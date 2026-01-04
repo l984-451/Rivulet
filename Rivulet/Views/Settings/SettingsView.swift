@@ -34,6 +34,63 @@ enum AutoplayCountdown: Int, CaseIterable, CustomStringConvertible {
     }
 }
 
+// MARK: - Language Option
+
+enum LanguageOption: String, CaseIterable, CustomStringConvertible {
+    case english = "eng"
+    case spanish = "spa"
+    case french = "fra"
+    case german = "deu"
+    case italian = "ita"
+    case portuguese = "por"
+    case japanese = "jpn"
+    case korean = "kor"
+    case chinese = "zho"
+    case russian = "rus"
+    case arabic = "ara"
+    case hindi = "hin"
+
+    var description: String {
+        switch self {
+        case .english: return "English"
+        case .spanish: return "Spanish"
+        case .french: return "French"
+        case .german: return "German"
+        case .italian: return "Italian"
+        case .portuguese: return "Portuguese"
+        case .japanese: return "Japanese"
+        case .korean: return "Korean"
+        case .chinese: return "Chinese"
+        case .russian: return "Russian"
+        case .arabic: return "Arabic"
+        case .hindi: return "Hindi"
+        }
+    }
+
+    /// Initialize from a language code (handles various formats)
+    init(languageCode: String?) {
+        guard let code = languageCode?.lowercased() else {
+            self = .english
+            return
+        }
+        switch code {
+        case "eng", "en", "english": self = .english
+        case "spa", "es", "spanish": self = .spanish
+        case "fra", "fr", "french": self = .french
+        case "deu", "de", "ger", "german": self = .german
+        case "ita", "it", "italian": self = .italian
+        case "por", "pt", "portuguese": self = .portuguese
+        case "jpn", "ja", "japanese": self = .japanese
+        case "kor", "ko", "korean": self = .korean
+        case "zho", "zh", "chi", "chinese": self = .chinese
+        case "rus", "ru", "russian": self = .russian
+        case "ara", "ar", "arabic": self = .arabic
+        case "hin", "hi", "hindi": self = .hindi
+        default: self = .english
+        }
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -62,6 +119,58 @@ struct SettingsView: View {
     @Environment(\.isSidebarVisible) private var isSidebarVisible
     #endif
     @State private var focusTrigger = 0  // Increment to trigger first row focus
+
+    // Audio/Subtitle preference state (synced with preference managers)
+    @State private var audioLanguage: LanguageOption = LanguageOption(languageCode: AudioPreferenceManager.current.languageCode)
+    @State private var subtitlesEnabled: Bool = SubtitlePreferenceManager.current.enabled
+    @State private var subtitleLanguage: LanguageOption = LanguageOption(languageCode: SubtitlePreferenceManager.current.languageCode)
+    @State private var preferSDH: Bool = SubtitlePreferenceManager.current.preferHearingImpaired
+
+    private var audioLanguageBinding: Binding<LanguageOption> {
+        Binding(
+            get: { audioLanguage },
+            set: { newValue in
+                audioLanguage = newValue
+                AudioPreferenceManager.current = AudioPreference(languageCode: newValue.rawValue)
+            }
+        )
+    }
+
+    private var subtitlesEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { subtitlesEnabled },
+            set: { newValue in
+                subtitlesEnabled = newValue
+                var pref = SubtitlePreferenceManager.current
+                pref.enabled = newValue
+                SubtitlePreferenceManager.current = pref
+            }
+        )
+    }
+
+    private var subtitleLanguageBinding: Binding<LanguageOption> {
+        Binding(
+            get: { subtitleLanguage },
+            set: { newValue in
+                subtitleLanguage = newValue
+                var pref = SubtitlePreferenceManager.current
+                pref.languageCode = newValue.rawValue
+                SubtitlePreferenceManager.current = pref
+            }
+        )
+    }
+
+    private var preferSDHBinding: Binding<Bool> {
+        Binding(
+            get: { preferSDH },
+            set: { newValue in
+                preferSDH = newValue
+                var pref = SubtitlePreferenceManager.current
+                pref.preferHearingImpaired = newValue
+                SubtitlePreferenceManager.current = pref
+            }
+        )
+    }
 
     private var liveTVLayout: Binding<LiveTVLayout> {
         Binding(
@@ -144,6 +253,42 @@ struct SettingsView: View {
 
                         // Playback section
                         SettingsSection(title: "Playback") {
+                            SettingsPickerRow(
+                                icon: "waveform",
+                                iconColor: .cyan,
+                                title: "Audio Language",
+                                subtitle: "Preferred language for audio tracks",
+                                selection: audioLanguageBinding,
+                                options: LanguageOption.allCases
+                            )
+
+                            SettingsToggleRow(
+                                icon: "captions.bubble",
+                                iconColor: .yellow,
+                                title: "Subtitles",
+                                subtitle: "Enable subtitles when available",
+                                isOn: subtitlesEnabledBinding
+                            )
+
+                            if subtitlesEnabled {
+                                SettingsPickerRow(
+                                    icon: "text.bubble",
+                                    iconColor: .orange,
+                                    title: "Subtitle Language",
+                                    subtitle: "Preferred language for subtitles",
+                                    selection: subtitleLanguageBinding,
+                                    options: LanguageOption.allCases
+                                )
+
+                                SettingsToggleRow(
+                                    icon: "ear",
+                                    iconColor: .pink,
+                                    title: "Prefer SDH",
+                                    subtitle: "Prefer subtitles for the deaf and hard of hearing",
+                                    isOn: preferSDHBinding
+                                )
+                            }
+
                             SettingsToggleRow(
                                 icon: "forward.fill",
                                 iconColor: .blue,

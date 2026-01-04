@@ -110,7 +110,7 @@ struct MediaItemContextMenu: ViewModifier {
                     Button {
                         onGoToSeason()
                     } label: {
-                        Label("Go to Season", systemImage: "folder")
+                        Label("Go to Season", systemImage: "list.number")
                     }
                 }
 

@@ -91,6 +91,43 @@ enum LanguageOption: String, CaseIterable, CustomStringConvertible {
     }
 }
 
+// MARK: - Subtitle Option (includes Off)
+
+enum SubtitleOption: Hashable, CaseIterable, CustomStringConvertible {
+    case off
+    case language(LanguageOption)
+
+    static var allCases: [SubtitleOption] {
+        [.off] + LanguageOption.allCases.map { .language($0) }
+    }
+
+    var description: String {
+        switch self {
+        case .off: return "Off"
+        case .language(let lang): return lang.description
+        }
+    }
+
+    var isEnabled: Bool {
+        if case .off = self { return false }
+        return true
+    }
+
+    var languageCode: String? {
+        if case .language(let lang) = self { return lang.rawValue }
+        return nil
+    }
+
+    /// Initialize from subtitle preference
+    init(enabled: Bool, languageCode: String?) {
+        if !enabled {
+            self = .off
+        } else {
+            self = .language(LanguageOption(languageCode: languageCode))
+        }
+    }
+}
+
 // MARK: - Settings View
 
 struct SettingsView: View {
@@ -122,9 +159,10 @@ struct SettingsView: View {
 
     // Audio/Subtitle preference state (synced with preference managers)
     @State private var audioLanguage: LanguageOption = LanguageOption(languageCode: AudioPreferenceManager.current.languageCode)
-    @State private var subtitlesEnabled: Bool = SubtitlePreferenceManager.current.enabled
-    @State private var subtitleLanguage: LanguageOption = LanguageOption(languageCode: SubtitlePreferenceManager.current.languageCode)
-    @State private var preferSDH: Bool = SubtitlePreferenceManager.current.preferHearingImpaired
+    @State private var subtitleOption: SubtitleOption = SubtitleOption(
+        enabled: SubtitlePreferenceManager.current.enabled,
+        languageCode: SubtitlePreferenceManager.current.languageCode
+    )
 
     private var audioLanguageBinding: Binding<LanguageOption> {
         Binding(
@@ -136,37 +174,16 @@ struct SettingsView: View {
         )
     }
 
-    private var subtitlesEnabledBinding: Binding<Bool> {
+    private var subtitleOptionBinding: Binding<SubtitleOption> {
         Binding(
-            get: { subtitlesEnabled },
+            get: { subtitleOption },
             set: { newValue in
-                subtitlesEnabled = newValue
+                subtitleOption = newValue
                 var pref = SubtitlePreferenceManager.current
-                pref.enabled = newValue
-                SubtitlePreferenceManager.current = pref
-            }
-        )
-    }
-
-    private var subtitleLanguageBinding: Binding<LanguageOption> {
-        Binding(
-            get: { subtitleLanguage },
-            set: { newValue in
-                subtitleLanguage = newValue
-                var pref = SubtitlePreferenceManager.current
-                pref.languageCode = newValue.rawValue
-                SubtitlePreferenceManager.current = pref
-            }
-        )
-    }
-
-    private var preferSDHBinding: Binding<Bool> {
-        Binding(
-            get: { preferSDH },
-            set: { newValue in
-                preferSDH = newValue
-                var pref = SubtitlePreferenceManager.current
-                pref.preferHearingImpaired = newValue
+                pref.enabled = newValue.isEnabled
+                if let code = newValue.languageCode {
+                    pref.languageCode = code
+                }
                 SubtitlePreferenceManager.current = pref
             }
         )
@@ -262,32 +279,14 @@ struct SettingsView: View {
                                 options: LanguageOption.allCases
                             )
 
-                            SettingsToggleRow(
+                            SettingsListPickerRow(
                                 icon: "captions.bubble",
                                 iconColor: .yellow,
                                 title: "Subtitles",
-                                subtitle: "Enable subtitles when available",
-                                isOn: subtitlesEnabledBinding
+                                subtitle: "Preferred language for subtitles",
+                                selection: subtitleOptionBinding,
+                                options: SubtitleOption.allCases
                             )
-
-                            if subtitlesEnabled {
-                                SettingsListPickerRow(
-                                    icon: "text.bubble",
-                                    iconColor: .orange,
-                                    title: "Subtitle Language",
-                                    subtitle: "Preferred language for subtitles",
-                                    selection: subtitleLanguageBinding,
-                                    options: LanguageOption.allCases
-                                )
-
-                                SettingsToggleRow(
-                                    icon: "ear",
-                                    iconColor: .pink,
-                                    title: "Prefer SDH",
-                                    subtitle: "Prefer subtitles for the deaf and hard of hearing",
-                                    isOn: preferSDHBinding
-                                )
-                            }
 
                             SettingsToggleRow(
                                 icon: "forward.fill",

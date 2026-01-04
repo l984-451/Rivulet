@@ -31,6 +31,7 @@ final class MPVMetalViewController: UIViewController {
     private var isShuttingDown = false
     private var lastKnownSize: CGSize = .zero
     private var previousDrawableSize: CGSize = .zero
+    private var audioRouteObserver: NSObjectProtocol?
 
     /// Explicit target size set by parent - when set, enables transform-based scaling
     /// to avoid swapchain recreation during multiview layout changes
@@ -233,6 +234,12 @@ final class MPVMetalViewController: UIViewController {
         // Clear delegate to prevent callbacks during shutdown
         delegate = nil
 
+        // Remove audio route change observer
+        if let observer = audioRouteObserver {
+            NotificationCenter.default.removeObserver(observer)
+            audioRouteObserver = nil
+        }
+
         // Clear the wakeup callback to prevent dangling pointer
         mpv_set_wakeup_callback(mpvHandle, nil, nil)
 
@@ -288,6 +295,65 @@ final class MPVMetalViewController: UIViewController {
         } catch {
             print("🎬 AVAudioSession: Configuration failed - \(error.localizedDescription)")
         }
+
+        // Observe audio route changes
+        if audioRouteObserver == nil {
+            audioRouteObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleAudioRouteChange(notification)
+            }
+        }
+    }
+
+    private func handleAudioRouteChange(_ notification: Notification) {
+        guard !isShuttingDown, mpv != nil else { return }
+
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+
+        let session = AVAudioSession.sharedInstance()
+        let newRoute = session.currentRoute.outputs.first?.portType.rawValue ?? "unknown"
+
+        switch reason {
+        case .newDeviceAvailable:
+            print("🎬 AVAudioSession: New device available, switching to: \(newRoute)")
+            reinitializeAudio()
+
+        case .oldDeviceUnavailable:
+            print("🎬 AVAudioSession: Device unavailable, switching to: \(newRoute)")
+            reinitializeAudio()
+
+        case .routeConfigurationChange:
+            print("🎬 AVAudioSession: Route configuration changed to: \(newRoute)")
+            reinitializeAudio()
+
+        default:
+            break
+        }
+    }
+
+    private func reinitializeAudio() {
+        guard mpv != nil, !isShuttingDown else { return }
+
+        // Reconfigure audio session for new route
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setActive(false, options: [])
+            try session.setActive(true, options: [])
+        } catch {
+            print("🎬 AVAudioSession: Reactivation failed - \(error.localizedDescription)")
+        }
+
+        // Trigger MPV audio reinitialization by resetting audio-device to default
+        // Setting to empty string tells MPV to use system default
+        setString("audio-device", "auto")
+        print("🎬 MPV: Audio device reset to auto for route change")
     }
 
     // MARK: - MPV Setup

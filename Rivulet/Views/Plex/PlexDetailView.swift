@@ -136,7 +136,7 @@ struct PlexDetailView: View {
                     // Up Next caption for shows/seasons (below button row, above description)
                     if let caption = upNextCaption {
                         Text(caption)
-                            .font(.title3)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
 
@@ -1357,29 +1357,66 @@ struct PlexDetailView: View {
             }
         }
 
-        // No OnDeck episode - get the first episode of the first season
-        guard let firstSeason = seasons.first,
-              let seasonRatingKey = firstSeason.ratingKey else { return }
+        // No OnDeck episode - search for first in-progress or unwatched episode across all seasons
+        for season in seasons {
+            guard let seasonRatingKey = season.ratingKey else { continue }
 
-        do {
-            let seasonEpisodes = try await networkManager.getChildren(
-                serverURL: serverURL,
-                authToken: token,
-                ratingKey: seasonRatingKey
-            )
-
-            if let firstEpisode = seasonEpisodes.first,
-               let episodeRatingKey = firstEpisode.ratingKey {
-                // Fetch full metadata for the first episode
-                let fullEpisode = try await networkManager.getFullMetadata(
+            do {
+                let seasonEpisodes = try await networkManager.getChildren(
                     serverURL: serverURL,
                     authToken: token,
-                    ratingKey: episodeRatingKey
+                    ratingKey: seasonRatingKey
                 )
-                nextUpEpisode = fullEpisode
+
+                // First, look for an in-progress episode in this season
+                if let inProgressEpisode = seasonEpisodes.first(where: { $0.isInProgress }),
+                   let ratingKey = inProgressEpisode.ratingKey {
+                    let fullEpisode = try await networkManager.getFullMetadata(
+                        serverURL: serverURL,
+                        authToken: token,
+                        ratingKey: ratingKey
+                    )
+                    nextUpEpisode = fullEpisode
+                    return
+                }
+
+                // Next, look for first unwatched episode in this season
+                if let unwatchedEpisode = seasonEpisodes.first(where: { !$0.isWatched }),
+                   let ratingKey = unwatchedEpisode.ratingKey {
+                    let fullEpisode = try await networkManager.getFullMetadata(
+                        serverURL: serverURL,
+                        authToken: token,
+                        ratingKey: ratingKey
+                    )
+                    nextUpEpisode = fullEpisode
+                    return
+                }
+            } catch {
+                print("Failed to load episodes for season: \(error)")
             }
-        } catch {
-            print("Failed to load first episode: \(error)")
+        }
+
+        // All episodes watched - fall back to first episode of first season
+        if let firstSeason = seasons.first,
+           let seasonRatingKey = firstSeason.ratingKey {
+            do {
+                let seasonEpisodes = try await networkManager.getChildren(
+                    serverURL: serverURL,
+                    authToken: token,
+                    ratingKey: seasonRatingKey
+                )
+                if let firstEpisode = seasonEpisodes.first,
+                   let ratingKey = firstEpisode.ratingKey {
+                    let fullEpisode = try await networkManager.getFullMetadata(
+                        serverURL: serverURL,
+                        authToken: token,
+                        ratingKey: ratingKey
+                    )
+                    nextUpEpisode = fullEpisode
+                }
+            } catch {
+                print("Failed to load first episode: \(error)")
+            }
         }
     }
 

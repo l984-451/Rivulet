@@ -52,6 +52,7 @@ struct PlexDetailView: View {
     @State private var relatedItems: [PlexMetadata] = []
     @State private var isWatched = false
     @State private var isStarred = false  // For music: 5-star rating toggle
+    @State private var displayedProgress: Double = 0  // For animating progress bar
     @State private var isLoadingExtras = false
     @State private var showTrailerPlayer = false
     @State private var trailerMetadata: PlexMetadata?  // Full metadata for trailer playback
@@ -141,8 +142,10 @@ struct PlexDetailView: View {
                     }
 
                     // Progress bar for in-progress content (movies/episodes)
-                    if !isMusicItem, effectiveItem.isInProgress, let progress = effectiveItem.watchProgress, progress > 0 && progress < 1 {
-                        progressSection(progress: progress)
+                    // Show if not watched and has progress
+                    if !isMusicItem, !isWatched, displayedProgress > 0 {
+                        progressSection(progress: displayedProgress)
+                            .transition(.opacity.animation(.easeOut(duration: 0.3)))
                     }
 
                     // Summary
@@ -214,6 +217,9 @@ struct PlexDetailView: View {
 
             // Initialize watched state
             isWatched = item.isWatched
+
+            // Initialize progress for animation
+            displayedProgress = item.watchProgress ?? 0
 
             // Initialize starred state for music (userRating > 0 means starred)
             isStarred = (item.userRating ?? 0) > 0
@@ -599,12 +605,13 @@ struct PlexDetailView: View {
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(Color.blue)
                         .frame(width: geo.size.width * progress)
+                        .animation(.easeOut(duration: 0.5), value: progress)
                 }
             }
             .frame(height: 6)
 
-            // Time remaining text
-            if let remaining = effectiveItem.remainingTimeFormatted {
+            // Time remaining text (hide when animating to 100%)
+            if progress < 1, let remaining = effectiveItem.remainingTimeFormatted {
                 Text("\(remaining) remaining")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -1508,14 +1515,23 @@ struct PlexDetailView: View {
                     authToken: token,
                     ratingKey: ratingKey
                 )
+                isWatched = false
             } else {
                 try await networkManager.markWatched(
                     serverURL: serverURL,
                     authToken: token,
                     ratingKey: ratingKey
                 )
+                // Animate progress bar to 100% before marking as watched
+                withAnimation(.easeOut(duration: 0.5)) {
+                    displayedProgress = 1.0
+                }
+                // After animation, mark as watched and hide progress
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                isWatched = true
             }
-            isWatched.toggle()
+            // Notify home screen to refresh Continue Watching
+            NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
         } catch {
             print("Failed to toggle watched status: \(error)")
         }

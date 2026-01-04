@@ -253,7 +253,7 @@ struct SettingsView: View {
 
                         // Playback section
                         SettingsSection(title: "Playback") {
-                            SettingsPickerRow(
+                            SettingsListPickerRow(
                                 icon: "waveform",
                                 iconColor: .cyan,
                                 title: "Audio Language",
@@ -271,7 +271,7 @@ struct SettingsView: View {
                             )
 
                             if subtitlesEnabled {
-                                SettingsPickerRow(
+                                SettingsListPickerRow(
                                     icon: "text.bubble",
                                     iconColor: .orange,
                                     title: "Subtitle Language",

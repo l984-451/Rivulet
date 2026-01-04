@@ -306,6 +306,185 @@ struct SettingsPickerRow<T: Hashable & CustomStringConvertible>: View {
     }
 }
 
+// MARK: - Settings List Picker Row (Popup Selection)
+
+struct SettingsListPickerRow<T: Hashable & CustomStringConvertible>: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    @Binding var selection: T
+    let options: [T]
+
+    @FocusState private var isFocused: Bool
+    @State private var showPicker = false
+
+    var body: some View {
+        Button {
+            showPicker = true
+        } label: {
+            HStack(spacing: 20) {
+                // Icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(iconColor.gradient)
+                        .frame(width: 64, height: 64)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+                // Text
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 29, weight: .medium))
+                        .foregroundStyle(.white)
+
+                    Text(subtitle)
+                        .font(.system(size: 23))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+
+                Spacer()
+
+                // Current selection with chevron
+                HStack(spacing: 12) {
+                    Text(selection.description)
+                        .font(.system(size: 26, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(isFocused ? .white.opacity(0.8) : .white.opacity(0.4))
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isFocused ? .white.opacity(0.18) : .white.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(
+                                isFocused ? .white.opacity(0.25) : .white.opacity(0.08),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(SettingsButtonStyle())
+        .focused($isFocused)
+        .scaleEffect(isFocused ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)
+        .sheet(isPresented: $showPicker) {
+            ListPickerSheet(
+                title: title,
+                selection: $selection,
+                options: options,
+                isPresented: $showPicker
+            )
+        }
+    }
+}
+
+// MARK: - List Picker Sheet
+
+struct ListPickerSheet<T: Hashable & CustomStringConvertible>: View {
+    let title: String
+    @Binding var selection: T
+    let options: [T]
+    @Binding var isPresented: Bool
+
+    @FocusState private var focusedOption: T?
+
+    var body: some View {
+        VStack(spacing: 32) {
+            // Header
+            Text(title)
+                .font(.system(size: 42, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.top, 60)
+
+            // Options list
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 12) {
+                    ForEach(options, id: \.self) { option in
+                        ListPickerOptionRow(
+                            option: option,
+                            isSelected: selection == option,
+                            isFocused: focusedOption == option,
+                            onSelect: {
+                                selection = option
+                                isPresented = false
+                            }
+                        )
+                        .focused($focusedOption, equals: option)
+                    }
+                }
+                .padding(.horizontal, 80)
+                .padding(.vertical, 8)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.95))
+        .onAppear {
+            // Focus the currently selected option
+            focusedOption = selection
+        }
+        #if os(tvOS)
+        .onExitCommand {
+            isPresented = false
+        }
+        #endif
+    }
+}
+
+// MARK: - List Picker Option Row
+
+struct ListPickerOptionRow<T: CustomStringConvertible>: View {
+    let option: T
+    let isSelected: Bool
+    let isFocused: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack {
+                Text(option.description)
+                    .font(.system(size: 29, weight: .medium))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.green)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isFocused ? .white.opacity(0.18) : .white.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(
+                                isFocused ? .white.opacity(0.25) : .white.opacity(0.08),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(SettingsButtonStyle())
+        .scaleEffect(isFocused ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)
+    }
+}
+
 // MARK: - Connect Button
 
 struct ConnectButton: View {

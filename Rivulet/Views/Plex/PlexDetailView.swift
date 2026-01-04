@@ -133,6 +133,13 @@ struct PlexDetailView: View {
                     // Action buttons
                     actionButtons
 
+                    // Up Next caption for shows/seasons (below button row, above description)
+                    if let caption = upNextCaption {
+                        Text(caption)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+
                     // Progress bar for in-progress content (movies/episodes)
                     if !isMusicItem, effectiveItem.isInProgress, let progress = effectiveItem.watchProgress, progress > 0 && progress < 1 {
                         progressSection(progress: progress)
@@ -656,34 +663,25 @@ struct PlexDetailView: View {
                 #endif
             } else if item.type == "show" || item.type == "season" {
                 // TV Show/Season: Play button uses nextUpEpisode
-                VStack(alignment: .leading, spacing: 4) {
-                    Button {
-                        if let episode = nextUpEpisode {
-                            selectedEpisode = episode
-                        }
-                        playFromBeginning = false
-                        showPlayer = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "play.fill")
-                            Text(showPlayButtonLabel)
-                        }
-                        .font(.system(size: 20, weight: .semibold))
-                        .frame(minWidth: actionButtonMinWidth, minHeight: actionButtonHeight)
+                Button {
+                    if let episode = nextUpEpisode {
+                        selectedEpisode = episode
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(nextUpEpisode == nil)
-                    #if os(tvOS)
-                    .focused($focusedActionButton, equals: "play")
-                    #endif
-
-                    // Up Next caption (shown when next episode exists but isn't in progress)
-                    if let caption = upNextCaption {
-                        Text(caption)
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
+                    playFromBeginning = false
+                    showPlayer = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                        Text(showPlayButtonLabel)
                     }
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(minWidth: actionButtonMinWidth, minHeight: actionButtonHeight)
                 }
+                .buttonStyle(.borderedProminent)
+                .disabled(nextUpEpisode == nil)
+                #if os(tvOS)
+                .focused($focusedActionButton, equals: "play")
+                #endif
             } else if item.type != "track" {
                 // Movies/Episodes: Standard Play/Resume button
                 Button {

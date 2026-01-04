@@ -36,6 +36,9 @@ final class MPVPlayerWrapper: NSObject, PlayerProtocol, MPVPlayerDelegate {
     private var pendingHeaders: [String: String]?
     private var pendingStartTime: TimeInterval?
 
+    /// The URL that was actually loaded into MPV (preserved for error reporting)
+    private var loadedURL: URL?
+
     // MARK: - Publishers
 
     var playbackStatePublisher: AnyPublisher<UniversalPlaybackState, Never> {
@@ -104,6 +107,7 @@ final class MPVPlayerWrapper: NSObject, PlayerProtocol, MPVPlayerDelegate {
 
         // If controller already exists, load directly
         if let controller = playerController {
+            loadedURL = url  // Preserve for error reporting
             controller.httpHeaders = headers
             controller.startTime = startTime
             controller.loadFile(url)
@@ -118,6 +122,7 @@ final class MPVPlayerWrapper: NSObject, PlayerProtocol, MPVPlayerDelegate {
 
         // If we have a pending URL, load it now
         if let url = pendingURL {
+            loadedURL = url  // Preserve for error reporting
             controller.httpHeaders = pendingHeaders
             controller.startTime = pendingStartTime
             controller.loadFile(url)
@@ -188,6 +193,7 @@ final class MPVPlayerWrapper: NSObject, PlayerProtocol, MPVPlayerDelegate {
         _currentAudioTrackId = nil
         _currentSubtitleTrackId = nil
         _duration = 0
+        loadedURL = nil
         playbackStateSubject.send(.idle)
         timeSubject.send(0)
     }
@@ -265,12 +271,17 @@ final class MPVPlayerWrapper: NSObject, PlayerProtocol, MPVPlayerDelegate {
         event.message = SentryMessage(formatted: "MPV Playback Error: \(message)")
         event.extra = [
             "error_message": message,
-            "pending_url": pendingURL?.absoluteString ?? "none",
+            "stream_url": loadedURL?.absoluteString ?? "none",
+            "stream_host": loadedURL?.host ?? "unknown",
+            "stream_path": loadedURL?.path ?? "unknown",
             "has_controller": playerController != nil,
             "duration": _duration,
             "current_time": playerController?.currentTime ?? 0
         ]
-        event.tags = ["component": "mpv_player"]
+        event.tags = [
+            "component": "mpv_player",
+            "stream_host": loadedURL?.host ?? "unknown"
+        ]
 
         // Fingerprint by error type so different MPV errors create separate issues
         let errorCategory = categorizeMPVError(message)

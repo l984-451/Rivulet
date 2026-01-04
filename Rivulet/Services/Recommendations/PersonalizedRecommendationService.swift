@@ -68,8 +68,23 @@ actor PersonalizedRecommendationService {
     private let maxItemsPerLibrary = 200
     private let maxWatchedForProfile = 120
     private let maxRecommendations = 40
-    private let minTMDBRating = 5.0
-    private let minTMDBVoteCount = 50
+
+    // Genre normalization (common variants)
+    private let genreNormalization: [String: String] = [
+        "sci-fi": "science fiction",
+        "scifi": "science fiction",
+        "science-fiction": "science fiction",
+        "sci-fi & fantasy": "science fiction",
+        "action & adventure": "action",
+        "action/adventure": "action",
+        "war & politics": "war",
+        "tv movie": "drama",
+        "news": "documentary",
+        "talk": "comedy",
+        "reality": "documentary",
+        "soap": "drama",
+        "kids": "family"
+    ]
 
     func recommendations(
         forceRefresh: Bool = false,
@@ -187,11 +202,16 @@ actor PersonalizedRecommendationService {
     // MARK: - Feature helpers
 
     private func buildFeatures(for item: PlexMetadata) async -> TMDBItemFeatures {
+        func normalize(_ genre: String) -> String {
+            let lower = genre.lowercased()
+            return genreNormalization[lower] ?? lower
+        }
+
         var features = TMDBItemFeatures(
             keywords: [],
             cast: item.castNames,
             directors: item.directorNames,
-            genres: item.genreTags,
+            genres: item.genreTags.map(normalize),
             voteAverage: nil,
             voteCount: nil
         )
@@ -206,20 +226,21 @@ actor PersonalizedRecommendationService {
     }
 
     private func recencyWeight(lastViewedAt: Int?) -> Double {
-        guard let ts = lastViewedAt else { return 0.6 }
+        guard let ts = lastViewedAt else { return 1.0 }
         let days = (Date().timeIntervalSince1970 - Double(ts)) / (60 * 60 * 24)
         switch days {
         case ..<30: return 1.0
-        case ..<90: return 0.8
-        case ..<180: return 0.6
-        default: return 0.4
+        case ..<90: return 0.75
+        case ..<180: return 0.5
+        case ..<365: return 0.25
+        default: return 0.1
         }
     }
 
     private func rewatchBoost(viewCount: Int?) -> Double {
         let count = Double(viewCount ?? 0)
         if count <= 1 { return 1.0 }
-        return min(1.0 + (count * 0.1), 1.5)
+        return log2(count) + 1.0
     }
 
     private func normalizedScore(tags: [String], counts: [String: Double], maxCount: Double) -> Double {
@@ -230,16 +251,38 @@ actor PersonalizedRecommendationService {
         return sum / (maxCount * Double(tags.count))
     }
 
-    private func score(features: TMDBItemFeatures, profile: FeatureProfile, metadata: PlexMetadata) -> Double {
-        // Quality filters
-        if let voteAvg = features.voteAverage, voteAvg < minTMDBRating {
-            return 0
-        }
-        if let voteCount = features.voteCount, voteCount < minTMDBVoteCount {
-            return 0
+    private func fuzzyKeywordScore(keywords: [String], counts: [String: Double]) -> Double {
+        guard !keywords.isEmpty, !counts.isEmpty else { return 0 }
+        let maxCount = counts.values.max() ?? 1
+        var total: Double = 0
+
+        for keyword in keywords {
+            var bestMatch = 0.0
+            for (userKeyword, weight) in counts {
+                let kwLower = keyword
+                let userLower = userKeyword
+                if kwLower == userLower {
+                    bestMatch = max(bestMatch, weight)
+                    continue
+                }
+                if kwLower.contains(userLower) || userLower.contains(kwLower) {
+                    let kwParts = Set(kwLower.split(separator: " "))
+                    let userParts = Set(userLower.split(separator: " "))
+                    let overlap = kwParts.intersection(userParts).count
+                    let union = max(kwParts.union(userParts).count, 1)
+                    let similarity = Double(overlap) / Double(union)
+                    let matchScore = weight * (0.5 + 0.5 * similarity)
+                    bestMatch = max(bestMatch, matchScore)
+                }
+            }
+            total += bestMatch
         }
 
-        let keywordScore = normalizedScore(tags: features.keywords, counts: profile.keywords, maxCount: profile.maxKeyword)
+        return total / (Double(keywords.count) * maxCount)
+    }
+
+    private func score(features: TMDBItemFeatures, profile: FeatureProfile, metadata: PlexMetadata) -> Double {
+        let keywordScore = fuzzyKeywordScore(keywords: features.keywords, counts: profile.keywords)
         let genreScore = normalizedScore(tags: features.genres, counts: profile.genres, maxCount: profile.maxGenre)
         let castScore = normalizedScore(tags: features.cast, counts: profile.cast, maxCount: profile.maxCast)
         let directorScore = normalizedScore(tags: features.directors, counts: profile.directors, maxCount: profile.maxDirector)

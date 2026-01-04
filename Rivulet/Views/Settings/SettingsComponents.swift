@@ -399,16 +399,16 @@ struct ListPickerSheet<T: Hashable & CustomStringConvertible>: View {
     @FocusState private var focusedOption: T?
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 24) {
             // Header
             Text(title)
-                .font(.system(size: 42, weight: .bold))
+                .font(.system(size: 36, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.top, 60)
+                .padding(.top, 40)
 
             // Options list
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     ForEach(options, id: \.self) { option in
                         ListPickerOptionRow(
                             option: option,
@@ -422,17 +422,25 @@ struct ListPickerSheet<T: Hashable & CustomStringConvertible>: View {
                         .focused($focusedOption, equals: option)
                     }
                 }
-                .padding(.horizontal, 80)
+                .padding(.horizontal, 32)
                 .padding(.vertical, 8)
             }
+            .frame(maxHeight: 600)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.95))
+        .padding(.bottom, 40)
+        .frame(width: 500)
+        .background(
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(.black.opacity(0.3))
+        )
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
         .onAppear {
             // Focus the currently selected option
-            focusedOption = selection
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focusedOption = selection
+            }
         }
         #if os(tvOS)
         .onExitCommand {
@@ -454,24 +462,24 @@ struct ListPickerOptionRow<T: CustomStringConvertible>: View {
         Button(action: onSelect) {
             HStack {
                 Text(option.description)
-                    .font(.system(size: 29, weight: .medium))
+                    .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(.white)
 
                 Spacer()
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(.green)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isFocused ? .white.opacity(0.18) : .white.opacity(0.08))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(
                                 isFocused ? .white.opacity(0.25) : .white.opacity(0.08),
                                 lineWidth: 1

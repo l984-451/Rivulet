@@ -264,6 +264,61 @@ Settings sections use `.glassEffect(.regular, in: RoundedRectangle(...))` for th
 
 ---
 
+## Popup Sheets
+
+### Glass Popup Sheet Pattern
+
+Modal sheets (pickers, confirmations, info panels) use a centered glass container rather than full-screen backgrounds:
+
+```swift
+VStack(spacing: 24) {
+    // Header
+    Text(title)
+        .font(.system(size: 36, weight: .bold))
+        .foregroundStyle(.white)
+        .padding(.top, 40)
+
+    // Content (scrollable if needed)
+    ScrollView(.vertical, showsIndicators: false) {
+        VStack(spacing: 8) {
+            // Items...
+        }
+        .padding(.horizontal, 32)
+    }
+    .frame(maxHeight: 600)  // Constrain scroll height
+
+    Spacer(minLength: 0)
+}
+.padding(.bottom, 40)
+.frame(width: 500)  // Fixed width, not full-screen
+.background(
+    RoundedRectangle(cornerRadius: 32, style: .continuous)
+        .fill(.black.opacity(0.3))
+)
+.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+.onExitCommand {
+    dismiss()  // Menu button dismisses
+}
+```
+
+### Popup Sheet Sizing
+
+| Sheet Type | Width |
+|------------|-------|
+| Picker/List | 500pt |
+| Reorder controls | 480pt |
+| Confirmation | 450pt |
+
+### Key Differences from Full-Screen Views
+
+- **Fixed width** - centered on screen, not edge-to-edge
+- **Glass background** - `.black.opacity(0.3)` + `.glassEffect()`
+- **32pt corner radius** - larger than row backgrounds (16-18pt)
+- **Constrained scroll height** - `maxHeight: 600` for long lists
+- **Compact typography** - 36pt title, 26pt option text
+
+---
+
 ## Animation Timings
 
 ### Standard Spring Animation

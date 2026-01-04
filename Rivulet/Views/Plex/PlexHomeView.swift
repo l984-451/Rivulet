@@ -352,6 +352,12 @@ struct PlexHomeView: View {
                                 },
                                 onRefreshNeeded: {
                                     await dataStore.refreshHubs()
+                                },
+                                onGoToSeason: { episode in
+                                    navigateToSeason(for: episode)
+                                },
+                                onGoToShow: { episode in
+                                    navigateToShow(for: episode)
                                 }
                             )
                         }
@@ -496,6 +502,12 @@ struct PlexHomeView: View {
                 },
                 onRefreshNeeded: {
                     await refreshRecommendations(force: true)
+                },
+                onGoToSeason: { episode in
+                    navigateToSeason(for: episode)
+                },
+                onGoToShow: { episode in
+                    navigateToShow(for: episode)
                 }
             )
         }
@@ -576,6 +588,52 @@ struct PlexHomeView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Navigation Helpers
+
+    /// Navigate to the season containing the given episode
+    private func navigateToSeason(for episode: PlexMetadata) {
+        guard let seasonKey = episode.parentRatingKey,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+
+        Task {
+            do {
+                let season = try await PlexNetworkManager.shared.getMetadata(
+                    serverURL: serverURL,
+                    authToken: token,
+                    ratingKey: seasonKey
+                )
+                await MainActor.run {
+                    selectedItem = season
+                }
+            } catch {
+                print("Failed to navigate to season: \(error)")
+            }
+        }
+    }
+
+    /// Navigate to the show containing the given episode
+    private func navigateToShow(for episode: PlexMetadata) {
+        guard let showKey = episode.grandparentRatingKey,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+
+        Task {
+            do {
+                let show = try await PlexNetworkManager.shared.getMetadata(
+                    serverURL: serverURL,
+                    authToken: token,
+                    ratingKey: showKey
+                )
+                await MainActor.run {
+                    selectedItem = show
+                }
+            } catch {
+                print("Failed to navigate to show: \(error)")
+            }
+        }
     }
 }
 
@@ -907,6 +965,8 @@ struct InfiniteContentRow: View {
     var contextMenuSource: MediaItemContextSource = .other
     var onItemSelected: ((PlexMetadata) -> Void)?
     var onRefreshNeeded: MediaItemRefreshCallback?
+    var onGoToSeason: ((PlexMetadata) -> Void)?
+    var onGoToShow: ((PlexMetadata) -> Void)?
 
     @Environment(\.openSidebar) private var openSidebar
     @Environment(\.focusScopeManager) private var focusScopeManager
@@ -990,7 +1050,9 @@ struct InfiniteContentRow: View {
                             serverURL: serverURL,
                             authToken: authToken,
                             source: contextMenuSource,
-                            onRefreshNeeded: onRefreshNeeded
+                            onRefreshNeeded: onRefreshNeeded,
+                            onGoToSeason: onGoToSeason != nil ? { onGoToSeason?(item) } : nil,
+                            onGoToShow: onGoToShow != nil ? { onGoToShow?(item) } : nil
                         )
                         .onAppear {
                             // Load more when user is 5 items from the end

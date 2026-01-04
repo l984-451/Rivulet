@@ -334,6 +334,8 @@ struct MediaRow: View {
     var contextMenuSource: MediaItemContextSource = .other
     var onItemSelected: ((PlexMetadata) -> Void)?
     var onRefreshNeeded: MediaItemRefreshCallback?
+    var onGoToSeason: ((PlexMetadata) -> Void)?
+    var onGoToShow: ((PlexMetadata) -> Void)?
 
     #if os(tvOS)
     @Environment(\.openSidebar) private var openSidebar
@@ -379,7 +381,9 @@ struct MediaRow: View {
                             serverURL: serverURL,
                             authToken: authToken,
                             source: contextMenuSource,
-                            onRefreshNeeded: onRefreshNeeded
+                            onRefreshNeeded: onRefreshNeeded,
+                            onGoToSeason: onGoToSeason != nil ? { onGoToSeason?(item) } : nil,
+                            onGoToShow: onGoToShow != nil ? { onGoToShow?(item) } : nil
                         )
                     }
                 }
@@ -405,6 +409,8 @@ struct MediaGrid: View {
     var contextMenuSource: MediaItemContextSource = .library
     var onItemSelected: ((PlexMetadata) -> Void)?
     var onRefreshNeeded: MediaItemRefreshCallback?
+    var onGoToSeason: ((PlexMetadata) -> Void)?
+    var onGoToShow: ((PlexMetadata) -> Void)?
 
     // Track focused item for proper initial focus
     @FocusState private var focusedItemId: String?
@@ -442,7 +448,9 @@ struct MediaGrid: View {
                     serverURL: serverURL,
                     authToken: authToken,
                     source: contextMenuSource,
-                    onRefreshNeeded: onRefreshNeeded
+                    onRefreshNeeded: onRefreshNeeded,
+                    onGoToSeason: onGoToSeason != nil ? { onGoToSeason?(item) } : nil,
+                    onGoToShow: onGoToShow != nil ? { onGoToShow?(item) } : nil
                 )
             }
         }

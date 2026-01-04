@@ -34,6 +34,8 @@ struct MediaItemContextMenu: ViewModifier {
     let source: MediaItemContextSource
     var onRefreshNeeded: MediaItemRefreshCallback?
     var onShowInfo: MediaItemNavigationCallback?
+    var onGoToSeason: MediaItemNavigationCallback?
+    var onGoToShow: MediaItemNavigationCallback?
 
     @State private var isPerformingAction = false
 
@@ -102,6 +104,25 @@ struct MediaItemContextMenu: ViewModifier {
                 }
             }
 
+            // Go to Season/Show (only for episodes)
+            if item.type == "episode" {
+                if let onGoToSeason = onGoToSeason, item.parentRatingKey != nil {
+                    Button {
+                        onGoToSeason()
+                    } label: {
+                        Label("Go to Season", systemImage: "folder")
+                    }
+                }
+
+                if let onGoToShow = onGoToShow, item.grandparentRatingKey != nil {
+                    Button {
+                        onGoToShow()
+                    } label: {
+                        Label("Go to Show", systemImage: "tv")
+                    }
+                }
+            }
+
             Divider()
 
             // More Info (navigate to detail view)
@@ -161,7 +182,9 @@ extension View {
         authToken: String,
         source: MediaItemContextSource = .other,
         onRefreshNeeded: MediaItemRefreshCallback? = nil,
-        onShowInfo: MediaItemNavigationCallback? = nil
+        onShowInfo: MediaItemNavigationCallback? = nil,
+        onGoToSeason: MediaItemNavigationCallback? = nil,
+        onGoToShow: MediaItemNavigationCallback? = nil
     ) -> some View {
         modifier(MediaItemContextMenu(
             item: item,
@@ -169,7 +192,9 @@ extension View {
             authToken: authToken,
             source: source,
             onRefreshNeeded: onRefreshNeeded,
-            onShowInfo: onShowInfo
+            onShowInfo: onShowInfo,
+            onGoToSeason: onGoToSeason,
+            onGoToShow: onGoToShow
         ))
     }
 }

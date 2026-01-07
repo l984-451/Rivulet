@@ -44,14 +44,50 @@ actor XMLTVParser {
 
     /// Parse XMLTV data from a URL
     func parse(from url: URL) async throws -> ParseResult {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await fetchWithHTTPSUpgrade(url: url)
+        return try parse(data: data)
+    }
+
+    // MARK: - Private Networking
+
+    /// Fetch data from URL, attempting HTTPS upgrade for HTTP URLs
+    private func fetchWithHTTPSUpgrade(url: URL) async throws -> (Data, URLResponse) {
+        // If already HTTPS or not HTTP, use as-is
+        guard url.scheme == "http",
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return try await fetchData(from: url)
+        }
+
+        // Try HTTPS first with a short timeout
+        components.scheme = "https"
+        if let httpsURL = components.url {
+            do {
+                return try await fetchData(from: httpsURL, timeout: 3.0)
+            } catch {
+                // HTTPS failed, fall back to HTTP
+                print("📺 XMLTVParser: HTTPS failed for \(httpsURL.host ?? "unknown"), falling back to HTTP")
+            }
+        }
+
+        // Fall back to original HTTP URL
+        return try await fetchData(from: url)
+    }
+
+    /// Fetch data from a URL with optional custom timeout
+    private func fetchData(from url: URL, timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
+        var request = URLRequest(url: url)
+        if let timeout = timeout {
+            request.timeoutInterval = timeout
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {
             throw XMLTVParseError.httpError(httpResponse.statusCode)
         }
 
-        return try parse(data: data)
+        return (data, response)
     }
 
     /// Parse XMLTV data from raw data

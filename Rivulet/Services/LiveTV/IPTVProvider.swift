@@ -45,10 +45,29 @@ actor IPTVProvider: LiveTVProvider {
         self.sourceType = .dispatcharr
         self.sourceId = sourceId
         self.displayName = displayName
-        self.baseURL = dispatcharrURL
-        self.dispatcharrService = DispatcharrService(baseURL: dispatcharrURL)
-        self.m3uURL = dispatcharrURL.appendingPathComponent("output/m3u")
-        self.epgURL = dispatcharrURL.appendingPathComponent("output/epg")
+
+        // Clean the URL in case it already contains /output/m3u or /output/epg
+        // This handles URLs that were saved before the cleanup was added
+        let cleanedURL = Self.cleanDispatcharrURL(dispatcharrURL)
+
+        self.baseURL = cleanedURL
+        self.dispatcharrService = DispatcharrService(baseURL: cleanedURL)
+        self.m3uURL = cleanedURL.appendingPathComponent("output/m3u")
+        self.epgURL = cleanedURL.appendingPathComponent("output/epg")
+    }
+
+    /// Clean a Dispatcharr URL by removing /output/m3u or /output/epg paths
+    private static func cleanDispatcharrURL(_ url: URL) -> URL {
+        var urlString = url.absoluteString
+
+        // Strip /output/m3u or /output/epg paths if present
+        if let range = urlString.range(of: "/output/m3u", options: .caseInsensitive) {
+            urlString = String(urlString[..<range.lowerBound])
+        } else if let range = urlString.range(of: "/output/epg", options: .caseInsensitive) {
+            urlString = String(urlString[..<range.lowerBound])
+        }
+
+        return URL(string: urlString) ?? url
     }
 
     /// Initialize for generic M3U source

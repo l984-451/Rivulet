@@ -43,6 +43,15 @@ actor DispatcharrService {
             cleanedURL = "http://\(cleanedURL)"
         }
 
+        // Strip /output/m3u or /output/epg paths if user pasted a full endpoint URL
+        // This prevents URL duplication when we append these paths later
+        // Handles: /output/m3u, /output/m3u/, /output/m3u/ProfileName, etc.
+        if let range = cleanedURL.range(of: "/output/m3u", options: .caseInsensitive) {
+            cleanedURL = String(cleanedURL[..<range.lowerBound])
+        } else if let range = cleanedURL.range(of: "/output/epg", options: .caseInsensitive) {
+            cleanedURL = String(cleanedURL[..<range.lowerBound])
+        }
+
         guard let url = URL(string: cleanedURL) else {
             return nil
         }

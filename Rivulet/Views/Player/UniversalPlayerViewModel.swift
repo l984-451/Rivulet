@@ -348,13 +348,15 @@ final class UniversalPlayerViewModel: ObservableObject {
     // MARK: - Player Instance
 
     /// The player engine being used for this playback session
-    private(set) var playerType: PlayerType = .mpv
+    /// Published so the view can react to fallback from AVPlayer to MPV
+    @Published private(set) var playerType: PlayerType = .mpv
 
     /// MPV player (used for most content)
-    private(set) var mpvPlayerWrapper: MPVPlayerWrapper?
+    /// Published so the view can react to fallback from AVPlayer to MPV
+    @Published private(set) var mpvPlayerWrapper: MPVPlayerWrapper?
 
     /// AVPlayer (used for Dolby Vision when enabled)
-    private(set) var avPlayerWrapper: AVPlayerWrapper?
+    @Published private(set) var avPlayerWrapper: AVPlayerWrapper?
 
     // MARK: - Metadata
 
@@ -700,6 +702,33 @@ final class UniversalPlayerViewModel: ObservableObject {
 
             startControlsHideTimer()
         } catch {
+            // If AVPlayer failed, try falling back to MPV
+            if playerType == .avplayer {
+                print("🎬 [Fallback] AVPlayer failed to load: \(error.localizedDescription)")
+                print("🎬 [Fallback] Attempting fallback to MPV player...")
+
+                // Capture the AVPlayer failure to Sentry before fallback
+                SentrySDK.capture(error: error) { scope in
+                    scope.setTag(value: "playback", key: "component")
+                    scope.setTag(value: "avplayer", key: "player_type")
+                    scope.setTag(value: "fallback_triggered", key: "fallback_status")
+                    scope.setExtra(value: url.absoluteString, key: "stream_url")
+                    scope.setExtra(value: self.metadata.title ?? "unknown", key: "media_title")
+                    scope.setExtra(value: self.metadata.type ?? "unknown", key: "media_type")
+                    scope.setExtra(value: self.metadata.ratingKey ?? "unknown", key: "rating_key")
+                    scope.setExtra(value: self.startOffset ?? 0, key: "start_offset")
+                }
+
+                // Attempt MPV fallback
+                do {
+                    try await fallbackToMPV()
+                    return  // Success - don't show error
+                } catch {
+                    print("🎬 [Fallback] MPV fallback also failed: \(error.localizedDescription)")
+                    // Fall through to show the original error
+                }
+            }
+
             errorMessage = error.localizedDescription
             playbackState = .failed(.loadFailed(error.localizedDescription))
 
@@ -714,6 +743,88 @@ final class UniversalPlayerViewModel: ObservableObject {
                 scope.setExtra(value: self.startOffset ?? 0, key: "start_offset")
             }
         }
+    }
+
+    // MARK: - AVPlayer to MPV Fallback
+
+    /// Tracks whether we've already attempted fallback (to prevent loops)
+    private var hasAttemptedMPVFallback = false
+
+    /// Fall back from AVPlayer to MPV when AVPlayer fails to load
+    /// This creates an MPV player, rebuilds the stream URL for direct play, and retries
+    private func fallbackToMPV() async throws {
+        guard !hasAttemptedMPVFallback else {
+            throw PlayerError.loadFailed("Already attempted MPV fallback")
+        }
+        hasAttemptedMPVFallback = true
+
+        // Stop AVPlayer
+        avPlayerWrapper?.stop()
+        avPlayerWrapper = nil
+
+        // Switch to MPV
+        playerType = .mpv
+        mpvPlayerWrapper = MPVPlayerWrapper()
+
+        // Cancel existing subscriptions and rebind to MPV
+        cancellables.removeAll()
+        bindPlayerState()
+
+        // Rebuild stream URL for MPV (direct play instead of HLS)
+        let networkManager = PlexNetworkManager.shared
+        guard let ratingKey = metadata.ratingKey else {
+            throw PlayerError.loadFailed("Missing rating key")
+        }
+
+        let partKey = metadata.Media?.first?.Part?.first?.key
+
+        if let partKey = partKey {
+            streamURL = networkManager.buildVLCDirectPlayURL(
+                serverURL: serverURL,
+                authToken: authToken,
+                partKey: partKey
+            )
+        } else {
+            streamURL = networkManager.buildDirectStreamURL(
+                serverURL: serverURL,
+                authToken: authToken,
+                ratingKey: ratingKey,
+                offsetMs: Int((startOffset ?? 0) * 1000),
+                isAudio: false
+            )
+        }
+
+        streamHeaders = [
+            "X-Plex-Token": authToken,
+            "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
+            "X-Plex-Platform": PlexAPI.platform,
+            "X-Plex-Device": PlexAPI.deviceName,
+            "X-Plex-Product": PlexAPI.productName
+        ]
+
+        guard let url = streamURL else {
+            throw PlayerError.loadFailed("Could not build MPV stream URL")
+        }
+
+        print("🎬 [Fallback] Retrying with MPV using URL: \(url.absoluteString)")
+
+        // Show notice to user about the fallback
+        showCompatibilityNotice("AVPlayer failed — falling back to standard HDR")
+
+        // Load and play with MPV
+        guard let mpv = mpvPlayerWrapper else {
+            throw PlayerError.loadFailed("MPV player not available")
+        }
+
+        try await mpv.load(url: url, headers: streamHeaders, startTime: startOffset)
+        mpv.play()
+        self.duration = mpv.duration
+        updateTrackLists()
+
+        preloadThumbnails()
+        startControlsHideTimer()
+
+        print("🎬 [Fallback] MPV fallback successful!")
     }
 
     /// Called when the MPV view controller is created

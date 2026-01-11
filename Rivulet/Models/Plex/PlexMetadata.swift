@@ -28,8 +28,19 @@ struct PlexCrewMember: Codable, Identifiable, Sendable {
 
 /// Generic tag model (genres, collections, etc.)
 struct PlexTag: Codable, Identifiable, Hashable, Sendable {
-    var id: String { tag ?? UUID().uuidString }
+    var id: String { idString ?? tag ?? UUID().uuidString }
+    var _id: Int?          // Collection/genre ID from Plex API (decoded from "id")
     var tag: String?
+
+    /// String version of the numeric ID for use with collection API
+    var idString: String? {
+        _id.map { String($0) }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case _id = "id"
+        case tag
+    }
 }
 
 /// Trailer/Extra content
@@ -126,6 +137,7 @@ struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var art: String?
     var banner: String?
     var Genre: [PlexTag]?
+    var Collection: [PlexTag]?
 
     // MARK: - Timing
     var duration: Int?            // Milliseconds
@@ -223,6 +235,7 @@ struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
         art: String? = nil,
         banner: String? = nil,
         Genre: [PlexTag]? = nil,
+        Collection: [PlexTag]? = nil,
         duration: Int? = nil,
         originallyAvailableAt: String? = nil,
         addedAt: Int? = nil,
@@ -282,6 +295,7 @@ struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
         self.art = art
         self.banner = banner
         self.Genre = Genre
+        self.Collection = Collection
         self.duration = duration
         self.originallyAvailableAt = originallyAvailableAt
         self.addedAt = addedAt

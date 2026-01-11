@@ -115,6 +115,77 @@ actor PersonalizedRecommendationService {
         return items
     }
 
+    /// Get recommendations for a specific item (content-based + personalized)
+    /// Builds a profile from the item's features and optionally blends with watch history
+    /// - Parameters:
+    ///   - item: The item to get recommendations for
+    ///   - blendWithHistory: If true, blends item features with user's watch history (85/15 split)
+    ///   - limit: Maximum number of recommendations to return
+    func recommendationsForItem(
+        _ item: PlexMetadata,
+        blendWithHistory: Bool = true,
+        limit: Int = 12
+    ) async throws -> [PlexMetadata] {
+        let auth = await MainActor.run { (authManager.selectedServerURL, authManager.selectedServerToken) }
+        guard let serverURL = auth.0, let token = auth.1 else {
+            throw NSError(domain: "PlexAuth", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not authenticated with Plex"])
+        }
+
+        // Build feature profile from the current item
+        let itemFeatures = await buildFeatures(for: item)
+        var itemProfile = FeatureProfile()
+        itemProfile.add(features: itemFeatures, weight: 1.0)
+
+        // Optionally blend with watch history profile
+        let profile: FeatureProfile
+        if blendWithHistory {
+            // Get watch history profile
+            let historyProfile = try await buildWatchHistoryProfile(serverURL: serverURL, token: token)
+            profile = blendProfiles(primary: itemProfile, secondary: historyProfile, primaryWeight: 0.85)
+        } else {
+            profile = itemProfile
+        }
+
+        // Get library items to score
+        await dataStore.loadLibrariesIfNeeded()
+        let visibleLibraries = await MainActor.run { dataStore.visibleLibraries }
+        let movieLibraries = visibleLibraries.filter { $0.type == "movie" }
+
+        var libraryItems: [PlexMetadata] = []
+        for library in movieLibraries {
+            let result = try await networkManager.getLibraryItemsWithTotal(
+                serverURL: serverURL,
+                authToken: token,
+                sectionId: library.key,
+                start: 0,
+                size: maxItemsPerLibrary
+            )
+            libraryItems.append(contentsOf: result.items.filter { $0.type == "movie" })
+        }
+
+        // Filter out watched items and the current item
+        let candidates = libraryItems.filter {
+            $0.ratingKey != item.ratingKey && ($0.viewCount ?? 0) == 0
+        }
+
+        // Score candidates
+        var scored: [(PlexMetadata, Double)] = []
+        for candidate in candidates {
+            let features = await buildFeatures(for: candidate)
+            let itemScore = score(features: features, profile: profile, metadata: candidate)
+            scored.append((candidate, itemScore))
+        }
+
+        // Sort and return top results
+        let sorted = scored
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+            .prefix(limit)
+            .map { $0.0 }
+
+        return Array(sorted)
+    }
+
     // MARK: - Core logic
 
     private func computeRecommendations(contentType: RecommendationContentType, libraryKey: String?, serverURL: String) async throws -> [PlexMetadata] {
@@ -312,5 +383,82 @@ actor PersonalizedRecommendationService {
 
         let ratingBoost = ((metadata.audienceRating ?? metadata.rating ?? metadata.userRating ?? 0) / 10.0) * 0.1
         return redistributed + ratingBoost
+    }
+
+    // MARK: - Profile helpers
+
+    /// Build a feature profile from user's watch history
+    private func buildWatchHistoryProfile(serverURL: String, token: String) async throws -> FeatureProfile {
+        await dataStore.loadLibrariesIfNeeded()
+        let visibleLibraries = await MainActor.run { dataStore.visibleLibraries }
+        let movieLibraries = visibleLibraries.filter { $0.type == "movie" }
+
+        var watchedItems: [PlexMetadata] = []
+        for library in movieLibraries {
+            let result = try await networkManager.getLibraryItemsWithTotal(
+                serverURL: serverURL,
+                authToken: token,
+                sectionId: library.key,
+                start: 0,
+                size: maxItemsPerLibrary
+            )
+            let watched = result.items.filter { ($0.viewCount ?? 0) > 0 || $0.lastViewedAt != nil }
+            watchedItems.append(contentsOf: watched)
+        }
+
+        // Sort by recency and take top items
+        let recentWatched = watchedItems
+            .sorted { ($0.lastViewedAt ?? 0) > ($1.lastViewedAt ?? 0) }
+            .prefix(maxWatchedForProfile)
+
+        var profile = FeatureProfile()
+        for item in recentWatched {
+            let features = await buildFeatures(for: item)
+            let weight = recencyWeight(lastViewedAt: item.lastViewedAt) * rewatchBoost(viewCount: item.viewCount)
+            profile.add(features: features, weight: weight)
+        }
+
+        return profile
+    }
+
+    /// Blend two profiles with specified weights
+    private func blendProfiles(primary: FeatureProfile, secondary: FeatureProfile, primaryWeight: Double) -> FeatureProfile {
+        let secondaryWeight = 1.0 - primaryWeight
+
+        var blended = FeatureProfile()
+
+        // Blend keywords
+        for (key, value) in primary.keywords {
+            blended.keywords[key, default: 0] += value * primaryWeight
+        }
+        for (key, value) in secondary.keywords {
+            blended.keywords[key, default: 0] += value * secondaryWeight
+        }
+
+        // Blend genres
+        for (key, value) in primary.genres {
+            blended.genres[key, default: 0] += value * primaryWeight
+        }
+        for (key, value) in secondary.genres {
+            blended.genres[key, default: 0] += value * secondaryWeight
+        }
+
+        // Blend cast
+        for (key, value) in primary.cast {
+            blended.cast[key, default: 0] += value * primaryWeight
+        }
+        for (key, value) in secondary.cast {
+            blended.cast[key, default: 0] += value * secondaryWeight
+        }
+
+        // Blend directors
+        for (key, value) in primary.directors {
+            blended.directors[key, default: 0] += value * primaryWeight
+        }
+        for (key, value) in secondary.directors {
+            blended.directors[key, default: 0] += value * secondaryWeight
+        }
+
+        return blended
     }
 }

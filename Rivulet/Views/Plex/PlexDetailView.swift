@@ -47,9 +47,11 @@ struct PlexDetailView: View {
     @State private var savedTrackFocus: String?  // Save focus when playing track
     #endif
 
-    // New state for cast/crew and related items
+    // New state for cast/crew, collections, and recommendations
     @State private var fullMetadata: PlexMetadata?
-    @State private var relatedItems: [PlexMetadata] = []
+    @State private var collectionItems: [PlexMetadata] = []
+    @State private var collectionName: String?
+    @State private var recommendedItems: [PlexMetadata] = []
     @State private var isWatched = false
     @State private var isStarred = false  // For music: 5-star rating toggle
     @State private var displayedProgress: Double = 0  // For animating progress bar
@@ -65,6 +67,7 @@ struct PlexDetailView: View {
     @State private var isLoadingNavigation = false
 
     private let networkManager = PlexNetworkManager.shared
+    private let recommendationService = PersonalizedRecommendationService.shared
 
     /// Effective item data - uses fullMetadata for progress/viewOffset when available
     /// This ensures we have the most up-to-date playback position after returning from the player
@@ -179,6 +182,28 @@ struct PlexDetailView: View {
                 .padding(.horizontal, 48)
                 .padding(.top, 8)
 
+                // Collection Section (for movies that are part of a collection)
+                if !collectionItems.isEmpty, let name = collectionName {
+                    MediaItemRow(
+                        title: name,
+                        items: collectionItems,
+                        serverURL: authManager.selectedServerURL ?? "",
+                        authToken: authManager.selectedServerToken ?? ""
+                    )
+                    .padding(.top, 32)
+                }
+
+                // Recommended Section (TMDB-powered)
+                if !recommendedItems.isEmpty {
+                    MediaItemRow(
+                        title: "Recommended",
+                        items: recommendedItems,
+                        serverURL: authManager.selectedServerURL ?? "",
+                        authToken: authManager.selectedServerToken ?? ""
+                    )
+                    .padding(.top, 32)
+                }
+
                 // Cast & Crew Section
                 if let metadata = fullMetadata,
                    (!metadata.cast.isEmpty || !(metadata.Director?.isEmpty ?? true)) {
@@ -189,12 +214,6 @@ struct PlexDetailView: View {
                         authToken: authManager.selectedServerToken ?? ""
                     )
                     .padding(.top, 32)
-                }
-
-                // Related Items Section
-                if !relatedItems.isEmpty {
-                    relatedItemsSection
-                        .padding(.top, 32)
                 }
 
                 Spacer()
@@ -212,7 +231,9 @@ struct PlexDetailView: View {
             episodes = []
             selectedSeason = nil
             fullMetadata = nil
-            relatedItems = []
+            collectionItems = []
+            collectionName = nil
+            recommendedItems = []
             nextUpEpisode = nil
 
             // Initialize watched state
@@ -227,8 +248,18 @@ struct PlexDetailView: View {
             // Load full metadata for cast/crew and trailer
             await loadFullMetadata()
 
-            // Load related items
-            await loadRelatedItems()
+            // Load collection and recommendations for movies
+            if item.type == "movie" {
+                // Load collection items if movie is part of a collection
+                if let collection = fullMetadata?.Collection?.first,
+                   let collectionId = collection.idString,
+                   let sectionId = fullMetadata?.librarySectionID {
+                    let name = (collection.tag ?? "Collection") + " Collection"
+                    await loadCollectionItems(sectionId: String(sectionId), collectionId: collectionId, name: name)
+                }
+                // Load TMDB-powered recommendations
+                await loadRecommendedItems()
+            }
 
             // Load seasons for TV shows
             if item.type == "show" {
@@ -1178,35 +1209,6 @@ struct PlexDetailView: View {
         }
     }
 
-    // MARK: - Related Items Section
-
-    private var relatedItemsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("More Like This")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 48)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 24) {
-                    ForEach(relatedItems, id: \.ratingKey) { relatedItem in
-                        NavigationLink(value: relatedItem) {
-                            MediaPosterCard(
-                                item: relatedItem,
-                                serverURL: authManager.selectedServerURL ?? "",
-                                authToken: authManager.selectedServerToken ?? ""
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 48)
-                .padding(.vertical, 16)
-            }
-        }
-    }
-
     // MARK: - Player Presentation (tvOS)
 
     #if os(tvOS)
@@ -1321,21 +1323,31 @@ struct PlexDetailView: View {
         isLoadingExtras = false
     }
 
-    private func loadRelatedItems() async {
+    private func loadCollectionItems(sectionId: String, collectionId: String, name: String) async {
         guard let serverURL = authManager.selectedServerURL,
-              let token = authManager.selectedServerToken,
-              let ratingKey = item.ratingKey else { return }
+              let token = authManager.selectedServerToken else { return }
 
         do {
-            let related = try await networkManager.getRelatedItems(
+            let items = try await networkManager.getCollectionItems(
                 serverURL: serverURL,
                 authToken: token,
-                ratingKey: ratingKey,
-                limit: 12
+                sectionId: sectionId,
+                collectionId: collectionId,
+                excludeRatingKey: item.ratingKey
             )
-            relatedItems = related
+            collectionItems = items
+            collectionName = name
         } catch {
-            print("Failed to load related items: \(error)")
+            print("Failed to load collection items: \(error)")
+        }
+    }
+
+    private func loadRecommendedItems() async {
+        do {
+            let items = try await recommendationService.recommendationsForItem(item, blendWithHistory: true, limit: 12)
+            recommendedItems = items
+        } catch {
+            print("Failed to load recommended items: \(error)")
         }
     }
 

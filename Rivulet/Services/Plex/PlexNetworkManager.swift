@@ -436,7 +436,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "includeOnDeck", value: "1"),
             URLQueryItem(name: "includeChapters", value: "1"),
             URLQueryItem(name: "includeRelated", value: "0"),
-            URLQueryItem(name: "includeMarkers", value: "1")
+            URLQueryItem(name: "includeMarkers", value: "1"),
+            URLQueryItem(name: "includeCollections", value: "1")
         ]
 
         guard let url = components.url else {
@@ -503,6 +504,45 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         )
 
         return container.MediaContainer.Metadata ?? []
+    }
+
+    /// Get items in a collection (other movies in the same collection)
+    /// - Parameters:
+    ///   - sectionId: The library section ID containing the collection
+    ///   - collectionId: The collection filter ID (from Collection[].id in metadata)
+    ///   - excludeRatingKey: Optional ratingKey to exclude from results (typically current movie)
+    func getCollectionItems(
+        serverURL: String,
+        authToken: String,
+        sectionId: String,
+        collectionId: String,
+        excludeRatingKey: String? = nil
+    ) async throws -> [PlexMetadata] {
+        guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
+            throw PlexAPIError.invalidURL
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "collection", value: collectionId)
+        ]
+
+        guard let url = components.url else {
+            throw PlexAPIError.invalidURL
+        }
+
+        let container: PlexMediaContainerWrapper = try await request(
+            url,
+            headers: plexHeaders(authToken: authToken)
+        )
+
+        var items = container.MediaContainer.Metadata ?? []
+
+        // Filter out the excluded item (current movie)
+        if let exclude = excludeRatingKey {
+            items = items.filter { $0.ratingKey != exclude }
+        }
+
+        return items
     }
 
     /// Get children of an item (seasons for shows, episodes for seasons, albums for artists)

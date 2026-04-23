@@ -2461,11 +2461,18 @@ final class DirectPlayPipeline {
         return heavy.contains(where: { normalized == $0 || normalized.hasPrefix($0) })
     }
 
-    /// Find a lighter audio track for DV throughput. Prefers same language,
-    /// prioritizes EAC3 > AC3 > AAC by channel count.
+    /// Find a lighter audio track as a substitute for a heavy-decode primary
+    /// on DV content. Excludes special-purpose tracks (commentary, audio
+    /// description, narration); prefers same language; strongly prefers
+    /// `isDefault`-flagged tracks; tie-breaks by channel count then
+    /// EAC3 > AC3 > AAC. Returns nil when no suitable lighter track exists —
+    /// in that case the caller must keep the heavy track rather than swap to
+    /// a commentary or audio-description track as if it were the main audio.
     private func preferredLighterAudioTrack(than current: FFmpegTrackInfo) -> FFmpegTrackInfo? {
         let candidates = demuxer.audioTracks.filter { track in
-            track.streamIndex != current.streamIndex && !codecIsHeavyDecode(track.codecName)
+            track.streamIndex != current.streamIndex
+                && !codecIsHeavyDecode(track.codecName)
+                && !Self.isSpecialPurposeAudioTrack(track)
         }
         guard !candidates.isEmpty else { return nil }
 
@@ -2478,17 +2485,35 @@ final class DirectPlayPipeline {
             languageScoped = candidates
         }
 
-        // Score: prefer surround > stereo, EAC3 > AC3 > AAC
+        // Score: default flag dominates; then more channels; then EAC3 > AC3 > AAC.
         return languageScoped.max(by: { lighterTrackScore($0) < lighterTrackScore($1) })
     }
 
     private func lighterTrackScore(_ track: FFmpegTrackInfo) -> Int {
         let normalized = Self.normalizedCodecIdentifier(track.codecName)
         var score = Int(track.channels) * 10  // More channels = better
+        if track.isDefault { score += 100 }   // Default-flagged track dominates tie-breaking
         if normalized.hasPrefix("eac3") || normalized.hasPrefix("ec3") { score += 5 }
         else if normalized.hasPrefix("ac3") { score += 3 }
         else if normalized.hasPrefix("aac") { score += 1 }
         return score
+    }
+
+    /// True when the track's title indicates an alternate-purpose mix
+    /// (commentary, audio description, narration, etc.) rather than the
+    /// film's main audio. Such tracks must never be chosen as a lighter-codec
+    /// substitute for the primary audio — selecting a commentary in place of
+    /// a Dolby Atmos main mix is the worst failure mode for this path.
+    private static func isSpecialPurposeAudioTrack(_ track: FFmpegTrackInfo) -> Bool {
+        guard let title = track.title?.lowercased(), !title.isEmpty else { return false }
+        let keywords = [
+            "commentary", "commentaries",
+            "audio description", "descriptive audio", "descriptive",
+            "narration", "narrator",
+            "sign language", "visually impaired",
+            "karaoke", "isolated score",
+        ]
+        return keywords.contains(where: { title.contains($0) })
     }
 
     private func codecIsLikelyNative(_ codec: String) -> Bool {

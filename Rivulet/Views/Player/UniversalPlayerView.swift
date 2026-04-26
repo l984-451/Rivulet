@@ -876,7 +876,7 @@ struct UniversalPlayerView: View {
     @ViewBuilder
     private var playerContentLayer: some View {
         ZStack {
-            if viewModel.player != nil {
+            if viewModel.player != nil || viewModel.rivuletPlayer != nil {
                 SubtitleOverlayView(
                     subtitleManager: viewModel.subtitleManager,
                     bottomOffset: viewModel.showControls ? 140 : 60

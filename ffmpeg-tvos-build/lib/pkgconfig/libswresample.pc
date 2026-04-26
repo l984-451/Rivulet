@@ -1,7 +1,7 @@
-prefix=
+prefix=/Users/rrg/sw/rivulet/ffmpeg-tvos-build
 exec_prefix=${prefix}
-libdir=/lib
-includedir=/include
+libdir=/Users/rrg/sw/rivulet/ffmpeg-tvos-build/lib
+includedir=/Users/rrg/sw/rivulet/ffmpeg-tvos-build/include
 
 Name: libswresample
 Description: FFmpeg audio resampling library

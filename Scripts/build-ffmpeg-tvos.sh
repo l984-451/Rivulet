@@ -18,6 +18,13 @@
 
 set -euo pipefail
 
+# Resolve script and project paths up front. The build later cds into the
+# FFmpeg source dir, so anything relying on $0 or $(pwd) past that point would
+# break — capture the absolute paths now.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+FW_DIR="$PROJECT_DIR/Frameworks"
+
 FFMPEG_SRC="${1:-$(pwd)/ffmpeg}"
 BUILD_DIR="$(pwd)/ffmpeg-tvos-build"
 TVOS_MIN="18.0"
@@ -71,7 +78,7 @@ echo "Configuring FFmpeg for tvOS arm64..."
     --enable-muxer=mp4,ipod \
     --enable-parser=hevc,h264,aac,ac3,eac3,flac,opus,vorbis,h263 \
     --enable-protocol=file,http,https,tcp,tls,crypto \
-    --enable-decoder=srt,webvtt,ass,ssa,subrip,truehd,mlp,dca,flac,pcm_s16le,pcm_s24le,aac,aac_latm,ac3,eac3,mp3,alac \
+    --enable-decoder=srt,webvtt,ass,ssa,subrip,pgssub,dvdsub,dvbsub,truehd,mlp,dca,flac,pcm_s16le,pcm_s24le,aac,aac_latm,ac3,eac3,mp3,alac \
     --enable-encoder=eac3 \
     \
     --disable-filters \
@@ -134,10 +141,6 @@ for h in d3d11va.h dxva2.h vdpau.h mediacodec.h qsv.h jni.h; do
 done
 
 # Package each library as an xcframework
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-FW_DIR="$PROJECT_DIR/Frameworks"
-
 for lib in avformat avcodec avutil swresample; do
     LIB_NAME="Lib${lib}"
     echo ""

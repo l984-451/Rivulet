@@ -437,9 +437,11 @@ struct PlayerControlsOverlay: View {
 
     // MARK: - Track Display Formatting
 
-    /// Audio track title: format string (e.g., "AAC Stereo", "TrueHD 5.1")
+    /// Audio track title: Plex's long-form descriptive title when present
+    /// (e.g., "English (AC3 5.1) - Director's Commentary"); otherwise the
+    /// synthesized format string ("AAC Stereo", "TrueHD 5.1").
     private func formatAudioTrackTitle(_ track: MediaTrack) -> String {
-        track.audioFormatString
+        track.extendedDisplayTitle ?? track.audioFormatString
     }
 
     /// Audio track subtitle: language in uppercase (e.g., "ENGLISH")
@@ -447,9 +449,11 @@ struct PlayerControlsOverlay: View {
         track.languageDisplay
     }
 
-    /// Subtitle track title: language in uppercase (e.g., "ENGLISH")
+    /// Subtitle track title: Plex's long-form descriptive title when
+    /// present; otherwise the language in uppercase ("ENGLISH").
+    /// Forced / SDH suffixes are appended in either case.
     private func formatSubtitleTrackTitle(_ track: MediaTrack) -> String {
-        var title = track.languageDisplay
+        var title = track.extendedDisplayTitle ?? track.languageDisplay
         if track.isForced {
             title += " (Forced)"
         }

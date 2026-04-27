@@ -2761,6 +2761,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 isDefault: stream.default ?? track.isDefault,
                 isForced: stream.forced ?? track.isForced,
                 isHearingImpaired: stream.hearingImpaired ?? track.isHearingImpaired,
+                extendedDisplayTitle: stream.extendedDisplayTitle ?? track.extendedDisplayTitle,
                 channels: stream.channels ?? track.channels,
                 subtitleKey: stream.key ?? track.subtitleKey
             )

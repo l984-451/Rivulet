@@ -18,6 +18,12 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
     let isForced: Bool
     let isHearingImpaired: Bool
 
+    /// Plex's long-form descriptive title when present (e.g.,
+    /// "English (AC3 5.1) - Director's Commentary"). Preferred over `name`
+    /// in user-facing pickers so commentary / audio-description / SDH
+    /// tracks are distinguishable from the main mix.
+    let extendedDisplayTitle: String?
+
     // Audio-specific
     let channels: Int?
 
@@ -33,6 +39,7 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
         isDefault: Bool = false,
         isForced: Bool = false,
         isHearingImpaired: Bool = false,
+        extendedDisplayTitle: String? = nil,
         channels: Int? = nil,
         subtitleKey: String? = nil
     ) {
@@ -44,6 +51,7 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isDefault = isDefault
         self.isForced = isForced
         self.isHearingImpaired = isHearingImpaired
+        self.extendedDisplayTitle = extendedDisplayTitle
         self.channels = channels
         self.subtitleKey = subtitleKey
     }
@@ -58,6 +66,7 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isDefault = stream.default ?? false
         self.isForced = stream.forced ?? false
         self.isHearingImpaired = stream.hearingImpaired ?? false
+        self.extendedDisplayTitle = stream.extendedDisplayTitle
         self.channels = stream.channels
         self.subtitleKey = stream.key
     }

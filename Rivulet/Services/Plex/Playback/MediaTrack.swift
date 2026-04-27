@@ -100,7 +100,7 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
         case "subrip", "srt": return "SRT"
         case "ass", "ssa": return "ASS"
         case "pgs", "hdmv_pgs_subtitle", "pgssub": return "PGS"
-        case "dvdsub", "dvd_subtitle": return "VOBSUB"
+        case "dvdsub", "dvd_subtitle", "vobsub": return "VOBSUB"
         case "mov_text": return "TX3G"
         case "webvtt", "vtt": return "WebVTT"
         case "cc_dec": return "CC"
@@ -117,7 +117,7 @@ struct MediaTrack: Identifiable, Equatable, Sendable {
         case "subrip", "srt": return "srt"
         case "ass", "ssa": return "ass"
         case "pgs", "hdmv_pgs_subtitle", "pgssub": return "pgs"
-        case "dvdsub", "dvd_subtitle": return "dvdsub"
+        case "dvdsub", "dvd_subtitle", "vobsub": return "dvdsub"
         case "mov_text", "tx3g": return "mov_text"
         case "webvtt", "vtt": return "webvtt"
         default: return codec

@@ -21,7 +21,12 @@ struct SubtitleOverlayView: View {
                 // Bitmap subtitle cues (PGS, DVB-SUB) — positioned absolutely
                 ForEach(subtitleManager.currentBitmapCues) { cue in
                     ForEach(Array(cue.rects.enumerated()), id: \.offset) { _, rect in
-                        BitmapSubtitleRectView(rect: rect, viewSize: geometry.size)
+                        BitmapSubtitleRectView(
+                            rect: rect,
+                            viewSize: geometry.size,
+                            referenceWidth: cue.referenceWidth,
+                            referenceHeight: cue.referenceHeight
+                        )
                     }
                 }
 
@@ -74,15 +79,18 @@ private struct SubtitleTextView: View {
 private struct BitmapSubtitleRectView: View {
     let rect: BitmapSubtitleRect
     let viewSize: CGSize
-
-    /// PGS coordinates are typically in 1920x1080 video resolution space
-    private let referenceWidth: CGFloat = 1920
-    private let referenceHeight: CGFloat = 1080
+    /// Codec-reported reference resolution that the rect coordinates are authored
+    /// against. 0 means the codec didn't report it; fall back to the HD spec
+    /// (1920×1080), which matches Blu-ray PGS authoring.
+    let referenceWidth: Int
+    let referenceHeight: Int
 
     var body: some View {
         if let image = createImage() {
-            let scaleX = viewSize.width / referenceWidth
-            let scaleY = viewSize.height / referenceHeight
+            let refW: CGFloat = referenceWidth > 0 ? CGFloat(referenceWidth) : 1920
+            let refH: CGFloat = referenceHeight > 0 ? CGFloat(referenceHeight) : 1080
+            let scaleX = viewSize.width / refW
+            let scaleY = viewSize.height / refH
             let scaledWidth = CGFloat(rect.width) * scaleX
             let scaledHeight = CGFloat(rect.height) * scaleY
             let scaledX = CGFloat(rect.x) * scaleX

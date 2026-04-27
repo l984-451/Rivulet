@@ -19,6 +19,11 @@ struct DecodedSubtitleFrame: Sendable {
     let rects: [BitmapSubtitleRect]
     let startTime: TimeInterval
     let endTime: TimeInterval
+    /// Codec-reported reference resolution that rect coordinates are authored
+    /// against (DVDSUB sets it from extradata; PGS sets it from segment headers
+    /// during decode). 0 if unknown.
+    let referenceWidth: Int
+    let referenceHeight: Int
 }
 
 // =============================================================================
@@ -177,12 +182,22 @@ final class FFmpegSubtitleDecoder: @unchecked Sendable {
             }
         }
 
+        // Codec reference resolution. After avcodec_decode_subtitle2, ctx.width/height
+        // reflect the subtitle's authoring resolution: dvdsub_init parses "size: WxH"
+        // from extradata (DVD VOBSUB → 720×480 NTSC or 720×576 PAL); pgssub reads the
+        // presentation segment width/height (Blu-ray PGS → 1920×1080 even on UHD discs);
+        // DVB-SUB picks up the display definition segment.
+        let referenceWidth = Int(ctx.pointee.width)
+        let referenceHeight = Int(ctx.pointee.height)
+
         // Return frame even with 0 rects — empty rects = PGS "clear screen" display set.
         // The pipeline uses this to close the previous open-ended cue.
         return DecodedSubtitleFrame(
             rects: rects,
             startTime: startTime,
-            endTime: endTime
+            endTime: endTime,
+            referenceWidth: referenceWidth,
+            referenceHeight: referenceHeight
         )
     }
 

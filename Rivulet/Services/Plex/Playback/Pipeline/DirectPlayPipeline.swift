@@ -2294,7 +2294,9 @@ final class DirectPlayPipeline {
                                     id: cueId,
                                     startTime: frame.startTime,
                                     endTime: frame.endTime,
-                                    rects: frame.rects
+                                    rects: frame.rects,
+                                    referenceWidth: frame.referenceWidth,
+                                    referenceHeight: frame.referenceHeight
                                 )
                                 await MainActor.run { [weak self] in
                                     self?.onBitmapSubtitleCue?(cue)

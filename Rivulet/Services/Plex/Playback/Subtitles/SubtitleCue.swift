@@ -81,6 +81,11 @@ struct BitmapSubtitleCue: Identifiable, Sendable {
     let startTime: TimeInterval
     var endTime: TimeInterval   // var: PGS cues use .infinity sentinel, trimmed when next cue arrives
     let rects: [BitmapSubtitleRect]
+    /// Reference resolution that the rect coordinates are authored against.
+    /// VOBSUB ≈ 720×480 (NTSC) or 720×576 (PAL), PGS = 1920×1080, DVB-SUB ≈ 720×576.
+    /// 0 means the codec didn't report it; renderers should fall back to a sensible default.
+    let referenceWidth: Int
+    let referenceHeight: Int
 
     func isActive(at time: TimeInterval) -> Bool {
         time >= startTime && time < endTime

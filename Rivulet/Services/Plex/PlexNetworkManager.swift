@@ -1550,6 +1550,33 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Set the preferred subtitle stream on a media part. Pass `0` for
+    /// `subtitleStreamID` to disable subtitles. Plex persists this
+    /// per-user-per-part, so it survives across plays from any client.
+    func setSelectedSubtitleStream(
+        serverURL: String,
+        authToken: String,
+        partId: Int,
+        subtitleStreamID: Int
+    ) async {
+        let urlString = "\(serverURL)/library/parts/\(partId)?subtitleStreamID=\(subtitleStreamID)&X-Plex-Token=\(authToken)"
+        guard let url = URL(string: urlString) else {
+            print("[Plex] Failed to build subtitle stream selection URL")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            print("[Plex] Set subtitle stream \(subtitleStreamID) on part \(partId): HTTP \(status)")
+        } catch {
+            print("[Plex] Failed to set subtitle stream: \(error.localizedDescription)")
+        }
+    }
+
     /// Ping the `/decision` endpoint to tell Plex to actually start the transcode/remux session.
     /// Without this, Plex may return a playlist with segment URLs but never begin muxing,
     /// causing the init segment (`/base/header`) to hang indefinitely.

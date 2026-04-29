@@ -13,10 +13,31 @@ import Foundation
 /// Plex API constants
 enum PlexAPI: Sendable {
     static let baseUrl = "https://plex.tv"
-    static let clientIdentifier = "com.gstudios.rivulet"
     static let productName = "Rivulet"
     static let deviceName = "Apple TV"
     static let platform = "tvOS"
+
+    /// Stable per-install client identifier. Plex uses this to distinguish
+    /// devices in its Dashboard, attribute transcode sessions, and track
+    /// "Continue Watching" state. Generated as a UUID on first launch and
+    /// persisted in UserDefaults so subsequent launches reuse it.
+    ///
+    /// Earlier Rivulet hardcoded "com.gstudios.rivulet" globally — every
+    /// install on every device identified as the same Plex client, which
+    /// merged multi-device deployments in the Plex Dashboard and let one
+    /// device's traffic redirect another device's transcode session.
+    /// Matches Plezy's `lib/services/storage_service.dart`
+    /// `getOrCreateClientIdentifier` pattern.
+    static let clientIdentifier: String = {
+        let key = "plexClientIdentifier"
+        let defaults = UserDefaults.standard
+        if let stored = defaults.string(forKey: key), !stored.isEmpty {
+            return stored
+        }
+        let generated = UUID().uuidString
+        defaults.set(generated, forKey: key)
+        return generated
+    }()
 }
 
 // MARK: - Server/Device Models

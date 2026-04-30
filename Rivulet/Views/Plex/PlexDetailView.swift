@@ -667,6 +667,11 @@ struct PlexDetailView: View {
             // item within this detail view (e.g., via collection / recs).
             preplayAudioTrackId = nil
             preplaySubtitleSelection = .auto
+            // Cancel any in-flight write for the previous item so
+            // presentPlayer() doesn't await a task that refreshes
+            // metadata for the now-defunct item.
+            pendingPreplayWrite?.cancel()
+            pendingPreplayWrite = nil
         }
         .onChange(of: showPlayer) { _, isShowing in
             // Clear selected episode/track and playFromBeginning when player closes
@@ -1416,14 +1421,6 @@ struct PlexDetailView: View {
 
     private var preplaySubtitleTracks: [MediaTrack] {
         preplayStreams.filter { $0.isSubtitle }.map { MediaTrack(from: $0) }
-    }
-
-    /// The id passed to TrackSelectionSheet for the subtitle picker.
-    /// `.auto` and `.off` both surface as nil (the picker shows "Off"
-    /// highlighted for nil); `.track(id)` surfaces the picked id.
-    private var preplaySubtitleSelectedId: Int? {
-        if case .track(let id) = preplaySubtitleSelection { return id }
-        return nil
     }
 
     /// Audio stream Plex has marked `selected` for the current user.

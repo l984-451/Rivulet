@@ -1532,8 +1532,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         partId: Int,
         audioStreamID: Int
     ) async {
-        let urlString = "\(serverURL)/library/parts/\(partId)?audioStreamID=\(audioStreamID)&X-Plex-Token=\(authToken)"
-        guard let url = URL(string: urlString) else {
+        guard var components = URLComponents(string: "\(serverURL)/library/parts/\(partId)") else {
+            print("[Plex] Failed to build audio stream selection URL")
+            return
+        }
+        components.queryItems = [
+            URLQueryItem(name: "audioStreamID", value: "\(audioStreamID)"),
+            URLQueryItem(name: "X-Plex-Token", value: authToken)
+        ]
+        guard let url = components.url else {
             print("[Plex] Failed to build audio stream selection URL")
             return
         }
@@ -1542,7 +1549,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         request.httpMethod = "PUT"
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("[Plex] Set audio stream \(audioStreamID) on part \(partId): HTTP \(status)")
         } catch {
@@ -1559,8 +1566,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         partId: Int,
         subtitleStreamID: Int
     ) async {
-        let urlString = "\(serverURL)/library/parts/\(partId)?subtitleStreamID=\(subtitleStreamID)&X-Plex-Token=\(authToken)"
-        guard let url = URL(string: urlString) else {
+        guard var components = URLComponents(string: "\(serverURL)/library/parts/\(partId)") else {
+            print("[Plex] Failed to build subtitle stream selection URL")
+            return
+        }
+        components.queryItems = [
+            URLQueryItem(name: "subtitleStreamID", value: "\(subtitleStreamID)"),
+            URLQueryItem(name: "X-Plex-Token", value: authToken)
+        ]
+        guard let url = components.url else {
             print("[Plex] Failed to build subtitle stream selection URL")
             return
         }
@@ -1569,7 +1583,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         request.httpMethod = "PUT"
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("[Plex] Set subtitle stream \(subtitleStreamID) on part \(partId): HTTP \(status)")
         } catch {

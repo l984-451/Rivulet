@@ -450,10 +450,14 @@ struct PlayerControlsOverlay: View {
     }
 
     /// Subtitle track title: Plex's long-form descriptive title when
-    /// present; otherwise the language in uppercase ("ENGLISH").
-    /// Forced / SDH suffixes are appended in either case.
+    /// present (already includes "Forced" / "SDH" where applicable);
+    /// otherwise the language in uppercase ("ENGLISH") with suffixes
+    /// appended.
     private func formatSubtitleTrackTitle(_ track: MediaTrack) -> String {
-        var title = track.extendedDisplayTitle ?? track.languageDisplay
+        if let extended = track.extendedDisplayTitle {
+            return extended
+        }
+        var title = track.languageDisplay
         if track.isForced {
             title += " (Forced)"
         }

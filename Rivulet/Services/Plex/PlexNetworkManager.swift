@@ -2498,12 +2498,22 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                 }
             }
 
-            // Fallback: return the authToken itself (works for server owners)
-            print("🌐 PlexNetwork: ⚠️ No server-specific token found, using plex.tv auth token")
-            return authToken
+            // No per-server token found. Returning the input plex.tv-level
+            // authToken here was the previous behavior, but for accounts
+            // that have multiple servers in their resources list (server
+            // owner of one + friend-share on another, or two friend-shares),
+            // the matching above can fall through. The plex.tv-level token
+            // doesn't authenticate against the target PMS the same way a
+            // per-server access token does — the server logs the request
+            // as "Signed-in Token ()" with no user attribution and treats
+            // the user as guest, returning 401 on per-section/streaming
+            // endpoints. Returning nil instead lets the caller (selectUser)
+            // keep the per-server token that selectServer set up at sign-in.
+            print("🌐 PlexNetwork: ⚠️ No per-server token found for serverURL=\(serverURL); returning nil to preserve existing selectedServerToken")
+            return nil
         } catch {
-            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(error)")
-            return authToken
+            print("🌐 PlexNetwork: ❌ Failed to get server access token: \(error) — returning nil")
+            return nil
         }
     }
 

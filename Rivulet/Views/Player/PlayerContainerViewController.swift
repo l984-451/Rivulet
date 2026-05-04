@@ -20,6 +20,7 @@ class PlayerContainerViewController: UIViewController {
     private var hostingController: UIHostingController<AnyView>?
     private var cancellables = Set<AnyCancellable>()
     private var panGestureRecognizer: UIPanGestureRecognizer?
+    private var touchSurfaceTapGesture: UITapGestureRecognizer?
 
     // Directional gesture recognizers for IR remote support
     private var dPadLeftTapGesture: UITapGestureRecognizer?
@@ -83,6 +84,10 @@ class PlayerContainerViewController: UIViewController {
 
         // Pan gesture for swipe-to-scrub on Siri Remote touchpad
         setupPanGesture()
+
+        // Bare-tap on the Siri Remote touch surface surfaces the timeline
+        // overlay briefly (matches Plex's tvOS client behavior).
+        setupTouchSurfaceTapGesture()
 
         // Directional gestures for IR remote support (learned remotes, universal remotes)
         // These fire UIPress events with leftArrow/rightArrow, NOT GameController events
@@ -294,6 +299,35 @@ class PlayerContainerViewController: UIViewController {
         panRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
         view.addGestureRecognizer(panRecognizer)
         panGestureRecognizer = panRecognizer
+    }
+
+    // MARK: - Touch-Surface Tap (timeline overlay)
+
+    /// Bare-tap on the Siri Remote touch surface (no force/click). Fires
+    /// only on `.indirect` touches — the touchpad — and not on `.select`
+    /// presses (those are the click and are routed to play/pause via the
+    /// micro-gamepad buttonA handler). Coexists with the pan recognizer:
+    /// if the user starts moving, pan takes over and tap doesn't fire.
+    private func setupTouchSurfaceTapGesture() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceTap))
+        tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        // On tvOS, UITapGestureRecognizer defaults allowedPressTypes to
+        // [.select], so without this it would silently wait for a click
+        // rather than a bare finger tap.
+        tap.allowedPressTypes = []
+        view.addGestureRecognizer(tap)
+        touchSurfaceTapGesture = tap
+    }
+
+    @objc private func handleTouchSurfaceTap() {
+        guard let vm = viewModel else { return }
+        guard !vm.showInfoPanel,
+              !vm.isScrubbing,
+              vm.postVideoState == .hidden,
+              !vm.playbackState.isFailed
+        else { return }
+
+        vm.showControlsTemporarily()
     }
 
     // MARK: - Directional Gestures (IR Remote Support)

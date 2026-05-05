@@ -919,9 +919,13 @@ struct UniversalPlayerView: View {
                 .zIndex(15)
             }
 
-            // Error State
+            // Error State. zIndex above the controls overlay so the
+            // SwiftUI focus engine sees the error buttons as topmost.
+            // The focus container itself (.focusSection + .defaultFocus
+            // + delayed onAppear claim) lives inside PlayerErrorOverlay.
             if case .failed(let error) = viewModel.playbackState {
                 errorView(error: error)
+                    .zIndex(50)
             }
 
             // Skip Button (intro/credits) - shows regardless of controls visibility, but not during post-video
@@ -1203,36 +1207,14 @@ struct UniversalPlayerView: View {
     // MARK: - Error View
 
     private func errorView(error: PlayerError) -> some View {
-        VStack(spacing: 24) {
-            Image(systemName: errorIcon(for: error))
-                .font(.system(size: 60))
-                .foregroundStyle(errorIconColor(for: error))
-
-            Text(errorTitle(for: error))
-                .font(.title)
-                .foregroundStyle(.white)
-
-            Text(error.userFacingDescription)
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 60)
-
-            HStack(spacing: 20) {
-                if error.isRetryable {
-                    Button("Try Again") {
-                        Task { await viewModel.retryPlayback() }
-                    }
-                    .buttonStyle(AppStoreButtonStyle())
-                }
-
-                Button("Dismiss") {
-                    viewModel.shouldDismiss = true
-                }
-                .buttonStyle(AppStoreButtonStyle())
-            }
-            .padding(.top, 20)
-        }
+        PlayerErrorOverlay(
+            error: error,
+            iconSystemName: errorIcon(for: error),
+            iconColor: errorIconColor(for: error),
+            title: errorTitle(for: error),
+            onRetry: { Task { await viewModel.retryPlayback() } },
+            onDismiss: { viewModel.shouldDismiss = true }
+        )
     }
 
     private func errorIcon(for error: PlayerError) -> String {
@@ -1480,6 +1462,98 @@ extension UniversalPlayerView {
             authToken: authManager.selectedServerToken ?? "",
             startOffset: startOffset
         )
+    }
+}
+
+/// Player error overlay with explicit default focus.
+///
+/// Lifted out of `UniversalPlayerView.errorView` so it can carry its own
+/// `@FocusState` and per-button `.focused()` bindings — without that, the
+/// error buttons were technically reachable from the Siri Remote (clicks
+/// fired their actions) but never visually highlighted, leaving the user
+/// unable to tell which button they were about to press. The visual
+/// highlight is driven off the outer `@FocusState` rather than
+/// `AppStoreButtonStyle`'s broken internal `@FocusState`, which doesn't
+/// reliably reflect the button's true focus state when wrapped in a
+/// `ButtonStyle.makeBody`.
+@MainActor
+private struct PlayerErrorOverlay: View {
+    let error: PlayerError
+    let iconSystemName: String
+    let iconColor: Color
+    let title: String
+    let onRetry: () -> Void
+    let onDismiss: () -> Void
+
+    private enum Field: Hashable { case retry, dismiss }
+
+    @FocusState private var focused: Field?
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: iconSystemName)
+                .font(.system(size: 60))
+                .foregroundStyle(iconColor)
+
+            Text(title)
+                .font(.title)
+                .foregroundStyle(.white)
+
+            Text(error.userFacingDescription)
+                .font(.body)
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 60)
+
+            HStack(spacing: 20) {
+                if error.isRetryable {
+                    actionButton(label: "Try Again", field: .retry, action: onRetry)
+                }
+
+                actionButton(label: "Dismiss", field: .dismiss, action: onDismiss)
+            }
+            .padding(.top, 20)
+        }
+        // focusSection + defaultFocus + delayed onAppear claim, ALL on
+        // the same view. Mirrors the proven pattern in
+        // WaitingToStartOverlay / HostDisconnectModal in this file.
+        // Splitting any of these (e.g. .focusSection at the call site)
+        // breaks directional navigation between Try Again and Dismiss.
+        .focusSection()
+        .defaultFocus($focused, error.isRetryable ? .retry : .dismiss)
+        .onAppear {
+            // Delay the focus claim slightly: when playbackState
+            // transitions to .failed and this overlay mounts, the focus
+            // engine takes a tick to register our focus container.
+            // Without the delay the @FocusState assignment races and
+            // lands before the engine is ready.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focused = error.isRetryable ? .retry : .dismiss
+            }
+        }
+    }
+
+    /// Focus-aware button for the error overlay. Mirrors the visual
+    /// language of `AppStoreButtonStyle` but reads the *outer*
+    /// `@FocusState` so the highlight reflects actual focus.
+    private func actionButton(label: String, field: Field, action: @escaping () -> Void) -> some View {
+        let isFocused = focused == field
+        return Button(action: action) {
+            Text(label)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(isFocused ? .black : .white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(isFocused ? Color.white : Color.white.opacity(0.15))
+                )
+                .scaleEffect(isFocused ? 1.1 : 1.0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isFocused)
+        }
+        .buttonStyle(.plain)
+        .focused($focused, equals: field)
+        .focusEffectDisabled()
     }
 }
 

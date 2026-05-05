@@ -576,6 +576,19 @@ final class DirectPlayPipeline {
         }
 
         let isResume = (state == .paused && readTask != nil)
+        // Distinguish a fresh start that follows a paused-seek (state was
+        // .paused, readTask was nil because the paused-seek inline path
+        // exited the loop after enqueueing one preview keyframe) from a
+        // fresh start at initial load (state was .ready). In the
+        // paused-seek case the demuxer has been advanced past that
+        // keyframe, so the next reads return non-keyframe P/B packets.
+        // Without intervention those feed into a display layer whose
+        // decoder reference can be stale across a long paused gap, and
+        // the visible result is a frozen image while the synchronizer
+        // clock advances and audio plays normally. Re-seeking the demuxer
+        // before startReadLoop() guarantees a keyframe heads the new read
+        // sequence.
+        let isFreshStartFromPaused = (state == .paused && readTask == nil)
         isPlaying = true
         playbackRate = rate
         state = .running
@@ -605,6 +618,21 @@ final class DirectPlayPipeline {
             deferRunningStateChange = true
             playerDebugLog("[DirectPlay] start(rate=\(rate))")
             playerDebugLog("[StartupTrace] start(): deferring .running emission until preroll completes")
+
+            // Refresh the demuxer position so the next read loop's first
+            // packet is a keyframe — see comment above. Skipped for the
+            // state==.ready initial-load case where the demuxer is already
+            // keyframe-aligned at the open position.
+            if isFreshStartFromPaused {
+                let resumeTime = renderer.currentTime
+                do {
+                    try demuxer.seek(to: resumeTime)
+                    playerDebugLog("[DirectPlay] start(): re-seeking demuxer to \(String(format: "%.3f", resumeTime))s after paused-seek")
+                } catch {
+                    playerDebugLog("[DirectPlay] start(): demuxer re-seek failed at \(String(format: "%.3f", resumeTime))s: \(error)")
+                }
+            }
+
             startReadLoop()
         }
     }

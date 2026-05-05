@@ -1431,7 +1431,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
          // Match official Plex tvOS behavior for DV by using the "Plex Apple TV" profile name.
          // Stick with "Generic" for non-DV to keep our custom extra profile.
-         let clientProfileName = useDolbyVision ? "Plex Apple TV" : "Generic"
+         // forceVideoTranscode disables DV — transcoded output cannot preserve it,
+         // so the DV profile name would mislead the server.
+         let effectiveUseDolbyVision = forceVideoTranscode ? false : useDolbyVision
+         let clientProfileName = effectiveUseDolbyVision ? "Plex Apple TV" : "Generic"
 
         // Match the official Plex tvOS profile so the server returns Apple decoder-friendly streams.
         // Keep our explicit limitations (dvhe/hev1 remap) to ensure compatible codec tags.
@@ -1476,8 +1479,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "container", value: "mp4"),
             URLQueryItem(name: "segmentFormat", value: "mp4"),
             URLQueryItem(name: "segmentContainer", value: "mp4"),  // Force CMAF/fMP4 segments (required for DV on tvOS)
-            // directPlay=1 tells server we CAN direct play mp4/mov - without this, server may transcode instead of remux
-            URLQueryItem(name: "directPlay", value: "1"),
+            // directPlay=1 tells server we CAN direct play mp4/mov - without this, server may transcode instead of remux.
+            // forceVideoTranscode flips it to 0 so the server actually transcodes (e.g., MPEG-2 / VC-1 source where
+            // direct-play would hand back the raw file and the local decoder would fail).
+            URLQueryItem(name: "directPlay", value: forceVideoTranscode ? "0" : "1"),
             // For MKV+DV, we must force video transcoding (not just remux) to get Apple-compatible codec tags (dvh1/hvc1)
             // MKV files typically use dvhe/hev1 which the tvOS decoder path does not accept here
             URLQueryItem(name: "directStream", value: forceVideoTranscode ? "0" : "1"),
@@ -1487,7 +1492,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // Note: segmentContainer=mp4 ensures fMP4 segments regardless of this setting
             URLQueryItem(name: "directStreamAudio", value: allowAudioDirectStream ? "1" : "0"),
             URLQueryItem(name: "fastSeek", value: "1"),
-            URLQueryItem(name: "videoCodec", value: "h264,hevc"),
+            // forceVideoTranscode caps the target at h264 only — h264 is the most universally
+            // compatible codec and is what we want when transcoding from a non-Apple-decodable
+            // source. The default keeps both for direct-play / remux-only requests.
+            URLQueryItem(name: "videoCodec", value: forceVideoTranscode ? "h264" : "h264,hevc"),
             URLQueryItem(name: "videoResolution", value: "4096x2160"),
             URLQueryItem(name: "videoQuality", value: "100"),
             URLQueryItem(name: "segmentDuration", value: "6"),
@@ -1512,12 +1520,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
         // Add HDR-related parameters for proper DV remuxing and codec signaling.
         // useDoviCodecs=1 ensures Plex preserves Dolby Vision metadata in the HLS output.
-        if hasHDR && useDolbyVision {
+        if hasHDR && effectiveUseDolbyVision {
             components.queryItems?.append(URLQueryItem(name: "useDoviCodecs", value: "1"))
             components.queryItems?.append(URLQueryItem(name: "includeCodecs", value: "1"))
         }
 
-        print("[Plex HLS] Using \(clientProfileName) profile for \(useDolbyVision ? "Dolby Vision" : "HDR/SDR") (session: \(sessionId))")
+        print("[Plex HLS] Using \(clientProfileName) profile for \(effectiveUseDolbyVision ? "Dolby Vision" : "HDR/SDR") (session: \(sessionId))")
 
         guard let url = components.url else { return nil }
         return (url, headers)

@@ -116,6 +116,21 @@ struct ContentRouter {
         "truehd", "mlp",                        // Dolby TrueHD / MLP
     ]
 
+    /// Video codecs Apple TV cannot decode natively at any tvOS version
+    /// (no hardware decoder, AVSampleBuffer rejects the format). Content
+    /// using these codecs must be server-side transcoded — direct-play
+    /// would fail with "Cannot Load Video".
+    ///
+    /// Stored normalized (lowercased, hyphens/underscores stripped); the
+    /// `requiresTranscode(videoCodec:)` helper applies the same normalization
+    /// before lookup.
+    static let videoCodecsRequiringTranscode: Set<String> = [
+        "mpeg2", "mpeg2video", "mp2v",          // MPEG-2 (broadcast captures, classic-TV rips)
+        "vc1", "wmv3",                          // VC-1 (older WMV-derived encodes)
+        "vp9",                                  // VP9 (no Apple TV hardware decoder)
+        "av1",                                  // AV1 (no Apple TV hardware decoder through A15 / 3rd-gen)
+    ]
+
     // MARK: - Route Decision
 
     /// Determine the primary playback route for the given content.
@@ -153,6 +168,26 @@ struct ContentRouter {
             reasoning.append("force_hls_requested")
             let hls = buildHLSRoute(context: context)
             playerDebugLog("[ContentRouter] \(container) | audio=\(audioCodec) → HLS (forced)")
+            return PlaybackPlan(
+                policy: context.playbackPolicy,
+                primary: hls,
+                fallbacks: [],
+                reasoning: reasoning
+            )
+        }
+
+        // Apple TV has no native decoder for the source video codec
+        // (e.g. MPEG-2, VC-1, VP9, AV1). Direct-play would produce
+        // "Couldn't Load Video"; force a server-side transcode. The URL
+        // builder downstream picks up the same condition via
+        // `forceVideoTranscode` so the HLS request is shaped as a real
+        // transcode (directPlay=0, directStream=0, h264 target) rather
+        // than a direct-play remux.
+        if let videoCodec = Self.primaryVideoCodec(from: context.metadata),
+           Self.requiresTranscode(videoCodec: videoCodec) {
+            reasoning.append("video_codec_requires_transcode_\(videoCodec.lowercased())")
+            let hls = buildHLSRoute(context: context)
+            playerDebugLog("[ContentRouter] \(container) | video=\(videoCodec) audio=\(audioCodec) → HLS (codec requires transcode)")
             return PlaybackPlan(
                 policy: context.playbackPolicy,
                 primary: hls,
@@ -245,6 +280,22 @@ struct ContentRouter {
     }
 
     /// Check if a specific audio codec requires server-side transcode.
+    static func requiresTranscode(videoCodec: String) -> Bool {
+        let normalized = videoCodec.lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+        return videoCodecsRequiringTranscode.contains(normalized)
+    }
+
+    /// Convenience: does this metadata's primary video codec require a
+    /// server-side transcode?
+    static func requiresVideoTranscode(metadata: PlexMetadata) -> Bool {
+        guard let codec = primaryVideoCodec(from: metadata), !codec.isEmpty else {
+            return false
+        }
+        return requiresTranscode(videoCodec: codec)
+    }
+
     static func requiresTranscode(audioCodec: String) -> Bool {
         let normalized = audioCodec.lowercased()
             .replacingOccurrences(of: "-", with: "")
@@ -284,6 +335,20 @@ struct ContentRouter {
     // MARK: - Private: Audio Analysis
 
     /// Extract the primary audio codec from PlexMetadata.
+    /// Extract the primary video codec from PlexMetadata. Used by both
+    /// the unsupported-codec routing override and the URL builder's
+    /// forceVideoTranscode plumbing.
+    static func primaryVideoCodec(from metadata: PlexMetadata) -> String? {
+        if let media = metadata.Media?.first, let codec = media.videoCodec {
+            return codec
+        }
+        if let part = metadata.Media?.first?.Part?.first,
+           let videoStream = part.Stream?.first(where: { $0.isVideo }) {
+            return videoStream.codec
+        }
+        return nil
+    }
+
     private static func primaryAudioCodec(from metadata: PlexMetadata) -> String? {
         // First try media-level audioCodec
         if let media = metadata.Media?.first, let codec = media.audioCodec {

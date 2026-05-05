@@ -1061,8 +1061,16 @@ final class UniversalPlayerViewModel: ObservableObject {
         await fetchSeasonPosterIfNeeded()
 
         let useApplePlayer = UserDefaults.standard.bool(forKey: "useApplePlayer")
+        // RivuletPlayer's pipeline is direct-play / progressive-file
+        // only — its loadHLS only works as a fallback against a
+        // pre-built transcode URL stored on `streamURL`, and the
+        // ContentRouter `.hls(url:)` route carries just the server
+        // base. When the source video codec has no Apple TV decoder
+        // (e.g. MPEG-2, VC-1) we must transcode, and only the
+        // AVPlayer path consumes the resulting HLS stream end-to-end.
+        let mustUseAVPlayer = ContentRouter.requiresVideoTranscode(metadata: metadata)
 
-        if !useApplePlayer {
+        if !useApplePlayer && !mustUseAVPlayer {
             await startRivuletPlayback()
         } else {
             await startAVPlayerPlayback()
@@ -1290,6 +1298,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Build an HLS URL and headers for Rivulet fallback at the requested offset.
     private func buildRivuletHLSURL(offset: TimeInterval?) -> (url: URL, headers: [String: String], sessionId: String?)? {
         guard let ratingKey = metadata.ratingKey else { return nil }
+        // Source video codec has no Apple TV decoder (e.g. MPEG-2): the
+        // direct-play-shaped URL would hand back the raw file and the
+        // local decoder would fail. Flip on forceVideoTranscode so the
+        // URL becomes a real transcode request.
+        let forceVideoTranscode = ContentRouter.requiresVideoTranscode(metadata: metadata)
         guard let result = PlexNetworkManager.shared.buildHLSDirectPlayURL(
             serverURL: serverURL,
             authToken: authToken,
@@ -1297,6 +1310,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             offsetMs: Int((offset ?? 0) * 1000),
             hasHDR: metadata.hasHDR,
             useDolbyVision: metadata.hasDolbyVision,
+            forceVideoTranscode: forceVideoTranscode,
             allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_fallback_build")
         ) else {
             return nil
@@ -2499,6 +2513,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         // Build new HLS URL (Plex will use the audio stream we just set)
+        let forceVideoTranscode = ContentRouter.requiresVideoTranscode(metadata: metadata)
         guard let result = networkManager.buildHLSDirectPlayURL(
             serverURL: serverURL,
             authToken: authToken,
@@ -2506,6 +2521,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             offsetMs: Int(resumeTime * 1000),
             hasHDR: metadata.hasHDR,
             useDolbyVision: metadata.hasDolbyVision,
+            forceVideoTranscode: forceVideoTranscode,
             allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_audio_switch")
         ) else {
             print("🎬 [AudioSwitch] Failed to build HLS URL")

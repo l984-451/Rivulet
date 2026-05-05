@@ -54,6 +54,12 @@ struct PlexLibraryView: View {
     @State private var capturedSourceFrames: [PreviewSourceTarget: CGRect] = [:]
     @State private var showPreviewCover = false
     @State private var lastPrefetchIndex: Int = -18  // Track last prefetch position for throttling
+
+    // §26: Resume-or-restart prompt for in-progress items launched directly
+    // from the hero carousel / Continue Watching row (bypassing detail view).
+    @State private var showResumeChoice = false
+    @State private var resumeChoiceTimeMs: Int = 0
+    @State private var resumeChoiceLaunch: ((_ playFromBeginning: Bool) -> Void)? = nil
     private var firstDisplayedItem: PlexMetadata? {
         items.first
     }
@@ -218,6 +224,27 @@ struct PlexLibraryView: View {
         .onChange(of: focusedItemId) { _, newValue in
             if let newValue {
                 lastFocusedItemId = newValue
+            }
+        }
+        // §26: Resume-or-restart prompt for direct-play paths (hero carousel,
+        // Continue Watching primary tap). The "Watch from Beginning" context-
+        // menu action bypasses this by passing `fromBeginning: true` to
+        // `playItemDirectly`.
+        .confirmationDialog(
+            "Resume Playback?",
+            isPresented: $showResumeChoice,
+            titleVisibility: .visible
+        ) {
+            Button("Resume from \(PlexMetadata.formatResumeTime(resumeChoiceTimeMs))") {
+                resumeChoiceLaunch?(false)
+                resumeChoiceLaunch = nil
+            }
+            Button("Start from Beginning") {
+                resumeChoiceLaunch?(true)
+                resumeChoiceLaunch = nil
+            }
+            Button("Cancel", role: .cancel) {
+                resumeChoiceLaunch = nil
             }
         }
     }
@@ -1137,7 +1164,28 @@ struct PlexLibraryView: View {
 
     // MARK: - Direct Playback (used by the hero carousel's Play button)
 
+    /// §26: When `fromBeginning` is false (the default tap path) and the item
+    /// is in progress, surfaces the resume-or-restart prompt instead of going
+    /// straight into playback. Callers that want to skip the prompt — e.g. the
+    /// "Watch from Beginning" context-menu action — pass `fromBeginning: true`.
     private func playItemDirectly(_ item: PlexMetadata, fromBeginning: Bool = false) {
+        if !fromBeginning,
+           item.isInProgress,
+           let offsetMs = item.viewOffset, offsetMs > 0 {
+            resumeChoiceTimeMs = offsetMs
+            resumeChoiceLaunch = { fromBegin in
+                presentPlayerForItem(item, fromBeginning: fromBegin)
+            }
+            showResumeChoice = true
+        } else {
+            presentPlayerForItem(item, fromBeginning: fromBeginning)
+        }
+    }
+
+    /// Actually present the player for an item (no prompt). Split out from
+    /// `playItemDirectly` so the resume-or-restart dialog can call back into
+    /// the playback path without re-triggering the prompt.
+    private func presentPlayerForItem(_ item: PlexMetadata, fromBeginning: Bool) {
         Task {
             guard let serverURL = authManager.selectedServerURL,
                   let token = authManager.selectedServerToken else { return }

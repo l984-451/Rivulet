@@ -542,6 +542,19 @@ extension PlexMetadata {
         return progress > 0.02 && progress < 0.9
     }
 
+    /// Format a Plex viewOffset (ms) for the resume prompt: H:MM:SS when ≥ 1 hour,
+    /// M:SS otherwise — matches stock Plex / Infuse "Resume from …" wording.
+    static func formatResumeTime(_ viewOffsetMs: Int) -> String {
+        let totalSeconds = max(0, viewOffsetMs) / 1000
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
     /// Check if item should show as "watched" (completed, no active re-watch in progress)
     /// - Shows/Seasons: all episodes must be watched (viewedLeafCount >= leafCount)
     /// - Movies/Episodes: viewCount > 0 and not currently in progress

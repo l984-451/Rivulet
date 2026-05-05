@@ -94,6 +94,14 @@ struct PlexDetailView: View {
     @State private var playFromBeginning = false  // For "Play from Beginning" button
     @State private var isLoadingShufflePlay = false
 
+    // §26: Resume-or-restart prompt state. Shown when the user presses
+    // Play on an in-progress item (movie, episode, or show/season whose
+    // next-up episode is in progress). Selection drives `playFromBeginning`
+    // and then opens the player.
+    @State private var showResumeChoice = false
+    @State private var resumeChoiceTimeMs: Int = 0
+    @State private var resumeChoiceLaunch: ((_ playFromBeginning: Bool) -> Void)? = nil
+
     // Pre-play track picker state. Selections are per-detail-page-visit
     // and are passed to the player on Play; we don't touch the saved
     // language preference managers, so future plays still default to
@@ -662,6 +670,24 @@ struct PlexDetailView: View {
                 }
             )
         }
+        // §26: Resume-or-restart prompt for in-progress items.
+        .confirmationDialog(
+            "Resume Playback?",
+            isPresented: $showResumeChoice,
+            titleVisibility: .visible
+        ) {
+            Button("Resume from \(PlexMetadata.formatResumeTime(resumeChoiceTimeMs))") {
+                resumeChoiceLaunch?(false)
+                resumeChoiceLaunch = nil
+            }
+            Button("Start from Beginning") {
+                resumeChoiceLaunch?(true)
+                resumeChoiceLaunch = nil
+            }
+            Button("Cancel", role: .cancel) {
+                resumeChoiceLaunch = nil
+            }
+        }
         .onChange(of: currentItem.ratingKey) { _, _ in
             // Reset pre-play picker state when navigating to a different
             // item within this detail view (e.g., via collection / recs).
@@ -1227,6 +1253,20 @@ struct PlexDetailView: View {
     private let pillButtonHeight: CGFloat = 66
     private let circleButtonSize: CGFloat = 66
 
+    // §26: Either show the resume-or-restart prompt (in-progress items) or
+    // launch playback directly (everything else). The launch closure runs
+    // synchronously on the chosen branch and is responsible for setting
+    // `selectedEpisode` / `playFromBeginning` / `showPlayer` as needed.
+    private func presentPlay(for item: PlexMetadata, launch: @escaping (_ playFromBeginning: Bool) -> Void) {
+        if item.isInProgress, let offsetMs = item.viewOffset, offsetMs > 0 {
+            resumeChoiceTimeMs = offsetMs
+            resumeChoiceLaunch = launch
+            showResumeChoice = true
+        } else {
+            launch(false)
+        }
+    }
+
     private var actionButtons: some View {
         HStack(spacing: 18) {
             // Primary play button with inline progress + time remaining
@@ -1268,9 +1308,12 @@ struct PlexDetailView: View {
                 .disabled(tracks.isEmpty)
             } else if currentItem.type == "show" || currentItem.type == "season" {
                 Button {
-                    if let episode = nextUpEpisode { selectedEpisode = episode }
-                    playFromBeginning = false
-                    showPlayer = true
+                    guard let episode = nextUpEpisode else { return }
+                    presentPlay(for: episode) { fromBeginning in
+                        selectedEpisode = episode
+                        playFromBeginning = fromBeginning
+                        showPlayer = true
+                    }
                 } label: {
                     playButtonLabel(text: showPlayButtonLabel, isFocused: focusedActionButton == "play")
                         .font(.system(size: 22, weight: .semibold))
@@ -1303,8 +1346,10 @@ struct PlexDetailView: View {
             } else if currentItem.type != "track" {
                 // Movies/Episodes: Play button with progress bar + time remaining
                 Button {
-                    playFromBeginning = false
-                    showPlayer = true
+                    presentPlay(for: effectiveItem) { fromBeginning in
+                        playFromBeginning = fromBeginning
+                        showPlayer = true
+                    }
                 } label: {
                     playButtonLabel(text: effectiveItem.isInProgress ? "Resume" : "Play", isFocused: focusedActionButton == "play")
                         .font(.system(size: 22, weight: .semibold))
@@ -1591,9 +1636,11 @@ struct PlexDetailView: View {
                                     focusedEpisodeId: $focusedEpisodeId,
                                     showSeasonPrefix: seasons.count > 1,
                                     onPlay: {
-                                        selectedEpisode = episode
-                                        playFromBeginning = false
-                                        showPlayer = true
+                                        presentPlay(for: episode) { fromBeginning in
+                                            selectedEpisode = episode
+                                            playFromBeginning = fromBeginning
+                                            showPlayer = true
+                                        }
                                     },
                                     onRefreshNeeded: {
                                         await refreshEpisodeWatchStatus(ratingKey: episode.ratingKey)
@@ -1660,9 +1707,11 @@ struct PlexDetailView: View {
                                 authToken: authManager.selectedServerToken ?? "",
                                 focusedEpisodeId: $focusedEpisodeId,
                                 onPlay: {
-                                    selectedEpisode = episode
-                                    playFromBeginning = false
-                                    showPlayer = true
+                                    presentPlay(for: episode) { fromBeginning in
+                                        selectedEpisode = episode
+                                        playFromBeginning = fromBeginning
+                                        showPlayer = true
+                                    }
                                 },
                                 onRefreshNeeded: {
                                     await refreshEpisodeWatchStatus(ratingKey: episode.ratingKey)

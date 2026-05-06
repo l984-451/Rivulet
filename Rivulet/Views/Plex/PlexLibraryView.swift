@@ -58,6 +58,7 @@ struct PlexLibraryView: View {
     // §26: Resume-or-restart prompt for in-progress items launched directly
     // from the hero carousel / Continue Watching row (bypassing detail view).
     @State private var showResumeChoice = false
+    @AppStorage("promptResumeOrRestart") private var promptResumeOrRestart = false
     @State private var resumeChoiceTimeMs: Int = 0
     @State private var resumeChoiceLaunch: ((_ playFromBeginning: Bool) -> Void)? = nil
     private var firstDisplayedItem: PlexMetadata? {
@@ -1169,7 +1170,8 @@ struct PlexLibraryView: View {
     /// straight into playback. Callers that want to skip the prompt — e.g. the
     /// "Watch from Beginning" context-menu action — pass `fromBeginning: true`.
     private func playItemDirectly(_ item: PlexMetadata, fromBeginning: Bool = false) {
-        if !fromBeginning,
+        if promptResumeOrRestart,
+           !fromBeginning,
            item.isInProgress,
            let offsetMs = item.viewOffset, offsetMs > 0 {
             resumeChoiceTimeMs = offsetMs

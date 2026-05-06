@@ -99,6 +99,7 @@ struct PlexDetailView: View {
     // next-up episode is in progress). Selection drives `playFromBeginning`
     // and then opens the player.
     @State private var showResumeChoice = false
+    @AppStorage("promptResumeOrRestart") private var promptResumeOrRestart = false
     @State private var resumeChoiceTimeMs: Int = 0
     @State private var resumeChoiceLaunch: ((_ playFromBeginning: Bool) -> Void)? = nil
 
@@ -1258,7 +1259,7 @@ struct PlexDetailView: View {
     // synchronously on the chosen branch and is responsible for setting
     // `selectedEpisode` / `playFromBeginning` / `showPlayer` as needed.
     private func presentPlay(for item: PlexMetadata, launch: @escaping (_ playFromBeginning: Bool) -> Void) {
-        if item.isInProgress, let offsetMs = item.viewOffset, offsetMs > 0 {
+        if promptResumeOrRestart, item.isInProgress, let offsetMs = item.viewOffset, offsetMs > 0 {
             resumeChoiceTimeMs = offsetMs
             resumeChoiceLaunch = launch
             showResumeChoice = true

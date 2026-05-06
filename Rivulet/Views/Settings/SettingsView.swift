@@ -286,6 +286,7 @@ struct SettingsView: View {
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipCredits") private var autoSkipCredits = false
     @AppStorage("autoSkipAds") private var autoSkipAds = false
+    @AppStorage("promptResumeOrRestart") private var promptResumeOrRestart = false
     @AppStorage("useApplePlayer") private var useApplePlayer = true
     @AppStorage("autoplayCountdown") private var autoplayCountdownRaw = AutoplayCountdown.fiveSeconds.rawValue
     @AppStorage("displaySize") private var displaySizeRaw = DisplaySize.normal.rawValue
@@ -705,6 +706,12 @@ struct SettingsView: View {
                 title: "Auto-Skip Ads",
                 isOn: $autoSkipAds,
                 onFocusChange: { if $0 { focusState.focusedSettingId = "autoSkipAds" } }
+            )
+
+            SettingsToggleRow(
+                title: "Resume or Restart Prompt",
+                isOn: $promptResumeOrRestart,
+                onFocusChange: { if $0 { focusState.focusedSettingId = "promptResumeOrRestart" } }
             )
 
             SettingsRow(

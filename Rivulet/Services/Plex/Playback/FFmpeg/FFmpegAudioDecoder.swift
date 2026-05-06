@@ -649,24 +649,29 @@ final class FFmpegAudioDecoder: @unchecked Sendable {
         let actualSize = Int(convertedSamples) * Int(outChannels) * bytesPerSample
         let pcmData = Data(bytes: outBuf, count: actualSize)
 
-        // When resampling, use continuous PTS tracking to eliminate micro-gaps.
-        // The resampler output sample count doesn't exactly match source PTS spacing,
-        // creating ~0.37ms gaps per batch that cause audible crackling. By tracking
-        // a running PTS based on actual output samples, each buffer starts exactly
-        // where the previous one ended.
+        // Use continuous PTS tracking to eliminate micro-gaps between buffers.
+        // Two sources of per-buffer drift fall into this:
+        //   1. Resampling: swr_convert's output sample count doesn't exactly match
+        //      source PTS spacing.
+        //   2. Container-tick rounding: FFmpeg's per-frame PTS is rounded to the
+        //      container timebase (e.g., Matroska's 1ms ticks). Frames whose true
+        //      duration doesn't divide evenly into that tick (AAC 1024/48000 ≈
+        //      21.333ms, FLAC 4096/48000 ≈ 85.333ms, PCM 1600/48000 ≈ 33.333ms)
+        //      drift ~0.333ms per frame, which the renderer hears as flutter.
+        //      AC-3 (1536/48000 = 32ms exactly) doesn't drift and so was clean
+        //      while every other codec was distorted.
+        // Tracking a running PTS based on the first frame's anchor + actual output
+        // sample counts makes each buffer start exactly where the previous ended.
         var overridePTS: CMTime?
-        if needsResample {
-            let timescale = Int32(effectiveOutputRate)
-            if continuousOutputPTS.isValid {
-                overridePTS = continuousOutputPTS
-            }
-            // Advance continuous PTS by actual output sample count
-            let outputDuration = CMTime(value: CMTimeValue(convertedSamples), timescale: timescale)
-            if continuousOutputPTS.isValid {
-                continuousOutputPTS = CMTimeAdd(continuousOutputPTS, outputDuration)
-            }
-            // Will be anchored on first valid PTS from buildDecodedFrame
+        let timescale = Int32(effectiveOutputRate)
+        if continuousOutputPTS.isValid {
+            overridePTS = continuousOutputPTS
         }
+        let outputDuration = CMTime(value: CMTimeValue(convertedSamples), timescale: timescale)
+        if continuousOutputPTS.isValid {
+            continuousOutputPTS = CMTimeAdd(continuousOutputPTS, outputDuration)
+        }
+        // Anchored on first valid PTS from buildDecodedFrame.
 
         return buildDecodedFrame(
             data: pcmData, sampleCount: Int(convertedSamples),

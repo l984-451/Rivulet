@@ -845,6 +845,18 @@ final class FFmpegAudioDecoder: @unchecked Sendable {
         }
 
         var inLayout = frame.pointee.ch_layout
+        // Raw PCM streams arrive without channel-layout metadata
+        // (order=AV_CHANNEL_ORDER_UNSPEC, mask=0). swresample needs a concrete
+        // layout to know the channel ordering — synthesize a default from the
+        // channel count, which gives us the standard MPEG layouts (mono/stereo/
+        // 5.1/7.1) that match channelLayoutTag(for:) on the output side.
+        if inLayout.order == AV_CHANNEL_ORDER_UNSPEC {
+            playerDebugLog(
+                "[AudioDecoder] Input ch_layout was UNSPEC; defaulting to standard " +
+                "\(inputChannels)ch layout for swresample"
+            )
+            av_channel_layout_default(&inLayout, inputChannels)
+        }
         var outLayout: AVChannelLayout
         if needsDownmix {
             outLayout = AVChannelLayout()

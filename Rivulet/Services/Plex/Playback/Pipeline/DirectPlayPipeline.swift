@@ -1707,15 +1707,19 @@ final class DirectPlayPipeline {
                     guard let anchor = prerollAnchorPTSSeconds, let maxVPTS = prerollMaxVideoPTSSeconds else { return 0 }
                     return max(0, maxVPTS - anchor)
                 }()
-                // Required video lead before the clock starts. DV/HDR content from Plex
-                // takes ~10 s for the HTTP read loop to warm up; during that warmup the
-                // read loop sustains roughly 0.4–0.82× realtime, so a too-small lead is
-                // depleted before the network reaches steady state and the audio renderer
-                // underruns. Aim for enough buffer to bridge the entire warmup phase
-                // (warmup_seconds × (1 - average_warmup_rate) ≈ 3 s).
+                // Required video lead before the clock starts.
+                //   - Conversion (HLS transcode): 5.0 s — bridges the HLS HTTP rate-up
+                //     window where segments arrive at ~0.4× realtime for the first few
+                //     seconds. Smaller values cause renderer underrun → "first ~10s
+                //     skipped" mode.
+                //   - hasDV / HDR direct-stream: 0.5 s — direct-stream HTTP is fast
+                //     (~12-25× realtime), so a deep preroll is unnecessary AND harmful:
+                //     it stacks frames the cold HW decoder can't drain at realtime,
+                //     producing a sustained slow-clock window (~0.5× wall) at startup.
+                //   - Default: 0.20 s — already-clean SDR/AVC fast path.
                 let requiredPrerollLeadSeconds: Double = {
                     if requiresConversion { return 5.0 }
-                    if hasDV { return 3.0 }
+                    if hasDV { return 0.5 }
                     return 0.20
                 }()
                 let videoReady = videoLeadSeconds >= requiredPrerollLeadSeconds
@@ -1728,7 +1732,7 @@ final class DirectPlayPipeline {
                 // by a too-aggressive timeout.
                 let prerollTimeout: Double = {
                     if requiresConversion { return 12000 }
-                    if hasDV { return 10000 }
+                    if hasDV { return 1500 }
                     return 1000
                 }()
                 let timedOut = hasAudioPath && waitedMs >= prerollTimeout
@@ -2127,7 +2131,7 @@ final class DirectPlayPipeline {
                                 }()
                                 let requiredPrerollLeadSeconds: Double = {
                                     if requiresConversion { return 5.0 }
-                                    if hasDV { return 3.0 }
+                                    if hasDV { return 0.5 }
                                     return 0.20
                                 }()
                                 let waitedMs: Double = {

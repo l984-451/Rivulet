@@ -1543,7 +1543,16 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // compatible codec and is what we want when transcoding from a non-Apple-decodable
             // source. The default keeps both for direct-play / remux-only requests.
             URLQueryItem(name: "videoCodec", value: forceVideoTranscode ? "h264" : "h264,hevc"),
-            URLQueryItem(name: "videoResolution", value: "4096x2160"),
+            // Cap burn-in transcodes at 1080p. Plex's `subtitles=burn` filter
+            // chain inserts an `hwdownload → inlineass → hwupload` round-trip
+            // per frame so it can rasterize subtitles onto CPU memory. At 4K
+            // the GPU↔CPU bandwidth + per-frame CPU work pushes the M4 Pro
+            // transcoder below real-time speed; scrub forward stalls the
+            // transcoder for tens of seconds. Capping at 1080p drops the
+            // per-frame work ~4x and keeps scrub usable. Long-term fix would
+            // be a custom Metal HLG renderer that bypasses Plex transcode
+            // entirely. Soft-sub paths keep the source resolution.
+            URLQueryItem(name: "videoResolution", value: burnInSubtitles ? "1920x1080" : "4096x2160"),
             URLQueryItem(name: "videoQuality", value: "100"),
             URLQueryItem(name: "segmentDuration", value: "6"),
             // EAC3 preferred for surround (HomePod compatible), AAC for stereo fallback

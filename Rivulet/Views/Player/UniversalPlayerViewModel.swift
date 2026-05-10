@@ -336,10 +336,25 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Which row within the focused column
     @Published var focusedRowIndex: Int = 0
 
+    /// True when in-playback subtitle switching is meaningful. False on
+    /// the AVPlayer/HLS path: Plex's HLS manifest is single-stream for
+    /// subtitles (`subtitleStreamID` is session-scoped, the manifest
+    /// emits only the currently-selected stream), so AVPlayer's
+    /// `select(_:in:)` mid-playback can't switch to a different track.
+    /// Gated UI shows an explanatory notice instead of a non-functional
+    /// picker.
+    var inPlaybackSubtitleSwitchingSupported: Bool {
+        rivuletPlayer != nil
+    }
+
     /// Number of rows in a given column
     func rowCount(forColumn column: Int) -> Int {
         switch column {
-        case 0: return 1 + subtitleTracks.count  // "Off" + subtitle tracks
+        case 0:
+            // Subtitles column has no focusable rows on AVPlayer/HLS path —
+            // the column slot still renders an explanatory notice but is
+            // skipped by focus navigation.
+            return inPlaybackSubtitleSwitchingSupported ? (1 + subtitleTracks.count) : 0
         case 1: return max(1, audioTracks.count)  // Audio tracks (at least 1)
         default: return 0
         }
@@ -363,7 +378,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 focusedRowIndex += 1
             }
         case .left:
-            if focusedColumn > 0 {
+            // Skip column 0 (subtitles) when the path doesn't support
+            // mid-playback subtitle switching — the column shows a
+            // non-focusable notice instead of a picker.
+            let leftmostFocusable = inPlaybackSubtitleSwitchingSupported ? 0 : 1
+            if focusedColumn > leftmostFocusable {
                 focusedColumn -= 1
                 // Clamp row index to new column's range
                 focusedRowIndex = min(focusedRowIndex, rowCount(forColumn: focusedColumn) - 1)
@@ -702,7 +721,19 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
 
         case .hls:
-            if let result = buildRivuletHLSURL(offset: startOffset) {
+            // The .hls plan feeds AVPlayer (RivuletPlayer's path goes
+            // through .localRemux + the rivuletFallbackURL prep above).
+            // Burn subtitles into the video frames here: Plex's HLS
+            // manifest is structurally single-stream for subtitles, and
+            // AVPlayer's HLS WebVTT loader has a first-cue threshold
+            // quirk that breaks renditions whose first cue is more than
+            // a few seconds in. RivuletPlayer's HLS-fallback path keeps
+            // soft subs (FFmpeg ingests WebVTT renditions natively).
+            let forceVideoTranscode = ContentRouter.requiresVideoTranscode(metadata: metadata)
+            if let result = buildRivuletHLSURL(
+                offset: startOffset,
+                burnInSubtitles: useApplePlayer || forceVideoTranscode
+            ) {
                 streamURL = result.url
                 streamHeaders = result.headers
                 plexSessionId = result.sessionId
@@ -1296,7 +1327,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// Build an HLS URL and headers for Rivulet fallback at the requested offset.
-    private func buildRivuletHLSURL(offset: TimeInterval?) -> (url: URL, headers: [String: String], sessionId: String?)? {
+    /// `burnInSubtitles` controls whether `subtitles=burn` is requested. Pass
+    /// true on the AVPlayer/HLS path (Plex's HLS WebVTT pipeline is
+    /// structurally hostile to AVPlayer); false on RivuletPlayer's
+    /// HLS-fallback path (FFmpeg ingests WebVTT renditions natively).
+    private func buildRivuletHLSURL(
+        offset: TimeInterval?,
+        burnInSubtitles: Bool = false
+    ) -> (url: URL, headers: [String: String], sessionId: String?)? {
         guard let ratingKey = metadata.ratingKey else { return nil }
         // Source video codec has no Apple TV decoder (e.g. MPEG-2): the
         // direct-play-shaped URL would hand back the raw file and the
@@ -1311,7 +1349,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             hasHDR: metadata.hasHDR,
             useDolbyVision: metadata.hasDolbyVision,
             forceVideoTranscode: forceVideoTranscode,
-            allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_fallback_build")
+            allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_fallback_build"),
+            burnInSubtitles: burnInSubtitles
         ) else {
             return nil
         }
@@ -2222,7 +2261,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     func resetSettingsPanel() {
         // Refresh track lists when panel opens
         updateTrackLists()
-        focusedColumn = 0
+        // Start focus on the leftmost focusable column. The subtitles
+        // column (0) is non-focusable on AVPlayer/HLS where it shows a
+        // limitation notice rather than a picker.
+        focusedColumn = inPlaybackSubtitleSwitchingSupported ? 0 : 1
         focusedRowIndex = 0
     }
 
@@ -2604,9 +2646,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     func selectSubtitleTrack(id: Int?) {
         // Delegate the actual pipeline switch to the auto-selection helper,
         // then persist the user's explicit choice as the saved preference so
-        // future playback sessions restore it.
-        // TODO: AVPlayer path still needs AVMediaSelectionGroup wiring; this
-        // fix only covers the RivuletPlayer pipeline (custom player).
+        // future playback sessions restore it. RivuletPlayer applies the
+        // selection live; AVPlayer/HLS receives no client-side action — the
+        // server burns the user's pre-playback selection into the video and
+        // the in-playback picker is gated out (see
+        // `inPlaybackSubtitleSwitchingSupported`).
         selectSubtitleTrackWithoutSaving(id: id)
 
         if let id = id, let track = subtitleTracks.first(where: { $0.id == id }) {
@@ -2955,7 +2999,14 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
-    /// Select subtitle track without saving preference (for auto-selection)
+    /// Select subtitle track without saving preference (for auto-selection).
+    /// On the AVPlayer/HLS path subtitles are server-side burned into the
+    /// video frames (`subtitles=burn` in the start URL), so there's no
+    /// client-side track to select on that path — the picker pre-play sets
+    /// the server preference via `setSelectedSubtitleStream` and Plex bakes
+    /// it in when building the transcode session. Mid-playback changes
+    /// require a session rebuild and are gated out of the in-playback UI;
+    /// see `inPlaybackSubtitleSwitchingSupported`.
     private func selectSubtitleTrackWithoutSaving(id: Int?) {
         if rivuletPlayer != nil {
             rivuletPlayer?.selectSubtitleTrack(id: id)

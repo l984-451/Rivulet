@@ -1449,6 +1449,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// - Parameter useDolbyVision: Whether to include DV enhancement layers (useDoviCodecs=1). Set to false to get HDR10 base layer only.
     /// - Parameter forceVideoTranscode: Force video transcoding (not just remux) to get Apple-compatible codec tags. Required for MKV+DV.
     /// - Parameter allowAudioDirectStream: Allow server to pass-through audio (AAC/AC3/EAC3). False forces AAC transcode for DTS/TrueHD safety.
+    /// - Parameter burnInSubtitles: When true, requests `subtitles=burn` so
+    ///   Plex bakes the server-side-stored subtitle stream into the video
+    ///   frames. Use this for the AVPlayer/HLS path where Plex's HLS WebVTT
+    ///   protocol is structurally single-stream and AVPlayer's first-cue
+    ///   threshold quirk would otherwise need a local proxy + synthetic-cue
+    ///   workaround. RivuletPlayer's FFmpeg ingest pipeline handles WebVTT
+    ///   renditions natively, so leave this false on that path.
     func buildHLSDirectPlayURL(
         serverURL: String,
         authToken: String,
@@ -1457,7 +1464,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         hasHDR: Bool = false,
         useDolbyVision: Bool = true,
         forceVideoTranscode: Bool = false,
-        allowAudioDirectStream: Bool = true
+        allowAudioDirectStream: Bool = true,
+        burnInSubtitles: Bool = false
     ) -> (url: URL, headers: [String: String])? {
         // Request an HLS remux that keeps the HEVC/Dolby Vision bitstream intact
         // tvOS requires fMP4/CMAF segments for Dolby Vision profiles 5/8
@@ -1542,7 +1550,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "audioCodec", value: allowAudioDirectStream ? "aac,eac3,ac3" : "eac3,ac3,aac"),
             URLQueryItem(name: "audioBitrate", value: "1024"),
             URLQueryItem(name: "audioChannels", value: "8"),
-            URLQueryItem(name: "subtitles", value: "auto"),
+            URLQueryItem(name: "subtitles", value: burnInSubtitles ? "burn" : "auto"),
             URLQueryItem(name: "subtitleSize", value: "100"),
             URLQueryItem(name: "context", value: "streaming"),
             URLQueryItem(name: "location", value: "lan"),

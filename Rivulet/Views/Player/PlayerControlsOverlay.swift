@@ -97,37 +97,55 @@ struct PlayerControlsOverlay: View {
             HStack(alignment: .top, spacing: 0) {
                 // Left Column: Subtitles
                 settingsColumn(title: "SUBTITLES", columnIndex: 0) {
-                    ScrollViewReader { proxy in
-                        ScrollView(.vertical, showsIndicators: false) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                // Off option
-                                PlaybackSettingsRow(
-                                    title: "Off",
-                                    subtitle: "No subtitles",
-                                    isSelected: viewModel.currentSubtitleTrackId == nil,
-                                    isFocused: viewModel.isSettingFocused(column: 0, index: 0)
-                                )
-                                .id("sub_0")
-
-                                ForEach(Array(viewModel.subtitleTracks.enumerated()), id: \.element.id) { index, track in
+                    if viewModel.inPlaybackSubtitleSwitchingSupported {
+                        ScrollViewReader { proxy in
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Off option
                                     PlaybackSettingsRow(
-                                        title: formatSubtitleTrackTitle(track),
-                                        subtitle: formatSubtitleTrackSubtitle(track),
-                                        isSelected: track.id == viewModel.currentSubtitleTrackId,
-                                        isFocused: viewModel.isSettingFocused(column: 0, index: index + 1)
+                                        title: "Off",
+                                        subtitle: "No subtitles",
+                                        isSelected: viewModel.currentSubtitleTrackId == nil,
+                                        isFocused: viewModel.isSettingFocused(column: 0, index: 0)
                                     )
-                                    .id("sub_\(index + 1)")
+                                    .id("sub_0")
+
+                                    ForEach(Array(viewModel.subtitleTracks.enumerated()), id: \.element.id) { index, track in
+                                        PlaybackSettingsRow(
+                                            title: formatSubtitleTrackTitle(track),
+                                            subtitle: formatSubtitleTrackSubtitle(track),
+                                            isSelected: track.id == viewModel.currentSubtitleTrackId,
+                                            isFocused: viewModel.isSettingFocused(column: 0, index: index + 1)
+                                        )
+                                        .id("sub_\(index + 1)")
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .onChange(of: viewModel.focusedRowIndex) { _, newIndex in
+                                if viewModel.focusedColumn == 0 {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        proxy.scrollTo("sub_\(newIndex)", anchor: .center)
+                                    }
                                 }
                             }
-                            .padding(.vertical, 8)
                         }
-                        .onChange(of: viewModel.focusedRowIndex) { _, newIndex in
-                            if viewModel.focusedColumn == 0 {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    proxy.scrollTo("sub_\(newIndex)", anchor: .center)
-                                }
-                            }
+                    } else {
+                        // AVPlayer/HLS path: Plex's HLS manifest is
+                        // single-stream for subtitles, so mid-playback
+                        // subtitle changes can't take effect. Pre-play
+                        // picker on the item page still works.
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Choose subtitles before playback starts.")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                            Text("This content streams via a server-side transcode that bakes the subtitle stream into the session, so mid-playback changes can't take effect.")
+                                .font(.system(size: 15))
+                                .foregroundStyle(.white.opacity(0.55))
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 12)
                     }
                 }
 

@@ -135,12 +135,37 @@ struct PlayerControlsOverlay: View {
                         // single-stream for subtitles, so mid-playback
                         // subtitle changes can't take effect. Pre-play
                         // picker on the item page still works.
+                        let activeTrack = viewModel.currentSubtitleTrackId.flatMap { id in
+                            viewModel.subtitleTracks.first(where: { $0.id == id })
+                        }
                         VStack(alignment: .leading, spacing: 12) {
+                            if let track = activeTrack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Currently playing")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .tracking(1.0)
+                                        .foregroundStyle(.white.opacity(0.45))
+                                    Text(formatSubtitleTrackTitle(track))
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Currently playing")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .tracking(1.0)
+                                        .foregroundStyle(.white.opacity(0.45))
+                                    Text("No subtitles")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundStyle(.white)
+                                }
+                            }
                             Text("Choose subtitles before playback starts.")
-                                .font(.system(size: 18, weight: .medium))
+                                .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.85))
                             Text("This content streams via a server-side transcode that bakes the subtitle stream into the session, so mid-playback changes can't take effect.")
-                                .font(.system(size: 15))
+                                .font(.system(size: 13))
                                 .foregroundStyle(.white.opacity(0.55))
                                 .fixedSize(horizontal: false, vertical: true)
                         }

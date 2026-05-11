@@ -1058,6 +1058,25 @@ final class DirectPlayPipeline {
             onError?(FFmpegError.noCodecParameters)
             return
         }
+        // Detect HLG in the actual decoded format description (more reliable
+        // than relying on Plex metadata for color characteristics). When the
+        // content is HLG and the Metal sink is enabled, switch the video sink
+        // from AVSampleBufferDisplayLayer to MetalVideoRenderer before
+        // configuring the layer color characteristics. AVSampleBufferDisplayLayer
+        // on tvOS renders HLG as black; the Metal sink uses CALayer.toneMapMode
+        // (tvOS 18+) + CALayer.preferredDynamicRange (tvOS 26+) to drive
+        // system tonemapping and emit true Direct Play HDR.
+        if ContentRouter.metalHLGSinkEnabled,
+           let ext = CMFormatDescriptionGetExtensions(videoFD) as? [CFString: Any],
+           let transfer = ext[kCMFormatDescriptionExtension_TransferFunction] as? String,
+           transfer == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String) {
+            playerDebugLog("[DirectPlay] HLG detected in format description — enabling Metal video sink")
+            _ = renderer.enableMetalVideoSink()
+        }
+        // Hand the format description to the renderer so it can configure
+        // the active sink (AVSBL diagnostics, or Metal renderer VT session +
+        // layer color characteristics).
+        renderer.configureLayerForVideoFormat(videoFD)
         let audioFD = demuxer.audioFormatDescription
         let hasDV = demuxer.hasDolbyVision
         let activeAudioTrack = demuxer.audioTracks.first(where: { $0.streamIndex == demuxer.selectedAudioStream })

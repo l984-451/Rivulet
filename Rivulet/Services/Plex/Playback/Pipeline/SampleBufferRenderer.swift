@@ -99,6 +99,19 @@ final class SampleBufferRenderer {
     /// merely when a request starts or data is buffered.
     var onAudioPrimedForPlayback: ((Double) -> Void)?
 
+    /// Called when the video sink switches between AVSampleBufferDisplayLayer
+    /// and MetalVideoRenderer (in either direction). UI layers bound to the
+    /// player observe this to re-host the underlying view.
+    var onVideoSinkChanged: (() -> Void)?
+
+    // MARK: - Metal Video Sink (optional)
+
+    /// Alternate video sink used for HLG HDR content where
+    /// AVSampleBufferDisplayLayer renders black on tvOS. Owns its own
+    /// VTDecompressionSession and a CAMetalLayer-backed UIView. Nil while
+    /// the default AVSBL sink is active.
+    private(set) var metalRenderer: MetalVideoRenderer?
+
     // MARK: - Audio State
 
     // hasLoggedFirstAudioSample, audioEnqueueCount, lastAudioDiagWallTime are
@@ -152,6 +165,63 @@ final class SampleBufferRenderer {
         audioRenderer.allowedAudioSpatializationFormats = []
 
         observeAudioRendererNotifications()
+    }
+
+    /// Diagnostic-only: log the HDR-relevant extensions on the incoming
+    /// video CMFormatDescription, and (if a Metal video sink is active)
+    /// hand the format description to the Metal renderer so it can build
+    /// its VTDecompressionSession + layer color configuration.
+    @MainActor
+    func configureLayerForVideoFormat(_ formatDesc: CMFormatDescription) {
+        guard let extensions = CMFormatDescriptionGetExtensions(formatDesc) as? [CFString: Any] else {
+            playerDebugLog("[Renderer] configureLayerForVideoFormat: no extensions")
+            return
+        }
+        let transferFn = extensions[kCMFormatDescriptionExtension_TransferFunction] as? String
+        let primaries = extensions[kCMFormatDescriptionExtension_ColorPrimaries] as? String
+        let matrix = extensions[kCMFormatDescriptionExtension_YCbCrMatrix] as? String
+        let fullRange = extensions[kCMFormatDescriptionExtension_FullRangeVideo] as? Bool
+        let pq = kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String
+        let hlg = kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String
+        let isHDR = transferFn == pq || transferFn == hlg
+        playerDebugLog("[Renderer] configureLayerForVideoFormat: primaries=\(primaries ?? "nil") transfer=\(transferFn ?? "nil") matrix=\(matrix ?? "nil") fullRange=\(fullRange.map(String.init) ?? "nil") isHDR=\(isHDR)")
+
+        metalRenderer?.configure(formatDescription: formatDesc)
+    }
+
+    /// Switch video output from AVSampleBufferDisplayLayer to a Metal-backed
+    /// renderer. Call before the first video sample is enqueued. Returns the
+    /// renderer on success, or nil if Metal is unavailable on this device.
+    ///
+    /// Side-effects: removes `displayLayer` from the synchronizer so the
+    /// synchronizer no longer drives it. Audio renderer stays attached. The
+    /// Metal renderer's CADisplayLink reads `synchronizer.currentTime()` to
+    /// pick which queued frame to present each tick.
+    @MainActor
+    func enableMetalVideoSink() -> MetalVideoRenderer? {
+        if let metalRenderer { return metalRenderer }
+        guard let renderer = MetalVideoRenderer(synchronizer: renderSynchronizer) else {
+            playerDebugLog("[Renderer] enableMetalVideoSink: Metal unavailable; staying on AVSBL")
+            return nil
+        }
+        renderSynchronizer.removeRenderer(displayLayer, at: .invalid) { _ in }
+        renderer.start()
+        metalRenderer = renderer
+        playerDebugLog("[Renderer] enableMetalVideoSink: video sink switched to Metal")
+        onVideoSinkChanged?()
+        return renderer
+    }
+
+    /// Reverse `enableMetalVideoSink()`. Stops the Metal renderer and re-attaches
+    /// `displayLayer` to the synchronizer. Used on player teardown.
+    @MainActor
+    func disableMetalVideoSink() {
+        guard let renderer = metalRenderer else { return }
+        renderer.stop()
+        metalRenderer = nil
+        renderSynchronizer.addRenderer(displayLayer)
+        playerDebugLog("[Renderer] disableMetalVideoSink: video sink reverted to AVSBL")
+        onVideoSinkChanged?()
     }
 
     deinit {

@@ -296,6 +296,13 @@ struct ContentRouter {
         return requiresTranscode(videoCodec: codec)
     }
 
+    /// Master switch for the Metal-renderer HLG direct play path. When true,
+    /// DirectPlayPipeline activates `SampleBufferRenderer.enableMetalVideoSink()`
+    /// on detecting HLG in the first sample's format description. When false,
+    /// HLG content falls through to the default AVSBL path (which renders
+    /// black on tvOS).
+    static let metalHLGSinkEnabled = true
+
     static func requiresTranscode(audioCodec: String) -> Bool {
         let normalized = audioCodec.lowercased()
             .replacingOccurrences(of: "-", with: "")

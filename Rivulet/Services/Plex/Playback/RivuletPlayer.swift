@@ -242,6 +242,12 @@ final class RivuletPlayer: ObservableObject {
             }
         }
 
+        // When the video sink swaps (AVSBL ⇄ Metal), force any SwiftUI views
+        // bound to this player to re-render so SampleBufferDisplayView picks
+        // up the new metal renderer's UIView.
+        renderer.onVideoSinkChanged = { [weak self] in
+            self?.objectWillChange.send()
+        }
     }
 
     private func observeRouteChanges() {

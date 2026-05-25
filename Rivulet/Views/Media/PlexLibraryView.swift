@@ -9,9 +9,35 @@ import SwiftUI
 import UIKit
 
 
+/// Per-libraryKey persistence for PlexLibraryView's picker state, surviving
+/// SwiftUI view re-creation when TabView destroys deselected tabs' state.
+/// Lives at module scope so it's a process-wide singleton.
+@MainActor
+private final class LibraryPickerCache {
+    static let shared = LibraryPickerCache()
+    private var modes: [String: PlexLibraryView.BrowseMode] = [:]
+    private var collectionFlags: [String: Bool] = [:]
+
+    func mode(for key: String) -> PlexLibraryView.BrowseMode? { modes[key] }
+    func setMode(_ mode: PlexLibraryView.BrowseMode, for key: String) { modes[key] = mode }
+    func hasCollections(for key: String) -> Bool? { collectionFlags[key] }
+    func setHasCollections(_ has: Bool, for key: String) { collectionFlags[key] = has }
+}
+
 struct PlexLibraryView: View {
     let libraryKey: String
     let libraryTitle: String
+
+    init(libraryKey: String, libraryTitle: String) {
+        self.libraryKey = libraryKey
+        self.libraryTitle = libraryTitle
+        // Seed picker state from the per-library cache so re-entry into a
+        // library restores the user's last-used browse mode (and whether
+        // we knew there were collections), rather than resetting to defaults.
+        let cache = LibraryPickerCache.shared
+        _browseMode = State(initialValue: cache.mode(for: libraryKey) ?? .allItems)
+        _hasCollections = State(initialValue: cache.hasCollections(for: libraryKey) ?? false)
+    }
 
     @Environment(\.nestedNavigationState) private var nestedNavState
     @Environment(\.uiScale) private var scale
@@ -37,6 +63,20 @@ struct PlexLibraryView: View {
     /// We dismiss the overlay and `.navigationDestination(item:)` (attached
     /// to the NavigationStack content below) handles the push.
     @State private var pendingPreviewNavigation: MediaItem?
+
+    // Browse mode picker: All Items (current behavior) vs Collections grid.
+    enum BrowseMode: Hashable { case allItems, collections }
+    @State private var browseMode: BrowseMode = .allItems
+    @State private var collections: [PlexMetadata] = []
+    @State private var isLoadingCollections = false
+    @State private var collectionsError: String?
+    @State private var selectedCollection: PlexMetadata?
+    @FocusState private var browsePickerFocus: BrowseMode?
+    @FocusState private var focusedCollectionRk: String?
+    /// True once we've confirmed the library has at least one collection.
+    /// Drives whether the Collections tab is rendered.
+    @State private var hasCollections: Bool = false
+
     @State private var heroItems: [PlexMetadata] = []
     @State private var heroCurrentIndex: Int = 0
     @State private var heroScrollOffset: CGFloat = 0
@@ -271,6 +311,8 @@ struct PlexLibraryView: View {
                 errorView(error)
             } else if items.isEmpty {
                 emptyView
+            } else if browseMode == .collections {
+                collectionsContentView
             } else {
                 contentView
             }
@@ -297,6 +339,28 @@ struct PlexLibraryView: View {
             }
             .navigationDestination(item: $pendingPreviewNavigation) { item in
                 MediaDetailView(item: item)
+            }
+            .navigationDestination(item: $selectedCollection) { coll in
+                CollectionDetailView(collection: coll)
+            }
+            .task(id: libraryKey) {
+                // Fetch collections eagerly so we know whether to render the
+                // Collections tab at all. browseMode is preserved across
+                // library switches; loadCollections demotes .collections to
+                // .allItems if the new library has none.
+                collections = []
+                await loadCollections()
+                // Claim focus on the (possibly-adjusted) active tab so the
+                // user always lands on the picker on library entry. The
+                // brief delay lets the focus engine settle first.
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                browsePickerFocus = browseMode
+            }
+            .onChange(of: browseMode) { _, newValue in
+                LibraryPickerCache.shared.setMode(newValue, for: libraryKey)
+            }
+            .onChange(of: hasCollections) { _, newValue in
+                LibraryPickerCache.shared.setHasCollections(newValue, for: libraryKey)
             }
             .overlayPreferenceValue(PreviewSourceFramePreferenceKey.self) { anchors in
                 GeometryReader { proxy in
@@ -540,6 +604,7 @@ struct PlexLibraryView: View {
                         Color.clear
                             .frame(height: 0)
                             .id("libraryContentRowsAnchor")
+                        browseModePicker
                         essentialRowsView(scrollProxy: scrollProxy)
                         discoveryRowsView(scrollProxy: scrollProxy)
                         librarySectionHeader
@@ -974,6 +1039,202 @@ struct PlexLibraryView: View {
             }
         } catch {
             print("Failed to reload with new sort: \(error)")
+        }
+    }
+
+    // MARK: - Browse Mode Picker
+
+    @ViewBuilder
+    private var browseModePicker: some View {
+        HStack(spacing: 24) {
+            browseTabButton(.allItems, label: "Library")
+            if hasCollections {
+                browseTabButton(.collections, label: "Collections")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .focusSection()
+        .padding(.vertical, 8)
+        .onAppear {
+            // Re-claim focus on the active tab every time the picker appears
+            // (initial entry AND re-entry from sidebar — TabView keeps the
+            // library view alive, so .task(id: libraryKey) only fires once).
+            // Set immediately rather than via DispatchQueue.asyncAfter so the
+            // focus engine doesn't settle on the default (first) focusable
+            // before we override.
+            browsePickerFocus = browseMode
+        }
+    }
+
+    private func browseTabButton(_ mode: BrowseMode, label: String) -> some View {
+        let active = (browseMode == mode)
+        return Button {
+            browseMode = mode
+        } label: {
+            Text(label)
+                .font(.system(size: 24, weight: .semibold))
+                .padding(.horizontal, 26)
+                .padding(.vertical, 12)
+                .foregroundStyle(active ? .black : .white)
+                .background(
+                    Capsule()
+                        .fill(active ? .white : .white.opacity(0.08))
+                )
+                .contentShape(Capsule())
+                .hoverEffect(.highlight)
+        }
+        .buttonStyle(CardButtonStyle())
+        .focused($browsePickerFocus, equals: mode)
+        // Declare the active tab as the preferred default focus within the
+        // picker's focus section. When focus enters the section (initial
+        // entry AND TabView re-entry), tvOS picks the highest-priority
+        // default focus declaration. Higher priority for the active tab.
+        .defaultFocus($browsePickerFocus, mode, priority: active ? .userInitiated : .automatic)
+    }
+
+    // MARK: - Collections Mode
+
+    private var collectionsContentView: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 36) {
+                browseModePicker
+                    .padding(.top, 80)
+                collectionsBody
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var collectionsBody: some View {
+        if isLoadingCollections && collections.isEmpty {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .frame(maxWidth: .infinity, minHeight: 400)
+        } else if let collectionsError {
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundStyle(.secondary)
+                Text("Unable to Load Collections")
+                    .font(.title3)
+                Text(collectionsError)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 500)
+                Button("Try Again") {
+                    Task { await loadCollections() }
+                }
+                .buttonStyle(AppStoreButtonStyle())
+            }
+            .frame(maxWidth: .infinity, minHeight: 300)
+        } else if collections.isEmpty {
+            Text("No collections in this library.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 300)
+        } else {
+            LazyVGrid(columns: columns, spacing: 40) {
+                ForEach(collections, id: \.ratingKey) { coll in
+                    collectionsGridItem(coll)
+                }
+            }
+            .focusSection()
+            .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+            .padding(.bottom, 40)
+        }
+    }
+
+    @ViewBuilder
+    private func collectionsGridItem(_ coll: PlexMetadata) -> some View {
+        let rk = coll.ratingKey ?? ""
+        let isFocused = focusedCollectionRk == rk
+        Button {
+            selectedCollection = coll
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                EquatableView(content: MediaPosterCard(
+                    item: coll,
+                    serverURL: authManager.selectedServerURL ?? "",
+                    authToken: authManager.selectedServerToken ?? ""
+                ))
+                .hoverEffectDisabled()  // suppress MediaPosterCard's inner highlight
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(coll.title ?? "Collection")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    if let count = coll.childCount {
+                        Text("\(count) \(childCountNoun(count: count))")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 56, alignment: .top)
+            }
+            // Uniform scale-up on focus — no backing chrome, just the tile
+            // growing. Mirrors Plex tvOS's collection-tile behavior.
+            .scaleEffect(isFocused ? 1.10 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
+        }
+        .buttonStyle(CardButtonStyle())
+        .focused($focusedCollectionRk, equals: rk)
+    }
+
+    /// Map library type → noun for collection child counts. Plex's own
+    /// clients use "Movies" / "Shows" rather than generic "Items".
+    private func childCountNoun(count: Int) -> String {
+        switch currentLibraryType {
+        case "movie": return count == 1 ? "Movie" : "Movies"
+        case "show":  return count == 1 ? "Show" : "Shows"
+        case "artist": return count == 1 ? "Album" : "Albums"
+        default:      return count == 1 ? "Item" : "Items"
+        }
+    }
+
+    private func loadCollections() async {
+        guard let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else {
+            collectionsError = "Not connected"
+            hasCollections = false
+            return
+        }
+
+        isLoadingCollections = true
+        collectionsError = nil
+
+        do {
+            let fetched = try await networkManager.getCollections(
+                serverURL: serverURL,
+                authToken: token,
+                sectionId: libraryKey
+            )
+            // Plex's per-collection composite cache is occasionally stale —
+            // e.g. the "Star Wars" collection on sky has updatedAt ==
+            // composite-cache timestamp, so Plex won't regenerate even though
+            // the cached output is broken. Substituting `/composite/0`
+            // bypasses that cache slot; Plex regenerates from current state
+            // and caches the result under `/composite/0` per-collection.
+            collections = fetched.map { coll in
+                var m = coll
+                if let thumb = m.thumb {
+                    m.thumb = thumb.replacingOccurrences(
+                        of: #"/composite/\d+"#,
+                        with: "/composite/0",
+                        options: .regularExpression
+                    )
+                }
+                return m
+            }
+            hasCollections = !collections.isEmpty
+            isLoadingCollections = false
+            // If we ended up in collections mode but there are none, fall back.
+            if browseMode == .collections && !hasCollections {
+                browseMode = .allItems
+            }
+        } catch {
+            collectionsError = error.localizedDescription
+            hasCollections = false
+            isLoadingCollections = false
         }
     }
 
@@ -1688,3 +1949,4 @@ struct PlexLibraryView: View {
         PlexLibraryView(libraryKey: "1", libraryTitle: "Movies")
     }
 }
+

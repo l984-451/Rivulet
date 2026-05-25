@@ -3657,6 +3657,8 @@ private struct MediaItemAgnosticRow: View {
     let items: [MediaItem]
     var onItemSelected: ((MediaItem) -> Void)?
 
+    @FocusState private var focusedItemID: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
@@ -3667,12 +3669,22 @@ private struct MediaItemAgnosticRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: ScaledDimensions.rowItemSpacing) {
                     ForEach(items, id: \.ref.itemID) { item in
+                        let id = item.ref.itemID
+                        let isFocused = focusedItemID == id
                         Button {
                             onItemSelected?(item)
                         } label: {
                             MediaItemAgnosticPosterCard(item: item)
+                                // Suppress the inner poster's hover-highlight
+                                // (which scales the poster only, covering the
+                                // title below). The wrapper scaleEffect
+                                // below grows poster + title together.
+                                .hoverEffectDisabled()
+                                .scaleEffect(isFocused ? 1.10 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
                         }
                         .buttonStyle(CardButtonStyle())
+                        .focused($focusedItemID, equals: id)
                     }
                 }
                 .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)

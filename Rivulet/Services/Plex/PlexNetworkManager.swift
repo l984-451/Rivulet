@@ -533,20 +533,27 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     ///   - sectionId: The library section ID containing the collection
     ///   - collectionId: The collection filter ID (from Collection[].id in metadata)
     ///   - excludeRatingKey: Optional ratingKey to exclude from results (typically current movie)
+    ///   - sort: Optional Plex sort field (e.g. "originallyAvailableAt"). Defaults
+    ///     to Plex's section-level default (alphabetical by titleSort) when nil.
     func getCollectionItems(
         serverURL: String,
         authToken: String,
         sectionId: String,
         collectionId: String,
-        excludeRatingKey: String? = nil
+        excludeRatingKey: String? = nil,
+        sort: String? = nil
     ) async throws -> [PlexMetadata] {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
             throw PlexAPIError.invalidURL
         }
 
-        components.queryItems = [
+        var query: [URLQueryItem] = [
             URLQueryItem(name: "collection", value: collectionId)
         ]
+        if let sort {
+            query.append(URLQueryItem(name: "sort", value: sort))
+        }
+        components.queryItems = query
 
         guard let url = components.url else {
             throw PlexAPIError.invalidURL

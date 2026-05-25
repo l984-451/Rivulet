@@ -120,7 +120,8 @@ enum TMDBMediaMapper {
             contentRating: nil,
             rating: tmdb.voteAverage,
             nextEpisode: nil,
-            collections: []
+            collections: [],
+            librarySectionId: nil
         )
     }
 }

@@ -336,7 +336,8 @@ enum PlexMediaMapper {
             contentRating: meta.contentRating,
             rating: meta.rating,
             nextEpisode: nextEpisode,
-            collections: collections
+            collections: collections,
+            librarySectionId: meta.librarySectionID.map(String.init)
         )
     }
 

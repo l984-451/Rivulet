@@ -113,6 +113,7 @@ struct MediaDetailView: View {
     // they pass `fromBeginning: true` to the launch closure directly.
     @AppStorage("promptResumeOrRestart") private var promptResumeOrRestart = false
     @AppStorage("hideSpoilersForUnwatched") private var hideSpoilersForUnwatched = false
+    @AppStorage("showRelatedRow") private var showRelatedRow = true
     @State private var showResumeChoice = false
     @State private var resumeChoiceTimeMs: Int = 0
     @State private var resumeChoiceLaunch: ((_ playFromBeginning: Bool) -> Void)? = nil
@@ -2206,12 +2207,19 @@ struct MediaDetailView: View {
         case .movie:
             // Collection + recommendations are independent of each other
             async let collectionTask: Void = {
-                // TODO(post-wave-1): collectionItems returns [] for Wave 1; skip fetch
-                // Collection name comes from detail?.collections, but we need a library
-                // context to call collectionItems(matching:in:) — not available yet.
-                _ = detail?.collections
+                // Render the first collection the item belongs to (if any)
+                // as an "Other items in <name>" footer row. Plex's API
+                // returns the per-item collection tags with both id and
+                // name; section context comes from the detail itself.
+                guard let coll = detail?.collections.first,
+                      let sectionId = detail?.librarySectionId else { return }
+                await loadCollectionItems(
+                    sectionId: sectionId,
+                    collectionId: coll.id,
+                    name: "\(coll.name) Collection"
+                )
             }()
-            async let recommendTask: Void = loadRecommendedItems()
+            async let recommendTask: Void = showRelatedRow ? loadRecommendedItems() : ()
             _ = await (collectionTask, recommendTask)
 
         case .show:
@@ -2468,7 +2476,10 @@ struct MediaDetailView: View {
                 authToken: token,
                 sectionId: sectionId,
                 collectionId: collectionId,
-                excludeRatingKey: currentItem.ref.itemID
+                excludeRatingKey: currentItem.ref.itemID,
+                // Match Plex tvOS: release-date order (chronological) rather
+                // than Plex's section-level default of alphabetical-by-title.
+                sort: "originallyAvailableAt"
             )
             // Convert [PlexMetadata] → [MediaItem]
             guard let prov = providerRegistry.primaryProvider else { return }
@@ -2926,7 +2937,7 @@ struct MediaDetailView: View {
 
     @ViewBuilder
     private var recommendedRow: some View {
-        if !recommendedItems.isEmpty {
+        if showRelatedRow, !recommendedItems.isEmpty {
             MediaItemAgnosticRow(
                 title: "Related",
                 items: recommendedItems,

@@ -97,6 +97,11 @@ enum SettingsDescriptorStore {
             iconColor: .mint,
             description: "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content."
         ),
+        "relatedRow": SettingDescriptor(
+            icon: "rectangle.split.3x1",
+            iconColor: .orange,
+            description: "Shows a 'Related' row of suggested similar items at the bottom of each movie or show page."
+        ),
         "showDiscoverTab": SettingDescriptor(
             icon: "safari",
             iconColor: .blue,

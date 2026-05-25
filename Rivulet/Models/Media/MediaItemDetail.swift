@@ -27,4 +27,5 @@ struct MediaItemDetail: Sendable {
     // Wave 1 additions for the detail view
     let nextEpisode: MediaItem?      // shows only — Plex `OnDeck`, Jellyfin `/Shows/NextUp`
     let collections: [MediaCollectionRef]  // collections this item is tagged with
+    let librarySectionId: String?    // for resolving collection items via section-scoped API
 }

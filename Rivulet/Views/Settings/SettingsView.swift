@@ -293,6 +293,7 @@ struct SettingsView: View {
     @AppStorage("useApplePlayer") private var useApplePlayer = true
     @AppStorage("autoplayCountdown") private var autoplayCountdownRaw = AutoplayCountdown.fiveSeconds.rawValue
     @AppStorage("showPostVideoUpNext") private var showPostVideoUpNext = true
+    @AppStorage("showRelatedRow") private var showRelatedRow = true
     @AppStorage("displaySize") private var displaySizeRaw = DisplaySize.normal.rawValue
     @AppStorage("musicLoudnessNormalization") private var musicLoudnessNormalization = false
     @AppStorage("musicCrossfadeDuration") private var musicCrossfadeDurationRaw = CrossfadeOption.off.rawValue
@@ -665,6 +666,12 @@ struct SettingsView: View {
                 title: "Personalized Recommendations",
                 isOn: $enablePersonalizedRecommendations,
                 onFocusChange: { if $0 { focusState.focusedSettingId = "personalizedRecs" } }
+            )
+
+            SettingsToggleRow(
+                title: "Related Row on Item Pages",
+                isOn: $showRelatedRow,
+                onFocusChange: { if $0 { focusState.focusedSettingId = "relatedRow" } }
             )
 
             SettingsToggleRow(

@@ -1063,13 +1063,24 @@ struct MediaDetailView: View {
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 18) {
-            if isPlayableFromProvider {
-                playableActionButtons
-            } else {
-                watchlistActionButton
+        // ScrollView so the row keeps each button at its intrinsic width
+        // (play button + multiple circle-to-pill buttons) when the total
+        // exceeds the available width — happens on items with an extra
+        // optional button (e.g. Trailer) or when a focused button
+        // expands into a pill. tvOS focus engine auto-scrolls the
+        // focused button into view; .scrollClipDisabled lets the
+        // focus-driven pill expansion render past the viewport edge
+        // without clipping.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 18) {
+                if isPlayableFromProvider {
+                    playableActionButtons
+                } else {
+                    watchlistActionButton
+                }
             }
         }
+        .scrollClipDisabled()
         .disabled(!allowActionRowInteraction)
     }
 
@@ -1363,15 +1374,26 @@ struct MediaDetailView: View {
                 }
             }
 
-            // Time: remaining if in progress, total duration otherwise
-            if effectiveIsInProgress, let remaining = effectiveRemainingFormatted {
-                Text(remaining)
-            } else if let duration = currentItemDurationFormatted {
-                Text(duration)
-            } else {
-                Text(text)
+            // Time: remaining if in progress, total duration otherwise.
+            // lineLimit(1)+fixedSize prevents the parent HStack squeezing
+            // an adjacent focused button from wrapping the time text
+            // ("43m" → "43" / "m") or hiding it entirely.
+            Group {
+                if effectiveIsInProgress, let remaining = effectiveRemainingFormatted {
+                    Text(remaining)
+                } else if let duration = currentItemDurationFormatted {
+                    Text(duration)
+                } else {
+                    Text(text)
+                }
             }
+            .lineLimit(1)
+            .fixedSize()
         }
+        // Make the play button hold its intrinsic width — without this
+        // the row's HStack shrinks the Play button to give space to a
+        // sibling that just expanded into a pill on focus.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - Body Modifier Chain (split for type-checker)

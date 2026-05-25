@@ -97,6 +97,11 @@ enum SettingsDescriptorStore {
             iconColor: .mint,
             description: "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content."
         ),
+        "libraryItemTitles": SettingDescriptor(
+            icon: "text.below.photo",
+            iconColor: .teal,
+            description: "Show the title (and release year, for movies) under each poster in library grids and home rows. Off by default."
+        ),
         "showDiscoverTab": SettingDescriptor(
             icon: "safari",
             iconColor: .blue,

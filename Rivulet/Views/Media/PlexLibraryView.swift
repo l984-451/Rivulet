@@ -22,6 +22,7 @@ struct PlexLibraryView: View {
     @AppStorage("showLibraryHero") private var showLibraryHero = false
     @AppStorage("showLibraryRecommendations") private var showLibraryRecommendations = true
     @AppStorage("showLibraryRecentRows") private var showLibraryRecentRows = true
+    @AppStorage("showLibraryItemTitles") private var showLibraryItemTitles = false
     @State private var currentSortOption: LibrarySortOption = .addedAtDesc
     @State private var items: [PlexMetadata] = []
     @State private var hubs: [PlexHub] = []  // Library-specific hubs from Plex API
@@ -998,16 +999,48 @@ struct PlexLibraryView: View {
     }
 
     @ViewBuilder
+    private func libraryGridLabel(item: PlexMetadata) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.title ?? "")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let year = item.year, item.type == "movie" {
+                Text(verbatim: "\(year)")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        // Cap label to poster width so a long title truncates (with
+        // tail ellipsis) instead of spilling horizontally and blowing
+        // out the grid column's footprint.
+        .frame(width: ScaledDimensions.posterWidth * scale, height: 44, alignment: .topLeading)
+    }
+
+    @ViewBuilder
     private func libraryGridItem(item: PlexMetadata, index: Int) -> some View {
+        let tileFocused = focusedItemId == gridFocusId(for: item)
         Button {
             selectedItem = selectMediaItem(item)
         } label: {
-            // EquatableView tells SwiftUI to use our custom == to skip unnecessary re-renders
-            EquatableView(content: MediaPosterCard(
-                item: item,
-                serverURL: authManager.selectedServerURL ?? "",
-                authToken: authManager.selectedServerToken ?? ""
-            ))
+            VStack(alignment: .leading, spacing: 10) {
+                // EquatableView tells SwiftUI to use our custom == to skip unnecessary re-renders
+                EquatableView(content: MediaPosterCard(
+                    item: item,
+                    serverURL: authManager.selectedServerURL ?? "",
+                    authToken: authManager.selectedServerToken ?? ""
+                ))
+                .hoverEffectDisabled(showLibraryItemTitles)
+                if showLibraryItemTitles {
+                    libraryGridLabel(item: item)
+                }
+            }
+            // Whole tile scales uniformly on focus (poster + label
+            // together) when labels are shown, so the label below isn't
+            // covered by an expanding poster.
+            .scaleEffect(showLibraryItemTitles && tileFocused ? 1.10 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: tileFocused)
         }
         .buttonStyle(CardButtonStyle())
         .focused($focusedItemId, equals: gridFocusId(for: item))

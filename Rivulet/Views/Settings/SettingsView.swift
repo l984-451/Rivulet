@@ -293,6 +293,7 @@ struct SettingsView: View {
     @AppStorage("useApplePlayer") private var useApplePlayer = true
     @AppStorage("autoplayCountdown") private var autoplayCountdownRaw = AutoplayCountdown.fiveSeconds.rawValue
     @AppStorage("showPostVideoUpNext") private var showPostVideoUpNext = true
+    @AppStorage("showLibraryItemTitles") private var showLibraryItemTitles = false
     @AppStorage("displaySize") private var displaySizeRaw = DisplaySize.normal.rawValue
     @AppStorage("musicLoudnessNormalization") private var musicLoudnessNormalization = false
     @AppStorage("musicCrossfadeDuration") private var musicCrossfadeDurationRaw = CrossfadeOption.off.rawValue
@@ -665,6 +666,12 @@ struct SettingsView: View {
                 title: "Personalized Recommendations",
                 isOn: $enablePersonalizedRecommendations,
                 onFocusChange: { if $0 { focusState.focusedSettingId = "personalizedRecs" } }
+            )
+
+            SettingsToggleRow(
+                title: "Library Item Titles",
+                isOn: $showLibraryItemTitles,
+                onFocusChange: { if $0 { focusState.focusedSettingId = "libraryItemTitles" } }
             )
 
             SettingsToggleRow(

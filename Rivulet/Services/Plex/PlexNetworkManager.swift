@@ -567,6 +567,26 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return items
     }
 
+    /// Get the list of collections in a library section.
+    /// Returns each collection as a PlexMetadata (collections are exposed
+    /// as Metadata entries with `type == "collection"` and child counts).
+    func getCollections(
+        serverURL: String,
+        authToken: String,
+        sectionId: String
+    ) async throws -> [PlexMetadata] {
+        guard let url = URL(string: "\(serverURL)/library/sections/\(sectionId)/collections") else {
+            throw PlexAPIError.invalidURL
+        }
+
+        let container: PlexMediaContainerWrapper = try await request(
+            url,
+            headers: plexHeaders(authToken: authToken)
+        )
+
+        return container.MediaContainer.Metadata ?? []
+    }
+
     /// Get children of an item (seasons for shows, episodes for seasons, albums for artists)
     func getChildren(
         serverURL: String,

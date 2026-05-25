@@ -317,7 +317,10 @@ enum PlexMediaMapper {
         let nextEpisode: MediaItem? = meta.OnDeck?.Metadata?.first.map {
             item($0, providerID: providerID, serverURL: serverURL, authToken: authToken)
         }
-        let collections = (meta.Collection ?? []).compactMap(\.tag)
+        let collections: [MediaCollectionRef] = (meta.Collection ?? []).compactMap { tag in
+            guard let name = tag.tag, let id = tag.idString else { return nil }
+            return MediaCollectionRef(id: id, name: name)
+        }
 
         return MediaItemDetail(
             item: item(meta, providerID: providerID, serverURL: serverURL, authToken: authToken),

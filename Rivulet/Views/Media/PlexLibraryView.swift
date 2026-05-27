@@ -1057,7 +1057,7 @@ struct PlexLibraryView: View {
         .padding(.vertical, 8)
         .onAppear {
             // Re-claim focus on the active tab every time the picker appears
-            // (initial entry AND re-entry from sidebar — TabView keeps the
+            // (initial entry AND re-entry from sidebar; TabView keeps the
             // library view alive, so .task(id: libraryKey) only fires once).
             // Set immediately rather than via DispatchQueue.asyncAfter so the
             // focus engine doesn't settle on the default (first) focusable
@@ -1171,7 +1171,7 @@ struct PlexLibraryView: View {
                 }
                 .frame(height: 56, alignment: .top)
             }
-            // Uniform scale-up on focus — no backing chrome, just the tile
+            // Uniform scale-up on focus; no backing chrome, just the tile
             // growing. Mirrors Plex tvOS's collection-tile behavior.
             .scaleEffect(isFocused ? 1.10 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
@@ -1208,10 +1208,10 @@ struct PlexLibraryView: View {
                 authToken: token,
                 sectionId: libraryKey
             )
-            // Plex's per-collection composite cache is occasionally stale —
-            // e.g. the "Star Wars" collection on sky has updatedAt ==
-            // composite-cache timestamp, so Plex won't regenerate even though
-            // the cached output is broken. Substituting `/composite/0`
+            // Plex's per-collection composite cache is occasionally stale
+            // (e.g. the "Star Wars" collection on sky has updatedAt ==
+            // composite-cache timestamp, so Plex won't regenerate even
+            // though the cached output is broken). Substituting `/composite/0`
             // bypasses that cache slot; Plex regenerates from current state
             // and caches the result under `/composite/0` per-collection.
             collections = fetched.map { coll in

@@ -591,7 +591,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             headers: plexHeaders(authToken: authToken)
         )
 
-        return container.MediaContainer.Metadata ?? []
+        // Per-collection Plex responses don't carry librarySectionID at the
+        // item level; backfill from the input so callers can reach the
+        // section without threading it separately.
+        let sectionIDInt = Int(sectionId)
+        var items = container.MediaContainer.Metadata ?? []
+        for i in items.indices where items[i].librarySectionID == nil {
+            items[i].librarySectionID = sectionIDInt
+        }
+        return items
     }
 
     /// Get children of an item (seasons for shows, episodes for seasons, albums for artists)

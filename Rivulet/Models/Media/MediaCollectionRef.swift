@@ -5,7 +5,7 @@
 //  Lightweight reference to a collection an item belongs to. Carries the
 //  provider-native id plus the display name. Distinct from a full collection
 //  entity (which a future browse surface would model as `MediaItem` with
-//  `kind == .collection`) — this type only needs to identify and label a
+//  `kind == .collection`); this type only needs to identify and label a
 //  collection, not render it as a tile.
 //
 

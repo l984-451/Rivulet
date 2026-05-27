@@ -152,7 +152,8 @@ struct CollectionDetailView: View {
     private func loadItems() async {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
-              let ratingKey = collection.ratingKey else {
+              let ratingKey = collection.ratingKey,
+              let sectionID = collection.librarySectionID else {
             error = "Missing connection or collection id"
             return
         }
@@ -161,10 +162,15 @@ struct CollectionDetailView: View {
         error = nil
 
         do {
-            let fetched = try await networkManager.getChildren(
+            // Sort by originallyAvailableAt so the items list mirrors the
+            // per-item footer's release-date ordering; getChildren returns
+            // Plex's default (alphabetical titleSort), which is wrong here.
+            let fetched = try await networkManager.getCollectionItems(
                 serverURL: serverURL,
                 authToken: token,
-                ratingKey: ratingKey
+                sectionId: String(sectionID),
+                collectionId: ratingKey,
+                sort: "originallyAvailableAt"
             )
             items = fetched
             isLoading = false

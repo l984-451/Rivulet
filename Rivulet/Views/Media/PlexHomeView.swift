@@ -1188,6 +1188,7 @@ struct InfiniteContentRow: View {
     @State private var hasReachedEnd = false
     @State private var totalSize: Int?
     @FocusState private var focusedItemId: String?  // Track which item is focused (format: "context:itemId")
+    @Environment(\.uiScale) private var uiScale
 
     /// Create a unique focus ID for an item in this row
     private func focusId(for item: PlexMetadata) -> String {
@@ -1288,11 +1289,38 @@ struct InfiniteContentRow: View {
                                     isFocused: focusedItemId == focusId(for: item)
                                 )
                             } else {
-                                MediaPosterCard(
-                                    item: item,
-                                    serverURL: serverURL,
-                                    authToken: authToken
-                                )
+                                // Whole tile scales uniformly on focus (poster +
+                                // title + year together) so the label below
+                                // doesn't get covered by MediaPosterCard's inner
+                                // hover-highlight.
+                                let tileFocused = focusedItemId == focusId(for: item)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    MediaPosterCard(
+                                        item: item,
+                                        serverURL: serverURL,
+                                        authToken: authToken
+                                    )
+                                    .hoverEffectDisabled()
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title ?? "")
+                                            .font(.system(size: 18, weight: .medium))
+                                            .foregroundStyle(.white.opacity(0.9))
+                                            .lineLimit(1)
+                                        if let year = item.year, item.type == "movie" {
+                                            Text(verbatim: "\(year)")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(.white.opacity(0.55))
+                                        }
+                                    }
+                                    // Cap label to poster width so a long
+                                    // title truncates rather than stretching
+                                    // the tile (LazyHStack doesn't enforce
+                                    // a per-item width the way LazyVGrid's
+                                    // columns do for the library grid).
+                                    .frame(width: ScaledDimensions.posterWidth * uiScale, height: 44, alignment: .topLeading)
+                                }
+                                .scaleEffect(tileFocused ? 1.10 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: tileFocused)
                             }
                         }
                         .previewSourceAnchor(rowID: rowID, itemID: sourceItemID(for: item, index: index))

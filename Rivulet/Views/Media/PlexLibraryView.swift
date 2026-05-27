@@ -986,16 +986,41 @@ struct PlexLibraryView: View {
     }
 
     @ViewBuilder
+    private func libraryGridLabel(item: PlexMetadata) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.title ?? "")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+            if let year = item.year, item.type == "movie" {
+                Text(verbatim: "\(year)")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .frame(height: 44, alignment: .top)
+    }
+
+    @ViewBuilder
     private func libraryGridItem(item: PlexMetadata, index: Int) -> some View {
+        let tileFocused = focusedItemId == gridFocusId(for: item)
         Button {
             selectedItem = selectMediaItem(item)
         } label: {
-            // EquatableView tells SwiftUI to use our custom == to skip unnecessary re-renders
-            EquatableView(content: MediaPosterCard(
-                item: item,
-                serverURL: authManager.selectedServerURL ?? "",
-                authToken: authManager.selectedServerToken ?? ""
-            ))
+            VStack(alignment: .leading, spacing: 10) {
+                // EquatableView tells SwiftUI to use our custom == to skip unnecessary re-renders
+                EquatableView(content: MediaPosterCard(
+                    item: item,
+                    serverURL: authManager.selectedServerURL ?? "",
+                    authToken: authManager.selectedServerToken ?? ""
+                ))
+                .hoverEffectDisabled()
+                libraryGridLabel(item: item)
+            }
+            // Whole tile scales uniformly on focus (poster + label
+            // together) so the label isn't covered by an expanding poster.
+            .scaleEffect(tileFocused ? 1.10 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: tileFocused)
         }
         .buttonStyle(CardButtonStyle())
         .focused($focusedItemId, equals: gridFocusId(for: item))

@@ -84,15 +84,17 @@ struct WatchlistHubRow: View {
         // round-trip + await the Plex auth context before presenting.
         Task {
             let allItems = Array(watchlist.watchlistItems.prefix(20))
-            let mediaItems = await buildMediaItems(from: allItems)
-            guard !mediaItems.isEmpty else {
+            let pairs = await buildMediaItems(from: allItems)
+            guard !pairs.isEmpty else {
                 await MainActor.run { Task { await legacySelect(item) } }
                 return
             }
-            // Selected index: match on tmdb id (primary key) and fall back to
-            // watchlist entry id if the tapped item lacks a tmdb id.
-            let targetItemID = mediaItemID(for: item)
-            let validIndex = mediaItems.firstIndex(where: { $0.ref.itemID == targetItemID }) ?? 0
+            // Match on the originating watchlist entry id — robust across
+            // both library-matched (Plex ratingKey) and TMDB-only itemID
+            // encodings, and tolerant of entries that get skipped during
+            // mapping (e.g. no tmdbId).
+            let validIndex = pairs.firstIndex(where: { $0.sourceID == item.id }) ?? 0
+            let mediaItems = pairs.map(\.item)
             await MainActor.run {
                 onPreviewRequested(
                     PreviewRequest(
@@ -112,7 +114,7 @@ struct WatchlistHubRow: View {
     /// actions in MediaDetailView + Plex artwork). Unmatched entries use
     /// `TMDBMediaMapper` with the watchlist poster spliced in; the carousel's
     /// prefetch loop will enrich backdrop/overview from TMDB detail.
-    private func buildMediaItems(from entries: [PlexWatchlistItem]) async -> [MediaItem] {
+    private func buildMediaItems(from entries: [PlexWatchlistItem]) async -> [(sourceID: String, item: MediaItem)] {
         let authManager = PlexAuthManager.shared
         let serverURL = authManager.selectedServerURL ?? ""
         let token = authManager.selectedServerToken ?? ""
@@ -140,7 +142,7 @@ struct WatchlistHubRow: View {
             return out
         }
 
-        var result: [MediaItem] = []
+        var result: [(sourceID: String, item: MediaItem)] = []
         result.reserveCapacity(entries.count)
         for (index, entry) in entries.enumerated() {
             guard let tmdbId = entry.tmdbId else { continue }
@@ -149,12 +151,13 @@ struct WatchlistHubRow: View {
             // Library match wins — Plex ref so MediaDetailView shows
             // Play/Resume/Watched and the artwork comes from Plex.
             if let match = lookups[index], !serverURL.isEmpty {
-                result.append(
-                    PlexMediaMapper.item(match,
-                                         providerID: providerID,
-                                         serverURL: serverURL,
-                                         authToken: token)
-                )
+                result.append((
+                    sourceID: entry.id,
+                    item: PlexMediaMapper.item(match,
+                                               providerID: providerID,
+                                               serverURL: serverURL,
+                                               authToken: token)
+                ))
                 continue
             }
 
@@ -197,13 +200,9 @@ struct WatchlistHubRow: View {
                     grandparentArtwork: built.grandparentArtwork
                 )
             }
-            result.append(built)
+            result.append((sourceID: entry.id, item: built))
         }
         return result
-    }
-
-    private func mediaItemID(for item: PlexWatchlistItem) -> String {
-        item.tmdbId.map(String.init) ?? item.id
     }
 
     /// Pre-carousel behavior: library-matched items go straight to

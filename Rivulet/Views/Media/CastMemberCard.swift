@@ -103,6 +103,14 @@ struct CastCrewRow: View {
     let cast: [MediaPerson]
     let directors: [MediaPerson]
 
+    // tvOS's focus engine doesn't enter a section if it can't find a
+    // focus-tracked target — without `@FocusState`/`.focused`, the row
+    // is unreachable by D-pad and the horizontal ScrollView can't be
+    // scrolled. Mirror the working pattern from the detail-page
+    // Related row (`MediaItemAgnosticRow`): @FocusState focusedID +
+    // `.focused($focusedID, equals: id)` per button.
+    @FocusState private var focusedID: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Cast & Crew")
@@ -114,6 +122,7 @@ struct CastCrewRow: View {
                 LazyHStack(spacing: 24) {
                     // Directors first
                     ForEach(directors) { director in
+                        let isFocused = focusedID == director.id
                         Button { } label: {
                             PersonCard(
                                 name: director.name,
@@ -122,12 +131,16 @@ struct CastCrewRow: View {
                                 serverURL: "",
                                 authToken: ""
                             )
+                            .scaleEffect(isFocused ? 1.10 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
                         }
                         .buttonStyle(CircleCardButtonStyle())
+                        .focused($focusedID, equals: director.id)
                     }
 
                     // Cast members
                     ForEach(cast) { actor in
+                        let isFocused = focusedID == actor.id
                         Button { } label: {
                             PersonCard(
                                 name: actor.name,
@@ -136,8 +149,11 @@ struct CastCrewRow: View {
                                 serverURL: "",
                                 authToken: ""
                             )
+                            .scaleEffect(isFocused ? 1.10 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
                         }
                         .buttonStyle(CircleCardButtonStyle())
+                        .focused($focusedID, equals: actor.id)
                     }
                 }
                 .padding(.horizontal, 48)

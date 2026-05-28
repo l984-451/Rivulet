@@ -51,8 +51,20 @@ enum PlexMediaMapper {
     // MARK: - Artwork
 
     /// Helper for building Plex artwork URLs from arbitrary paths.
+    ///
+    /// Most thumb/art fields come back as server-relative paths (e.g.
+    /// `/library/metadata/123/thumb/456`) that need the server origin
+    /// prepended and an `X-Plex-Token` appended. Cast/crew thumbs and
+    /// some other people-related artwork instead come back as fully
+    /// qualified URLs into Plex's public metadata CDN (e.g.
+    /// `https://metadata-static.plex.tv/.../people/<hash>.jpg`). Return
+    /// those unchanged — prepending the server origin produces a
+    /// malformed URL whose request fails, falling back to a placeholder.
     static func artworkURL(_ path: String?, serverURL: String, authToken: String) -> URL? {
         guard let path else { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
         return URL(string: "\(serverURL)\(path)?X-Plex-Token=\(authToken)")
     }
 
@@ -263,8 +275,7 @@ enum PlexMediaMapper {
         authToken: String
     ) -> MediaItemDetail {
         func personURL(_ thumb: String?) -> URL? {
-            guard let thumb else { return nil }
-            return URL(string: "\(serverURL)\(thumb)?X-Plex-Token=\(authToken)")
+            Self.artworkURL(thumb, serverURL: serverURL, authToken: authToken)
         }
 
         let cast = (meta.Role ?? []).map { role in

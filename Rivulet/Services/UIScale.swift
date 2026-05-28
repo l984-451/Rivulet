@@ -77,7 +77,7 @@ enum ScaledDimensions {
     // Typography
     static let posterTitleSize: CGFloat = 24
     static let posterSubtitleSize: CGFloat = 19
-    static let sectionTitleSize: CGFloat = 28
+    static let sectionTitleSize: CGFloat = 30
     static let heroTitleSize: CGFloat = 56
 
     // Spacing

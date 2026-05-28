@@ -23,34 +23,32 @@ struct CardButtonStyle: ButtonStyle {
 
 // MARK: - Watched Corner Tag
 
-/// A triangular corner tag indicating the item has been watched
-/// Uses Path instead of Canvas for simpler GPU-backed rendering
+/// A rounded-rectangle badge indicating the item has been watched.
+/// Sits inside the top-trailing corner of artwork with a dark
+/// translucent fill and a white checkmark.
 struct WatchedCornerTag: View {
-    private let size: CGFloat = 48
-    private let checkSize: CGFloat = 18
+    var cornerRadius: CGFloat = ScaledDimensions.posterCornerRadius
 
-    /// Triangle shape for the corner tag
-    private struct CornerTriangle: Shape {
-        func path(in rect: CGRect) -> Path {
-            Path { p in
-                p.move(to: CGPoint(x: 0, y: 0))
-                p.addLine(to: CGPoint(x: rect.width, y: 0))
-                p.addLine(to: CGPoint(x: rect.width, y: rect.height))
-                p.closeSubpath()
-            }
-        }
-    }
+    private let size: CGFloat = 44
+    private let checkSize: CGFloat = 20
 
     var body: some View {
-        CornerTriangle()
-            .fill(.green)
-            .frame(width: size, height: size)
-            .overlay(alignment: .topTrailing) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: checkSize, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(6)
-            }
+        UnevenRoundedRectangle(
+            cornerRadii: .init(
+                topLeading: 0,
+                bottomLeading: cornerRadius,
+                bottomTrailing: 0,
+                topTrailing: 0
+            ),
+            style: .continuous
+        )
+        .fill(.black.opacity(0.55))
+        .frame(width: size, height: size)
+        .overlay {
+            Image(systemName: "checkmark")
+                .font(.system(size: checkSize, weight: .semibold))
+                .foregroundStyle(.white)
+        }
     }
 }
 

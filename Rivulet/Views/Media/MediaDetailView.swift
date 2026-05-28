@@ -3361,7 +3361,8 @@ struct EpisodeCard: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     if episode.isWatched {
-                        WatchedCornerTag().accessibilityLabel("Watched")
+                        WatchedCornerTag(cornerRadius: 8)
+                            .accessibilityLabel("Watched")
                     }
                 }
                 .overlay(

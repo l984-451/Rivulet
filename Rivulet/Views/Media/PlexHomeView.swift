@@ -239,6 +239,14 @@ struct PlexHomeView: View {
                     presentPreview(request: request)
                 }
             }
+            .onReceive(nestedNavState.popToRootSubject) { _ in
+                // Sidebar tab swap from inside a detail push: clear our
+                // nav-stack @State so the push pops to root, unblocking
+                // the tab swap. See NestedNavigationState.popToRootSubject.
+                selectedItem = nil
+                selectedMusicItem = nil
+                pendingPreviewNavigation = nil
+            }
         }
         .onChange(of: selectedItem) { _, newValue in
             print("[PlexHome] selectedItem changed: \(newValue?.title ?? "nil") (itemID: \(newValue?.ref.itemID ?? "nil"))")

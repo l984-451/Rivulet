@@ -487,6 +487,12 @@ struct SettingsView: View {
         .onDisappear {
             nestedNavState.isSettingsSubPage = false
         }
+        .onReceive(nestedNavState.popToRootSubject) { _ in
+            // Sidebar tab swap from inside a sub-page: reset our internal
+            // nav stack to root so the swap isn't visually locked to the
+            // current sub-page. See NestedNavigationState.popToRootSubject.
+            navigationStack = [.root]
+        }
         .onExitCommand(perform: currentPage != .root ? { goBack() } : nil)
     }
 

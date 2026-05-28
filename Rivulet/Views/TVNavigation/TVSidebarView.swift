@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 import os.log
 
 // Temporary diagnostic logger for intermittent sidebar focus loss.
@@ -75,17 +76,30 @@ struct TVSidebarView: View {
         Binding(
             get: { selectedTab },
             set: { newTab in
-                // Block tab changes while in nested navigation (carousel,
-                // detail view, or deep Settings sub-page).
-                guard !nestedNavState.isNested, !nestedNavState.isSettingsSubPage else { return }
-
                 if newTab == .account {
                     if profileManager.hasMultipleProfiles {
                         showProfileSwitcher = true
                     }
                     return  // Never store .account — selectedTab stays unchanged
                 }
-                selectedTab = newTab
+
+                // When the user picks a sidebar tab while a detail view
+                // (NavigationStack push) or a Settings sub-page is on
+                // screen, tvOS locks the visible tab content to that
+                // stack: writing `selectedTab` lands in @State but the
+                // displayed tab doesn't follow. Signal the active tab's
+                // content view to clear its detail @State (popping to
+                // root), then write the new selection on the next
+                // runloop so SwiftUI sees a clean root-level tab swap.
+                // Matches Apple TV+ app behavior.
+                if nestedNavState.isNested || nestedNavState.isSettingsSubPage {
+                    nestedNavState.popToRootSubject.send()
+                    Task { @MainActor in
+                        selectedTab = newTab
+                    }
+                } else {
+                    selectedTab = newTab
+                }
             }
         )
     }
@@ -334,7 +348,14 @@ struct TVSidebarView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .toolbarVisibility((nestedNavState.isNested || isMusicLibrarySelected || nestedNavState.isSettingsSubPage) ? .hidden : .automatic, for: .tabBar)
+        // Hiding the tab bar leaves the sidebar visually surfaceable via
+        // touchpad swipe-left but non-interactive, so the user can summon
+        // the menu and find that tab selection silently no-ops. Detail
+        // views and Settings sub-pages are reached via swap-on-pop (see
+        // `tabSelection.set`), so they no longer hide the tab bar. Music
+        // library views own the whole screen with their own internal
+        // layout — keep `.hidden` there.
+        .toolbarVisibility(isMusicLibrarySelected ? .hidden : .automatic, for: .tabBar)
         .animation(.easeInOut(duration: 0.18), value: nestedNavState.isNested)
         .onChange(of: nestedNavState.isNested) { _, isNested in
             guard isNested else { return }

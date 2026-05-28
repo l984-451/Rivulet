@@ -38,11 +38,19 @@ enum SidebarTab: Hashable {
 class NestedNavigationState: ObservableObject {
     @Published var isNested: Bool = false
     @Published var isSettingsSubPage: Bool = false
+
+    /// Sent by `TVSidebarView` when the user picks a sidebar tab while the
+    /// active tab has a NavigationStack push on screen. tvOS locks the
+    /// visible tab content to the navigation stack while it's at depth ≥ 1,
+    /// so a selection write lands in state but the displayed tab doesn't
+    /// switch. Subscribers (per-tab content views) clear their detail
+    /// `@State` so the push pops to root, unblocking the swap.
+    let popToRootSubject = PassthroughSubject<Void, Never>()
 }
 
 /// Environment key for nested navigation state
 private struct NestedNavigationStateKey: EnvironmentKey {
-    static let defaultValue: NestedNavigationState = NestedNavigationState()
+    @MainActor static let defaultValue: NestedNavigationState = NestedNavigationState()
 }
 
 extension EnvironmentValues {

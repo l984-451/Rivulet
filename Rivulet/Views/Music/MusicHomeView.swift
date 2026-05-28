@@ -123,6 +123,14 @@ struct MusicHomeView: View {
         .onChange(of: selectedPlaylist) { _, new in
             nestedNavState.isNested = new != nil || selectedArtist != nil || selectedAlbum != nil
         }
+        .onReceive(nestedNavState.popToRootSubject) { _ in
+            // Sidebar tab swap from inside a detail push: clear our
+            // nav-stack @State so the push pops to root, unblocking
+            // the tab swap. See NestedNavigationState.popToRootSubject.
+            selectedArtist = nil
+            selectedAlbum = nil
+            selectedPlaylist = nil
+        }
         .task(id: libraryKey) {
             await loadRecentlyAdded()
             await loadGenres()

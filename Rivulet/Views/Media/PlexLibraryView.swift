@@ -313,6 +313,13 @@ struct PlexLibraryView: View {
                     presentPreview(request: request)
                 }
             }
+            .onReceive(nestedNavState.popToRootSubject) { _ in
+                // Sidebar tab swap from inside a detail push: clear our
+                // nav-stack @State so the push pops to root, unblocking
+                // the tab swap. See NestedNavigationState.popToRootSubject.
+                selectedItem = nil
+                pendingPreviewNavigation = nil
+            }
     }
 
     // MARK: - Preview Presentation (UIKit Modal)

@@ -80,6 +80,13 @@ struct PlexLibraryView: View {
     @State private var heroItems: [PlexMetadata] = []
     @State private var heroCurrentIndex: Int = 0
     @State private var heroScrollOffset: CGFloat = 0
+    /// True while the library hero owns focus. Drives the browse picker's
+    /// reveal: hidden + non-focusable when on the hero (so Down skips it), shown
+    /// + focusable otherwise (so Up reaches it). Initialised true so the picker
+    /// starts hidden on entry, before the hero claims default focus. Focus-state
+    /// based rather than scroll-offset based; focusing the picker scrolls the
+    /// hero toward the top, which an offset gate would misread as "back on hero."
+    @State private var isHeroFocused = true
     @State private var lastLoadedLibraryKey: String?  // Track which library is currently loaded
     @State private var hasPrefetched = false  // Track if we've already prefetched for this library
     @State private var hasMoreItems = true  // Whether there are more items to load
@@ -311,8 +318,6 @@ struct PlexLibraryView: View {
                 errorView(error)
             } else if items.isEmpty {
                 emptyView
-            } else if browseMode == .collections {
-                collectionsContentView
             } else {
                 contentView
             }
@@ -348,13 +353,13 @@ struct PlexLibraryView: View {
                 // Collections tab at all. browseMode is preserved across
                 // library switches; loadCollections demotes .collections to
                 // .allItems if the new library has none.
+                //
+                // We deliberately do NOT claim focus on the picker here: the
+                // hero's Play button takes default focus on entry, and the
+                // picker reveals itself only once the user scrolls down (see
+                // pickerOpacity / pickerRevealed).
                 collections = []
                 await loadCollections()
-                // Claim focus on the (possibly-adjusted) active tab so the
-                // user always lands on the picker on library entry. The
-                // brief delay lets the focus engine settle first.
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                browsePickerFocus = browseMode
             }
             .onChange(of: browseMode) { _, newValue in
                 LibraryPickerCache.shared.setMode(newValue, for: libraryKey)
@@ -581,9 +586,13 @@ struct PlexLibraryView: View {
                             onInfo: { item in selectedItem = selectMediaItem(item) },
                             onPlay: { item in playItemDirectly(item) },
                             onHeroFocused: {
+                                isHeroFocused = true
                                 withAnimation(.smooth(duration: 0.8)) {
                                     scrollProxy.scrollTo("libraryHero", anchor: .top)
                                 }
+                            },
+                            onHeroExited: {
+                                isHeroFocused = false
                             }
                         )
                         .frame(height: heroSectionHeight)
@@ -605,10 +614,14 @@ struct PlexLibraryView: View {
                             .frame(height: 0)
                             .id("libraryContentRowsAnchor")
                         browseModePicker
-                        essentialRowsView(scrollProxy: scrollProxy)
-                        discoveryRowsView(scrollProxy: scrollProxy)
-                        librarySectionHeader
-                        libraryGridView
+                        if browseMode == .collections {
+                            collectionsBody
+                        } else {
+                            essentialRowsView(scrollProxy: scrollProxy)
+                            discoveryRowsView(scrollProxy: scrollProxy)
+                            librarySectionHeader
+                            libraryGridView
+                        }
                     }
                     .padding(.top, heroActive ? 0 : 100)
 
@@ -1044,9 +1057,35 @@ struct PlexLibraryView: View {
 
     // MARK: - Browse Mode Picker
 
+    /// The picker is revealed (visible + focusable) whenever the hero is NOT
+    /// the focused element. Driven by `isHeroFocused`, not scroll offset:
+    /// focusing the picker scrolls the hero back toward the top, so an
+    /// offset-based gate disabled the picker the instant it gained focus and
+    /// ejected it (feedback loop seen on device). Gated on the *setting* so it
+    /// stays hidden during the brief window before hero items load. With the
+    /// hero off it is always revealed.
+    private var pickerRevealed: Bool {
+        guard showLibraryHero else { return true }
+        return !isHeroFocused
+    }
+
+    /// Whether the picker itself currently holds focus.
+    private var pickerFocused: Bool { browsePickerFocus != nil }
+
+    /// Picker opacity. With the hero off the picker is the top-of-screen nav, so
+    /// it stays fully visible. With the hero on it follows the season-pill
+    /// pattern: hidden while the hero owns focus, recessed while revealed in
+    /// content but not focused (so the active pill doesn't read as "focused"
+    /// when it isn't), full when the picker itself has focus.
+    private var pickerOpacity: Double {
+        guard showLibraryHero else { return 1.0 }
+        guard !isHeroFocused else { return 0 }
+        return pickerFocused ? 1.0 : 0.6
+    }
+
     @ViewBuilder
     private var browseModePicker: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: 40) {
             browseTabButton(.allItems, label: "Library")
             if hasCollections {
                 browseTabButton(.collections, label: "Collections")
@@ -1055,19 +1094,22 @@ struct PlexLibraryView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .focusSection()
         .padding(.vertical, 8)
-        .onAppear {
-            // Re-claim focus on the active tab every time the picker appears
-            // (initial entry AND re-entry from sidebar; TabView keeps the
-            // library view alive, so .task(id: libraryKey) only fires once).
-            // Set immediately rather than via DispatchQueue.asyncAfter so the
-            // focus engine doesn't settle on the default (first) focusable
-            // before we override.
-            browsePickerFocus = browseMode
-        }
+        // Carousel-style reveal (mirrors the season pills): hidden and
+        // non-focusable while the hero owns focus; revealed (recessed) once
+        // focus moves into content, brightening when the picker itself gains
+        // focus.
+        .opacity(pickerOpacity)
+        .animation(.easeInOut(duration: 0.3), value: pickerOpacity)
+        .disabled(!pickerRevealed)
     }
 
     private func browseTabButton(_ mode: BrowseMode, label: String) -> some View {
         let active = (browseMode == mode)
+        // With the hero on, the active tab is bright-filled only when the picker
+        // is focused (so it doesn't masquerade as focused while recessed in
+        // content); otherwise it gets a subtle indicator. With the hero off the
+        // picker is the top nav, so the active tab is always bright-filled.
+        let highlighted = active && (!showLibraryHero || pickerFocused)
         return Button {
             browseMode = mode
         } label: {
@@ -1075,10 +1117,11 @@ struct PlexLibraryView: View {
                 .font(.system(size: 24, weight: .semibold))
                 .padding(.horizontal, 26)
                 .padding(.vertical, 12)
-                .foregroundStyle(active ? .black : .white)
+                .foregroundStyle(highlighted ? .black : .white)
                 .background(
                     Capsule()
-                        .fill(active ? .white : .white.opacity(0.08))
+                        .fill(highlighted ? Color.white
+                              : (active ? Color.white.opacity(0.22) : Color.white.opacity(0.08)))
                 )
                 .contentShape(Capsule())
                 .hoverEffect(.highlight)
@@ -1093,16 +1136,6 @@ struct PlexLibraryView: View {
     }
 
     // MARK: - Collections Mode
-
-    private var collectionsContentView: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 36) {
-                browseModePicker
-                    .padding(.top, 80)
-                collectionsBody
-            }
-        }
-    }
 
     @ViewBuilder
     private var collectionsBody: some View {

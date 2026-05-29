@@ -237,9 +237,21 @@ struct HeroBackdropImage<Placeholder: View>: View {
     }
 
     private func imageView(_ image: UIImage) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
+        // Fill the *container* and clip, rather than letting the image's own
+        // dimensions drive layout. `.aspectRatio(.fill)` without a bounding
+        // frame reports the scaled image size as this view's layout size, so a
+        // source with extreme dimensions (e.g. a near-square poster used as a
+        // backdrop) balloons to thousands of points tall and shoves the hero
+        // off-screen. Anchoring to a flexible `Color.clear` pins the layout
+        // size to whatever the parent proposes; the image fills it as an
+        // overlay and the overflow is clipped.
+        Color.clear
+            .overlay(
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            )
+            .clipped()
     }
 
     @MainActor

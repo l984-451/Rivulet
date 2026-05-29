@@ -517,8 +517,13 @@ struct PlexLibraryView: View {
                             onInfo: { item in selectedItem = selectMediaItem(item) },
                             onPlay: { item in playItemDirectly(item) },
                             onHeroFocused: {
-                                withAnimation(.smooth(duration: 0.8)) {
-                                    scrollProxy.scrollTo("libraryHero", anchor: .top)
+                                // Only snap back to the hero when we're actually
+                                // scrolled down into content. On entry the hero is
+                                // already at the top, so this scrollTo is redundant.
+                                if heroScrollOffset > 1 {
+                                    withAnimation(.smooth(duration: 0.8)) {
+                                        scrollProxy.scrollTo("libraryHero", anchor: .top)
+                                    }
                                 }
                             }
                         )
@@ -589,8 +594,13 @@ struct PlexLibraryView: View {
         .onChange(of: hubs.count) { _, _ in
             // Recompute cached hubs (memoization)
             cachedProcessedHubs = computeProcessedHubs(from: hubs)
-            // Reselect hero whenever hubs change so the promoted list stays current.
-            selectHeroItems()
+            // Pick the hero from hubs only if it isn't already set. We do NOT
+            // re-pick an existing hero here: the instant pick and a later hub
+            // pick can differ, and swapping a beat after entry is the visible
+            // "flash". The hero is chosen once and kept.
+            if heroItems.isEmpty {
+                selectHeroItems()
+            }
         }
     }
 
@@ -605,10 +615,13 @@ struct PlexLibraryView: View {
         commitHeroItems(next)
     }
 
-    /// Variant used during instant library-switch restoration, where cached
-    /// items are available before hubs finish loading.
+    /// Variant used during instant library-switch restoration. Prefers the
+    /// hub-based pick (same priority as `selectHeroItems`) so the instant pick
+    /// matches the eventual one and the hero doesn't visibly swap ("flash")
+    /// when hubs finish loading. Falls back to the item list when no hubs are
+    /// cached yet.
     private func selectHeroItemsFromCurrentData() {
-        let next = computeHeroItems(preferItemsFirst: true)
+        let next = computeHeroItems(preferItemsFirst: false)
         commitHeroItems(next)
     }
 
@@ -1667,8 +1680,22 @@ struct PlexLibraryView: View {
     }
     */
 
-    /// Ensure the first grid item receives focus when entering a library
+    /// Whether the library hero is currently on screen.
+    private var heroIsActive: Bool {
+        showLibraryHero && !heroItems.isEmpty
+    }
+
+    /// Ensure the first grid item receives focus when entering a library.
+    ///
+    /// When the library hero is on screen it owns the initial focus (its Play
+    /// button), so we must NOT pull focus down into the grid; doing so buries
+    /// the hero under the poster rows. This only bit freshly-loaded libraries:
+    /// their items arrive via an `items.count` change that fires this, whereas
+    /// cache-warm libraries never trip it. `selectHeroItems()` runs just before
+    /// this in the same change handler, so `heroIsActive` is already true here
+    /// for hero libraries.
     private func ensureInitialFocusIfNeeded() {
+        guard !heroIsActive else { return }
         guard focusedItemId == nil else { return }
         guard let first = firstDisplayedItem else { return }
 

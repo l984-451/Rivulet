@@ -131,6 +131,15 @@ struct HeroOverlayContent: View {
         .onChange(of: focusedButton) { oldButton, newButton in
             if newButton != nil && oldButton == nil {
                 onHeroFocused?()
+                // Always land on Play when entering the hero. tvOS's directional
+                // focus otherwise lands on whichever button sits above the
+                // column you came up from (often the "next" arrow); Play is the
+                // hero's primary action, so re-anchor to it for a predictable
+                // entry. Only fires on entry (oldButton == nil), so navigating
+                // between buttons once inside is unaffected.
+                if newButton != .play {
+                    focusedButton = .play
+                }
             } else if newButton == nil && oldButton != nil {
                 onHeroExited?()
             }

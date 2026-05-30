@@ -17,7 +17,7 @@ struct PersonCard: View {
     let serverURL: String
     let authToken: String
 
-    private let circleSize: CGFloat = 140
+    private let circleSize: CGFloat = 188
 
     var body: some View {
         VStack(spacing: 10) {

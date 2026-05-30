@@ -26,6 +26,32 @@ enum PlexMediaMapper {
 
     // MARK: - Kind
 
+    /// Loose title-match used by the header Trailer button to gate on
+    /// "is this trailer actually for the feature?": normalizes case,
+    /// strips leading articles + non-alphanumerics, and checks substring
+    /// either direction so "7 Faces of Dr. Lao (1964) - Theatrical Trailer"
+    /// matches feature "7 Faces of Dr. Lao". Returns false on either-nil.
+    static func titlesMatch(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        let na = normalizedTitle(a)
+        let nb = normalizedTitle(b)
+        guard !na.isEmpty, !nb.isEmpty else { return false }
+        return na.contains(nb) || nb.contains(na)
+    }
+
+    static func normalizedTitle(_ s: String) -> String {
+        var t = s.lowercased()
+        for prefix in ["the ", "a ", "an "] where t.hasPrefix(prefix) {
+            t.removeFirst(prefix.count)
+        }
+        let scalars = t.unicodeScalars.map { sc -> Character in
+            if CharacterSet.alphanumerics.contains(sc) { return Character(sc) }
+            return " "
+        }
+        let compact = String(scalars).split(separator: " ").joined(separator: " ")
+        return compact
+    }
+
     static func kind(_ type: String?) -> MediaKind {
         switch type {
         case "movie": return .movie
@@ -33,6 +59,12 @@ enum PlexMediaMapper {
         case "season": return .season
         case "episode": return .episode
         case "collection": return .collection
+        // Extras come back as type=="clip"; they're single-video items with
+        // their own Media block, indistinguishable from movies for routing /
+        // playback / detail-page rendering. Classifying as .movie lets them
+        // re-use the movie code path everywhere (detail view, action row,
+        // audio/subtitle pickers, WT, etc.) without a new case.
+        case "clip": return .movie
         default: return .unknown
         }
     }
@@ -57,9 +89,15 @@ enum PlexMediaMapper {
     }
 
     static func artwork(_ meta: PlexMetadata, serverURL: String, authToken: String) -> MediaArtwork {
-        MediaArtwork(
+        // For clip-type items (Plex extras: trailers, featurettes, behind-the-
+        // scenes, etc.) Plex has no per-clip `art` field, so `bestArt` falls
+        // back to grandparentArt (the parent movie's backdrop). Source the
+        // extra's backdrop from its own thumb (a frame of the extra video)
+        // so the pushed detail page represents the extra itself.
+        let backdropSource: String? = (meta.type == "clip") ? meta.thumb : meta.bestArt
+        return MediaArtwork(
             poster: artworkURL(meta.thumb ?? meta.bestThumb, serverURL: serverURL, authToken: authToken),
-            backdrop: artworkURL(meta.bestArt, serverURL: serverURL, authToken: authToken),
+            backdrop: artworkURL(backdropSource, serverURL: serverURL, authToken: authToken),
             thumbnail: artworkURL(meta.thumb, serverURL: serverURL, authToken: authToken),
             logo: artworkURL(meta.clearLogoPath, serverURL: serverURL, authToken: authToken)
         )
@@ -305,10 +343,37 @@ enum PlexMediaMapper {
                 mediaSource(media, part, serverURL: serverURL, authToken: authToken)
             }
         }
-        // PlexExtra exposes only `key`/`ratingKey` — no nested Media. The trailer
-        // URL is the extra's playback key, which the player resolves at play time.
-        let trailerURL: URL? = meta.Extras?.Metadata?
-            .first(where: { $0.subtype == "trailer" || $0.type == "clip" })
+        // Plex inlines `Media[].Part[]` on each Extras entry. User-added extras
+        // (files under /Volumes/...) carry a Part.file path; Plex's IVA-supplied
+        // extras stream from /services/iva/assets/... and have no file. We only
+        // surface user-added extras; IVA streams are low quality and not what
+        // we want in the carousel.
+        let localExtras = (meta.Extras?.Metadata ?? []).filter(\.hasLocalFile)
+        let extras: [MediaExtra] = localExtras.compactMap { ex in
+            guard let rk = ex.ratingKey else { return nil }
+            return MediaExtra(
+                id: rk,
+                title: ex.title ?? "",
+                subtype: ExtraSubtype.fromPlex(subtype: ex.subtype, extraType: ex.extraType),
+                durationSec: ex.duration.map { $0 / 1000 },
+                thumbURL: personURL(ex.thumb)
+            )
+        }
+        .sorted { $0.subtype < $1.subtype }
+        // type=="clip" matches every extra (trailers, featurettes, BTS all share
+        // type=clip), so OR-ing it in caused the Trailer button to fall through
+        // to the first non-trailer extra when no trailer was present. Restrict
+        // to the subtype check so the button either points at a real trailer or
+        // doesn't render.
+        //
+        // Disc-rip extras directories often contain trailers for OTHER films
+        // alongside the feature (Kino Lorber, Criterion, etc.), so require the
+        // trailer's title to match the feature item's title before using it for
+        // the header Trailer button. The trailers still appear in the Extras
+        // row regardless; this gate is only for the dedicated action button so
+        // it doesn't promise a feature trailer it can't deliver.
+        let trailerURL: URL? = localExtras
+            .first(where: { $0.subtype == "trailer" && titlesMatch($0.title, meta.title) })
             .flatMap { $0.key }
             .flatMap { URL(string: "\(serverURL)\($0)?X-Plex-Token=\(authToken)") }
 
@@ -318,6 +383,10 @@ enum PlexMediaMapper {
             item($0, providerID: providerID, serverURL: serverURL, authToken: authToken)
         }
         let collections = (meta.Collection ?? []).compactMap(\.tag)
+
+        let extraSubtype: ExtraSubtype? = (meta.type == "clip")
+            ? ExtraSubtype.fromPlex(subtype: meta.subtype, extraType: meta.extraType)
+            : nil
 
         return MediaItemDetail(
             item: item(meta, providerID: providerID, serverURL: serverURL, authToken: authToken),
@@ -330,10 +399,12 @@ enum PlexMediaMapper {
             chapters: chapters,
             mediaSources: mediaSources,
             trailerURL: trailerURL,
+            extras: extras,
             contentRating: meta.contentRating,
             rating: meta.rating,
             nextEpisode: nextEpisode,
-            collections: collections
+            collections: collections,
+            extraSubtype: extraSubtype
         )
     }
 

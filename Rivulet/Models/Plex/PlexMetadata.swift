@@ -68,6 +68,14 @@ struct PlexExtra: Codable, Identifiable, Sendable {
     var thumb: String?
     var duration: Int?
     var extraType: Int?     // 1=trailer
+    var Media: [PlexMedia]?
+
+    /// User-added extras have a local file path under /Volumes/...; Plex's
+    /// IVA-supplied extras stream from /services/iva/assets/... and carry
+    /// no file field.
+    var hasLocalFile: Bool {
+        (Media?.first?.Part?.first?.file?.isEmpty == false)
+    }
 }
 
 /// Container for extras in Plex API response
@@ -146,7 +154,9 @@ struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var ratingKey: String?
     var key: String?
     var guid: String?
-    var type: String?             // "movie", "show", "season", "episode"
+    var type: String?             // "movie", "show", "season", "episode", "clip"
+    var subtype: String?          // clips only: "trailer", "behindTheScenes", etc.
+    var extraType: Int?           // clips only: 1=trailer
 
     // MARK: - Display Info
     var title: String?

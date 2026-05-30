@@ -117,10 +117,12 @@ enum TMDBMediaMapper {
             chapters: [],
             mediaSources: [],
             trailerURL: nil,
+            extras: [],
             contentRating: nil,
             rating: tmdb.voteAverage,
             nextEpisode: nil,
-            collections: []
+            collections: [],
+            extraSubtype: nil
         )
     }
 }

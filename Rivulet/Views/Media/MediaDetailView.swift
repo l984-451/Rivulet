@@ -80,6 +80,8 @@ struct MediaDetailView: View {
 
     // Detail state (replaces fullMetadata)
     @State private var detail: MediaItemDetail?
+    @State private var seasonExtras: [MediaExtra] = []
+    @State private var seasonExtrasSeasonTitle: String?
     @State private var collectionItems: [MediaItem] = []
     @State private var collectionName: String?
     @State private var recommendedItems: [MediaItem] = []
@@ -139,6 +141,7 @@ struct MediaDetailView: View {
     @State private var navigateToSeason: MediaItem?
     @State private var navigateToShow: MediaItem?
     @State private var navigateToEpisode: MediaItem?
+    @State private var navigateToExtraItem: MediaItem?
     @State private var isLoadingNavigation = false
 
     // Unified episode list state (all seasons in one scroll)
@@ -356,6 +359,7 @@ struct MediaDetailView: View {
                 navigateToSeason: $navigateToSeason,
                 navigateToShow: $navigateToShow,
                 navigateToEpisode: $navigateToEpisode,
+                navigateToExtra: $navigateToExtraItem,
                 // Disabled inside `PreviewOverlayHost`-hosted views: the
                 // overlay is presented via UIKit modal, so the SwiftUI
                 // tree has no `NavigationStack` ancestor and these
@@ -407,6 +411,11 @@ struct MediaDetailView: View {
             parentShowLogoPath = nil
             parentShowSummary = nil
             parentShowTagline = nil
+            seasonExtras = []
+            seasonExtrasSeasonTitle = nil
+        }
+        .onChange(of: selectedSeason?.ref.itemID) { _, _ in
+            Task { await loadSeasonExtras(for: selectedSeason) }
         }
         .onChange(of: showExpandedChrome) { _, isVisible in
             let ref = currentItem.ref.itemID
@@ -919,7 +928,8 @@ struct MediaDetailView: View {
                 Text(heroBrandTitle)
                     .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -928,10 +938,15 @@ struct MediaDetailView: View {
     // MARK: - Hero Sub-components
 
     private var heroTitleText: some View {
+        // Up to 2 lines (slot is heroLogoSlotHeight = 120pt; 2 lines at
+        // 52pt is too tall, so shrink the font to fit). Long titles like
+        // an Extra's "Theatrical Trailer for SomeMovie" hit this path.
         Text(heroBrandTitle)
             .font(.system(size: 52, weight: .bold))
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 4)
+            .lineLimit(2)
+            .minimumScaleFactor(0.4)
     }
 
     /// Genre tags + content rating badge (Apple TV+ style: "TV Show · Adventure · Sci-Fi [TV-14]")
@@ -964,14 +979,21 @@ struct MediaDetailView: View {
     private var heroMetadataParts: [String] {
         var parts: [String] = []
 
-        // Type label from kind
-        switch currentItem.kind {
-        case .show, .episode, .season:
-            parts.append("TV Show")
-        case .movie:
-            parts.append("Movie")
-        default:
-            break
+        // Type label: extras (Plex clips) override the kind label with
+        // their subtype ("Trailer", "Featurette", etc.) since the mapper
+        // classifies a clip as MediaKind.movie at its boundary so the
+        // action row works.
+        if let subtype = detail?.extraSubtype {
+            parts.append(subtype.displayName)
+        } else {
+            switch currentItem.kind {
+            case .show, .episode, .season:
+                parts.append("TV Show")
+            case .movie:
+                parts.append("Movie")
+            default:
+                break
+            }
         }
 
         // Genres (up to 2 — keeps the row concise alongside the type label and rating badge)
@@ -1756,6 +1778,8 @@ struct MediaDetailView: View {
                 .padding(.horizontal, 48)
                 .allowsHitTesting(!isPreviewCarousel)
                 recommendedRow
+                extrasRow
+                seasonExtrasRow
                 collectionRow
                 castCrewRow
             }
@@ -2577,6 +2601,69 @@ struct MediaDetailView: View {
             ?? episodes.first
     }
 
+    private func loadSeasonExtras(for season: MediaItem?) async {
+        guard currentItem.kind == .show, let season,
+              let prov = provider else {
+            seasonExtras = []
+            seasonExtrasSeasonTitle = nil
+            return
+        }
+        do {
+            let d = try await prov.fullDetail(for: season.ref)
+            seasonExtras = d.extras
+            seasonExtrasSeasonTitle = season.title
+        } catch {
+            print("Failed to load season extras: \(error)")
+            seasonExtras = []
+            seasonExtrasSeasonTitle = nil
+        }
+    }
+
+    /// Push a fresh MediaDetailView for the pressed extra, the way episode /
+    /// season / show tile presses already do. The previous attempt swapped
+    /// displayedItem in place, which on tvOS left the entire below-fold
+    /// hidden (the user saw only the hero backdrop and the Siri Remote
+    /// went unresponsive). Pushing onto the NavigationStack gives the new
+    /// detail page a clean SwiftUI view tree and proper Back semantics
+    /// (Back returns to the parent's detail page, where the extras row
+    /// lives). When the host is the UIKit preview overlay (no
+    /// NavigationStack ancestor), route through onSubItemNavigation
+    /// instead, same pattern as episode-row presses.
+    private func navigateToExtra(_ extra: MediaExtra) {
+        let providerID = currentItem.ref.providerID
+        let stub = MediaItem(
+            ref: MediaItemRef(providerID: providerID, itemID: extra.id),
+            kind: .movie,
+            title: extra.title,
+            sortTitle: nil,
+            overview: nil,
+            year: nil,
+            runtime: extra.durationSec.map { TimeInterval($0) },
+            parentRef: nil,
+            grandparentRef: nil,
+            episodeNumber: nil,
+            seasonNumber: nil,
+            childProgress: nil,
+            userState: MediaUserState(isPlayed: false, viewOffset: 0, isFavorite: false, lastViewedAt: nil),
+            // Backdrop derives from the extra's own thumb (a frame from
+            // its video) rather than the parent's art, so the pushed
+            // detail page represents the extra itself.
+            artwork: MediaArtwork(
+                poster: extra.thumbURL,
+                backdrop: extra.thumbURL,
+                thumbnail: extra.thumbURL,
+                logo: nil
+            ),
+            parentArtwork: nil,
+            grandparentArtwork: nil
+        )
+        if let nav = onSubItemNavigation {
+            nav(stub)
+        } else {
+            navigateToExtraItem = stub
+        }
+    }
+
     private func loadAndPlayTrailer() async {
         // detail?.trailerURL is a playable URL. We need a PlexMetadata for
         // UniversalPlayerView (escape hatch). Extract the ratingKey from the
@@ -2951,6 +3038,33 @@ struct MediaDetailView: View {
                         displayedItem = selected
                     }
                 }
+            )
+            .padding(.top, 32)
+        }
+    }
+
+    @ViewBuilder
+    private var extrasRow: some View {
+        if let extras = detail?.extras, !extras.isEmpty {
+            // Distinguish from the season row when both are visible on a show page.
+            let label = (currentItem.kind == .show && !seasonExtras.isEmpty) ? "Show Extras" : "Extras"
+            ExtrasRow(
+                title: label,
+                extras: extras,
+                onExtraSelected: { extra in navigateToExtra(extra) }
+            )
+            .padding(.top, 32)
+        }
+    }
+
+    @ViewBuilder
+    private var seasonExtrasRow: some View {
+        if currentItem.kind == .show, !seasonExtras.isEmpty {
+            let seasonLabel = seasonExtrasSeasonTitle ?? "Season"
+            ExtrasRow(
+                title: "\(seasonLabel) Extras",
+                extras: seasonExtras,
+                onExtraSelected: { extra in navigateToExtra(extra) }
             )
             .padding(.top, 32)
         }
@@ -3719,6 +3833,131 @@ private struct MediaItemAgnosticPosterCard: View {
     }
 }
 
+// MARK: - Extras Row
+
+private struct ExtrasRow: View {
+    let title: String
+    let extras: [MediaExtra]
+    var onExtraSelected: ((MediaExtra) -> Void)?
+
+    @FocusState private var focusedID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: ScaledDimensions.sectionTitleSize, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: ScaledDimensions.rowItemSpacing) {
+                    ForEach(extras) { extra in
+                        let isFocused = focusedID == extra.id
+                        Button {
+                            onExtraSelected?(extra)
+                        } label: {
+                            ExtraTileCard(extra: extra)
+                                .hoverEffectDisabled()
+                                .scaleEffect(isFocused ? 1.10 : 1.0)
+                                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFocused)
+                        }
+                        .buttonStyle(CardButtonStyle())
+                        .focused($focusedID, equals: extra.id)
+                    }
+                }
+                .padding(.horizontal, ScaledDimensions.rowHorizontalPadding)
+                .padding(.vertical, ScaledDimensions.rowVerticalPadding)
+            }
+            .scrollClipDisabled()
+        }
+        .focusSection()
+    }
+}
+
+private struct ExtraTileCard: View {
+    let extra: MediaExtra
+
+    @Environment(\.uiScale) private var scale
+
+    private var tileWidth: CGFloat { ScaledDimensions.continueWatchingWidth * scale }
+    private var tileHeight: CGFloat { tileWidth * 9 / 16 }
+    private var cornerRadius: CGFloat { ScaledDimensions.posterCornerRadius }
+    private var titleSize: CGFloat { ScaledDimensions.posterTitleSize * scale }
+    private var subtitleSize: CGFloat { ScaledDimensions.posterSubtitleSize * scale }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            CachedAsyncImage(url: extra.thumbURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: .fill)
+                case .empty:
+                    Rectangle().fill(Color(white: 0.15))
+                        .overlay { ProgressView().tint(.white.opacity(0.3)) }
+                case .failure:
+                    Rectangle()
+                        .fill(LinearGradient(colors: [Color(white: 0.18), Color(white: 0.12)], startPoint: .top, endPoint: .bottom))
+                        .overlay { Image(systemName: glyphFor(extra.subtype)).foregroundStyle(.white.opacity(0.3)) }
+                }
+            }
+            .frame(width: tileWidth, height: tileHeight)
+            .overlay(alignment: .bottomTrailing) {
+                if let secs = extra.durationSec, secs > 0 {
+                    Text(formatDuration(secs))
+                        .font(.system(size: subtitleSize - 4, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .padding(8)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if let glyph = glyphFor(extra.subtype, optional: true) {
+                    Image(systemName: glyph)
+                        .font(.system(size: titleSize - 6, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.55), in: Circle())
+                        .padding(8)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .hoverEffect(.highlight)
+
+            Text(extra.title)
+                .font(.system(size: titleSize, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+                .frame(width: tileWidth, alignment: .leading)
+        }
+    }
+
+    private func glyphFor(_ subtype: ExtraSubtype) -> String {
+        glyphFor(subtype, optional: false) ?? "play.rectangle"
+    }
+
+    private func glyphFor(_ subtype: ExtraSubtype, optional: Bool) -> String? {
+        switch subtype {
+        case .trailer:         return "film"
+        case .featurette:      return "sparkles"
+        case .behindTheScenes: return "camera"
+        case .deletedScene:    return "scissors"
+        case .interview:       return "quote.bubble"
+        case .scene:           return "play.rectangle"
+        case .short:           return "tv"
+        case .unknown:         return optional ? nil : "play.rectangle"
+        }
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
 // MARK: - Navigation Destinations Modifier
 
 /// Conditionally applies .navigationDestination modifiers.
@@ -3727,6 +3966,7 @@ private struct NavigationDestinationsModifier: ViewModifier {
     @Binding var navigateToSeason: MediaItem?
     @Binding var navigateToShow: MediaItem?
     @Binding var navigateToEpisode: MediaItem?
+    @Binding var navigateToExtra: MediaItem?
     let isEnabled: Bool
 
     func body(content: Content) -> some View {
@@ -3740,6 +3980,9 @@ private struct NavigationDestinationsModifier: ViewModifier {
                 }
                 .navigationDestination(item: $navigateToEpisode) { episode in
                     MediaDetailView(item: episode)
+                }
+                .navigationDestination(item: $navigateToExtra) { extra in
+                    MediaDetailView(item: extra)
                 }
         } else {
             content

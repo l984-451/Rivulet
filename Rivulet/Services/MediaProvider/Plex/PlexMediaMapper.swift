@@ -91,7 +91,8 @@ enum PlexMediaMapper {
             frameRate: stream.frameRate,
             bitrate: stream.bitrate,
             videoRange: range,
-            isDefault: stream.default ?? false
+            isDefault: stream.default ?? false,
+            scanType: stream.scanType
         )
     }
 
@@ -101,6 +102,7 @@ enum PlexMediaMapper {
             id: "\(stream.id)",
             index: stream.index ?? 0,
             codec: stream.codec ?? "unknown",
+            profile: stream.profile,
             channels: stream.channels,
             channelLayout: stream.audioChannelLayout,
             language: stream.language,
@@ -246,6 +248,7 @@ enum PlexMediaMapper {
             bitrate: media.bitrate.map { $0 * 1000 },     // Plex bitrate is kbps
             fileSize: part.size.map { Int64($0) },
             fileName: part.file,
+            videoResolution: media.videoResolution,
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,
@@ -333,7 +336,8 @@ enum PlexMediaMapper {
             contentRating: meta.contentRating,
             rating: meta.rating,
             nextEpisode: nextEpisode,
-            collections: collections
+            collections: collections,
+            originallyAvailableAt: meta.originallyAvailableAt
         )
     }
 

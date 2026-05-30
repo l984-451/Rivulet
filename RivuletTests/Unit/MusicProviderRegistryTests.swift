@@ -49,7 +49,8 @@ final class MusicProviderRegistryTests: XCTestCase {
         func recentlyPlayed(limit: Int) async throws -> [MusicItem] { [] }
         func resolveStream(for trackRef: MediaItemRef) async throws -> StreamInfo {
             StreamInfo(source: MediaSource(id: "", container: nil, duration: 0, bitrate: nil,
-                                           fileSize: nil, fileName: nil, videoTracks: [], audioTracks: [],
+                                           fileSize: nil, fileName: nil, videoResolution: nil,
+                                           videoTracks: [], audioTracks: [],
                                            subtitleTracks: [], streamKind: .directPlay, streamURL: nil),
                        playSessionID: nil, trackInfoAvailable: false)
         }

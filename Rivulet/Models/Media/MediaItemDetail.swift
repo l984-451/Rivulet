@@ -27,4 +27,8 @@ struct MediaItemDetail: Sendable {
     // Wave 1 additions for the detail view
     let nextEpisode: MediaItem?      // shows only — Plex `OnDeck`, Jellyfin `/Shows/NextUp`
     let collections: [String]        // collection names this item is tagged with
+
+    // Full original-air/release date ("YYYY-MM-DD"). Episodes surface the full
+    // date ("Sep 24, 2019") in the hero metadata row; movies keep year-only.
+    let originallyAvailableAt: String?
 }

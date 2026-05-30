@@ -18,6 +18,12 @@ struct VideoTrack: Hashable, Sendable, Identifiable {
     let bitrate: Int?
     let videoRange: VideoRange
     let isDefault: Bool
+    let scanType: String?          // Plex "progressive" / "interlaced"; nil if unknown
+
+    /// True when the source is interlaced (1080i/576i/480i). Plex reports the
+    /// scan type per video stream; when it's absent we assume progressive (the
+    /// common case), so we never wrongly tag progressive content as interlaced.
+    var isInterlaced: Bool { scanType?.lowercased() == "interlaced" }
 
     enum VideoRange: Hashable, Sendable {
         case sdr

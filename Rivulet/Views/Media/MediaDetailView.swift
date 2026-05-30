@@ -983,17 +983,49 @@ struct MediaDetailView: View {
         return parts
     }
 
-    /// Year, duration, quality badges row (Apple TV+ style: "2023 · 49 min [4K] [DV] [5.1]")
+    /// Hero metadata date: episodes show the full original air date
+    /// ("Sep 24, 2019"); movies and everything else show the year. Falls back
+    /// to the year when the full date is absent (detail not loaded yet) or
+    /// unparseable.
+    private var heroDateText: String? {
+        if currentItem.kind == .episode,
+           let raw = detail?.originallyAvailableAt,
+           let formatted = Self.formattedAirDate(raw) {
+            return formatted
+        }
+        return currentItem.year.map(String.init)
+    }
+
+    private static func formattedAirDate(_ raw: String) -> String? {
+        guard let date = plexDateParser.date(from: String(raw.prefix(10))) else { return nil }
+        return airDateDisplay.string(from: date)
+    }
+    private static let plexDateParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+    private static let airDateDisplay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    /// Date, duration, quality badges row (Apple TV+ style:
+    /// "Sep 24, 2019 · 49 min [4K] [DV] [E-AC3 5.1]")
     private var heroQualityRow: some View {
         HStack(spacing: 8) {
-            // Year · Duration with dot separator
-            let year = currentItem.year
+            // Date · Duration with dot separator
+            let dateText = heroDateText
             let duration = currentItemDurationFormatted
 
-            if let year {
-                Text(String(year))
+            if let dateText {
+                Text(dateText)
             }
-            if year != nil && duration != nil {
+            if dateText != nil && duration != nil {
                 Text("·")
             }
             if let duration {

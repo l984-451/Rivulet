@@ -16,6 +16,7 @@ struct MediaSource: Hashable, Sendable, Identifiable {
     let bitrate: Int?              // bits/second
     let fileSize: Int64?           // bytes; nil for transcoded streams
     let fileName: String?          // display name for source picker ("4K HDR", etc.)
+    let videoResolution: String?   // provider-computed label: "4k", "1080", "720", "480", "sd"
 
     let videoTracks: [VideoTrack]  // usually 1, rarely more
     let audioTracks: [AudioTrack]
@@ -39,12 +40,7 @@ extension MediaSource {
         var badges: [String] = []
 
         if let video = videoTracks.first {
-            // Resolution
-            if let height = video.height {
-                if height >= 2000 { badges.append("4K") }
-                else if height >= 1080 { badges.append("HD") }
-                // 720 and below: no badge
-            }
+            if let res = resolutionLabel(video) { badges.append(res) }
 
             // HDR / DV
             switch video.videoRange {
@@ -55,18 +51,43 @@ extension MediaSource {
             }
         }
 
-        if let audio = audioTracks.first {
-            if let layout = audio.channelLayout, !layout.isEmpty {
-                // Plex layouts: "5.1", "7.1", "Atmos", "Stereo".
-                // Drop Stereo — uninteresting in a badge row.
-                if layout.lowercased() != "stereo" {
-                    badges.append(layout)
-                }
-            } else if let channels = audio.channels, channels >= 6 {
-                badges.append("\(channels - 1).1")
-            }
+        // The default audio track (falling back to the first) drives the badge.
+        // Shows codec + channel layout for every track, including stereo/mono.
+        if let audio = audioTracks.first(where: { $0.isDefault }) ?? audioTracks.first {
+            badges.append(audio.qualityLabel)
         }
 
         return badges
+    }
+
+    /// Resolution badge. Prefers the provider-computed `videoResolution`
+    /// ("4k"/"1080"/...), which is correct for cropped widescreen content
+    /// whose pixel height is below the nominal value; falls back to the video
+    /// track's height only when the provider supplies nothing.
+    private func resolutionLabel(_ video: VideoTrack) -> String? {
+        // Interlaced sources carry an "i" suffix (1080i/576i/480i); progressive
+        // gets "p". 4K and 720 have no interlaced broadcast form, so they stay
+        // progressive even if a probe oddly claims otherwise. Absent scanType
+        // means assume progressive (the common case), so we never mislabel.
+        func scan(_ base: String) -> String { base + (video.isInterlaced ? "i" : "p") }
+
+        switch videoResolution?.lowercased() {
+        case "4k", "2160": return "4K"
+        case "1080":       return scan("1080")
+        case "720":        return "720p"
+        case "576":        return scan("576")
+        case "480", "sd":  return scan("480")
+        case .some(let r) where !r.isEmpty: return r.uppercased()  // e.g. "8K"
+        default: break
+        }
+        guard let height = video.height else { return nil }
+        switch height {
+        case 1600...:    return "4K"
+        case 800..<1600: return scan("1080")
+        case 620..<800:  return "720p"
+        case 500..<620:  return scan("576")
+        case 1..<500:    return scan("480")
+        default:         return nil
+        }
     }
 }

@@ -435,6 +435,12 @@ struct MediaDetailView: View {
         .onChange(of: nextUpEpisode) { oldValue, newValue in
             let ref = currentItem.ref.itemID
             previewFocusLog.info("[NextUp] changed: \(oldValue?.ref.itemID ?? "nil", privacy: .public) -> \(newValue?.ref.itemID ?? "nil", privacy: .public) isExpandedPreviewFlow=\(isExpandedPreviewFlow) showExpandedChrome=\(showExpandedChrome) currentFocus=\(String(describing: focusedActionButton), privacy: .public) ref=\(ref, privacy: .public)")
+            // Standalone detail view: once Play enables, promote focus from the
+            // shuffle fallback claimed on appear (for shows whose nextUp had not
+            // resolved yet). The preview overlay runs its own dance below.
+            if onPreviewExitRequested == nil, newValue != nil, focusedActionButton == "shuffle" {
+                focusedActionButton = "play"
+            }
             guard newValue != nil,
                   isExpandedPreviewFlow,
                   showExpandedChrome else { return }
@@ -457,6 +463,15 @@ struct MediaDetailView: View {
                   episode.parentRef?.itemID != selectedSeason?.ref.itemID,
                   let newSeason = seasons.first(where: { $0.ref.itemID == episode.parentRef?.itemID }) else { return }
             selectedSeason = newSeason
+        }
+        .onAppear {
+            // Standalone detail view: claim initial focus on the primary action
+            // button so the now-focusable synopsis above it doesn't grab it.
+            // The preview-overlay flow runs its own focus dance, so skip there.
+            guard onPreviewExitRequested == nil else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                focusedActionButton = firstActionButtonKey
+            }
         }
         .onAppear {
             guard isExpandedPreviewFlow, let bridge = menuBridge else { return }
@@ -767,70 +782,12 @@ struct MediaDetailView: View {
                     // Genre + content rating row
                     heroMetadataRow
 
-                    // Description area (narrower than full metadata block, per Apple TV+ reference)
-                    VStack(alignment: .leading, spacing: 4) {
-                        if currentItem.kind == .episode {
-                            if let epString = currentItemEpisodeString {
-                                let title = currentItem.title
-                                let header = epString + (title.isEmpty ? "" : " · \(title)")
-                                let desc = detail?.item.overview ?? currentItem.overview ?? ""
-                                if shouldBlurHeroSummary {
-                                    // When blurring, split header (sharp) from description
-                                    // (blurred) so the title stays visible. Matches Infuse.
-                                    Text(header)
-                                        .font(.caption)
-                                        .bold()
-                                        .foregroundStyle(.white)
-                                        .lineLimit(2)
-                                    if !desc.isEmpty {
-                                        Text(desc)
-                                            .font(.caption)
-                                            .foregroundStyle(.white)
-                                            .lineLimit(3)
-                                            .blur(radius: 8)
-                                    }
-                                } else {
-                                    (Text(header).bold() + Text(desc.isEmpty ? "" : ":  \(desc)"))
-                                        .font(.caption)
-                                        .foregroundStyle(.white)
-                                        .lineLimit(3)
-                                }
-                            }
-                        } else if currentItem.kind == .show || currentItem.kind == .season {
-                            // For seasons, Plex often returns an empty
-                            // summary (notably for single-season recently-
-                            // added shows). Fall back to the parent show's
-                            // tagline/summary so the hero isn't blank.
-                            let effectiveTagline = detail?.tagline
-                                ?? (currentItem.kind == .season ? parentShowTagline : nil)
-                            if let tagline = effectiveTagline, !tagline.isEmpty {
-                                Text(tagline)
-                                    .font(.caption)
-                                    .italic()
-                                    .foregroundStyle(.white.opacity(0.9))
-                            }
-                            if !effectiveOverview.isEmpty {
-                                Text(effectiveOverview)
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.85))
-                                    .lineLimit(3)
-                            }
-                        } else {
-                            if let tagline = detail?.tagline {
-                                Text(tagline)
-                                    .font(.caption)
-                                    .italic()
-                                    .foregroundStyle(.white.opacity(0.9))
-                            } else if let summary = detail?.item.overview ?? currentItem.overview, !summary.isEmpty {
-                                Text(summary)
-                                    .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.85))
-                                    .lineLimit(3)
-                                    .blur(radius: shouldBlurHeroSummary ? 8 : 0)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: 560, alignment: .leading)
+                    // Focusable description area (Infuse-style): the whole
+                    // synopsis block is one focus target whose click opens the
+                    // full text in SummarySheet. Replaces the retired
+                    // info-circle "More Info" button.
+                    heroDescriptionArea
+                        .frame(maxWidth: 560, alignment: .leading)
 
                     // Year · Duration · Quality badges
                     heroQualityRow
@@ -852,9 +809,15 @@ struct MediaDetailView: View {
                 HStack(alignment: .bottom, spacing: 0) {
                     actionButtons
                         .onMoveCommand { direction in
-                            if direction == .up,
-                               isExpandedPreviewFlow,
-                               scrollProgress == 0 {
+                            guard direction == .up, scrollProgress == 0 else { return }
+                            // onMoveCommand consumes the Up press, so the focus
+                            // engine won't move up on its own. Step up to the
+                            // synopsis when it's a focus target; otherwise (no
+                            // readable summary) fall back to the preview's
+                            // collapse-to-carousel.
+                            if summaryIsFocusable {
+                                focusedActionButton = "summary"
+                            } else if isExpandedPreviewFlow {
                                 onPreviewExitRequested?()
                             }
                         }
@@ -881,6 +844,10 @@ struct MediaDetailView: View {
             }
             .padding(.horizontal, heroOverlayHorizontalInset)
             .animation(isPreviewCarousel ? nil : .easeInOut(duration: 0.3), value: currentItem.ref.itemID)
+            // Keep initial focus on Play even though the hero description is
+            // now focusable and sits above the action row; without this the
+            // focus engine can land on the topmost focusable (the summary).
+            .defaultFocus($focusedActionButton, "play")
         }
     }
 
@@ -1077,6 +1044,188 @@ struct MediaDetailView: View {
 
     // MARK: - Summary Section (Full, below fold)
 
+    /// Renders only its label, with no platter, press scale, or system focus
+    /// highlight, so the hero synopsis can supply its own focus cue (the accent
+    /// bar plus brightening) without a bright background washing out the text.
+    private struct BareTextButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+        }
+    }
+
+    /// Whether the hero synopsis is a focus target. True when there is full
+    /// text to show and the chrome is interactive, which covers both the
+    /// standalone detail view and the expanded preview overlay. False in the
+    /// non-expanded carousel, where Up drives item paging instead.
+    private var summaryIsFocusable: Bool {
+        hasReadableSummary && allowActionRowInteraction
+    }
+
+    /// The action button to land on when stepping Down out of the focused
+    /// synopsis: the primary Play, or Shuffle for a show with no next-up
+    /// episode (Play is disabled there), or the watchlist button for
+    /// non-playable (TMDB) items.
+    private var firstActionButtonKey: String {
+        if !isPlayableFromProvider { return "watchlist" }
+        if (currentItem.kind == .show || currentItem.kind == .season), nextUpEpisode == nil {
+            return "shuffle"
+        }
+        return "play"
+    }
+
+    /// Focusable wrapper around the hero description (Infuse-style). When the
+    /// item has a readable long summary and the chrome is interactive, the
+    /// whole block becomes a single focus target whose click presents the full
+    /// text in `SummarySheet`. This replaces the retired info-circle "More
+    /// Info" button. A leading accent bar fades in on focus, mirroring the
+    /// full-text page's paragraph rows; it sits in the hero's horizontal
+    /// padding (drawn via overlay) so the text stays aligned with the genre
+    /// and quality rows.
+    ///
+    /// The synopsis sits one focus step above the action row in every flow.
+    /// In the preview overlay, Up from the synopsis collapses back to the item
+    /// carousel (the binding the action row used to own); the user reaches the
+    /// synopsis with one Up from the buttons and the carousel with a second.
+    ///
+    /// The visible text is full-width, but the actual focus target is a narrow,
+    /// transparent proxy pinned over the Play column (the leading
+    /// `proxyFocusWidth` points). That keeps the focus engine's geometric Down
+    /// landing on Play instead of the centered "Watched" circle - the engine
+    /// won't consume an `onMoveCommand` for a section-less leaf, so the only
+    /// reliable lever is the geometry it sees.
+    private let proxyFocusWidth: CGFloat = 150
+
+    @ViewBuilder
+    private var heroDescriptionArea: some View {
+        let focused = focusedActionButton == "summary"
+        ZStack(alignment: .topLeading) {
+            // Full-width synopsis text - display only, never the focus target.
+            heroDescriptionLabel(focused: focused)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .shadow(color: .white.opacity(focused ? 0.6 : 0), radius: 6)
+                .allowsHitTesting(false)
+
+            // Narrow transparent focus proxy over the Play column.
+            if summaryIsFocusable {
+                Button {
+                    showSummarySheet = true
+                } label: {
+                    Color.clear
+                }
+                .buttonStyle(BareTextButtonStyle())
+                .focused($focusedActionButton, equals: "summary")
+                .focusEffectDisabled()
+                .frame(width: proxyFocusWidth)
+                .onMoveCommand { direction in
+                    switch direction {
+                    case .up:
+                        // Top of the focusable hierarchy. In the preview
+                        // overlay, Up collapses back to the item carousel;
+                        // standalone has nothing above, so this is inert.
+                        if isExpandedPreviewFlow { onPreviewExitRequested?() }
+                    case .down:
+                        // Backstop: the narrow proxy should make the geometric
+                        // Down resolve to Play on its own, but assert it too.
+                        focusedActionButton = firstActionButtonKey
+                    default:
+                        break
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white)
+                .frame(width: 4)
+                .offset(x: -16)
+                .opacity(focused ? 1 : 0)
+        }
+        .animation(.easeOut(duration: 0.15), value: focused)
+    }
+
+    /// The hero description content: an episode header + synopsis, a
+    /// show/season tagline + summary, or, for movies, the tagline as a
+    /// headline with the synopsis beneath it. Spoiler-prone synopses blur
+    /// while unwatched (`shouldBlurHeroSummary`); the tagline is marketing-
+    /// level and never blurs. With no tagline the synopsis takes the headline
+    /// slot. `focused` drives a subtle brightening.
+    @ViewBuilder
+    private func heroDescriptionLabel(focused: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if currentItem.kind == .episode {
+                if let epString = currentItemEpisodeString {
+                    let title = currentItem.title
+                    let header = epString + (title.isEmpty ? "" : " · \(title)")
+                    let desc = detail?.item.overview ?? currentItem.overview ?? ""
+                    if shouldBlurHeroSummary {
+                        // Header stays sharp so the episode is identifiable;
+                        // only the spoiler-prone synopsis blurs. Matches Infuse.
+                        Text(header)
+                            .font(.caption)
+                            .bold()
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                        if !desc.isEmpty {
+                            Text(desc)
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .lineLimit(3)
+                                .blur(radius: 8)
+                        }
+                    } else {
+                        (Text(header).bold() + Text(desc.isEmpty ? "" : ":  \(desc)"))
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .lineLimit(3)
+                    }
+                }
+            } else if currentItem.kind == .show || currentItem.kind == .season {
+                // Seasons often have an empty summary (notably single-season
+                // recently-added shows); fall back to the parent show's
+                // tagline/summary so the hero isn't blank.
+                let effectiveTagline = detail?.tagline
+                    ?? (currentItem.kind == .season ? parentShowTagline : nil)
+                if let tagline = effectiveTagline, !tagline.isEmpty {
+                    Text(tagline)
+                        .font(.caption)
+                        .italic()
+                        .foregroundStyle(.white.opacity(focused ? 1.0 : 0.78))
+                }
+                if !effectiveOverview.isEmpty {
+                    Text(effectiveOverview)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(focused ? 1.0 : 0.68))
+                        .lineLimit(3)
+                }
+            } else {
+                // Movies: tagline as the headline, synopsis beneath.
+                // No tagline -> the synopsis takes the headline slot directly.
+                let tagline = detail?.tagline
+                let desc = detail?.item.overview ?? currentItem.overview ?? ""
+                if let tagline, !tagline.isEmpty {
+                    Text(tagline)
+                        .font(.caption)
+                        .italic()
+                        .foregroundStyle(.white.opacity(focused ? 1.0 : 0.78))
+                        .lineLimit(2)
+                    if !desc.isEmpty {
+                        Text(desc)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(focused ? 1.0 : 0.68))
+                            .lineLimit(3)
+                            .blur(radius: shouldBlurHeroSummary ? 8 : 0)
+                    }
+                } else if !desc.isEmpty {
+                    Text(desc)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(focused ? 1.0 : 0.68))
+                        .lineLimit(3)
+                        .blur(radius: shouldBlurHeroSummary ? 8 : 0)
+                }
+            }
+        }
+    }
+
     /// Whether the hero overview should be blurred for the spoiler-hiding
     /// feature. Movies and episodes are spoiler-prone; show/season summaries
     /// are marketing-level and stay un-blurred. Matches Infuse: blur stays
@@ -1268,21 +1417,10 @@ struct MediaDetailView: View {
         .focused($focusedActionButton, equals: "watched")
         .accessibilityLabel(isWatched ? "Mark as Unwatched" : "Mark as Watched")
 
-        // Info button — surfaces the full description for items with a
-        // non-empty summary (movies, shows, seasons, episodes). Hero
-        // text is `lineLimit(3)`-truncated; this is the path to read the
-        // rest. Matches Plex / Infuse "show full description".
-        if hasReadableSummary {
-            Button {
-                showSummarySheet = true
-            } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 24, weight: .semibold))
-                    .frame(width: circleButtonSize, height: circleButtonSize)
-            }
-            .buttonStyle(AppStoreActionButtonStyle(isFocused: focusedActionButton == "summary", cornerRadius: circleButtonSize / 2, isPrimary: false))
-            .focused($focusedActionButton, equals: "summary")
-        }
+        // (The full-description trigger moved off this action row: the hero
+        // description block is now the focusable element that presents
+        // SummarySheet; see `heroDescriptionArea`. The "summary" focus key
+        // is reused there.)
 
         // Trailer button — perfect circle
         if detail?.trailerURL != nil {

@@ -114,24 +114,24 @@ private struct SummaryDoneButton: View {
     var body: some View {
         Button(action: action) {
             Text("Done")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(.white)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(isFocused ? .black : .white)
                 .padding(.horizontal, 60)
                 .padding(.vertical, 18)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(isFocused ? .white.opacity(0.18) : .white.opacity(0.08))
+                        .fill(isFocused ? Color.white : Color.white.opacity(0.18))
                         .overlay(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .strokeBorder(
-                                    isFocused ? .white.opacity(0.25) : .white.opacity(0.08),
+                                    .white.opacity(isFocused ? 0 : 0.3),
                                     lineWidth: 1
                                 )
                         )
                 )
         }
         .buttonStyle(SettingsButtonStyle())
-        .scaleEffect(isFocused ? 1.02 : 1.0)
+        .scaleEffect(isFocused ? 1.06 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)
     }
 }

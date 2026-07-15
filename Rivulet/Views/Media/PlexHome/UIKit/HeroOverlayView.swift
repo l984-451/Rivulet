@@ -64,6 +64,14 @@ final class HeroOverlayView: UIView {
 
     private var watchlistObserver: AnyCancellable?
 
+    // MARK: - Auto-advance
+
+    /// Seconds each hero slide is shown before auto-advancing. The active
+    /// paging dot fills over this duration as a countdown.
+    private let heroCycleSeconds: TimeInterval = 9
+    private var autoAdvanceTimer: Timer?
+    private var isHeroFocused = false
+
     // MARK: - Init
 
     override init(frame: CGRect) {
@@ -171,7 +179,12 @@ final class HeroOverlayView: UIView {
         let nextInside = context.nextFocusedView?.isDescendant(of: self) == true
         let prevInside = context.previouslyFocusedView?.isDescendant(of: self) == true
         if nextInside, !prevInside {
+            isHeroFocused = true
             onFocusEntered?()
+            startAutoAdvanceCycle()   // begin auto-cycling while the hero is focused
+        } else if prevInside, !nextInside {
+            isHeroFocused = false
+            stopAutoAdvance()         // pause when focus leaves the hero
         }
         // Land-on-Play gate: secondary buttons are focus candidates only
         // while focus lives inside the hero (see
@@ -203,12 +216,45 @@ final class HeroOverlayView: UIView {
                             animated: animated, manageAlpha: manageAlpha, onReady: onReady)
     }
 
-    private func renderPagingDots() {
+    private func renderPagingDots(progressDuration: TimeInterval? = nil) {
         pagingDotsBackground.isHidden = items.count <= 1
         // Dots track the PRESS index (currentIndex), not the lagged metadata
         // (displayedIndex), so they advance with the backdrop image on the
         // click rather than 600ms later when the metadata swaps in.
-        pagingDots.update(count: items.count, activeIndex: currentIndex)
+        pagingDots.update(count: items.count, activeIndex: currentIndex,
+                          progressDuration: progressDuration)
+    }
+
+    // MARK: - Auto-advance cycle
+
+    /// Starts (or restarts) the auto-advance cycle: the active dot fills over
+    /// `heroCycleSeconds`, then the hero advances to the next slide. Only runs
+    /// while the hero is focused and there's more than one slide.
+    private func startAutoAdvanceCycle() {
+        autoAdvanceTimer?.invalidate()
+        autoAdvanceTimer = nil
+        guard isHeroFocused, items.count > 1 else {
+            renderPagingDots()
+            return
+        }
+        renderPagingDots(progressDuration: heroCycleSeconds)
+        autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: heroCycleSeconds,
+                                                repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.advance()
+            }
+        }
+    }
+
+    private func stopAutoAdvance() {
+        autoAdvanceTimer?.invalidate()
+        autoAdvanceTimer = nil
+        renderPagingDots()
+    }
+
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil { stopAutoAdvance() }
     }
 
     // MARK: - Paging (button -> currentIndex -> backdrop -> delayed slide swap)
@@ -217,6 +263,9 @@ final class HeroOverlayView: UIView {
         guard items.count > 1 else { return }
         let next = (currentIndex + 1) % items.count
         setCurrentIndex(next)
+        // Reset the cycle so the dot countdown restarts from this slide, whether
+        // the advance came from the timer or the Next button.
+        if isHeroFocused { startAutoAdvanceCycle() }
     }
 
     private func setCurrentIndex(_ newIndex: Int) {

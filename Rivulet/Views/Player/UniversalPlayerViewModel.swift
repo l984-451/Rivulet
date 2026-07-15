@@ -156,6 +156,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var hasSkippedIntro = false
     private var skippedCreditsIds: Set<Int> = []  // Track skipped credits by ID (can have multiple)
     private var skippedCommercialIds: Set<Int> = []  // Track skipped commercials by ID
+    private var skippedRecapIds: Set<Int> = []  // Track skipped recaps by ID (IntroDB backup)
+    private var skippedPreviewIds: Set<Int> = []  // Track skipped previews by ID
     private var hasTriggeredPostVideo = false
 
     // MARK: - Auto-Skip Countdown State
@@ -3002,6 +3004,30 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Don't check while scrubbing or if post-video already showing
         guard !isScrubbing, postVideoState == .hidden else { return }
 
+        // Check recap markers first — recaps precede the intro in an episode.
+        // These only exist via the IntroDB backup (Plex never emits recap).
+        for recap in metadata.recapMarkers {
+            guard let recapId = recap.id else { continue }
+            guard recap.endTimeSeconds > recap.startTimeSeconds else { continue }
+
+            let previewStart = max(0, recap.startTimeSeconds - markerPreviewTime)
+
+            // Reset skip flag if user rewound before the marker (same
+            // starts-at-0 special case as intro markers)
+            if skippedRecapIds.contains(recapId) {
+                if time < previewStart {
+                    skippedRecapIds.remove(recapId)
+                } else if previewStart == 0 && time < recap.startTimeSeconds + 1.0 && activeMarker == nil {
+                    skippedRecapIds.remove(recapId)
+                }
+            }
+
+            if time >= previewStart && time < recap.endTimeSeconds {
+                handleRecapMarkerActive(recap, currentTime: time)
+                return
+            }
+        }
+
         // Check intro marker (show 5 seconds early)
         if let intro = metadata.introMarker {
             // Skip malformed markers where end time is not after start time
@@ -3107,6 +3133,28 @@ final class UniversalPlayerViewModel: ObservableObject {
 
             if time >= previewStart && time < commercial.endTimeSeconds {
                 handleCommercialMarkerActive(commercial, currentTime: time)
+                return
+            }
+        }
+
+        // Check next-episode preview markers
+        for preview in metadata.previewMarkers {
+            guard let previewId = preview.id else { continue }
+            guard preview.endTimeSeconds > preview.startTimeSeconds else { continue }
+
+            let previewStart = max(0, preview.startTimeSeconds - markerPreviewTime)
+
+            // Reset skip flag if user rewound before the marker
+            if skippedPreviewIds.contains(previewId) {
+                if time < previewStart {
+                    skippedPreviewIds.remove(previewId)
+                } else if previewStart == 0 && time < preview.startTimeSeconds + 1.0 && activeMarker == nil {
+                    skippedPreviewIds.remove(previewId)
+                }
+            }
+
+            if time >= previewStart && time < preview.endTimeSeconds {
+                handlePreviewMarkerActive(preview, currentTime: time)
                 return
             }
         }
@@ -3271,6 +3319,64 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    /// Handle when playback enters a recap marker range (or preview window).
+    /// Recap markers come from the IntroDB backup; same behaviour as the
+    /// other marker kinds.
+    private func handleRecapMarkerActive(_ marker: PlexMarker, currentTime: TimeInterval) {
+        guard let recapId = marker.id else { return }
+
+        let autoSkipRecap = UserDefaults.standard.bool(forKey: "autoSkipRecap")
+
+        // Only auto-skip when actually inside the marker (not during preview window)
+        let insideMarker = currentTime >= marker.startTimeSeconds
+
+        // Auto-skip with a visible countdown when the setting is on.
+        if autoSkipRecap && !skippedRecapIds.contains(recapId) && insideMarker && !userDeclinedAutoSkip {
+            if activeMarker == nil {
+                activeMarker = marker
+                showSkipButton = true
+            }
+            if skipCountdownTimer == nil && skipCountdownSeconds == 0 {
+                startSkipCountdown(for: marker)
+            }
+            return
+        }
+
+        // Show skip button if not already skipped
+        if !skippedRecapIds.contains(recapId) && activeMarker == nil {
+            activeMarker = marker
+            showSkipButton = true
+        }
+    }
+
+    /// Handle when playback enters a next-episode preview marker range.
+    private func handlePreviewMarkerActive(_ marker: PlexMarker, currentTime: TimeInterval) {
+        guard let previewId = marker.id else { return }
+
+        let autoSkipPreview = UserDefaults.standard.bool(forKey: "autoSkipPreview")
+
+        // Only auto-skip when actually inside the marker (not during preview window)
+        let insideMarker = currentTime >= marker.startTimeSeconds
+
+        // Auto-skip with a visible countdown when the setting is on.
+        if autoSkipPreview && !skippedPreviewIds.contains(previewId) && insideMarker && !userDeclinedAutoSkip {
+            if activeMarker == nil {
+                activeMarker = marker
+                showSkipButton = true
+            }
+            if skipCountdownTimer == nil && skipCountdownSeconds == 0 {
+                startSkipCountdown(for: marker)
+            }
+            return
+        }
+
+        // Show skip button if not already skipped
+        if !skippedPreviewIds.contains(previewId) && activeMarker == nil {
+            activeMarker = marker
+            showSkipButton = true
+        }
+    }
+
     /// Skip to end of current marker (called from UI skip button)
     func skipActiveMarker() async {
         guard let marker = activeMarker else { return }
@@ -3289,6 +3395,10 @@ final class UniversalPlayerViewModel: ObservableObject {
             skippedCreditsIds.insert(creditsId)
         } else if marker.isCommercial, let commercialId = marker.id {
             skippedCommercialIds.insert(commercialId)
+        } else if marker.isRecap, let recapId = marker.id {
+            skippedRecapIds.insert(recapId)
+        } else if marker.isPreview, let previewId = marker.id {
+            skippedPreviewIds.insert(previewId)
         }
 
         // Seek to end of marker, clamped so we never land at/after duration.
@@ -3328,6 +3438,10 @@ final class UniversalPlayerViewModel: ObservableObject {
             return "Skip Credits"
         } else if marker.isCommercial {
             return "Skip Ad"
+        } else if marker.isRecap {
+            return "Skip Recap"
+        } else if marker.isPreview {
+            return "Skip Preview"
         }
         return "Skip"
     }
@@ -3545,9 +3659,62 @@ final class UniversalPlayerViewModel: ObservableObject {
                 metadata.Guid = fullMetadata.Guid
             }
 
+            // Markers may be absent on the lightweight metadata the player
+            // started with (hub items) — carry them over from the full fetch.
+            if metadata.Marker == nil || metadata.Marker?.isEmpty == true {
+                metadata.Marker = fullMetadata.Marker
+            }
+
         } catch {
             print("🎬 [Metadata] Failed to fetch full metadata: \(error)")
         }
+
+        // IntroDB backup (introdb.app / theintrodb.org): fill in marker kinds
+        // Plex didn't provide — notably RECAP, which Plex never emits.
+        await backfillMarkersFromIntroDB()
+    }
+
+    /// Adds IntroDB backup markers for kinds Plex didn't provide. Episodes
+    /// only (the lookup keys on the show's IMDB id + season/episode). Plex is
+    /// authoritative: a kind Plex already emitted is never replaced.
+    private func backfillMarkersFromIntroDB() async {
+        guard metadata.type == "episode",
+              let season = metadata.parentIndex,
+              let episode = metadata.index else { return }
+
+        let presentKinds = Set((metadata.Marker ?? []).compactMap(\.type))
+        let missingKinds = ["intro", "recap", "credits"].filter { !presentKinds.contains($0) }
+        guard !missingKinds.isEmpty else { return }
+
+        guard let imdbID = await showIMDBID() else { return }
+
+        let generation = itemGeneration
+        let backup = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode)
+        guard generation == itemGeneration else { return }  // item changed mid-fetch
+
+        let extras = backup.filter { marker in
+            guard let type = marker.type else { return false }
+            return missingKinds.contains(type)
+        }
+        guard !extras.isEmpty else { return }
+        metadata.Marker = (metadata.Marker ?? []) + extras
+        print("🎬 IntroDB: added backup markers \(extras.compactMap(\.type).sorted()) for S\(season)E\(episode)")
+    }
+
+    /// The show's IMDB id (e.g. "tt0903747"), resolved from the show-level
+    /// metadata's external guids.
+    private func showIMDBID() async -> String? {
+        guard let showKey = metadata.grandparentRatingKey else { return nil }
+        guard let show = try? await PlexNetworkManager.shared.getMetadata(
+            serverURL: serverURL,
+            authToken: authToken,
+            ratingKey: showKey,
+            includeGuids: true
+        ) else { return nil }
+        return show.Guid?
+            .compactMap(\.id)
+            .first { $0.hasPrefix("imdb://") }?
+            .replacingOccurrences(of: "imdb://", with: "")
     }
 
     /// Load the current season's episode list for the Up Next panel, sorted
@@ -4085,6 +4252,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         hasSkippedIntro = false
         skippedCreditsIds.removeAll()
         skippedCommercialIds.removeAll()
+        skippedRecapIds.removeAll()
+        skippedPreviewIds.removeAll()
 
         // Clear any replay window left open from the previous episode — its
         // invokedAt is a timestamp on episode N's timeline, meaningless (and

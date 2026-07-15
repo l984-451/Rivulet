@@ -512,6 +512,14 @@ final class MediaItemHeroOverlayView: UIView {
     private var displayedIndex: Int = 0
     private var displayedSwapWorkItem: DispatchWorkItem?
 
+    // MARK: - Auto-advance (same cycle as the PlexMetadata hero)
+
+    /// Seconds each hero slide is shown before auto-advancing. The active
+    /// paging dot fills over this duration as a countdown.
+    private let heroCycleSeconds: TimeInterval = 9
+    private var autoAdvanceTimer: Timer?
+    private var isHeroFocused = false
+
     // MARK: - Callbacks
 
     var onIndexChanged: ((Int, MediaItem) -> Void)?
@@ -615,7 +623,15 @@ final class MediaItemHeroOverlayView: UIView {
         // while focus lives inside the hero (see
         // HeroButtonRowView.setSecondaryButtonsFocusable).
         let nextInside = context.nextFocusedView?.isDescendant(of: self) == true
+        let prevInside = context.previouslyFocusedView?.isDescendant(of: self) == true
         buttonRow.setSecondaryButtonsFocusable(nextInside)
+        if nextInside, !prevInside {
+            isHeroFocused = true
+            startAutoAdvanceCycle()   // begin auto-cycling while the hero is focused
+        } else if prevInside, !nextInside {
+            isHeroFocused = false
+            stopAutoAdvance()         // pause when focus leaves the hero
+        }
     }
 
     // MARK: - Scroll parallax
@@ -660,14 +676,55 @@ final class MediaItemHeroOverlayView: UIView {
         slideView.configure(item: item, onReady: onReady)
     }
 
-    private func renderPagingDots() {
+    private func renderPagingDots(progressDuration: TimeInterval? = nil) {
         pagingDotsBackground.isHidden = items.count <= 1
         // Track the PRESS index (currentIndex), not the lagged metadata
         // (displayedIndex) — dots advance with the backdrop image on the click.
-        pagingDots.update(count: items.count, activeIndex: currentIndex)
+        pagingDots.update(count: items.count, activeIndex: currentIndex,
+                          progressDuration: progressDuration)
+    }
+
+    // MARK: - Auto-advance cycle
+
+    /// Starts (or restarts) the auto-advance cycle: the active dot fills over
+    /// `heroCycleSeconds`, then the hero advances to the next slide. Only runs
+    /// while the hero is focused and there's more than one slide.
+    private func startAutoAdvanceCycle() {
+        autoAdvanceTimer?.invalidate()
+        autoAdvanceTimer = nil
+        guard isHeroFocused, items.count > 1 else {
+            renderPagingDots()
+            return
+        }
+        renderPagingDots(progressDuration: heroCycleSeconds)
+        autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: heroCycleSeconds,
+                                                repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.advance()
+            }
+        }
+    }
+
+    private func stopAutoAdvance() {
+        autoAdvanceTimer?.invalidate()
+        autoAdvanceTimer = nil
+        renderPagingDots()
+    }
+
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil { stopAutoAdvance() }
     }
 
     // MARK: - Paging
+
+    private func advance() {
+        guard items.count > 1 else { return }
+        setCurrentIndex((currentIndex + 1) % items.count)
+        // Reset the cycle so the dot countdown restarts from this slide, whether
+        // the advance came from the timer or the Next button.
+        if isHeroFocused { startAutoAdvanceCycle() }
+    }
 
     private func setCurrentIndex(_ newIndex: Int) {
         guard newIndex != currentIndex else { return }
@@ -712,8 +769,8 @@ final class MediaItemHeroOverlayView: UIView {
             self.onInfo?(item)
         }
         buttonRow.onNext = { [weak self] in
-            guard let self, self.items.count > 1 else { return }
-            self.setCurrentIndex((self.currentIndex + 1) % self.items.count)
+            // advance() (not setCurrentIndex) so the dot countdown restarts.
+            self?.advance()
         }
         buttonRow.onWatchlist = { [weak self] in
             guard let self, let item = self.currentItem else { return }

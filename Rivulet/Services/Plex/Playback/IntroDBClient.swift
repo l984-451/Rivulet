@@ -52,8 +52,12 @@ nonisolated struct IntroDBClient {
             URLQueryItem(name: "season", value: String(season)),
             URLQueryItem(name: "episode", value: String(episode)),
         ]
-        guard let url = comps.url,
-              let (data, _) = try? await URLSession.shared.data(from: url) else { return [] }
+        guard let url = comps.url else { return [] }
+        // Short timeout: these are community DBs; a dead endpoint must not
+        // hold the (already off-critical-path) backfill task for a minute.
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return [] }
         return Self.decode(data)
     }
 

@@ -506,6 +506,16 @@ final class UniversalPlayerViewModel: ObservableObject {
             await fetchFullMetadataIfNeeded()
         }
 
+        // IntroDB backup markers: ALWAYS check, even when Plex metadata (and
+        // its markers) arrived complete — Plex never emits recap, so there is
+        // almost always a kind worth backfilling. Off the critical path so a
+        // slow/dead community DB can't delay playback start; the recap window
+        // sits at the top of the episode, and the merge lands within the
+        // first marker-check ticks.
+        Task { [weak self] in
+            await self?.backfillMarkersFromIntroDB()
+        }
+
         let routingContext = ContentRoutingContext(
             metadata: metadata,
             serverURL: URL(string: serverURL)!,
@@ -3668,10 +3678,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         } catch {
             print("🎬 [Metadata] Failed to fetch full metadata: \(error)")
         }
-
-        // IntroDB backup (introdb.app / theintrodb.org): fill in marker kinds
-        // Plex didn't provide — notably RECAP, which Plex never emits.
-        await backfillMarkersFromIntroDB()
     }
 
     /// Adds IntroDB backup markers for kinds Plex didn't provide. Episodes
@@ -3686,8 +3692,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         let missingKinds = ["intro", "recap", "credits"].filter { !presentKinds.contains($0) }
         guard !missingKinds.isEmpty else { return }
 
-        guard let imdbID = await showIMDBID() else { return }
+        guard let imdbID = await showIMDBID() else {
+            print("🎬 IntroDB: no IMDB id resolvable for show — skipping backup lookup")
+            return
+        }
 
+        print("🎬 IntroDB: checking \(imdbID) S\(season)E\(episode) for missing \(missingKinds)")
         let generation = itemGeneration
         let backup = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode)
         guard generation == itemGeneration else { return }  // item changed mid-fetch
@@ -3696,7 +3706,10 @@ final class UniversalPlayerViewModel: ObservableObject {
             guard let type = marker.type else { return false }
             return missingKinds.contains(type)
         }
-        guard !extras.isEmpty else { return }
+        guard !extras.isEmpty else {
+            print("🎬 IntroDB: no backup markers found (DBs returned \(backup.compactMap(\.type).sorted()))")
+            return
+        }
         metadata.Marker = (metadata.Marker ?? []) + extras
         print("🎬 IntroDB: added backup markers \(extras.compactMap(\.type).sorted()) for S\(season)E\(episode)")
     }

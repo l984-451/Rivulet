@@ -369,6 +369,14 @@ final class AetherPlayer: PlayerProtocol {
     /// (raw MPEG-TS, etc.) goes through the engine's demux/remux to a loopback
     /// HLS stream. Either way the engine publishes `currentAVPlayer` for the
     /// AVKit OSD. No start position (live).
+    ///
+    /// AetherEngine 5.2.0 adoption (per upstream, verified against real AU
+    /// 1080i25 broadcasts with teletext captions on page 801):
+    ///  - tuner URLs MUST load `isLive: true` with a `dvrWindowSeconds`
+    ///    (1800 below) — 5.2.0 fixed the mid-stream-joined TS clock anchor,
+    ///    live DVR sessions now feed subtitle packets to the overlay
+    ///    pipeline, and teletext open-ended/erase page semantics render
+    ///    correctly through `$subtitleCues` (which our overlay draws).
     /// `forceEngineDemux` disables the native-HLS shortcut so the engine's own
     /// demuxer opens the playlist instead — used as a fallback when AVPlayer's
     /// native path fails against a server (e.g. a Plex transcode session that

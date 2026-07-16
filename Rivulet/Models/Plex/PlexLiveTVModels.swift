@@ -121,6 +121,8 @@ nonisolated struct PlexLiveTVProgram: Codable, Identifiable, Sendable {
     let summary: String?
     let thumb: String?
     let art: String?
+    let grandparentThumb: String?
+    let grandparentArt: String?
     let year: Int?
     let originallyAvailableAt: String?
     let beginsAt: Int?           // Unix timestamp
@@ -265,13 +267,18 @@ extension PlexLiveTVChannel {
             URLQueryItem(name: "segmentFormat", value: "mpegts"),
             URLQueryItem(name: "segmentContainer", value: "mpegts"),
 
-            // Playback mode - for Live TV we need transcode, not direct play
+            // Playback mode - DIRECT STREAM: the server remuxes the tuner feed
+            // (no re-encode; the codec lists below declare the raw broadcast
+            // codecs as acceptable) and AetherEngine demuxes it client-side.
+            // directPlay stays off — the universal endpoint refuses to build a
+            // session when it decides direct play.
             URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
             URLQueryItem(name: "directStreamAudio", value: "1"),
 
-            // Video settings - Apple TV 4K supports up to 4K HEVC/H.264
-            URLQueryItem(name: "videoCodec", value: "h264,hevc"),
+            // Video settings - include mpeg2video so DVB broadcasts direct-play
+            // instead of forcing a video transcode (Aether software-decodes it)
+            URLQueryItem(name: "videoCodec", value: "h264,hevc,mpeg2video"),
             URLQueryItem(name: "videoResolution", value: "1920x1080"),
             URLQueryItem(name: "maxVideoBitrate", value: "20000"),
             URLQueryItem(name: "videoQuality", value: "100"),
@@ -279,8 +286,8 @@ extension PlexLiveTVChannel {
             // HLS segment settings
             URLQueryItem(name: "segmentDuration", value: "6"),
 
-            // Audio settings - support common formats
-            URLQueryItem(name: "audioCodec", value: "aac,ac3,eac3"),
+            // Audio settings - include mp2/mp3 (common on DVB) for direct play
+            URLQueryItem(name: "audioCodec", value: "aac,ac3,eac3,mp2,mp3"),
             URLQueryItem(name: "audioBitrate", value: "384"),
             URLQueryItem(name: "audioChannels", value: "6"),
 
@@ -342,9 +349,11 @@ extension PlexLiveTVChannel {
         // Each profile directive is separated by "+"
         // These are URL-encoded when added to the query string
         let profiles = [
-            // Direct play profiles - what we can play without transcoding
-            "add-direct-play-profile(type=videoProfile&protocol=http&container=mpegts&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3)",
-            "add-direct-play-profile(type=videoProfile&protocol=hls&container=mpegts&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3)",
+            // Direct play profiles - what we can play without transcoding.
+            // AetherEngine demuxes MPEG-TS and software-decodes MPEG-2, so
+            // declare the raw DVB codecs too and let Plex skip the transcoder.
+            "add-direct-play-profile(type=videoProfile&protocol=http&container=mpegts&videoCodec=h264,hevc,mpeg2video&audioCodec=aac,ac3,eac3,mp2,mp3)",
+            "add-direct-play-profile(type=videoProfile&protocol=hls&container=mpegts&videoCodec=h264,hevc,mpeg2video&audioCodec=aac,ac3,eac3,mp2,mp3)",
 
             // Transcode target - how to transcode if needed
             "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3&replace=true)",
@@ -459,13 +468,22 @@ extension PlexLiveTVChannel {
 }
 
 extension PlexLiveTVProgram {
-    /// Convert to UnifiedProgram
-    func toUnifiedProgram(unifiedChannelId: String) -> UnifiedProgram? {
+    /// Convert to UnifiedProgram. Plex EPG supplies two images we map to the
+    /// guide's artwork slots: `thumb` (2:3 poster) and `art` (16:9 background).
+    /// Both are resolved to full URLs (absolute passthrough, or Plex server path
+    /// + token) so they work the same as the XMLTV `posterURL` / `landscapeURL`.
+    func toUnifiedProgram(unifiedChannelId: String, serverURL: String, authToken: String) -> UnifiedProgram? {
         guard let start = startDate, let end = endDate else {
             return nil
         }
 
         let programId = "\(unifiedChannelId):\(beginsAt ?? 0)"
+
+        // Prefer the programme's own artwork, falling back to the show's
+        // (grandparent) poster/art, which Plex often populates when the
+        // per-episode image is missing.
+        let poster = Self.plexImageURL(thumb ?? grandparentThumb, serverURL: serverURL, authToken: authToken)
+        let background = Self.plexImageURL(art ?? grandparentArt, serverURL: serverURL, authToken: authToken)
 
         return UnifiedProgram(
             id: programId,
@@ -476,9 +494,21 @@ extension PlexLiveTVProgram {
             startTime: start,
             endTime: end,
             category: category,
-            iconURL: thumb.flatMap { URL(string: $0) },
+            iconURL: poster,          // keep icon = poster for existing callers
+            posterURL: poster,        // 2:3 poster (Plex `thumb`)
+            landscapeURL: background, // 16:9 background (Plex `art`)
             episodeNumber: nil,
             isNew: premiere ?? false
         )
+    }
+
+    /// Resolve a Plex image path to a full URL: external http(s) URLs pass
+    /// through; Plex server paths get the server prefix + auth token.
+    private static func plexImageURL(_ path: String?, serverURL: String, authToken: String) -> URL? {
+        guard let path, !path.isEmpty else { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
+        return URL(string: "\(serverURL)\(path)?X-Plex-Token=\(authToken)")
     }
 }

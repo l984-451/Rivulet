@@ -29,6 +29,10 @@ actor XMLTVParser {
         let description: String?
         let category: String?
         let icon: String?
+        /// Programme icon closest to 2:3 (portrait), for the guide poster.
+        let posterIcon: String?
+        /// Programme icon closest to 16:9 (landscape), for the guide background.
+        let landscapeIcon: String?
         let episodeNum: String?
         let isNew: Bool
     }
@@ -44,34 +48,12 @@ actor XMLTVParser {
 
     /// Parse XMLTV data from a URL
     func parse(from url: URL) async throws -> ParseResult {
-        let (data, _) = try await fetchWithHTTPSUpgrade(url: url)
+        // Fetch the URL exactly as supplied — http stays http (no https rewrite).
+        let (data, _) = try await fetchData(from: url)
         return try parse(data: data)
     }
 
     // MARK: - Private Networking
-
-    /// Fetch data from URL, attempting HTTPS upgrade for HTTP URLs
-    private func fetchWithHTTPSUpgrade(url: URL) async throws -> (Data, URLResponse) {
-        // If already HTTPS or not HTTP, use as-is
-        guard url.scheme == "http",
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return try await fetchData(from: url)
-        }
-
-        // Try HTTPS first with a short timeout
-        components.scheme = "https"
-        if let httpsURL = components.url {
-            do {
-                return try await fetchData(from: httpsURL, timeout: 3.0)
-            } catch {
-                // HTTPS failed, fall back to HTTP
-                print("📺 XMLTVParser: HTTPS failed for \(httpsURL.host ?? "unknown"), falling back to HTTP")
-            }
-        }
-
-        // Fall back to original HTTP URL
-        return try await fetchData(from: url)
-    }
 
     /// Fetch data from a URL with optional custom timeout
     private func fetchData(from url: URL, timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
@@ -136,6 +118,9 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
     private var currentDescription: String = ""
     private var currentCategory: String = ""
     private var currentProgramIcon: String?
+    /// All <icon> elements seen for the current programme, with dimensions when
+    /// supplied, so we can pick a 2:3 poster and a 16:9 background.
+    private var currentProgramIcons: [(url: String, w: Int?, h: Int?)] = []
     private var currentEpisodeNum: String = ""
     private var currentIsNew: Bool = false
 
@@ -175,6 +160,7 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
             currentDescription = ""
             currentCategory = ""
             currentProgramIcon = nil
+            currentProgramIcons = []
             currentEpisodeNum = ""
             currentIsNew = false
 
@@ -182,8 +168,11 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
             let src = attributeDict["src"]
             if currentChannelId != nil {
                 currentIconURL = src
-            } else if currentProgramChannelId != nil {
-                currentProgramIcon = src
+            } else if currentProgramChannelId != nil, let src {
+                if currentProgramIcon == nil { currentProgramIcon = src }
+                currentProgramIcons.append((url: src,
+                                            w: attributeDict["width"].flatMap { Int($0) },
+                                            h: attributeDict["height"].flatMap { Int($0) }))
             }
 
         case "new":
@@ -245,6 +234,8 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
                     description: currentDescription.isEmpty ? nil : currentDescription,
                     category: currentCategory.isEmpty ? nil : currentCategory,
                     icon: currentProgramIcon,
+                    posterIcon: Self.posterIcon(from: currentProgramIcons),
+                    landscapeIcon: Self.landscapeIcon(from: currentProgramIcons),
                     episodeNum: currentEpisodeNum.isEmpty ? nil : currentEpisodeNum,
                     isNew: currentIsNew
                 )
@@ -265,6 +256,35 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
         self.parseError = parseError
+    }
+
+    /// Programme poster: the icon closest to 2:3 (portrait) when dimensions are
+    /// given, otherwise the first icon so the poster always has something to
+    /// show (it's fit into a 2:3 frame, so any aspect is fine).
+    static func posterIcon(from icons: [(url: String, w: Int?, h: Int?)]) -> String? {
+        guard !icons.isEmpty else { return nil }
+        let sized = icons.compactMap { icon -> (url: String, ratio: Double)? in
+            guard let w = icon.w, let h = icon.h, h > 0 else { return nil }
+            return (icon.url, Double(w) / Double(h))
+        }
+        if let best = sized.min(by: { abs($0.ratio - 2.0 / 3.0) < abs($1.ratio - 2.0 / 3.0) }) {
+            return best.url
+        }
+        return icons.first?.url
+    }
+
+    /// Programme background: ONLY an icon that is genuinely landscape (declared
+    /// dimensions with aspect ratio ≥ 1.3). Icons without dimensions, or
+    /// square/portrait ones (e.g. a channel logo used as the programme icon),
+    /// are never treated as a background — so the backdrop stays empty (stock
+    /// background) rather than showing a stretched logo.
+    static func landscapeIcon(from icons: [(url: String, w: Int?, h: Int?)]) -> String? {
+        let landscape = icons.compactMap { icon -> (url: String, ratio: Double)? in
+            guard let w = icon.w, let h = icon.h, h > 0 else { return nil }
+            let ratio = Double(w) / Double(h)
+            return ratio >= 1.3 ? (icon.url, ratio) : nil
+        }
+        return landscape.min(by: { abs($0.ratio - 16.0 / 9.0) < abs($1.ratio - 16.0 / 9.0) })?.url
     }
 
     // MARK: - Helpers
@@ -340,6 +360,8 @@ extension XMLTVParser.ParsedProgram {
             endTime: stop,
             category: category,
             iconURL: icon.flatMap { URL(string: $0) },
+            posterURL: posterIcon.flatMap { URL(string: $0) },
+            landscapeURL: landscapeIcon.flatMap { URL(string: $0) },
             episodeNumber: episodeNum,
             isNew: isNew
         )

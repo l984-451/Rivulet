@@ -34,6 +34,11 @@ actor IPTVProvider: LiveTVProvider {
     // Cached data
     private var cachedChannels: [UnifiedChannel] = []
     private var cachedEPG: [String: [UnifiedProgram]] = [:]
+
+    /// Channel logos parsed from XMLTV `<channel><icon>`, keyed by unified
+    /// channel id. Surfaced via `channelLogosFromEPG()` so the data store can
+    /// fill in artwork the M3U playlist didn't provide.
+    private var cachedChannelLogos: [String: URL] = [:]
     private var lastChannelFetch: Date?
     private var lastEPGFetch: Date?
 
@@ -230,12 +235,27 @@ actor IPTVProvider: LiveTVProvider {
             unifiedEPG[unifiedChannelId] = unifiedPrograms
         }
 
+        // Capture channel logos from the XMLTV `<channel><icon>` elements,
+        // mapped onto our unified channel ids. These let the guide show channel
+        // artwork even when the M3U playlist had no `tvg-logo`.
+        var channelLogos: [String: URL] = [:]
+        for (xmltvChannelId, parsedChannel) in parseResult.channels {
+            guard let unifiedChannelId = tvgIdToUnifiedId[xmltvChannelId],
+                  let iconString = parsedChannel.iconURL,
+                  let iconURL = URL(string: iconString) else { continue }
+            channelLogos[unifiedChannelId] = iconURL
+        }
+
         // Update cache
         cachedEPG = unifiedEPG
+        cachedChannelLogos = channelLogos
         lastEPGFetch = Date()
 
         return filterEPG(unifiedEPG, channels: channels, startDate: startDate, endDate: endDate)
     }
+
+    /// Channel logos discovered in the XMLTV data (keyed by unified channel id).
+    func channelLogosFromEPG() async -> [String: URL] { cachedChannelLogos }
 
     func getCurrentProgram(for channel: UnifiedChannel) async -> UnifiedProgram? {
         guard let programs = cachedEPG[channel.id] else {

@@ -362,6 +362,81 @@ final class AetherPlayer: PlayerProtocol {
         )
     }
 
+    /// Live TV load. Sets `isLive` so the engine treats the source as live
+    /// (seek becomes a no-op, live-edge/reconnect behavior). HLS sources use
+    /// `nativeRemoteHLS` so AVPlayer plays the remote playlist directly (no
+    /// demuxer probe / loopback — "HLS straight to AVPlayer"); everything else
+    /// (raw MPEG-TS, etc.) goes through the engine's demux/remux to a loopback
+    /// HLS stream. Either way the engine publishes `currentAVPlayer` for the
+    /// AVKit OSD. No start position (live).
+    /// `forceEngineDemux` disables the native-HLS shortcut so the engine's own
+    /// demuxer opens the playlist instead — used as a fallback when AVPlayer's
+    /// native path fails against a server (e.g. a Plex transcode session that
+    /// rejects AVPlayer's request pattern).
+    func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
+        let isHLS = Self.isHLSURL(url) && !forceEngineDemux
+        let options = LoadOptions(
+            suppressDisplayCriteria: false,
+            httpHeaders: headers ?? [:],
+            // Same rich config as VOD, plus the live-specific flags.
+            matchContentEnabled: true,
+            panelIsInHDRMode: Self.panelIsInHDRMode(),
+            audioBridgeMode: .lossless,
+            isLive: true,
+            // ~30-minute DVR rewind window (engine retains it disk-backed).
+            dvrWindowSeconds: 1800,
+            nativeRemoteHLS: isHLS,
+            preserveASSMarkup: true,
+            probesize: 5 * 1024 * 1024,
+            maxAnalyzeDuration: 5_000_000,
+            // Honor the user's saved audio/subtitle language preferences, same
+            // as VOD, so the right tracks are picked on the first frame.
+            preferredAudioLanguages: Self.livePreferredAudioLanguages(),
+            preferredSubtitleLanguages: Self.livePreferredSubtitleLanguages()
+        )
+        do {
+            // Broadcast H.264 routinely mis-signals interlaced content as
+            // progressive (codecpar fieldOrder=0; MBAFF is only flagged
+            // per-frame), which routes it down the engine's NATIVE path with
+            // no deinterlacer — visible combing. Force the software path for
+            // live demux sessions: bwdif deinterlaces genuinely interlaced
+            // frames and passes true progressive through untouched, so a
+            // correctly-signalled progressive channel only pays a SW decode.
+            // (Engine flag is labeled test-only but is the exact switch for
+            // this; reset immediately after dispatch. Not applied to the
+            // native-HLS shortcut, which never enters the demux dispatch.)
+            if !isHLS { AetherEngine.setForceSoftwarePathForTesting(true) }
+            defer { if !isHLS { AetherEngine.setForceSoftwarePathForTesting(false) } }
+            try await engine.load(url: url, startPosition: nil, options: options)
+        } catch {
+            let pe = PlayerError.loadFailed(String(describing: error))
+            errorSubject.send(pe)
+            throw pe
+        }
+    }
+
+    private static func isHLSURL(_ url: URL) -> Bool {
+        if url.pathExtension.lowercased() == "m3u8" { return true }
+        let text = url.absoluteString.lowercased()
+        return text.contains(".m3u8") || text.contains("format=hls")
+    }
+
+    /// The user's saved audio-language intent (ISO code), if any.
+    private static func livePreferredAudioLanguages() -> [String] {
+        let lang = TrackIntentStore.effectiveAudioIntent.language
+        return lang.isEmpty ? [] : [lang]
+    }
+
+    /// The user's saved subtitle-language intent (ISO code) when subtitles
+    /// are enabled; empty (subtitles off) otherwise.
+    private static func livePreferredSubtitleLanguages() -> [String] {
+        if case .track(let language, _, _, _) = TrackIntentStore.subtitleIntent ?? .off,
+           !language.isEmpty {
+            return [language]
+        }
+        return []
+    }
+
     func load(
         url: URL,
         headers: [String: String]?,

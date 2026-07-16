@@ -251,7 +251,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
             matchedChannels += 1
 
             let unifiedPrograms = programs.compactMap { plexProgram -> UnifiedProgram? in
-                let result = plexProgram.toUnifiedProgram(unifiedChannelId: unifiedChannelId)
+                let result = plexProgram.toUnifiedProgram(unifiedChannelId: unifiedChannelId, serverURL: serverURL, authToken: authToken)
                 if result == nil {
                     print("📺 PlexLiveTVProvider: ⚠️ Failed to convert program '\(plexProgram.title)' - beginsAt: \(plexProgram.beginsAt as Any), endsAt: \(plexProgram.endsAt as Any)")
                 }
@@ -366,6 +366,95 @@ actor PlexLiveTVProvider: LiveTVProvider {
         SentryBridge.addBreadcrumb(breadcrumb)
 
         return newURL
+    }
+
+    /// Resolve a playable URL. Plex live channels go THROUGH Plex, but as a
+    /// continuous HTTP MPEG-TS stream — not HLS:
+    ///   1. POST /livetv/dvrs/{dvr}/channels/{id}/tune → livetv session uuid
+    ///   2. GET /video/:/transcode/universal/start.ts?protocol=http&
+    ///      container=mpegts&directPlay=1&directStream=1&
+    ///      path=/livetv/sessions/{uuid}&…
+    /// directPlay=1 asks the server to pass the RAW tuner TS straight through;
+    /// directStream=1 is its own fallback (remux, no re-encode — the client
+    /// profile declares the raw broadcast codecs). "Continuous" refers to the
+    /// HTTP delivery, NOT scan type: the video inside may be interlaced, which
+    /// AetherEngine deinterlaces (bwdif) after demuxing client-side — along
+    /// with the odd subtitle tracks (DVB/teletext). HDHomeRun direct URLs pass
+    /// through untouched (raw TS → same engine path).
+    func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
+        guard let base = buildStreamURL(for: channel) else { return nil }
+
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
+              var queryItems = components.queryItems,
+              let pathIndex = queryItems.firstIndex(where: { $0.name == "path" }),
+              let epgPath = queryItems[pathIndex].value,
+              epgPath.hasPrefix("/tv.plex.providers.epg") else {
+            return base  // Direct URL or non-EPG path — playable as-is.
+        }
+
+        // epgPath = /tv.plex.providers.epg.cloud:157/metadata/<channelId>
+        let parts = epgPath.split(separator: "/")
+        guard parts.count >= 3,
+              let dvrKey = parts[0].split(separator: ":").last.map(String.init) else {
+            return base
+        }
+        let channelId = String(parts[2])
+
+        do {
+            let tune = try await networkManager.tuneLiveTVChannel(
+                serverURL: serverURL,
+                authToken: authToken,
+                dvrKey: dvrKey,
+                channelIdentifier: channelId
+            )
+
+            let breadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
+            breadcrumb.message = "Tuned live channel to /livetv/sessions"
+            breadcrumb.data = [
+                "channel_name": channel.name,
+                "channel_id": channel.id,
+                "dvr_key": dvrKey,
+                "session_uuid": String(tune.sessionUUID.prefix(8))
+            ]
+            SentryBridge.addBreadcrumb(breadcrumb)
+
+            // Continuous HTTP MPEG-TS of the tuned session. Reuse the baked
+            // URL's full client profile (that's what tells the server it can
+            // pass through / remux instead of transcode), swap the endpoint to
+            // start.ts, and flip protocol to http (one stream, no HLS).
+            // directPlay=1 → raw tuner TS when the server allows it, with
+            // directStream=1 (remux) as the server's own fallback. Unlike the
+            // HLS endpoint, direct play is safe here: continuous HTTP has no
+            // segment session to refuse to build.
+            queryItems[pathIndex] = URLQueryItem(name: "path", value: "/livetv/sessions/\(tune.sessionUUID)")
+            queryItems = queryItems.map { item in
+                switch item.name {
+                case "protocol":   return URLQueryItem(name: "protocol", value: "http")
+                case "directPlay": return URLQueryItem(name: "directPlay", value: "1")
+                case "directStream": return URLQueryItem(name: "directStream", value: "1")
+                default:           return item
+                }
+            }
+            components.queryItems = queryItems
+            components.path = components.path.replacingOccurrences(
+                of: "start.m3u8",
+                with: "start.ts"
+            )
+            if let tsURL = components.url {
+                print("📺 PlexLiveTVProvider: playing tuned session as continuous HTTP TS, directPlay allowed (\(String(tune.sessionUUID.prefix(8)))…)")
+                return tsURL
+            }
+            return base
+        } catch {
+            SentryBridge.capture(error: error) { scope in
+                scope.setTag(value: "plex_livetv", key: "component")
+                scope.setExtra(value: channel.name, key: "channel_name")
+                scope.setExtra(value: dvrKey, key: "dvr_key")
+                scope.setExtra(value: "tune_failed", key: "operation")
+            }
+            // Fall back to the untuned URL — some PMS setups accept it.
+            return base
+        }
     }
 
     // MARK: - Private Methods

@@ -38,36 +38,12 @@ actor M3UParser {
     /// - Parameter url: URL to the M3U playlist
     /// - Returns: Array of parsed channels
     func parse(from url: URL) async throws -> [ParsedChannel] {
-        let (data, _) = try await fetchWithHTTPSUpgrade(url: url)
+        // Fetch the URL exactly as supplied — http stays http (no https rewrite).
+        let (data, _) = try await fetchData(from: url)
         return try parse(data: data)
     }
 
     // MARK: - Private Networking
-
-    /// Fetch data from URL, attempting HTTPS upgrade for HTTP URLs
-    /// - Parameter url: The URL to fetch from
-    /// - Returns: The fetched data and response
-    private func fetchWithHTTPSUpgrade(url: URL) async throws -> (Data, URLResponse) {
-        // If already HTTPS or not HTTP, use as-is
-        guard url.scheme == "http",
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return try await fetchData(from: url)
-        }
-
-        // Try HTTPS first with a short timeout
-        components.scheme = "https"
-        if let httpsURL = components.url {
-            do {
-                return try await fetchData(from: httpsURL, timeout: 3.0)
-            } catch {
-                // HTTPS failed, fall back to HTTP
-                print("📺 M3UParser: HTTPS failed for \(httpsURL.host ?? "unknown"), falling back to HTTP")
-            }
-        }
-
-        // Fall back to original HTTP URL
-        return try await fetchData(from: url)
-    }
 
     /// Fetch data from a URL with optional custom timeout
     private func fetchData(from url: URL, timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {

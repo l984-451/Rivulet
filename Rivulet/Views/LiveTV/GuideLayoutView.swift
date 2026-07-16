@@ -2,15 +2,22 @@
 //  GuideLayoutView.swift
 //  Rivulet
 //
+//  UHF-style Live TV guide host. Three layers: the UIKit-backed EPG grid
+//  (bottom, virtualized, with its own pinned channel column + time ruler +
+//  now-line), the info bar on top, and the fullscreen / PiP player overlay.
+//  The grid is `EPGGuide` (see EPGGuideView.swift), ported from PlexGuide and
+//  fed by Rivulet's `LiveTVDataStore`.
+//
 
 import SwiftUI
+import Combine
+import UIKit
 
-
-/// Display mode for Live TV player in guide view
+/// Display mode for the Live TV player in the guide.
 enum LiveTVDisplayMode: Equatable {
     case hidden      // No player visible
     case fullscreen  // Player is fullscreen overlay
-    case pip         // Player is in PIP (small, top-right)
+    case pip         // Player is in PiP (small, top-right)
 }
 
 struct GuideLayoutView: View {
@@ -19,564 +26,396 @@ struct GuideLayoutView: View {
 
     @StateObject private var dataStore = LiveTVDataStore.shared
 
-    /// Channels filtered by source (if specified)
-    private var channels: [UnifiedChannel] {
+    /// Selected category tab. nil = "All Channels"; otherwise an M3U group title.
+    @State private var selectedGroup: String?
+    @FocusState private var focusedCategory: String?
+
+    /// Channels for the current source, before category filtering.
+    private var sourceChannels: [UnifiedChannel] {
         if let sourceId = sourceIdFilter {
             return dataStore.channels.filter { $0.sourceId == sourceId }
         }
         return dataStore.channels
     }
 
-    // PIP state management
+    /// Distinct, sorted M3U group titles used as category tabs.
+    private var groupTitles: [String] {
+        let groups = sourceChannels.compactMap {
+            $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        return Array(Set(groups)).sorted()
+    }
+
+    /// Channels shown in the grid: source-filtered, then category-filtered.
+    private var channels: [UnifiedChannel] {
+        guard let group = selectedGroup else { return sourceChannels }
+        return sourceChannels.filter {
+            $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) == group
+        }
+    }
+
+    /// Programmes keyed by channel id (the EPGGuide indexes by `channel.id`).
+    /// Channels with no matched guide data get placeholder 4-hour blocks so
+    /// their rows still render focusable cells — without them the row has
+    /// nothing to land on and the channel can't be selected at all.
+    private var programsByChannel: [String: [UnifiedProgram]] {
+        var epg = dataStore.epg
+        for channel in channels where (epg[channel.id]?.isEmpty ?? true) {
+            epg[channel.id] = Self.placeholderPrograms(channelId: channel.id, from: timelineStart)
+        }
+        return epg
+    }
+
+    /// 4-hour "No guide data available." blocks spanning the visible timeline.
+    /// Block boundaries are derived from the (fixed) timeline start, so ids
+    /// stay stable across the 30s `now` ticks and don't churn the grid.
+    private static func placeholderPrograms(channelId: String, from start: Date) -> [UnifiedProgram] {
+        let blockSeconds: TimeInterval = 4 * 3600
+        let span = TimeInterval(EPGTheme.timelineSpanHours * 3600)
+        var programs: [UnifiedProgram] = []
+        var blockStart = start
+        while blockStart < start.addingTimeInterval(span) {
+            let blockEnd = blockStart.addingTimeInterval(blockSeconds)
+            programs.append(UnifiedProgram(
+                id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
+                channelId: channelId,
+                title: "No guide data available.",
+                startTime: blockStart,
+                endTime: blockEnd
+            ))
+            blockStart = blockEnd
+        }
+        return programs
+    }
+
+    private var totalMinutes: Int { EPGTheme.timelineSpanHours * 60 }
+
+    /// Height of the category tab bar between the info bar and the time ruler.
+    private let categoryBarHeight: CGFloat = 64
+
+    // Player state
     @State private var activeChannel: UnifiedChannel?
     @State private var playerSessionId = UUID()
     @State private var displayMode: LiveTVDisplayMode = .hidden
-    @State private var debugId = String(UUID().uuidString.prefix(8))
 
-    @State private var guideStartTime = Date()
-    @State private var focusedRow = 0
-    @State private var focusedColumn = 0
-    @State private var timeOffset = 0  // In 30-min increments for scrolling ahead
-    @FocusState private var hasFocus: Bool
+    // Guide state
+    @State private var timelineStart = Date()
+    @State private var now = Date()
+    @State private var focusedChannel: UnifiedChannel?
+    @State private var focusedProgram: UnifiedProgram?
+
+    private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-                // Background
-                Rectangle().fill(.background).ignoresSafeArea()
+                // No custom base: when the focused programme has no artwork the
+                // stock system background (the same one Settings uses) shows
+                // through. When artwork exists, `ambiance` paints it on top.
+                ambiance
 
-                // Guide content - always rendered but visually hidden when fullscreen
                 if channels.isEmpty {
                     ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    guideView(size: geo.size)
+                    guideContent
                         .opacity(displayMode == .fullscreen ? 0 : 1)
                         .disabled(displayMode == .fullscreen)
                 }
 
-                // Player layer - present when activeChannel exists
+                // EPG failure banner — surfaced so an empty guide doesn't look
+                // like a Rivulet bug when the cause is a broken third-party EPG.
+                if !dataStore.epgIssues.isEmpty, displayMode != .fullscreen {
+                    EPGIssueBanner(issues: dataStore.epgIssues)
+                        .padding(.horizontal, 40)
+                        .padding(.top, 16)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .allowsHitTesting(false)
+                }
+
+                // Player layer — present when a channel is active.
                 if let channel = activeChannel {
                     liveTVPlayerLayer(channel: channel, screenSize: geo.size)
                         .zIndex(displayMode == .fullscreen ? 100 : 10)
                 }
             }
         }
-        .onAppear {
-            setupStartTime()
-        }
+        .ignoresSafeArea(edges: [.bottom, .trailing])
+        .onAppear(perform: setupStartTime)
         .task {
             if dataStore.channels.isEmpty { await dataStore.loadChannels() }
-            if dataStore.epg.isEmpty { await dataStore.loadEPG(startDate: Date(), hours: 6) }
+            if dataStore.epg.isEmpty {
+                await dataStore.loadEPG(startDate: Date(), hours: EPGTheme.timelineSpanHours)
+            }
+            seedFocus()
         }
-        // Animation disabled for instant PIP transitions
-        .onChange(of: displayMode) { oldMode, newMode in
-            if oldMode == .fullscreen && newMode == .pip {
-                // Transitioning to PIP - focus guide immediately (no animation delay)
-                DispatchQueue.main.async {
-                    hasFocus = true
-                }
-            } else if oldMode == .pip && newMode == .fullscreen {
-                // Returning to fullscreen - clear guide focus
-                hasFocus = false
-            } else if newMode == .hidden {
-                // Player dismissed - focus guide
-                hasFocus = true
+        .onChange(of: channels.count) { _, _ in seedFocus() }
+        .onReceive(tick) { t in now = t }
+    }
+
+    // MARK: - Guide (grid + info bar)
+
+    private var guideContent: some View {
+        ZStack(alignment: .topLeading) {
+            EPGGuide(
+                channels: channels,
+                programsByChannel: programsByChannel,
+                timelineStart: timelineStart,
+                totalMinutes: totalMinutes,
+                now: now,
+                menuActive: displayMode == .fullscreen,
+                onFocus: { channel, program in
+                    focusedChannel = channel
+                    focusedProgram = program
+                },
+                onSelect: { channel, _ in selectChannel(channel) },
+                transparent: true,                 // dark see-through boxes + rounded clipping
+                // Reserve the info bar + category bar above the ruler.
+                topInset: EPGTheme.infoBarHeight + categoryBarHeight
+            )
+
+            VStack(alignment: .leading, spacing: 0) {
+                GuideInfoBar(channel: focusedChannel, program: focusedProgram)
+                    .frame(height: EPGTheme.infoBarHeight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
+
+                categoryBar
+                    .frame(height: categoryBarHeight)
             }
         }
     }
 
-    // MARK: - PIP Player Layer
+    // MARK: - Category bar ("All Channels" + M3U group titles)
 
-    /// PIP sizing constants
+    @ViewBuilder private var categoryBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                categoryButton(title: "All Channels", group: nil)
+                ForEach(groupTitles, id: \.self) { group in
+                    categoryButton(title: group, group: group)
+                }
+            }
+            .padding(.leading, EPGTheme.cellSpacing)
+            .padding(.trailing, 60)
+            .padding(.vertical, 10)
+        }
+        .focusSection()
+    }
+
+    private func categoryButton(title: String, group: String?) -> some View {
+        let selected = (selectedGroup == group)
+        let focused = (focusedCategory == title)
+        // White pill when it's the active filter, grey pill when focused,
+        // nothing otherwise. The system focus effect is disabled so the pill
+        // is the only focus indicator.
+        let pillColor: Color = selected ? Color.white
+            : (focused ? Color.white.opacity(0.22) : Color.clear)
+        let textColor: Color = selected ? EPGTheme.background
+            : (focused ? Color.white : EPGTheme.textSecondary)
+        return Button {
+            if selectedGroup != group {
+                selectedGroup = group
+                focusedChannel = nil        // reseed focus onto the filtered lineup
+                seedFocus()
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(textColor)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(pillColor))
+        }
+        .buttonStyle(CategoryTabButtonStyle())
+        .focusEffectDisabled()
+        .focused($focusedCategory, equals: title)
+        .animation(.easeInOut(duration: 0.15), value: focused)
+        .animation(.easeInOut(duration: 0.15), value: selected)
+    }
+
+    /// The focused programme's image, strong at the top and dimming to a faint
+    /// ambiance over the grid.
+    /// The guide backdrop: a 16:9 landscape programme image that is DISTINCT from
+    /// the poster artwork. If the programme's only image is a single reused one
+    /// (e.g. a channel logo serving as the programme icon), there's no real
+    /// backdrop and the stock settings background shows instead.
+    private var guideBackdropURL: URL? {
+        guard let prog = focusedProgram, let landscape = prog.landscapeURL else { return nil }
+        let posterSource = prog.posterURL ?? prog.iconURL ?? prog.landscapeURL
+        return landscape != posterSource ? landscape : nil
+    }
+
+    /// A constant full-screen layer. The backdrop image is drawn INSIDE it as an
+    /// overlay, so toggling the image (as focus moves between programmes with and
+    /// without a backdrop) never changes this layer's geometry — which is what
+    /// was nudging the grid. Only a genuine 16:9 image distinct from the poster
+    /// is used; otherwise the stock settings background shows through the clear.
+    private var ambiance: some View {
+        GeometryReader { geo in
+            if let url = guideBackdropURL {
+                ZStack(alignment: .topTrailing) {
+                    // Vibrant wash: the SOURCE image itself, blurred + stretched
+                    // to fill the whole guide, so its real colours bleed across
+                    // and down the screen. A left + bottom scrim keeps the
+                    // metadata column and grid readable.
+                    backdropImage(url)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .blur(radius: 70, opaque: true)
+                        .overlay(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0.72), Color.black.opacity(0.05)],
+                                startPoint: .leading, endPoint: .trailing)
+                        )
+                        .overlay(
+                            LinearGradient(
+                                colors: [Color.clear, Color.black.opacity(0.65)],
+                                startPoint: .top, endPoint: .bottom)
+                        )
+
+                    // Crisp image in the top-right quarter; its left + bottom
+                    // edges fade into the blurred wash.
+                    backdropImage(url)
+                        .frame(width: geo.size.width * 0.5, height: geo.size.height * 0.55)
+                        .clipped()
+                        .mask(
+                            LinearGradient(colors: [.clear, .white],
+                                           startPoint: .leading, endPoint: .trailing)
+                        )
+                        .mask(
+                            LinearGradient(stops: [
+                                .init(color: .white, location: 0.0),
+                                .init(color: .white, location: 0.45),
+                                .init(color: .clear, location: 1.0)
+                            ], startPoint: .top, endPoint: .bottom)
+                        )
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder private func backdropImage(_ url: URL) -> some View {
+        CachedAsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let img): img.resizable().scaledToFill()
+            default: Color.clear
+            }
+        }
+    }
+
+    // MARK: - Player layer (fullscreen + PiP)
+
     private var pipScale: CGFloat { 0.28 }
     private var pipMargin: CGFloat { 60 }
 
     @ViewBuilder
     private func liveTVPlayerLayer(channel: UnifiedChannel, screenSize: CGSize) -> some View {
-        let isPIP = displayMode == .pip
-        // Keep PiP at exact 16:9 with integral 16px width steps to avoid
-        // fractional scaling artifacts (can appear as a bottom strip).
-        let rawPipWidth = screenSize.width * pipScale
-        let pipWidth = max(16, floor(rawPipWidth / 16.0) * 16.0)
-        let pipHeight = pipWidth * 9.0 / 16.0
-        let pipSize = CGSize(width: pipWidth, height: pipHeight)
-        let targetSize = isPIP ? pipSize : screenSize
-        let targetCenter = CGPoint(
-            x: isPIP ? (screenSize.width - pipMargin - targetSize.width / 2) : (screenSize.width / 2),
-            y: isPIP ? (pipMargin + targetSize.height / 2) : (screenSize.height / 2)
-        )
-
-        LiveTVPlayerView(
+        let player = LiveTVPlayerView(
             channel: channel,
             onDismiss: {
                 displayMode = .hidden
                 activeChannel = nil
                 playerSessionId = UUID()
-                hasFocus = false
-                DispatchQueue.main.async {
-                    hasFocus = true
-                }
             },
             onEnterPIP: {
-                // Instant transition to PIP - no animation
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
                     displayMode = .pip
                 }
             },
-            isInteractive: displayMode == .fullscreen  // Disable focus capture in PIP mode
+            isInteractive: displayMode == .fullscreen  // Disable focus capture in PiP mode
         )
         // Force a fresh player session when changing channels or after exit/reopen.
         .id("\(playerSessionId.uuidString)-\(channel.id)")
-        .frame(width: targetSize.width, height: targetSize.height)
-        // Keep player frame changes immediate to avoid transient scale/zoom artifacts.
         .transaction { transaction in
             transaction.animation = nil
         }
         .animation(nil, value: displayMode)
-        .clipShape(RoundedRectangle(cornerRadius: isPIP ? 14 : 0, style: .continuous))
-        .shadow(color: isPIP ? .black.opacity(0.5) : .clear, radius: 20, x: 0, y: 10)
-        .position(x: targetCenter.x, y: targetCenter.y)
-        .allowsHitTesting(displayMode == .fullscreen)
-    }
 
-    private func setupStartTime() {
-        let now = Date()
-        let cal = Calendar.current
-        let min = cal.component(.minute, from: now)
-        guideStartTime = cal.date(bySettingHour: cal.component(.hour, from: now),
-                                   minute: (min / 30) * 30, second: 0, of: now) ?? now
-    }
-
-    // MARK: - Main Guide View
-
-    private func guideView(size: CGSize) -> some View {
-        let channelWidth: CGFloat = 280
-        let rowHeight: CGFloat = 110
-        let headerHeight: CGFloat = 52
-        let gridWidth = size.width - channelWidth
-        let pxPerMin = gridWidth / 180  // Show 3 hours
-        let visibleStart = guideStartTime.addingTimeInterval(Double(timeOffset * 30 * 60))
-        let visibleEnd = visibleStart.addingTimeInterval(180 * 60)
-
-        return Button {
-            selectFocusedChannel(trigger: "button")
-        } label: {
-            VStack(spacing: 0) {
-                // EPG failure banner — surfaced so an empty guide doesn't look
-                // like a Rivulet bug when the real cause is a broken third-party
-                // EPG URL (404/DNS/timeout/etc).
-                if !dataStore.epgIssues.isEmpty {
-                    EPGIssueBanner(issues: dataStore.epgIssues)
-                        .padding(.horizontal, 40)
-                        .padding(.top, 16)
-                        .padding(.bottom, 8)
-                }
-
-                // Header row with time slots
-                HStack(spacing: 0) {
-                    Color(white: 0.08)
-                        .frame(width: channelWidth, height: headerHeight)
-                    TimeHeaderView(startTime: visibleStart, width: gridWidth,
-                                  height: headerHeight, pxPerMin: pxPerMin)
-                }
-
-                // Divider between header and channel list
-                Rectangle()
-                    .fill(Color.white.opacity(0.15))
-                    .frame(height: 1)
-
-                // Scrollable channel list
-                ScrollViewReader { proxy in
-                        ScrollView(.vertical, showsIndicators: false) {
-                            ZStack(alignment: .topLeading) {
-                                // Use LazyVStack to avoid rendering all channels at once
-                                // This prevents memory pressure and focus system overload on older devices
-                                LazyVStack(spacing: 0, pinnedViews: []) {
-                                    ForEach(Array(channels.enumerated()), id: \.element.id) { idx, ch in
-                                        HStack(spacing: 0) {
-                                            ChannelCell(channel: ch, isSelected: idx == focusedRow,
-                                                       width: channelWidth, height: rowHeight)
-                                            ProgramRowView(
-                                                programs: dataStore.getPrograms(for: ch, startDate: visibleStart, endDate: visibleEnd),
-                                                startTime: visibleStart,
-                                                width: gridWidth,
-                                                height: rowHeight,
-                                                pxPerMin: pxPerMin,
-                                                isRowFocused: idx == focusedRow,
-                                                focusedCol: idx == focusedRow ? focusedColumn : nil
-                                            )
-                                        }
-                                        .id(idx)
-                                    }
-                                }
-
-                                // Time line overlay (inside scroll content)
-                                TimeLineView(now: Date(), startTime: visibleStart, endTime: visibleEnd,
-                                            headerHeight: 0, pxPerMin: pxPerMin,
-                                            totalHeight: CGFloat(channels.count) * rowHeight)
-                                    .offset(x: channelWidth)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                        .onChange(of: focusedRow) { _, row in
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                proxy.scrollTo(row, anchor: .center)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: .infinity)
-            }
-        }
-        .buttonStyle(GuideButtonStyle())
-        // Fallback for cases where tvOS focus remains visible but primary Button action
-        // is not delivered after overlay dismissal.
-        .simultaneousGesture(TapGesture().onEnded {
-            selectFocusedChannel(trigger: "tap_fallback")
-        })
-        .focused($hasFocus)
-        .focusSection()  // Prevent focus from escaping to sidebar trigger
-        .focusable(displayMode != .fullscreen)  // Disable focus when player is fullscreen
-        .onAppear { hasFocus = true }
-        .onChange(of: channels.count) { _, count in
-            if count > 0, focusedRow >= count {
-                focusedRow = max(0, count - 1)
-            } else {
-            }
-        }
-        .onMoveCommand { dir in
-            guard displayMode != .fullscreen else { return }  // Don't handle when player is fullscreen
-            handleNav(dir)
-        }
-        .onExitCommand {
-            guard displayMode != .fullscreen else { return }  // Don't handle when player is fullscreen
-            hasFocus = false
+        if displayMode == .pip {
+            // PiP: a small 16:9 box pinned top-right. Integral 16px width steps
+            // avoid fractional scaling artifacts (a thin bottom strip).
+            let pipWidth = max(16, floor((screenSize.width * pipScale) / 16.0) * 16.0)
+            let pipHeight = pipWidth * 9.0 / 16.0
+            player
+                .frame(width: pipWidth, height: pipHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
+                .position(x: screenSize.width - pipMargin - pipWidth / 2,
+                          y: pipMargin + pipHeight / 2)
+                .allowsHitTesting(false)
+        } else {
+            // Fullscreen: fill the true screen and ignore the guide's safe-area
+            // inset. Sizing to the GeometryReader's (inset) size is what made the
+            // player render as a centered box instead of edge-to-edge.
+            player
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+                .allowsHitTesting(true)
         }
     }
 
-    // MARK: - Channel Selection
-
-    private func selectFocusedChannel(trigger: String) {
-        if displayMode == .fullscreen {
-            return
-        }
-
-        guard focusedRow < channels.count else {
-            return
-        }
-
-        let channel = channels[focusedRow]
-        selectChannel(channel)
-    }
+    // MARK: - Selection
 
     private func selectChannel(_ channel: UnifiedChannel) {
-        if displayMode == .pip {
-            // Already playing - switch channel if different, then go fullscreen
-            if activeChannel?.id != channel.id {
-                playerSessionId = UUID()
-                activeChannel = channel
-            }
-            // Instant transition to fullscreen - no animation
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                displayMode = .fullscreen
-            }
-        } else {
-            // Start fresh - no animation needed
-            playerSessionId = UUID()
-            activeChannel = channel
-            displayMode = .fullscreen
+        // Live TV plays through Aether (same OSD as Aether VOD): HLS goes
+        // straight to AVPlayer, everything else is remuxed by the engine.
+        // Presented as a full-screen modal so it escapes the guide's
+        // TabView / safe-area insets.
+        guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+              let root = (scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first)?.rootViewController
+        else { return }
+
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+
+        let vc = LiveTVAetherPlayerViewController(channel: channel)
+        vc.modalPresentationStyle = .fullScreen
+        top.present(vc, animated: true)
+    }
+
+    // MARK: - Helpers
+
+    private func setupStartTime() {
+        let cal = Calendar.current
+        let nowDate = Date()
+        let minute = cal.component(.minute, from: nowDate)
+        timelineStart = cal.date(bySettingHour: cal.component(.hour, from: nowDate),
+                                 minute: (minute / 30) * 30, second: 0, of: nowDate) ?? nowDate
+    }
+
+    private func seedFocus() {
+        guard let first = channels.first else {
+            focusedChannel = nil
+            focusedProgram = nil
+            return
         }
-    }
-
-    private func handleNav(_ dir: MoveCommandDirection) {
-        guard !channels.isEmpty else { return }
-
-        switch dir {
-        case .up:
-            if focusedRow > 0 {
-                focusedRow -= 1
-                clampCol()
-            } else if displayMode == .pip {
-                // At top of guide and PIP is showing - return to fullscreen (no animation)
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    displayMode = .fullscreen
-                }
-            }
-        case .down:
-            if focusedRow < channels.count - 1 {
-                focusedRow += 1
-                clampCol()
-            }
-        case .left:
-            if focusedColumn > 0 {
-                focusedColumn -= 1
-            } else if timeOffset > 0 {
-                // Scroll back in time
-                timeOffset -= 1
-                focusedColumn = 0  // Start at first program when scrolling back
-            }
-        case .right:
-            let visibleStart = guideStartTime.addingTimeInterval(Double(timeOffset * 30 * 60))
-            let visibleEnd = visibleStart.addingTimeInterval(180 * 60)
-            let count = progCountFor(start: visibleStart, end: visibleEnd)
-            if focusedColumn < count - 1 {
-                focusedColumn += 1
-            } else if timeOffset < 18 {  // Allow 9 hours ahead (18 x 30min)
-                // Scroll forward in time
-                timeOffset += 1
-                focusedColumn = 0
-            }
-        @unknown default: break
+        if focusedChannel == nil {
+            focusedChannel = first
+            focusedProgram = dataStore.getCurrentProgram(for: first)
+                ?? dataStore.epg[first.id]?.first
         }
-    }
-
-    private func clampCol() {
-        let visibleStart = guideStartTime.addingTimeInterval(Double(timeOffset * 30 * 60))
-        let visibleEnd = visibleStart.addingTimeInterval(180 * 60)
-        focusedColumn = min(focusedColumn, max(0, progCountFor(start: visibleStart, end: visibleEnd) - 1))
-    }
-
-    private func progCountFor(start: Date, end: Date) -> Int {
-        guard focusedRow >= 0 && focusedRow < channels.count else { return 1 }
-        return max(1, dataStore.getPrograms(for: channels[focusedRow],
-                                            startDate: start, endDate: end).count)
     }
 }
 
-// Custom button style with no focus chrome
-private struct GuideButtonStyle: ButtonStyle {
+// MARK: - Category tab button style
+
+/// Renders only the label — no default background, scale, or focus chrome — so
+/// the pill (driven by `@FocusState`) is the sole focus indicator.
+private struct CategoryTabButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .opacity(configuration.isPressed ? 0.75 : 1.0)
     }
 }
 
-// MARK: - Subviews
+// MARK: - EPG failure banner
 
-private struct ChannelCell: View {
-    let channel: UnifiedChannel
-    let isSelected: Bool
-    let width: CGFloat
-    let height: CGFloat
-
-    var body: some View {
-        HStack(spacing: 10) {
-            // Channel logo - use CachedAsyncImage for better memory management
-            Group {
-                if let logoURL = channel.logoURL {
-                    CachedAsyncImage(url: logoURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        default:
-                            Image(systemName: "tv")
-                                .font(.system(size: 36))
-                                .foregroundColor(.white.opacity(0.3))
-                        }
-                    }
-                } else {
-                    Image(systemName: "tv")
-                        .font(.system(size: 36))
-                        .foregroundColor(.white.opacity(0.3))
-                }
-            }
-            .frame(width: 100, height: 70)
-
-            // Channel info
-            VStack(alignment: .leading, spacing: 4) {
-                if let n = channel.channelNumber {
-                    Text("\(n)")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                Text(channel.name)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 12)
-        .frame(width: width, height: height)
-        .background(Color(white: isSelected ? 0.2 : 0.1))
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isSelected)
-    }
-}
-
-private struct TimeHeaderView: View {
-    let startTime: Date
-    let width: CGFloat
-    let height: CGFloat
-    let pxPerMin: CGFloat
-
-    private static let fmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "h:mm a"
-        return f
-    }()
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<6, id: \.self) { i in  // 6 x 30min = 3hrs
-                Text(Self.fmt.string(from: startTime.addingTimeInterval(Double(i * 30 * 60))))
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(width: pxPerMin * 30, alignment: .leading)
-                    .padding(.leading, 14)
-            }
-        }
-        .frame(width: width, height: height, alignment: .leading)
-        .background(Color(white: 0.12))
-    }
-}
-
-private struct ProgramRowView: View {
-    let programs: [UnifiedProgram]
-    let startTime: Date
-    let width: CGFloat
-    let height: CGFloat
-    let pxPerMin: CGFloat
-    let isRowFocused: Bool
-    let focusedCol: Int?
-
-    private let endTime: Date
-
-    init(programs: [UnifiedProgram], startTime: Date, width: CGFloat, height: CGFloat,
-         pxPerMin: CGFloat, isRowFocused: Bool, focusedCol: Int?) {
-        self.programs = programs
-        self.startTime = startTime
-        self.width = width
-        self.height = height
-        self.pxPerMin = pxPerMin
-        self.isRowFocused = isRowFocused
-        self.focusedCol = focusedCol
-        self.endTime = startTime.addingTimeInterval(180 * 60)
-    }
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Rectangle().fill(Color(white: isRowFocused ? 0.08 : 0.05))
-
-            if programs.isEmpty {
-                ProgramCell(title: "No Data", time: nil, x: 2, cellWidth: width - 4,
-                           height: height, isFocused: isRowFocused, isAiring: false)
-            } else {
-                ForEach(Array(programs.enumerated()), id: \.element.id) { idx, prog in
-                    let (x, w) = position(prog)
-                    let now = Date()
-                    ProgramCell(
-                        title: prog.title,
-                        time: Self.fmt.string(from: prog.startTime),
-                        x: x,
-                        cellWidth: w,
-                        height: height,
-                        isFocused: isRowFocused && focusedCol == idx,
-                        isAiring: prog.startTime <= now && prog.endTime > now
-                    )
-                }
-            }
-        }
-        .frame(width: width, height: height)
-        .clipped()
-    }
-
-    private func position(_ p: UnifiedProgram) -> (CGFloat, CGFloat) {
-        let visStart = max(p.startTime, startTime)
-        let visEnd = min(p.endTime, endTime)
-        let x = CGFloat(visStart.timeIntervalSince(startTime) / 60) * pxPerMin
-        let w = max(CGFloat(visEnd.timeIntervalSince(visStart) / 60) * pxPerMin, 60)
-        return (x, w)
-    }
-
-    private static let fmt: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "h:mm a"
-        return f
-    }()
-}
-
-private struct ProgramCell: View {
-    let title: String
-    let time: String?
-    let x: CGFloat
-    let cellWidth: CGFloat
-    let height: CGFloat
-    let isFocused: Bool
-    let isAiring: Bool
-
-    var body: some View {
-        // Match the native tvOS highlight effect styling
-        // Normal: 0.12, Airing: 0.18, Focused: 0.35 (distinct from airing)
-        let bg: Color = {
-            if isFocused {
-                return Color(white: 0.35)
-            } else if isAiring {
-                return Color(white: 0.18)
-            } else {
-                return Color(white: 0.12)
-            }
-        }()
-
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-            if let t = time {
-                Text(t)
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(width: cellWidth - 6, height: height - 14, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(bg)
-        )
-        // Lift shadow when focused (mimics tvOS highlight)
-        .shadow(color: isFocused ? .black.opacity(0.6) : .clear, radius: 12, x: 0, y: 6)
-        .scaleEffect(isFocused ? 1.02 : 1.0, anchor: .leading)
-        .zIndex(isFocused ? 1 : 0)
-        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isFocused)
-        .offset(x: x + 3)
-    }
-}
-
-private struct TimeLineView: View {
-    let now: Date
-    let startTime: Date
-    let endTime: Date
-    let headerHeight: CGFloat
-    let pxPerMin: CGFloat
-    let totalHeight: CGFloat
-
-    var body: some View {
-        if now >= startTime && now <= endTime {
-            let x = CGFloat(now.timeIntervalSince(startTime) / 60) * pxPerMin
-            Rectangle()
-                .fill(Color.red)
-                .frame(width: 2, height: totalHeight)
-                .offset(x: x)
-        }
-    }
-}
-
-// MARK: - EPG Issue Banner
-
-/// Passive banner shown above the guide when one or more EPG fetches failed.
-/// Tells the user *which* source failed and *why* in a short phrase, so that
-/// an empty guide reads as "your EPG server is down" rather than "Rivulet is
-/// broken". Non-focusable by design — the fix belongs in Settings or on the
-/// upstream server, not behind a button here.
 private struct EPGIssueBanner: View {
     let issues: [LiveTVDataStore.EPGFetchIssue]
 
@@ -617,4 +456,3 @@ private struct EPGIssueBanner: View {
         )
     }
 }
-

@@ -10,7 +10,8 @@
 //  routes, so subtitles sit at the same height on every route):
 //    true  -> 368 pt bottom padding (rail bottom inset 84 + railHeight 260
 //             + 24 gap; clears the 3a glass rail)
-//    false -> 60 pt bottom padding (minimal clear of screen edge)
+//    false -> 100 pt bottom padding (same resting height as the AVPlayer
+//             route's SubtitleOverlayView, mirroring native caption placement)
 //
 
 import SwiftUI
@@ -29,8 +30,11 @@ struct AetherSubtitleOverlayView: View {
 
     // Bottom padding constants (pts). controlsVisiblePadding =
     // PlayerRailView.railHeight (260) + rail bottom inset (84) + 24 gap.
+    // defaultPadding matches SubtitleOverlayView's resting bottomOffset (100)
+    // on the AVPlayer route, which mirrors native AVPlayer caption placement —
+    // 60 sat visibly too close to the screen edge.
     private static let controlsVisiblePadding: CGFloat = 368
-    private static let defaultPadding: CGFloat = 60
+    private static let defaultPadding: CGFloat = 100
 
     var body: some View {
         GeometryReader { geo in
@@ -49,6 +53,14 @@ struct AetherSubtitleOverlayView: View {
 
                 // Text cues: stack vertically at bottom-centre. Also keyed by
                 // contentKey; see the note above.
+                //
+                // ORDER MATTERS: the bottom padding must be applied INSIDE the
+                // full-screen frame (padding first, then frame). Padding after
+                // the frame grows the composite beyond the screen — the frame
+                // stays screen-height, the ZStack top-anchors it, and the
+                // padding hangs invisibly off the bottom edge, so the inset
+                // never lifted the text at all (subs sat glued to the edge and
+                // the rail lift was a no-op).
                 VStack(spacing: 4) {
                     ForEach(model.activeCues.filter(\.isText), id: \.contentKey) { cue in
                         if case .text(let string) = cue.body {
@@ -56,10 +68,10 @@ struct AetherSubtitleOverlayView: View {
                         }
                     }
                 }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
                 .padding(.bottom, controlsVisible
                     ? Self.controlsVisiblePadding
                     : Self.defaultPadding)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
             }
         }
         .allowsHitTesting(false)

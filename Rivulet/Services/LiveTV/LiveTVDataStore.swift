@@ -465,6 +465,10 @@ class LiveTVDataStore: ObservableObject {
             acc[entry.key] = entry.value.displayName
         }
 
+        // Snapshot providers so we can gather XMLTV channel logos after the EPG
+        // fetch without touching the @MainActor providers dictionary post-suspension.
+        let providerList = Array(providers.values)
+
         epgLoadTask = Task {
             var allEPG: [String: [UnifiedProgram]] = [:]
             var issues: [EPGFetchIssue] = []
@@ -501,6 +505,13 @@ class LiveTVDataStore: ObservableObject {
                             allEPG[channelId] = programs
                         }
                     case .failure(let error):
+                        // A superseding loadEPG cancels this task, which
+                        // surfaces as NSURLError -999 / CancellationError in
+                        // the fetch. That's not a source failure — don't show
+                        // it in the guide banner.
+                        if error is CancellationError || (error as NSError).code == NSURLErrorCancelled {
+                            continue
+                        }
                         print("📺 LiveTVDataStore: ⚠️ EPG load failed for \(sourceId): \(error)")
                         let sourceName = sourceNames[sourceId] ?? sourceId
                         issues.append(EPGFetchIssue(
@@ -512,14 +523,55 @@ class LiveTVDataStore: ObservableObject {
                 }
             }
 
+            // Gather channel logos discovered in the XMLTV data so the guide can
+            // show channel artwork even when the M3U had no `tvg-logo`.
+            var xmltvLogos: [String: URL] = [:]
+            for provider in providerList {
+                let logos = await provider.channelLogosFromEPG()
+                xmltvLogos.merge(logos) { existing, _ in existing }
+            }
+
+            // A cancelled (superseded) task must NOT publish: its empty/partial
+            // results would clobber whatever the newer loadEPG task wrote.
+            guard !Task.isCancelled else { return }
+
+            let finalEPG = allEPG
+            let finalIssues = issues
+            let finalLogos = xmltvLogos
             await MainActor.run {
-                self.epg = allEPG
+                self.epg = finalEPG
                 self.isLoadingEPG = false
-                self.epgIssues = issues
+                self.epgIssues = finalIssues
+                self.applyXMLTVChannelLogos(finalLogos)
             }
         }
 
         await epgLoadTask?.value
+    }
+
+    /// Fills in channel artwork from XMLTV `<channel><icon>` logos for any
+    /// channel that didn't get a logo from its M3U `tvg-logo`.
+    private func applyXMLTVChannelLogos(_ logos: [String: URL]) {
+        guard !logos.isEmpty else { return }
+        var didChange = false
+        let updated = channels.map { channel -> UnifiedChannel in
+            guard channel.logoURL == nil, let logo = logos[channel.id] else { return channel }
+            didChange = true
+            return UnifiedChannel(
+                id: channel.id,
+                sourceType: channel.sourceType,
+                sourceId: channel.sourceId,
+                channelNumber: channel.channelNumber,
+                name: channel.name,
+                callSign: channel.callSign,
+                logoURL: logo,
+                streamURL: channel.streamURL,
+                tvgId: channel.tvgId,
+                groupTitle: channel.groupTitle,
+                isHD: channel.isHD
+            )
+        }
+        if didChange { channels = updated }
     }
 
     /// Converts a thrown EPG fetch error into a short, user-readable phrase
@@ -682,6 +734,17 @@ class LiveTVDataStore: ObservableObject {
     // MARK: - Stream URL
 
     /// Build the stream URL for a channel
+    /// Resolve a PLAYABLE stream URL, performing any provider-side session
+    /// setup first (Plex cloud-EPG/DVB channels need a tune before the
+    /// transcoder will serve them). Prefer this over `buildStreamURL(for:)`
+    /// at playback time; the sync variant remains for availability checks.
+    func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
+        guard let provider = providers[channel.sourceId] else {
+            return channel.streamURL
+        }
+        return await provider.resolveStreamURL(for: channel)
+    }
+
     func buildStreamURL(for channel: UnifiedChannel) -> URL? {
         guard let provider = providers[channel.sourceId] else {
             // No provider found - fallback to channel's embedded stream URL

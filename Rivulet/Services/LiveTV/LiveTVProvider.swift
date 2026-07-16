@@ -93,6 +93,10 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
     let endTime: Date
     let category: String?
     let iconURL: URL?
+    /// Preferred 2:3 (portrait) artwork for the guide poster, if the EPG offers one.
+    let posterURL: URL?
+    /// Preferred 16:9 (landscape) artwork for the guide background, if offered.
+    let landscapeURL: URL?
     let episodeNumber: String?
     let isNew: Bool
 
@@ -106,6 +110,8 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         endTime: Date,
         category: String? = nil,
         iconURL: URL? = nil,
+        posterURL: URL? = nil,
+        landscapeURL: URL? = nil,
         episodeNumber: String? = nil,
         isNew: Bool = false
     ) {
@@ -118,6 +124,8 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         self.endTime = endTime
         self.category = category
         self.iconURL = iconURL
+        self.posterURL = posterURL
+        self.landscapeURL = landscapeURL
         self.episodeNumber = episodeNumber
         self.isNew = isNew
     }
@@ -185,6 +193,26 @@ protocol LiveTVProvider: Sendable {
 
     /// Build the stream URL for a channel (may add auth tokens, etc.)
     func buildStreamURL(for channel: UnifiedChannel) -> URL?
+
+    /// Resolve a PLAYABLE stream URL, performing any server-side session setup
+    /// first (e.g. the Plex Live TV tune step for cloud-EPG/DVB DVRs). Defaults
+    /// to `buildStreamURL(for:)` for providers with directly playable URLs.
+    func resolveStreamURL(for channel: UnifiedChannel) async -> URL?
+
+    /// Channel logos discovered in the EPG/XMLTV data, keyed by unified channel
+    /// id. Used to fill in channel artwork when the playlist (M3U) didn't supply
+    /// a `tvg-logo`. Defaults to empty for sources without XMLTV channel icons.
+    func channelLogosFromEPG() async -> [String: URL]
+}
+
+extension LiveTVProvider {
+    /// Default: no XMLTV channel logos available.
+    func channelLogosFromEPG() async -> [String: URL] { [:] }
+
+    /// Default: the built URL is directly playable.
+    func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
+        buildStreamURL(for: channel)
+    }
 }
 
 // MARK: - Provider Errors

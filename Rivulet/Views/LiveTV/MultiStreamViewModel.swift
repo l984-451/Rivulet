@@ -218,9 +218,9 @@ final class MultiStreamViewModel: ObservableObject {
             layoutMode = .grid
         }
 
-        // Start playback
+        // Start playback (resolve = Plex tune step for cloud-EPG/DVB channels)
         let loadStartTime = Date()
-        if let url = LiveTVDataStore.shared.buildStreamURL(for: channel) {
+        if let url = await LiveTVDataStore.shared.resolveStreamURL(for: channel) {
 
             // Determine stream type for logging
             let streamType: String = {
@@ -509,8 +509,8 @@ final class MultiStreamViewModel: ObservableObject {
             layoutMode = .focus(mainId: newSlot.id)
         }
 
-        // Start playback
-        if let url = LiveTVDataStore.shared.buildStreamURL(for: channel) {
+        // Start playback (resolve = Plex tune step for cloud-EPG/DVB channels)
+        if let url = await LiveTVDataStore.shared.resolveStreamURL(for: channel) {
             // Log stream replacement attempt for debugging
             let breadcrumb = Breadcrumb(level: .info, category: "livetv_playback")
             breadcrumb.message = "Replacing Live TV stream"
@@ -912,7 +912,7 @@ final class MultiStreamViewModel: ObservableObject {
         recoveringSlots.insert(slotId)
         defer { recoveringSlots.remove(slotId) }
 
-        guard let url = LiveTVDataStore.shared.buildStreamURL(for: channel) else {
+        guard let url = await LiveTVDataStore.shared.resolveStreamURL(for: channel) else {
             scheduleAutoRecovery(for: slotId, channel: channel, reason: "no-url")
             return
         }

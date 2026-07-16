@@ -63,9 +63,7 @@ struct AetherSubtitleOverlayView: View {
                 // the rail lift was a no-op).
                 VStack(spacing: 4) {
                     ForEach(model.activeCues.filter(\.isText), id: \.contentKey) { cue in
-                        if case .text(let string) = cue.body {
-                            styledText(string, size: geo.size)
-                        }
+                        styledText(cue.body, size: geo.size)
                     }
                 }
                 .padding(.bottom, controlsVisible
@@ -96,20 +94,18 @@ struct AetherSubtitleOverlayView: View {
     // MARK: - Text cue
 
     @ViewBuilder
-    private func styledText(_ string: String, size: CGSize) -> some View {
+    private func styledText(_ body: AetherSubtitleCue.Body, size: CGSize) -> some View {
         let maxWidth = max(0, size.width - 240)
         // System conformance: the user's chosen caption font (via the
         // MediaAccessibility font descriptor) and text opacity apply, not
         // just color/size/edge. Base size 42 matches SubtitleOverlayView on
         // the HLS route so captions render identically across routes.
         let baseFont = style.font(ofSize: 42 * style.fontScale)
-        let foreground = style.foreground.opacity(style.foregroundOpacity)
 
         switch style.edge {
         case .dropShadow:
-            Text(string)
+            cueText(body)
                 .font(baseFont)
-                .foregroundStyle(foreground)
                 .multilineTextAlignment(.center)
                 .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
                 .padding(.horizontal, 12)
@@ -129,24 +125,22 @@ struct AetherSubtitleOverlayView: View {
             ]
             ZStack {
                 ForEach(Array(offsets.enumerated()), id: \.offset) { _, delta in
-                    Text(string)
+                    Text(body.plainText)
                         .font(baseFont)
                         .foregroundStyle(Color.black)
                         .multilineTextAlignment(.center)
                         .offset(x: delta.0, y: delta.1)
                 }
-                Text(string)
+                cueText(body)
                     .font(baseFont)
-                    .foregroundStyle(foreground)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: maxWidth)
 
         default:
             // .none / .raised / .depressed: solid background box.
-            Text(string)
+            cueText(body)
                 .font(baseFont)
-                .foregroundStyle(foreground)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
@@ -157,17 +151,56 @@ struct AetherSubtitleOverlayView: View {
                 .frame(maxWidth: maxWidth)
         }
     }
+
+    /// Builds the cue's `Text` with the colour policy applied per run:
+    ///  - Video Override ON (`style.allowsContentColor`): a run's
+    ///    content-specified colour wins; unstyled runs get the user colour.
+    ///  - Video Override OFF: everything renders in the user's colour.
+    /// The system foreground opacity applies to both.
+    private func cueText(_ body: AetherSubtitleCue.Body) -> Text {
+        let userColor = style.foreground.opacity(style.foregroundOpacity)
+        switch body {
+        case .text(let string):
+            return Text(string).foregroundStyle(userColor)
+        case .styledText(let runs):
+            return runs.reduce(Text(verbatim: "")) { acc, run in
+                let color: Color
+                if style.allowsContentColor, let contentColor = run.color {
+                    color = contentColor.opacity(style.foregroundOpacity)
+                } else {
+                    color = userColor
+                }
+                return acc + Text(run.text).foregroundStyle(color)
+            }
+        case .image:
+            return Text(verbatim: "")
+        }
+    }
 }
 
 // MARK: - AetherSubtitleCue helpers
 
 private extension AetherSubtitleCue {
     var isText: Bool {
-        if case .text = body { return true }
-        return false
+        switch body {
+        case .text, .styledText: return true
+        case .image: return false
+        }
     }
     var isBitmap: Bool {
         if case .image = body { return true }
         return false
+    }
+}
+
+private extension AetherSubtitleCue.Body {
+    /// Flattened text — used for the uniform-edge outline layers, which are
+    /// always solid black regardless of run colours.
+    var plainText: String {
+        switch self {
+        case .text(let string): return string
+        case .styledText(let runs): return runs.map(\.text).joined()
+        case .image: return ""
+        }
     }
 }

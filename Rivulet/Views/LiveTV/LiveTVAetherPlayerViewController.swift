@@ -89,9 +89,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var nativeLegibleOutput: AVPlayerItemLegibleOutput?
     private var nativeLegibleBridge: LegibleOutputBridge?
     private var nativeLegibleActive = false
-    /// Texts currently on screen — identical re-emissions (roll-up WebVTT
+    /// Lines currently on screen — identical re-emissions (roll-up WebVTT
     /// refreshes the same block every segment) must not replace the cues.
-    private var lastNativeLegibleTexts: [String] = []
+    private var lastNativeLegibleLines: [StyledLine] = []
     /// First-seen time per displayed line, so a continuing line keeps a
     /// stable cue identity while new lines roll in beneath it.
     private var nativeLegibleFirstSeen: [String: Double] = [:]
@@ -526,7 +526,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func resetNativeLegibleState() {
         nativeLegibleClearWorkItem?.cancel()
         nativeLegibleClearWorkItem = nil
-        lastNativeLegibleTexts = []
+        lastNativeLegibleLines = []
         nativeLegibleFirstSeen = [:]
     }
 
@@ -536,6 +536,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.handleNativeLegible(strings: strings, at: itemTime)
         }
         let output = AVPlayerItemLegibleOutput()
+        // Content-specified styling ONLY. The `.default` resolution bakes the
+        // user's caption appearance into every run, which would make every
+        // cue look "content-coloured" and defeat the Video Override gate in
+        // the overlay (CaptionStyle.allowsContentColor). With
+        // .sourceAndRulesOnly, a colour attribute is present iff the WebVTT
+        // actually specified one.
+        output.textStylingResolution = .sourceAndRulesOnly
         output.setDelegate(bridge, queue: .main)
         item.add(output)
         nativeLegibleBridge = bridge
@@ -554,15 +561,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     ///    so its view identity is stable while new lines roll in under it.
     private func handleNativeLegible(strings: [NSAttributedString], at itemTime: CMTime) {
         let time = max(0, CMTimeGetSeconds(itemTime))
-        let texts = strings.map { $0.string.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let lines = strings.compactMap(Self.styledLine(from:))
 
-        if texts.isEmpty {
-            guard nativeLegibleClearWorkItem == nil, !lastNativeLegibleTexts.isEmpty else { return }
+        if lines.isEmpty {
+            guard nativeLegibleClearWorkItem == nil, !lastNativeLegibleLines.isEmpty else { return }
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.nativeLegibleClearWorkItem = nil
-                self.lastNativeLegibleTexts = []
+                self.lastNativeLegibleLines = []
                 self.nativeLegibleFirstSeen = [:]
                 self.subtitleModel.update(cues: [])
             }
@@ -575,21 +581,68 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         nativeLegibleClearWorkItem?.cancel()
         nativeLegibleClearWorkItem = nil
 
-        guard texts != lastNativeLegibleTexts else { return }
-        lastNativeLegibleTexts = texts
+        guard lines != lastNativeLegibleLines else { return }
+        lastNativeLegibleLines = lines
 
-        // Stable per-line start times; drop entries for lines that left.
+        // Stable per-line start times (keyed by plain text so a colour
+        // change repaints the line without resetting its position in the
+        // stack); drop entries for lines that left.
         var firstSeen: [String: Double] = [:]
-        for text in texts {
-            firstSeen[text] = nativeLegibleFirstSeen[text] ?? time
+        for line in lines {
+            firstSeen[line.plain] = nativeLegibleFirstSeen[line.plain] ?? time
         }
         nativeLegibleFirstSeen = firstSeen
 
-        let cues = texts.enumerated().map { index, text -> AetherSubtitleCue in
-            let start = firstSeen[text] ?? time
-            return AetherSubtitleCue(id: index, startTime: start, endTime: start + 7200, body: .text(text))
+        let cues = lines.enumerated().map { index, line -> AetherSubtitleCue in
+            let start = firstSeen[line.plain] ?? time
+            return AetherSubtitleCue(id: index, startTime: start, endTime: start + 7200, body: .styledText(line.runs))
         }
         subtitleModel.update(cues: cues)
+    }
+
+    /// One legible-output attributed string, split into content-coloured runs.
+    private struct StyledLine: Equatable {
+        let plain: String
+        let runs: [AetherSubtitleCue.StyledRun]
+    }
+
+    /// Converts a legible-output attributed string into styled runs, keeping
+    /// only the content-specified foreground colour
+    /// (`kCMTextMarkupAttribute_ForegroundColorARGB`: [a, r, g, b] in 0...1;
+    /// present iff the WebVTT specified a colour, thanks to
+    /// `.sourceAndRulesOnly`). Whitespace-only strings return nil; edge
+    /// whitespace is trimmed so placement matches the old plain-text path.
+    private static func styledLine(from attr: NSAttributedString) -> StyledLine? {
+        guard !attr.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+
+        let colorKey = NSAttributedString.Key(kCMTextMarkupAttribute_ForegroundColorARGB as String)
+        let ns = attr.string as NSString
+        var runs: [AetherSubtitleCue.StyledRun] = []
+        attr.enumerateAttributes(in: NSRange(location: 0, length: attr.length)) { attrs, range, _ in
+            let text = ns.substring(with: range)
+            var color: Color?
+            if let argb = attrs[colorKey] as? [NSNumber], argb.count == 4 {
+                color = Color(.sRGB,
+                              red: argb[1].doubleValue,
+                              green: argb[2].doubleValue,
+                              blue: argb[3].doubleValue,
+                              opacity: argb[0].doubleValue)
+            }
+            runs.append(AetherSubtitleCue.StyledRun(text: text, color: color))
+        }
+
+        if var first = runs.first {
+            first.text = String(first.text.drop(while: \.isWhitespace))
+            runs[0] = first
+        }
+        if var last = runs.last {
+            while let c = last.text.last, c.isWhitespace { last.text.removeLast() }
+            runs[runs.count - 1] = last
+        }
+        runs.removeAll { $0.text.isEmpty }
+        guard !runs.isEmpty else { return nil }
+
+        return StyledLine(plain: runs.map(\.text).joined(), runs: runs)
     }
 
     private func presentInfoPanel() {

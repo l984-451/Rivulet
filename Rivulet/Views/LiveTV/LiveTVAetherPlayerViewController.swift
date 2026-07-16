@@ -89,6 +89,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var nativeLegibleOutput: AVPlayerItemLegibleOutput?
     private var nativeLegibleBridge: LegibleOutputBridge?
     private var nativeLegibleActive = false
+    /// Texts currently on screen — identical re-emissions (roll-up WebVTT
+    /// refreshes the same block every segment) must not replace the cues.
+    private var lastNativeLegibleTexts: [String] = []
+    /// First-seen time per displayed line, so a continuing line keeps a
+    /// stable cue identity while new lines roll in beneath it.
+    private var nativeLegibleFirstSeen: [String: Double] = [:]
+    /// Deferred clear: roll-up streams emit EMPTY legible events at every cue
+    /// boundary; clearing instantly blinks the overlay between cues.
+    private var nativeLegibleClearWorkItem: DispatchWorkItem?
 
     private final class LegibleOutputBridge: NSObject, AVPlayerItemLegibleOutputPushDelegate {
         let onStrings: ([NSAttributedString], CMTime) -> Void
@@ -233,6 +242,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         nativeLegibleOutput = nil
         nativeLegibleBridge = nil
         nativeLegibleGroup = nil
+        resetNativeLegibleState()
         aetherPlayer?.stop()
         aetherPlayer?.unbind(view: engineSurfaceView)
         aetherPlayer = nil
@@ -508,8 +518,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         } else {
             nativeLegibleActive = false
             item.select(nil, in: group)
+            resetNativeLegibleState()
             subtitleModel.update(cues: [])
         }
+    }
+
+    private func resetNativeLegibleState() {
+        nativeLegibleClearWorkItem?.cancel()
+        nativeLegibleClearWorkItem = nil
+        lastNativeLegibleTexts = []
+        nativeLegibleFirstSeen = [:]
     }
 
     private func ensureNativeLegibleOutput(on item: AVPlayerItem) {
@@ -526,16 +544,50 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Each legible-output event replaces the on-screen text wholesale (open
     /// ended: valid until the next event, which mirrors how the engine's
-    /// teletext cues behave). Empty events clear the overlay.
+    /// teletext cues behave). Anti-blink measures for roll-up WebVTT:
+    ///  - EMPTY events fire at every cue boundary; the clear is deferred
+    ///    ~0.5s and cancelled when the next cue arrives.
+    ///  - Identical re-emissions (the same block re-delivered each segment)
+    ///    are ignored so the cue identities — and their SwiftUI views —
+    ///    survive untouched.
+    ///  - A line that persists across events keeps its FIRST-seen start time,
+    ///    so its view identity is stable while new lines roll in under it.
     private func handleNativeLegible(strings: [NSAttributedString], at itemTime: CMTime) {
         let time = max(0, CMTimeGetSeconds(itemTime))
-        let texts = strings.map(\.string).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard !texts.isEmpty else {
-            subtitleModel.update(cues: [])
+        let texts = strings.map { $0.string.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if texts.isEmpty {
+            guard nativeLegibleClearWorkItem == nil, !lastNativeLegibleTexts.isEmpty else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.nativeLegibleClearWorkItem = nil
+                self.lastNativeLegibleTexts = []
+                self.nativeLegibleFirstSeen = [:]
+                self.subtitleModel.update(cues: [])
+            }
+            nativeLegibleClearWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
             return
         }
-        let cues = texts.enumerated().map { index, text in
-            AetherSubtitleCue(id: index, startTime: time, endTime: time + 3600, body: .text(text))
+
+        // Real text cancels any pending boundary clear.
+        nativeLegibleClearWorkItem?.cancel()
+        nativeLegibleClearWorkItem = nil
+
+        guard texts != lastNativeLegibleTexts else { return }
+        lastNativeLegibleTexts = texts
+
+        // Stable per-line start times; drop entries for lines that left.
+        var firstSeen: [String: Double] = [:]
+        for text in texts {
+            firstSeen[text] = nativeLegibleFirstSeen[text] ?? time
+        }
+        nativeLegibleFirstSeen = firstSeen
+
+        let cues = texts.enumerated().map { index, text -> AetherSubtitleCue in
+            let start = firstSeen[text] ?? time
+            return AetherSubtitleCue(id: index, startTime: start, endTime: start + 7200, body: .text(text))
         }
         subtitleModel.update(cues: cues)
     }

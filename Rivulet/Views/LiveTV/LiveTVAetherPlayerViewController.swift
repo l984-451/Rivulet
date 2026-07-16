@@ -70,6 +70,39 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var keepAliveTask: Task<Void, Never>?
     private var stopPingURL: URL?
 
+    /// tvOS delivers Menu both through the responder chain AND a parallel
+    /// system gesture that calls `dismiss(animated:)` on the presented VC.
+    /// After we consume a Menu press (hide rail / close panel), this swallows
+    /// the system echo so it can't peel the whole player. Cleared on use and
+    /// by a short timer so the next genuine press works.
+    private var blockNextDismiss = false
+
+    // MARK: Native HLS legible subtitles (remote WebVTT renditions)
+    //
+    // On the nativeRemoteHLS path the engine never demuxes, so its subtitle
+    // track list is empty — the stream's WebVTT renditions live in AVPlayer's
+    // legible media selection group. Selection alone isn't enough either: a
+    // bare AVPlayerLayer doesn't paint legible content (only AVKit does), so
+    // cues are pulled through an AVPlayerItemLegibleOutput and drawn by the
+    // same overlay the engine paths use.
+    private var nativeLegibleGroup: AVMediaSelectionGroup?
+    private var nativeLegibleOutput: AVPlayerItemLegibleOutput?
+    private var nativeLegibleBridge: LegibleOutputBridge?
+    private var nativeLegibleActive = false
+
+    private final class LegibleOutputBridge: NSObject, AVPlayerItemLegibleOutputPushDelegate {
+        let onStrings: ([NSAttributedString], CMTime) -> Void
+        init(onStrings: @escaping ([NSAttributedString], CMTime) -> Void) {
+            self.onStrings = onStrings
+        }
+        func legibleOutput(_ output: AVPlayerItemLegibleOutput,
+                           didOutputAttributedStrings strings: [NSAttributedString],
+                           nativeSampleBuffers nativeSamples: [Any],
+                           forItemTime itemTime: CMTime) {
+            onStrings(strings, itemTime)
+        }
+    }
+
     // MARK: Chrome state
 
     /// Same glass rail as Aether VOD; Up Next and Insights are hidden (they
@@ -196,6 +229,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         lastResortPlayer = nil
         lastResortLayer?.removeFromSuperlayer()
         lastResortLayer = nil
+        nativeLegibleActive = false
+        nativeLegibleOutput = nil
+        nativeLegibleBridge = nil
+        nativeLegibleGroup = nil
         aetherPlayer?.stop()
         aetherPlayer?.unbind(view: engineSurfaceView)
         aetherPlayer = nil
@@ -343,6 +380,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.updateFocusIfNeeded()
             self.restartAutoHide()
         }
+        // The panel consumes Menu itself while focus is inside it; arm the
+        // echo block so the parallel system gesture's dismiss() can't peel
+        // the rail (or the player) on the same physical press.
+        panel.onMenuHandled = { [weak self] in
+            self?.armDismissEchoBlock()
+        }
         activePanel = panel
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
@@ -350,31 +393,151 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private func presentSubtitlePanel() {
         guard let aether = aetherPlayer else { return }
-        let list = CardTrackListView(
-            header: "Subtitles",
-            tracks: aether.subtitleTracks,
-            selectedTrackId: aether.currentSubtitleTrackId,
-            showsOffRow: true
-        ) { [weak self] trackId in
-            self?.aetherPlayer?.selectSubtitleTrack(id: trackId)
-            self?.activePanel?.dismissPanel()
+
+        // Engine demux path: tracks come from the engine.
+        if !aether.subtitleTracks.isEmpty {
+            let list = CardTrackListView(
+                header: "Subtitles",
+                tracks: aether.subtitleTracks,
+                selectedTrackId: aether.currentSubtitleTrackId,
+                showsOffRow: true
+            ) { [weak self] trackId in
+                self?.aetherPlayer?.selectSubtitleTrack(id: trackId)
+                self?.activePanel?.dismissPanel()
+            }
+            presentPanel(content: list, width: 520)
+            return
         }
-        presentPanel(content: list, width: 520)
+
+        // nativeRemoteHLS path: the engine never demuxes, so list the REMOTE
+        // playlist's WebVTT renditions from AVPlayer's legible group.
+        guard let item = aether.currentAVPlayer?.currentItem else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
+                  !group.options.isEmpty else { return }
+            self.nativeLegibleGroup = group
+
+            let selected = item.currentMediaSelection.selectedMediaOption(in: group)
+            let selectedIndex = selected.flatMap { group.options.firstIndex(of: $0) }
+            let tracks = group.options.enumerated().map { index, option in
+                MediaTrack(
+                    id: index,
+                    name: option.displayName,
+                    language: option.locale.map { Locale.current.localizedString(forIdentifier: $0.identifier) ?? $0.identifier },
+                    languageCode: option.locale?.identifier,
+                    codec: "webvtt"
+                )
+            }
+            let list = CardTrackListView(
+                header: "Subtitles",
+                tracks: tracks,
+                selectedTrackId: selectedIndex,
+                showsOffRow: true
+            ) { [weak self] trackId in
+                self?.selectNativeLegible(trackId)
+                self?.activePanel?.dismissPanel()
+            }
+            self.presentPanel(content: list, width: 520)
+        }
     }
 
     private func presentAudioPanel() {
         guard let aether = aetherPlayer else { return }
-        let list = CardTrackListView(
-            header: "Audio",
-            tracks: aether.audioTracks,
-            selectedTrackId: aether.currentAudioTrackId,
-            showsOffRow: false
-        ) { [weak self] trackId in
-            if let trackId { self?.aetherPlayer?.selectAudioTrack(id: trackId) }
-            self?.activePanel?.dismissPanel()
-            self?.updateRailContent()
+
+        // Engine demux path: tracks come from the engine.
+        if !aether.audioTracks.isEmpty {
+            let list = CardTrackListView(
+                header: "Audio",
+                tracks: aether.audioTracks,
+                selectedTrackId: aether.currentAudioTrackId,
+                showsOffRow: false
+            ) { [weak self] trackId in
+                if let trackId { self?.aetherPlayer?.selectAudioTrack(id: trackId) }
+                self?.activePanel?.dismissPanel()
+                self?.updateRailContent()
+            }
+            presentPanel(content: list, width: 520)
+            return
         }
-        presentPanel(content: list, width: 520)
+
+        // nativeRemoteHLS path: list AVPlayer's audible media selection.
+        guard let item = aether.currentAVPlayer?.currentItem else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
+                  !group.options.isEmpty else { return }
+
+            let selected = item.currentMediaSelection.selectedMediaOption(in: group)
+            let selectedIndex = selected.flatMap { group.options.firstIndex(of: $0) }
+            let tracks = group.options.enumerated().map { index, option in
+                MediaTrack(
+                    id: index,
+                    name: option.displayName,
+                    language: option.locale.map { Locale.current.localizedString(forIdentifier: $0.identifier) ?? $0.identifier },
+                    languageCode: option.locale?.identifier
+                )
+            }
+            let list = CardTrackListView(
+                header: "Audio",
+                tracks: tracks,
+                selectedTrackId: selectedIndex,
+                showsOffRow: false
+            ) { [weak self] trackId in
+                if let trackId, trackId < group.options.count {
+                    item.select(group.options[trackId], in: group)
+                }
+                self?.activePanel?.dismissPanel()
+            }
+            self.presentPanel(content: list, width: 520)
+        }
+    }
+
+    /// Select (or clear, with nil) a remote WebVTT rendition, and attach the
+    /// legible output that feeds its cues to our overlay — AVPlayerLayer does
+    /// not paint legible content on its own.
+    private func selectNativeLegible(_ index: Int?) {
+        guard let aether = aetherPlayer,
+              let item = aether.currentAVPlayer?.currentItem,
+              let group = nativeLegibleGroup else { return }
+
+        if let index, index < group.options.count {
+            ensureNativeLegibleOutput(on: item)
+            nativeLegibleActive = true
+            item.select(group.options[index], in: group)
+        } else {
+            nativeLegibleActive = false
+            item.select(nil, in: group)
+            subtitleModel.update(cues: [])
+        }
+    }
+
+    private func ensureNativeLegibleOutput(on item: AVPlayerItem) {
+        guard nativeLegibleOutput == nil else { return }
+        let bridge = LegibleOutputBridge { [weak self] strings, itemTime in
+            self?.handleNativeLegible(strings: strings, at: itemTime)
+        }
+        let output = AVPlayerItemLegibleOutput()
+        output.setDelegate(bridge, queue: .main)
+        item.add(output)
+        nativeLegibleBridge = bridge
+        nativeLegibleOutput = output
+    }
+
+    /// Each legible-output event replaces the on-screen text wholesale (open
+    /// ended: valid until the next event, which mirrors how the engine's
+    /// teletext cues behave). Empty events clear the overlay.
+    private func handleNativeLegible(strings: [NSAttributedString], at itemTime: CMTime) {
+        let time = max(0, CMTimeGetSeconds(itemTime))
+        let texts = strings.map(\.string).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !texts.isEmpty else {
+            subtitleModel.update(cues: [])
+            return
+        }
+        let cues = texts.enumerated().map { index, text in
+            AetherSubtitleCue(id: index, startTime: time, endTime: time + 3600, body: .text(text))
+        }
+        subtitleModel.update(cues: cues)
     }
 
     private func presentInfoPanel() {
@@ -431,16 +594,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         for press in presses {
             switch press.type {
             case .menu:
-                // An open panel fences focus and consumes Menu itself; this
-                // branch is only the focus-outside-panel edge case.
-                if let activePanel {
-                    activePanel.dismissPanel()
-                    return
-                }
-                if railVisible {
-                    hideRail()
-                    return
-                }
+                // Route through dismiss(animated:): its override converts
+                // "close" into panel-close / rail-hide before ever exiting the
+                // player, and the same funnel catches the system Menu gesture.
                 dismiss(animated: true)
                 return
             case .select:
@@ -463,6 +619,40 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // to the system and peels an extra layer.
         for press in presses where press.type == .menu { return }
         super.pressesEnded(presses, with: event)
+    }
+
+    /// Menu must peel ONE layer at a time: panel → rail → player. tvOS's
+    /// system Menu gesture calls this directly (racing pressesBegan), so the
+    /// layering decision lives HERE — both delivery routes converge on it.
+    override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        if blockNextDismiss {
+            blockNextDismiss = false
+            completion?()
+            return
+        }
+        if let activePanel {
+            activePanel.dismissPanel()
+            armDismissEchoBlock()
+            completion?()
+            return
+        }
+        if railVisible {
+            hideRail()
+            armDismissEchoBlock()
+            completion?()
+            return
+        }
+        super.dismiss(animated: flag, completion: completion)
+    }
+
+    /// The press handler and the system gesture can BOTH reach dismiss() for
+    /// one physical Menu press; after consuming the first, swallow the echo.
+    /// Time-limited so a stuck flag can't eat the user's next real press.
+    private func armDismissEchoBlock() {
+        blockNextDismiss = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.blockNextDismiss = false
+        }
     }
 
     private func togglePlayPause() {
@@ -642,7 +832,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func bindAetherSubtitles(_ aether: AetherPlayer) {
         aether.$subtitleCues
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] cues in self?.subtitleModel.update(cues: cues) }
+            .sink { [weak self] cues in
+                guard let self else { return }
+                // While a native legible (remote WebVTT) selection drives the
+                // overlay, an empty engine publish must not wipe its cues —
+                // the engine list is always empty on the nativeRemoteHLS path.
+                if self.nativeLegibleActive && cues.isEmpty { return }
+                self.subtitleModel.update(cues: cues)
+            }
             .store(in: &cancellables)
 
         aether.$sourceTime

@@ -128,11 +128,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         aetherPlayer = aether
         aether.bind(view: engineSurfaceView)
         bindAetherSubtitles(aether)
+        startAudioDropoutDiagnostics()
 
         aether.playbackStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self else { return }
+                print("🔊 [LiveAudioDiag] playbackState → \(state) t=\(Date().timeIntervalSince1970)")
                 switch state {
                 case .playing:
                     self.loadingSpinner.stopAnimating()
@@ -384,6 +386,42 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         presentPanel(content: card, width: 560)
         card.onFocusChange = { [weak self] focused in
             self?.activePanel?.setFocusHighlight(focused)
+        }
+    }
+
+    // MARK: - Audio dropout diagnostics (temporary)
+
+    /// Logs the three things that can silence audio while video keeps playing,
+    /// timestamped so dropout moments can be matched against them:
+    ///  - AVAudioSession INTERRUPTIONS (system took the session)
+    ///  - AVAudioSession ROUTE CHANGES (HDMI renegotiation / someone calling
+    ///    setCategory-setActive mid-stream)
+    ///  - media services resets
+    /// If a dropout shows NONE of these, the starvation is inside the engine's
+    /// renderer feed (upstream issue); if it shows route changes with reason
+    /// .categoryChange, something app-side is touching the shared session.
+    private func startAudioDropoutDiagnostics() {
+        let center = NotificationCenter.default
+        let session = AVAudioSession.sharedInstance()
+
+        center.addObserver(forName: AVAudioSession.interruptionNotification,
+                           object: session, queue: .main) { note in
+            let raw = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) ?? 99
+            let type = AVAudioSession.InterruptionType(rawValue: raw)
+            print("🔊 [LiveAudioDiag] INTERRUPTION type=\(String(describing: type)) t=\(Date().timeIntervalSince1970)")
+        }
+
+        center.addObserver(forName: AVAudioSession.routeChangeNotification,
+                           object: session, queue: .main) { note in
+            let raw = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) ?? 99
+            let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
+            let out = session.currentRoute.outputs.map { "\($0.portType.rawValue)(ch=\($0.channels?.count ?? 0))" }.joined(separator: ",")
+            print("🔊 [LiveAudioDiag] ROUTE CHANGE reason=\(String(describing: reason)) route=[\(out)] sr=\(session.sampleRate) t=\(Date().timeIntervalSince1970)")
+        }
+
+        center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification,
+                           object: session, queue: .main) { _ in
+            print("🔊 [LiveAudioDiag] MEDIA SERVICES RESET t=\(Date().timeIntervalSince1970)")
         }
     }
 

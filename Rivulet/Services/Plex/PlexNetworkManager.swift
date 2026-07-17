@@ -1560,16 +1560,26 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
         let sessionId = UUID().uuidString
 
+        // A relay-tunneled server (PlexRelay) refuses raw part fetches above
+        // its remote-bitrate policy and cannot sustain original-bitrate
+        // streams, so the session must be a real transcode capped at 1.5 Mbps
+        // 480p (the rung stock Plex converts relay items to). A user request
+        // that already forces transcode composes with this; the cap only ever
+        // tightens the request, never loosens one.
+        let relayCapped = PlexRelay.isRelayURL(serverURL)
+        let effectiveForceTranscode = forceVideoTranscode || relayCapped
+
          // Match official Plex tvOS behavior for DV by using the "Plex Apple TV" profile name.
          // Stick with "Generic" for non-DV to keep our custom extra profile.
          // forceVideoTranscode disables DV — transcoded output cannot preserve it,
-         // so the DV profile name would mislead the server.
-         let effectiveUseDolbyVision = forceVideoTranscode ? false : useDolbyVision
+         // so the DV profile name would mislead the server. The relay cap
+         // transcodes for the same reason, so it disables DV the same way.
+         let effectiveUseDolbyVision = effectiveForceTranscode ? false : useDolbyVision
          let clientProfileName = effectiveUseDolbyVision ? "Plex Apple TV" : "Generic"
 
         // Match the official Plex tvOS profile so the server returns Apple decoder-friendly streams.
         // Keep our explicit limitations (dvhe/hev1 remap) to ensure compatible codec tags.
-        let clientProfile = [
+        var clientProfileClauses = [
             // Direct play profiles - tells the server what formats we can preserve in the HLS remux path
             "add-direct-play-profile(type=videoProfile&protocol=http&container=mp4,mov&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3&subtitleCodec=mov_text,tx3g,ttxt,text,webvtt)",
             "add-direct-play-profile(type=musicProfile&protocol=http&container=flac&audioCodec=flac)",
@@ -1591,7 +1601,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             "add-limitation(scope=videoCodec&scopeName=*&type=notMatch&name=video.codecID&value=hev1&onlyDirectPlay=true)",
             "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.width&value=4096&replace=true)",
             "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.height&value=2160&replace=true)"
-        ].joined(separator: "+")
+        ]
+        if relayCapped {
+            // Belt and braces with the maxVideoBitrate query param: the MDE
+            // bitrate limitation keeps the decision inside the relay budget
+            // even where a profile clause and a query param disagree.
+            clientProfileClauses.append(
+                "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=1500&replace=true)")
+        }
+        let clientProfile = clientProfileClauses.joined(separator: "+")
 
         // Plex HLS requires auth in HTTP headers, not query params
         // Without these headers, endpoint returns 400 Bad Request
@@ -1613,26 +1631,28 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // directPlay=1 tells server we CAN direct play mp4/mov - without this, server may transcode instead of remux.
             // forceVideoTranscode flips it to 0 so the server actually transcodes (e.g., MPEG-2 / VC-1 source where
             // direct-play would hand back the raw file and the local decoder would fail).
-            URLQueryItem(name: "directPlay", value: forceVideoTranscode ? "0" : "1"),
+            URLQueryItem(name: "directPlay", value: effectiveForceTranscode ? "0" : "1"),
             // For MKV+DV, we must force video transcoding (not just remux) to get Apple-compatible codec tags (dvh1/hvc1)
             // MKV files typically use dvhe/hev1 which the tvOS decoder path does not accept here
-            URLQueryItem(name: "directStream", value: forceVideoTranscode ? "0" : "1"),
+            URLQueryItem(name: "directStream", value: effectiveForceTranscode ? "0" : "1"),
             // directStreamAudio controls whether Plex passes through compatible audio or transcodes it
             // When allowAudioDirectStream=false (e.g., AirPlay/HomePod with multichannel AAC), force transcode
             // HomePod supports Dolby Digital surround (EAC3/AC3) but NOT multichannel AAC
             // Note: segmentContainer=mp4 ensures fMP4 segments regardless of this setting
-            URLQueryItem(name: "directStreamAudio", value: allowAudioDirectStream ? "1" : "0"),
+            // The relay cap also forces audio transcode: a passed-through
+            // lossless track can exceed the whole relay budget on its own.
+            URLQueryItem(name: "directStreamAudio", value: (allowAudioDirectStream && !relayCapped) ? "1" : "0"),
             URLQueryItem(name: "fastSeek", value: "1"),
             // forceVideoTranscode caps the target at h264 only — h264 is the most universally
             // compatible codec and is what we want when transcoding from a non-Apple-decodable
             // source. The default keeps both for direct-play / remux-only requests.
-            URLQueryItem(name: "videoCodec", value: forceVideoTranscode ? "h264" : "h264,hevc"),
-            URLQueryItem(name: "videoResolution", value: "4096x2160"),
+            URLQueryItem(name: "videoCodec", value: effectiveForceTranscode ? "h264" : "h264,hevc"),
+            URLQueryItem(name: "videoResolution", value: relayCapped ? "720x480" : "4096x2160"),
             URLQueryItem(name: "videoQuality", value: "100"),
             URLQueryItem(name: "segmentDuration", value: "6"),
             // EAC3 preferred for surround (HomePod compatible), AAC for stereo fallback
-            URLQueryItem(name: "audioCodec", value: allowAudioDirectStream ? "aac,eac3,ac3" : "eac3,ac3,aac"),
-            URLQueryItem(name: "audioBitrate", value: "1024"),
+            URLQueryItem(name: "audioCodec", value: (allowAudioDirectStream && !relayCapped) ? "aac,eac3,ac3" : "eac3,ac3,aac"),
+            URLQueryItem(name: "audioBitrate", value: relayCapped ? "320" : "1024"),
             URLQueryItem(name: "audioChannels", value: "8"),
             URLQueryItem(name: "subtitles", value: "auto"),
             URLQueryItem(name: "subtitleSize", value: "100"),
@@ -1645,6 +1665,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "includeKeyframePlaylist", value: "1")
         ]
 
+        if relayCapped {
+            // The 480p rung stock Plex converts relay items to. Without the
+            // cap the tunnel serves a stream it cannot sustain, or refuses
+            // the request outright above the server's remote-bitrate policy.
+            items.append(URLQueryItem(name: "maxVideoBitrate", value: "1500"))
+        }
+
         items.append(URLQueryItem(name: "X-Plex-Client-Profile-Extra", value: clientProfile))
 
         components.queryItems = items
@@ -1656,7 +1683,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             components.queryItems?.append(URLQueryItem(name: "includeCodecs", value: "1"))
         }
 
-        print("[Plex HLS] Using \(clientProfileName) profile for \(effectiveUseDolbyVision ? "Dolby Vision" : "HDR/SDR") (session: \(sessionId))")
+        print("[Plex HLS] Using \(clientProfileName) profile for \(effectiveUseDolbyVision ? "Dolby Vision" : "HDR/SDR")\(relayCapped ? " with relay cap 1.5 Mbps 480p" : "") (session: \(sessionId))")
 
         guard let url = components.url else { return nil }
         return (url, headers)

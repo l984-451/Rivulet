@@ -108,6 +108,22 @@ struct ContentRouter {
         var reasoning: [String] = []
         let hls = buildHLSRoute(context: context)
 
+        // A relay-tunneled server cannot serve raw parts for direct play
+        // (HTTP 500 above its remote-bitrate policy), so Aether has nothing
+        // it can ingest. Route straight to the capped HLS transcode, which
+        // is how stock Plex plays over relay. The 1.5 Mbps 480p cap itself
+        // is applied by buildHLSDirectPlayURL.
+        if PlexRelay.isRelayURL(context.serverURL) {
+            reasoning.append("relay_server_hls_transcode_only")
+            playerDebugLog("[ContentRouter] \(container) → HLS (relay server, capped transcode)")
+            return PlaybackPlan(
+                policy: context.playbackPolicy,
+                primary: hls,
+                fallbacks: [],
+                reasoning: reasoning
+            )
+        }
+
         if let aetherRoute = buildAetherRoute(context: context) {
             reasoning.append("aether,all-content")
             playerDebugLog("[ContentRouter] \(container) → Aether")

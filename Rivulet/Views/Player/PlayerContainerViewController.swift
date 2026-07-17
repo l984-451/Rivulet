@@ -1035,6 +1035,18 @@ class PlayerContainerViewController: UIViewController {
                 content: CardTrackListView(
                     header: "Subtitles", tracks: vm.subtitleTracks,
                     selectedTrackId: vm.currentSubtitleTrackId, showsOffRow: true,
+                    steppers: [
+                        // Delay: sticky per movie/episode (ratingKey).
+                        CardStepperConfig(
+                            title: "Delay",
+                            value: { [weak vm] in SubtitleAdjustments.formattedDelay(vm?.subtitleDelaySeconds ?? 0) },
+                            onStep: { [weak vm] step in vm?.adjustSubtitleDelay(bySteps: step) }),
+                        // Height: global across all media.
+                        CardStepperConfig(
+                            title: "Height",
+                            value: { SubtitleAdjustments.formattedHeight(SubtitleAdjustments.heightUnits) },
+                            onStep: { step in SubtitleAdjustments.setHeightUnits(SubtitleAdjustments.heightUnits + step) }),
+                    ],
                     onSelect: { [weak vm, weak self] id in
                         vm?.selectSubtitleTrack(id: id)
                         self?.activeRailPanel?.dismissPanel()
@@ -1317,10 +1329,21 @@ class PlayerContainerViewController: UIViewController {
         }
     }
 
-    /// Sync the pill's title (including any live countdown suffix) and
-    /// re-evaluate its visibility + focus ownership.
+    /// Sync the pill's title, drive the auto-skip fill sweep, and re-evaluate
+    /// visibility + focus ownership. The fill starts when the countdown
+    /// begins (seconds jump 0 → N, which IS the total duration) and clears
+    /// when it cancels or fires; mid-countdown re-shows restart with the
+    /// remaining seconds so the sweep still lands with the skip.
     private func refreshSkipPill() {
         skipPill?.setTitle(viewModel?.skipButtonDisplayLabel, for: .normal)
+        let seconds = viewModel?.skipCountdownSeconds ?? 0
+        if seconds > 0 {
+            if skipPill?.isFillRunning == false {
+                skipPill?.beginFill(duration: TimeInterval(seconds))
+            }
+        } else {
+            skipPill?.cancelFill()
+        }
         applyChromeVisibility()
     }
 

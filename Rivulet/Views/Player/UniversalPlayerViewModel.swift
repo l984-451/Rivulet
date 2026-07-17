@@ -166,7 +166,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// drives the pill's "· N" suffix and auto-skips the active marker at 0.
     @Published var skipCountdownSeconds: Int = 0
     private var skipCountdownTimer: Timer?
-    private let skipCountdownDelaySeconds: Int = 5
+    /// Auto-skip lead time follows the Autoplay Countdown setting so the
+    /// pill's fill animation and the autoplay ring share one duration. The
+    /// "Off" value only disables autoplay, not auto-skip — fall back to the
+    /// 5s default there.
+    private var skipCountdownDelaySeconds: Int {
+        let value = SettingsStore.int("autoplayCountdown", default: AutoplayCountdown.fiveSeconds.rawValue)
+        return value > 0 ? value : AutoplayCountdown.fiveSeconds.rawValue
+    }
     /// Tracks if the user cancelled the auto-skip countdown for the CURRENT
     /// marker (Menu press): keeps the manual pill up without restarting the
     /// countdown. Reset when the active marker clears or the user seeks back.
@@ -258,6 +265,34 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// rendered by AetherSubtitleOverlayView in UniversalPlayerView.
     /// (The AVPlayer routes render through subtitleManager instead.)
     let aetherSubtitleModel = SubtitleModel()
+
+    // MARK: - Subtitle delay (OSD stepper, sticky per item)
+
+    /// Persistence key for this item's subtitle delay.
+    private var subtitleDelayKey: String { "plex:\(metadata.ratingKey ?? "unknown")" }
+
+    /// Current subtitle delay in seconds; positive = subtitles later.
+    /// Applied to BOTH routes (model drives the aether overlay, manager the
+    /// HLS overlay) so the stepper works wherever the item routed.
+    var subtitleDelaySeconds: Double { aetherSubtitleModel.delaySeconds }
+
+    /// Steps the delay by ±SubtitleAdjustments.delayStep and persists it for
+    /// this ratingKey, so the item reopens with the same delay.
+    func adjustSubtitleDelay(bySteps steps: Int) {
+        let raw = aetherSubtitleModel.delaySeconds + Double(steps) * SubtitleAdjustments.delayStep
+        let value = (raw * 10).rounded() / 10
+        aetherSubtitleModel.delaySeconds = value
+        subtitleManager.delaySeconds = value
+        SubtitleAdjustments.setDelay(value, forKey: subtitleDelayKey)
+    }
+
+    /// Loads this item's stored delay into both pipelines. Called on every
+    /// playback setup (including next-episode swaps on this same instance).
+    private func loadStoredSubtitleDelay() {
+        let value = SubtitleAdjustments.delay(forKey: subtitleDelayKey)
+        aetherSubtitleModel.delaySeconds = value
+        subtitleManager.delaySeconds = value
+    }
 
     // MARK: - Metadata
 
@@ -499,6 +534,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         let networkManager = PlexNetworkManager.shared
 
         guard metadata.ratingKey != nil else { return }
+
+        // Sticky per-item subtitle delay (OSD stepper).
+        loadStoredSubtitleDelay()
 
         // Fetch full metadata if Media array is missing (needed for info overlay display)
         // This happens when starting playback from Continue Watching or other hubs with minimal metadata
@@ -3473,10 +3511,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         return "Skip"
     }
 
-    /// Pill title including the live auto-skip countdown when one is running
-    /// (e.g. "Skip Intro · 5"). Without a countdown it is just the base label.
+    /// Pill title. The auto-skip countdown no longer renders as a "· N"
+    /// suffix — the pill shows a left-to-right fill animation instead
+    /// (SkipPillButton.beginFill, driven by PlayerContainerViewController
+    /// from `skipCountdownSeconds`).
     var skipButtonDisplayLabel: String {
-        skipCountdownSeconds > 0 ? "\(skipButtonLabel) · \(skipCountdownSeconds)" : skipButtonLabel
+        skipButtonLabel
     }
 
     /// True when the skip pill is the lone on-screen affordance — chrome

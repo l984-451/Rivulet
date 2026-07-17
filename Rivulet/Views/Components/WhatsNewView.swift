@@ -145,6 +145,8 @@ struct WhatsNewView: View {
             "The featured carousel on Home and Discover now advances on its own, with a countdown shown on the page dots",
             "New Skip Recap and Skip Preview options in Playback settings, with a community database filling in markers your server does not have",
             "Live TV subtitles now show broadcaster colours (following your system caption settings) and rolling captions no longer flicker",
+            "New subtitle Delay and Height adjustments in the player's subtitle menu. Delay is remembered per movie, episode, and channel; height applies everywhere",
+            "The skip button now fills up while auto skip counts down, matching your Autoplay Countdown setting",
             "Updated AetherEngine to 5.5.0. Fixes audio cutting in and out on broadcast Live TV channels, adds teletext subtitles, faster startup on slower sources, and fewer stalls when resuming after a pause",
         ]),
         ("1.0.3 (66)", [

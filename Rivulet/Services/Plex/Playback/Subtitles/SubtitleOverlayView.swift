@@ -16,6 +16,11 @@ struct SubtitleOverlayView: View {
     /// Vertical offset from bottom (for player controls)
     var bottomOffset: CGFloat = 100
 
+    /// User height adjustment from the OSD stepper (global; positive =
+    /// higher). Same key AetherSubtitleOverlayView reads, so both routes
+    /// place captions identically.
+    @AppStorage("subtitleHeightUnits") private var heightUnits: Int = 0
+
     /// Current system caption appearance. Replaced wholesale when the user
     /// changes caption settings (via CaptionAppearance.changedNotification).
     @State private var captionStyle: CaptionStyle = CaptionAppearance.current()
@@ -56,7 +61,7 @@ struct SubtitleOverlayView: View {
                             }
                         }
                         .padding(.horizontal, 60)
-                        .padding(.bottom, bottomOffset)
+                        .padding(.bottom, max(0, bottomOffset + SubtitleAdjustments.heightOffset(forUnits: heightUnits)))
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)

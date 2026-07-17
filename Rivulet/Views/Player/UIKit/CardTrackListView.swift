@@ -17,21 +17,24 @@ final class CardTrackListView: UIView {
     }
 
     private let rows: [Row]
+    private let steppers: [CardStepperConfig]
     private let onSelect: (Int?) -> Void
     private let scrollView = UIScrollView()
     private let stack = UIStackView()
     private var rowButtons: [CardTrackRowButton] = []
+    private var stepperRows: [CardStepperRowView] = []
     /// Pin focus to the selected row only for the FIRST landing. After focus
     /// has entered the list once, `preferredFocusEnvironments` yields no
     /// preference so the focus engine leaves focus on whatever row the user
     /// navigated to — otherwise reaching the bottom and pressing Down would
     /// re-resolve focus back up to the selected row (the "bounce").
     private var hasPinnedInitialFocus = false
-    /// The row focus is currently on, tracked so `preferredFocusEnvironments`
-    /// can hold it (see there).
-    private weak var lastFocusedRow: CardTrackRowButton?
+    /// The control focus is currently on (a track row or a stepper button),
+    /// tracked so `preferredFocusEnvironments` can hold it (see there).
+    private weak var lastFocusedControl: UIView?
 
-    init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool, onSelect: @escaping (Int?) -> Void) {
+    init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool,
+         steppers: [CardStepperConfig] = [], onSelect: @escaping (Int?) -> Void) {
         var rows: [Row] = []
         if showsOffRow {
             rows.append(Row(title: "Off", subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil))
@@ -45,6 +48,7 @@ final class CardTrackListView: UIView {
             )
         })
         self.rows = rows
+        self.steppers = steppers
         self.onSelect = onSelect
         super.init(frame: .zero)
         setupViews(header: header)
@@ -102,6 +106,23 @@ final class CardTrackListView: UIView {
             stack.addArrangedSubview(button)
             rowButtons.append(button)
         }
+
+        // Adjustment steppers (delay / height) under the track rows, each
+        // with a small section label. Presses adjust in place — the panel
+        // stays up so the user can see the subtitles move as they step.
+        for config in steppers {
+            let sectionLabel = UILabel()
+            sectionLabel.text = config.title
+            sectionLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+            sectionLabel.textColor = UIColor.white.withAlphaComponent(0.55)
+            stack.addArrangedSubview(sectionLabel)
+            stack.setCustomSpacing(14, after: stepperRows.last ?? rowButtons.last ?? sectionLabel)
+            stack.setCustomSpacing(6, after: sectionLabel)
+
+            let row = CardStepperRowView(config: config)
+            stack.addArrangedSubview(row)
+            stepperRows.append(row)
+        }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -115,23 +136,151 @@ final class CardTrackListView: UIView {
         // interfere with row-to-row moves (directional focus never consults
         // preferredFocusEnvironments).
         if hasPinnedInitialFocus {
-            return lastFocusedRow.map { [$0] } ?? []
+            return lastFocusedControl.map { [$0] } ?? []
         }
         if let first = rowButtons.first(where: { $0.row.isSelected }) {
             return [first]
         }
-        return rowButtons.isEmpty ? [self] : [rowButtons[0]]
+        if let firstRow = rowButtons.first { return [firstRow] }
+        return stepperRows.isEmpty ? [self] : [stepperRows[0]]
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        // Once focus enters any of our rows, stop pinning the selected row
-        // and remember which row holds focus (see preferredFocusEnvironments).
-        if let next = context.nextFocusedView,
-           let row = rowButtons.first(where: { next.isDescendant(of: $0) || next === $0 }) {
+        // Once focus enters any of our controls, stop pinning the selected
+        // row and remember which control holds focus (see
+        // preferredFocusEnvironments). Stepper +/- buttons count too —
+        // holding a track row here instead would yank focus off the stepper
+        // whenever an edge press re-resolves through the panel fence.
+        guard let next = context.nextFocusedView, next.isDescendant(of: self) else { return }
+        if let row = rowButtons.first(where: { next.isDescendant(of: $0) || next === $0 }) {
             hasPinnedInitialFocus = true
-            lastFocusedRow = row
+            lastFocusedControl = row
+        } else if stepperRows.contains(where: { next.isDescendant(of: $0) }) {
+            hasPinnedInitialFocus = true
+            lastFocusedControl = next
         }
+    }
+}
+
+// MARK: - CardStepperConfig
+
+/// One adjustment stepper in the panel: a section title, a formatted value
+/// provider, and a step handler (`-1` / `+1`). The row re-reads `value()`
+/// after every press, so the handler owns clamping and persistence.
+struct CardStepperConfig {
+    let title: String
+    let value: () -> String
+    let onStep: (Int) -> Void
+}
+
+// MARK: - CardStepperRowView
+
+/// `[-]   value   [+]` — the minus/plus ends are focusable; the centre label
+/// shows the current value ("0.0s", "+3", …) and updates on every press.
+final class CardStepperRowView: UIView {
+
+    private let config: CardStepperConfig
+    private let valueLabel = UILabel()
+
+    init(config: CardStepperConfig) {
+        self.config = config
+        super.init(frame: .zero)
+
+        let minus = CardStepperButton(symbolName: "minus")
+        let plus = CardStepperButton(symbolName: "plus")
+        minus.onTap = { [weak self] in self?.step(-1) }
+        plus.onTap = { [weak self] in self?.step(+1) }
+
+        valueLabel.text = config.value()
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: 23, weight: .medium)
+        valueLabel.textColor = .white
+        valueLabel.textAlignment = .center
+
+        [minus, valueLabel, plus].forEach {
+            addSubview($0)
+            $0.translatesAutoresizingMaskIntoConstraints = false
+        }
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
+
+            minus.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            minus.centerYAnchor.constraint(equalTo: centerYAnchor),
+            minus.widthAnchor.constraint(equalToConstant: 64),
+            minus.heightAnchor.constraint(equalToConstant: 52),
+
+            plus.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            plus.centerYAnchor.constraint(equalTo: centerYAnchor),
+            plus.widthAnchor.constraint(equalToConstant: 64),
+            plus.heightAnchor.constraint(equalToConstant: 52),
+
+            valueLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            valueLabel.leadingAnchor.constraint(greaterThanOrEqualTo: minus.trailingAnchor, constant: 8),
+            valueLabel.trailingAnchor.constraint(lessThanOrEqualTo: plus.leadingAnchor, constant: -8),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func step(_ direction: Int) {
+        config.onStep(direction)
+        valueLabel.text = config.value()
+    }
+}
+
+// MARK: - CardStepperButton
+
+/// Round-rect +/- control matching the track rows' focus treatment
+/// (white fill, black glyph when focused).
+final class CardStepperButton: UIControl {
+
+    var onTap: (() -> Void)?
+    private let symbolView: UIImageView
+
+    init(symbolName: String) {
+        symbolView = UIImageView(image: UIImage(
+            systemName: symbolName,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+        ))
+        super.init(frame: .zero)
+
+        symbolView.tintColor = .white
+        symbolView.contentMode = .center
+        addSubview(symbolView)
+        symbolView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            symbolView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        backgroundColor = UIColor.white.withAlphaComponent(0.08)
+        layer.cornerRadius = 14
+        layer.cornerCurve = .continuous
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var canBecomeFocused: Bool { true }
+
+    // Same tvOS trap as CardTrackRowButton: Select never fires
+    // .primaryActionTriggered on a plain UIControl — handle the press.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses where press.type == .select {
+            onTap?()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let isFocused = context.nextFocusedView === self
+        coordinator.addCoordinatedAnimations({
+            self.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.08)
+            self.symbolView.tintColor = isFocused ? .black : .white
+        }, completion: nil)
     }
 }
 

@@ -28,6 +28,13 @@ final class SkipPillButton: UIButton {
 
     private let effectView: UIVisualEffectView
 
+    /// Auto-skip progress fill: sweeps left → right across the pill over the
+    /// countdown duration (replaces the old "· N" title suffix). Lives inside
+    /// the effect view's content so the capsule shape clips it.
+    private let fillView = UIView()
+    private var fillWidthConstraint: NSLayoutConstraint?
+    private(set) var isFillRunning = false
+
     init() {
         if #available(tvOS 26.0, *) {
             effectView = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
@@ -48,9 +55,49 @@ final class SkipPillButton: UIButton {
             effectView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
+        fillView.backgroundColor = UIColor.white.withAlphaComponent(0.35)
+        fillView.isUserInteractionEnabled = false
+        effectView.contentView.addSubview(fillView)
+        fillView.translatesAutoresizingMaskIntoConstraints = false
+        let width = fillView.widthAnchor.constraint(equalToConstant: 0)
+        fillWidthConstraint = width
+        NSLayoutConstraint.activate([
+            fillView.leadingAnchor.constraint(equalTo: effectView.contentView.leadingAnchor),
+            fillView.topAnchor.constraint(equalTo: effectView.contentView.topAnchor),
+            fillView.bottomAnchor.constraint(equalTo: effectView.contentView.bottomAnchor),
+            width,
+        ])
+
         setTitleColor(.white, for: .normal)
         titleLabel?.font = .systemFont(ofSize: 26, weight: .semibold)
         contentEdgeInsets = UIEdgeInsets(top: 16, left: 34, bottom: 16, right: 34)
+    }
+
+    /// Starts the left-to-right sweep, reaching the full pill width after
+    /// `duration` seconds (the auto-skip countdown). Restarting mid-sweep
+    /// (pill re-shown during a running countdown) begins from empty with the
+    /// remaining duration, so the fill still lands with the skip.
+    func beginFill(duration: TimeInterval) {
+        guard duration > 0 else { return }
+        cancelFill()
+        isFillRunning = true
+        layoutIfNeeded()
+        let target = max(bounds.width, 1)
+        fillWidthConstraint?.constant = 0
+        effectView.contentView.layoutIfNeeded()
+        fillWidthConstraint?.constant = target
+        UIView.animate(withDuration: duration, delay: 0, options: [.curveLinear]) {
+            self.effectView.contentView.layoutIfNeeded()
+        }
+    }
+
+    /// Stops and clears the sweep (countdown cancelled or fired).
+    func cancelFill() {
+        guard isFillRunning else { return }
+        isFillRunning = false
+        fillView.layer.removeAllAnimations()
+        fillWidthConstraint?.constant = 0
+        effectView.contentView.layoutIfNeeded()
     }
 
     required init?(coder: NSCoder) {
@@ -111,6 +158,11 @@ final class SkipPillButton: UIButton {
             self.transform = isFocused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
             self.effectView.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.1)
             self.setTitleColor(isFocused ? .black : .white, for: .normal)
+            // Keep the sweep visible on both backgrounds: light overlay on
+            // glass, dark overlay on the white focused fill.
+            self.fillView.backgroundColor = isFocused
+                ? UIColor.black.withAlphaComponent(0.12)
+                : UIColor.white.withAlphaComponent(0.35)
         }, completion: nil)
     }
 }

@@ -101,6 +101,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// boundary; clearing instantly blinks the overlay between cues.
     private var nativeLegibleClearWorkItem: DispatchWorkItem?
 
+    /// User subtitle delay for THIS channel (OSD stepper; sticky per channel
+    /// id). Engine cue paths apply it through SubtitleModel.delaySeconds;
+    /// the native legible path is event-driven with timeless cues, so a
+    /// POSITIVE delay is applied by scheduling the model updates instead
+    /// (a negative delay cannot pre-show cues that haven't arrived and is
+    /// treated as 0 on that path).
+    private var subtitleDelaySeconds: Double = 0
+
+    private var subtitleDelayKey: String { "live:\(channel.id)" }
+
     private final class LegibleOutputBridge: NSObject, AVPlayerItemLegibleOutputPushDelegate {
         let onStrings: ([NSAttributedString], CMTime) -> Void
         init(onStrings: @escaping ([NSAttributedString], CMTime) -> Void) {
@@ -167,6 +177,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         mountSubtitleOverlay()
         observeCaptionAppearance()
         setupChrome()
+
+        // Sticky per-channel subtitle delay (OSD stepper).
+        subtitleDelaySeconds = SubtitleAdjustments.delay(forKey: subtitleDelayKey)
+        subtitleModel.delaySeconds = subtitleDelaySeconds
 
         let aether = AetherPlayer()
         aetherPlayer = aether
@@ -416,7 +430,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 header: "Subtitles",
                 tracks: aether.subtitleTracks,
                 selectedTrackId: aether.currentSubtitleTrackId,
-                showsOffRow: true
+                showsOffRow: true,
+                steppers: subtitleAdjustmentSteppers()
             ) { [weak self] trackId in
                 self?.aetherPlayer?.selectSubtitleTrack(id: trackId)
                 self?.activePanel?.dismissPanel()
@@ -449,7 +464,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 header: "Subtitles",
                 tracks: tracks,
                 selectedTrackId: selectedIndex,
-                showsOffRow: true
+                showsOffRow: true,
+                steppers: subtitleAdjustmentSteppers()
             ) { [weak self] trackId in
                 self?.selectNativeLegible(trackId)
                 self?.activePanel?.dismissPanel()
@@ -535,6 +551,44 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         lastNativeLegibleLines = []
     }
 
+    /// Steps the channel's subtitle delay by ±SubtitleAdjustments.delayStep,
+    /// applies it live, and persists it for this channel id.
+    func adjustSubtitleDelay(bySteps steps: Int) {
+        let raw = subtitleDelaySeconds + Double(steps) * SubtitleAdjustments.delayStep
+        subtitleDelaySeconds = (raw * 10).rounded() / 10
+        subtitleModel.delaySeconds = subtitleDelaySeconds
+        SubtitleAdjustments.setDelay(subtitleDelaySeconds, forKey: subtitleDelayKey)
+    }
+
+    /// The two OSD adjustment steppers, shared by both subtitle panel
+    /// branches (engine tracks and native legible renditions).
+    private func subtitleAdjustmentSteppers() -> [CardStepperConfig] {
+        [
+            CardStepperConfig(
+                title: "Delay",
+                value: { [weak self] in SubtitleAdjustments.formattedDelay(self?.subtitleDelaySeconds ?? 0) },
+                onStep: { [weak self] step in self?.adjustSubtitleDelay(bySteps: step) }),
+            CardStepperConfig(
+                title: "Height",
+                value: { SubtitleAdjustments.formattedHeight(SubtitleAdjustments.heightUnits) },
+                onStep: { step in SubtitleAdjustments.setHeightUnits(SubtitleAdjustments.heightUnits + step) }),
+        ]
+    }
+
+    /// Applies a native-legible model update, honouring a positive per-channel
+    /// delay by scheduling it. The constant delay preserves event order.
+    private func applyNativeLegible(cues: [AetherSubtitleCue]) {
+        let delay = max(0, subtitleDelaySeconds)
+        if delay == 0 {
+            subtitleModel.update(cues: cues)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.nativeLegibleActive else { return }
+                self.subtitleModel.update(cues: cues)
+            }
+        }
+    }
+
     private func ensureNativeLegibleOutput(on item: AVPlayerItem) {
         guard nativeLegibleOutput == nil else { return }
         let bridge = LegibleOutputBridge { [weak self] strings, itemTime in
@@ -586,7 +640,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 guard let self else { return }
                 self.nativeLegibleClearWorkItem = nil
                 self.lastNativeLegibleLines = []
-                self.subtitleModel.update(cues: [])
+                self.applyNativeLegible(cues: [])
             }
             nativeLegibleClearWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
@@ -608,7 +662,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 body: .styledText(line.runs)
             )
         }
-        subtitleModel.update(cues: cues)
+        applyNativeLegible(cues: cues)
     }
 
     /// One legible-output attributed string, split into content-coloured runs.

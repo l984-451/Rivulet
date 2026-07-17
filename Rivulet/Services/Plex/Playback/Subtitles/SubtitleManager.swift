@@ -159,9 +159,15 @@ final class SubtitleManager: ObservableObject {
 
     // MARK: - Time Updates
 
+    /// User subtitle delay in seconds (positive = subtitles appear later).
+    /// Mirrors SubtitleModel.delaySeconds on the aether route so the OSD
+    /// delay stepper works identically on the HLS route.
+    var delaySeconds: Double = 0
+
     /// Update current cues based on playback time
     /// Call this from your time observer (typically 4-10 times per second)
-    func update(time: TimeInterval) {
+    func update(time rawTime: TimeInterval) {
+        let time = rawTime - delaySeconds
         // Skip if time hasn't changed significantly
         guard abs(time - lastUpdateTime) > updateThreshold else { return }
         lastUpdateTime = time

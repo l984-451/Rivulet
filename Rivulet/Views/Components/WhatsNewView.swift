@@ -142,7 +142,10 @@ struct WhatsNewView: View {
             "Show and movie pages opened from Top Shelf or Siri now match the pages you get inside the app",
             "Removing an item from Continue Watching no longer leaves focus in the wrong place",
             "The INFO panel in the player now shows the streaming mode for video, audio, and subtitles, so you can confirm Direct Play without checking the server dashboard",
-            "Updated AetherEngine to 5.3.1. Adds teletext subtitles and much smoother audio and video on broadcast Live TV channels, faster startup on slower sources, and fewer stalls when resuming after a pause",
+            "The featured carousel on Home and Discover now advances on its own, with a countdown shown on the page dots",
+            "New Skip Recap and Skip Preview options in Playback settings, with a community database filling in markers your server does not have",
+            "Live TV subtitles now show broadcaster colours (following your system caption settings) and rolling captions no longer flicker",
+            "Updated AetherEngine to 5.5.0. Fixes audio cutting in and out on broadcast Live TV channels, adds teletext subtitles, faster startup on slower sources, and fewer stalls when resuming after a pause",
         ]),
         ("1.0.3 (66)", [
             "Removing an item from Continue Watching is now instant and no longer clears your watch progress",

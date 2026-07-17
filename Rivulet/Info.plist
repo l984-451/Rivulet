@@ -20,12 +20,16 @@
 	<!-- Users connect to their own media servers (a Plex server, or an IPTV/M3U
 	     provider they subscribe to). These are commonly reached over HTTP on a local
 	     network or a self-hosted box without a TLS certificate, so arbitrary loads are
-	     required to support user-supplied endpoints. -->
+	     required to support user-supplied endpoints.
+
+	     Do NOT add NSAllowsLocalNetworking (or any finer-grained ATS key) next to
+	     NSAllowsArbitraryLoads: when a finer-grained key is present the OS IGNORES
+	     NSAllowsArbitraryLoads, so plain-HTTP servers on public IPs (remote IPTV
+	     proxies) get blocked while local ones keep working. ArbitraryLoads alone
+	     already covers local networking. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>

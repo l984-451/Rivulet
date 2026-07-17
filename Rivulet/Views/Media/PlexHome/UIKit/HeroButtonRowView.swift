@@ -472,7 +472,7 @@ final class HeroCircleButton: UIControl {
 @MainActor
 final class HeroPagingDotsView: UIView {
     private let stack = UIStackView()
-    private var dots: [UIView] = []
+    private var dots: [HeroDotView] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -492,34 +492,68 @@ final class HeroPagingDotsView: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func update(count: Int, activeIndex: Int) {
+    /// Updates the dots. When `progressDuration` is non-nil, the active dot
+    /// fills white over that many seconds — the auto-advance cycle countdown
+    /// (ported from PlexGuide). nil leaves the active dot solid.
+    func update(count: Int, activeIndex: Int, progressDuration: TimeInterval? = nil) {
         if dots.count != count {
             dots.forEach { $0.removeFromSuperview() }
             dots.removeAll()
             for _ in 0..<count {
-                let dot = UIView()
-                dot.translatesAutoresizingMaskIntoConstraints = false
-                dot.layer.cornerRadius = 4
-                dot.layer.cornerCurve = .continuous
+                let dot = HeroDotView()
                 stack.addArrangedSubview(dot)
-                NSLayoutConstraint.activate([
-                    dot.heightAnchor.constraint(equalToConstant: 8)
-                ])
                 dots.append(dot)
             }
         }
+        for (i, dot) in dots.enumerated() {
+            let active = i == activeIndex
+            dot.setActive(active, progress: active ? progressDuration : nil)
+        }
         UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseInOut]) {
-            for (i, dot) in self.dots.enumerated() {
-                let active = i == activeIndex
-                let width: CGFloat = active ? 22 : 8
-                // Update width constraint
-                for c in dot.constraints where c.firstAttribute == .width {
-                    dot.removeConstraint(c)
-                }
-                dot.widthAnchor.constraint(equalToConstant: width).isActive = true
-                dot.backgroundColor = UIColor.white.withAlphaComponent(active ? 1.0 : 0.35)
-            }
             self.layoutIfNeeded()
+        }
+    }
+}
+
+/// A single hero paging dot: a translucent track that widens when active and
+/// fills white. With a `progress` duration the fill animates linearly across
+/// the active width as an auto-advance countdown (ported from PlexGuide's
+/// DotView); without it the active dot is solid.
+final class HeroDotView: UIView {
+    private let fill = UIView()
+    private let dotHeight: CGFloat = 8
+    private let inactiveWidth: CGFloat = 8
+    private let activeWidth: CGFloat = 22
+    private var widthC: NSLayoutConstraint!
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = UIColor.white.withAlphaComponent(0.35)
+        layer.cornerRadius = dotHeight / 2
+        layer.cornerCurve = .continuous
+        clipsToBounds = true
+        fill.backgroundColor = .white
+        addSubview(fill)
+        heightAnchor.constraint(equalToConstant: dotHeight).isActive = true
+        widthC = widthAnchor.constraint(equalToConstant: inactiveWidth)
+        widthC.isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setActive(_ active: Bool, progress duration: TimeInterval?) {
+        fill.layer.removeAllAnimations()
+        widthC.constant = active ? activeWidth : inactiveWidth
+        if active, let duration {
+            // Reset to empty, then fill linearly over the cycle duration.
+            fill.frame = CGRect(x: 0, y: 0, width: 0, height: dotHeight)
+            UIView.animate(withDuration: duration, delay: 0,
+                           options: [.curveLinear, .beginFromCurrentState]) {
+                self.fill.frame = CGRect(x: 0, y: 0, width: self.activeWidth, height: self.dotHeight)
+            }
+        } else {
+            fill.frame = CGRect(x: 0, y: 0, width: active ? activeWidth : 0, height: dotHeight)
         }
     }
 }

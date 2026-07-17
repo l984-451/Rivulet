@@ -361,7 +361,7 @@
 				CODE_SIGN_ENTITLEMENTS = TopShelfExtension/TopShelfExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 66;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TopShelfExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TopShelfExtension;
@@ -372,7 +372,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet.TopShelfExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.rivulet.TopShelfExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
@@ -392,7 +392,7 @@
 				CODE_SIGN_ENTITLEMENTS = TopShelfExtension/TopShelfExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 66;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TopShelfExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TopShelfExtension;
@@ -403,7 +403,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet.TopShelfExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.rivulet.TopShelfExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SKIP_INSTALL = YES;
@@ -427,7 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 66;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -456,7 +456,7 @@
 					"-liconv",
 					"-lz",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.rivulet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -485,7 +485,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 66;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -514,7 +514,7 @@
 					"-liconv",
 					"-lz",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.rivulet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -660,10 +660,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 53;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.RivuletTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -683,10 +683,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 53;
-				DEVELOPMENT_TEAM = ZHB786H6YN;
+				DEVELOPMENT_TEAM = UXB66N824W;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jbstudios.RivuletTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -756,7 +756,7 @@
 			repositoryURL = "https://github.com/superuser404notfound/AetherEngine";
 			requirement = {
 				kind = exactVersion;
-				version = 5.3.1;
+				version = 5.5.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

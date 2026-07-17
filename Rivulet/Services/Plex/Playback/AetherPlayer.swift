@@ -113,11 +113,23 @@ final class AetherPlayer: PlayerProtocol {
         // AetherEngine 3.x moved the high-frequency clock off the engine's
         // own objectWillChange into a separate PlaybackClock (the engine
         // does NOT fire on clock ticks). Observe clock.$currentTime.
-        // Also drive sourceTime here so subtitle lookups share the same tick.
         engine.clock.$currentTime
             .receive(on: DispatchQueue.main)
             .sink { [weak self] t in
                 self?.timeSubject.send(t)
+            }
+            .store(in: &cancellables)
+
+        // Subtitle lookups use the clock's SOURCE axis, not currentTime.
+        // They are equal on zero-based sources (VOD), but on live /
+        // mid-stream-joined sources (a tuner TS) sourceTime is offset by the
+        // session zero — cue PTS arrive on the source axis (e.g. ~8996s)
+        // while currentTime is elapsed (~0s), so matching against
+        // currentTime shows no subtitles at all. 5.2.0 documents
+        // `sourceTime` as the value to use for the subtitle overlay.
+        engine.clock.$sourceTime
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] t in
                 self?.sourceTime = t
             }
             .store(in: &cancellables)
@@ -369,6 +381,14 @@ final class AetherPlayer: PlayerProtocol {
     /// (raw MPEG-TS, etc.) goes through the engine's demux/remux to a loopback
     /// HLS stream. Either way the engine publishes `currentAVPlayer` for the
     /// AVKit OSD. No start position (live).
+    ///
+    /// AetherEngine 5.2.0 adoption (per upstream, verified against real AU
+    /// 1080i25 broadcasts with teletext captions on page 801):
+    ///  - tuner URLs MUST load `isLive: true` with a `dvrWindowSeconds`
+    ///    (1800 below) — 5.2.0 fixed the mid-stream-joined TS clock anchor,
+    ///    live DVR sessions now feed subtitle packets to the overlay
+    ///    pipeline, and teletext open-ended/erase page semantics render
+    ///    correctly through `$subtitleCues` (which our overlay draws).
     /// `forceEngineDemux` disables the native-HLS shortcut so the engine's own
     /// demuxer opens the playlist instead — used as a fallback when AVPlayer's
     /// native path fails against a server (e.g. a Plex transcode session that

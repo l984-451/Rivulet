@@ -216,6 +216,8 @@ enum SettingsContent {
             toggle("autoSkipIntro", "Auto-Skip Intro", key: "autoSkipIntro", default: false),
             toggle("autoSkipCredits", "Auto-Skip Credits", key: "autoSkipCredits", default: false),
             toggle("autoSkipAds", "Auto-Skip Ads", key: "autoSkipAds", default: false),
+            toggle("autoSkipRecap", "Auto-Skip Recap", key: "autoSkipRecap", default: false),
+            toggle("autoSkipPreview", "Auto-Skip Preview", key: "autoSkipPreview", default: false),
             toggle("promptResumeOrRestart", "Resume or Restart Prompt", key: "promptResumeOrRestart", default: false),
             SettingsRowItem(id: "autoplayCountdown", title: "Autoplay Countdown",
                             kind: .navigationValue(.autoplayCountdownPicker, value: {

@@ -65,10 +65,12 @@ final class MultiStreamViewModel: ObservableObject {
         }
 
         func load(url: URL, headers: [String: String]?) async throws {
-            // isLive: engine auto-detection is off upstream; declaring it
-            // enables the live clock (live-edge tracking) and the engine's
-            // LiveReloadPolicy reconnect path for this slot.
-            try await aetherPlayer.load(url: url, headers: headers, startTime: nil, isLive: true)
+            // Full live load (isLive + DVR window + nativeRemoteHLS for HLS)
+            // — per the AetherEngine 5.2.0 adoption notes, tuner URLs load as
+            // live WITH a DVR window; this also enables the live clock,
+            // LiveReloadPolicy reconnects, and the live subtitle feed for
+            // this slot.
+            try await aetherPlayer.loadLive(url: url, headers: headers)
         }
     }
 

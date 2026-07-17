@@ -134,6 +134,16 @@ enum SettingsDescriptorStore {
             iconColor: .red,
             description: "Automatically skips advertisement segments when markers are available."
         ),
+        "autoSkipRecap": SettingDescriptor(
+            icon: "backward.end.circle",
+            iconColor: .teal,
+            description: "Automatically skips 'previously on' recaps. Recap markers come from the community intro database (introdb.app) when Plex has none."
+        ),
+        "autoSkipPreview": SettingDescriptor(
+            icon: "forward.end.circle",
+            iconColor: .purple,
+            description: "Automatically skips next-episode previews when markers are available."
+        ),
         "promptResumeOrRestart": SettingDescriptor(
             icon: "questionmark.circle",
             iconColor: .blue,

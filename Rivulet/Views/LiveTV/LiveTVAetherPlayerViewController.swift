@@ -92,9 +92,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Lines currently on screen — identical re-emissions (roll-up WebVTT
     /// refreshes the same block every segment) must not replace the cues.
     private var lastNativeLegibleLines: [StyledLine] = []
-    /// First-seen time per displayed line, so a continuing line keeps a
-    /// stable cue identity while new lines roll in beneath it.
-    private var nativeLegibleFirstSeen: [String: Double] = [:]
     /// Deferred clear: roll-up streams emit EMPTY legible events at every cue
     /// boundary; clearing instantly blinks the overlay between cues.
     private var nativeLegibleClearWorkItem: DispatchWorkItem?
@@ -527,7 +524,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         nativeLegibleClearWorkItem?.cancel()
         nativeLegibleClearWorkItem = nil
         lastNativeLegibleLines = []
-        nativeLegibleFirstSeen = [:]
     }
 
     private func ensureNativeLegibleOutput(on item: AVPlayerItem) {
@@ -536,6 +532,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.handleNativeLegible(strings: strings, at: itemTime)
         }
         let output = AVPlayerItemLegibleOutput()
+        // The engine's surface hosts a REAL AVPlayerLayer on the
+        // nativeRemoteHLS path, and AVPlayerLayer paints selected legible
+        // content itself. suppressesPlayerRendering defaults to FALSE, so
+        // without this the native render stacks on top of our overlay
+        // (double captions, and the native roll-up repaint reads as
+        // constant blinking).
+        output.suppressesPlayerRendering = true
         // Content-specified styling ONLY. The `.default` resolution bakes the
         // user's caption appearance into every run, which would make every
         // cue look "content-coloured" and defeat the Video Override gate in
@@ -557,10 +560,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     ///  - Identical re-emissions (the same block re-delivered each segment)
     ///    are ignored so the cue identities — and their SwiftUI views —
     ///    survive untouched.
-    ///  - A line that persists across events keeps its FIRST-seen start time,
-    ///    so its view identity is stable while new lines roll in under it.
+    ///  - Cues are TIMELESS (startTime 0, endTime huge). This pipeline is
+    ///    event-driven — whatever the last event delivered IS what's on
+    ///    screen — so the cues must never be gated by SubtitleModel's clock.
+    ///    The legible output's itemTime lives on the AVPlayerItem axis while
+    ///    the model runs on the engine's sourceTime axis (different on live
+    ///    HLS), and legible events can arrive AHEAD of display time; either
+    ///    mismatch makes time-stamped cues flicker in and out around the
+    ///    clock boundary.
     private func handleNativeLegible(strings: [NSAttributedString], at itemTime: CMTime) {
-        let time = max(0, CMTimeGetSeconds(itemTime))
         let lines = strings.compactMap(Self.styledLine(from:))
 
         if lines.isEmpty {
@@ -569,7 +577,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 guard let self else { return }
                 self.nativeLegibleClearWorkItem = nil
                 self.lastNativeLegibleLines = []
-                self.nativeLegibleFirstSeen = [:]
                 self.subtitleModel.update(cues: [])
             }
             nativeLegibleClearWorkItem = work
@@ -584,18 +591,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         guard lines != lastNativeLegibleLines else { return }
         lastNativeLegibleLines = lines
 
-        // Stable per-line start times (keyed by plain text so a colour
-        // change repaints the line without resetting its position in the
-        // stack); drop entries for lines that left.
-        var firstSeen: [String: Double] = [:]
-        for line in lines {
-            firstSeen[line.plain] = nativeLegibleFirstSeen[line.plain] ?? time
-        }
-        nativeLegibleFirstSeen = firstSeen
-
         let cues = lines.enumerated().map { index, line -> AetherSubtitleCue in
-            let start = firstSeen[line.plain] ?? time
-            return AetherSubtitleCue(id: index, startTime: start, endTime: start + 7200, body: .styledText(line.runs))
+            AetherSubtitleCue(
+                id: index,
+                startTime: 0,
+                endTime: .greatestFiniteMagnitude,
+                body: .styledText(line.runs)
+            )
         }
         subtitleModel.update(cues: cues)
     }

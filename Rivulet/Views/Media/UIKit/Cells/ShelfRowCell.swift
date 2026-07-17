@@ -288,6 +288,43 @@ final class ShelfRowCell: UICollectionViewCell {
         }
     }
 
+    /// Single-tile removal without nuking focus: delete the tile at the
+    /// captured index inside a batch update so the survivors slide over to
+    /// fill the gap. UIKit keeps focus coherent through a batch delete (it
+    /// tracks the focused cell across the update, landing on the slot's new
+    /// occupant when the focused tile itself was deleted) — which a
+    /// crossfade reload does not: the reload re-binds cell instances and
+    /// strands focus on whatever cell object the engine was holding. Falls
+    /// back to a plain reload when the caller's expectation doesn't match
+    /// the collection's actual shape (racing refresh).
+    func animateRemoval(at index: Int, newRealCount: Int, newSkeleton: Bool, contentToken: Int) {
+        let oldReal = realCount
+        let oldSkeleton = hasSkeleton
+        self.contentToken = contentToken
+        realCount = newRealCount
+        hasSkeleton = newSkeleton
+        guard index >= 0, index < oldReal, newRealCount == oldReal - 1,
+              rowCollectionView.numberOfItems(inSection: 0) == oldReal + (oldSkeleton ? 1 : 0)
+        else {
+            rowCollectionView.reloadData()
+            rowCollectionView.layoutIfNeeded()
+            return
+        }
+        let keepOffset = rowCollectionView.contentOffset.x
+        rowCollectionView.performBatchUpdates {
+            rowCollectionView.deleteItems(at: [IndexPath(item: index, section: 0)])
+            // Reconcile the skeleton placeholder (just past the real items) in
+            // the same batch, expressed in old-index space like the delete.
+            if oldSkeleton, !newSkeleton {
+                rowCollectionView.deleteItems(at: [IndexPath(item: oldReal, section: 0)])
+            } else if !oldSkeleton, newSkeleton {
+                rowCollectionView.insertItems(at: [IndexPath(item: newRealCount, section: 0)])
+            }
+        } completion: { [weak self] _ in
+            self?.setOffset(clampedTo: keepOffset)
+        }
+    }
+
     /// Append-only growth (pagination) without nuking focus: inserts the new
     /// trailing items; the skeleton placeholder (an unchanged trailing item)
     /// shifts to the new end automatically.

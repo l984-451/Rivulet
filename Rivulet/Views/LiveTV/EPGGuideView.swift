@@ -58,7 +58,19 @@ enum EPGTheme {
     /// Vertical gap between rows / horizontal gap between cells.
     static let cellSpacing: CGFloat = 4
     /// How far the guide timeline spans, starting at the current half hour.
-    static let timelineSpanHours: Int = 24
+    /// Now the CEILING / placeholder span rather than the fixed load window —
+    /// the live guide loads `initialGuideHours` up front and lazily extends.
+    /// Keep in sync with `LiveTVDataStore.epgMaxHoursAhead` (the fetch ceiling).
+    static let timelineSpanHours: Int = 72
+    /// EPG hours fetched up front when the guide first opens. Small so the grid
+    /// paints fast; `extendEPG` fills more in as the user scrolls right.
+    static let initialGuideHours: Int = 6
+    /// Hours pulled per lazy extension when scroll nears the loaded edge.
+    static let lazyLoadChunkHours: Int = 6
+    /// Fire the lazy-load request once the LEFT visible edge comes within this
+    /// many minutes of the loaded end. Sized to cover the visible width (~4 h)
+    /// plus a preload buffer, so more data arrives before the right edge does.
+    static let lazyLoadLookaheadMinutes: Double = 360
 }
 
 // MARK: - Program helpers
@@ -81,6 +93,10 @@ struct EPGGuide: UIViewRepresentable {
     var menuActive: Bool = false
     var onFocus: (UnifiedChannel?, UnifiedProgram?) -> Void
     var onSelect: (UnifiedChannel, UnifiedProgram?) -> Void
+    /// Fired when horizontal scroll (or focus) nears the loaded right edge, so
+    /// the host can fetch another chunk of EPG. Throttled to one call per
+    /// loaded-window size by the coordinator. nil = no lazy loading.
+    var onNeedMore: (() -> Void)? = nil
     /// Transparent overlay mode: see-through cells over an ambient backdrop.
     var transparent: Bool = true
     /// Space reserved above the time ruler (the info bar lives there).
@@ -169,6 +185,10 @@ struct EPGGuide: UIViewRepresentable {
         /// than the screen can't drag the guide away from the current time.
         private var lockedX: CGFloat = 0
         private var lockedXInitialized = false
+        /// Loaded-window size (parent.totalMinutes) that the last `onNeedMore`
+        /// request was fired for. Throttles lazy loading to one request per
+        /// window: once the window grows, the guard opens for the next edge.
+        private var requestedMoreForMinutes: Int = -1
         /// While `Date() < freeScrollUntil` the timeline may scroll horizontally.
         private var freeScrollUntil: Date = .distantPast
         private(set) var currentFocusedIsLive = false
@@ -342,6 +362,21 @@ struct EPGGuide: UIViewRepresentable {
                                                  at: IndexPath(item: 0, section: 0)) as? CornerView {
                 corner.configure(date: leftDate, transparent: parent.transparent)
             }
+            maybeRequestMore(leftMinutes: Double(minutesIn))
+        }
+
+        /// Lazy horizontal loading: when the left visible edge comes within the
+        /// look-ahead window of the loaded end, ask the host for more EPG. The
+        /// `requestedMoreForMinutes` guard fires at most once per loaded-window
+        /// size, so a scroll that lingers near the edge does not spam requests;
+        /// the guard reopens when the window grows and totalMinutes changes.
+        private func maybeRequestMore(leftMinutes: Double) {
+            guard parent.onNeedMore != nil,
+                  requestedMoreForMinutes != parent.totalMinutes,
+                  Double(parent.totalMinutes) - leftMinutes < EPGTheme.lazyLoadLookaheadMinutes
+            else { return }
+            requestedMoreForMinutes = parent.totalMinutes
+            parent.onNeedMore?()
         }
 
         func collectionView(_ cv: UICollectionView, didSelectItemAt indexPath: IndexPath) {

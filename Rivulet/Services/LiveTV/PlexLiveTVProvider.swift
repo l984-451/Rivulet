@@ -27,6 +27,9 @@ actor PlexLiveTVProvider: LiveTVProvider {
     // Cached data
     private var cachedChannels: [UnifiedChannel] = []
     private var cachedEPG: [String: [UnifiedProgram]] = [:]
+    /// Time range the merged `cachedEPG` covers, so a cache hit is served only
+    /// when it spans the requested window (see the lazy-load note in fetchEPG).
+    private var cachedEPGRange: (start: Date, end: Date)?
     private var lastChannelFetch: Date?
     private var lastEPGFetch: Date?
     private var capabilities: PlexLiveTVCapabilities?
@@ -184,8 +187,14 @@ actor PlexLiveTVProvider: LiveTVProvider {
         endDate: Date
     ) async throws -> [String: [UnifiedProgram]] {
         // Return cached if still valid and covers the requested range
+        // Serve from cache only when it's fresh AND actually COVERS the
+        // requested range. The guide's lazy horizontal loading asks for later
+        // windows ([loadedEnd, loadedEnd+chunk]); a range-blind cache would
+        // return the initial grid filtered to empty and stall the extension.
         if let lastFetch = lastEPGFetch,
            Date().timeIntervalSince(lastFetch) < epgCacheDuration,
+           let range = cachedEPGRange,
+           range.start <= startDate, range.end >= endDate,
            !cachedEPG.isEmpty {
             return filterEPG(cachedEPG, channels: channels, startDate: startDate, endDate: endDate)
         }
@@ -266,8 +275,21 @@ actor PlexLiveTVProvider: LiveTVProvider {
             }
         }
 
-        // Update cache
-        cachedEPG = unifiedEPG
+        // Update cache: MERGE this window into the retained grid (append +
+        // de-dupe by id) and widen the covered range, so a later lazy-load
+        // window adds to what's cached instead of replacing it.
+        for (channelId, programs) in unifiedEPG {
+            var existing = cachedEPG[channelId] ?? []
+            let known = Set(existing.map(\.id))
+            existing.append(contentsOf: programs.filter { !known.contains($0.id) })
+            existing.sort { $0.startTime < $1.startTime }
+            cachedEPG[channelId] = existing
+        }
+        if let range = cachedEPGRange {
+            cachedEPGRange = (min(range.start, startDate), max(range.end, endDate))
+        } else {
+            cachedEPGRange = (startDate, endDate)
+        }
         lastEPGFetch = Date()
 
         return unifiedEPG
@@ -491,6 +513,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
     func clearCache() {
         cachedChannels = []
         cachedEPG = [:]
+        cachedEPGRange = nil
         lastChannelFetch = nil
         lastEPGFetch = nil
         capabilities = nil

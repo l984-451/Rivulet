@@ -63,8 +63,10 @@ struct GuideLayoutView: View {
     /// nothing to land on and the channel can't be selected at all.
     private var programsByChannel: [String: [UnifiedProgram]] {
         var epg = dataStore.epg
+        let spanMinutes = totalMinutes
         for channel in channels where (epg[channel.id]?.isEmpty ?? true) {
-            epg[channel.id] = Self.placeholderPrograms(channelId: channel.id, from: timelineStart)
+            epg[channel.id] = Self.placeholderPrograms(
+                channelId: channel.id, from: timelineStart, spanMinutes: spanMinutes)
         }
         return epg
     }
@@ -72,9 +74,9 @@ struct GuideLayoutView: View {
     /// 4-hour "No guide data available." blocks spanning the visible timeline.
     /// Block boundaries are derived from the (fixed) timeline start, so ids
     /// stay stable across the 30s `now` ticks and don't churn the grid.
-    private static func placeholderPrograms(channelId: String, from start: Date) -> [UnifiedProgram] {
+    private static func placeholderPrograms(channelId: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
         let blockSeconds: TimeInterval = 4 * 3600
-        let span = TimeInterval(EPGTheme.timelineSpanHours * 3600)
+        let span = TimeInterval(spanMinutes * 60)
         var programs: [UnifiedProgram] = []
         var blockStart = start
         while blockStart < start.addingTimeInterval(span) {
@@ -91,7 +93,16 @@ struct GuideLayoutView: View {
         return programs
     }
 
-    private var totalMinutes: Int { EPGTheme.timelineSpanHours * 60 }
+    /// Timeline width in minutes, tracking the loaded EPG window so the grid
+    /// grows as `extendEPG` pulls more programming. Floors at the initial load
+    /// so the first paint has room, and never runs past the placeholder ceiling.
+    private var totalMinutes: Int {
+        let floor = EPGTheme.initialGuideHours * 60
+        let ceiling = EPGTheme.timelineSpanHours * 60
+        guard let through = dataStore.epgLoadedThrough else { return floor }
+        let loaded = Int(through.timeIntervalSince(timelineStart) / 60)
+        return min(max(floor, loaded), ceiling)
+    }
 
     /// Height of the category tab bar between the info bar and the time ruler.
     private let categoryBarHeight: CGFloat = 64
@@ -148,7 +159,7 @@ struct GuideLayoutView: View {
         .task {
             if dataStore.channels.isEmpty { await dataStore.loadChannels() }
             if dataStore.epg.isEmpty {
-                await dataStore.loadEPG(startDate: Date(), hours: EPGTheme.timelineSpanHours)
+                await dataStore.loadEPG(startDate: timelineStart, hours: EPGTheme.initialGuideHours)
             }
             seedFocus()
         }
@@ -172,6 +183,9 @@ struct GuideLayoutView: View {
                     focusedProgram = program
                 },
                 onSelect: { channel, _ in selectChannel(channel) },
+                onNeedMore: {
+                    Task { await dataStore.extendEPG(byHours: EPGTheme.lazyLoadChunkHours) }
+                },
                 transparent: true,                 // dark see-through boxes + rounded clipping
                 // Reserve the info bar + category bar above the ruler.
                 topInset: EPGTheme.infoBarHeight + categoryBarHeight

@@ -361,22 +361,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
 
         // Programme progress bar (non-seekable): map the show window onto the VOD
-        // scrubber — elapsed = now - start, duration = end - start. remaining/ends-at
-        // then read as "time left in the show" / the show's end clock time. Hidden when
-        // there's no guide data to anchor to.
+        // scrubber, with start/end clock times at the edges and the current clock
+        // time following the playhead. Hidden when there's no guide data to anchor to.
         if let current, current.endTime > current.startTime {
             progressBar.isHidden = false
-            let elapsed = max(0, Date().timeIntervalSince(current.startTime))
-            let duration = current.endTime.timeIntervalSince(current.startTime)
-            progressBar.update(
-                currentTime: min(elapsed, duration),
-                duration: duration,
-                isScrubbing: false,
-                scrubTime: 0,
-                scrubStepLabelText: nil,
-                scrubThumbnail: nil,
-                markers: [],
-                chapters: []
+            progressBar.updateLiveTimeline(
+                startTime: current.startTime,
+                currentTime: Date(),
+                endTime: current.endTime
             )
         } else {
             progressBar.isHidden = true

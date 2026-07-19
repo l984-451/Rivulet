@@ -568,11 +568,15 @@ final class EPGLayout: UICollectionViewLayout {
         let a = EPGCellAttributes(forSupplementaryViewOfKind: elementKind, with: indexPath)
         switch elementKind {
         case Self.kindChannel:
-            let slotTop = CGFloat(indexPath.section) * rowH
-            a.frame = CGRect(x: off.x, y: slotTop, width: colW, height: rowH)
+            // Use the exact same vertical frame as the programme cells. Keeping
+            // the row inset in layout attributes (rather than applying it later
+            // inside the supplementary view) avoids a subtle top-row rounding /
+            // clipping mismatch at the pinned ruler edge.
+            let frameY = CGFloat(indexPath.section) * rowH + gap
+            a.frame = CGRect(x: off.x, y: frameY, width: colW, height: rowH - gap * 2)
             a.zIndex = 10
             let visibleTop = off.y + rulerTop + headerH + gap
-            a.topClip = min(max(0, visibleTop - slotTop), rowH)
+            a.topClip = min(max(0, visibleTop - frameY), a.frame.height)
         case Self.kindTime:
             a.frame = CGRect(x: 0, y: off.y + rulerTop, width: contentWidth, height: headerH)
             a.zIndex = 12
@@ -746,6 +750,8 @@ final class ChannelColumnView: UICollectionReusableView {
     private let occluder = UIView()   // opaque; rounded only on the right
     private let box = UIView()        // coloured logo box; rounded all corners
     private let logo = UIImageView()
+    private var logoLoadTask: Task<Void, Never>?
+    private var currentLogoURL: URL?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -772,12 +778,12 @@ final class ChannelColumnView: UICollectionReusableView {
         let gap = EPGTheme.cellSpacing
         NSLayoutConstraint.activate([
             occluder.topAnchor.constraint(equalTo: topAnchor),
-            occluder.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -gap),
+            occluder.bottomAnchor.constraint(equalTo: bottomAnchor),
             occluder.leadingAnchor.constraint(equalTo: leadingAnchor),
             occluder.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            box.topAnchor.constraint(equalTo: topAnchor, constant: gap),
-            box.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -gap),
+            box.topAnchor.constraint(equalTo: topAnchor),
+            box.bottomAnchor.constraint(equalTo: bottomAnchor),
             box.leadingAnchor.constraint(equalTo: leadingAnchor, constant: gap),
             box.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -gap),
 
@@ -792,14 +798,36 @@ final class ChannelColumnView: UICollectionReusableView {
     func configure(_ channel: UnifiedChannel, transparent: Bool = false) {
         occluder.backgroundColor = transparent ? .clear : UIColor(EPGTheme.background)
         box.backgroundColor = transparent ? UIColor(white: 0, alpha: 0.28) : UIColor(EPGTheme.columnFill)
+
+        let nextLogoURL = channel.logoURL
+        if let nextLogoURL,
+           currentLogoURL == nextLogoURL,
+           logo.image != nil || logoLoadTask != nil {
+            return
+        }
+
+        logoLoadTask?.cancel()
+        logoLoadTask = nil
         logo.image = nil
-        if let url = channel.logoURL {
-            EPGLogoCache.shared.load(url) { [weak self] image in self?.logo.image = image }
+        currentLogoURL = nextLogoURL
+        guard let url = currentLogoURL else { return }
+
+        logoLoadTask = Task { [weak self] in
+            let image = await ImageCacheManager.shared.image(for: url, quality: .thumb)
+            guard let self,
+                  !Task.isCancelled,
+                  self.currentLogoURL == url
+            else { return }
+            self.logo.image = image
+            self.logoLoadTask = nil
         }
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        logoLoadTask?.cancel()
+        logoLoadTask = nil
+        currentLogoURL = nil
         logo.image = nil
     }
 
@@ -816,10 +844,10 @@ final class ChannelColumnView: UICollectionReusableView {
     }
     private func applyClip() {
         let gap = EPGTheme.cellSpacing
-        guard topClip > gap, bounds.height > 0 else { layer.mask = nil; return }
+        guard topClip > 0.5, bounds.height > 0 else { layer.mask = nil; return }
         let rect = CGRect(x: gap, y: topClip,
                           width: max(bounds.width - gap * 2, 0),
-                          height: max(bounds.height - gap - topClip, 0))
+                          height: max(bounds.height - topClip, 0))
         let r = EPGTheme.columnCorner
         clipMask.path = UIBezierPath(roundedRect: rect, byRoundingCorners: [.topLeft, .topRight],
                                      cornerRadii: CGSize(width: r, height: r)).cgPath
@@ -904,6 +932,7 @@ final class CornerView: UICollectionReusableView {
         addSubview(box)
         label.font = .systemFont(ofSize: 20, weight: .bold)
         label.textColor = .white
+        label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(label)
 
@@ -914,7 +943,7 @@ final class CornerView: UICollectionReusableView {
             box.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -gap),
             box.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -gap),
             box.heightAnchor.constraint(equalToConstant: boxH),
-            label.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 14),
+            label.centerXAnchor.constraint(equalTo: box.centerXAnchor),
             label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
         ])
     }
@@ -928,22 +957,6 @@ final class CornerView: UICollectionReusableView {
         } else {
             label.text = d.formatted(.dateTime.weekday(.abbreviated)).uppercased()
         }
-    }
-}
-
-// MARK: - Logo cache
-
-final class EPGLogoCache {
-    static let shared = EPGLogoCache()
-    private let cache = NSCache<NSURL, UIImage>()
-
-    func load(_ url: URL, completion: @escaping (UIImage?) -> Void) {
-        if let cached = cache.object(forKey: url as NSURL) { completion(cached); return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data, let image = UIImage(data: data) else { return }
-            self?.cache.setObject(image, forKey: url as NSURL)
-            DispatchQueue.main.async { completion(image) }
-        }.resume()
     }
 }
 

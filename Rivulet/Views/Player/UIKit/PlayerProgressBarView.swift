@@ -126,6 +126,8 @@ final class PlayerProgressBarView: UIView {
     private var lastMarkers: [PlexMarker] = []
 
     private var trackHeightConstraint: NSLayoutConstraint!
+    private var endsAtTrailingConstraint: NSLayoutConstraint!
+    private var endsAtPlayheadConstraint: NSLayoutConstraint!
 
     /// Loading placeholder mode; see `setSkeleton(_:)`.
     private var isSkeleton = false
@@ -271,6 +273,12 @@ final class PlayerProgressBarView: UIView {
 
         trackHeightConstraint = trackBackground.heightAnchor.constraint(equalToConstant: Metrics.trackHeight)
 
+        endsAtTrailingConstraint = endsAtLabel.trailingAnchor.constraint(
+            equalTo: remainingTimeLabel.leadingAnchor,
+            constant: -Metrics.endsAtGap
+        )
+        endsAtPlayheadConstraint = endsAtLabel.centerXAnchor.constraint(equalTo: leadingAnchor)
+
         NSLayoutConstraint.activate([
             trackBackground.topAnchor.constraint(equalTo: topAnchor),
             trackBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -290,7 +298,7 @@ final class PlayerProgressBarView: UIView {
             remainingTimeLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
 
             endsAtLabel.centerYAnchor.constraint(equalTo: remainingTimeLabel.centerYAnchor),
-            endsAtLabel.trailingAnchor.constraint(equalTo: remainingTimeLabel.leadingAnchor, constant: -Metrics.endsAtGap),
+            endsAtTrailingConstraint,
 
             bottomAnchor.constraint(equalTo: currentTimeLabel.bottomAnchor),
         ])
@@ -451,6 +459,38 @@ final class PlayerProgressBarView: UIView {
         let showWheelIndicator = isScrubbing && isWheelScrubbing
         wheelRing.isHidden = !showWheelIndicator
         wheelDot.isHidden = !showWheelIndicator
+    }
+
+    /// Live TV keeps the progress bar's existing geometry and fill treatment,
+    /// but labels the programme window with wall-clock times. The current clock
+    /// time follows the playhead instead of occupying either edge.
+    func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date) {
+        let duration = endTime.timeIntervalSince(startTime)
+        guard duration > 0 else { return }
+
+        let elapsed = min(max(0, currentTime.timeIntervalSince(startTime)), duration)
+        update(
+            currentTime: elapsed,
+            duration: duration,
+            isScrubbing: false,
+            scrubTime: 0,
+            scrubStepLabelText: nil,
+            scrubThumbnail: nil,
+            markers: [],
+            chapters: []
+        )
+
+        currentTimeLabel.text = Self.endsAtFormatter.string(from: startTime)
+        remainingTimeLabel.text = Self.endsAtFormatter.string(from: endTime)
+        endsAtLabel.text = Self.endsAtFormatter.string(from: currentTime)
+        endsAtLabel.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
+        endsAtLabel.textColor = UIColor.white.withAlphaComponent(0.82)
+        endsAtLabel.textAlignment = .center
+        endsAtLabel.isHidden = false
+
+        endsAtTrailingConstraint.isActive = false
+        endsAtPlayheadConstraint.constant = trackBackground.bounds.width * CGFloat(elapsed / duration)
+        endsAtPlayheadConstraint.isActive = true
     }
 
     /// Loading placeholder: keeps the locked geometry and vertical rhythm

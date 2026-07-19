@@ -423,7 +423,11 @@ final class AetherPlayer: PlayerProtocol {
             // Honor the user's saved audio/subtitle language preferences, same
             // as VOD, so the right tracks are picked on the first frame.
             preferredAudioLanguages: Self.livePreferredAudioLanguages(),
-            preferredSubtitleLanguages: Self.livePreferredSubtitleLanguages()
+            preferredSubtitleLanguages: Self.livePreferredSubtitleLanguages(),
+            // DVB teletext caption page. libzvbi auto-detect (nil) only finds a page the broadcast
+            // FLAGS as a subtitle page; AU FTA channels carry captions on 801 without that flag, so
+            // auto-detect returns nothing. Region-default to 801 for AU, otherwise auto-detect.
+            teletextPage: Self.liveTeletextPage()
         )
         do {
             // Broadcast H.264 routinely mis-signals interlaced content as
@@ -466,6 +470,17 @@ final class AetherPlayer: PlayerProtocol {
             return [language]
         }
         return []
+    }
+
+    /// DVB teletext caption page for live loads. A `liveTeletextPage` UserDefaults key overrides
+    /// everything (0 = force libzvbi auto-detect); otherwise Australian regions default to 801 (AU
+    /// FTA carries captions there without flagging it as a subtitle page, so auto-detect misses it)
+    /// and every other region uses libzvbi's flagged-subtitle-page auto-detect (nil).
+    private static func liveTeletextPage() -> Int? {
+        if let stored = UserDefaults.standard.object(forKey: "liveTeletextPage") as? Int {
+            return stored == 0 ? nil : stored
+        }
+        return Locale.current.region?.identifier == "AU" ? 801 : nil
     }
 
     func load(

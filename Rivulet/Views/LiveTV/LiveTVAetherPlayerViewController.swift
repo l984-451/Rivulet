@@ -143,6 +143,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Same glass rail as Aether VOD; Up Next and Insights are hidden (they
     /// have no meaning for a live broadcast).
     private let railView = PlayerRailView()
+    /// Non-seekable programme progress bar shown above the rail (see LiveProgressBarView).
+    private let liveProgressBar = LiveProgressBarView()
     private var railVisible = false
     private var activePanel: PlayerRailPanelView?
     private var autoHideTimer: Timer?
@@ -312,6 +314,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             railView.heightAnchor.constraint(equalToConstant: PlayerRailView.railHeight),
         ])
 
+        // Programme progress bar, sitting just above the rail and fading with it.
+        liveProgressBar.alpha = 0
+        liveProgressBar.transform = CGAffineTransform(translationX: 0, y: 24)
+        view.addSubview(liveProgressBar)
+        liveProgressBar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            liveProgressBar.leadingAnchor.constraint(equalTo: railView.leadingAnchor),
+            liveProgressBar.trailingAnchor.constraint(equalTo: railView.trailingAnchor),
+            liveProgressBar.bottomAnchor.constraint(equalTo: railView.topAnchor, constant: -20),
+            liveProgressBar.heightAnchor.constraint(equalToConstant: 30),
+        ])
+
         railView.onSubtitles = { [weak self] in self?.presentSubtitlePanel() }
         railView.onAudio = { [weak self] in self?.presentAudioPanel() }
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
@@ -343,6 +357,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             runtime = "\(formatter.string(from: current.startTime)) – \(formatter.string(from: current.endTime))"
         }
 
+        // Programme progress bar (non-seekable): spans the show window, knob at now.
+        liveProgressBar.update(start: current?.startTime, end: current?.endTime)
+
         var audioDescription: String?
         if let aether = aetherPlayer,
            let activeId = aether.currentAudioTrackId,
@@ -362,6 +379,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         UIView.animate(withDuration: 0.25) {
             self.railView.alpha = 1
             self.railView.transform = .identity
+            self.liveProgressBar.alpha = 1
+            self.liveProgressBar.transform = .identity
         }
         rebuildSubtitleOverlay()
         setNeedsFocusUpdate()
@@ -378,6 +397,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         UIView.animate(withDuration: 0.2) {
             self.railView.alpha = 0
             self.railView.transform = CGAffineTransform(translationX: 0, y: 24)
+            self.liveProgressBar.alpha = 0
+            self.liveProgressBar.transform = CGAffineTransform(translationX: 0, y: 24)
         }
         rebuildSubtitleOverlay()
         setNeedsFocusUpdate()

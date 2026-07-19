@@ -67,11 +67,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var fallbackStage = 0
     private var isFallbackInFlight = false
 
-    /// Plex releases a tuned /livetv/sessions grab unless the client reports
-    /// a timeline periodically. Pings every 60s while playing; a final
-    /// "stopped" ping on teardown releases the tuner promptly.
-    private var keepAliveTask: Task<Void, Never>?
-    private var stopPingURL: URL?
+    /// Keeps the tuned session alive and publishes full Plex Dashboard state.
+    private lazy var liveTimelineReporter = PlexLiveTVTimelineReporter(channel: channel)
 
     /// The in-flight stream resolve/load (and its fallback retries). Held so it
     /// can be cancelled on dismissal — otherwise a slow Plex tune could finish
@@ -212,6 +209,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 switch state {
                 case .playing:
                     self.loadingSpinner.stopAnimating()
+                    self.liveTimelineReporter.setState("playing")
+                case .paused:
+                    self.liveTimelineReporter.setState("paused")
                 case .failed:
                     guard !self.isFallbackInFlight else { return }
                     self.advanceFallback()
@@ -939,71 +939,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         lastResortLayer?.frame = view.bounds
     }
 
-    // MARK: - Live session keepalive (Plex tuner grabs)
+    // MARK: - Plex Live TV timeline
 
-    /// If the stream URL carries a tuned Plex live session, report a timeline
-    /// every 60s so the server keeps the tuner grab alive, and remember a
-    /// "stopped" ping to release it on dismiss. No-op for non-Plex streams.
     private func startLiveSessionKeepAlive(for url: URL) {
-        keepAliveTask?.cancel()
-        keepAliveTask = nil
-        stopPingURL = nil
-
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let token = components.queryItems?.first(where: { $0.name == "X-Plex-Token" })?.value,
-              let scheme = components.scheme,
-              let host = components.host else { return }
-
-        // Session path comes from either form of tuned URL:
-        //  - direct part:          /livetv/sessions/<uuid>/<tuner>/index.m3u8
-        //  - universal transcode:  …start.ts?path=/livetv/sessions/<uuid>
-        let sessionPath: String
-        if url.path.hasPrefix("/livetv/sessions/") {
-            let parts = url.path.split(separator: "/")  // [livetv, sessions, uuid, …]
-            guard parts.count >= 3 else { return }
-            sessionPath = "/livetv/sessions/\(parts[2])"
-        } else if let queryPath = components.queryItems?.first(where: { $0.name == "path" })?.value,
-                  queryPath.hasPrefix("/livetv/sessions/") {
-            sessionPath = queryPath
-        } else {
-            return  // Not a tuned Plex session — no keepalive needed.
-        }
-
-        let port = components.port.map { ":\($0)" } ?? ""
-
-        func timelineURL(state: String) -> URL? {
-            var ping = URLComponents(string: "\(scheme)://\(host)\(port)/:/timeline")
-            ping?.queryItems = [
-                URLQueryItem(name: "key", value: sessionPath),
-                URLQueryItem(name: "state", value: state),
-                URLQueryItem(name: "time", value: "0"),
-                URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
-                URLQueryItem(name: "X-Plex-Token", value: token)
-            ]
-            return ping?.url
-        }
-
-        stopPingURL = timelineURL(state: "stopped")
-        guard let playingURL = timelineURL(state: "playing") else { return }
-
-        keepAliveTask = Task.detached(priority: .utility) {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                guard !Task.isCancelled else { return }
-                _ = try? await URLSession.shared.data(from: playingURL)
-            }
-        }
+        liveTimelineReporter.start(url: url)
     }
 
     private func stopLiveSessionKeepAlive() {
-        keepAliveTask?.cancel()
-        keepAliveTask = nil
-        if let stopURL = stopPingURL {
-            stopPingURL = nil
-            Task.detached(priority: .utility) {
-                _ = try? await URLSession.shared.data(from: stopURL)
-            }
-        }
+        liveTimelineReporter.stop()
     }
 
     // MARK: - Subtitle overlay (same overlay as Aether VOD)

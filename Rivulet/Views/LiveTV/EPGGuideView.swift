@@ -972,7 +972,7 @@ struct GuideInfoBar: View {
     /// falling back to any programme icon. The channel logo is handled
     /// separately so it can be letterboxed into a 2:3 frame.
     private var programImageURL: URL? {
-        program?.posterURL ?? program?.iconURL ?? program?.landscapeURL
+        program?.posterURL ?? program?.iconURL
     }
 
     var body: some View {

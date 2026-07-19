@@ -259,8 +259,8 @@ struct GuideLayoutView: View {
     /// backdrop and the stock settings background shows instead.
     private var guideBackdropURL: URL? {
         guard let prog = focusedProgram, let landscape = prog.landscapeURL else { return nil }
-        let posterSource = prog.posterURL ?? prog.iconURL ?? prog.landscapeURL
-        return landscape != posterSource ? landscape : nil
+        guard let posterSource = prog.posterURL ?? prog.iconURL else { return landscape }
+        return landscape == posterSource ? nil : landscape
     }
 
     /// A constant full-screen layer. The backdrop image is drawn INSIDE it as an

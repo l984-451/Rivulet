@@ -124,6 +124,8 @@ nonisolated struct PlexLiveTVProgram: Codable, Identifiable, Sendable {
     let summary: String?
     let thumb: String?
     let art: String?
+    let parentThumb: String?
+    let parentArt: String?
     let grandparentThumb: String?
     let grandparentArt: String?
     let year: Int?
@@ -250,65 +252,49 @@ extension PlexLiveTVChannel {
         ]
         SentryBridge.addBreadcrumb(startBreadcrumb)
 
+        // Plex's universal Live TV output is standard HLS with MPEG-TS media
+        // segments and, when available, a WebVTT subtitle rendition.
         var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/start.m3u8")
 
         // Build the client profile extras - these define codec support and limitations
         // This matches what official Plex clients send for Apple TV
         let profileExtras = buildClientProfileExtras()
 
+        let productVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? "1.0"
         components?.queryItems = [
-            // Core transcode parameters
+            // Plex session identity. The transcoder uses these to associate
+            // the master, child playlist, and segment requests with the same
+            // client instead of creating an orphaned session.
+            URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
+            URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionId),
+            URLQueryItem(name: "X-Plex-Platform", value: "Generic"),
+            URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName),
+            URLQueryItem(name: "X-Plex-Version", value: productVersion),
+
+            // Plezy-compatible Live TV decision/start handshake.
             URLQueryItem(name: "X-Plex-Client-Profile-Name", value: "Generic"),
             URLQueryItem(name: "path", value: key),
             URLQueryItem(name: "mediaIndex", value: "0"),
             URLQueryItem(name: "partIndex", value: "0"),
-            URLQueryItem(name: "offset", value: "0"),
             URLQueryItem(name: "protocol", value: "hls"),
-
-            // Container format
-            URLQueryItem(name: "container", value: "mpegts"),
-            URLQueryItem(name: "segmentFormat", value: "mpegts"),
-            URLQueryItem(name: "segmentContainer", value: "mpegts"),
-
-            // Playback mode - DIRECT STREAM: the server remuxes the tuner feed
-            // (no re-encode; the codec lists below declare the raw broadcast
-            // codecs as acceptable) and AetherEngine demuxes it client-side.
-            // directPlay stays off — the universal endpoint refuses to build a
-            // session when it decides direct play.
             URLQueryItem(name: "directPlay", value: "0"),
             URLQueryItem(name: "directStream", value: "1"),
             URLQueryItem(name: "directStreamAudio", value: "1"),
-
-            // Video settings - include mpeg2video so DVB broadcasts direct-play
-            // instead of forcing a video transcode (Aether software-decodes it)
-            URLQueryItem(name: "videoCodec", value: "h264,hevc,mpeg2video"),
-            URLQueryItem(name: "videoResolution", value: "1920x1080"),
-            URLQueryItem(name: "maxVideoBitrate", value: "20000"),
-            URLQueryItem(name: "videoQuality", value: "100"),
-
-            // HLS segment settings
-            URLQueryItem(name: "segmentDuration", value: "6"),
-
-            // Audio settings - include mp2/mp3 (common on DVB) for direct play
-            URLQueryItem(name: "audioCodec", value: "aac,ac3,eac3,mp2,mp3"),
-            URLQueryItem(name: "audioBitrate", value: "384"),
-            URLQueryItem(name: "audioChannels", value: "6"),
-
-            // Subtitles
             URLQueryItem(name: "subtitles", value: "auto"),
+            URLQueryItem(name: "advancedSubtitles", value: "text"),
             URLQueryItem(name: "subtitleSize", value: "100"),
-
-            // Context and location
-            URLQueryItem(name: "context", value: "streaming"),
+            URLQueryItem(name: "audioBoost", value: "100"),
             URLQueryItem(name: "location", value: "lan"),
-
-            // Session management
+            URLQueryItem(name: "addDebugOverlay", value: "0"),
             URLQueryItem(name: "session", value: sessionId),
             URLQueryItem(name: "autoAdjustQuality", value: "0"),
             URLQueryItem(name: "hasMDE", value: "1"),
-
-            // Fast seeking support
             URLQueryItem(name: "fastSeek", value: "1"),
+            URLQueryItem(name: "mediaBufferSize", value: "157286"),
+            URLQueryItem(name: "copyts", value: "0"),
+            URLQueryItem(name: "Accept-Language", value: "en"),
+            URLQueryItem(name: "X-Plex-Incomplete-Segments", value: "1"),
 
             // Client profile extras - critical for Plex to understand client capabilities
             URLQueryItem(name: "X-Plex-Client-Profile-Extra", value: profileExtras),
@@ -316,6 +302,12 @@ extension PlexLiveTVChannel {
             // Authentication
             URLQueryItem(name: "X-Plex-Token", value: authToken),
         ]
+        // `+` separates Plex profile clauses. Encode it as data, not the
+        // application/x-www-form-urlencoded spelling of a space.
+        if let encodedQuery = components?.percentEncodedQuery {
+            components?.percentEncodedQuery = encodedQuery
+                .replacingOccurrences(of: "+", with: "%2B")
+        }
 
         let resultURL = components?.url
 
@@ -349,25 +341,13 @@ extension PlexLiveTVChannel {
     /// Build the X-Plex-Client-Profile-Extra parameter value.
     /// This tells Plex what codecs and formats the client supports.
     private func buildClientProfileExtras() -> String {
-        // Each profile directive is separated by "+"
-        // These are URL-encoded when added to the query string
+        // Match Plezy's known-working Live TV profile exactly. Plex keeps the
+        // programme in HLS/MPEG-TS and exposes the selected subtitle as a
+        // WebVTT rendition alongside it.
         let profiles = [
-            // Direct play profiles - what we can play without transcoding.
-            // AetherEngine demuxes MPEG-TS and software-decodes MPEG-2, so
-            // declare the raw DVB codecs too and let Plex skip the transcoder.
-            "add-direct-play-profile(type=videoProfile&protocol=http&container=mpegts&videoCodec=h264,hevc,mpeg2video&audioCodec=aac,ac3,eac3,mp2,mp3)",
-            "add-direct-play-profile(type=videoProfile&protocol=hls&container=mpegts&videoCodec=h264,hevc,mpeg2video&audioCodec=aac,ac3,eac3,mp2,mp3)",
-
-            // Transcode target - how to transcode if needed
-            "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264,hevc&audioCodec=aac,ac3,eac3&replace=true)",
-
-            // Subtitle transcode target
+            "add-settings(DirectPlayStreamSelection=true)",
+            "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp3)",
             "add-transcode-target(type=subtitleProfile&context=streaming&protocol=hls&container=webvtt&subtitleCodec=webvtt)",
-
-            // Limitations - match Apple TV 4K capabilities
-            "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.width&value=1920&replace=true)",
-            "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.height&value=1080&replace=true)",
-            "add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=6&replace=true)",
         ]
 
         return profiles.joined(separator: "+")
@@ -485,12 +465,27 @@ extension PlexLiveTVProgram {
         // Prefer the programme's own artwork, falling back to the show's
         // (grandparent) poster/art, which Plex often populates when the
         // per-episode image is missing.
-        let poster = Self.plexImageURL(thumb ?? grandparentThumb, serverURL: serverURL, authToken: authToken)
-        let background = Self.plexImageURL(art ?? grandparentArt, serverURL: serverURL, authToken: authToken)
+        // Plex episode metadata uses `thumb` for the 16:9 episode still and
+        // parent/grandparent thumbs for portrait season/show posters. Movies
+        // use their own thumb as the poster. Keep those roles separate so a
+        // landscape episode still is never promoted into the 2:3 poster slot.
+        let isEpisode = type?.lowercased() == "episode" || grandparentTitle != nil
+        let posterPath = isEpisode
+            ? (grandparentThumb ?? parentThumb)
+            : (thumb ?? grandparentThumb ?? parentThumb)
+        let backgroundPath = isEpisode
+            ? (thumb ?? art ?? grandparentArt ?? parentArt)
+            : (art ?? grandparentArt ?? parentArt)
+
+        let poster = Self.plexImageURL(
+            posterPath, serverURL: serverURL, authToken: authToken)
+        let background = Self.plexImageURL(
+            backgroundPath, serverURL: serverURL, authToken: authToken)
 
         return UnifiedProgram(
             id: programId,
             channelId: unifiedChannelId,
+            sourceProgramId: ratingKey,
             title: grandparentTitle ?? title,
             subtitle: grandparentTitle != nil ? title : parentTitle,
             description: summary,

@@ -241,6 +241,7 @@ struct StreamSlotView: View {
                 isHD: true
             ),
             aetherPlayer: AetherPlayer(),
+            timelineReporter: nil,
             playbackState: .loading,
             isMuted: false
         ),

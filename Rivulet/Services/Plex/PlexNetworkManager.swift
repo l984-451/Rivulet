@@ -2181,15 +2181,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return channels
     }
 
-    /// Tune a Plex Live TV channel and return the live session UUID.
+    /// Tune a Plex Live TV channel and return its playback handshake values.
     ///
     /// Cloud-EPG / DVB DVRs require this tune step before the universal
     /// transcoder can open the stream: pointing `path` at the EPG channel
     /// metadata returns HTTP 400. The correct flow (matching Plex's own
     /// clients) is:
     ///   POST /livetv/dvrs/{dvrKey}/channels/{channelId}/tune
-    ///   → MediaSubscription → MediaGrabOperation → Video → Media[0].uuid
-    ///   → play with path=/livetv/sessions/{uuid}
+    ///   → MediaSubscription → MediaGrabOperation → Metadata.key
+    ///   → decision + start with that exact key and the tune session identifier
     func tuneLiveTVChannel(
         serverURL: String,
         authToken: String,
@@ -2201,20 +2201,24 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             ? String(channelIdentifier.split(separator: "/").last ?? "")
             : channelIdentifier
 
+        let sessionIdentifier = UUID().uuidString.uppercased()
         guard !channelId.isEmpty,
-              let url = URL(string: "\(serverURL)/livetv/dvrs/\(dvrKey)/channels/\(channelId)/tune") else {
+              var components = URLComponents(
+                  string: "\(serverURL)/livetv/dvrs/\(dvrKey)/channels/\(channelId)/tune"
+              ) else {
             throw PlexAPIError.invalidURL
         }
+        components.queryItems = [
+            URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier),
+        ]
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
 
         var headers = plexHeaders(authToken: authToken)
         headers["Accept"] = "application/json"
         let data = try await requestData(url, method: "POST", headers: headers)
 
-        // The response shape varies between PMS versions and EPG providers:
-        // XML <Video> can surface in JSON as "Video" OR "Metadata", and the
-        // nesting under MediaGrabOperation isn't stable. Rather than pinning a
-        // Codable shape, walk the tree for the first Media entry carrying a
-        // uuid — that's the livetv session id in every observed variant.
+        // The response shape varies between PMS versions and EPG providers,
+        // so walk it rather than pinning one Codable nesting shape.
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let mediaContainer = root["MediaContainer"] as? [String: Any] else {
             let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
@@ -2228,55 +2232,48 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.parsingError
         }
 
-        func firstMediaUUID(in node: Any) -> String? {
+        // Plex's playback contract is the exact Metadata.key returned by the
+        // tune response. It is not the Media.uuid and not a nested Part.key.
+        // PMS may add provider-specific structure to this path, so preserve it
+        // verbatim for the universal-transcoder decision/start handshake.
+        func liveSessionPath(inMetadata node: Any) -> String? {
             if let dict = node as? [String: Any] {
-                if let mediaArray = dict["Media"] as? [[String: Any]] {
-                    for media in mediaArray {
-                        if let uuid = media["uuid"] as? String, !uuid.isEmpty { return uuid }
-                    }
-                } else if let media = dict["Media"] as? [String: Any],
-                          let uuid = media["uuid"] as? String, !uuid.isEmpty {
-                    return uuid
+                if let key = dict["key"] as? String,
+                   key.hasPrefix("/livetv/sessions/"),
+                   !key.lowercased().contains(".m3u8") {
+                    return key
                 }
                 for value in dict.values {
-                    if let uuid = firstMediaUUID(in: value) { return uuid }
+                    if let path = liveSessionPath(inMetadata: value) { return path }
                 }
             } else if let array = node as? [Any] {
                 for value in array {
-                    if let uuid = firstMediaUUID(in: value) { return uuid }
+                    if let path = liveSessionPath(inMetadata: value) { return path }
                 }
             }
             return nil
         }
 
-        // The Part key inside the grab is the DIRECT-PLAY stream: the DVR's
-        // own HLS of the raw broadcast (/livetv/sessions/<uuid>/<tuner>/index.m3u8),
-        // served without the universal transcoder.
-        func firstPartKey(in node: Any) -> String? {
+        func firstTuneMetadataSessionPath(in node: Any) -> String? {
             if let dict = node as? [String: Any] {
-                let parts: [[String: Any]]
-                if let arr = dict["Part"] as? [[String: Any]] { parts = arr }
-                else if let one = dict["Part"] as? [String: Any] { parts = [one] }
-                else { parts = [] }
-                for part in parts {
-                    if let key = part["key"] as? String, key.contains("/livetv/sessions/") {
-                        return key
-                    }
+                if let metadata = dict["Metadata"],
+                   let path = liveSessionPath(inMetadata: metadata) {
+                    return path
                 }
                 for value in dict.values {
-                    if let key = firstPartKey(in: value) { return key }
+                    if let path = firstTuneMetadataSessionPath(in: value) { return path }
                 }
             } else if let array = node as? [Any] {
                 for value in array {
-                    if let key = firstPartKey(in: value) { return key }
+                    if let path = firstTuneMetadataSessionPath(in: value) { return path }
                 }
             }
             return nil
         }
 
-        guard let uuid = firstMediaUUID(in: mediaContainer) else {
+        guard let sessionPath = firstTuneMetadataSessionPath(in: mediaContainer) else {
             let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
-            breadcrumb.message = "Tune succeeded but no Media uuid found"
+            breadcrumb.message = "Tune succeeded but no live Metadata.key found"
             breadcrumb.data = [
                 "dvr": dvrKey,
                 "channel": channelId,
@@ -2287,8 +2284,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidResponse
         }
 
-        let partKey = firstPartKey(in: mediaContainer)
-        return PlexLiveTVTuneResult(sessionUUID: uuid, partKey: partKey)
+        let sessionUUID = sessionPath.split(separator: "/").dropFirst(2).first.map(String.init)
+            ?? sessionIdentifier
+        return PlexLiveTVTuneResult(
+            sessionUUID: sessionUUID,
+            sessionPath: sessionPath,
+            sessionIdentifier: sessionIdentifier
+        )
     }
 
     /// Extract provider path from DVR key and lineup URL for EPG access
@@ -2385,6 +2387,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let summary: String?
             let thumb: String?
             let art: String?
+            let parentThumb: String?
+            let parentArt: String?
             let grandparentThumb: String?
             let grandparentArt: String?
             let year: Int?
@@ -2435,6 +2439,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                     summary: program.summary,
                     thumb: program.thumb,
                     art: program.art,
+                    parentThumb: program.parentThumb,
+                    parentArt: program.parentArt,
                     grandparentThumb: program.grandparentThumb,
                     grandparentArt: program.grandparentArt,
                     year: program.year,
@@ -2804,10 +2810,12 @@ nonisolated struct PlexLiveTVTuneResult: Sendable {
     /// The livetv session uuid (usable as path=/livetv/sessions/<uuid> on the
     /// universal transcoder).
     let sessionUUID: String
-    /// The grab's Part key — the DVR's own HLS of the RAW broadcast
-    /// (/livetv/sessions/<uuid>/<tuner>/index.m3u8). Fetching this directly is
-    /// true direct play: no universal transcoder involved.
-    let partKey: String?
+    /// Exact Metadata.key returned by the tune response. This is the path PMS
+    /// expects on the universal transcode decision/start requests.
+    let sessionPath: String
+    /// Playback identity sent on the tune request and reused for decision,
+    /// start, child playlists, segments, and timeline heartbeats.
+    let sessionIdentifier: String
 }
 
 // MARK: - API Errors

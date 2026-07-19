@@ -89,6 +89,9 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
 struct UnifiedProgram: Identifiable, Hashable, Sendable {
     let id: String
     let channelId: String
+    /// Provider-native programme identifier, used for playback reporting.
+    /// Plex supplies the airing programme's ratingKey; IPTV sources leave nil.
+    let sourceProgramId: String?
     let title: String
     let subtitle: String?
     let description: String?
@@ -106,6 +109,7 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
     init(
         id: String,
         channelId: String,
+        sourceProgramId: String? = nil,
         title: String,
         subtitle: String? = nil,
         description: String? = nil,
@@ -120,6 +124,7 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.channelId = channelId
+        self.sourceProgramId = sourceProgramId
         self.title = title
         self.subtitle = subtitle
         self.description = description

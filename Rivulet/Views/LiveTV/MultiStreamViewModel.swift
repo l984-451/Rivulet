@@ -28,6 +28,7 @@ final class MultiStreamViewModel: ObservableObject {
         let channel: UnifiedChannel
 
         let aetherPlayer: AetherPlayer
+        let timelineReporter: PlexLiveTVTimelineReporter?
 
         var playbackState: UniversalPlaybackState
         var currentProgram: UnifiedProgram?
@@ -53,13 +54,16 @@ final class MultiStreamViewModel: ObservableObject {
 
         func play() {
             aetherPlayer.play()
+            timelineReporter?.setState("playing")
         }
 
         func pause() {
             aetherPlayer.pause()
+            timelineReporter?.setState("paused")
         }
 
         func stop() {
+            timelineReporter?.stop()
             aetherPlayer.stop()
         }
 
@@ -71,7 +75,13 @@ final class MultiStreamViewModel: ObservableObject {
             // isLive: engine auto-detection is off upstream; declaring it
             // enables the live clock (live-edge tracking) and the engine's
             // LiveReloadPolicy reconnect path for this slot.
-            try await aetherPlayer.load(url: url, headers: headers, startTime: nil, isLive: true)
+            if channel.sourceType == .plex {
+                try await aetherPlayer.loadLive(url: url, headers: headers)
+                timelineReporter?.start(url: url)
+            } else {
+                try await aetherPlayer.load(
+                    url: url, headers: headers, startTime: nil, isLive: true)
+            }
         }
     }
 
@@ -200,6 +210,9 @@ final class MultiStreamViewModel: ObservableObject {
         var slot = StreamSlot(
             channel: channel,
             aetherPlayer: AetherPlayer(),
+            timelineReporter: channel.sourceType == .plex
+                ? PlexLiveTVTimelineReporter(channel: channel)
+                : nil,
             playbackState: .loading,
             isMuted: isMuted
         )
@@ -494,6 +507,9 @@ final class MultiStreamViewModel: ObservableObject {
         var newSlot = StreamSlot(
             channel: channel,
             aetherPlayer: AetherPlayer(),
+            timelineReporter: channel.sourceType == .plex
+                ? PlexLiveTVTimelineReporter(channel: channel)
+                : nil,
             playbackState: .loading,
             isMuted: isMuted
         )

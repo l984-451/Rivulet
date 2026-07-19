@@ -393,19 +393,9 @@ actor PlexLiveTVProvider: LiveTVProvider {
         return newURL
     }
 
-    /// Resolve a playable URL. Plex live channels go THROUGH Plex, but as a
-    /// continuous HTTP MPEG-TS stream — not HLS:
-    ///   1. POST /livetv/dvrs/{dvr}/channels/{id}/tune → livetv session uuid
-    ///   2. GET /video/:/transcode/universal/start.ts?protocol=http&
-    ///      container=mpegts&directPlay=1&directStream=1&
-    ///      path=/livetv/sessions/{uuid}&…
-    /// directPlay=1 asks the server to pass the RAW tuner TS straight through;
-    /// directStream=1 is its own fallback (remux, no re-encode — the client
-    /// profile declares the raw broadcast codecs). "Continuous" refers to the
-    /// HTTP delivery, NOT scan type: the video inside may be interlaced, which
-    /// AetherEngine deinterlaces (bwdif) after demuxing client-side — along
-    /// with the odd subtitle tracks (DVB/teletext). HDHomeRun direct URLs pass
-    /// through untouched (raw TS → same engine path).
+    /// Match Plezy's working Live TV handshake: tune with a playback-session
+    /// identifier, submit a universal-transcoder decision using the exact
+    /// Metadata.key returned by tune, then play the resulting standard HLS.
     func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
         guard let base = buildStreamURL(for: channel) else { return nil }
 
@@ -434,41 +424,38 @@ actor PlexLiveTVProvider: LiveTVProvider {
             )
 
             let breadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
-            breadcrumb.message = "Tuned live channel to /livetv/sessions"
+            breadcrumb.message = "Using Plezy-compatible Plex Live TV HLS"
             breadcrumb.data = [
                 "channel_name": channel.name,
                 "channel_id": channel.id,
                 "dvr_key": dvrKey,
-                "session_uuid": String(tune.sessionUUID.prefix(8))
+                "session_uuid": String(tune.sessionUUID.prefix(8)),
+                "playback_route": "universal_hls_mpegts_direct_stream"
             ]
             SentryBridge.addBreadcrumb(breadcrumb)
+            print(
+                "📺 PlexLiveTVProvider: route=plezy-hls-direct-stream"
+                + " channel='\(channel.name)' session=\(tune.sessionUUID.prefix(8))"
+            )
 
-            // Continuous HTTP MPEG-TS of the tuned session. Reuse the baked
-            // URL's full client profile (that's what tells the server it can
-            // pass through / remux instead of transcode), swap the endpoint to
-            // start.ts, and flip protocol to http (one stream, no HLS).
-            // directPlay=1 → raw tuner TS when the server allows it, with
-            // directStream=1 (remux) as the server's own fallback. Unlike the
-            // HLS endpoint, direct play is safe here: continuous HTTP has no
-            // segment session to refuse to build.
-            queryItems[pathIndex] = URLQueryItem(name: "path", value: "/livetv/sessions/\(tune.sessionUUID)")
-            queryItems = queryItems.map { item in
-                switch item.name {
-                case "protocol":   return URLQueryItem(name: "protocol", value: "http")
-                case "directPlay": return URLQueryItem(name: "directPlay", value: "1")
-                case "directStream": return URLQueryItem(name: "directStream", value: "1")
-                default:           return item
-                }
+            // PMS expects the exact Metadata.key returned by tune. Media.uuid
+            // and Part.key are internal grab details and produced the 404s in
+            // the previous implementation.
+            queryItems[pathIndex] = URLQueryItem(name: "path", value: tune.sessionPath)
+            if let sessionIndex = queryItems.firstIndex(where: {
+                $0.name == "X-Plex-Session-Identifier"
+            }) {
+                queryItems[sessionIndex] = URLQueryItem(
+                    name: "X-Plex-Session-Identifier",
+                    value: tune.sessionIdentifier
+                )
             }
             components.queryItems = queryItems
-            components.path = components.path.replacingOccurrences(
-                of: "start.m3u8",
-                with: "start.ts"
-            )
-            if let tsURL = components.url {
-                return tsURL
-            }
-            return base
+            components.percentEncodedQuery = components.percentEncodedQuery?
+                .replacingOccurrences(of: "+", with: "%2B")
+            guard let streamURL = components.url else { return base }
+            await networkManager.startTranscodeDecision(hlsURL: streamURL, headers: [:])
+            return streamURL
         } catch {
             SentryBridge.capture(error: error) { scope in
                 scope.setTag(value: "plex_livetv", key: "component")
@@ -476,8 +463,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
                 scope.setExtra(value: dvrKey, key: "dvr_key")
                 scope.setExtra(value: "tune_failed", key: "operation")
             }
-            // Fall back to the untuned URL — some PMS setups accept it.
-            return base
+            return nil
         }
     }
 

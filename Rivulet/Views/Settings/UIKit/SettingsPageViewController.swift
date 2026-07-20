@@ -197,13 +197,8 @@ extension SettingsPageViewController: UICollectionViewDataSource, UICollectionVi
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: Self.cellID, for: indexPath) as! SettingsCell
         let item = rows[indexPath.item]
-        let titleSize: CGFloat
-        switch item.kind {
-        case .navigation, .navigationValue, .info: titleSize = 36
-        default: titleSize = 32
-        }
         cell.configure(title: item.title, value: item.valueText, showsChevron: item.showsChevron,
-                       destructive: item.isDestructive, titleSize: titleSize, showsCheckmark: item.showsCheckmark)
+                       destructive: item.isDestructive, showsCheckmark: item.showsCheckmark)
         cell.onFocusGained = { [weak self] in self?.onFocusRow?(item.id) }
         return cell
     }

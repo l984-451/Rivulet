@@ -33,6 +33,7 @@ Rivulet/
 │   │       └── Subtitles/    # SubtitleManager, SubtitleParser, SubtitleOverlayView, SubtitleClockSyncController
 │   ├── LiveTV/         # PlexLiveTVProvider, IPTVProvider, LiveTVDataStore
 │   ├── IPTV/           # M3UParser, XMLTVParser, DispatcharrService
+│   ├── Insights/       # InsightsTriviaClient, InsightsShowIDResolver (in-player cast/trivia panel)
 │   ├── Cache/          # CacheManager, ImageCacheManager
 │   └── Focus/          # FocusMemory (tvOS section focus restoration)
 ├── Views/
@@ -41,7 +42,8 @@ Rivulet/
 │   │   ├── Aether/     # AetherVideoSurfaceView, AetherSubtitleOverlayView, AetherSubtitleCue
 │   │   ├── Subtitles/  # SubtitleModel (bridge); the pipeline lives in Services/…/Subtitles
 │   │   ├── UIKit/      # PlayerRailView, PlayerRailPanelView, PlayerProgressBarView,
-│   │   │               #   PlayerUpNextPanelView, UpNextRowState, pills (canonical player chrome)
+│   │   │               #   PlayerUpNextPanelView, UpNextRowState, pills (canonical player chrome),
+│   │   │               #   Insights* panels (in-player cast/trivia; backed by Services/Insights + TMDB)
 │   │   └── PostVideo/  # Post-playback summary overlays
 │   ├── Media/          # PreviewContext, HeroBackdropSupport, SharedMediaComponents,
 │   │                   #   CastMemberCard (CastCrewRow), FocusScrollMotion
@@ -59,7 +61,7 @@ Rivulet/
 │   ├── Settings/       # SettingsView, SettingsComponents, SettingsDescriptors, sub-pages
 │   ├── Components/     # CachedAsyncImage, GlassRowStyle, WhatsNewView
 │   └── TVNavigation/   # TVSidebarView, NavigationEnvironment
-└── Docs/
+└── Docs/                   # gitignored, maintainer-local (see Build & Run note)
     ├── RIVULET_PLAYER.md   # Canonical player reference (routing, AetherPlayer + AVPlayer)
     └── DESIGN_GUIDE.md     # UI/UX documentation
 ```
@@ -233,13 +235,40 @@ CachedAsyncImage(url: imageURL) { phase in
 
 ## Build & Run
 
+One-time setup: `Rivulet/Config/Secrets.swift` is gitignored and required for the app target to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):
+
+```bash
+cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+```
+
+`Secrets.swift` is the only gitignored file in `Rivulet/Config/` — the rest (`TMDBConfig`, `InsightsConfig`, `InputConfig`) are tracked and present in a fresh clone. Copying the template is the whole step: all three targets use Xcode buildable-folder references (`PBXFileSystemSynchronizedRootGroup`), so files are picked up from disk and never need adding to the project. `RivuletApp.swift` reads `Secrets.sentryDSN`, so the app target will not compile without it.
+
+There is a single shared scheme, `Rivulet` (targets: `Rivulet`, `RivuletTests`, `TopShelfExtension`). No SwiftLint/SwiftFormat is configured — there is no lint command.
+
 ```bash
 # Build for tvOS Simulator
 xcodebuild -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' build
 
 # Build for device
 xcodebuild -scheme Rivulet -destination 'platform=tvOS,name=My Apple TV' build
+
+# Run the full unit test suite (RivuletTests, XCTest, @testable import Rivulet)
+xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV'
+
+# Run a single test class or method
+xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' \
+  -only-testing:RivuletTests/MediaItemTests
+xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple TV' \
+  -only-testing:RivuletTests/MediaItemTests/test_id_returnsRef
 ```
+
+Tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature — Parsers, Playback, Player, Preferences, Services, Siri, etc.), with shared fixtures/mocks in `RivuletTests/Fixtures/`, `RivuletTests/Helpers/`, `RivuletTests/Mocks/`.
+
+**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is no CI test run today — `codemagic.yaml` only builds/archives/publishes to TestFlight on tag push; the two GitHub workflows (`.github/workflows/`) are Claude Code review/mention bots, not test runners. Run tests locally.
+
+**The Simulator does not fully mimic Apple TV**, especially for focus-engine behavior. Treat Simulator-only verification of tvOS focus/remote-input changes as provisional; say so rather than declaring it fixed.
+
+**`Docs/` is gitignored** (untracked on purpose, `c89b52d`) — files like `Docs/RIVULET_PLAYER.md` and `Docs/DESIGN_GUIDE.md` referenced throughout this file live only on the maintainer's machine and may not exist in a fresh clone or sandboxed checkout. The same goes for the `aether-update` and `rivulet-tvos-uikit` skills referenced above — `.claude/` is gitignored too, so they are not in the repo. If a referenced doc or skill is missing in your environment, say so and proceed carefully rather than guessing its contents.
 
 ## Key Files
 

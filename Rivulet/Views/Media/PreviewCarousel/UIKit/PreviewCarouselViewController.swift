@@ -56,6 +56,12 @@ final class PreviewCarouselViewController: UIViewController {
     private var hasPreparedEntrySnapshots = false
     private var didStandaloneExpand = false
 
+    /// Clipping windows wrapping each entry snapshot. The morph animates
+    /// these, not the snapshots (see EntryMorphWindowView). Parallel to
+    /// `entrySnapshots` rather than keyed by item index, so repeated indices
+    /// each keep their own window instead of one silently replacing another.
+    private var entryMorphWindows: [(window: EntryMorphWindowView, itemIndex: Int, sourceFrame: CGRect)] = []
+
     /// CADisplayLink-driven paging state. Replaces UIViewPropertyAnimator
     /// because UIVPA's contentOffset interpolation doesn't trigger
     /// per-frame layout invalidation, which breaks parallax and
@@ -650,19 +656,20 @@ final class PreviewCarouselViewController: UIViewController {
         if !hasPreparedEntrySnapshots {
             hasPreparedEntrySnapshots = true
             for entry in entrySnapshots.sorted(by: { $0.itemIndex < $1.itemIndex }) {
-                let snapshot = entry.snapshotView
-                snapshot.removeFromSuperview()
-                snapshot.layer.cornerCurve = .continuous
-                snapshot.layer.cornerRadius = 16
-                snapshot.layer.masksToBounds = true
-                snapshot.layer.zPosition = entry.itemIndex == selectedIndex
+                let window = EntryMorphWindowView(
+                    content: entry.snapshotView,
+                    sourceSize: entry.sourceFrame.size
+                )
+                window.layer.cornerRadius = 16
+                window.layer.zPosition = entry.itemIndex == selectedIndex
                     ? 100
                     : CGFloat(50 - abs(entry.itemIndex - selectedIndex))
-                entrySnapshotContainer.addSubview(snapshot)
+                entryMorphWindows.append((window, entry.itemIndex, entry.sourceFrame))
+                entrySnapshotContainer.addSubview(window)
             }
         }
-        for entry in entrySnapshots {
-            entry.snapshotView.frame = view.convert(entry.sourceFrame, from: nil)
+        for entry in entryMorphWindows {
+            entry.window.setWindow(view.convert(entry.sourceFrame, from: nil))
         }
     }
 
@@ -688,20 +695,21 @@ final class PreviewCarouselViewController: UIViewController {
         let morpher = UIViewPropertyAnimator(duration: 0.45, timingParameters: timing)
         morpher.addAnimations { [weak self] in
             guard let self else { return }
-            for entry in self.entrySnapshots {
+            for entry in self.entryMorphWindows {
                 guard self.items.indices.contains(entry.itemIndex) else {
-                    entry.snapshotView.alpha = 0
+                    entry.window.alpha = 0
                     continue
                 }
-                entry.snapshotView.frame = self.carouselFrameInView(for: entry.itemIndex)
-                entry.snapshotView.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
+                entry.window.setWindow(self.carouselFrameInView(for: entry.itemIndex))
+                entry.window.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
             }
         }
         morpher.addCompletion { [weak self] _ in
             guard let self else { return }
-            for entry in self.entrySnapshots {
-                entry.snapshotView.removeFromSuperview()
+            for entry in self.entryMorphWindows {
+                entry.window.removeFromSuperview()
             }
+            self.entryMorphWindows.removeAll()
             self.entrySnapshotContainer.isHidden = true
             self.state.completeEntryMorph()
             self.updateCurrentCellChrome(animated: true)
@@ -1457,7 +1465,9 @@ final class PreviewCarouselViewController: UIViewController {
             view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
         }
 
-        var liveSnapshots: [PreviewEntrySnapshot] = []
+        // Same clipping window as the entry morph, so shrinking back into a
+        // portrait tile crops the composite instead of squashing it.
+        var liveWindows: [(window: EntryMorphWindowView, sourceFrame: CGRect)] = []
         for entry in entrySnapshots {
             guard items.indices.contains(entry.itemIndex) else { continue }
             let cardFrame = carouselFrameInView(for: entry.itemIndex)
@@ -1469,20 +1479,16 @@ final class PreviewCarouselViewController: UIViewController {
                 height: cardFrame.height * composite.scale
             )) else { continue }
             let snapshot = UIImageView(image: UIImage(cgImage: cropped, scale: composite.scale, orientation: composite.imageOrientation))
-            snapshot.frame = cardFrame
+            // Safe: the window keeps this box at the composite's aspect ratio.
             snapshot.contentMode = .scaleToFill
-            snapshot.layer.cornerCurve = .continuous
-            snapshot.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
-            snapshot.layer.masksToBounds = true
-            snapshot.layer.zPosition = entry.itemIndex == selectedIndex
+            let window = EntryMorphWindowView(content: snapshot, sourceSize: cardFrame.size)
+            window.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
+            window.layer.zPosition = entry.itemIndex == selectedIndex
                 ? 100
                 : CGFloat(50 - abs(entry.itemIndex - selectedIndex))
-            entrySnapshotContainer.addSubview(snapshot)
-            liveSnapshots.append(PreviewEntrySnapshot(
-                itemIndex: entry.itemIndex,
-                sourceFrame: entry.sourceFrame,
-                snapshotView: snapshot
-            ))
+            window.setWindow(cardFrame)
+            entrySnapshotContainer.addSubview(window)
+            liveWindows.append((window, entry.sourceFrame))
         }
 
         backdropPlane.alpha = 0
@@ -1498,10 +1504,10 @@ final class PreviewCarouselViewController: UIViewController {
         let morpher = UIViewPropertyAnimator(duration: 0.45, timingParameters: timing)
         morpher.addAnimations { [weak self] in
             guard let self else { return }
-            for entry in liveSnapshots {
-                entry.snapshotView.frame = self.view.convert(entry.sourceFrame, from: nil)
-                entry.snapshotView.layer.cornerRadius = 16
-                entry.snapshotView.alpha = 0
+            for live in liveWindows {
+                live.window.setWindow(self.view.convert(live.sourceFrame, from: nil))
+                live.window.layer.cornerRadius = 16
+                live.window.alpha = 0
             }
             self.backdrop.alpha = 0
         }

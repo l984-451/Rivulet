@@ -1,0 +1,33 @@
+name: SwiftLint
+
+# Fast, free PR gate. Runs on Linux via the official SwiftLint container, so it
+# needs no macOS runner. The .swiftlint-baseline.json grandfathers pre-existing
+# violations — this job only fails on NEW ones. Full build/test stays on
+# Codemagic (tag builds).
+on:
+  pull_request:
+    paths:
+      - '**/*.swift'
+      - '.swiftlint.yml'
+      - '.swiftlint-baseline.json'
+      - '.github/workflows/swiftlint.yml'
+  push:
+    branches: [main]
+
+concurrency:
+  group: swiftlint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swiftlint:
+    runs-on: ubuntu-latest
+    # Pinned to match the version developers run locally via pre-commit.
+    container: ghcr.io/realm/swiftlint:0.65.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: SwiftLint (strict, baseline-aware)
+        run: swiftlint lint --strict --reporter github-actions-logging

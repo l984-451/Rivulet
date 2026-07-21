@@ -1,0 +1,53 @@
+# SwiftLint configuration for Rivulet.
+#
+# Philosophy: keep the rules that catch real bugs, drop the pure-style noise
+# that fights the codebase's existing conventions (SwiftFormat owns formatting).
+# Pre-existing violations are grandfathered via .swiftlint-baseline.json, so a
+# clean checkout passes and only NEW violations fail. Regenerate the baseline
+# after a deliberate cleanup:
+#   swiftlint lint --write-baseline .swiftlint-baseline.json
+
+excluded:
+  - .build
+  - DerivedData
+  - Rivulet/OpenSourceLicenses.swift   # generated
+  - Rivulet/Config/Secrets.swift        # generated in CI
+  - RivuletTests/Fixtures
+  - node_modules
+  - .wrangler
+
+baseline: .swiftlint-baseline.json
+
+disabled_rules:
+  # Pure style — no correctness signal, conflicts with the codebase's conventions.
+  - identifier_name
+  - line_length
+  - trailing_comma
+  - todo
+  - nesting
+  - large_tuple
+
+  # Size metrics — real, but not "noise". Track separately, don't gate on them.
+  - function_body_length
+  - file_length
+  - type_body_length
+  - cyclomatic_complexity
+  - function_parameter_count
+
+  # Formatting SwiftFormat handles deterministically — no need to double-report.
+  - vertical_whitespace
+  - statement_position
+  - comma
+  - opening_brace
+  - colon
+  - trailing_whitespace
+  - trailing_newline
+  - comment_spacing
+  - closure_parameter_position
+  - vertical_parameter_alignment
+  - implicit_optional_initialization
+
+# Kept on (bug / smell catchers), for reference:
+#   force_cast, force_try, non_optional_string_data_conversion, for_where,
+#   unused_closure_parameter, unused_optional_binding, redundant_string_enum_value,
+#   void_function_in_ternary, control_statement, unneeded_override, inclusive_language, …

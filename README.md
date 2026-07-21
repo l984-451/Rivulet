@@ -126,6 +126,27 @@ I welcome all contributions from any level of developer. I welcome contributions
 
 **If you do contribute, please build and test on an actual Apple TV. The simulator is close, but does not mimic the Apple TV fully.**
 
+### Development setup
+
+Linting and formatting run locally through [pre-commit](https://pre-commit.com). One-time setup:
+
+```bash
+brew install swiftlint swiftformat pre-commit
+pre-commit install          # installs the git hook
+```
+
+Now every commit runs SwiftFormat and SwiftLint on changed Swift files. To lint the whole project manually:
+
+```bash
+swiftlint lint             # config + baseline are picked up automatically
+```
+
+Rules are tuned in `.swiftlint.yml` to catch real bugs (force casts, force tries, etc.) without style noise. Pre-existing violations are grandfathered in `.swiftlint-baseline.json`, so only **new** violations fail — the same check the `SwiftLint` GitHub Action runs on every PR. If you deliberately clean up existing violations, regenerate the baseline so the counts shrink:
+
+```bash
+swiftlint lint --write-baseline .swiftlint-baseline.json
+```
+
 By submitting a pull request, you agree to license your contribution under the same terms as Rivulet (PolyForm Noncommercial 1.0.0, see [LICENSE](LICENSE)).
 
 ## License

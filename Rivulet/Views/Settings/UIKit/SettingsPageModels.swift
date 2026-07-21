@@ -310,6 +310,7 @@ enum SettingsContent {
             SettingsRowItem(id: "liveTVSources", title: "Live TV Sources", kind: .navigation(.iptv)),
             toggle("liveTVAboveLibraries", "Live TV Above Libraries", key: "liveTVAboveLibraries", default: false),
             toggle("classicTVMode", "Classic TV Mode", key: "classicTVMode", default: false),
+            toggle("liveTVPlayerMinimise", "Guide Mini-Player", key: "liveTVPlayerMinimise", default: false),
             toggle("combineSources", "Combine Sources", key: "combineLiveTVSources", default: true),
             SettingsRowItem(id: "defaultLayout", title: "Default Layout",
                             kind: .cycle(value: { LiveTVLayout(rawValue: SettingsStore.string("liveTVLayout", default: LiveTVLayout.guide.rawValue))?.description ?? "" },

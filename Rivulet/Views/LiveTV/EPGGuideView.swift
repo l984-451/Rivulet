@@ -84,6 +84,12 @@ private extension UnifiedProgram {
 
 // MARK: - SwiftUI wrapper
 
+struct EPGFocusRequest: Equatable {
+    let id = UUID()
+    let channelID: String
+    let programID: String?
+}
+
 struct EPGGuide: UIViewRepresentable {
     let channels: [UnifiedChannel]
     let programsByChannel: [String: [UnifiedProgram]]
@@ -92,6 +98,10 @@ struct EPGGuide: UIViewRepresentable {
     let now: Date
     /// When true the grid releases focus (e.g. an overlay is presented).
     var menuActive: Bool = false
+    /// A one-shot request to scroll to and focus a specific programme.
+    var focusRequest: EPGFocusRequest? = nil
+    /// When present, consumes Menu and hands it to the guide host.
+    var onMenu: (() -> Void)? = nil
     var onFocus: (UnifiedChannel?, UnifiedProgram?) -> Void
     var onSelect: (UnifiedChannel, UnifiedProgram?) -> Void
     /// Fired when horizontal scroll (or focus) nears the loaded right edge, so
@@ -112,7 +122,7 @@ struct EPGGuide: UIViewRepresentable {
         // keeps cells within the CV's bounds).
         let infoBarInset = topInset ?? (transparent ? 0 : EPGTheme.infoBarHeight)
         layout.topOffset = 0
-        let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        let cv = EPGCollectionView(frame: .zero, collectionViewLayout: layout)
         cv.backgroundColor = .clear
         cv.contentInsetAdjustmentBehavior = .never
         cv.contentInset = UIEdgeInsets(top: layout.gridTopInset,
@@ -137,7 +147,7 @@ struct EPGGuide: UIViewRepresentable {
 
         context.coordinator.collectionView = cv
         context.coordinator.apply(self, to: layout)
-
+        cv.onMenuPress = self.onMenu
         // Play/Pause jumps back to the now-airing programme.
         let jump = UITapGestureRecognizer(target: context.coordinator,
                                           action: #selector(Coordinator.jumpToNow))
@@ -155,6 +165,7 @@ struct EPGGuide: UIViewRepresentable {
         context.coordinator.parent = self
         guard let cv = context.coordinator.collectionView,
               let layout = cv.collectionViewLayout as? EPGLayout else { return }
+        cv.onMenuPress = self.onMenu
         cv.isUserInteractionEnabled = !menuActive
         let dataChanged = context.coordinator.apply(self, to: layout)
         if dataChanged {
@@ -167,18 +178,21 @@ struct EPGGuide: UIViewRepresentable {
             // Likely just `now` advanced — move the now-line without a reload.
             layout.invalidateLayout()
         }
+        context.coordinator.applyFocusRequest(self.focusRequest)
     }
 
     // MARK: Coordinator
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
         var parent: EPGGuide
-        weak var collectionView: UICollectionView?
+        weak var collectionView: EPGCollectionView?
         private(set) var sections: [UnifiedChannel] = []
         private(set) var programs: [[UnifiedProgram]] = []
         private var lastSignature: Int = 0
         private var currentSection = 0
         private var pendingFocus: IndexPath?
+        private var pendingFocusWorkItem: DispatchWorkItem?
+        private var lastFocusRequestID: UUID?
         var didRestScroll = false
         /// The committed horizontal offset. The timeline only moves sideways on a
         /// deliberate left/right move (or drag); during channel changes and when
@@ -294,6 +308,12 @@ struct EPGGuide: UIViewRepresentable {
             guard let ip = context.nextFocusedIndexPath,
                   let channel = sections[safe: ip.section],
                   let program = programs[safe: ip.section]?[safe: ip.item] else { return }
+            if pendingFocus == ip {
+                pendingFocus = nil
+                pendingFocusWorkItem?.cancel()
+                pendingFocusWorkItem = nil
+                cv.remembersLastFocusedIndexPath = true
+            }
             let now = parent.now
             currentSection = ip.section
             currentFocusedIsLive = program.isLive(at: now)
@@ -382,11 +402,10 @@ struct EPGGuide: UIViewRepresentable {
 
         func collectionView(_ cv: UICollectionView, didSelectItemAt indexPath: IndexPath) {
             guard let channel = sections[safe: indexPath.section] else { return }
-            let now = parent.now
-            let row = programs[safe: indexPath.section] ?? []
-            let current = row.first { $0.isLive(at: now) } ?? row.last { $0.start <= now }
-            // Hand selection back to SwiftUI, which launches Rivulet's player.
-            parent.onSelect(channel, current)
+            let selected = programs[safe: indexPath.section]?[safe: indexPath.item]
+            // Hand the actual selected cell back to SwiftUI. The host decides
+            // whether it represents a playable current programme.
+            parent.onSelect(channel, selected)
         }
 
         // Play/Pause → move focus to the now-playing programme in the current row.
@@ -404,10 +423,102 @@ struct EPGGuide: UIViewRepresentable {
             cv.updateFocusIfNeeded()
         }
 
+        func applyFocusRequest(_ request: EPGFocusRequest?) {
+            guard let request, request.id != lastFocusRequestID,
+                  let cv = collectionView,
+                  let section = sections.firstIndex(where: { $0.id == request.channelID }),
+                  let row = programs[safe: section], !row.isEmpty
+            else { return }
+
+            lastFocusRequestID = request.id
+            let now = parent.now
+            let item = request.programID.flatMap { id in row.firstIndex(where: { $0.id == id }) }
+                ?? row.firstIndex { $0.isLive(at: now) }
+                ?? row.lastIndex { $0.start <= now }
+                ?? 0
+            let target = IndexPath(item: item, section: section)
+
+            pendingFocusWorkItem?.cancel()
+            pendingFocus = target
+            // Otherwise UICollectionView's remembered old cell can win the
+            // focus decision and pull the guide straight back on the next move.
+            cv.remembersLastFocusedIndexPath = false
+            currentSection = section
+            freeScrollUntil = Date().addingTimeInterval(0.8)
+            cv.layoutIfNeeded()
+            cv.scrollToItem(
+                at: target,
+                at: [.centeredHorizontally, .centeredVertically],
+                animated: true
+            )
+
+            // Keep the target pending until didUpdateFocus confirms that the
+            // highlight actually moved. Clearing it merely because UIKit asked
+            // for a preferred path loses the request if the scroll is still
+            // settling, leaving the old highlighted cell in control.
+            let work = DispatchWorkItem { [weak self, weak cv] in
+                self?.focusPendingTarget(in: cv, expected: target)
+            }
+            pendingFocusWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+        }
+
         func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
-            defer { pendingFocus = nil }
+            guard let pendingFocus,
+                  collectionView.cellForItem(at: pendingFocus) != nil else { return nil }
             return pendingFocus
         }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            guard let cv = collectionView, let pendingFocus else { return }
+            focusPendingTarget(in: cv, expected: pendingFocus)
+        }
+
+        private func focusPendingTarget(
+            in collectionView: UICollectionView?,
+            expected target: IndexPath
+        ) {
+            guard let collectionView,
+                  pendingFocus == target,
+                  let cell = collectionView.cellForItem(at: target),
+                  cell.window != nil else { return }
+            collectionView.layoutIfNeeded()
+            collectionView.setNeedsFocusUpdate()
+            collectionView.updateFocusIfNeeded()
+        }
+    }
+}
+
+/// While a minimised player is active, Menu belongs to the guide's
+/// return-to-playing-programme action. With no handler it follows the normal
+/// responder chain unchanged.
+final class EPGCollectionView: UICollectionView {
+    var onMenuPress: (() -> Void)?
+    private var consumedMenu = false
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .menu }), let onMenuPress {
+            consumedMenu = true
+            onMenuPress()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if consumedMenu, presses.contains(where: { $0.type == .menu }) {
+            consumedMenu = false
+            return
+        }
+        super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if consumedMenu, presses.contains(where: { $0.type == .menu }) {
+            consumedMenu = false
+            return
+        }
+        super.pressesCancelled(presses, with: event)
     }
 }
 

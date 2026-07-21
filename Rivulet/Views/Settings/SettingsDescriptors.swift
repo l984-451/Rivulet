@@ -174,6 +174,11 @@ enum SettingsDescriptorStore {
             iconColor: .indigo,
             description: "Hides player controls during live TV for a traditional television experience. Swipe up to show controls."
         ),
+        "liveTVPlayerMinimise": SettingDescriptor(
+            icon: "pip.fill",
+            iconColor: .cyan,
+            description: "Keeps a channel playing in the top-right of the Guide when you leave fullscreen. Press Menu to return to its current programme, then select it to go fullscreen again."
+        ),
         "combineSources": SettingDescriptor(
             icon: "square.stack.3d.down.right",
             iconColor: .purple,

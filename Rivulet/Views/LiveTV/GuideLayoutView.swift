@@ -20,7 +20,7 @@ import UIKit
 enum LiveTVDisplayMode: Equatable {
     case hidden      // No player visible
     case fullscreen  // Player is fullscreen overlay
-    case pip         // Player is in PiP (small, top-right)
+    case minimised   // Player continues beneath the guide artwork treatment
 }
 
 struct GuideLayoutView: View {
@@ -28,6 +28,7 @@ struct GuideLayoutView: View {
     var sourceIdFilter: String?
 
     @StateObject private var dataStore = LiveTVDataStore.shared
+    @AppStorage("liveTVPlayerMinimise") private var playerMinimiseEnabled = false
 
     /// Selected category tab. nil = "All Channels"; otherwise an M3U group title.
     @State private var selectedGroup: String?
@@ -109,6 +110,7 @@ struct GuideLayoutView: View {
 
     // Player state
     @State private var activeChannel: UnifiedChannel?
+    @State private var activePlayerController: LiveTVAetherPlayerViewController?
     @State private var playerSessionId = UUID()
     @State private var displayMode: LiveTVDisplayMode = .hidden
 
@@ -117,6 +119,7 @@ struct GuideLayoutView: View {
     @State private var now = Date()
     @State private var focusedChannel: UnifiedChannel?
     @State private var focusedProgram: UnifiedProgram?
+    @State private var guideFocusRequest: EPGFocusRequest?
 
     // Backdrop transition state. Keep the existing artwork treatment, but let
     // the wash settle before revealing the crisp image for the new programme.
@@ -140,13 +143,28 @@ struct GuideLayoutView: View {
                 // through. When artwork exists, `ambiance` paints it on top.
                 ambiance
 
+                // The live surface replaces the crisp top-right artwork while
+                // minimised. It stays above the blur but below the guide, so
+                // the same edge masks and guide cells naturally obscure it.
+                if displayMode == .minimised,
+                   let controller = activePlayerController {
+                    liveTVPlayerLayer(
+                        controller: controller,
+                        screenSize: geo.size,
+                        topSafeAreaInset: geo.safeAreaInsets.top
+                    )
+                        .zIndex(1)
+                }
+
                 if channels.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .zIndex(2)
                 } else {
                     guideContent
                         .opacity(displayMode == .fullscreen ? 0 : 1)
                         .disabled(displayMode == .fullscreen)
+                        .zIndex(2)
                 }
 
                 // EPG failure banner — surfaced so an empty guide doesn't look
@@ -157,13 +175,9 @@ struct GuideLayoutView: View {
                         .padding(.top, 16)
                         .frame(maxWidth: .infinity, alignment: .top)
                         .allowsHitTesting(false)
+                        .zIndex(3)
                 }
 
-                // Player layer — present when a channel is active.
-                if let channel = activeChannel {
-                    liveTVPlayerLayer(channel: channel, screenSize: geo.size)
-                        .zIndex(displayMode == .fullscreen ? 100 : 10)
-                }
             }
         }
         .ignoresSafeArea(edges: [.bottom, .trailing])
@@ -177,9 +191,15 @@ struct GuideLayoutView: View {
         }
         .onChange(of: channels.count) { _, _ in seedFocus() }
         .onReceive(tick) { t in now = t }
+        .onExitCommand(perform: guideMenuHandler)
     }
 
     // MARK: - Guide (grid + info bar)
+
+    private var guideMenuHandler: (() -> Void)? {
+        guard displayMode == .minimised else { return nil }
+        return { requestPlayingProgramFocus() }
+    }
 
     private var guideContent: some View {
         ZStack(alignment: .topLeading) {
@@ -190,11 +210,15 @@ struct GuideLayoutView: View {
                 totalMinutes: totalMinutes,
                 now: now,
                 menuActive: displayMode == .fullscreen,
+                focusRequest: guideFocusRequest,
+                onMenu: guideMenuHandler,
                 onFocus: { channel, program in
                     focusedChannel = channel
                     focusedProgram = program
                 },
-                onSelect: { channel, _ in selectChannel(channel) },
+                onSelect: { channel, program in
+                    selectChannel(channel, selectedProgram: program)
+                },
                 onNeedMore: {
                     Task { await dataStore.extendEPG(byHours: EPGTheme.lazyLoadChunkHours) }
                 },
@@ -293,7 +317,7 @@ struct GuideLayoutView: View {
                         .opacity(backdropProgress)
                 }
 
-                if let displayedArtworkImage {
+                if displayMode != .minimised, let displayedArtworkImage {
                     crispArtwork(displayedArtworkImage, size: geo.size)
                         .opacity(artworkOpacity)
                 }
@@ -410,62 +434,67 @@ struct GuideLayoutView: View {
             .scaledToFill()
     }
 
-    // MARK: - Player layer (fullscreen + PiP)
-
-    private var pipScale: CGFloat { 0.28 }
-    private var pipMargin: CGFloat { 60 }
+    // MARK: - Player layer (minimised guide artwork)
 
     @ViewBuilder
-    private func liveTVPlayerLayer(channel: UnifiedChannel, screenSize: CGSize) -> some View {
-        let player = LiveTVPlayerView(
-            channel: channel,
-            onDismiss: {
-                displayMode = .hidden
-                activeChannel = nil
-                playerSessionId = UUID()
-            },
-            onEnterPIP: {
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    displayMode = .pip
-                }
-            },
-            isInteractive: displayMode == .fullscreen  // Disable focus capture in PiP mode
-        )
-        // Force a fresh player session when changing channels or after exit/reopen.
-        .id("\(playerSessionId.uuidString)-\(channel.id)")
-        .transaction { transaction in
-            transaction.animation = nil
-        }
-        .animation(nil, value: displayMode)
-
-        if displayMode == .pip {
-            // PiP: a small 16:9 box pinned top-right. Integral 16px width steps
-            // avoid fractional scaling artifacts (a thin bottom strip).
-            let pipWidth = max(16, floor((screenSize.width * pipScale) / 16.0) * 16.0)
-            let pipHeight = pipWidth * 9.0 / 16.0
-            player
-                .frame(width: pipWidth, height: pipHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
-                .position(x: screenSize.width - pipMargin - pipWidth / 2,
-                          y: pipMargin + pipHeight / 2)
-                .allowsHitTesting(false)
-        } else {
-            // Fullscreen: fill the true screen and ignore the guide's safe-area
-            // inset. Sizing to the GeometryReader's (inset) size is what made the
-            // player render as a centered box instead of edge-to-edge.
-            player
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-                .allowsHitTesting(true)
-        }
+    private func liveTVPlayerLayer(
+        controller: LiveTVAetherPlayerViewController,
+        screenSize: CGSize,
+        topSafeAreaInset: CGFloat
+    ) -> some View {
+        // Fullscreen playback is a real UIKit modal so it covers the app
+        // sidebar and owns Menu. Only the minimised state is embedded here.
+        LiveTVEmbeddedAetherPlayer(controller: controller)
+            .id(playerSessionId)
+            .frame(width: screenSize.width * 0.5, height: screenSize.height * 0.55)
+            .clipped()
+            .mask(
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0.0),
+                    .init(color: .white.opacity(0.22), location: 0.05),
+                    .init(color: .white.opacity(0.62), location: 0.16),
+                    .init(color: .white, location: 0.34),
+                    .init(color: .white, location: 1.0)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+                )
+            )
+            .mask(
+                LinearGradient(stops: [
+                    .init(color: .white, location: 0.0),
+                    .init(color: .white, location: 0.70),
+                    .init(color: .white.opacity(0.65), location: 0.84),
+                    .init(color: .clear, location: 1.0)
+                ], startPoint: .top, endPoint: .bottom)
+            )
+            .position(
+                x: screenSize.width * 0.75,
+                // The guide itself begins below tvOS's top safe area. Move the
+                // video back into that area so its top edge matches the
+                // full-screen artwork rather than the info-card content.
+                y: screenSize.height * 0.275 - topSafeAreaInset
+            )
+            .allowsHitTesting(false)
     }
 
     // MARK: - Selection
 
-    private func selectChannel(_ channel: UnifiedChannel) {
+    private func selectChannel(_ channel: UnifiedChannel, selectedProgram: UnifiedProgram?) {
+        // Selecting the currently airing cell for the still-playing channel
+        // returns the existing controller to fullscreen and restores its OSD.
+        if displayMode == .minimised,
+           activeChannel?.id == channel.id {
+            guard selectedProgram?.isCurrentlyAiring == true else { return }
+            restorePlayerFullscreen()
+            return
+        }
+
+        if playerMinimiseEnabled {
+            startMinimisablePlayer(channel)
+            return
+        }
+
         // Live TV plays through Aether (same OSD as Aether VOD): HLS goes
         // straight to AVPlayer, everything else is remuxed by the engine.
         // Presented as a full-screen modal so it escapes the guide's
@@ -481,6 +510,124 @@ struct GuideLayoutView: View {
         let vc = LiveTVAetherPlayerViewController(channel: channel)
         vc.modalPresentationStyle = .fullScreen
         top.present(vc, animated: true)
+    }
+
+    private func startMinimisablePlayer(_ channel: UnifiedChannel) {
+        // Replacing a channel while the old player is embedded should tear the
+        // old session down normally. Start the new modal after SwiftUI has
+        // removed that child controller from the guide hierarchy.
+        if activePlayerController != nil {
+            activePlayerController?.onMinimize = nil
+            activePlayerController?.onDismiss = nil
+            activePlayerController = nil
+            activeChannel = nil
+            displayMode = .hidden
+            DispatchQueue.main.async {
+                startMinimisablePlayer(channel)
+            }
+            return
+        }
+
+        let sessionID = UUID()
+        let controller = LiveTVAetherPlayerViewController(channel: channel)
+        controller.modalPresentationStyle = .fullScreen
+        controller.onMinimize = { [weak controller] in
+            guard let controller,
+                  activePlayerController === controller,
+                  playerSessionId == sessionID else { return }
+            controller.setMinimizedPresentation(true)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                displayMode = .minimised
+            }
+            // Returning from fullscreen should land on the programme that is
+            // still playing, not whichever guide cell launched the session.
+            DispatchQueue.main.async {
+                requestPlayingProgramFocus()
+            }
+        }
+        controller.onDismiss = { [weak controller] in
+            guard let controller,
+                  activePlayerController === controller,
+                  playerSessionId == sessionID else { return }
+            displayMode = .hidden
+            activeChannel = nil
+            activePlayerController = nil
+            playerSessionId = UUID()
+        }
+
+        activeChannel = channel
+        activePlayerController = controller
+        playerSessionId = sessionID
+        displayMode = .fullscreen
+        presentPlayerController(controller, sessionID: sessionID)
+    }
+
+    private func restorePlayerFullscreen() {
+        guard displayMode == .minimised,
+              let controller = activePlayerController else { return }
+        let sessionID = playerSessionId
+
+        // Removing a child controller normally tears Aether down. Arm this
+        // single reparent first, then let SwiftUI detach it before presenting.
+        controller.prepareForReparenting()
+        displayMode = .fullscreen
+        DispatchQueue.main.async {
+            presentPlayerController(controller, sessionID: sessionID)
+        }
+    }
+
+    private func presentPlayerController(
+        _ controller: LiveTVAetherPlayerViewController,
+        sessionID: UUID,
+        attempt: Int = 0
+    ) {
+        guard activePlayerController === controller,
+              playerSessionId == sessionID else { return }
+
+        // A UIViewController cannot be presented while SwiftUI still owns it
+        // as a child. Usually one run-loop turn is enough; retry briefly if the
+        // representable is still being dismantled.
+        guard controller.parent == nil,
+              controller.presentingViewController == nil else {
+            guard attempt < 12 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                presentPlayerController(
+                    controller,
+                    sessionID: sessionID,
+                    attempt: attempt + 1
+                )
+            }
+            return
+        }
+
+        guard let top = topViewController() else { return }
+        controller.setMinimizedPresentation(false)
+        controller.modalPresentationStyle = .fullScreen
+        top.present(controller, animated: true)
+    }
+
+    private func topViewController() -> UIViewController? {
+        guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+              let root = (scene.windows.first(where: { $0.isKeyWindow })
+                ?? scene.windows.first)?.rootViewController
+        else { return nil }
+
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        return top
+    }
+
+    private func requestPlayingProgramFocus() {
+        guard displayMode == .minimised, let channel = activeChannel else { return }
+        let program = dataStore.getCurrentProgram(for: channel)
+        selectedGroup = nil
+        focusedChannel = channel
+        focusedProgram = program
+        guideFocusRequest = EPGFocusRequest(
+            channelID: channel.id,
+            programID: program?.id
+        )
     }
 
     // MARK: - Helpers
@@ -504,6 +651,24 @@ struct GuideLayoutView: View {
             focusedProgram = dataStore.getCurrentProgram(for: first)
                 ?? dataStore.epg[first.id]?.first
         }
+    }
+}
+
+/// Hosts an existing UIKit Live TV controller in the passive top-right guide
+/// treatment. Fullscreen uses UIKit presentation instead of this representable.
+private struct LiveTVEmbeddedAetherPlayer: UIViewControllerRepresentable {
+    let controller: LiveTVAetherPlayerViewController
+
+    func makeUIViewController(context: Context) -> LiveTVAetherPlayerViewController {
+        controller.setMinimizedPresentation(true)
+        return controller
+    }
+
+    func updateUIViewController(
+        _ controller: LiveTVAetherPlayerViewController,
+        context: Context
+    ) {
+        controller.setMinimizedPresentation(true)
     }
 }
 

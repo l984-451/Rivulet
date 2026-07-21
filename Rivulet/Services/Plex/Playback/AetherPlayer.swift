@@ -482,19 +482,14 @@ final class AetherPlayer: PlayerProtocol {
         )
     }
 
-    /// Live TV load. Sets `isLive` so the engine treats the source as live
-    /// (seek becomes a no-op, live-edge/reconnect behavior). HLS sources use
-    /// `nativeRemoteHLS` so AVPlayer plays the remote playlist directly (no
-    /// demuxer probe / loopback — "HLS straight to AVPlayer"); everything else
-    /// (raw MPEG-TS, etc.) goes through the engine's demux/remux to a loopback
-    /// HLS stream. Either way the engine publishes `currentAVPlayer` for the
-    /// AVKit OSD. No start position (live).
-    /// `forceEngineDemux` disables the native-HLS shortcut so the engine's own
-    /// demuxer opens the playlist instead — used as a fallback when AVPlayer's
-    /// native path fails against a server (e.g. a Plex transcode session that
-    /// rejects AVPlayer's request pattern).
-    func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
-        let isHLS = Self.isHLSURL(url) && !forceEngineDemux
+    /// Live TV load. Plain HLS uses Aether's native remote-HLS route. Plex HLS
+    /// needs `hlsIngest`: its MPEG-TS segments carry broadcast audio and
+    /// DVB/teletext subtitle streams that AVPlayer's remote-HLS route would not
+    /// expose. Aether 5.17+ requires those playlists to enter through
+    /// `HLSLiveIngestReader`; handing a playlist to the raw URL reader now fails
+    /// closed instead of relying on FFmpeg network demuxing.
+    func loadLive(url: URL, headers: [String: String]?, hlsIngest: Bool = false) async throws {
+        let nativeRemoteHLS = Self.isHLSURL(url) && !hlsIngest
         let options = LoadOptions(
             suppressDisplayCriteria: false,
             httpHeaders: headers ?? [:],
@@ -505,7 +500,7 @@ final class AetherPlayer: PlayerProtocol {
             isLive: true,
             // ~30-minute DVR rewind window (engine retains it disk-backed).
             dvrWindowSeconds: 1800,
-            nativeRemoteHLS: isHLS,
+            nativeRemoteHLS: nativeRemoteHLS,
             preserveASSMarkup: true,
             probesize: 5 * 1024 * 1024,
             maxAnalyzeDuration: 5_000_000,
@@ -532,9 +527,21 @@ final class AetherPlayer: PlayerProtocol {
             // (Engine flag is labeled test-only but is the exact switch for
             // this; reset immediately after dispatch. Not applied to the
             // native-HLS shortcut, which never enters the demux dispatch.)
-            if !isHLS { AetherEngine.setForceSoftwarePathForTesting(true) }
-            defer { if !isHLS { AetherEngine.setForceSoftwarePathForTesting(false) } }
-            try await engine.load(url: url, startPosition: nil, options: options)
+            if !nativeRemoteHLS { AetherEngine.setForceSoftwarePathForTesting(true) }
+            defer { if !nativeRemoteHLS { AetherEngine.setForceSoftwarePathForTesting(false) } }
+            if hlsIngest {
+                let reader = HLSLiveIngestReader(
+                    playlistURL: url,
+                    httpHeaders: headers ?? [:]
+                )
+                try await engine.load(
+                    source: .custom(reader, formatHint: "mpegts"),
+                    startPosition: nil,
+                    options: options
+                )
+            } else {
+                try await engine.load(url: url, startPosition: nil, options: options)
+            }
         } catch {
             let pe = PlayerError.loadFailed(String(describing: error))
             errorSubject.send(pe)

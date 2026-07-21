@@ -26,8 +26,9 @@
 //  Playback routing (inside `AetherPlayer.loadLive`):
 //    - plain HLS (.m3u8 / format=hls) → nativeRemoteHLS: AVPlayer plays the
 //      remote playlist directly, engine re-attaches its layer to the surface.
-//    - raw MPEG-TS and Plex tuned sessions (progressive start.ts remux) →
-//      engine demux/decode.
+//    - Plex HLS → HLSLiveIngestReader → engine demux/remux, retaining the
+//      broadcast audio and DVB/teletext subtitle streams in its TS segments.
+//    - raw MPEG-TS → engine demux/decode.
 //
 //  Failure ladder (each stage re-resolves the URL — fresh Plex tune/session):
 //    0 primary → 1 engine demux → 2 bare AVPlayer on an AVPlayerLayer.
@@ -53,7 +54,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private let loadingSpinner = UIActivityIndicatorView(style: .large)
 
     private let subtitleModel = SubtitleModel()
-    private var subtitleHostingController: UIHostingController<AetherSubtitleOverlayView>?
+    private let subtitleChromeState = LiveTVSubtitleChromeState()
+    private var subtitleHostingController: UIHostingController<LiveTVSubtitleOverlayRoot>?
     private var captionStyle: CaptionStyle = CaptionAppearance.current()
     private var cancellables = Set<AnyCancellable>()
 
@@ -141,6 +143,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Same glass rail as Aether VOD; Up Next and Insights are hidden (they
     /// have no meaning for a live broadcast).
     private let railView = PlayerRailView()
+    /// Same foreground scrim as VOD. It sits above subtitles and below the
+    /// glass rail so captions slide underneath the OSD instead of reading over
+    /// its translucent material.
+    private let chromeScrim = ChromeScrimView()
     /// The SAME scrubber component VOD uses (same assets + spot in the rail),
     /// but driven non-seekably: it shows the current programme's air window
     /// (start/end wall-clock at the edges, current time on the playhead) with
@@ -162,6 +168,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Called once when the player is dismissed, so the guide can restore state.
     var onDismiss: (() -> Void)?
+    /// Set for a minimisable guide session. Menu with all chrome closed keeps
+    /// playback alive and returns the same controller to the guide.
+    var onMinimize: (() -> Void)?
+    private var isMinimizedPresentation = false
+    /// A modal↔guide reparent keeps the same controller and playback session.
+    /// The next disappearance must therefore skip normal teardown.
+    private var preservePlaybackForReparenting = false
 
     init(channel: UnifiedChannel) {
         self.channel = channel
@@ -232,7 +245,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             guard let url = await LiveTVDataStore.shared.resolveStreamURL(for: channel) else {
                 if Task.isCancelled { return }
                 onDismiss?()
-                dismiss(animated: true)
+                if presentingViewController != nil {
+                    onMinimize = nil
+                    dismiss(animated: true)
+                }
                 return
             }
             if Task.isCancelled { return }
@@ -244,7 +260,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 try await aether.loadLive(
                     url: url,
                     headers: nil,
-                    forceEngineDemux: url.path.hasPrefix("/livetv/sessions/")
+                    hlsIngest: Self.shouldUsePlexHLSIngest(url, channel: channel)
                 )
                 if Task.isCancelled { return }
                 aether.play()
@@ -258,6 +274,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         guard isBeingDismissed || isMovingFromParent else { return }
+        if preservePlaybackForReparenting {
+            preservePlaybackForReparenting = false
+            return
+        }
         streamLoadTask?.cancel()
         streamLoadTask = nil
         stopLiveSessionKeepAlive()
@@ -300,9 +320,61 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         onDismiss?()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        preservePlaybackForReparenting = false
+    }
+
+    /// Called before SwiftUI removes this controller from the guide so it can
+    /// be presented modally again without stopping Aether during the handoff.
+    func prepareForReparenting() {
+        preservePlaybackForReparenting = true
+    }
+
+    /// Switches the embedded controller between fullscreen interaction and a
+    /// passive guide preview without rebuilding the Aether playback session.
+    func setMinimizedPresentation(_ minimized: Bool) {
+        guard isMinimizedPresentation != minimized else { return }
+        isMinimizedPresentation = minimized
+        guard isViewLoaded else { return }
+
+        if minimized {
+            activePanel?.dismissPanel()
+            if railVisible { hideRail() }
+            focusCatcher.isHidden = true
+            view.isUserInteractionEnabled = false
+        } else {
+            view.isUserInteractionEnabled = true
+            focusCatcher.isHidden = false
+            showRail()
+        }
+
+        // The focused environment changes from this controller to the EPG (or
+        // back again). Ask their shared root after SwiftUI commits the new
+        // disabled/z-order state, otherwise a local focus request can be
+        // ignored because this controller no longer contains focus.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let root = self.view.window?.rootViewController ?? self
+            root.setNeedsFocusUpdate()
+            root.updateFocusIfNeeded()
+        }
+    }
+
     // MARK: - Chrome (glass rail + panels)
 
     private func setupChrome() {
+        chromeScrim.alpha = 0
+        chromeScrim.isUserInteractionEnabled = false
+        view.addSubview(chromeScrim)
+        chromeScrim.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            chromeScrim.topAnchor.constraint(equalTo: view.topAnchor),
+            chromeScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            chromeScrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            chromeScrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
         // Focus catcher: 1pt, transparent, always present.
         focusCatcher.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
         focusCatcher.backgroundColor = .clear
@@ -334,6 +406,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             progressBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -132),
             progressBar.bottomAnchor.constraint(equalTo: railView.bottomAnchor, constant: -34),
         ])
+
+        // State the intended VOD-matching order explicitly. The subtitle host
+        // was mounted before setupChrome; the scrim occludes it, while the rail
+        // and progress bar remain crisp above both.
+        view.bringSubviewToFront(chromeScrim)
+        view.bringSubviewToFront(railView)
+        view.bringSubviewToFront(progressBar)
+        view.bringSubviewToFront(focusCatcher)
 
         railView.onSubtitles = { [weak self] in self?.presentSubtitlePanel() }
         railView.onAudio = { [weak self] in self?.presentAudioPanel() }
@@ -396,12 +476,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railVisible = true
         updateRailContent()
         UIView.animate(withDuration: 0.25) {
+            self.chromeScrim.alpha = 1
             self.railView.alpha = 1
             self.railView.transform = .identity
             self.progressBar.alpha = 1
             self.progressBar.transform = .identity
         }
-        rebuildSubtitleOverlay()
+        subtitleChromeState.controlsVisible = true
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
         restartAutoHide()
@@ -414,12 +495,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         autoHideTimer = nil
         railView.resetFocusMemory()
         UIView.animate(withDuration: 0.2) {
+            self.chromeScrim.alpha = 0
             self.railView.alpha = 0
             self.railView.transform = CGAffineTransform(translationX: 0, y: 24)
             self.progressBar.alpha = 0
             self.progressBar.transform = CGAffineTransform(translationX: 0, y: 24)
         }
-        rebuildSubtitleOverlay()
+        subtitleChromeState.controlsVisible = false
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
     }
@@ -847,6 +929,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             completion?()
             return
         }
+        if let onMinimize {
+            armDismissEchoBlock()
+            preservePlaybackForReparenting = true
+            super.dismiss(animated: flag) {
+                onMinimize()
+                completion?()
+            }
+            return
+        }
         super.dismiss(animated: flag, completion: completion)
     }
 
@@ -898,7 +989,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 let retryURL = Self.forcingDirectStream(freshURL)
                 do {
                     aetherPlayer?.stop()
-                    try await aetherPlayer?.loadLive(url: retryURL, headers: nil, forceEngineDemux: true)
+                    try await aetherPlayer?.loadLive(
+                        url: retryURL,
+                        headers: nil,
+                        hlsIngest: Self.isHLSDelivery(retryURL)
+                    )
                     if Task.isCancelled { return }
                     aetherPlayer?.play()
                 } catch {
@@ -939,6 +1034,30 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         return components.url ?? url
     }
 
+    /// Plex returns HLS from several URLs that do not advertise it in their
+    /// extension, notably `/livetv/.../tune` and `/livetv/sessions/...`.
+    /// Route those through Aether's explicit live-HLS ingest reader. Raw tuner
+    /// URLs (HDHomeRun `/auto/...`, UDP, etc.) remain on the raw demux path.
+    private static func shouldUsePlexHLSIngest(
+        _ url: URL,
+        channel: UnifiedChannel
+    ) -> Bool {
+        guard channel.sourceType == .plex else { return false }
+        return isHLSDelivery(url)
+    }
+
+    private static func isHLSDelivery(_ url: URL) -> Bool {
+        let path = url.path.lowercased()
+        let text = url.absoluteString.lowercased()
+        if url.pathExtension.lowercased() == "m3u8"
+            || text.contains(".m3u8")
+            || text.contains("format=hls") {
+            return true
+        }
+        return path.hasPrefix("/livetv/")
+            && (path.hasSuffix("/tune") || path.contains("/sessions/"))
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         lastResortLayer?.frame = view.bounds
@@ -970,11 +1089,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         subtitleHostingController = hosting
     }
 
-    private func makeOverlayRootView() -> AetherSubtitleOverlayView {
-        AetherSubtitleOverlayView(
+    private func makeOverlayRootView() -> LiveTVSubtitleOverlayRoot {
+        LiveTVSubtitleOverlayRoot(
             model: subtitleModel,
             style: captionStyle,
-            controlsVisible: railVisible  // lift captions above the glass rail
+            chromeState: subtitleChromeState
         )
     }
 
@@ -1015,5 +1134,31 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     @objc private func captionAppearanceDidChange() {
         captionStyle = CaptionAppearance.current()
         rebuildSubtitleOverlay()
+    }
+}
+
+/// Keeps the Live TV subtitle overlay mounted while the OSD changes. Replacing
+/// a UIHostingController root view makes the bottom inset jump immediately;
+/// publishing this value lets SwiftUI interpolate it exactly like VOD.
+@MainActor
+private final class LiveTVSubtitleChromeState: ObservableObject {
+    @Published var controlsVisible = false
+}
+
+private struct LiveTVSubtitleOverlayRoot: View {
+    let model: SubtitleModel
+    let style: CaptionStyle
+    @ObservedObject var chromeState: LiveTVSubtitleChromeState
+
+    var body: some View {
+        AetherSubtitleOverlayView(
+            model: model,
+            style: style,
+            controlsVisible: chromeState.controlsVisible
+        )
+        .animation(
+            .easeInOut(duration: 0.25),
+            value: chromeState.controlsVisible
+        )
     }
 }

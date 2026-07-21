@@ -150,4 +150,3 @@ extension View {
         modifier(FocusMemoryModifier(memoryKey: key, focusedId: focusedId, restoreOnEntry: restoreOnEntry))
     }
 }
-

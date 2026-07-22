@@ -1,0 +1,5 @@
+# Pinned Xcode version (major.minor). Consumed by xcodes/tooling that
+# honor .xcode-version; also the source of truth for CI (codemagic.yaml
+# currently uses `xcode: latest` — pin it to match this).
+# Detected from the build host via `xcodebuild -version` (Xcode 26.6, 17F113).
+26.6

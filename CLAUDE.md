@@ -298,6 +298,27 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 
 **`Docs/` is gitignored** (untracked on purpose, `c89b52d`), though some files under it are force-added and do ship — the `superpowers/` plans and specs, and `AETHER_ENGINE_STARTUP_NOTES.md`. What is *not* in the repo is `Docs/RIVULET_PLAYER.md` and `Docs/DESIGN_GUIDE.md`, both referenced throughout this file; they live only on the maintainer's machine. The `aether-update` and `rivulet-tvos-uikit` skills referenced above are also absent — `.claude/` is gitignored with nothing force-added. If a referenced doc or skill is missing in your environment, say so and proceed carefully rather than guessing its contents.
 
+### Developer setup & Make wrappers
+
+The toolchain is pinned so local and CI stay in sync: `Brewfile` lists the dev
+tools (swiftlint, swiftformat, pre-commit, xcbeautify, gh) and `.xcode-version`
+pins Xcode. `make bootstrap` installs both, then wires the pre-commit hook.
+
+`Makefile` targets are thin wrappers over the `xcodebuild` commands above, and
+the CI/lint tracks call the same targets so behavior can't drift:
+
+```bash
+make bootstrap     # brew bundle + pre-commit install (one-time)
+make lint          # swiftlint (config/baseline auto-discovered)
+make format        # swiftformat in place
+make format-check  # swiftformat --lint (no writes)
+make test          # xcodebuild test on the tvOS sim via Rivulet.xctestplan
+make build         # xcodebuild build for the tvOS sim
+```
+
+`make test` uses the `Rivulet.xctestplan` test plan; SCHEME/DESTINATION/TESTPLAN
+are variables at the top of the Makefile.
+
 ## Key Files
 
 | Purpose | File |

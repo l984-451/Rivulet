@@ -120,6 +120,25 @@ open Rivulet.xcodeproj
 xcodebuild -scheme Rivulet -destination 'generic/platform=tvOS' build
 ```
 
+### Developer setup
+
+The toolchain is pinned so local and CI stay in sync — `Brewfile` lists the dev
+tools and `.xcode-version` pins Xcode. One-time setup installs them and wires the
+git hooks:
+
+```bash
+make bootstrap     # brew bundle + pre-commit install
+```
+
+`Makefile` wraps the common tasks (run `make` to list them):
+
+```bash
+make lint          # SwiftLint
+make format        # SwiftFormat (in place)
+make test          # xcodebuild test on the tvOS Simulator
+make build         # xcodebuild build for the tvOS Simulator
+```
+
 ## Contributing
 
 I welcome all contributions from any level of developer. I welcome contributions from LLMs too as long as they are checked and tested.

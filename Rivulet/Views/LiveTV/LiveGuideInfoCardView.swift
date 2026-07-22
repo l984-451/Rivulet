@@ -98,11 +98,15 @@ final class LiveGuideInfoCardView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    private static func timeRange(_ program: UnifiedProgram) -> String {
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
-        return "\(formatter.string(from: program.startTime)) – \(formatter.string(from: program.endTime))"
+        return formatter
+    }()
+
+    private static func timeRange(_ program: UnifiedProgram) -> String {
+        "\(timeFormatter.string(from: program.startTime)) – \(timeFormatter.string(from: program.endTime))"
     }
 
     // MARK: - Focus

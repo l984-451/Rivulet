@@ -30,8 +30,10 @@ enum InputConfig {
 
     /// Single-press Left/Right skip. Applied uniformly across every remote and
     /// focus state (content-focused, IR d-pad, keyboard, and the focused
-    /// scrubber). May become a user-facing Playback setting later.
-    static let tapSeekSeconds: TimeInterval = 30
+    /// scrubber). User-configurable via Settings → Playback → Skip Length.
+    static var tapSeekSeconds: TimeInterval {
+        TimeInterval(SettingsStore.int(SkipInterval.storageKey, default: SkipInterval.defaultValue.rawValue))
+    }
     static let jumpSeekSeconds: TimeInterval = 30
 
     static let dpadThreshold: Float = 0.3

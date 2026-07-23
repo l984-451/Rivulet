@@ -127,6 +127,10 @@ enum SettingsDescriptorStore {
             icon: "forward.end.alt",
             description: "How long to wait before automatically playing the next episode. Set to Off to disable autoplay."
         ),
+        "skipLength": SettingDescriptor(
+            icon: "forward.fill",
+            description: "How far a single Left or Right press skips during playback."
+        ),
         "showPostVideoUpNext": SettingDescriptor(
             icon: "rectangle.stack",
             description: "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode."
@@ -353,6 +357,7 @@ enum SettingsDescriptorStore {
         case .userProfiles: return ("person.crop.circle", .systemCyan)
         case .displaySizePicker: return ("textformat.size", .systemOrange)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
+        case .skipIntervalPicker: return ("forward.fill", .systemBlue)
         case .contentFilter: return ("hand.raised.fill", .systemOrange)
         case .contentFilterStrength: return ("dial.medium.fill", .systemOrange)
         case .liveTVSourceDetail: return ("tv.and.mediabox", .systemBlue)

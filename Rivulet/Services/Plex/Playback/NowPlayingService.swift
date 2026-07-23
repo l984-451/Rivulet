@@ -32,6 +32,7 @@ final class NowPlayingService: ObservableObject {
     private var cachedArtwork: MPMediaItemArtwork?
     private var cachedArtworkURL: String?
     private var interruptionObserver: NSObjectProtocol?
+    private var skipIntervalObserver: NSObjectProtocol?
     private var inputCoordinator: PlaybackInputCoordinator?
     private var lastHandledPlaybackState: UniversalPlaybackState?
     /// Track if we've set Now Playing info with valid duration (> 0)
@@ -45,6 +46,15 @@ final class NowPlayingService: ObservableObject {
         // Configuring at app launch causes OSStatus error -50
         setupInterruptionHandling()
         setupRemoteCommandCenter()
+
+        // Keep the Control Center skip glyphs current when Skip Length changes.
+        skipIntervalObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshSkipIntervals()
+        }
     }
 
     // MARK: - Audio Session Configuration
@@ -274,27 +284,23 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
-        // Skip forward (10 seconds)
+        // Skip forward. Seek by the live setting, not the event's interval:
+        // the event echoes preferredIntervals, which is only refreshed when the
+        // Skip Length setting changes (see refreshSkipIntervals).
         commandCenter.skipForwardCommand.isEnabled = true
-        commandCenter.skipForwardCommand.preferredIntervals = [NSNumber(value: InputConfig.tapSeekSeconds)]
-        commandCenter.skipForwardCommand.addTarget { [weak self] event in
-            guard let skipEvent = event as? MPSkipIntervalCommandEvent else {
-                return .commandFailed
-            }
-            self?.dispatchInputAction(.seekRelative(seconds: skipEvent.interval))
+        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
+            self?.dispatchInputAction(.seekRelative(seconds: InputConfig.tapSeekSeconds))
             return .success
         }
 
-        // Skip backward (10 seconds)
+        // Skip backward (see note above).
         commandCenter.skipBackwardCommand.isEnabled = true
-        commandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: InputConfig.tapSeekSeconds)]
-        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
-            guard let skipEvent = event as? MPSkipIntervalCommandEvent else {
-                return .commandFailed
-            }
-            self?.dispatchInputAction(.seekRelative(seconds: -skipEvent.interval))
+        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.dispatchInputAction(.seekRelative(seconds: -InputConfig.tapSeekSeconds))
             return .success
         }
+
+        refreshSkipIntervals()
 
         // Change playback position (scrubbing/seeking)
         commandCenter.changePlaybackPositionCommand.isEnabled = true
@@ -349,6 +355,16 @@ final class NowPlayingService: ObservableObject {
 
     private func setupRemoteCommandCenter() {
         configureRemoteCommands(on: MPRemoteCommandCenter.shared())
+    }
+
+    /// Sync the number shown inside the Control Center skip glyphs with the
+    /// user's Skip Length setting. The handlers already seek by the live
+    /// `InputConfig.tapSeekSeconds`; this only drives the displayed interval.
+    private func refreshSkipIntervals() {
+        let intervals = [NSNumber(value: InputConfig.tapSeekSeconds)]
+        let commandCenter = MPRemoteCommandCenter.shared()
+        commandCenter.skipForwardCommand.preferredIntervals = intervals
+        commandCenter.skipBackwardCommand.preferredIntervals = intervals
     }
 
     private func dispatchInputAction(_ action: PlaybackInputAction) {

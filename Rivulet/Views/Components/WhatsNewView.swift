@@ -149,6 +149,7 @@ struct WhatsNewView: View {
             "Seeking is more dependable, a seek made while a title is still opening is no longer ignored, jumping far ahead no longer stalls playback until it gives up, and scrubbing to the very end no longer leaves Play unresponsive",
             "Subtitles now reappear when you seek onto a line that is already on screen, picture based subtitles with more than one element render in full, and external .sup subtitle files load",
             "Dolby Vision Profile 5 titles no longer play with a green or purple tint, and widescreen content encoded with non square pixels no longer appears squashed",
+            "You can now set how far a single Left or Right press skips during playback, from 5 to 30 seconds, in Playback settings",
         ]),
         ("1.0.4 (69)", [
             "New Content Filtering in Playback settings can mute strong language and skip scenes during playback, with per category controls and a quick toggle in the player",

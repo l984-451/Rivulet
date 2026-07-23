@@ -50,7 +50,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case plex, iptv, libraries, cache, userProfiles
     case liveTVSourceDetail
     case addLiveTVSource, addOwnServer, addPlaylistURL
-    case displaySizePicker, autoplayCountdownPicker
+    case displaySizePicker, autoplayCountdownPicker, skipIntervalPicker
     case contentFilter, contentFilterStrength
 
     var title: String {
@@ -73,6 +73,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .userProfiles: return "User Profiles"
         case .displaySizePicker: return "Display Size"
         case .autoplayCountdownPicker: return "Autoplay Countdown"
+        case .skipIntervalPicker: return "Skip Length"
         case .contentFilter: return "Content Filtering"
         case .contentFilterStrength: return "Profanity Strength"
         }
@@ -95,6 +96,24 @@ enum AutoplayCountdown: Int, CaseIterable, CustomStringConvertible {
         case .twentySeconds: return "20 seconds"
         }
     }
+}
+
+// MARK: - Skip Length
+
+/// Single Left/Right tap-skip length (seconds). Drives `InputConfig.tapSeekSeconds`.
+/// Values are limited to magnitudes SF Symbols ships numbered goforward/gobackward
+/// glyphs for, so the on-screen seek indicator always shows the number.
+enum SkipInterval: Int, CaseIterable, CustomStringConvertible {
+    case fiveSeconds = 5
+    case tenSeconds = 10
+    case fifteenSeconds = 15
+    case thirtySeconds = 30
+
+    /// UserDefaults key backing the Skip Length setting.
+    static let storageKey = "skipSeconds"
+    static let defaultValue: SkipInterval = .thirtySeconds
+
+    var description: String { "\(rawValue) seconds" }
 }
 
 // Note: DisplaySize enum is in Services/UIScale.swift for global access.

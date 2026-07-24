@@ -300,24 +300,24 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature â
 
 ### Developer setup & Make wrappers
 
-The toolchain is pinned so local and CI stay in sync: `Brewfile` lists the dev
-tools (swiftlint, swiftformat, pre-commit, xcbeautify, gh) and `.xcode-version`
-pins Xcode. `make bootstrap` installs both, then wires the pre-commit hook.
+`Brewfile` lists the dev tools (swiftlint, swiftformat, pre-commit, xcbeautify,
+gh). `make bootstrap` installs them, then wires the pre-commit hook.
 
 `Makefile` targets are thin wrappers over the `xcodebuild` commands above, and
 the CI/lint tracks call the same targets so behavior can't drift:
 
 ```bash
 make bootstrap     # brew bundle + pre-commit install (one-time)
-make lint          # swiftlint (config/baseline auto-discovered)
+make lint          # swiftlint --strict (matches CI)
 make format        # swiftformat in place
 make format-check  # swiftformat --lint (no writes)
-make test          # xcodebuild test on the tvOS sim via Rivulet.xctestplan
+make test          # xcodebuild test on the tvOS sim
 make build         # xcodebuild build for the tvOS sim
 ```
 
-`make test` uses the `Rivulet.xctestplan` test plan; SCHEME/DESTINATION/TESTPLAN
-are variables at the top of the Makefile.
+`make test` uses `Rivulet.xctestplan` if it's present at the repo root,
+otherwise it falls back to the scheme's default tests (the full `RivuletTests`
+suite). SCHEME/DESTINATION/TESTPLAN are variables at the top of the Makefile.
 
 ## Key Files
 

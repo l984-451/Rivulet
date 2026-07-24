@@ -67,6 +67,10 @@ Rivulet/Config/Secrets.swift
 # Internal developer docs — kept locally, not in the repo.
 Docs/
 
+# Node / wrangler tooling caches
+node_modules/
+.wrangler/
+
 # Playwright MCP session scratch (browser snapshots, traces, etc.)
 .playwright-mcp/
 

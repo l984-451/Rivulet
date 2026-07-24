@@ -122,9 +122,8 @@ xcodebuild -scheme Rivulet -destination 'generic/platform=tvOS' build
 
 ### Developer setup
 
-The toolchain is pinned so local and CI stay in sync — `Brewfile` lists the dev
-tools and `.xcode-version` pins Xcode. One-time setup installs them and wires the
-git hooks:
+`Brewfile` lists the dev tools (swiftlint, swiftformat, pre-commit, etc.).
+One-time setup installs them and wires the git hooks:
 
 ```bash
 make bootstrap     # brew bundle + pre-commit install

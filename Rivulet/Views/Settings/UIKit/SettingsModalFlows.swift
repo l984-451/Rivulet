@@ -56,4 +56,3 @@ struct ProfilePinFlow: View {
         .background(.black.opacity(0.6))
     }
 }
-

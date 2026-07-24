@@ -3,9 +3,9 @@
 
 SCHEME      := Rivulet
 DESTINATION := platform=tvOS Simulator,name=Apple TV
-# Shared naming contract: the test plan and some tools land on other branches
-# that aren't merged to main yet. These targets are written to work once
-# everything is on main.
+# Optional curated test plan. If Rivulet.xctestplan is present at the repo root
+# it is used; otherwise `make test` falls back to the scheme's default tests
+# (the full RivuletTests suite), so the target works with or without the plan.
 TESTPLAN    := Rivulet.xctestplan
 
 .DEFAULT_GOAL := help
@@ -24,10 +24,10 @@ bootstrap: ## Install toolchain (brew bundle) and git hooks (pre-commit)
 		|| { echo "pre-commit not found after brew bundle. Check the Brewfile."; exit 1; }
 	pre-commit install
 
-lint: ## Run SwiftLint (config/baseline auto-discovered)
+lint: ## Run SwiftLint (matches CI: --strict)
 	@command -v swiftlint >/dev/null 2>&1 \
 		|| { echo "swiftlint not found. Run 'make bootstrap' or 'brew bundle'."; exit 1; }
-	swiftlint lint
+	swiftlint lint --strict
 
 format: ## Format Swift sources in place (SwiftFormat)
 	@command -v swiftformat >/dev/null 2>&1 \
@@ -39,15 +39,17 @@ format-check: ## Check formatting without writing changes
 		|| { echo "swiftformat not found. Run 'make bootstrap' or 'brew bundle'."; exit 1; }
 	swiftformat . --lint
 
-# Depends on $(TESTPLAN), which arrives via another branch (see note above).
+# Uses $(TESTPLAN) if present, else the scheme's default tests.
 # xcbeautify is optional: fall back to raw xcodebuild if it's absent.
-test: ## Run the test plan on the tvOS Simulator
-	@if command -v xcbeautify >/dev/null 2>&1; then \
+test: ## Run tests on the tvOS Simulator (uses the test plan if present, else scheme default)
+	@plan_arg=""; \
+	if [ -f "$(TESTPLAN)" ]; then plan_arg="-testPlan $$(basename "$(TESTPLAN)" .xctestplan)"; fi; \
+	if command -v xcbeautify >/dev/null 2>&1; then \
 		set -o pipefail; \
-		xcodebuild test -scheme "$(SCHEME)" -destination "$(DESTINATION)" -testPlan "$(TESTPLAN)" | xcbeautify; \
+		xcodebuild test -scheme "$(SCHEME)" -destination "$(DESTINATION)" $$plan_arg | xcbeautify; \
 	else \
 		echo "xcbeautify not found; using raw xcodebuild output."; \
-		xcodebuild test -scheme "$(SCHEME)" -destination "$(DESTINATION)" -testPlan "$(TESTPLAN)"; \
+		xcodebuild test -scheme "$(SCHEME)" -destination "$(DESTINATION)" $$plan_arg; \
 	fi
 
 build: ## Build for the tvOS Simulator

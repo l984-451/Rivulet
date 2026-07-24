@@ -1231,13 +1231,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     }
 
     // MARK: - Streaming URLs
-    
+
     /// Playback strategy - ordered by preference
     enum PlaybackStrategy: String, CaseIterable {
         case directPlay = "Direct Play"          // Play file directly, no processing
         case directStream = "Direct Stream"      // Remux container only, no transcoding
         case hlsTranscode = "HLS Transcode"      // Full transcode to HLS
-        
+
         var next: PlaybackStrategy? {
             switch self {
             case .directPlay: return .directStream
@@ -1278,7 +1278,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             return buildHLSTranscodeURL(serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, offsetMs: offsetMs, isAudio: isAudio)
         }
     }
-    
+
     /// Direct play - stream the file as-is (most efficient)
     /// Apple TV supports: H.264, HEVC (4K), AAC, AC3, E-AC3, and most common containers
     private func buildDirectPlayURL(
@@ -1328,7 +1328,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
         return components.url
     }
-    
+
     /// Direct stream - remux container only, copy video stream
     /// Only transcodes audio if incompatible (like DTS → AAC)
     /// Video is passed through unchanged (no re-encoding)
@@ -1528,7 +1528,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
             // Session
             URLQueryItem(name: "session", value: sessionId),
-            
+
             // Additional params for stability
             URLQueryItem(name: "autoAdjustQuality", value: "0"),
             URLQueryItem(name: "hasMDE", value: "1")
@@ -1902,16 +1902,16 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
             URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName)
         ]
-        
+
         guard let url = components.url else {
             throw PlexAPIError.invalidURL
         }
-        
+
         let container: PlaybackDecisionContainer = try await request(
             url,
             headers: plexHeaders(authToken: authToken)
         )
-        
+
         return container.MediaContainer
     }
 

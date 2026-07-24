@@ -68,8 +68,12 @@ final class SkipIntervalSettingTests: XCTestCase {
 
         coordinator.handle(action: .stepSeek(forward: true), source: .siriMicroGamepad)
 
-        let until = Date().addingTimeInterval(InputConfig.seekCoalesceInterval + 0.08)
-        RunLoop.main.run(until: until)
+        // The coalesce timer fires on the main run loop; spin it until the
+        // seek is dispatched rather than betting on a fixed deadline.
+        let deadline = Date().addingTimeInterval(InputConfig.seekCoalesceInterval + 2.0)
+        while target.received.isEmpty && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
 
         XCTAssertEqual(target.received.count, 1)
         guard case .seekRelative(let seconds) = target.received.first?.0 else {

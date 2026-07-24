@@ -32,7 +32,6 @@ final class NowPlayingService: ObservableObject {
     private var cachedArtwork: MPMediaItemArtwork?
     private var cachedArtworkURL: String?
     private var interruptionObserver: NSObjectProtocol?
-    private var skipIntervalObserver: NSObjectProtocol?
     private var inputCoordinator: PlaybackInputCoordinator?
     private var lastHandledPlaybackState: UniversalPlaybackState?
     /// Track if we've set Now Playing info with valid duration (> 0)
@@ -46,15 +45,6 @@ final class NowPlayingService: ObservableObject {
         // Configuring at app launch causes OSStatus error -50
         setupInterruptionHandling()
         setupRemoteCommandCenter()
-
-        // Keep the Control Center skip glyphs current when Skip Length changes.
-        skipIntervalObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.refreshSkipIntervals()
-        }
     }
 
     // MARK: - Audio Session Configuration
@@ -145,6 +135,10 @@ final class NowPlayingService: ObservableObject {
 
         self.viewModel = viewModel
         self.inputCoordinator = inputCoordinator
+
+        // Pick up any Skip Length change for this session's Control Center glyphs.
+        // Settings can't change mid-playback, so refreshing per attach suffices.
+        refreshSkipIntervals()
 
         // CRITICAL: Ensure audio session is active BEFORE setting Now Playing info
         // This is required for tvOS to register us as the Now Playing app
@@ -285,8 +279,8 @@ final class NowPlayingService: ObservableObject {
         }
 
         // Skip forward. Seek by the live setting, not the event's interval:
-        // the event echoes preferredIntervals, which is only refreshed when the
-        // Skip Length setting changes (see refreshSkipIntervals).
+        // the event echoes preferredIntervals, which only tracks the displayed
+        // glyph and is refreshed per playback session (see refreshSkipIntervals).
         commandCenter.skipForwardCommand.isEnabled = true
         commandCenter.skipForwardCommand.addTarget { [weak self] _ in
             self?.dispatchInputAction(.seekRelative(seconds: InputConfig.tapSeekSeconds))

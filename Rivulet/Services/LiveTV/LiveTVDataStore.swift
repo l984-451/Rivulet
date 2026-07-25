@@ -350,13 +350,23 @@ class LiveTVDataStore: ObservableObject {
         isLoadingChannels = true
         channelsError = nil
 
-        channelLoadTask = Task {
+        // Snapshot providers up-front so the task body doesn't touch the
+        // @MainActor-bound dictionary (same reason as loadEPG below). Without
+        // this the task has to inherit MainActor, which puts the sort at the
+        // bottom of this function on the main thread.
+        let providerEntries = Array(providers)
+
+        // Detached, not `Task {}`: a Task created inside a @MainActor method
+        // inherits MainActor isolation, so the merge + sort of every channel
+        // (100k+ on a large M3U) would run on the main thread while the home
+        // screen is loading. The MainActor.run below is the only main hop.
+        channelLoadTask = Task.detached { [providerEntries] in
             var allChannels: [UnifiedChannel] = []
             var errors: [String] = []
 
             // Fetch from all providers in parallel
             await withTaskGroup(of: (String, Result<[UnifiedChannel], Error>).self) { group in
-                for (id, provider) in providers {
+                for (id, provider) in providerEntries {
                     group.addTask {
                         do {
                             let channels = try await provider.fetchChannels()
@@ -399,7 +409,7 @@ class LiveTVDataStore: ObservableObject {
                 }
             }
 
-            await updateSourceInfo()
+            await self.updateSourceInfo()
         }
 
         await channelLoadTask?.value

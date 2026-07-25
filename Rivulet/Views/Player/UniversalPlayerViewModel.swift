@@ -160,6 +160,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     // MARK: - Chapter Thumbnails
     private var chapterThumbnails: [Int: Data] = [:]  // index → image data
 
+    /// Part whose BIF is currently held by PlexThumbnailService. Tracked so the
+    /// outgoing item's BIF can be released on teardown and across episode swaps —
+    /// a BIF holds every trickplay frame of the item, so a binge would otherwise
+    /// accumulate them for the process lifetime.
+    private var preloadedThumbnailPartId: Int?
+
     // MARK: - Skip Marker State
     @Published private(set) var activeMarker: PlexMarker?
     @Published private(set) var showSkipButton = false
@@ -2278,6 +2284,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         subtitleClockSync.stop()
         clearReplayWindow()
         contentFilter.reset()
+        releaseThumbnailCache()
 
         // Clear the active playback route and content from the App Hang scope
         // (RIVULET-41) so a later hang off the player isn't tagged with a stale
@@ -2776,11 +2783,20 @@ final class UniversalPlayerViewModel: ObservableObject {
             return
         }
         // print("🖼️ Preloading BIF thumbnails for part \(partId)")
+        preloadedThumbnailPartId = partId
         PlexThumbnailService.shared.preloadBIF(
             partId: partId,
             serverURL: serverURL,
             authToken: authToken
         )
+    }
+
+    /// Drop the outgoing item's BIF. Safe to call when nothing is cached; a
+    /// later scrub re-fetches on demand.
+    private func releaseThumbnailCache() {
+        guard let partId = preloadedThumbnailPartId else { return }
+        preloadedThumbnailPartId = nil
+        PlexThumbnailService.shared.clearCache(partId: partId)
     }
 
     // MARK: - Track Selection
@@ -4396,6 +4412,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         // schedules a fresh one for the new item if needed.
         insightsRecheckTask?.cancel()
         insightsRecheckTask = nil
+        // Release the outgoing episode's BIF; preloadThumbnails() loads the new
+        // one. Without this a binge retains every episode's trickplay frames.
+        releaseThumbnailCache()
 
         // Re-resolve the title logo for the new episode.
         fetchTitleLogoIfNeeded()

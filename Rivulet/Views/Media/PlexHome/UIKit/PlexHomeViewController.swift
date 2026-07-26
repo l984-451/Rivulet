@@ -1227,6 +1227,10 @@ final class PlexHomeViewController: UIViewController {
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
         refreshOnReappearIfNeeded()
+        if let window = view.window {
+            MenuPressInterceptor.install(in: window)
+            MenuPressInterceptor.register(self)
+        }
     }
 
     /// Nonblocking stale-while-revalidate whenever the home surface comes back
@@ -1284,6 +1288,18 @@ final class PlexHomeViewController: UIViewController {
     private var heroSectionIndex: Int? {
         sectionsSnapshot.firstIndex(where: { $0.kind == .hero })
     }
+
+    /// The section a staged Menu back returns to. Every hero-bearing mode
+    /// (home, library, discover) tops out at the hero; Search has no hero, so
+    /// its first section is the top.
+    private var topSectionIndex: Int {
+        heroSectionIndex ?? 0
+    }
+
+    /// Set while a staged Menu back is pulling focus to the top section. Only
+    /// used by modes with no hero — hero modes reuse `needsInitialHeroFocus`
+    /// so focus lands on Play exactly as it does at launch.
+    private var wantsTopFocus = false
 
     /// Ask the engine to re-resolve focus while initial-hero routing is
     /// active. Called from viewDidAppear AND after snapshot applies — on cold
@@ -4237,6 +4253,11 @@ final class PlexHomeViewController: UIViewController {
            let heroCell = collectionView.cellForItem(at: IndexPath(item: 0, section: heroIndex)) {
             return [heroCell]
         }
+        // Staged Menu back on a heroless page (Search) — see returnToTopRow().
+        if wantsTopFocus,
+           let topCell = collectionView.cellForItem(at: IndexPath(item: 0, section: topSectionIndex)) {
+            return [topCell]
+        }
         return super.preferredFocusEnvironments
     }
 }
@@ -4645,6 +4666,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let kind: HomeSectionKind? = sectionsSnapshot.indices.contains(nextSectionIndex)
             ? sectionsSnapshot[nextSectionIndex].kind
             : nil
+        // The staged Menu back has landed; stop routing focus to the top.
+        if wantsTopFocus, nextSectionIndex == topSectionIndex { wantsTopFocus = false }
         // Initial-hero routing ends once the hero has focus, or as soon as
         // the user makes a directional move WITHIN the page (never yank focus
         // mid-navigation). Directional entries from OUTSIDE (the sidebar)
@@ -4747,14 +4770,76 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         // `isScrollEnabled = false` hands us the vertical focus-scroll: the
         // engine no longer masks a nil section by scrolling on its own, so a
         // Down/Up move between orthogonal rows would otherwise fail to centre.
-        var v: UIView? = context.nextFocusedView
-        while let view = v {
-            if let cell = view as? UICollectionViewCell,
+        return sectionIndex(forFocusedView: context.nextFocusedView)
+    }
+
+    /// Walk a focused view's superview chain to its enclosing collection-view
+    /// cell and read that cell's section.
+    private func sectionIndex(forFocusedView view: UIView?) -> Int? {
+        var v: UIView? = view
+        while let current = v {
+            if let cell = current as? UICollectionViewCell,
                let ip = self.collectionView.indexPath(for: cell) {
                 return ip.section
             }
-            v = view.superview
+            v = current.superview
         }
         return nil
+    }
+}
+
+// MARK: - Staged Menu back (issue #19)
+
+extension PlexHomeViewController: MenuBackHandling {
+    /// Stage 1: a Menu press from below the top row snaps the page back to its
+    /// top row instead of opening the sidebar. At the top row this declines, so
+    /// the system performs its native sidebar reveal (stage 2), and from there
+    /// `TVSidebarView.onExitCommand` returns to Home (stage 3).
+    func handleMenuBack() -> Bool {
+        guard isViewLoaded, let window = view.window, window.isKeyWindow else { return false }
+        // Focus must be inside THIS page's collection. When a player, detail
+        // carousel, tile menu or Settings page is up, focus lives inside it —
+        // this page declines and Menu keeps its normal meaning there.
+        guard let focused = UIFocusSystem.focusSystem(for: collectionView)?.focusedItem as? UIView,
+              focused.isDescendant(of: collectionView) else { return false }
+        guard StagedMenuBack.shouldReturnToTop(
+            focusedSection: sectionIndex(forFocusedView: focused),
+            topSection: topSectionIndex
+        ) else { return false }
+
+        returnToTopRow()
+        return true
+    }
+
+    /// Snap to the top row and put focus there.
+    ///
+    /// The jump is deliberate. While the page is scrolled deep the top row's
+    /// cell has been recycled, so focus cannot be routed to a cell that does
+    /// not exist yet — and animating there first loses the race: the focus
+    /// engine re-resolves mid-flight, lands on whatever row is passing, and
+    /// scrolls that back into view (the page ends up one row higher instead of
+    /// at the top). Setting the offset and laying out first creates the cell,
+    /// so the focus request has somewhere to land.
+    private func returnToTopRow() {
+        // Cancel any in-flight focus-scroll so it can't animate back over us.
+        offsetLink?.invalidate()
+        offsetLink = nil
+        collectionView.contentOffset = CGPoint(x: 0, y: -collectionView.adjustedContentInset.top)
+        collectionView.layoutIfNeeded()
+
+        // Hero modes reuse the launch routing so focus lands on Play; Search
+        // has no hero, so `wantsTopFocus` aims at its first section instead.
+        if heroSectionIndex != nil {
+            needsInitialHeroFocus = true
+        } else {
+            wantsTopFocus = true
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        // The hero's buttons live in a SwiftUI subview that may not be
+        // focusable until the next runloop turn; re-assert once it is.
+        DispatchQueue.main.async { [weak self] in
+            self?.nudgeInitialHeroFocusIfNeeded()
+        }
     }
 }

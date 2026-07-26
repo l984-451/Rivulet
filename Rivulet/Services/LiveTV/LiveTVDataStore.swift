@@ -319,15 +319,22 @@ class LiveTVDataStore: ObservableObject {
     private func updateSourceInfo() async {
         var infos: [LiveTVSourceInfo] = []
 
+        // One pass instead of a filter per provider: on a large lineup the
+        // per-provider filter is O(providers × channels) on the main actor,
+        // a second main-thread sweep right behind the channel load.
+        var channelCounts: [String: Int] = [:]
+        for channel in channels {
+            channelCounts[channel.sourceId, default: 0] += 1
+        }
+
         for (id, provider) in providers {
             let isConnected = await provider.isConnected
-            let channelCount = channels.filter { $0.sourceId == id }.count
 
             infos.append(LiveTVSourceInfo(
                 id: id,
                 sourceType: provider.sourceType,
                 displayName: provider.displayName,
-                channelCount: channelCount,
+                channelCount: channelCounts[id] ?? 0,
                 isConnected: isConnected,
                 lastSync: nil  // TODO: Track last sync time
             ))
@@ -337,6 +344,61 @@ class LiveTVDataStore: ObservableObject {
     }
 
     // MARK: - Channel Loading
+
+    /// Fetch every provider in parallel and merge the results into one sorted
+    /// lineup.
+    ///
+    /// `nonisolated` so both callers below can run it off the main actor. On a
+    /// large M3U this is 100k+ channels, and the sort falls through to Unicode
+    /// string collation because most playlists omit `tvg-chno` — enough work to
+    /// stall the focus engine if it lands on the main thread.
+    private nonisolated static func fetchAndMergeChannels(
+        from providerEntries: [(key: String, value: any LiveTVProvider)],
+        refreshing: Bool
+    ) async -> (channels: [UnifiedChannel], errors: [String]) {
+        var allChannels: [UnifiedChannel] = []
+        var errors: [String] = []
+
+        await withTaskGroup(of: (String, Result<[UnifiedChannel], Error>).self) { group in
+            for (id, provider) in providerEntries {
+                group.addTask {
+                    do {
+                        let channels = refreshing
+                            ? try await provider.refreshChannels()
+                            : try await provider.fetchChannels()
+                        return (id, .success(channels))
+                    } catch {
+                        return (id, .failure(error))
+                    }
+                }
+            }
+
+            for await (sourceId, result) in group {
+                switch result {
+                case .success(let channels):
+                    allChannels.append(contentsOf: channels)
+                case .failure(let error):
+                    errors.append("\(sourceId): \(error.localizedDescription)")
+                    print("📺 LiveTVDataStore: ❌ Failed to load from \(sourceId): \(error)")
+                }
+            }
+        }
+
+        // Sort channels by number, then name
+        allChannels.sort { c1, c2 in
+            if let n1 = c1.channelNumber, let n2 = c2.channelNumber {
+                return n1 < n2
+            } else if c1.channelNumber != nil {
+                return true
+            } else if c2.channelNumber != nil {
+                return false
+            } else {
+                return c1.name < c2.name
+            }
+        }
+
+        return (allChannels, errors)
+    }
 
     /// Load channels from all sources
     func loadChannels() async {
@@ -350,62 +412,28 @@ class LiveTVDataStore: ObservableObject {
         isLoadingChannels = true
         channelsError = nil
 
-        // Snapshot providers up-front so the task body doesn't touch the
-        // @MainActor-bound dictionary (same reason as loadEPG below). Without
-        // this the task has to inherit MainActor, which puts the sort at the
-        // bottom of this function on the main thread.
+        // Snapshot providers up-front so the task body never touches the
+        // @MainActor-bound dictionary.
         let providerEntries = Array(providers)
 
         // Detached, not `Task {}`: a Task created inside a @MainActor method
-        // inherits MainActor isolation, so the merge + sort of every channel
-        // (100k+ on a large M3U) would run on the main thread while the home
-        // screen is loading. The MainActor.run below is the only main hop.
+        // inherits MainActor isolation, which would put the merge and sort back
+        // on the main thread while the home screen is still loading. Priority
+        // does not change isolation, so `Task(priority:)` is not a substitute.
+        // The MainActor.run below is the only main hop.
         channelLoadTask = Task.detached { [providerEntries] in
-            var allChannels: [UnifiedChannel] = []
-            var errors: [String] = []
+            let merged = await Self.fetchAndMergeChannels(from: providerEntries, refreshing: false)
 
-            // Fetch from all providers in parallel
-            await withTaskGroup(of: (String, Result<[UnifiedChannel], Error>).self) { group in
-                for (id, provider) in providerEntries {
-                    group.addTask {
-                        do {
-                            let channels = try await provider.fetchChannels()
-                            return (id, .success(channels))
-                        } catch {
-                            return (id, .failure(error))
-                        }
-                    }
-                }
-
-                for await (sourceId, result) in group {
-                    switch result {
-                    case .success(let channels):
-                        allChannels.append(contentsOf: channels)
-                    case .failure(let error):
-                        errors.append("\(sourceId): \(error.localizedDescription)")
-                        print("📺 LiveTVDataStore: ❌ Failed to load from \(sourceId): \(error)")
-                    }
-                }
-            }
-
-            // Sort channels by number, then name
-            allChannels.sort { c1, c2 in
-                if let n1 = c1.channelNumber, let n2 = c2.channelNumber {
-                    return n1 < n2
-                } else if c1.channelNumber != nil {
-                    return true
-                } else if c2.channelNumber != nil {
-                    return false
-                } else {
-                    return c1.name < c2.name
-                }
-            }
+            // A cancelled (superseded) task must NOT publish: its partial
+            // results would clobber whatever the newer loadChannels wrote, and
+            // that newer task owns isLoadingChannels from here on.
+            guard !Task.isCancelled else { return }
 
             await MainActor.run {
-                self.channels = allChannels
+                self.channels = merged.channels
                 self.isLoadingChannels = false
-                if !errors.isEmpty {
-                    self.channelsError = errors.joined(separator: "\n")
+                if !merged.errors.isEmpty {
+                    self.channelsError = merged.errors.joined(separator: "\n")
                 }
             }
 
@@ -422,49 +450,17 @@ class LiveTVDataStore: ObservableObject {
         isLoadingChannels = true
         channelsError = nil
 
-        var allChannels: [UnifiedChannel] = []
-        var errors: [String] = []
+        // Detached for the same reason as loadChannels — this one is reached
+        // from a Settings action, so the freeze would be squarely on a tap.
+        let providerEntries = Array(providers)
+        let merged = await Task.detached { [providerEntries] in
+            await Self.fetchAndMergeChannels(from: providerEntries, refreshing: true)
+        }.value
 
-        // Refresh from all providers in parallel
-        await withTaskGroup(of: (String, Result<[UnifiedChannel], Error>).self) { group in
-            for (id, provider) in providers {
-                group.addTask {
-                    do {
-                        let channels = try await provider.refreshChannels()
-                        return (id, .success(channels))
-                    } catch {
-                        return (id, .failure(error))
-                    }
-                }
-            }
-
-            for await (sourceId, result) in group {
-                switch result {
-                case .success(let channels):
-                    allChannels.append(contentsOf: channels)
-                case .failure(let error):
-                    errors.append("\(sourceId): \(error.localizedDescription)")
-                }
-            }
-        }
-
-        // Sort channels
-        allChannels.sort { c1, c2 in
-            if let n1 = c1.channelNumber, let n2 = c2.channelNumber {
-                return n1 < n2
-            } else if c1.channelNumber != nil {
-                return true
-            } else if c2.channelNumber != nil {
-                return false
-            } else {
-                return c1.name < c2.name
-            }
-        }
-
-        channels = allChannels
+        channels = merged.channels
         isLoadingChannels = false
-        if !errors.isEmpty {
-            channelsError = errors.joined(separator: "\n")
+        if !merged.errors.isEmpty {
+            channelsError = merged.errors.joined(separator: "\n")
         }
 
         await updateSourceInfo()
@@ -495,18 +491,23 @@ class LiveTVDataStore: ObservableObject {
         // Snapshot providers so we can gather XMLTV channel logos after the EPG
         // fetch without touching the @MainActor providers dictionary post-suspension.
         let providerList = Array(providers.values)
+        let providersById = providers
 
-        epgLoadTask = Task {
+        // Grouping has to read `channels`, so it stays here on the main actor;
+        // the merge of every source's programs below does not, and is the part
+        // that scales with the lineup.
+        let channelsBySource = Dictionary(grouping: channels, by: { $0.sourceId })
+
+        // Detached for the same reason as loadChannels: `Task {}` would inherit
+        // MainActor and put the EPG merge on the main thread.
+        epgLoadTask = Task.detached { [channelsBySource, providersById, providerList, sourceNames] in
             var allEPG: [String: [UnifiedProgram]] = [:]
             var issues: [EPGFetchIssue] = []
-
-            // Group channels by source
-            let channelsBySource = Dictionary(grouping: channels, by: { $0.sourceId })
 
             // Fetch EPG from each provider
             await withTaskGroup(of: (String, Result<[String: [UnifiedProgram]], Error>).self) { group in
                 for (sourceId, sourceChannels) in channelsBySource {
-                    guard let provider = providers[sourceId] else {
+                    guard let provider = providersById[sourceId] else {
                         print("📺 LiveTVDataStore: ⚠️ No provider found for sourceId: \(sourceId)")
                         continue
                     }
@@ -678,7 +679,7 @@ class LiveTVDataStore: ObservableObject {
     /// for the guide banner. Keep these deliberately concrete — "EPG server
     /// returned HTTP 404" tells the user where to look, whereas the raw
     /// `error.localizedDescription` is often opaque.
-    static func shortEPGFailureReason(for error: Error) -> String {
+    nonisolated static func shortEPGFailureReason(for error: Error) -> String {
         if let xmltv = error as? XMLTVParseError {
             switch xmltv {
             case .httpError(let code):

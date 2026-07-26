@@ -48,6 +48,14 @@ final class PlexThumbnailService {
         loadingTasks[partId] = task
 
         let result = await task.value
+
+        // `clearCache` may have released this part while the load was in
+        // flight; it drops the entry from `loadingTasks` to say so. Still hand
+        // back the frame we already have, but don't re-populate the cache
+        // nobody is left holding.
+        guard loadingTasks[partId] == task else {
+            return result?.thumbnail(at: time)
+        }
         loadingTasks[partId] = nil
 
         if let data = result {
@@ -120,7 +128,13 @@ final class PlexThumbnailService {
         loadingTasks[partId] = task
 
         Task {
-            if let result = await task.value {
+            let result = await task.value
+            // The caller may have released this part before the download
+            // finished (short watch, or a skip to the next episode). Writing
+            // the result now would re-fill the cache with nobody left to
+            // release it, so treat a dropped `loadingTasks` entry as a release.
+            guard loadingTasks[partId] == task else { return }
+            if let result {
                 bifCache[partId] = result
             } else {
                 unavailableParts.insert(partId)
@@ -202,10 +216,16 @@ final class PlexThumbnailService {
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }
 
-    /// Clear cache for a specific part
+    /// Release the frames held for a part. Also drops any in-flight load, so a
+    /// download that finishes after this call doesn't re-fill the cache.
+    ///
+    /// Deliberately keeps `unavailableParts`: a part with no BIF on the server
+    /// still has none after a release, and re-arming it would re-issue both the
+    /// sd and hd requests every time the item is replayed.
     func clearCache(partId: Int) {
+        loadingTasks[partId]?.cancel()
+        loadingTasks[partId] = nil
         bifCache[partId] = nil
-        unavailableParts.remove(partId)
     }
 
     /// Clear all cached data

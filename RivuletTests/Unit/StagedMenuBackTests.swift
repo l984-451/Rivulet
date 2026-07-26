@@ -103,4 +103,30 @@ final class MenuPressSwallowStateTests: XCTestCase {
         var state = MenuPressSwallowState()
         XCTAssertFalse(state.shouldWithhold(began: false, finished: true, handle: { true }))
     }
+
+    /// A second `.began` arriving before the first press ends must not re-ask
+    /// the handler or take over the pending press's tracking — the press being
+    /// swallowed owns the state until its own terminal phase.
+    func testOverlappingBeganDoesNotReAskOrRetrack() {
+        var state = MenuPressSwallowState()
+        var asked = 0
+        XCTAssertTrue(state.shouldWithhold(began: true, finished: false, handle: { asked += 1; return true }))
+        // Second press begins while the first is still down.
+        XCTAssertTrue(state.shouldWithhold(began: true, finished: false, handle: { asked += 1; return true }))
+        XCTAssertEqual(asked, 1)
+        XCTAssertTrue(state.isSwallowing)
+        // The original press's terminal phase still ends the swallow.
+        XCTAssertTrue(state.shouldWithhold(began: false, finished: true, handle: { true }))
+        XCTAssertFalse(state.isSwallowing)
+    }
+
+    /// The declined case must stay re-askable: no swallow is pending, so a
+    /// following `.began` is a fresh decision.
+    func testBeganAfterADeclinedPressIsAskedAgain() {
+        var state = MenuPressSwallowState()
+        var asked = 0
+        XCTAssertFalse(state.shouldWithhold(began: true, finished: false, handle: { asked += 1; return false }))
+        XCTAssertFalse(state.shouldWithhold(began: true, finished: false, handle: { asked += 1; return false }))
+        XCTAssertEqual(asked, 2)
+    }
 }

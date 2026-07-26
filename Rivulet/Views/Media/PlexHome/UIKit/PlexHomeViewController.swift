@@ -4669,7 +4669,11 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         // The staged Menu back has landed; stop routing focus to the top. A
         // directional move clears it too — if the top cell never took focus the
         // flag would otherwise latch and yank focus back on some later,
-        // unrelated update. Mirrors the two exits `needsInitialHeroFocus` has.
+        // unrelated update. `needsInitialHeroFocus` additionally requires the
+        // move to start INSIDE the collection, because it is armed at launch
+        // when focus can arrive from the sidebar. This flag is only ever armed
+        // by handleMenuBack(), which already requires focus inside the
+        // collection, so that conjunct would be dead weight here.
         if wantsTopFocus, nextSectionIndex == topSectionIndex || !context.focusHeading.isEmpty {
             wantsTopFocus = false
         }

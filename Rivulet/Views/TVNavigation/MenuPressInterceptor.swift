@@ -31,7 +31,10 @@ struct MenuPressSwallowState {
     ///   - handle: asked once per press, on `.began`. True means consumed.
     /// - Returns: true when this event must be withheld from the system.
     mutating func shouldWithhold(began: Bool, finished: Bool, handle: () -> Bool) -> Bool {
-        if began {
+        // A second `.began` arriving before the first press ends must not
+        // re-ask the handler or overwrite the pending press — the press being
+        // swallowed owns the state until its own terminal phase.
+        if began, !isSwallowing {
             let consumed = handle()
             // A single event carrying both phases needs no follow-up swallow.
             isSwallowing = consumed && !finished

@@ -4666,8 +4666,13 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let kind: HomeSectionKind? = sectionsSnapshot.indices.contains(nextSectionIndex)
             ? sectionsSnapshot[nextSectionIndex].kind
             : nil
-        // The staged Menu back has landed; stop routing focus to the top.
-        if wantsTopFocus, nextSectionIndex == topSectionIndex { wantsTopFocus = false }
+        // The staged Menu back has landed; stop routing focus to the top. A
+        // directional move clears it too — if the top cell never took focus the
+        // flag would otherwise latch and yank focus back on some later,
+        // unrelated update. Mirrors the two exits `needsInitialHeroFocus` has.
+        if wantsTopFocus, nextSectionIndex == topSectionIndex || !context.focusHeading.isEmpty {
+            wantsTopFocus = false
+        }
         // Initial-hero routing ends once the hero has focus, or as soon as
         // the user makes a directional move WITHIN the page (never yank focus
         // mid-navigation). Directional entries from OUTSIDE (the sidebar)

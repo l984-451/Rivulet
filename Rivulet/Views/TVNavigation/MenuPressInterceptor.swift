@@ -87,10 +87,6 @@ enum MenuPressInterceptor {
         handlers.append(WeakHandler(value: handler))
     }
 
-    static func resign(_ handler: any MenuBackHandling) {
-        handlers.removeAll { $0.value == nil || $0.value === handler }
-    }
-
     /// Offer the press to registered surfaces, most recently registered first.
     /// Each decides for itself whether it currently owns focus, so a surface
     /// sitting under a presented player or detail page declines.
@@ -121,6 +117,10 @@ enum MenuPressInterceptor {
                 return
             }
             let withhold = MainActor.assumeIsolated { () -> Bool in
+                // Withholding drops the whole event, so a non-Menu press
+                // batched into the same one goes with it. The remote delivers
+                // Menu on its own in practice, and there is no way to forward
+                // a partial UIPressesEvent.
                 let menuPresses = pressesEvent.allPresses.filter { $0.type == .menu }
                 guard !menuPresses.isEmpty else { return false }
                 return swallowState.shouldWithhold(

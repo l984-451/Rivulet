@@ -46,7 +46,7 @@ final class EpisodeThumbCardView: TVCardView {
 
     // Consume the Select press in BOTH began/ended so the focused card owns the
     // press cycle — otherwise pressesEnded(.select) is not reliably delivered
-    // (mirrors AboutCardControl).
+    // (mirrors DetailCardControl).
     // TVCardView cancels the Select press internally between pressesBegan and
     // pressesEnded (the Ended becomes pressesCancelled), so an Ended-based
     // handler never runs. Fire onSelect on pressesBegan — the only event that is
@@ -82,7 +82,7 @@ final class EpisodeDescriptionView: UIView {
     }
 
     // Consume the Select press in BOTH began/ended so the focused block owns the
-    // press cycle (mirrors AboutCardControl) — required for reliable delivery.
+    // press cycle (mirrors DetailCardControl) — required for reliable delivery.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         if presses.contains(where: { $0.type == .select }) { return }
         super.pressesBegan(presses, with: event)

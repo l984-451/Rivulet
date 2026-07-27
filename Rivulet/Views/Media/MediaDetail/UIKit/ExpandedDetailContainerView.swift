@@ -58,6 +58,7 @@ final class ExpandedDetailContainerView: UIView {
     /// Forwarded up to the host VC to present the About popups.
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
     var onSelectAdvisory: ((ContentAdvisory) -> Void)?
+    var onSelectInfoColumn: ((DetailInfoSection) -> Void)?
 
     private(set) var maxScrollOffset: CGFloat = 0
 
@@ -385,6 +386,9 @@ final class ExpandedDetailContainerView: UIView {
         }
         belowFoldCollection.onSelectSynopsis = { [weak self] d in self?.onSelectSynopsis?(d) }
         belowFoldCollection.onSelectAdvisory = { [weak self] a in self?.onSelectAdvisory?(a) }
+        belowFoldCollection.onSelectInfoColumn = { [weak self] section in
+            self?.onSelectInfoColumn?(section)
+        }
 
         // Logo + season pills sit ABOVE the collection (content scrolls under).
         bringSubviewToFront(smallTitleLogo)

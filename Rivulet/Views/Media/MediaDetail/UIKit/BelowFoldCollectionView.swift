@@ -85,6 +85,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Selecting the About cards opens the matching popup (synopsis / advisory).
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
     var onSelectAdvisory: ((ContentAdvisory) -> Void)?
+    /// Selecting an Information / Languages / Accessibility card opens that
+    /// section in full (title + every row).
+    var onSelectInfoColumn: ((DetailInfoSection) -> Void)?
 
     /// Which sub-target of the focused episode card is focused (thumb vs
     /// description). Set from the cell's focus reporting.
@@ -241,9 +244,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .related:
                 // Home-identical shelf: one full-width ShelfRowCell hosting
                 // the posters (margin 40, symmetric peeks, pitch landings).
-                self.relatedHeaderVisible = !isPrimary
                 return self.homeShelfHostSection(
-                    header: !isPrimary,
                     topInset: isPrimary ? peek : 0,
                     sectionBottomInset: isPrimary ? 36 : 56
                 )
@@ -256,10 +257,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     header: true
                 )
             case .about: return self.fullWidthSection(height: 370)
-            case .info:  return self.fullWidthSection(height: 460, band: true)
+            // 504 = the old 460 plus the 44pt of padding the info cards add.
+            case .info:  return self.fullWidthSection(height: 504)
             }
         }
-        layout.register(InfoBandDecorationView.self, forDecorationViewOfKind: InfoBandDecorationView.kind)
         return layout
     }
 
@@ -268,21 +269,19 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// with the home shelf's exact geometry and landings. The item spans the
     /// whole (panel + overshoot) collection width; panel alignment happens
     /// inside the cell via panelOvershoot.
-    private func homeShelfHostSection(header: Bool,
-                                      topInset: CGFloat = 0,
+    private func homeShelfHostSection(topInset: CGFloat = 0,
                                       sectionBottomInset: CGFloat = 56) -> NSCollectionLayoutSection {
         // The ShelfRowCell draws its own header (self-aligned with the tiles),
         // so there's NO supplementary header — just one full-width item tall
-        // enough for the optional header + the row.
-        let headerH: CGFloat = header ? 44 : 0
-        let rowHeight = headerH + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
+        // enough for the header + the row.
+        let rowHeight = ShelfRowCell.headerHeight + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                               heightDimension: .absolute(rowHeight))
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: itemSize, subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
         section.contentInsets = .init(
-            top: (header ? 8 : 0) + topInset,
+            top: 8 + topInset,
             leading: 0,
             bottom: sectionBottomInset,
             trailing: 0
@@ -290,9 +289,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         return section
     }
 
-    /// A single full-width block (About / Info columns) — no orthogonal scroll,
+    /// A single full-width block (About / Info cards) — no orthogonal scroll,
     /// left/right gutters matching the rails.
-    private func fullWidthSection(height: CGFloat, band: Bool = false) -> NSCollectionLayoutSection {
+    private func fullWidthSection(height: CGFloat) -> NSCollectionLayoutSection {
         let item = NSCollectionLayoutItem(layoutSize: .init(
             widthDimension: .fractionalWidth(1), heightDimension: .absolute(height)))
         let group = NSCollectionLayoutGroup.horizontal(
@@ -300,11 +299,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
         section.contentInsets = .init(top: 24, leading: Self.rowLeading, bottom: 56, trailing: Self.rowTrailing)
-        if band {
-            // Full-width darkened band behind the section (spans the section rect,
-            // edge to edge — the columns stay inset via contentInsets).
-            section.decorationItems = [.background(elementKind: InfoBandDecorationView.kind)]
-        }
         return section
     }
 
@@ -418,7 +412,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 // below-fold's state-dependent translation), and draw the
                 // header in-cell so it aligns with the tiles.
                 cell.screenAlignsLeading = true
-                cell.headerTitle = self.relatedHeaderVisible ? "Related" : nil
+                cell.headerTitle = "Related"
                 cell.configure(
                     kind: .poster,
                     realCount: items.count,
@@ -440,6 +434,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 return cell
             case .info:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: InfoColumnsCollectionCell.reuseID, for: indexPath) as! InfoColumnsCollectionCell
+                cell.onSelectColumn = { [weak self] section in
+                    self?.onSelectInfoColumn?(section)
+                }
                 if let d = self.detail { cell.configure(detail: d) }
                 return cell
             }
@@ -586,9 +583,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private var cachedRelated: [BelowFoldItem] = []
     /// Ordered Related items backing the shelf (index == shelf tile index).
     private var relatedItems: [MediaItem] = []
-    /// Whether the Related row currently draws its in-cell header (false when
-    /// Related is the primary/first section, matching the old `!isPrimary`).
-    private var relatedHeaderVisible = true
     private var cachedCastOrder: [(String, BelowFoldItem)] = []
 
     private func applySnapshot() {

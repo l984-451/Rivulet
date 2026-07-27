@@ -3,9 +3,26 @@
 Date: 2026-07-10
 Issues: #19 (Back button should scroll back up to top row), #192 (Back button on remote takes you all the way back to Home)
 
-## OUTCOME (2026-07-10) — read this first
+## SUPERSEDED (2026-07-27) — read this first
 
-**Shipped: #192 only. #19 abandoned as platform-blocked.**
+**#19 is no longer platform-blocked. Both stages ship.** Stage 1 is
+`MenuPressInterceptor`, which takes the press at `UIWindow.sendEvent(_:)` and offers it to
+the focused surface; `PlexHomeViewController` consumes it below the top row and declines at
+the top, so the system still performs its native sidebar reveal. Stage 3 is unchanged from
+what shipped for #192.
+
+The 2026-07-10 conclusion below was right about every seam it tested and wrong about the
+one it did not test. `sendEvent(_:)` sits earlier in the event pipeline than `pressesBegan`:
+the window sees the press before the `.sidebarAdaptable` shell consumes it, so returning
+early there withholds it from the system entirely. The dead-seam list is still accurate and
+still worth reading before anyone proposes a fourth approach — it is the reason the
+interceptor sits where it does rather than anywhere more obvious.
+
+Note the asymmetry that made this easy to miss: a `pressesBegan` swizzle **on `UIWindow`**
+was tested and does not see `.menu`, so the window looked ruled out as a class of hook. It
+was not; only that method on it was.
+
+## OUTCOME (2026-07-10) — historical, superseded above
 
 The staged design below assumed the app could intercept the Menu press that moves focus
 from a content grid into the sidebar. It cannot. Empirically confirmed on the tvOS 26

@@ -90,6 +90,14 @@ enum MenuPressInterceptor {
         handlers.append(WeakHandler(value: handler))
     }
 
+    /// Drop a surface as it goes away. Only home is a cached controller; every
+    /// library, Discover and Search page builds a fresh one, so without this the
+    /// list grows by one entry per page visited. A stale entry would still
+    /// decline (it checks whether it owns focus), but it would be asked first.
+    static func resign(_ handler: any MenuBackHandling) {
+        handlers.removeAll { $0.value == nil || $0.value === handler }
+    }
+
     /// Offer the press to registered surfaces, most recently registered first.
     /// Each decides for itself whether it currently owns focus, so a surface
     /// sitting under a presented player or detail page declines.

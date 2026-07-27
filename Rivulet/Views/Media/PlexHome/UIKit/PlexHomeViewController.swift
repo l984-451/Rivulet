@@ -1233,6 +1233,14 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // Stop taking Menu presses the moment the page leaves the screen, and
+        // keep the handler list from growing by one per page visited. A fresh
+        // appearance re-registers.
+        MenuPressInterceptor.resign(self)
+    }
+
     /// Nonblocking stale-while-revalidate whenever the home surface comes back
     /// on screen (tab switch back, player/preview dismissal): re-check the
     /// small Continue Watching hub in the background. The data store throttles

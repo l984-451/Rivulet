@@ -283,7 +283,18 @@ final class InfoColumnsView: UIView {
     /// nil keeps them inert (the episode detail page, which scrolls normally
     /// and has nothing to open).
     var onSelectColumn: ((DetailInfoSection) -> Void)? {
-        didSet { columns.forEach { $0.card.selectable = onSelectColumn != nil } }
+        didSet { updateSelectability() }
+    }
+
+    /// A card is a focus stop only when there IS a handler AND it has rows to
+    /// show — an item with no year / runtime / rating / genres / studio would
+    /// otherwise leave a focusable "Information" card that opens a popup
+    /// containing nothing but its title.
+    private func updateSelectability() {
+        let enabled = onSelectColumn != nil
+        for column in columns {
+            column.card.selectable = enabled && !column.section.rows.isEmpty
+        }
     }
 
     override init(frame: CGRect) {
@@ -369,6 +380,7 @@ final class InfoColumnsView: UIView {
             to: columns[0])
         apply(.init(title: "Languages", rows: langs), cardRows: langs, to: columns[1])
         apply(.init(title: "Accessibility", rows: access), cardRows: access, to: columns[2])
+        updateSelectability()
     }
 
     /// The card renders `cardRows`; `section` is what a Select hands to the popup.

@@ -244,8 +244,12 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .related:
                 // Home-identical shelf: one full-width ShelfRowCell hosting
                 // the posters (margin 40, symmetric peeks, pitch landings).
+                // As the primary row, lift the section by its own header (+ the
+                // section's 8pt pad) so the 40pt peek strip is POSTER, like the
+                // episodes row — the "Related" title rides just above it.
+                let relatedLift = ShelfRowCell.headerHeight + 8
                 return self.homeShelfHostSection(
-                    topInset: isPrimary ? peek : 0,
+                    topInset: isPrimary ? max(0, peek - relatedLift) : 0,
                     sectionBottomInset: isPrimary ? 36 : 56
                 )
             case .cast:

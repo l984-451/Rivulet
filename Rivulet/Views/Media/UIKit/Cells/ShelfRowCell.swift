@@ -131,7 +131,7 @@ final class ShelfRowCell: UICollectionViewCell {
         }
     }
 
-    private static let headerHeight: CGFloat = 44
+    static let headerHeight: CGFloat = 44
 
     private let headerLabel: UILabel = {
         let l = UILabel()

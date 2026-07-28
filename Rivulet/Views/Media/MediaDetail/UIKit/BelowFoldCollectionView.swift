@@ -245,10 +245,12 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .related:
                 // Home-identical shelf: one full-width ShelfRowCell hosting
                 // the posters (margin 40, symmetric peeks, pitch landings).
-                self.relatedHeaderVisible = !isPrimary
+                // As the primary row, lift the section by its own header (+ the
+                // section's 8pt pad) so the 40pt peek strip is POSTER, like the
+                // episodes row — the "Related" title rides just above it.
+                let relatedLift = ShelfRowCell.headerHeight + 8
                 return self.homeShelfHostSection(
-                    header: !isPrimary,
-                    topInset: isPrimary ? peek : 0,
+                    topInset: isPrimary ? max(0, peek - relatedLift) : 0,
                     sectionBottomInset: isPrimary ? 36 : 56
                 )
             case .cast:
@@ -272,21 +274,19 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// with the home shelf's exact geometry and landings. The item spans the
     /// whole (panel + overshoot) collection width; panel alignment happens
     /// inside the cell via panelOvershoot.
-    private func homeShelfHostSection(header: Bool,
-                                      topInset: CGFloat = 0,
+    private func homeShelfHostSection(topInset: CGFloat = 0,
                                       sectionBottomInset: CGFloat = 56) -> NSCollectionLayoutSection {
         // The ShelfRowCell draws its own header (self-aligned with the tiles),
         // so there's NO supplementary header — just one full-width item tall
-        // enough for the optional header + the row.
-        let headerH: CGFloat = header ? 44 : 0
-        let rowHeight = headerH + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
+        // enough for the header + the row.
+        let rowHeight = ShelfRowCell.headerHeight + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                               heightDimension: .absolute(rowHeight))
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: itemSize, subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
         section.contentInsets = .init(
-            top: (header ? 8 : 0) + topInset,
+            top: 8 + topInset,
             leading: 0,
             bottom: sectionBottomInset,
             trailing: 0
@@ -422,7 +422,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 // below-fold's state-dependent translation), and draw the
                 // header in-cell so it aligns with the tiles.
                 cell.screenAlignsLeading = true
-                cell.headerTitle = self.relatedHeaderVisible ? "Related" : nil
+                cell.headerTitle = "Related"
                 cell.configure(
                     kind: .poster,
                     realCount: items.count,
@@ -658,9 +658,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private var cachedRelated: [BelowFoldItem] = []
     /// Ordered Related items backing the shelf (index == shelf tile index).
     private var relatedItems: [MediaItem] = []
-    /// Whether the Related row currently draws its in-cell header (false when
-    /// Related is the primary/first section, matching the old `!isPrimary`).
-    private var relatedHeaderVisible = true
     private var cachedCastOrder: [(String, BelowFoldItem)] = []
 
     private func applySnapshot() {

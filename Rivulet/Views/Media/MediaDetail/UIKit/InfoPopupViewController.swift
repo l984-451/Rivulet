@@ -17,6 +17,45 @@
 
 import UIKit
 
+/// Card height + scroll insets for a measured content height. Pure so the sizing
+/// can be tested without a device (see InfoPopupCardLayoutTests).
+///
+/// The insets are breathing room for content scrolling in and out of the card's
+/// edges, so they belong ONLY to the overflowing case. Applying the top inset
+/// unconditionally made short content scrollable by 8pt and clipped its last
+/// line — the card fit the content exactly, then the inset pushed it down.
+struct InfoPopupCardLayout {
+    let cardHeight: CGFloat
+    let scrolls: Bool
+    let insetTop: CGFloat
+    let insetBottom: CGFloat
+
+    /// Breathing room for content scrolling in and out of the card's edges.
+    private static let scrollInsetTop: CGFloat = 8
+    private static let scrollInsetBottom: CGFloat = 72
+
+    static func make(contentHeight: CGFloat, pad: CGFloat, screenHeight: CGFloat) -> InfoPopupCardLayout {
+        let natural = contentHeight + 2 * pad
+        let cardHeight = min(natural, screenHeight * 0.85)
+        return make(cardHeight: cardHeight, scrolls: natural > cardHeight + 0.5)
+    }
+
+    /// Forced height: the caller has decided the content is long enough that
+    /// measuring it is unreliable, so the card always scrolls.
+    static func make(fixedHeight: CGFloat, screenHeight: CGFloat) -> InfoPopupCardLayout {
+        make(cardHeight: min(fixedHeight, screenHeight * 0.92), scrolls: true)
+    }
+
+    private static func make(cardHeight: CGFloat, scrolls: Bool) -> InfoPopupCardLayout {
+        InfoPopupCardLayout(
+            cardHeight: cardHeight,
+            scrolls: scrolls,
+            insetTop: scrolls ? scrollInsetTop : 0,
+            insetBottom: scrolls ? scrollInsetBottom : 0
+        )
+    }
+}
+
 final class InfoPopupViewController: UIViewController {
 
     /// Focusable card so the modal owns the remote.
@@ -96,7 +135,8 @@ final class InfoPopupViewController: UIViewController {
             scroll.clipsToBounds = true
             // Breathing room so content scrolling in/out fades within the card,
             // not flush against its edges.
-            scroll.contentInset = UIEdgeInsets(top: 8, left: 0, bottom: 72, right: 0)
+            // Insets are owned by `apply(_:)` once the content is measured.
+            scroll.contentInset = .zero
             blur.contentView.addSubview(scroll)
             scroll.addSubview(content)
             // Card height is set in viewDidLayoutSubviews to the content's
@@ -187,12 +227,7 @@ final class InfoPopupViewController: UIViewController {
         // and pin the card to the requested height, clamped to the screen. Tall
         // content overflows + scrolls; short content just leaves headroom.
         if let h = fixedHeight {
-            let target = min(h, view.bounds.height * 0.92)
-            scroll.contentInset.bottom = 72
-            if abs(cardHeight.constant - target) > 0.5 {
-                cardHeight.constant = target
-                view.setNeedsLayout()
-            }
+            apply(InfoPopupCardLayout.make(fixedHeight: h, screenHeight: view.bounds.height))
             return
         }
         // 2. Card height: measure the content RELIABLY. `scroll.contentSize` is
@@ -207,13 +242,19 @@ final class InfoPopupViewController: UIViewController {
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel).height
         guard contentH > 1 else { return }
-        let screen = view.bounds.height
-        let desired = min(contentH + 2 * pad, screen * 0.85)
-        // Bottom scroll-inset (breathing room) only when content overflows the card.
-        let scrolls = (contentH + 2 * pad) > desired + 0.5
-        scroll.contentInset.bottom = scrolls ? 72 : 0
-        if abs(cardHeight.constant - desired) > 0.5 {
-            cardHeight.constant = desired
+        apply(InfoPopupCardLayout.make(
+            contentHeight: contentH, pad: pad, screenHeight: view.bounds.height))
+    }
+
+    /// Single writer for the card height and the scroll insets. Both insets
+    /// track the overflow state — leaving the top one applied to content that
+    /// fit pushed it 8pt down and clipped its last line.
+    private func apply(_ layout: InfoPopupCardLayout) {
+        scroll.contentInset.top = layout.insetTop
+        scroll.contentInset.bottom = layout.insetBottom
+        if !layout.scrolls { scroll.contentOffset = .zero }
+        if abs(cardHeight.constant - layout.cardHeight) > 0.5 {
+            cardHeight.constant = layout.cardHeight
             view.setNeedsLayout()
         }
     }

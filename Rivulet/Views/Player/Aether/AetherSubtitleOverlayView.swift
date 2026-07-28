@@ -9,12 +9,14 @@
 //  Mounted in UniversalPlayerView above the video surface, below the
 //  UIKit transport bar hosted by PlayerContainerViewController.
 //
-//  controlsVisible insets (matched to SubtitleOverlayView on the AVPlayer
-//  routes, so subtitles sit at the same height on every route):
-//    true  -> 368 pt bottom padding (rail bottom inset 84 + railHeight 260
-//             + 24 gap; clears the 3a glass rail)
-//    false -> 100 pt bottom padding (same resting height as the AVPlayer
-//             route's SubtitleOverlayView, mirroring native caption placement)
+//  Sizing and placement mirror AVPlayer's own caption rendering:
+//    - point size = a fraction of the PRESENTATION height x the system's
+//      relative-character-size multiplier
+//    - the resting bottom margin is a fraction of the PICTURE height, so a
+//      letterboxed film is captioned on the image, not in its black bar
+//    - with the rail up, the screen-anchored rail clearance (368 pt = rail
+//      bottom inset 84 + railHeight 260 + 24 gap) wins instead
+//  See the Metrics block below for the derivations.
 //
 
 import SwiftUI
@@ -31,21 +33,120 @@ struct AetherSubtitleOverlayView: View {
     /// True when the player rail is visible; lifts text above it.
     var controlsVisible: Bool
 
-    // Bottom padding constants (pts). controlsVisiblePadding =
-    // PlayerRailView.railHeight (260) + rail bottom inset (84) + 24 gap.
-    // defaultPadding matches SubtitleOverlayView's resting bottomOffset (100)
-    // on the AVPlayer route, which mirrors native AVPlayer caption placement —
-    // 60 sat visibly too close to the screen edge.
+    /// The video's presentation size (`AetherPlayer.videoSize`). `.zero` means
+    /// "unknown" — the overlay then measures against its full bounds, which is
+    /// the pre-existing behaviour and correct for a 16:9 picture filling the
+    /// screen.
+    var videoSize: CGSize = .zero
+
+    // controlsVisiblePadding = PlayerRailView.railHeight (260) + rail bottom
+    // inset (84) + 24 gap; measured from the SCREEN because the rail is
+    // screen-anchored.
     private static let controlsVisiblePadding: CGFloat = 368
-    private static let defaultPadding: CGFloat = 100
+
+    /// Distance from the bottom of the PICTURE to the bottom of the caption
+    /// box, as a fraction of picture height — so letterboxed content keeps
+    /// captions on the image rather than dropping them into the black bar,
+    /// and the placement holds at any presentation size.
+    ///
+    /// Tuned against AVPlayer's own placement (a two-line caption centres at
+    /// roughly 8% of picture height). Bottom-anchored rather than
+    /// centre-anchored, so a third line grows upward instead of shifting the
+    /// whole caption down.
+    private static let videoBottomMarginFraction: CGFloat = 0.06
+
+    // MARK: Apple-matching caption metrics
+    //
+    // Tuned against AVPlayer's own caption rendering (screenshot comparison at
+    // the smallest system caption size). Three differences mattered: Apple
+    // sizes type from the VIDEO height rather than a fixed point size, boxes
+    // the text tightly, and draws one background per LINE rather than one
+    // around the whole cue.
+
+    /// Caption point size as a fraction of the PRESENTATION height (the
+    /// player's own bounds), before the user's relative-size multiplier.
+    ///
+    /// The model is: base fraction × the system's own multiplier. The WebVTT
+    /// caption spec default is 5% (`5vh`); this sits near it, tuned on device
+    /// against AVPlayer's own rendering — at the smallest system caption size
+    /// `MACaptionAppearanceGetRelativeCharacterSize` reports 0.35, and
+    /// 1080 × 0.0529 × 0.35 = 20pt is the match. Every other size follows
+    /// from the multiplier.
+    ///
+    /// Do NOT re-tune this to compensate for a size problem: if captions are
+    /// the wrong size, suspect the multiplier reaching us instead (see
+    /// `CaptionAppearance.fontScale`, whose clamp used to swallow 0.35 and
+    /// silently flatten the bottom of the range).
+    ///
+    /// Deliberately NOT the letterboxed picture height: Apple sizes captions
+    /// from the presentation and only *positions* them against the picture,
+    /// so a 2.39:1 film gets the same type as a 16:9 one rather than shrunken
+    /// type. tvOS always presents 1080 points tall regardless of whether the
+    /// display is 1080p or 4K, so this is stable across outputs.
+    private static let fontHeightFraction: CGFloat = 0.0529
+
+    /// Fallback presentation height, for the degenerate case of a zero-height
+    /// layout pass.
+    private static let assumedVideoHeight: CGFloat = 1080
+
+    // Box geometry is expressed as MULTIPLES OF THE POINT SIZE, not fixed
+    // points, because Apple's caption box grows with the type — at a large
+    // caption size a fixed 4pt radius reads as a hard rectangle against much
+    // bigger glyphs. The ratios below reproduce the previously tuned 4 / 8 / 2
+    // at the smallest setting and scale from there.
+    private static let cornerRadiusRatio: CGFloat = 0.15
+    private static let paddingHRatio: CGFloat = 0.30
+    private static let paddingVRatio: CGFloat = 0.075
+
+    /// Extra leading between the lines of one cue, on top of the font's own
+    /// line height. Zero matches Apple, whose caption lines sit on natural
+    /// leading inside a single background.
+    private static let textLineSpacing: CGFloat = 0
+
+    /// Gap between separate simultaneous cues (two speakers), which SHOULD
+    /// read as distinct blocks.
+    private static let cueSpacing: CGFloat = 4
 
     /// User height adjustment from the OSD stepper (global; positive = higher).
     /// Read as @AppStorage so stepping it re-renders the overlay live.
     @AppStorage(SubtitleAdjustments.heightKey) private var heightUnits: Int = 0
 
-    private var bottomPadding: CGFloat {
-        let base = controlsVisible ? Self.controlsVisiblePadding : Self.defaultPadding
+    /// The picture's rect inside `bounds`, aspect-fit (how both the engine
+    /// surface and AVPlayerLayer place video). Falls back to the full bounds
+    /// when the size is unknown.
+    private func videoRect(in bounds: CGSize) -> CGRect {
+        guard videoSize.width > 0, videoSize.height > 0,
+              bounds.width > 0, bounds.height > 0 else {
+            return CGRect(origin: .zero, size: bounds)
+        }
+        let scale = min(bounds.width / videoSize.width, bounds.height / videoSize.height)
+        let w = videoSize.width * scale
+        let h = videoSize.height * scale
+        return CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
+    }
+
+    /// Distance from the bottom of the CONTAINER to the text.
+    ///
+    /// Two anchors compete and the larger wins: the caption must sit
+    /// `videoBottomMargin` above the bottom of the PICTURE (so letterboxed
+    /// content is not captioned into its black bar), and it must clear the
+    /// rail when the rail is up (which is anchored to the SCREEN). Taking the
+    /// max means a 2.39:1 film with the rail hidden lifts by its letterbox,
+    /// while the same film with the rail up still clears the chrome.
+    private func bottomPadding(in bounds: CGSize) -> CGFloat {
+        let rect = videoRect(in: bounds)
+        let letterbox = max(0, bounds.height - rect.maxY)
+        var base = letterbox + rect.height * Self.videoBottomMarginFraction
+        if controlsVisible {
+            base = max(base, Self.controlsVisiblePadding)
+        }
         return max(0, base + SubtitleAdjustments.heightOffset(forUnits: heightUnits))
+    }
+
+    /// Caption point size for this presentation, before per-cue styling.
+    private func baseFontSize(in bounds: CGSize) -> CGFloat {
+        let height = bounds.height > 0 ? bounds.height : Self.assumedVideoHeight
+        return height * Self.fontHeightFraction * style.fontScale
     }
 
     var body: some View {
@@ -73,12 +174,12 @@ struct AetherSubtitleOverlayView: View {
                 // padding hangs invisibly off the bottom edge, so the inset
                 // never lifted the text at all (subs sat glued to the edge and
                 // the rail lift was a no-op).
-                VStack(spacing: 4) {
+                VStack(spacing: Self.cueSpacing) {
                     ForEach(model.activeCues.filter(\.isText), id: \.contentKey) { cue in
                         styledText(cue.body, size: geo.size)
                     }
                 }
-                .padding(.bottom, bottomPadding)
+                .padding(.bottom, bottomPadding(in: geo.size))
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
             }
         }
@@ -103,29 +204,19 @@ struct AetherSubtitleOverlayView: View {
 
     // MARK: - Text cue
 
+    /// One cue in ONE rounded box, sized to its longest line.
+    ///
+    /// A multi-line cue keeps its author's line breaks and stays inside a
+    /// single background — the box hugs the widest line and the shorter lines
+    /// centre within it. (An earlier attempt boxed each line separately; that
+    /// reads as detached labels rather than one caption.)
     @ViewBuilder
     private func styledText(_ body: AetherSubtitleCue.Body, size: CGSize) -> some View {
         let maxWidth = max(0, size.width - 240)
-        // System conformance: the user's chosen caption font (via the
-        // MediaAccessibility font descriptor) and text opacity apply, not
-        // just color/size/edge. Base size 42 matches SubtitleOverlayView on
-        // the HLS route so captions render identically across routes.
-        let baseFont = style.font(ofSize: 42 * style.fontScale)
+        let pointSize = baseFontSize(in: size)
+        let baseFont = style.font(ofSize: pointSize)
 
         switch style.edge {
-        case .dropShadow:
-            cueText(body)
-                .font(baseFont)
-                .multilineTextAlignment(.center)
-                .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(style.backgroundColor.opacity(style.backgroundOpacity))
-                )
-                .frame(maxWidth: maxWidth)
-
         case .uniform:
             // 8-direction black outline (no per-character stroke on tvOS).
             let offsets: [(CGFloat, CGFloat)] = [
@@ -141,27 +232,39 @@ struct AetherSubtitleOverlayView: View {
                         .font(baseFont)
                         .foregroundStyle(Color.black)
                         .multilineTextAlignment(.center)
+                        .lineSpacing(Self.textLineSpacing)
                         .offset(x: delta.0, y: delta.1)
                 }
                 cueText(body)
                     .font(baseFont)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(Self.textLineSpacing)
             }
             .frame(maxWidth: maxWidth)
 
+        case .dropShadow:
+            boxed(cueText(body).font(baseFont), maxWidth: maxWidth, fontSize: pointSize)
+                .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
+
         default:
             // .none / .raised / .depressed: solid background box.
-            cueText(body)
-                .font(baseFont)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(style.backgroundColor.opacity(style.backgroundOpacity))
-                )
-                .frame(maxWidth: maxWidth)
+            boxed(cueText(body).font(baseFont), maxWidth: maxWidth, fontSize: pointSize)
         }
+    }
+
+    /// The tight background box Apple draws behind a caption, with padding and
+    /// radius proportional to `fontSize`.
+    private func boxed(_ text: some View, maxWidth: CGFloat, fontSize: CGFloat) -> some View {
+        text
+            .multilineTextAlignment(.center)
+            .lineSpacing(Self.textLineSpacing)
+            .padding(.horizontal, fontSize * Self.paddingHRatio)
+            .padding(.vertical, fontSize * Self.paddingVRatio)
+            .background(
+                RoundedRectangle(cornerRadius: fontSize * Self.cornerRadiusRatio, style: .continuous)
+                    .fill(style.backgroundColor.opacity(style.backgroundOpacity))
+            )
+            .frame(maxWidth: maxWidth)
     }
 
     /// Builds the cue's `Text`, applying the colour policy per run:

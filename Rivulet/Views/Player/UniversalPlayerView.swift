@@ -945,7 +945,11 @@ struct UniversalPlayerView: View {
                     // (showControls || isScrubbing): the scrub ribbon keeps
                     // the bottom band occupied even when the rail hides, so
                     // captions stay lifted through a scrub.
-                    controlsVisible: viewModel.showControls || viewModel.isScrubbing
+                    controlsVisible: viewModel.showControls || viewModel.isScrubbing,
+                    // Lets the overlay measure its bottom margin from the
+                    // picture rather than the screen, so a letterboxed film
+                    // is not captioned into its black bar.
+                    videoSize: viewModel.videoSize
                 )
                 .ignoresSafeArea()
                 .allowsHitTesting(false)

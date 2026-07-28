@@ -100,9 +100,16 @@ enum CaptionAppearance {
     /// `MACaptionAppearanceGetRelativeCharacterSize` already returns the size as a
     /// multiplicative scale factor (≈1.0 at the default), NOT an offset — so it is
     /// used directly. A non-positive value means "unset"; treat that as 1.0.
+    ///
+    /// The bounds are a sanity net against a nonsense value, NOT a style
+    /// decision: they were 0.5...2.0, which silently compressed the ends of
+    /// the system's own range, so captions stopped tracking the Subtitles &
+    /// Captioning size setting at the extremes. Widened to cover anything
+    /// tvOS plausibly reports; the caption is still bounded in practice by
+    /// the overlay's own max width.
     static func fontScale(forRelativeSize relative: CGFloat) -> CGFloat {
         guard relative > 0 else { return 1.0 }
-        return min(max(relative, 0.5), 2.0)
+        return min(max(relative, 0.25), 4.0)
     }
 
     /// Reads the current system caption style from MediaAccessibility.

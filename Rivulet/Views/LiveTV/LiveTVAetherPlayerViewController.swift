@@ -1092,7 +1092,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         AetherSubtitleOverlayView(
             model: subtitleModel,
             style: captionStyle,
-            controlsVisible: railVisible  // lift captions above the glass rail
+            controlsVisible: railVisible,  // lift captions above the glass rail
+            // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
+            // captions on the picture rather than in the pillar/letterbox.
+            videoSize: aetherPlayer?.videoSize ?? .zero
         )
     }
 
@@ -1111,6 +1114,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 if self.nativeLegibleActive && cues.isEmpty { return }
                 self.subtitleModel.update(cues: cues)
             }
+            .store(in: &cancellables)
+
+        // The overlay is a rebuilt-on-demand root view, so a videoSize change
+        // has to force a rebuild — nothing observes the player from SwiftUI.
+        aether.$videoSize
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rebuildSubtitleOverlay() }
             .store(in: &cancellables)
 
         aether.$sourceTime

@@ -141,6 +141,7 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         ("1.0.4 (71)", [
+            "Subtitles now match the way Apple TV draws its own captions, with the same text size, tighter background behind each line, and the same distance from the picture. On letterboxed films they sit on the image instead of down in the black bar",
             "Updated AetherEngine to 5.23.11",
             "Playback starts and seeks more reliably: resuming part way in is faster, jumping far ahead no longer stalls, and titles with TrueHD or DTS-HD MA audio no longer sit on Loading forever",
             "Fixed picture and colour problems on several kinds of file, including Dolby Vision Profile 5 titles that played with a green or purple tint and widescreen content that looked squashed",

@@ -268,6 +268,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// switch, background reopen).
     @Published private(set) var aetherPlayer: AetherPlayer?
 
+    /// The playing item's presentation size, mirrored from `aetherPlayer` so
+    /// SwiftUI actually observes it (see the subscription in the bind block).
+    /// `.zero` before the first frame and on the AVPlayer/hls route.
+    @Published private(set) var videoSize: CGSize = .zero
+
     /// Subtitle manager for custom subtitle rendering.
     let subtitleManager = SubtitleManager()
     private let subtitleClockSync = SubtitleClockSyncController()
@@ -1759,6 +1764,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] cues in
                 self?.aetherSubtitleModel.update(cues: cues)
+            }
+            .store(in: &cancellables)
+
+        // Mirrored onto the view model because AetherPlayer is not an
+        // ObservableObject: a SwiftUI view reading `aetherPlayer.videoSize`
+        // directly would never re-render, since `$aetherPlayer` only fires
+        // when the PLAYER changes, not its properties.
+        player.$videoSize
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] size in
+                self?.videoSize = size
             }
             .store(in: &cancellables)
 

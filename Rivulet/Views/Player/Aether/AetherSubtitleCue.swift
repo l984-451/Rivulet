@@ -26,6 +26,10 @@ struct AetherSubtitleCue: Identifiable {
     let startTime: Double
     let endTime: Double
     let body: Body
+    /// Content-specified placement, or nil to use the overlay's default band.
+    /// Defaulted so the Live TV legible bridge, which builds cues by hand
+    /// from AVPlayer's attributed strings, does not have to pass it.
+    var placement: TextPlacement? = nil
 
     /// Text dialogue, or a positioned bitmap (PGS / DVB / DVD).
     enum Body {
@@ -42,11 +46,45 @@ struct AetherSubtitleCue: Identifiable {
         case image(cgImage: CGImage, position: CGRect)
     }
 
-    /// One run of a styled text cue. `color` is nil when the content did not
-    /// specify one, in which case the renderer uses the system caption colour.
+    /// One run of a styled text cue, mirroring AetherEngine's
+    /// `SubtitleTextRun`. Every field is CONTENT-specified styling; nil /
+    /// false means the content was silent and the renderer uses the system
+    /// caption value. Whether a content value is painted at all is the
+    /// renderer's call, per attribute, against the matching
+    /// `CaptionStyle.allowsContent*` (the system "Video Override" states).
+    ///
+    /// The engine parses these out of the ASS event line libavcodec produces
+    /// for every text format, so SRT, WebVTT, teletext and ASS all arrive
+    /// here through one path (AE 5.26.0).
     struct StyledRun: Hashable {
         var text: String
         var color: Color?
+        var isBold: Bool = false
+        var isItalic: Bool = false
+        var isUnderlined: Bool = false
+        var isStruckThrough: Bool = false
+        /// Face the content asked for (ASS `\fn`, SRT `<font face=>`).
+        var fontName: String?
+        /// Size the content asked for (ASS `\fs`), in ASS play-resolution
+        /// points — a RELATIVE hint, not a pixel size, so the renderer scales
+        /// it against the script's nominal size rather than using it directly.
+        var fontSize: Int?
+    }
+
+    /// Placement the content asked for (ASS `\an` / `\pos`), mirroring
+    /// AetherEngine's `SubtitleTextPlacement`. nil for nearly every cue,
+    /// meaning the host places it in its usual band.
+    ///
+    /// There is NO system caption setting for position, so no Video Override
+    /// gate applies — a content position is always honoured, and the user's
+    /// Height stepper deliberately does not move it (a sign pinned to the top
+    /// of frame must not drift with an app-level offset).
+    struct TextPlacement: Hashable {
+        /// ASS numpad alignment: 1 bottom-left through 9 top-right, 5 centred.
+        var alignment: Int?
+        /// `\pos` anchor normalized to [0, 1] against the video frame, y from
+        /// the top — the same convention `SubtitleImage.position` uses.
+        var position: CGPoint?
     }
 
     /// Stable content identity: `(startTime, endTime, body)`.
@@ -62,7 +100,7 @@ struct AetherSubtitleCue: Identifiable {
     /// (identical start + end + body) while keeping genuine simultaneous
     /// speakers (identical start, DIFFERENT text) distinct.
     var contentKey: ContentKey {
-        ContentKey(startTime: startTime, endTime: endTime, body: body)
+        ContentKey(startTime: startTime, endTime: endTime, body: body, placement: placement)
     }
 
     /// Hashable projection of a cue's content.
@@ -83,10 +121,12 @@ struct AetherSubtitleCue: Identifiable {
         let startTime: Double
         let endTime: Double
         let body: BodyKey
+        let placement: TextPlacement?
 
-        init(startTime: Double, endTime: Double, body: Body) {
+        init(startTime: Double, endTime: Double, body: Body, placement: TextPlacement?) {
             self.startTime = startTime
             self.endTime = endTime
+            self.placement = placement
             switch body {
             case .text(let string):
                 self.body = .text(string)

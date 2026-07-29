@@ -268,6 +268,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// switch, background reopen).
     @Published private(set) var aetherPlayer: AetherPlayer?
 
+    /// The playing item's presentation size, mirrored from `aetherPlayer` so
+    /// SwiftUI actually observes it (see the subscription in the bind block).
+    /// `.zero` before the first frame and on the AVPlayer/hls route.
+    @Published private(set) var videoSize: CGSize = .zero
+
     /// Subtitle manager for custom subtitle rendering.
     let subtitleManager = SubtitleManager()
     private let subtitleClockSync = SubtitleClockSyncController()
@@ -286,8 +291,22 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Subtitle delay (OSD stepper, sticky per item)
 
-    /// Persistence key for this item's subtitle delay.
-    private var subtitleDelayKey: String { "plex:\(metadata.ratingKey ?? "unknown")" }
+    /// Persistence key for this item's sticky subtitle adjustments (delay and
+    /// height). Shared by both, so a title carries one identity.
+    var subtitleMediaKey: String { "plex:\(metadata.ratingKey ?? "unknown")" }
+
+    /// This item's height adjustment in stepper units. Published so both
+    /// overlays re-render on a step, and reloaded per item like the delay.
+    @Published private(set) var subtitleHeightUnits: Int = 0
+
+    /// Steps the height and persists it for this ratingKey. Applied to BOTH
+    /// routes, same as the delay stepper, so it survives a mid-playback route
+    /// change.
+    func adjustSubtitleHeight(bySteps steps: Int) {
+        SubtitleAdjustments.setHeightUnits(subtitleHeightUnits + steps,
+                                           forMediaKey: subtitleMediaKey)
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+    }
 
     /// Current subtitle delay in seconds; positive = subtitles appear later.
     var subtitleDelaySeconds: Double { aetherSubtitleModel.delaySeconds }
@@ -302,15 +321,16 @@ final class UniversalPlayerViewModel: ObservableObject {
         let value = SubtitleAdjustments.roundedDelay(raw)
         aetherSubtitleModel.delaySeconds = value
         subtitleManager.delaySeconds = value
-        SubtitleAdjustments.setDelay(value, forKey: subtitleDelayKey)
+        SubtitleAdjustments.setDelay(value, forKey: subtitleMediaKey)
     }
 
     /// Loads this item's stored delay into both pipelines. Called on every
     /// playback setup, including next-episode swaps on this same instance.
     private func loadStoredSubtitleDelay() {
-        let value = SubtitleAdjustments.delay(forKey: subtitleDelayKey)
+        let value = SubtitleAdjustments.delay(forKey: subtitleMediaKey)
         aetherSubtitleModel.delaySeconds = value
         subtitleManager.delaySeconds = value
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
     }
 
     // MARK: - Metadata
@@ -1759,6 +1779,18 @@ final class UniversalPlayerViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] cues in
                 self?.aetherSubtitleModel.update(cues: cues)
+            }
+            .store(in: &cancellables)
+
+        // Mirrored onto the view model because AetherPlayer is not an
+        // ObservableObject: a SwiftUI view reading `aetherPlayer.videoSize`
+        // directly would never re-render, since `$aetherPlayer` only fires
+        // when the PLAYER changes, not its properties.
+        player.$videoSize
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] size in
+                self?.videoSize = size
             }
             .store(in: &cancellables)
 

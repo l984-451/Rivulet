@@ -37,8 +37,16 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     /// Applied on top of the size Apple bases on the presentation (view) height.
     var fontScale: CGFloat
 
+    /// Video Override state for the character size — gates a cue's own
+    /// `fontSize` (ASS `\fs`, SRT `<font size=>`).
+    var allowsContentFontSize: Bool
+
     /// System caption font descriptor. `nil` falls back to the system sans font.
     var fontDescriptor: CTFontDescriptor?
+
+    /// Video Override state for the font — gates a cue's own `fontName` and
+    /// its bold / italic / underline / strikethrough.
+    var allowsContentFont: Bool
 
     /// Text edge (shadow/raised/etc.) style.
     var edge: Edge
@@ -67,7 +75,9 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
         backgroundColor: .black,
         backgroundOpacity: 0.75,
         fontScale: 1.0,
+        allowsContentFontSize: true,
         fontDescriptor: nil,
+        allowsContentFont: true,
         edge: .dropShadow
     )
 
@@ -78,6 +88,8 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
             && lhs.backgroundColor == rhs.backgroundColor
             && lhs.backgroundOpacity == rhs.backgroundOpacity
             && lhs.fontScale == rhs.fontScale
+            && lhs.allowsContentFontSize == rhs.allowsContentFontSize
+            && lhs.allowsContentFont == rhs.allowsContentFont
             && lhs.edge == rhs.edge
             && descriptorsEqual(lhs.fontDescriptor, rhs.fontDescriptor)
     }
@@ -100,9 +112,16 @@ enum CaptionAppearance {
     /// `MACaptionAppearanceGetRelativeCharacterSize` already returns the size as a
     /// multiplicative scale factor (≈1.0 at the default), NOT an offset — so it is
     /// used directly. A non-positive value means "unset"; treat that as 1.0.
+    ///
+    /// The bounds are a sanity net against a nonsense value, NOT a style
+    /// decision: they were 0.5...2.0, which silently compressed the ends of
+    /// the system's own range, so captions stopped tracking the Subtitles &
+    /// Captioning size setting at the extremes. Widened to cover anything
+    /// tvOS plausibly reports; the caption is still bounded in practice by
+    /// the overlay's own max width.
     static func fontScale(forRelativeSize relative: CGFloat) -> CGFloat {
         guard relative > 0 else { return 1.0 }
-        return min(max(relative, 0.5), 2.0)
+        return min(max(relative, 0.25), 4.0)
     }
 
     /// Reads the current system caption style from MediaAccessibility.
@@ -118,9 +137,17 @@ enum CaptionAppearance {
         // Read it straight after the COLOUR call — that read is the "Video
         // Override" state for text colour, and the opacity call below
         // immediately clobbers it.
+        // Each `allowsContent*` below is captured IMMEDIATELY after its own
+        // call, because every MediaAccessibility read overwrites `behavior`.
+        // They gate the content styling the engine now delivers (5.26.0:
+        // bold / italic / underline / strikethrough / font / size on
+        // SubtitleTextRun) the same way `allowsContentColor` has always gated
+        // colour: content wins only where the user allows it to.
+        func contentMayOverride() -> Bool { behavior == .useContentIfAvailable }
+
         let fgUnmanaged = MACaptionAppearanceCopyForegroundColor(.user, &behavior)
         let foreground = Color(fgUnmanaged.takeRetainedValue() as CGColor)
-        let allowsContentColor = (behavior == .useContentIfAvailable)
+        let allowsContentColor = contentMayOverride()
         let rawFgOpacity = Double(MACaptionAppearanceGetForegroundOpacity(.user, &behavior))
         let foregroundOpacity = rawFgOpacity > 0 ? min(rawFgOpacity, 1.0) : 1.0
 
@@ -140,11 +167,13 @@ enum CaptionAppearance {
 
         // Font scale
         let relative = MACaptionAppearanceGetRelativeCharacterSize(.user, &behavior)
+        let allowsContentFontSize = contentMayOverride()
         let scale = fontScale(forRelativeSize: relative)
 
         // Font (system caption font descriptor)
         let fontDescriptor = MACaptionAppearanceCopyFontDescriptorForStyle(.user, &behavior, .default)
             .takeRetainedValue()
+        let allowsContentFont = contentMayOverride()
 
         // Edge style
         let maEdge = MACaptionAppearanceGetTextEdgeStyle(.user, &behavior)
@@ -164,7 +193,9 @@ enum CaptionAppearance {
             backgroundColor: backgroundColor,
             backgroundOpacity: backgroundOpacity,
             fontScale: scale,
+            allowsContentFontSize: allowsContentFontSize,
             fontDescriptor: fontDescriptor,
+            allowsContentFont: allowsContentFont,
             edge: edge
         )
     }

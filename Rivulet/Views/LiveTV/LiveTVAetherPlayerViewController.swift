@@ -84,7 +84,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// starts a fresh one so each attempt is measured separately.
     private var joinTelemetry: LiveJoinTelemetry?
 
-    // MARK: Subtitle delay (OSD stepper, sticky per channel)
+    // MARK: Subtitle delay and height (OSD steppers, sticky per channel)
 
     /// User subtitle delay for THIS channel. Engine-cue paths apply it through
     /// SubtitleModel.delaySeconds. The native-legible (remote WebVTT) path is
@@ -92,16 +92,59 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// by scheduling the model update instead; a NEGATIVE delay can't pre-show
     /// cues that haven't arrived yet, so it's treated as 0 on that path.
     private var subtitleDelaySeconds: Double = 0
-    private var subtitleDelayKey: String { "live:\(channel.id)" }
+
+    /// This channel's height adjustment, in stepper units. Re-read on every
+    /// channel switch so a switch picks up the incoming channel's own value.
+    private var subtitleHeightUnits: Int = 0
+
+    private var subtitleMediaKey: String { "live:\(channel.id)" }
 
     // MARK: Native HLS legible subtitles (remote WebVTT renditions)
     //
-    // On the nativeRemoteHLS path the engine never demuxes, so its subtitle
-    // track list is empty — the stream's WebVTT renditions live in AVPlayer's
-    // legible media selection group instead. Selecting one isn't enough
-    // either: a bare AVPlayerLayer doesn't paint legible content (only AVKit
-    // does), so cues are pulled out through an AVPlayerItemLegibleOutput and
-    // drawn by the same overlay every other path uses.
+    // On the nativeRemoteHLS path the engine never demuxes: the stream's WebVTT
+    // renditions live in AVPlayer's legible media selection group, and it
+    // publishes no cues of its own. Selecting a rendition isn't enough either —
+    // a bare AVPlayerLayer doesn't paint legible content (only AVKit does), so
+    // cues are pulled out through an AVPlayerItemLegibleOutput and drawn by the
+    // same overlay every other path uses.
+    //
+    // The engine DOES publish that group as `subtitleTracks` (AE#154), so an
+    // empty engine track list no longer distinguishes this path from the demux
+    // one. Route detection lives below; do not reintroduce that test.
+    /// Whether this session took the `nativeRemoteHLS` bypass.
+    ///
+    /// AE#154 made the engine publish the bypass item's legible options as
+    /// `subtitleTracks`, so "the engine track list is empty" no longer
+    /// identifies the native route — it used to, and every branch keyed off it
+    /// silently started taking the demux path, handing subtitle selection to
+    /// the engine (and rendering to AVPlayer). Branch on the routing decision.
+    private var isNativeHLSRoute = false
+
+    /// True when AVPlayer is playing the REMOTE playlist itself, so its legible
+    /// renditions are ours to intercept and the engine has no cues of its own.
+    ///
+    /// Confirmed against the item's URL rather than trusting the routing
+    /// decision alone: the engine can move a bypass session onto the
+    /// live-ingest loopback mid-load (#168, a native mount that builds no video
+    /// track), after which it really is demuxing and really does publish cues.
+    /// It exposes no effective-route property to ask, but the loopback item is
+    /// served from its local HTTP server, which is plainly visible here.
+    private var isPlayingRemoteHLSDirectly: Bool {
+        guard isNativeHLSRoute, let item = aetherPlayer?.currentAVPlayer?.currentItem
+        else { return false }
+        return Self.isRemoteItem(item)
+    }
+
+    /// The loopback item is served by the engine's local HTTP server; a bypass
+    /// item points at the origin.
+    private static func isRemoteItem(_ item: AVPlayerItem) -> Bool {
+        guard let asset = item.asset as? AVURLAsset else { return false }
+        switch asset.url.host?.lowercased() {
+        case "127.0.0.1", "localhost", "::1", nil: return false
+        default: return true
+        }
+    }
+
     private var nativeLegibleGroup: AVMediaSelectionGroup?
     private var nativeLegibleOutput: AVPlayerItemLegibleOutput?
     private var nativeLegibleBridge: LegibleOutputBridge?
@@ -117,6 +160,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Deferred clear: roll-up streams emit an EMPTY legible event at every
     /// cue boundary, and clearing on the spot blinks the overlay between cues.
     private var nativeLegibleClearWorkItem: DispatchWorkItem?
+    /// Nested inside the `$currentAVPlayer` sink rather than stored in
+    /// `cancellables`, so it can be replaced when the player is swapped.
+    /// `startPlayback` builds a fresh `AetherPlayer` per session, so the outer
+    /// sink re-subscribes and re-establishes this on every channel switch.
+    private var nativeItemObservation: AnyCancellable?
 
     /// Push-delegate shim: `AVPlayerItemLegibleOutput.setDelegate` does not
     /// retain, so the VC holds this.
@@ -199,6 +247,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         ])
         loadingSpinner.startAnimating()
 
+        // ORDER MATTERS: the overlay must be added BEFORE setupChrome, so the
+        // rail and progress bar sit in front of it and captions slide up
+        // behind the chrome rather than over it. Same z-order as VOD.
         mountSubtitleOverlay()
         observeCaptionAppearance()
         setupChrome()
@@ -215,13 +266,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
         // Sticky per-channel subtitle delay (OSD stepper). Re-read per channel:
         // the key is derived from the channel id.
-        subtitleDelaySeconds = SubtitleAdjustments.delay(forKey: subtitleDelayKey)
+        subtitleDelaySeconds = SubtitleAdjustments.delay(forKey: subtitleMediaKey)
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
         subtitleModel.delaySeconds = subtitleDelaySeconds
 
         let aether = AetherPlayer()
         aetherPlayer = aether
         aether.bind(view: engineSurfaceView)
         bindAetherSubtitles(aether)
+        bindNativeLegibleAttachment(aether)
 
         aether.playbackStatePublisher
             .receive(on: DispatchQueue.main)
@@ -266,10 +319,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             // AVPlayer's native HLS path can't decode broadcast mp2 audio
             // or the DVB/teletext subtitles that direct play preserves.
             let forceEngineDemux = url.path.hasPrefix("/livetv/sessions/")
-            joinTelemetry?.resolveFinished(
-                url: url,
-                route: AetherPlayer.liveRoute(for: url, forceEngineDemux: forceEngineDemux)
-            )
+            let route = AetherPlayer.liveRoute(for: url, forceEngineDemux: forceEngineDemux)
+            isNativeHLSRoute = route == .nativeHLS
+            joinTelemetry?.resolveFinished(url: url, route: route)
             startLiveSessionKeepAlive(for: url)
             do {
                 try await aether.loadLive(
@@ -337,6 +389,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         nativeLegibleBridge = nil
         nativeLegibleItem = nil
         nativeLegibleGroup = nil
+        isNativeHLSRoute = false
+        nativeItemObservation = nil
         resetNativeLegibleState()
         // Drop the outgoing channel's cues: on a switch the overlay would
         // otherwise keep painting them until the new session publishes.
@@ -457,7 +511,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.progressBar.alpha = 1
             self.progressBar.transform = .identity
         }
-        rebuildSubtitleOverlay()
+        rebuildSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
         restartAutoHide()
@@ -475,7 +529,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.progressBar.alpha = 0
             self.progressBar.transform = CGAffineTransform(translationX: 0, y: 24)
         }
-        rebuildSubtitleOverlay()
+        rebuildSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
     }
@@ -541,8 +595,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func presentSubtitlePanel() {
         guard let aether = aetherPlayer else { return }
 
-        // Engine demux path: tracks come from the engine.
-        if !aether.subtitleTracks.isEmpty {
+        // Engine demux path: tracks come from the engine, and so do cues.
+        // Never taken on the bypass, where the engine's published tracks are
+        // AE#154 mirrors of AVPlayer's legible options and selecting one hands
+        // rendering to AVPlayerLayer instead of our overlay.
+        if !isPlayingRemoteHLSDirectly, !aether.subtitleTracks.isEmpty {
             let list = CardTrackListView(
                 header: "Subtitles",
                 tracks: aether.subtitleTracks,
@@ -665,6 +722,55 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
+    /// Attach the legible output to every native item, as soon as it exists.
+    ///
+    /// Two things this deliberately does NOT do, both of which broke it before:
+    ///
+    /// It does not run once after `loadLive` returns. `engine.load` returns
+    /// when the native host is mounted, several seconds before the item is
+    /// ready (device: `readyToPlay` at t+4.5s), so a one-shot attach races
+    /// AVFoundation's automatic selection and loses.
+    ///
+    /// It does not wait for a selection to exist, or adopt one.
+    /// `suppressesPlayerRendering` applies to whatever legible option is or
+    /// LATER BECOMES selected, so the output only has to be on the item before
+    /// the first cue is drawn. Gating on a current selection just reintroduced
+    /// the race. Automatic selection is left alone on purpose: it honours the
+    /// system captioning preference and the preferred languages `loadLive`
+    /// passes, and disabling it would mean nothing is ever selected at all.
+    private func bindNativeLegibleAttachment(_ aether: AetherPlayer) {
+        aether.$currentAVPlayer
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] player in
+                guard let self, let player else { return }
+                // Aether swaps the item under us (retune, #93 item-death
+                // revive), and each new item needs its own output.
+                self.nativeItemObservation = player.publisher(for: \.currentItem)
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] item in
+                        guard let self, let item else { return }
+                        self.attachNativeLegible(to: item)
+                    }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func attachNativeLegible(to item: AVPlayerItem) {
+        guard isNativeHLSRoute, Self.isRemoteItem(item), nativeLegibleItem !== item else { return }
+        ensureNativeLegibleOutput(on: item)
+        nativeLegibleActive = true
+
+        Task { @MainActor [weak self] in
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
+                  !group.options.isEmpty else { return }
+            guard let self, self.nativeLegibleItem === item else { return }
+            // Only needed so the subtitle panel can list and switch renditions.
+            // Cue delivery does not depend on it: the output is already on the
+            // item and receives whatever automatic selection settles on.
+            self.nativeLegibleGroup = group
+        }
+    }
+
     private func resetNativeLegibleState() {
         nativeLegibleClearWorkItem?.cancel()
         nativeLegibleClearWorkItem = nil
@@ -744,7 +850,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 id: index,
                 startTime: 0,
                 endTime: .greatestFiniteMagnitude,
-                body: .styledText(line.runs)
+                body: .styledText(line.runs),
+                placement: line.placement
             )
         }
         applyNativeLegible(cues: cues)
@@ -778,9 +885,19 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 onStep: { [weak self] step in self?.adjustSubtitleDelay(bySteps: step) }),
             CardStepperConfig(
                 title: "Height",
-                value: { SubtitleAdjustments.formattedHeight(SubtitleAdjustments.heightUnits) },
-                onStep: { step in SubtitleAdjustments.setHeightUnits(SubtitleAdjustments.heightUnits + step) }),
+                value: { [weak self] in
+                    SubtitleAdjustments.formattedHeight(self?.subtitleHeightUnits ?? 0)
+                },
+                onStep: { [weak self] step in self?.adjustSubtitleHeight(bySteps: step) }),
         ]
+    }
+
+    /// Steps this channel's subtitle height, applies it live, and persists it.
+    private func adjustSubtitleHeight(bySteps steps: Int) {
+        SubtitleAdjustments.setHeightUnits(subtitleHeightUnits + steps,
+                                           forMediaKey: subtitleMediaKey)
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+        rebuildSubtitleOverlay()
     }
 
     /// Steps this channel's subtitle delay, applies it live, and persists it.
@@ -788,24 +905,38 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let raw = subtitleDelaySeconds + Double(steps) * SubtitleAdjustments.delayStep
         subtitleDelaySeconds = SubtitleAdjustments.roundedDelay(raw)
         subtitleModel.delaySeconds = subtitleDelaySeconds
-        SubtitleAdjustments.setDelay(subtitleDelaySeconds, forKey: subtitleDelayKey)
+        SubtitleAdjustments.setDelay(subtitleDelaySeconds, forKey: subtitleMediaKey)
     }
 
-    /// One legible-output attributed string, split into content-coloured runs.
+    /// One legible-output attributed string: its styled runs plus the
+    /// placement the cue asked for.
     private struct StyledLine: Equatable {
         let runs: [AetherSubtitleCue.StyledRun]
+        var placement: AetherSubtitleCue.TextPlacement?
     }
 
-    /// Converts a legible-output attributed string into styled runs, keeping
-    /// only the content-specified foreground colour
-    /// (`kCMTextMarkupAttribute_ForegroundColorARGB`: [a, r, g, b] in 0...1,
-    /// present iff the WebVTT specified one thanks to `.sourceAndRulesOnly`).
+    /// Converts a legible-output attributed string into styled runs.
+    ///
+    /// This is the ONLY way styling reaches the overlay on the remote-HLS
+    /// path: the rendition belongs to AVPlayer, the engine never demuxes it,
+    /// so nothing arrives on `subtitleCues` and the 5.26.0 / 5.27.0 engine
+    /// styling does not apply here. AVFoundation does surface the full
+    /// text-markup set on the legible output, so the same attributes are
+    /// recovered from it instead — every one present iff the WebVTT actually
+    /// specified it, thanks to `.sourceAndRulesOnly`.
+    ///
     /// Whitespace-only strings return nil; edge whitespace is trimmed so
     /// placement matches the plain-text path.
     private static func styledLine(from attr: NSAttributedString) -> StyledLine? {
         guard !attr.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let colorKey = NSAttributedString.Key(kCMTextMarkupAttribute_ForegroundColorARGB as String)
+        let boldKey = NSAttributedString.Key(kCMTextMarkupAttribute_BoldStyle as String)
+        let italicKey = NSAttributedString.Key(kCMTextMarkupAttribute_ItalicStyle as String)
+        let underlineKey = NSAttributedString.Key(kCMTextMarkupAttribute_UnderlineStyle as String)
+        let faceKey = NSAttributedString.Key(kCMTextMarkupAttribute_FontFamilyName as String)
+        let sizeKey = NSAttributedString.Key(kCMTextMarkupAttribute_RelativeFontSize as String)
+
         let ns = attr.string as NSString
         var runs: [AetherSubtitleCue.StyledRun] = []
         attr.enumerateAttributes(in: NSRange(location: 0, length: attr.length)) { attrs, range, _ in
@@ -818,7 +949,23 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                               blue: argb[3].doubleValue,
                               opacity: argb[0].doubleValue)
             }
-            runs.append(AetherSubtitleCue.StyledRun(text: text, color: color))
+            // Relative size is a PERCENTAGE of the default cue size; the
+            // renderer wants ASS play-resolution points, so convert through
+            // the same nominal 16pt the engine's synthesised lines use.
+            var fontSize: Int?
+            if let percent = (attrs[sizeKey] as? NSNumber)?.doubleValue,
+               percent > 0, abs(percent - 100) > 0.5 {
+                fontSize = Int((percent / 100 * 16).rounded())
+            }
+            runs.append(AetherSubtitleCue.StyledRun(
+                text: text,
+                color: color,
+                isBold: (attrs[boldKey] as? NSNumber)?.boolValue ?? false,
+                isItalic: (attrs[italicKey] as? NSNumber)?.boolValue ?? false,
+                isUnderlined: (attrs[underlineKey] as? NSNumber)?.boolValue ?? false,
+                fontName: attrs[faceKey] as? String,
+                fontSize: fontSize
+            ))
         }
 
         if var first = runs.first {
@@ -832,7 +979,63 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         runs.removeAll { $0.text.isEmpty }
         guard !runs.isEmpty else { return nil }
 
-        return StyledLine(runs: runs)
+        return StyledLine(runs: runs, placement: cuePlacement(from: attr))
+    }
+
+    /// The cue's own placement, from the cue-level markup attributes (uniform
+    /// across the string, so read at index 0).
+    ///
+    /// WebVTT `line` is a percentage down the frame and `position` a
+    /// percentage across; `align` gives the column. Mapped to the same ASS
+    /// numpad + normalized-anchor model the engine uses on its own demux
+    /// path, so the overlay places an engine cue and an AVPlayer cue the same
+    /// way. Anchored to the frame edge the line is nearer, matching how the
+    /// engine resolves it (AE 5.27.0) — the spec's default line alignment
+    /// pins the box top, which would hang a two-line cue off the bottom at
+    /// `line:90%`.
+    ///
+    /// nil when the cue asked for nothing, which is the common case and puts
+    /// it in the overlay's default band.
+    private static func cuePlacement(from attr: NSAttributedString) -> AetherSubtitleCue.TextPlacement? {
+        guard attr.length > 0 else { return nil }
+        let attrs = attr.attributes(at: 0, effectiveRange: nil)
+        let lineKey = NSAttributedString.Key(
+            kCMTextMarkupAttribute_OrthogonalLinePositionPercentageRelativeToWritingDirection as String)
+        let posKey = NSAttributedString.Key(
+            kCMTextMarkupAttribute_TextPositionPercentageRelativeToWritingDirection as String)
+        let alignKey = NSAttributedString.Key(kCMTextMarkupAttribute_Alignment as String)
+
+        let linePercent = (attrs[lineKey] as? NSNumber)?.doubleValue
+        let posPercent = (attrs[posKey] as? NSNumber)?.doubleValue
+        let alignment = attrs[alignKey] as? String
+        guard linePercent != nil || posPercent != nil || alignment != nil else { return nil }
+
+        // Column: 0 left, 1 centre, 2 right.
+        var col = 1
+        if let alignment {
+            if alignment == (kCMTextMarkupAlignmentType_Start as String)
+                || alignment == (kCMTextMarkupAlignmentType_Left as String) {
+                col = 0
+            } else if alignment == (kCMTextMarkupAlignmentType_End as String)
+                || alignment == (kCMTextMarkupAlignmentType_Right as String) {
+                col = 2
+            }
+        }
+
+        // Row: numpad 0 bottom, 1 middle, 2 top. Without a line the cue keeps
+        // only its column, so it stays in the default band horizontally
+        // placed — an anchor point needs both axes to mean anything.
+        guard let linePercent else {
+            return AetherSubtitleCue.TextPlacement(alignment: col + 1, position: nil)
+        }
+        let y = min(max(linePercent / 100, 0), 1)
+        let row = y < 0.34 ? 2 : (y < 0.67 ? 1 : 0)
+
+        let x = posPercent.map { min(max($0 / 100, 0), 1) } ?? 0.5
+        return AetherSubtitleCue.TextPlacement(
+            alignment: row * 3 + col + 1,
+            position: CGPoint(x: x, y: y)
+        )
     }
 
     /// The live counterpart of the VOD OSD's season list: every channel in
@@ -1078,8 +1281,19 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let hosting = UIHostingController(rootView: makeOverlayRootView())
         hosting.view.backgroundColor = .clear
         hosting.view.isUserInteractionEnabled = false
+        // The overlay measures every margin from the SCREEN (the rail is
+        // screen-anchored, and the picture is full-bleed). A hosting controller
+        // applies the safe area to its content by default, which on tvOS is the
+        // ~60pt title-safe margin, so the GeometryReader inside would report the
+        // inset box and every bottom margin would be that much too high — the
+        // rail gap measured about double its intended 5%. VOD's overlay avoids
+        // this with .ignoresSafeArea(); this is the hosting-controller
+        // equivalent, and keeps the rootView's type intact so the generic
+        // parameter above still matches.
+        hosting.safeAreaRegions = []
 
         addChild(hosting)
+        // Added here, below the chrome — see the call site in viewDidLoad.
         view.addSubview(hosting.view)
         hosting.view.frame = view.bounds
         hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1092,12 +1306,37 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         AetherSubtitleOverlayView(
             model: subtitleModel,
             style: captionStyle,
-            controlsVisible: railVisible  // lift captions above the glass rail
+            controlsVisible: railVisible,  // lift captions above the glass rail
+            // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
+            // captions on the picture rather than in the pillar/letterbox.
+            videoSize: aetherPlayer?.videoSize ?? .zero,
+            // Height is sticky per channel, like the delay stepper.
+            heightUnits: subtitleHeightUnits
         )
     }
 
-    private func rebuildSubtitleOverlay() {
-        subtitleHostingController?.rootView = makeOverlayRootView()
+    /// Swaps the overlay's root view.
+    ///
+    /// `animated` is for the rail-driven lift ONLY. Replacing a hosting
+    /// controller's `rootView` is a UIKit-side assignment, not a SwiftUI
+    /// transaction, so the `.animation(value: controlsVisible)` inside the
+    /// overlay has nothing to attach to and the captions jump to their new
+    /// height instead of sliding. Wrapping the assignment supplies the
+    /// transaction. VOD needs none of this: there `controlsVisible` comes off
+    /// an @Published, so the change already happens inside SwiftUI.
+    ///
+    /// Content-driven rebuilds (a new video size, a caption-settings change)
+    /// stay instant — animating a caption's geometry because the user changed
+    /// their font size would be noise.
+    private func rebuildSubtitleOverlay(animated: Bool = false) {
+        guard let hosting = subtitleHostingController else { return }
+        guard animated else {
+            hosting.rootView = makeOverlayRootView()
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            hosting.rootView = makeOverlayRootView()
+        }
     }
 
     private func bindAetherSubtitles(_ aether: AetherPlayer) {
@@ -1106,11 +1345,21 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             .sink { [weak self] cues in
                 guard let self else { return }
                 // While a native legible (remote WebVTT) selection drives the
-                // overlay, an empty engine publish must not wipe its cues —
-                // the engine track list is always empty on nativeRemoteHLS.
+                // overlay, an empty engine publish must not wipe its cues: the
+                // engine has no cues of its own on the bypass. Keyed off the
+                // publish being empty rather than the route, so a #168 reroute
+                // onto the loopback (where it really does demux) still lands.
                 if self.nativeLegibleActive && cues.isEmpty { return }
                 self.subtitleModel.update(cues: cues)
             }
+            .store(in: &cancellables)
+
+        // The overlay is a rebuilt-on-demand root view, so a videoSize change
+        // has to force a rebuild — nothing observes the player from SwiftUI.
+        aether.$videoSize
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rebuildSubtitleOverlay() }
             .store(in: &cancellables)
 
         aether.$sourceTime

@@ -945,7 +945,13 @@ struct UniversalPlayerView: View {
                     // (showControls || isScrubbing): the scrub ribbon keeps
                     // the bottom band occupied even when the rail hides, so
                     // captions stay lifted through a scrub.
-                    controlsVisible: viewModel.showControls || viewModel.isScrubbing
+                    controlsVisible: viewModel.showControls || viewModel.isScrubbing,
+                    // Lets the overlay measure its bottom margin from the
+                    // picture rather than the screen, so a letterboxed film
+                    // is not captioned into its black bar.
+                    videoSize: viewModel.videoSize,
+                    // Height is sticky per title, like the delay stepper.
+                    heightUnits: viewModel.subtitleHeightUnits
                 )
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -955,10 +961,8 @@ struct UniversalPlayerView: View {
             } else if viewModel.player != nil {
                 SubtitleOverlayView(
                     subtitleManager: viewModel.subtitleManager,
-                    // 368 = rail bottom inset 84 + railHeight 260 + 24 gap;
-                    // resting 100 — both match AetherSubtitleOverlayView so
-                    // captions sit at the same height on every route.
-                    bottomOffset: (viewModel.showControls || viewModel.isScrubbing) ? 368 : 100
+                    controlsVisible: viewModel.showControls || viewModel.isScrubbing,
+                    heightUnits: viewModel.subtitleHeightUnits
                 )
                 .ignoresSafeArea()
             }

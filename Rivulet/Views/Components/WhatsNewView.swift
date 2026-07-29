@@ -141,7 +141,11 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         ("1.0.4 (71)", [
-            "Updated AetherEngine to 5.23.11",
+            "Subtitles now match the way Apple TV draws its own captions, with the same text size, tighter background behind each line, and the same distance from the picture. On letterboxed films they sit on the image instead of down in the black bar",
+            "Subtitles now keep the styling and placement the content asked for, including bold, italic, underline, colour, size and captions the maker placed away from the bottom of the picture. This works for SRT, WebVTT, ASS and broadcast teletext, and your Subtitles and Captioning settings still decide which of it is used",
+            "Broadcast captions that the channel moves to the top of the screen, to avoid covering on screen graphics, now appear there instead of at the bottom",
+            "Subtitle files in WebVTT format now load, and keep the position the file asks for",
+            "Updated AetherEngine to 5.28.2",
             "Playback starts and seeks more reliably: resuming part way in is faster, jumping far ahead no longer stalls, and titles with TrueHD or DTS-HD MA audio no longer sit on Loading forever",
             "Fixed picture and colour problems on several kinds of file, including Dolby Vision Profile 5 titles that played with a green or purple tint and widescreen content that looked squashed",
             "Live TV is steadier: interlaced channels play with sound, HDR channels switch your TV into HDR, channels that rebuffered on opening now start cleanly, and a channel that loses its source recovers on its own instead of giving up on the retry",

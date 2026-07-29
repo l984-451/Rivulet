@@ -57,6 +57,23 @@ final class AetherPlayer: PlayerProtocol {
     /// (embedded or sidecar) is selected and the engine has cue data.
     @Published private(set) var isSubtitleActive: Bool = false
 
+    /// The item's presentation size (pixel dimensions after aperture/pixel
+    /// aspect correction), for hosts that must place UI against the VIDEO
+    /// rect rather than the screen — the subtitle overlay measures its bottom
+    /// margin from the picture, so captions on 2.39:1 content sit above the
+    /// letterbox rather than down in the black bar.
+    ///
+    /// `.zero` until an item reports one, and on the software path (no
+    /// AVPlayer). Callers treat `.zero` as "assume the video fills the view".
+    @Published private(set) var videoSize: CGSize = .zero
+
+    /// Per-player / per-item observers for `videoSize`. Held separately from
+    /// `cancellables` because they are replaced whenever the engine swaps its
+    /// inner AVPlayer or item (audio-track switch, background reopen, the
+    /// failure ladder), not torn down with the session.
+    private var videoItemCancellable: AnyCancellable?
+    private var videoSizeCancellable: AnyCancellable?
+
     /// True while playback is stalled waiting for media. Combines
     /// engine.$isBuffering with a direct timeControlStatus observation on the
     /// engine's inner AVPlayer: the engine's flag only updates inside its
@@ -181,25 +198,44 @@ final class AetherPlayer: PlayerProtocol {
                     case .text(let string):
                         body = .text(string)
                     case .richText(let runs):
-                        // Coloured teletext / ASS colour runs (engine 5.7.0+).
-                        // Whether the colour is painted is the renderer's call
-                        // (CaptionStyle.allowsContentColor).
+                        // Styled runs. Since engine 5.26.0 this is not just
+                        // colour: bold / italic / underline / strikethrough,
+                        // font face and size arrive too, and for EVERY text
+                        // format — libavcodec converts SRT, WebVTT and
+                        // teletext into ASS event lines, and the engine now
+                        // parses the whole override set rather than colour
+                        // alone. Whether any of it is painted is the
+                        // renderer's call, per attribute, against the
+                        // CaptionStyle.allowsContent* Video Override states.
                         body = .styledText(runs.map { run in
                             AetherSubtitleCue.StyledRun(
                                 text: run.text,
                                 color: run.color.map {
                                     Color(red: Double($0.r) / 255, green: Double($0.g) / 255, blue: Double($0.b) / 255)
-                                }
+                                },
+                                isBold: run.isBold,
+                                isItalic: run.isItalic,
+                                isUnderlined: run.isUnderlined,
+                                isStruckThrough: run.isStruckThrough,
+                                fontName: run.fontName,
+                                fontSize: run.fontSize
                             )
                         })
                     case .image(let image):
                         body = .image(cgImage: image.cgImage, position: image.position)
                     }
+                    // Placement the source asked for (ASS \an / \pos), nil for
+                    // nearly every cue. Bitmap cues carry their own geometry
+                    // on the image, so placement is text-only upstream.
+                    let placement = cue.placement.map {
+                        AetherSubtitleCue.TextPlacement(alignment: $0.alignment, position: $0.position)
+                    }
                     return AetherSubtitleCue(
                         id: cue.id,
                         startTime: cue.startTime,
                         endTime: cue.endTime,
-                        body: body
+                        body: body,
+                        placement: placement
                     )
                 }
             }
@@ -244,6 +280,7 @@ final class AetherPlayer: PlayerProtocol {
                 avp?.isMuted = self.isMuted
                 self.currentAVPlayer = avp
                 self.observeTimeControlStatus(of: avp)
+                self.observeVideoSize(of: avp)
             }
             .store(in: &cancellables)
 
@@ -260,6 +297,37 @@ final class AetherPlayer: PlayerProtocol {
                 self?.subtitleTracks = tracks.map(Self.translateTrack)
             }
             .store(in: &cancellables)
+    }
+
+    /// Tracks `presentationSize` across item swaps. Observed in two hops
+    /// rather than through a `\.currentItem?.presentationSize` key path:
+    /// nested KVO through an optional chain is not reliably delivered, and a
+    /// missed update would leave the overlay measuring against a stale
+    /// aspect ratio for the whole session.
+    private func observeVideoSize(of player: AVPlayer?) {
+        videoSizeCancellable = nil
+        guard let player else {
+            videoItemCancellable = nil
+            videoSize = .zero
+            return
+        }
+        videoItemCancellable = player
+            .publisher(for: \.currentItem)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] item in
+                guard let self else { return }
+                guard let item else {
+                    self.videoSizeCancellable = nil
+                    return
+                }
+                self.videoSizeCancellable = item
+                    .publisher(for: \.presentationSize)
+                    // A zero size is the pre-ready placeholder; publishing it
+                    // would flip the overlay back to full-bounds mid-session.
+                    .filter { $0.width > 0 && $0.height > 0 }
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] size in self?.videoSize = size }
+            }
     }
 
     /// Watch the inner AVPlayer's transport directly. Replaced whenever the

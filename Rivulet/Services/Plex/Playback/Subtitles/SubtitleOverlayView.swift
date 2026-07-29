@@ -16,13 +16,13 @@ import UIKit
 struct SubtitleOverlayView: View {
     @ObservedObject var subtitleManager: SubtitleManager
 
-    /// Vertical offset from bottom (for player controls)
-    var bottomOffset: CGFloat = 100
+    /// True when the player rail is visible; lifts text clear of it.
+    var controlsVisible: Bool = false
 
-    /// User height adjustment from the OSD stepper (global; positive = higher).
-    /// Same key AetherSubtitleOverlayView reads, so both routes place captions
-    /// identically. @AppStorage so stepping it re-renders the overlay live.
-    @AppStorage(SubtitleAdjustments.heightKey) private var heightUnits: Int = 0
+
+    /// Height adjustment for THIS media, in stepper units. Pushed in by the
+    /// host, same as on AetherSubtitleOverlayView.
+    var heightUnits: Int = 0
 
     /// Current system caption appearance. Replaced wholesale when the user
     /// changes caption settings (via CaptionAppearance.changedNotification).
@@ -64,10 +64,22 @@ struct SubtitleOverlayView: View {
                             }
                         }
                         .padding(.horizontal, 60)
-                        .padding(.bottom, max(0, bottomOffset + SubtitleAdjustments.heightOffset(forUnits: heightUnits)))
+                        // Same floor AetherSubtitleOverlayView uses, so a
+                        // title falling back to the HLS route does not shift
+                        // its captions. This route has no picture rect of its
+                        // own — the transcode fills the view — so the bounds
+                        // stand in for the picture height.
+                        .padding(.bottom, max(0, (controlsVisible
+                                                  ? SubtitleAdjustments.controlsFloor(pictureHeight: geometry.size.height)
+                                                  : geometry.size.height * SubtitleAdjustments.bottomMarginFraction)
+                                                 + SubtitleAdjustments.heightOffset(forUnits: heightUnits)))
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                // Same curve as the chrome's own fade and as
+                // AetherSubtitleOverlayView, so the lift looks identical
+                // whichever route a title took.
+                .animation(.easeInOut(duration: 0.25), value: controlsVisible)
             }
         }
         .allowsHitTesting(false)  // Don't interfere with player controls

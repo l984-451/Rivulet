@@ -31,7 +31,6 @@ struct GuideLayoutView: View {
 
     /// Selected category tab. nil = "All Channels"; otherwise an M3U group title.
     @State private var selectedGroup: String?
-    @FocusState private var focusedCategory: String?
 
     /// Channels for the current source, before category filtering.
     private var sourceChannels: [UnifiedChannel] {
@@ -104,9 +103,6 @@ struct GuideLayoutView: View {
         return min(max(floor, loaded), ceiling)
     }
 
-    /// Height of the category tab bar between the info bar and the time ruler.
-    private let categoryBarHeight: CGFloat = 64
-
     // Player state
     @State private var activeChannel: UnifiedChannel?
     @State private var playerSessionId = UUID()
@@ -147,6 +143,7 @@ struct GuideLayoutView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     guideContent
+                        .padding(.top, EPGTheme.guideTopPadding)
                         .opacity(displayMode == .fullscreen ? 0 : 1)
                         .disabled(displayMode == .fullscreen)
                 }
@@ -191,6 +188,14 @@ struct GuideLayoutView: View {
                 timelineStart: timelineStart,
                 totalMinutes: totalMinutes,
                 now: now,
+                categoryTitles: groupTitles,
+                selectedCategory: selectedGroup,
+                onCategorySelect: { group in
+                    guard selectedGroup != group else { return }
+                    selectedGroup = group
+                    focusedChannel = nil
+                    seedFocus()
+                },
                 menuActive: displayMode == .fullscreen,
                 onFocus: { channel, program in
                     focusedChannel = channel
@@ -202,67 +207,14 @@ struct GuideLayoutView: View {
                 },
                 transparent: true,                 // dark see-through boxes + rounded clipping
                 // Reserve the info bar + category bar above the ruler.
-                topInset: EPGTheme.infoBarHeight + categoryBarHeight
+                topInset: EPGTheme.infoBarHeight + EPGTheme.categoryBarHeight
             )
 
-            VStack(alignment: .leading, spacing: 0) {
-                GuideInfoBar(channel: focusedChannel, program: focusedProgram)
-                    .frame(height: EPGTheme.infoBarHeight)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .allowsHitTesting(false)
-
-                categoryBar
-                    .frame(height: categoryBarHeight)
-            }
+            GuideInfoBar(channel: focusedChannel, program: focusedProgram)
+                .frame(height: EPGTheme.infoBarHeight)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .allowsHitTesting(false)
         }
-    }
-
-    // MARK: - Category bar ("All Channels" + M3U group titles)
-
-    @ViewBuilder private var categoryBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 14) {
-                categoryButton(title: "All Channels", group: nil)
-                ForEach(groupTitles, id: \.self) { group in
-                    categoryButton(title: group, group: group)
-                }
-            }
-            .padding(.leading, EPGTheme.cellSpacing)
-            .padding(.trailing, 60)
-            .padding(.vertical, 10)
-        }
-        .focusSection()
-    }
-
-    private func categoryButton(title: String, group: String?) -> some View {
-        let selected = (selectedGroup == group)
-        let focused = (focusedCategory == title)
-        // White pill when it's the active filter, grey pill when focused,
-        // nothing otherwise. The system focus effect is disabled so the pill
-        // is the only focus indicator.
-        let pillColor: Color = selected ? Color.white
-            : (focused ? Color.white.opacity(0.22) : Color.clear)
-        let textColor: Color = selected ? EPGTheme.background
-            : (focused ? Color.white : EPGTheme.textSecondary)
-        return Button {
-            if selectedGroup != group {
-                selectedGroup = group
-                focusedChannel = nil        // reseed focus onto the filtered lineup
-                seedFocus()
-            }
-        } label: {
-            Text(title)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(textColor)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(pillColor))
-        }
-        .buttonStyle(CategoryTabButtonStyle())
-        .focusEffectDisabled()
-        .focused($focusedCategory, equals: title)
-        .animation(.easeInOut(duration: 0.15), value: focused)
-        .animation(.easeInOut(duration: 0.15), value: selected)
     }
 
     /// The focused programme's image, strong at the top and dimming to a faint
@@ -498,17 +450,6 @@ struct GuideLayoutView: View {
             focusedProgram = dataStore.getCurrentProgram(for: first)
                 ?? dataStore.epg[first.id]?.first
         }
-    }
-}
-
-// MARK: - Category tab button style
-
-/// Renders only the label — no default background, scale, or focus chrome — so
-/// the pill (driven by `@FocusState`) is the sole focus indicator.
-private struct CategoryTabButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.75 : 1.0)
     }
 }
 

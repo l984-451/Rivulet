@@ -47,6 +47,10 @@ enum EPGTheme {
     static let timelineBoxHeight: CGFloat = 34
     /// Height of the fixed info bar (top layer) the grid scrolls beneath.
     static let infoBarHeight: CGFloat = 300
+    /// Height of the UIKit category pills between the info bar and time ruler.
+    static let categoryBarHeight: CGFloat = 64
+    /// Vertical breathing room below the UIKit navigation chrome.
+    static let guideTopPadding: CGFloat = 35
     /// Gap between the info bar and the time ruler.
     static let rulerGap: CGFloat = 0
     /// Extra gap between the time ruler and the first row.
@@ -90,6 +94,9 @@ struct EPGGuide: UIViewRepresentable {
     let timelineStart: Date
     let totalMinutes: Int
     let now: Date
+    let categoryTitles: [String]
+    let selectedCategory: String?
+    let onCategorySelect: (String?) -> Void
     /// When true the grid releases focus (e.g. an overlay is presented).
     var menuActive: Bool = false
     var onFocus: (UnifiedChannel?, UnifiedProgram?) -> Void
@@ -147,6 +154,10 @@ struct EPGGuide: UIViewRepresentable {
         let container = EPGContainerView()
         container.contentTopInset = infoBarInset
         container.install(collectionView: cv)
+        container.configureCategories(
+            titles: categoryTitles,
+            selected: selectedCategory,
+            onSelect: onCategorySelect)
         container.setTransparent(transparent)
         return container
     }
@@ -155,7 +166,11 @@ struct EPGGuide: UIViewRepresentable {
         context.coordinator.parent = self
         guard let cv = context.coordinator.collectionView,
               let layout = cv.collectionViewLayout as? EPGLayout else { return }
-        cv.isUserInteractionEnabled = !menuActive
+        uiView.isUserInteractionEnabled = !menuActive
+        uiView.configureCategories(
+            titles: categoryTitles,
+            selected: selectedCategory,
+            onSelect: onCategorySelect)
         let dataChanged = context.coordinator.apply(self, to: layout)
         if dataChanged {
             cv.reloadData()
@@ -458,6 +473,10 @@ struct EPGGuide: UIViewRepresentable {
 
 final class EPGContainerView: UIView {
     private var collectionView: UICollectionView?
+    private let categoryBar = GuideCategoryBarView()
+    private weak var pendingGridFocusTarget: UIView?
+    private weak var pendingCategoryFocusTarget: UIView?
+    private var gridUpSwipeBinding: DirectionalInputBinding?
     private let timeFade = CAGradientLayer()
     private let bottomFade = CAGradientLayer()
     private let rightFade = CAGradientLayer()
@@ -475,6 +494,21 @@ final class EPGContainerView: UIView {
     func install(collectionView cv: UICollectionView) {
         self.collectionView = cv
         addSubview(cv)
+        addSubview(categoryBar)
+        categoryBar.onMoveDown = { [weak self] in self?.moveFocusIntoGrid() }
+        gridUpSwipeBinding = DirectionalInputBinding(
+            gatedSwipesOn: cv,
+            directions: [.up],
+            shouldHandle: { [weak cv] direction in
+                guard direction == .up, let cv,
+                      let focused = UIFocusSystem.focusSystem(for: cv)?.focusedItem as? UICollectionViewCell,
+                      let indexPath = cv.indexPath(for: focused)
+                else { return false }
+                return indexPath.section == 0
+            },
+            onSwipe: { [weak self] _ in
+                self?.moveFocusToCategories()
+            })
 
         let bg = UIColor(EPGTheme.background)
 
@@ -494,8 +528,87 @@ final class EPGContainerView: UIView {
         layer.addSublayer(rightFade)
     }
 
+    func configureCategories(
+        titles: [String],
+        selected: String?,
+        onSelect: @escaping (String?) -> Void
+    ) {
+        categoryBar.configure(titles: titles, selected: selected, onSelect: onSelect)
+    }
+
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let pendingGridFocusTarget {
+            return [pendingGridFocusTarget]
+        }
+        if let pendingCategoryFocusTarget {
+            return [pendingCategoryFocusTarget]
+        }
+        return super.preferredFocusEnvironments
+    }
+
+    /// Complete the category-to-grid handoff after the directional focus update
+    /// that requested it has ended. Calling `updateFocusIfNeeded` inline from a
+    /// focus delegate is ignored by UIKit because an update is already active.
+    private func moveFocusIntoGrid() {
+        guard pendingGridFocusTarget == nil, let cv = collectionView else { return }
+        cv.layoutIfNeeded()
+        pendingGridFocusTarget = firstVisibleProgramCell(in: cv) ?? cv
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.setNeedsFocusUpdate()
+            self.updateFocusIfNeeded()
+            self.pendingGridFocusTarget = nil
+        }
+    }
+
+    /// Symmetric boundary handoff from the top programme row back to the last
+    /// focused category pill. Called only for a declined Up press or a gated
+    /// indirect-touch Up swipe while section zero owns focus.
+    func moveFocusToCategories() {
+        guard pendingCategoryFocusTarget == nil,
+              let target = categoryBar.preferredFocusTarget()
+        else { return }
+        pendingCategoryFocusTarget = target
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.setNeedsFocusUpdate()
+            self.updateFocusIfNeeded()
+            self.pendingCategoryFocusTarget = nil
+        }
+    }
+
+    /// Prefer the programme crossing the visible timeline's leading edge in
+    /// the first visible channel row. This is the natural "current programme"
+    /// landing point even when an almost-finished cell is only a few points wide.
+    private func firstVisibleProgramCell(in cv: UICollectionView) -> UIView? {
+        let visible = cv.indexPathsForVisibleItems
+        guard let firstSection = visible.map(\.section).min() else { return nil }
+        let entryX = cv.contentOffset.x + EPGTheme.channelColumnWidth + EPGTheme.cellSpacing
+
+        let target = visible
+            .filter { $0.section == firstSection }
+            .min { lhs, rhs in
+                distance(from: entryX, to: cv.layoutAttributesForItem(at: lhs)?.frame)
+                    < distance(from: entryX, to: cv.layoutAttributesForItem(at: rhs)?.frame)
+            }
+        return target.flatMap { cv.cellForItem(at: $0) }
+    }
+
+    private func distance(from x: CGFloat, to frame: CGRect?) -> CGFloat {
+        guard let frame else { return .greatestFiniteMagnitude }
+        if frame.minX...frame.maxX ~= x { return 0 }
+        return min(abs(x - frame.minX), abs(x - frame.maxX))
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        categoryBar.frame = CGRect(
+            x: 0,
+            y: EPGTheme.infoBarHeight,
+            width: bounds.width,
+            height: EPGTheme.categoryBarHeight)
         collectionView?.frame = CGRect(x: 0, y: contentTopInset,
                                        width: bounds.width,
                                        height: max(bounds.height - contentTopInset, 0))
@@ -503,6 +616,232 @@ final class EPGContainerView: UIView {
         timeFade.frame = CGRect(x: 0, y: top, width: bounds.width, height: 16)
         bottomFade.frame = CGRect(x: 0, y: bounds.height - 70, width: bounds.width, height: 70)
         rightFade.frame = CGRect(x: bounds.width - 48, y: top, width: 48, height: bounds.height - top)
+    }
+}
+
+// MARK: - UIKit category bar
+
+/// Native category pills hosted beside the native programme collection view.
+/// Keeping both focusable regions in one UIKit environment lets tvOS move Down
+/// into the guide and Up back to the filters without a cross-framework bridge.
+final class GuideCategoryBarView: UIView {
+    private struct Item: Equatable {
+        let title: String
+        let group: String?
+    }
+
+    private var items: [Item] = []
+    private var selectedGroup: String?
+    private var onSelect: ((String?) -> Void)?
+    private var lastFocusedIndexPath: IndexPath?
+    var onMoveDown: (() -> Void)?
+    private var downSwipeBinding: DirectionalInputBinding?
+
+    private lazy var collectionView: UICollectionView = {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumLineSpacing = 14
+        layout.minimumInteritemSpacing = 14
+        layout.sectionInset = UIEdgeInsets(
+            top: 10,
+            left: EPGTheme.cellSpacing,
+            bottom: 10,
+            right: 60)
+
+        let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        view.backgroundColor = .clear
+        view.contentInsetAdjustmentBehavior = .never
+        view.showsHorizontalScrollIndicator = false
+        view.showsVerticalScrollIndicator = false
+        view.remembersLastFocusedIndexPath = true
+        view.dataSource = self
+        view.delegate = self
+        view.register(
+            GuideCategoryPillCell.self,
+            forCellWithReuseIdentifier: GuideCategoryPillCell.reuseIdentifier)
+        return view
+    }()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(collectionView)
+        downSwipeBinding = DirectionalInputBinding(
+            gatedSwipesOn: collectionView,
+            directions: [.down],
+            shouldHandle: { [weak self] direction in
+                guard let self else { return false }
+                let focused = UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView
+                return direction == .down
+                    && (focused?.isDescendant(of: self.collectionView) ?? false)
+            },
+            onSwipe: { [weak self] _ in
+                self?.onMoveDown?()
+            })
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        collectionView.frame = bounds
+    }
+
+    func configure(
+        titles: [String],
+        selected: String?,
+        onSelect: @escaping (String?) -> Void
+    ) {
+        let nextItems = [Item(title: "All Channels", group: nil)]
+            + titles.map { Item(title: $0, group: $0) }
+        let itemsChanged = items != nextItems
+        let selectionChanged = selectedGroup != selected
+
+        items = nextItems
+        selectedGroup = selected
+        self.onSelect = onSelect
+
+        if itemsChanged {
+            collectionView.reloadData()
+        } else if selectionChanged {
+            refreshVisiblePills()
+        }
+    }
+
+    private func refreshVisiblePills() {
+        for indexPath in collectionView.indexPathsForVisibleItems {
+            guard let item = items[safe: indexPath.item],
+                  let cell = collectionView.cellForItem(at: indexPath) as? GuideCategoryPillCell
+            else { continue }
+            cell.configure(title: item.title, selected: item.group == selectedGroup)
+        }
+    }
+
+    func preferredFocusTarget() -> UIView? {
+        collectionView.layoutIfNeeded()
+        let selectedIndex = items.firstIndex { $0.group == selectedGroup }
+            .map { IndexPath(item: $0, section: 0) }
+        let targetIndex = lastFocusedIndexPath ?? selectedIndex ?? IndexPath(item: 0, section: 0)
+        return collectionView.cellForItem(at: targetIndex)
+    }
+}
+
+extension GuideCategoryBarView: UICollectionViewDataSource,
+                                UICollectionViewDelegate,
+                                UICollectionViewDelegateFlowLayout {
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        items.count
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        cellForItemAt indexPath: IndexPath
+    ) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(
+            withReuseIdentifier: GuideCategoryPillCell.reuseIdentifier,
+            for: indexPath) as! GuideCategoryPillCell
+        if let item = items[safe: indexPath.item] {
+            cell.configure(title: item.title, selected: item.group == selectedGroup)
+        }
+        cell.onDeclinedDownPress = { [weak self] in
+            self?.onMoveDown?()
+        }
+        return cell
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        sizeForItemAt indexPath: IndexPath
+    ) -> CGSize {
+        guard let title = items[safe: indexPath.item]?.title else { return .zero }
+        let font = UIFont.systemFont(ofSize: 24, weight: .semibold)
+        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 44
+        return CGSize(width: width, height: 44)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        guard let item = items[safe: indexPath.item],
+              item.group != selectedGroup
+        else { return }
+        onSelect?(item.group)
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
+        with coordinator: UIFocusAnimationCoordinator
+    ) {
+        if let next = context.nextFocusedIndexPath { lastFocusedIndexPath = next }
+    }
+}
+
+final class GuideCategoryPillCell: UICollectionViewCell {
+    static let reuseIdentifier = "GuideCategoryPillCell"
+
+    private let titleLabel = UILabel()
+    private var selectedCategory = false
+    var onDeclinedDownPress: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        contentView.layer.cornerRadius = 22
+        contentView.layer.cornerCurve = .continuous
+        titleLabel.font = .systemFont(ofSize: 24, weight: .semibold)
+        titleLabel.textAlignment = .center
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
+            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
+            titleLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isHighlighted: Bool {
+        didSet { contentView.alpha = isHighlighted ? 0.75 : 1 }
+    }
+
+    /// Discrete arrows reach the focused responder only when the focus engine
+    /// declines to move. That is precisely the dead-end handoff we need here;
+    /// touch-remotes use the gated swipe twin installed on the category bar.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .downArrow }) {
+            onDeclinedDownPress?()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    func configure(title: String, selected: Bool) {
+        titleLabel.text = title
+        selectedCategory = selected
+        applyAppearance(focused: isFocused)
+    }
+
+    override func didUpdateFocus(
+        in context: UIFocusUpdateContext,
+        with coordinator: UIFocusAnimationCoordinator
+    ) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        coordinator.addCoordinatedAnimations { self.applyAppearance(focused: focused) }
+    }
+
+    private func applyAppearance(focused: Bool) {
+        if selectedCategory {
+            contentView.backgroundColor = .white
+            titleLabel.textColor = UIColor(EPGTheme.background)
+        } else if focused {
+            contentView.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+            titleLabel.textColor = .white
+        } else {
+            contentView.backgroundColor = .clear
+            titleLabel.textColor = UIColor(EPGTheme.textSecondary)
+        }
     }
 }
 
@@ -773,6 +1112,38 @@ final class ProgramCellView: UICollectionViewCell {
     }
 
     override var canBecomeFocused: Bool { true }
+
+    /// An Up arrow reaches the focused cell only after the focus engine has
+    /// declined it. At section zero, hand it back to the category collection;
+    /// all other presses continue through the normal responder chain.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .upArrow }),
+           let cv = enclosingCollectionView,
+           cv.indexPath(for: self)?.section == 0,
+           let container = enclosingEPGContainer {
+            container.moveFocusToCategories()
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
+
+    private var enclosingCollectionView: UICollectionView? {
+        var view = superview
+        while let current = view {
+            if let collection = current as? UICollectionView { return collection }
+            view = current.superview
+        }
+        return nil
+    }
+
+    private var enclosingEPGContainer: EPGContainerView? {
+        var view = superview
+        while let current = view {
+            if let container = current as? EPGContainerView { return container }
+            view = current.superview
+        }
+        return nil
+    }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         let focused = (context.nextFocusedView == self)

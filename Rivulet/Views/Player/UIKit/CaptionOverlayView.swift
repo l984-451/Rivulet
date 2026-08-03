@@ -18,16 +18,17 @@
 //  - with the rail up, the same margin is measured off the rail's top edge
 //    instead, so the caption keeps its distance either way
 //
-//  There is a margin FLOOR every cue obeys (`placementFloor`), including one
-//  that positioned itself: a cue placed into the rail is lifted clear of it.
-//  There is a matching no-go zone at each side (`sideSafeFraction`), because
-//  AVPlayer will not draw to the picture edge either.
+//  Unplaced cues use the app's 5% bottom band. Authored placements do not
+//  inherit that offset: their measured box is clamped into the central 80% of
+//  the picture (10%...90% on both axes).
 //
-//  Within those, a cue that gave an exact position keeps it. Vertically the
-//  position names the box's TOP edge (WebVTT's default `line-align: start`),
-//  so the box hangs down from it, which is where AVPlayer draws it.
-//  Horizontally the box is centred on the position. A cue that gave only a
-//  coarse band (teletext) takes that band's resting anchor instead.
+//  Within those, a cue that gave an exact position keeps it. Horizontally the
+//  cue's left/centre/right alignment determines which box edge owns the anchor,
+//  and the measured box is kept inside the 10% side insets. Vertically the
+//  authored coordinate names the box's top edge. A cue that gave only a coarse
+//  band (teletext) takes that band's natural top/middle/bottom anchor instead.
+//  When the OSD is visible, any overlapping cue is lifted to keep the same 5%
+//  picture-height gap above it as an unplaced cue.
 //
 //  Only the user's Height stepper is placement-exempt.
 //
@@ -158,28 +159,14 @@ final class CaptionOverlayView: UIView {
         /// caption wraps well inside the picture rather than at its edge.
         static let defaultBandSideInset: CGFloat = 120
 
-        /// Where a TOP-band cue lands when its source gave only a coarse band
-        /// and no fine position — teletext through the engine demux, which
-        /// quantises the 24-row grid to three bands and supplies no percentage.
-        ///
-        /// Free to tune, because nothing measurable pins it: the source
-        /// genuinely does not say where in the top third the caption belongs.
-        /// Set near where the same page's proxied WebVTT resolves (it carries an
-        /// exact `line:`, typically around 10%), so the two routes look similar
-        /// even though only one of them can be precise.
-        static let bandTopFraction: CGFloat = 0.10
+        /// Authored placement coordinates stay inside the central 80% of the
+        /// picture. This is a coordinate clamp, not a minimum caption width:
+        /// 5% becomes 10%, while an authored 10% or 85% is left untouched.
+        static let placementSafeFraction: CGFloat = 0.10
 
-        /// Anchor for a LEFT or RIGHT column that came with no fine position.
-        /// Deliberately the same 10% / 90% the proxy writes into its WebVTT
-        /// (`align:left position:10%`), so the same page lands in the same place
-        /// whichever route it arrived by.
-        static let bandSideFraction: CGFloat = 0.10
-
-        /// Horizontal no-go zone at each edge of the PICTURE. AVPlayer will not
-        /// draw a caption to the very edge — it keeps one inside a safe inset,
-        /// the same idea as tvOS's title-safe area. Matches the 90pt the player
-        /// chrome insets itself by at 1920 wide.
-        static let sideSafeFraction: CGFloat = 0.05
+        static func clampedPlacementCoordinate(_ value: CGFloat) -> CGFloat {
+            min(max(value, placementSafeFraction), 1 - placementSafeFraction)
+        }
 
         /// Duration and curve of the rail-driven lift. Matches the chrome's own
         /// fade (`UIView.animate(withDuration: 0.25)` with no options is a 0.25s
@@ -274,8 +261,7 @@ final class CaptionOverlayView: UIView {
         return CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
     }
 
-    /// The lowest any caption may sit, as a distance from the bottom of the
-    /// CONTAINER. EVERY cue obeys this, placed or not.
+    /// The default band's distance from the bottom of the CONTAINER.
     ///
     /// Two anchors compete and the larger wins: the caption must sit
     /// `SubtitleAdjustments.bottomMarginFraction` of the PICTURE above its
@@ -285,10 +271,9 @@ final class CaptionOverlayView: UIView {
     /// lifts by its letterbox, while the same film with the rail up still
     /// clears the chrome.
     ///
-    /// Placed cues obey it too — Live TV is almost entirely placed cues, and
-    /// exempting them is what made its captions sit lower than VOD's. It is a
-    /// floor only: a cue asking to sit higher keeps its own position.
-    private func placementFloor(in size: CGSize) -> CGFloat {
+    /// Authored placements deliberately do not use this floor. Their only
+    /// safety adjustment is the 10% coordinate clamp in `layoutPlaced`.
+    private func defaultBandFloor(in size: CGSize) -> CGFloat {
         let rect = videoRect(in: size)
         let letterbox = max(0, size.height - rect.maxY)
         var base = letterbox + rect.height * SubtitleAdjustments.bottomMarginFraction
@@ -302,7 +287,7 @@ final class CaptionOverlayView: UIView {
     /// floor plus the user's Height stepper, which applies to the default band
     /// only.
     private func bottomPadding(in size: CGSize) -> CGFloat {
-        max(0, placementFloor(in: size) + SubtitleAdjustments.heightOffset(forUnits: heightUnits))
+        max(0, defaultBandFloor(in: size) + SubtitleAdjustments.heightOffset(forUnits: heightUnits))
     }
 
     /// Caption point size for this presentation, before per-cue styling.
@@ -327,12 +312,13 @@ final class CaptionOverlayView: UIView {
         // put PGS/DVB cues wrong on anything letterboxed: a 2.39:1 film
         // stretched them vertically and pushed them toward the black bar.
         for entry in bitmapCues {
-            entry.view.frame = CGRect(
+            let requestedFrame = CGRect(
                 x: rect.minX + entry.position.minX * rect.width,
                 y: rect.minY + entry.position.minY * rect.height,
                 width: entry.position.width * rect.width,
                 height: entry.position.height * rect.height
             )
+            entry.view.frame = adjustedPositionedFrame(requestedFrame, in: rect)
         }
 
         let unplaced = textCues.filter { $0.placement == nil }
@@ -341,7 +327,7 @@ final class CaptionOverlayView: UIView {
         layoutDefaultBand(unplaced.map(\.view), in: size, pointSize: pointSize)
         for entry in placed {
             guard let placement = entry.placement else { continue }
-            layoutPlaced(entry.view, placement: placement, in: size, rect: rect, pointSize: pointSize)
+            layoutPlaced(entry.view, placement: placement, rect: rect, pointSize: pointSize)
         }
     }
 
@@ -369,19 +355,13 @@ final class CaptionOverlayView: UIView {
     /// Two kinds of placement arrive here and they resolve differently:
     ///
     /// **With a fine position** (proxied WebVTT `line:` / `position:`, ASS
-    /// `\pos`) the line position names the box's TOP edge: WebVTT's default
-    /// `line-align` is `start`, so the box hangs DOWN from the stated line, and
-    /// that is where AVPlayer draws it. Anchoring the centre on it instead sits
-    /// half a box high.
+    /// `\pos`) the box remains on that clamped coordinate.
     ///
     /// **Without one** (teletext through the engine demux, which quantises the
     /// grid row to a coarse `\an` and supplies no percentage) the numpad band is
-    /// all there is, so the cue takes that band's natural resting place: the
-    /// shared floor at the bottom, the matching margin at the top, dead centre
-    /// in the middle.
+    /// all there is, so it resolves to 10%, 50%, or 90% on each axis.
     private func layoutPlaced(_ box: CaptionBoxView,
                               placement: AetherSubtitleCue.TextPlacement,
-                              in size: CGSize,
                               rect: CGRect,
                               pointSize: CGFloat) {
         // Numpad: rows 7-9 top, 4-6 middle, 1-3 bottom; columns 1/4/7 left,
@@ -390,12 +370,13 @@ final class CaptionOverlayView: UIView {
         let col = (an - 1) % 3
         let row = (an - 1) / 3
 
-        // Clamped so a wild coordinate cannot push a caption off screen.
-        let ax = placement.position.map { min(max($0.x, 0), 1) }
-        let ay = placement.position.map { min(max($0.y, 0), 1) }
-
-        let letterbox = max(0, size.height - rect.maxY)
-        let floor = placementFloor(in: size)
+        // Authored coordinates are preserved within the 10%...90% safe zone.
+        let ax = placement.position.map {
+            Metrics.clampedPlacementCoordinate($0.x)
+        }
+        let ay = placement.position.map {
+            Metrics.clampedPlacementCoordinate($0.y)
+        }
 
         // Horizontal first: the width limit decides how the box wraps, and the
         // wrapped height then decides the vertical anchor.
@@ -404,53 +385,76 @@ final class CaptionOverlayView: UIView {
         // proxy writes for that column, so both routes resolve through the
         // identical maths below and land together.
         let anchorX: CGFloat? = ax
-            ?? (col == 0 ? Metrics.bandSideFraction
-                : col == 2 ? 1 - Metrics.bandSideFraction : nil)
+            ?? (col == 0 ? Metrics.placementSafeFraction
+                : col == 2 ? 1 - Metrics.placementSafeFraction : nil)
 
-        let sideSafe = rect.width * Metrics.sideSafeFraction
-        let usable = max(0, rect.width - sideSafe * 2)
-        // Smallest half-width worth wrapping into, so a cue anchored near an
-        // edge is nudged inward rather than squeezed to a column one word wide.
-        let minHalf = usable * 0.15
-
-        var centreX = rect.midX
-        var widthLimit = usable
-        if let anchorX {
-            let lo = sideSafe + minHalf
-            let hi = max(lo, rect.width - sideSafe - minHalf)
-            let centre = min(max(anchorX * rect.width, lo), hi)
-            let half = max(minHalf, min(centre - sideSafe, rect.width - sideSafe - centre))
-            centreX = rect.minX + centre
-            widthLimit = half * 2
-        }
+        let safeMinX = rect.minX + rect.width * Metrics.placementSafeFraction
+        let safeMaxX = rect.maxX - rect.width * Metrics.placementSafeFraction
+        let widthLimit = max(0, safeMaxX - safeMinX)
 
         box.apply(pointSize: pointSize)
         let fitted = box.fittingSize(maxWidth: widthLimit)
 
+        let requestedAnchorX = anchorX.map { rect.minX + $0 * rect.width } ?? rect.midX
+        let requestedX: CGFloat
+        switch col {
+        case 0: requestedX = requestedAnchorX
+        case 2: requestedX = requestedAnchorX - fitted.width
+        default: requestedX = requestedAnchorX - fitted.width / 2
+        }
+        let maxX = max(safeMinX, safeMaxX - fitted.width)
+        let originX = min(max(requestedX, safeMinX), maxX)
+
         // Vertical. A fine position wins; the band is the fallback.
         //
-        // The box is measured, so the half-box below is the real one. That
-        // matters twice: the top-edge anchor is exact for a two-line cue rather
-        // than a one-line estimate, and the floor clamp protects the TEXT
-        // rather than a guess at its midpoint.
-        let centreY: CGFloat
+        // A fine vertical coordinate names the box's top edge. Coarse teletext
+        // uses the matching natural band anchor: top edge at 10%, centred in
+        // the middle, or bottom edge at 90%.
+        let requestedY: CGFloat
         if let ay {
-            let halfBox = fitted.height / 2
-            let lowestCentre = max(0, floor - letterbox) + halfBox
-            let requestedCentre = (1 - ay) * rect.height - halfBox
-            centreY = rect.maxY - max(requestedCentre, lowestCentre)
+            requestedY = rect.minY + ay * rect.height
         } else if row == 2 {
-            centreY = rect.minY + rect.height * Metrics.bandTopFraction + fitted.height / 2
+            requestedY = rect.minY
+                + rect.height * Metrics.placementSafeFraction
         } else if row == 1 {
-            centreY = rect.midY
+            requestedY = rect.midY - fitted.height / 2
         } else {
-            centreY = rect.maxY - max(0, floor - letterbox) - fitted.height / 2
+            requestedY = rect.minY
+                + rect.height * (1 - Metrics.placementSafeFraction)
+                - fitted.height
         }
 
-        box.frame = CGRect(x: (centreX - fitted.width / 2).rounded(),
-                           y: (centreY - fitted.height / 2).rounded(),
-                           width: fitted.width,
-                           height: fitted.height)
+        let requestedFrame = CGRect(
+            x: originX,
+            y: requestedY,
+            width: fitted.width,
+            height: fitted.height)
+        box.frame = adjustedPositionedFrame(requestedFrame, in: rect).integral
+    }
+
+    /// Keeps every authored text or bitmap box inside the picture's 10% safe
+    /// rectangle. If the OSD would obscure it, the OSD wins and the box moves
+    /// only far enough upward to retain a 5%-of-picture-height gap.
+    private func adjustedPositionedFrame(_ frame: CGRect, in rect: CGRect) -> CGRect {
+        let safeX = rect.width * Metrics.placementSafeFraction
+        let safeY = rect.height * Metrics.placementSafeFraction
+        let safeRect = rect.insetBy(dx: safeX, dy: safeY)
+
+        let maxX = max(safeRect.minX, safeRect.maxX - frame.width)
+        var originX = min(max(frame.minX, safeRect.minX), maxX)
+        let safeMaxY = max(safeRect.minY, safeRect.maxY - frame.height)
+        var originY = min(max(frame.minY, safeRect.minY), safeMaxY)
+
+        if controlsVisible {
+            let osdMaxY = bounds.height
+                - SubtitleAdjustments.controlsFloor(pictureHeight: rect.height)
+            originY = min(originY, osdMaxY - frame.height)
+            originY = max(rect.minY, originY)
+        }
+
+        if !originX.isFinite { originX = safeRect.minX }
+        if !originY.isFinite { originY = safeRect.minY }
+        return CGRect(origin: CGPoint(x: originX, y: originY), size: frame.size)
     }
 
     // MARK: Host API

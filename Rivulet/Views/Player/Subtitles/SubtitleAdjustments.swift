@@ -106,9 +106,9 @@ enum SubtitleAdjustments {
     /// Measured against the picture rather than the screen so letterboxed
     /// content keeps its captions on the image instead of dropping them into
     /// the black bar, and so the placement holds at any presentation size.
-    /// Tuned against AVPlayer's own placement (a two-line caption centres at
-    /// roughly 8% of picture height).
-    static let bottomMarginFraction: CGFloat = 0.06
+    /// This is the app-defined resting position for cues without authored
+    /// placement. Positioned cues do not inherit it.
+    static let bottomMarginFraction: CGFloat = 0.05
 
     /// The lowest a caption may sit while the rail is showing. Lives here
     /// because BOTH overlays need it and they must agree: captions should not

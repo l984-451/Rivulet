@@ -85,6 +85,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Selecting the About cards opens the matching popup (synopsis / advisory).
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
     var onSelectAdvisory: ((ContentAdvisory) -> Void)?
+    /// Selecting an Information / Languages / Accessibility card opens that
+    /// section in full (title + every row).
+    var onSelectInfoColumn: ((DetailInfoSection) -> Void)?
 
     /// Which sub-target of the focused episode card is focused (thumb vs
     /// description). Set from the cell's focus reporting.
@@ -275,10 +278,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     header: true
                 )
             case .about: return self.fullWidthSection(height: 370)
-            case .info:  return self.fullWidthSection(height: 460, band: true)
+            // 504 = the old 460 plus the 44pt of padding the info cards add.
+            case .info:  return self.fullWidthSection(height: 504)
             }
         }
-        layout.register(InfoBandDecorationView.self, forDecorationViewOfKind: InfoBandDecorationView.kind)
         return layout
     }
 
@@ -307,9 +310,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         return section
     }
 
-    /// A single full-width block (About / Info columns) — no orthogonal scroll,
+    /// A single full-width block (About / Info cards) — no orthogonal scroll,
     /// left/right gutters matching the rails.
-    private func fullWidthSection(height: CGFloat, band: Bool = false) -> NSCollectionLayoutSection {
+    private func fullWidthSection(height: CGFloat) -> NSCollectionLayoutSection {
         let item = NSCollectionLayoutItem(layoutSize: .init(
             widthDimension: .fractionalWidth(1), heightDimension: .absolute(height)))
         let group = NSCollectionLayoutGroup.horizontal(
@@ -317,11 +320,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
         section.contentInsets = .init(top: 24, leading: Self.rowLeading, bottom: 56, trailing: Self.rowTrailing)
-        if band {
-            // Full-width darkened band behind the section (spans the section rect,
-            // edge to edge — the columns stay inset via contentInsets).
-            section.decorationItems = [.background(elementKind: InfoBandDecorationView.kind)]
-        }
         return section
     }
 
@@ -457,6 +455,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 return cell
             case .info:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: InfoColumnsCollectionCell.reuseID, for: indexPath) as! InfoColumnsCollectionCell
+                cell.onSelectColumn = { [weak self] section in
+                    self?.onSelectInfoColumn?(section)
+                }
                 if let d = self.detail { cell.configure(detail: d) }
                 return cell
             }

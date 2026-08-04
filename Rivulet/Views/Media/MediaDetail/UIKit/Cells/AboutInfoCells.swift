@@ -29,14 +29,14 @@ final class AboutCollectionCell: UICollectionViewCell {
     private let header = sectionHeaderLabel("About")
     // Both cards are focusable controls: select the synopsis → description popup;
     // select the advisory → content-rating popup.
-    private let leftCard = AboutCardControl()
+    private let leftCard = DetailCardControl()
     private let titleLabel = UILabel()
     private let genresLabel = UILabel()
     private let synopsisLabel = UILabel()
 
     // Right card = Common Sense Media advisory (inline: age + seal + one-liner;
     // full topic dots + paragraph live in the popup), content-rating fallback.
-    private let rightCard = AboutCardControl()
+    private let rightCard = DetailCardControl()
 
     /// Set by the cell provider; the cell forwards the current data on select.
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
@@ -214,11 +214,19 @@ final class AboutCollectionCell: UICollectionViewCell {
         leftCard.selectable = !(detail.item.overview ?? "").isEmpty
         rightCard.selectable = advisory?.hasRichDetail ?? false
     }
-    // Focus lives on the two cards (AboutCardControl), not the cell itself.
+    // Focus lives on the two cards (DetailCardControl), not the cell itself.
     override var canBecomeFocused: Bool { false }
 }
 
 // MARK: - Information / Languages / Accessibility columns
+
+/// One labelled section of the detail's info block. Travels from the card that
+/// was selected up to the popup that renders it, so the callback chain carries a
+/// named type rather than an anonymous title/rows tuple.
+struct DetailInfoSection {
+    let title: String
+    let rows: [(String, String)]
+}
 
 final class InfoColumnsCollectionCell: UICollectionViewCell {
     static let reuseID = "InfoColumnsCollectionCell"
@@ -241,35 +249,73 @@ final class InfoColumnsCollectionCell: UICollectionViewCell {
 
     func configure(detail: MediaItemDetail) { columns.configure(detail: detail) }
 
-    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
-        let focused = context.nextFocusedView === self
-        coordinator.addCoordinatedAnimations { [weak self] in
-            self?.contentView.backgroundColor = UIColor(white: 1, alpha: focused ? 0.05 : 0)
-        }
+    /// Select on a card → open that section in full. Also what makes the cards
+    /// focusable, so the focus-driven below-fold can reach them.
+    var onSelectColumn: ((DetailInfoSection) -> Void)? {
+        get { columns.onSelectColumn }
+        set { columns.onSelectColumn = newValue }
     }
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        contentView.backgroundColor = .clear
-    }
+
+    // Focus lives on the three cards (DetailCardControl), not the cell itself.
+    override var canBecomeFocused: Bool { false }
 }
 
 /// Standalone Information / Languages / Accessibility columns. Reused by the
 /// carousel below-fold cell above AND the episode detail page's below-fold.
 final class InfoColumnsView: UIView {
-    private let information = InfoColumnView()
-    private let languages = InfoColumnView()
-    private let accessibility = InfoColumnView()
+
+    /// One column: its card, the view inside it, and the section it last
+    /// rendered. Bundling these keeps the card, its content, and its Select
+    /// payload from drifting out of step — they used to be three arrays held
+    /// together by index.
+    private final class Column {
+        let card = DetailCardControl()
+        let view = InfoColumnView()
+        var section = DetailInfoSection(title: "", rows: [])
+    }
+
+    private let columns = [Column(), Column(), Column()]
     private let row = UIStackView()
+
+    /// Select on a card → open that section in full. A card's own copy trims
+    /// long values to stay scannable, so the popup is where the complete list
+    /// lives. Setting this makes the cards focusable AND selectable; leaving it
+    /// nil keeps them inert (the episode detail page, which scrolls normally
+    /// and has nothing to open).
+    var onSelectColumn: ((DetailInfoSection) -> Void)? {
+        didSet { updateSelectability() }
+    }
+
+    /// A card is a focus stop only when there IS a handler AND it has rows to
+    /// show — an item with no year / runtime / rating / genres / studio would
+    /// otherwise leave a focusable "Information" card that opens a popup
+    /// containing nothing but its title.
+    private func updateSelectability() {
+        let enabled = onSelectColumn != nil
+        for column in columns {
+            column.card.selectable = enabled && !column.section.rows.isEmpty
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.axis = .horizontal
         row.distribution = .fillEqually
-        row.alignment = .top
-        row.spacing = 48
+        // .fill (not .top) so the three cards are equal height however far their
+        // text wraps — ragged card bottoms read as broken.
+        row.alignment = .fill
+        row.spacing = 24
         addSubview(row)
-        [information, languages, accessibility].forEach { row.addArrangedSubview($0) }
+        for column in columns {
+            column.card.selectable = false   // opt-in via onSelectColumn
+            column.card.onSelect = { [weak self, weak column] in
+                guard let column else { return }
+                self?.onSelectColumn?(column.section)
+            }
+            column.card.embed(column.view)
+            row.addArrangedSubview(column.card)
+        }
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: topAnchor),
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -281,14 +327,26 @@ final class InfoColumnsView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(detail: MediaItemDetail) {
-        // Information
-        var info: [(String, String)] = []
-        if let y = detail.item.year { info.append(("Released", "\(y)")) }
-        if let runtime = detail.item.runtime, runtime > 0 { info.append(("Run Time", Self.runtime(runtime))) }
-        if let r = detail.contentRating, !r.isEmpty { info.append(("Rated", r)) }
-        if !detail.genres.isEmpty { info.append(("Genres", detail.genres.prefix(4).joined(separator: ", "))) }
-        if !detail.studios.isEmpty { info.append(("Studio", detail.studios.prefix(2).joined(separator: ", "))) }
-        information.configure(title: "Information", rows: info)
+        // Information. `card` is the trimmed value shown on the card itself,
+        // `full` the untrimmed one the popup gets. Built once as triples so a
+        // new row can't be added to one and forgotten in the other.
+        var information: [(label: String, card: String, full: String)] = []
+        if let y = detail.item.year { information.append(("Released", "\(y)", "\(y)")) }
+        if let runtime = detail.item.runtime, runtime > 0 {
+            let text = Self.runtime(runtime)
+            information.append(("Run Time", text, text))
+        }
+        if let r = detail.contentRating, !r.isEmpty { information.append(("Rated", r, r)) }
+        if !detail.genres.isEmpty {
+            information.append(("Genres",
+                                detail.genres.prefix(4).joined(separator: ", "),
+                                detail.genres.joined(separator: ", ")))
+        }
+        if !detail.studios.isEmpty {
+            information.append(("Studio",
+                                detail.studios.prefix(2).joined(separator: ", "),
+                                detail.studios.joined(separator: ", ")))
+        }
 
         // Languages — from the first media source's tracks.
         let source = detail.mediaSources.first
@@ -305,7 +363,6 @@ final class InfoColumnsView: UIView {
             if !names.isEmpty { langs.append(("Subtitles", names.joined(separator: ", "))) }
         }
         if langs.isEmpty { langs.append(("Audio", "Unknown")) }
-        languages.configure(title: "Languages", rows: langs)
 
         // Accessibility — SDH / AD presence from the tracks.
         var access: [(String, String)] = []
@@ -316,7 +373,22 @@ final class InfoColumnsView: UIView {
         if hasSDH { access.append(("SDH", "Subtitles for the deaf and hard of hearing are available.")) }
         if hasAD { access.append(("AD", "Audio descriptions are available.")) }
         if access.isEmpty { access.append(("", "No accessibility features detected.")) }
-        accessibility.configure(title: "Accessibility", rows: access)
+
+        apply(
+            .init(title: "Information", rows: information.map { ($0.label, $0.full) }),
+            cardRows: information.map { ($0.label, $0.card) },
+            to: columns[0])
+        apply(.init(title: "Languages", rows: langs), cardRows: langs, to: columns[1])
+        apply(.init(title: "Accessibility", rows: access), cardRows: access, to: columns[2])
+        updateSelectability()
+    }
+
+    /// The card renders `cardRows`; `section` is what a Select hands to the popup.
+    private func apply(_ section: DetailInfoSection,
+                       cardRows: [(String, String)],
+                       to column: Column) {
+        column.section = section
+        column.view.configure(title: section.title, rows: cardRows)
     }
 
     private func uniqueOrdered(_ values: [String]) -> [String] {
@@ -407,26 +479,19 @@ private func sectionHeaderLabel(_ text: String) -> UILabel {
     return l
 }
 
-/// Full-width darkened band behind the Information / Languages / Accessibility
-/// area. Added as a SECTION BACKGROUND decoration so it spans edge-to-edge
-/// (the full section rect) even though the columns themselves are inset.
-final class InfoBandDecorationView: UICollectionReusableView {
-    static let kind = "infoBand"
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = UIColor(white: 0, alpha: 0.28)
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-}
+// MARK: - Focusable detail card
 
-// MARK: - Focusable About card
+/// A focusable detail card (About synopsis / advisory, the info columns).
+/// Selecting it opens the matching popup. Focus appearance = subtle brighten +
+/// scale (matches the glass style).
+final class DetailCardControl: UIControl {
+    /// Content inset — the card owns its own padding so every surface using one
+    /// gets the same, rather than restating four numbers per call site.
+    static let contentInsets = UIEdgeInsets(top: 22, left: 24, bottom: 22, right: 24)
 
-/// A focusable About card (synopsis or advisory). Selecting it opens the matching
-/// popup. Focus appearance = subtle brighten + scale (matches the glass style).
-final class AboutCardControl: UIControl {
     var onSelect: (() -> Void)?
-    /// Gates focus/selection — e.g. the advisory card only when CSM is present.
+    /// Gates focus AND selection: a card with nothing to open is skipped by the
+    /// focus engine rather than becoming a dead-end focus target.
     var selectable: Bool = true {
         didSet { if selectable != oldValue { setNeedsFocusUpdate() } }
     }
@@ -441,6 +506,19 @@ final class AboutCardControl: UIControl {
     }
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Pin a content view inside the card's standard padding.
+    func embed(_ view: UIView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(view)
+        let inset = Self.contentInsets
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: topAnchor, constant: inset.top),
+            view.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset.left),
+            view.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset.right),
+            view.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -inset.bottom),
+        ])
+    }
 
     @objc private func fire() { onSelect?() }
 

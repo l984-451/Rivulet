@@ -333,6 +333,10 @@ final class PreviewCarouselViewController: UIViewController {
             let content = InfoPopupContent.advisory(advisory)
             self?.present(InfoPopupViewController(content: content, width: 720, scrollable: true), animated: true)
         }
+        expandedDetail.onSelectInfoColumn = { [weak self] section in
+            let content = InfoPopupContent.infoColumn(section)
+            self?.present(InfoPopupViewController(content: content, width: 720, scrollable: true), animated: true)
+        }
         // Episode thumb Select → play the episode.
         expandedDetail.onPlayEpisode = { [weak self] episode in
             self?.playMediaItem(episode)

@@ -288,6 +288,15 @@ enum InfoPopupContent {
         return stack
     }
 
+    /// One below-fold info section (Information / Languages / Accessibility) in
+    /// full. The card it came from trims long values to stay scannable; this is
+    /// the complete list.
+    static func infoColumn(_ section: DetailInfoSection) -> UIView {
+        let column = InfoColumnView()
+        column.configure(title: section.title, rows: section.rows)
+        return column
+    }
+
     /// Common Sense advisory: green-check + age, one-liner, per-topic dot meters.
     static func advisory(_ advisory: ContentAdvisory) -> UIView {
         let stack = verticalStack(spacing: 18)
@@ -397,9 +406,7 @@ enum InfoPopupContent {
     private static func addSection(title: String, rows: [(String, String)], to stack: UIStackView) {
         guard !rows.isEmpty else { return }
         if let last = stack.arrangedSubviews.last { stack.setCustomSpacing(30, after: last) }
-        let col = InfoColumnView()
-        col.configure(title: title, rows: rows)
-        stack.addArrangedSubview(col)
+        stack.addArrangedSubview(infoColumn(.init(title: title, rows: rows)))
     }
 
     private static func metaRow(_ detail: MediaItemDetail) -> UIView {

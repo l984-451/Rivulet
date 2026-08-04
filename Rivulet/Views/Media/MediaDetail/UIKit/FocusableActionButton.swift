@@ -88,7 +88,7 @@ final class FocusableActionButton: UIControl {
     // On tvOS a bare UIControl's `.primaryActionTriggered` is unreliable for the
     // remote Select press (it's delivered to the FOCUSED view's press handlers).
     // Handle it here too, debounced so primaryActionTriggered + pressesEnded
-    // can't double-fire. Mirrors AboutCardControl.
+    // can't double-fire. Mirrors DetailCardControl.
     private var lastFireTime: CFTimeInterval = 0
     private func fireOnce() {
         let now = CACurrentMediaTime()

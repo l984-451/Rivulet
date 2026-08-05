@@ -102,7 +102,7 @@ actor XMLTVParser {
 
 // MARK: - XMLTV Internal Parser (XMLParserDelegate)
 
-private class XMLTVInternalParser: NSObject, XMLParserDelegate {
+private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate {
     private var channels: [String: XMLTVParser.ParsedXMLTVChannel] = [:]
     private var programs: [String: [XMLTVParser.ParsedProgram]] = [:]
 
@@ -316,6 +316,27 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
 
         guard let second = Int(s[idx..<s.index(idx, offsetBy: 2)]) else { return nil }
 
+        // XMLTV timestamps commonly end in an explicit numeric offset, for
+        // example `20260802193000 +0800`. Treating the wall-clock portion as
+        // UTC shifts an Australian guide by an entire evening. Preserve the
+        // previous UTC fallback for feeds that omit the optional timezone.
+        let suffix = s[s.index(s.startIndex, offsetBy: 14)...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var timeZone = TimeZone(secondsFromGMT: 0)
+        if suffix.count >= 5 {
+            let signCharacter = suffix.first
+            let digits = suffix.dropFirst().prefix(4)
+            if (signCharacter == "+" || signCharacter == "-"),
+               digits.count == 4,
+               let hours = Int(digits.prefix(2)),
+               let minutes = Int(digits.suffix(2)),
+               hours <= 23,
+               minutes <= 59 {
+                let sign = signCharacter == "-" ? -1 : 1
+                timeZone = TimeZone(secondsFromGMT: sign * (hours * 3600 + minutes * 60))
+            }
+        }
+
         var components = DateComponents()
         components.year = year
         components.month = month
@@ -323,7 +344,7 @@ private class XMLTVInternalParser: NSObject, XMLParserDelegate {
         components.hour = hour
         components.minute = minute
         components.second = second
-        components.timeZone = TimeZone(identifier: "UTC")
+        components.timeZone = timeZone
 
         return Calendar(identifier: .gregorian).date(from: components)
     }
@@ -347,6 +368,7 @@ enum XMLTVParseError: LocalizedError {
 
 // MARK: - Convenience Extensions
 
+#if os(tvOS)
 extension XMLTVParser.ParsedProgram {
     /// Convert to UnifiedProgram
     func toUnifiedProgram(unifiedChannelId: String) -> UnifiedProgram {
@@ -370,3 +392,4 @@ extension XMLTVParser.ParsedProgram {
         )
     }
 }
+#endif

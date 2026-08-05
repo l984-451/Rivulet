@@ -12,6 +12,13 @@
 		A740D1192F59C56300B9820B /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A740D1182F59C56300B9820B /* AVKit.framework */; };
 		A7F159552F04124A001B2177 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 		B2000001AAAA000000000001 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
+		B30000110000000000000011 /* Rivulet/Services/IPTV/M3UParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000130000000000000013 /* Rivulet/Services/IPTV/M3UParser.swift */; };
+		B30000120000000000000012 /* Rivulet/Services/IPTV/XMLTVParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000140000000000000014 /* Rivulet/Services/IPTV/XMLTVParser.swift */; };
+		B30000170000000000000017 /* Rivulet/Services/Plex/Playback/AetherPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000180000000000000018 /* Rivulet/Services/Plex/Playback/AetherPlayer.swift */; };
+		B30000190000000000000019 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
+		B300001A000000000000001A /* Rivulet/Services/LiveTV/LiveTVClientIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B300001B000000000000001B /* Rivulet/Services/LiveTV/LiveTVClientIdentity.swift */; };
+		B300001C000000000000001C /* Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = B300001D000000000000001D /* Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift */; };
+		B300001E000000000000001E /* Rivulet/Services/Security/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B300001F000000000000001F /* Rivulet/Services/Security/KeychainHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +58,13 @@
 		A72E03DA2EDA297D003A73DA /* Rivulet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rivulet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A740D1182F59C56300B9820B /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		A784830A2F062C2000F9E6D0 /* RivuletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RivuletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B30000010000000000000001 /* Rivulet iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Rivulet iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B30000130000000000000013 /* Rivulet/Services/IPTV/M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/IPTV/M3UParser.swift; sourceTree = SOURCE_ROOT; };
+		B30000140000000000000014 /* Rivulet/Services/IPTV/XMLTVParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/IPTV/XMLTVParser.swift; sourceTree = SOURCE_ROOT; };
+		B30000180000000000000018 /* Rivulet/Services/Plex/Playback/AetherPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/Plex/Playback/AetherPlayer.swift; sourceTree = SOURCE_ROOT; };
+		B300001B000000000000001B /* Rivulet/Services/LiveTV/LiveTVClientIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/LiveTV/LiveTVClientIdentity.swift; sourceTree = SOURCE_ROOT; };
+		B300001D000000000000001D /* Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift; sourceTree = SOURCE_ROOT; };
+		B300001F000000000000001F /* Rivulet/Services/Security/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rivulet/Services/Security/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -67,6 +81,13 @@
 				Info.plist,
 			);
 			target = A72E03D92EDA297D003A73DA /* Rivulet */;
+		};
+		B30000160000000000000016 /* Exceptions for "RivuletiOS" folder in "Rivulet iOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B30000040000000000000004 /* Rivulet iOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -90,6 +111,14 @@
 		A784830B2F062C2000F9E6D0 /* RivuletTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RivuletTests;
+			sourceTree = "<group>";
+		};
+		B30000020000000000000002 /* RivuletiOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B30000160000000000000016 /* Exceptions for "RivuletiOS" folder in "Rivulet iOS" target */,
+			);
+			path = RivuletiOS;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -120,6 +149,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B30000030000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B30000190000000000000019 /* AetherEngine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -127,8 +164,10 @@
 			isa = PBXGroup;
 			children = (
 				A72E03DC2EDA297D003A73DA /* Rivulet */,
+				B30000020000000000000002 /* RivuletiOS */,
 				A70B443C2F05AF3200DEF5ED /* TopShelfExtension */,
 				A784830B2F062C2000F9E6D0 /* RivuletTests */,
+				B30000150000000000000015 /* Shared iOS Sources */,
 				A7F159532F04124A001B2177 /* Frameworks */,
 				A72E03DB2EDA297D003A73DA /* Products */,
 			);
@@ -138,6 +177,7 @@
 			isa = PBXGroup;
 			children = (
 				A72E03DA2EDA297D003A73DA /* Rivulet.app */,
+				B30000010000000000000001 /* Rivulet iOS.app */,
 				A70B44392F05AF3200DEF5ED /* TopShelfExtension.appex */,
 				A784830A2F062C2000F9E6D0 /* RivuletTests.xctest */,
 			);
@@ -151,6 +191,19 @@
 				A70B443A2F05AF3200DEF5ED /* TVServices.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B30000150000000000000015 /* Shared iOS Sources */ = {
+			isa = PBXGroup;
+			children = (
+				B300001B000000000000001B /* Rivulet/Services/LiveTV/LiveTVClientIdentity.swift */,
+				B300001D000000000000001D /* Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift */,
+				B300001F000000000000001F /* Rivulet/Services/Security/KeychainHelper.swift */,
+				B30000130000000000000013 /* Rivulet/Services/IPTV/M3UParser.swift */,
+				B30000140000000000000014 /* Rivulet/Services/IPTV/XMLTVParser.swift */,
+				B30000180000000000000018 /* Rivulet/Services/Plex/Playback/AetherPlayer.swift */,
+			);
+			name = "Shared iOS Sources";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -228,6 +281,29 @@
 			productReference = A784830A2F062C2000F9E6D0 /* RivuletTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B30000040000000000000004 /* Rivulet iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B30000080000000000000008 /* Build configuration list for PBXNativeTarget "Rivulet iOS" */;
+			buildPhases = (
+				B30000050000000000000005 /* Sources */,
+				B30000030000000000000003 /* Frameworks */,
+				B30000060000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B30000020000000000000002 /* RivuletiOS */,
+			);
+			name = "Rivulet iOS";
+			packageProductDependencies = (
+				B2000010AAAA000000000001 /* AetherEngine */,
+			);
+			productName = "Rivulet iOS";
+			productReference = B30000010000000000000001 /* Rivulet iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -247,6 +323,9 @@
 					A78483092F062C2000F9E6D0 = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = A72E03D92EDA297D003A73DA;
+					};
+					B30000040000000000000004 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -269,6 +348,7 @@
 			projectRoot = "";
 			targets = (
 				A72E03D92EDA297D003A73DA /* Rivulet */,
+				B30000040000000000000004 /* Rivulet iOS */,
 				A70B44382F05AF3200DEF5ED /* TopShelfExtension */,
 				A78483092F062C2000F9E6D0 /* RivuletTests */,
 			);
@@ -291,6 +371,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A78483082F062C2000F9E6D0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000060000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -336,6 +423,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000050000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B300001A000000000000001A /* Rivulet/Services/LiveTV/LiveTVClientIdentity.swift in Sources */,
+				B300001C000000000000001C /* Rivulet/Services/Plex/Playback/Subtitles/CaptionAppearance.swift in Sources */,
+				B300001E000000000000001E /* Rivulet/Services/Security/KeychainHelper.swift in Sources */,
+				B30000110000000000000011 /* Rivulet/Services/IPTV/M3UParser.swift in Sources */,
+				B30000120000000000000012 /* Rivulet/Services/IPTV/XMLTVParser.swift in Sources */,
+				B30000170000000000000017 /* Rivulet/Services/Plex/Playback/AetherPlayer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -703,6 +803,79 @@
 			};
 			name = Release;
 		};
+		B30000090000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = ZHB786H6YN;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RivuletiOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Rivulet;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rivulet connects to media servers on your local network, such as your Plex server, to stream your library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B300000A000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = ZHB786H6YN;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RivuletiOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Rivulet;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rivulet connects to media servers on your local network, such as your Plex server, to stream your library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.rivulet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -738,6 +911,15 @@
 			buildConfigurations = (
 				A78483112F062C2000F9E6D0 /* Debug */,
 				A78483122F062C2000F9E6D0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B30000080000000000000008 /* Build configuration list for PBXNativeTarget "Rivulet iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B30000090000000000000009 /* Debug */,
+				B300000A000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

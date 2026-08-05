@@ -91,6 +91,28 @@ final class XMLTVParserTests: XCTestCase {
         XCTAssertNotNil(program.stop)
     }
 
+    func testParsesNumericTimezoneOffset() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Perth Channel</display-name>
+          </channel>
+          <programme start="20260802193000 +0800" stop="20260802203000 +0800" channel="ch1">
+            <title>Evening News</title>
+          </programme>
+        </tv>
+        """
+
+        let result = try await parser.parse(data: Data(xml.utf8))
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+        let utc = Calendar(identifier: .gregorian)
+            .dateComponents(in: TimeZone(identifier: "UTC")!, from: program.start)
+
+        XCTAssertEqual(utc.hour, 11)
+        XCTAssertEqual(utc.minute, 30)
+    }
+
     func testHandlesInvalidDateGracefully() async throws {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>

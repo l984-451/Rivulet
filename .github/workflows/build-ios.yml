@@ -1,0 +1,81 @@
+name: iOS Build
+
+# Closes the platform-boundary CI gap: without this, no automation compiles
+# the "Rivulet iOS" scheme between ios-v* release tags, so a RivuletCore
+# change that only breaks the iOS target stays invisible until release
+# archive time. Lint cannot catch it (it checks #if patterns, not type
+# references) and the tvOS build stays green.
+#
+# Build-check only — archives, signing, and TestFlight stay on Codemagic.
+# macOS runners are free on public repos.
+
+on:
+  pull_request:
+    paths:
+      - 'RivuletCore/**'
+      - 'RivuletiOS/**'
+      - 'Rivulet.xcodeproj/**'
+      - '.github/workflows/build-ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'RivuletCore/**'
+      - 'RivuletiOS/**'
+      - 'Rivulet.xcodeproj/**'
+      - '.github/workflows/build-ios.yml'
+
+concurrency:
+  group: build-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Deployment target is 26.0, so this needs an Xcode 26 SDK. If the
+      # image stops shipping one, the listing below says what IS there —
+      # the fix is usually bumping runs-on to the newer macos image.
+      - name: Select newest Xcode 26
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$XCODE" ]; then
+            echo "::warning::No Xcode 26 on this image. Available:"
+            ls -d /Applications/Xcode*.app
+            XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      # Both app targets read Secrets.swift; placeholders compile fine.
+      - name: Generate placeholder Secrets.swift
+        run: cp RivuletCore/Config/Secrets.swift.template RivuletCore/Config/Secrets.swift
+
+      # AetherEngine pulls FFmpeg as binary artifacts — the checkout is the
+      # slow part, so cache it keyed on the pin.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Rivulet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # ARCHS=arm64: a generic simulator destination otherwise builds the
+      # x86_64 slice too, and LibDovi's tvOS-simulator xcframework carries no
+      # x86_64 dovi_* symbols — the fat link fails. Runners are arm64 anyway.
+      - name: Build Rivulet iOS (Debug, simulator)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Rivulet.xcodeproj \
+            -scheme "Rivulet iOS" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            build

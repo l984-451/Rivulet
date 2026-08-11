@@ -35,6 +35,9 @@ nonisolated enum BelowFoldSectionKind: Hashable, Sendable {
 
 nonisolated enum BelowFoldItem: Hashable, Sendable {
     case episode(String)
+    /// Boundary marker between seasons in the flat rail, keyed by the season
+    /// ref itemID it introduces. Structural only — never a focus stop.
+    case seasonDivider(String)
     case trailer(String)
     case extra(String)
     case related(String)
@@ -85,6 +88,16 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Selecting the About cards opens the matching popup (synopsis / advisory).
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
     var onSelectAdvisory: ((ContentAdvisory) -> Void)?
+    /// The loader's seasons, published as soon as they land, with the index of
+    /// the season it resolved as selected. The container builds the season pills
+    /// from this instead of fetching `/children` a second time of its own.
+    var onSeasonsLoaded: (([MediaItem], Int) -> Void)?
+    /// Per-season watched counts recomputed from the refreshed episodes, keyed by
+    /// season ref itemID. A watch-state refresh reconfigures episode cells and
+    /// nothing else — it never re-runs the seasons fetch — so anything showing a
+    /// season's played count needs this to repaint (CLAUDE.md: "Changing watch
+    /// state must repaint").
+    var onSeasonProgressRefreshed: (([String: ChildProgress]) -> Void)?
 
     /// Which sub-target of the focused episode card is focused (thumb vs
     /// description). Set from the cell's focus reporting.
@@ -127,7 +140,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         backgroundColor = .clear
 
         collectionView = FocusScrollControlledCollectionView(frame: bounds, collectionViewLayout: makeLayout())
-        collectionView.topBand = Self.detailsTopY
+        collectionView.topBand = detailsTopY
         // Disable the collection's own (vertical) scrolling so the focus engine
         // can't spin up its centering "focus scroll animator". We drive all
         // vertical scroll ourselves (slide on entry, didUpdateFocus per section).
@@ -144,6 +157,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // the current season's first episode (nearest-visible / preferred index).
         collectionView.remembersLastFocusedIndexPath = false
         collectionView.register(EpisodeCollectionCell.self, forCellWithReuseIdentifier: EpisodeCollectionCell.reuseID)
+        collectionView.register(SeasonDividerCell.self, forCellWithReuseIdentifier: SeasonDividerCell.reuseID)
         collectionView.register(TrailerCollectionCell.self, forCellWithReuseIdentifier: TrailerCollectionCell.reuseID)
         collectionView.register(RelatedPosterCell.self, forCellWithReuseIdentifier: RelatedPosterCell.reuseID)
         collectionView.register(ShelfRowCell.self, forCellWithReuseIdentifier: ShelfRowCell.reuseID)
@@ -191,7 +205,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Small top inset = where episodes land in details (so the focus engine
         // aligns them there). The carousel-stable peek offset is provided by the
         // large TOP INSET on the episodes section (see makeLayout), not by this.
-        let topInset = Self.detailsTopY
+        let topInset = detailsTopY
         if collectionView.contentInset.top != topInset {
             collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
             collectionView.setContentOffset(CGPoint(x: 0, y: -topInset), animated: false)
@@ -216,18 +230,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             // the first section, movies (Trailers first) had a tiny inset, so the
             // slide barely moved and the blur/fade never triggered.
             let isPrimary = (index == 0)
-            let peek = max(0, self.bounds.height - Self.episodePeek - Self.detailsTopY)
+            let peek = max(0, self.bounds.height - Self.episodePeek - self.detailsTopY)
             switch self.sectionKinds[index] {
             // Episodes: LEFT-aligned (ATV+), first card at the metadata inset
             // (leading 128). The collection's small contentInset.top (= detailsTopY)
             // lets the focus engine land them at ~detailsTopY in details.
             case .episodes:
-                return self.shelfSection(
-                    itemW: Self.episodeWidth,
-                    itemH: Self.episodeHeight,
-                    leading: Self.rowLeading,
-                    gap: 16,
-                    header: false,
+                return self.episodesRailSection(
                     topInset: isPrimary ? peek : 0,
                     sectionBottomInset: 36
                 )
@@ -325,6 +334,40 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         return section
     }
 
+    /// The episode rail's section. A custom group instead of `shelfSection`'s
+    /// repeating item because the rail mixes widths: full episode cards plus
+    /// slim season dividers. Frames are computed eagerly from `cachedEpisodes`
+    /// (the provider closure re-runs on every data-driven invalidation), so
+    /// layout attributes — and everything that reads them: the orthogonal
+    /// season scroll, pill alignment, initial-episode landing — stay exact,
+    /// which estimated self-sizing would not guarantee.
+    private func episodesRailSection(topInset: CGFloat, sectionBottomInset: CGFloat) -> NSCollectionLayoutSection {
+        let gap: CGFloat = 16
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        for railItem in cachedEpisodes {
+            let w: CGFloat
+            if case .seasonDivider = railItem { w = SeasonDividerCell.cardWidth } else { w = Self.episodeWidth }
+            frames.append(CGRect(x: x, y: 0, width: w, height: Self.episodeHeight))
+            x += w + gap
+        }
+        let total = max(x - gap, 1)
+        let group = NSCollectionLayoutGroup.custom(layoutSize: .init(
+            widthDimension: .absolute(total), heightDimension: .absolute(Self.episodeHeight))
+        ) { _ in
+            frames.map { NSCollectionLayoutGroupCustomItem(frame: $0) }
+        }
+        let section = NSCollectionLayoutSection(group: group)
+        section.orthogonalScrollingBehavior = .continuous
+        section.contentInsets = .init(
+            top: topInset,
+            leading: Self.rowLeading,
+            bottom: sectionBottomInset,
+            trailing: Self.rowTrailing
+        )
+        return section
+    }
+
     private func shelfSection(
         itemW: CGFloat,
         itemH: CGFloat,
@@ -389,6 +432,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                         self.focusedEpisodeKind = kind
                     }
                 }
+                return cell
+            case .seasonDivider(let seasonID):
+                let cell = cv.dequeueReusableCell(withReuseIdentifier: SeasonDividerCell.reuseID, for: indexPath) as! SeasonDividerCell
+                cell.configure(label: self.railDividerLabels[seasonID] ?? "·")
                 return cell
             case .trailer(let id):
                 // Trailers reuse the EpisodeCollectionCell so they match episodes
@@ -486,6 +533,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         loadToken &+= 1
         let token = loadToken
         configuredItem = item
+        setDetailsTopY(forKind: item.kind)
         Task { [weak self] in
             guard let self else { return }
             let content = await self.loader.load(for: item, detail: detail)
@@ -523,6 +571,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         loadToken &+= 1
         let token = loadToken
         configuredItem = item
+        setDetailsTopY(forKind: item.kind)
         let showRef: MediaItemRef?
         switch item.kind {
         case .show: showRef = item.ref
@@ -605,6 +654,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             changed.append(.episode(id))
         }
         guard !changed.isEmpty else { return }
+        // Published before the cell reconfigure so every watch-derived surface
+        // moves together. Derived from these same episodes rather than a second
+        // seasons fetch — the counts are already in hand.
+        onSeasonProgressRefreshed?(Self.seasonProgress(from: episodes))
         var snapshot = dataSource.snapshot()
         // Only reconfigure identifiers the snapshot still holds — a refresh can
         // land after the rail has been re-configured for a different show.
@@ -615,13 +668,30 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         dataSource.apply(snapshot, animatingDifferences: false)
     }
 
+    /// Group episodes into per-season played/total counts, keyed by season ref
+    /// itemID. Mirrors Plex's leafCount / viewedLeafCount, which is where
+    /// `MediaItem.childProgress` comes from on the seasons fetch, so a refreshed
+    /// count and a fetched one mean the same thing. `isPlayed` is the played
+    /// flag, not a resume fraction — this is a count, not a progress rule.
+    private static func seasonProgress(from episodes: [MediaItem]) -> [String: ChildProgress] {
+        var counts: [String: (played: Int, total: Int)] = [:]
+        for episode in episodes {
+            guard let seasonID = episode.parentRef?.itemID else { continue }
+            var count = counts[seasonID] ?? (played: 0, total: 0)
+            count.total += 1
+            if episode.userState.isPlayed { count.played += 1 }
+            counts[seasonID] = count
+        }
+        return counts.mapValues { ChildProgress(played: $0.played, total: $0.total) }
+    }
+
     private func ingestEpisodesOnly(_ episodes: [MediaItem]) {
         // Match the full-ingest label format: a multi-season show shows "S01E01"
         // prefixes, not "Episode N". (Derived from the episodes themselves since
         // the lighter peek load doesn't fetch the seasons list.)
         multiSeason = Set(episodes.compactMap { $0.seasonNumber }).count > 1
         episodesByID = Dictionary(episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
-        cachedEpisodes = episodes.map { BelowFoldItem.episode($0.ref.itemID) }
+        cachedEpisodes = buildRailItems(from: episodes)
         // Cast/related/about are loaded only on expand.
         trailersByID = [:]; extrasByID = [:]; relatedByID = [:]; castEntriesByID = [:]
         cachedTrailers = []; cachedExtras = []; cachedRelated = []; cachedCastOrder = []
@@ -658,13 +728,59 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             cachedCastOrder.append((id, .cast(id)))
         }
         castEntriesByID = entries
-        cachedEpisodes = content.episodes.map { BelowFoldItem.episode($0.ref.itemID) }
+        cachedEpisodes = buildRailItems(from: content.episodes)
         cachedTrailers = content.trailers.map { BelowFoldItem.trailer($0.id) }
         cachedExtras = content.extras.map { BelowFoldItem.extra($0.id) }
         relatedItems = content.related
         cachedRelated = content.related.isEmpty ? [] : [BelowFoldItem.relatedShelf]
+
+        // Publish the seasons once everything else is ingested, so a handler that
+        // reads back from this view sees a consistent state. The loader has
+        // already resolved which season to open on (the item's own for a season
+        // page, the parent for an episode, the first for a show), so there is
+        // nothing for the container to re-derive — or to re-fetch.
+        let selectedSeasonIndex = content.selectedSeason
+            .flatMap { sel in content.seasons.firstIndex(where: { $0.ref.itemID == sel.ref.itemID }) } ?? 0
+        onSeasonsLoaded?(content.seasons, selectedSeasonIndex)
     }
 
+    /// Build the flat rail: the episodes, with a season divider inserted at each
+    /// boundary. A single-season rail gets none — the divider marks a
+    /// transition, and with one season there is nothing to transition from.
+    private func buildRailItems(from episodes: [MediaItem]) -> [BelowFoldItem] {
+        let seasonIDs = Set(episodes.compactMap { $0.parentRef?.itemID })
+        guard seasonIDs.count > 1 else {
+            railDividerLabels = [:]
+            return episodes.map { .episode($0.ref.itemID) }
+        }
+        var items: [BelowFoldItem] = []
+        var labels: [String: String] = [:]
+        var prevSeasonID: String?
+        var seen: Set<String> = []
+        for ep in episodes {
+            if let sid = ep.parentRef?.itemID {
+                if let prev = prevSeasonID, prev != sid, !seen.contains(sid) {
+                    labels[sid] = Self.dividerLabel(for: ep)
+                    items.append(.seasonDivider(sid))
+                    seen.insert(sid)
+                }
+                prevSeasonID = sid
+            }
+            items.append(.episode(ep.ref.itemID))
+        }
+        railDividerLabels = labels
+        return items
+    }
+
+    private static func dividerLabel(for episode: MediaItem) -> String {
+        guard let n = episode.seasonNumber else { return "·" }
+        return n == 0 ? "SP" : "S\(n)"
+    }
+
+    /// season ref itemID → chip label ("S3" / "SP"), for the divider cells.
+    private var railDividerLabels: [String: String] = [:]
+
+    /// The flat rail's items: episodes plus any season dividers.
     private var cachedEpisodes: [BelowFoldItem] = []
     private var cachedTrailers: [BelowFoldItem] = []
     private var cachedExtras: [BelowFoldItem] = []
@@ -775,7 +891,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
            let attrFirst = layout.layoutAttributesForItem(at: IndexPath(item: 0, section: epSection)) {
             delta = attrTarget.frame.minX - attrFirst.frame.minX
         } else {
-            delta = CGFloat(itemIdx) * (Self.episodeWidth + 16)
+            // Fallback for when the attributes aren't built yet. It cannot assume
+            // a fixed pitch any more: the rail mixes episode cards with slimmer
+            // season dividers, so sum the actual widths up to the target.
+            delta = cachedEpisodes.prefix(itemIdx).reduce(CGFloat(0)) { acc, railItem in
+                if case .seasonDivider = railItem { return acc + SeasonDividerCell.cardWidth + 16 }
+                return acc + Self.episodeWidth + 16
+            }
         }
         let maxX = max(base, scroller.contentSize.width - scroller.bounds.width + scroller.contentInset.right)
         let clampedX = min(max(base, base + delta), maxX)
@@ -798,19 +920,39 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     }
 
     func resetScroll() {
-        collectionView.setContentOffset(CGPoint(x: 0, y: -Self.detailsTopY), animated: false)
+        collectionView.setContentOffset(CGPoint(x: 0, y: -detailsTopY), animated: false)
     }
 
     /// Screen-y where the first episode lands in details (under the logo + the
     /// season-pills row, per the ATV+ reference). Also the collection's
     /// contentInset.top, so the focus engine aligns the focused episode here.
-    static let detailsTopY: CGFloat = 230
+    /// Per content kind since the season info strip: show-family pages land the
+    /// rail lower to reserve the strip's room between the pills and the rail;
+    /// movies keep the original landing. The REST (peek) position is invariant
+    /// either way — the episodes section's top inset is derived from this, and
+    /// the two cancel at rest (first cards at bounds.height − episodePeek).
+    static let movieDetailsTopY: CGFloat = 230
+    static let showDetailsTopY: CGFloat = 396
+    private(set) var detailsTopY: CGFloat = BelowFoldCollectionView.movieDetailsTopY
+
+    /// Set the details landing for the item kind being configured. On a change
+    /// the layout re-derives the peek inset and `layoutSubviews` re-applies the
+    /// content inset (kind changes only happen at carousel-stable rest).
+    private func setDetailsTopY(forKind kind: MediaKind) {
+        let y: CGFloat = (kind == .show || kind == .season || kind == .episode)
+            ? Self.showDetailsTopY : Self.movieDetailsTopY
+        guard detailsTopY != y else { return }
+        detailsTopY = y
+        collectionView.topBand = y
+        collectionView.collectionViewLayout.invalidateLayout()
+        setNeedsLayout()
+    }
 
     /// The `onScroll` value when the episodes sit at their details-rest (topBand)
     /// position — i.e. where the season-pills row is at its resting Y. Above this
     /// the pills scroll UP with the rail; below it (entry/collapse) they follow it
     /// down. Equals the episodes section's top inset (the carousel peek).
-    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - Self.detailsTopY) }
+    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - detailsTopY) }
 
     /// Whether focus is on the episodes (top) row vs a lower section. Drives the
     /// Up handler: episodes → pills; lower section → let the engine move up.
@@ -836,7 +978,16 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
               let current = collectionView.focusedEpisodeIndexPath,
               current.section == epSection else { return false }
         let count = collectionView.numberOfItems(inSection: epSection)
-        let targetItem = current.item + (forward ? 1 : -1)
+        // Step OVER season dividers. They occupy rail indices but are not focus
+        // stops, so a bare ±1 would arm focus on one and the update would land
+        // nowhere.
+        func isDivider(_ i: Int) -> Bool {
+            guard i >= 0, i < cachedEpisodes.count else { return false }
+            if case .seasonDivider = cachedEpisodes[i] { return true }
+            return false
+        }
+        var targetItem = current.item + (forward ? 1 : -1)
+        while isDivider(targetItem) { targetItem += forward ? 1 : -1 }
         guard targetItem >= 0, targetItem < count else { return false }
         armedEpisodeFocusIndexPath = IndexPath(item: targetItem, section: epSection)
         // No manual scroll: the engine scrolls the orthogonal row to the focused
@@ -861,7 +1012,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Scroll so the first episode lands at detailsTopY — which is the focus
         // engine's preferred position (contentInset.top == detailsTopY), so
         // handing focus in afterward causes no re-scroll bounce.
-        let targetY = max(0, bounds.height - Self.episodePeek - 2 * Self.detailsTopY)
+        let targetY = max(0, bounds.height - Self.episodePeek - 2 * detailsTopY)
         guard animated else { setOffsetY(targetY); completion?(); return }
         animateOffsetY(to: targetY, duration: 0.6, completion: completion)
     }
@@ -869,7 +1020,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Reverse of slideToDetailsTop: slide the episodes back down to the hero
     /// peek rest (drives the reverse choreography). Completion fires at the end.
     func slideToHeroRest(animated: Bool, completion: (() -> Void)? = nil) {
-        let targetY = -Self.detailsTopY
+        let targetY = -detailsTopY
         guard animated else { setOffsetY(targetY); completion?(); return }
         animateOffsetY(to: targetY, duration: 0.6, completion: completion)
     }
@@ -951,6 +1102,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, canFocusItemAt indexPath: IndexPath) -> Bool {
         switch dataSource.itemIdentifier(for: indexPath) {
         case .episode, .trailer, .extra: return false
+        // Same answer for a different reason: the others defer to focusable
+        // subviews, the divider has none and is never a focus stop at all.
+        case .seasonDivider: return false
         default: return true
         }
     }

@@ -120,6 +120,20 @@ final class SidebarCollectionView: UICollectionView {
         }
         return super.preferredFocusEnvironments
     }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        // The aim is for the OPENING move only, and nothing was clearing it.
+        // Left set, EVERY later focus update while the sidebar was open
+        // resolved back through it to the selected row — so the expand
+        // animator's completion, which requests focus ~0.3s after opening,
+        // yanked the user back from whatever row they had already moved to.
+        // The next open re-aims via `aimInitialFocusAtSelectedTab`.
+        if let next = context.nextFocusedItem as? UIView, next.isDescendant(of: self) {
+            preferredFocusIndexPath = nil
+        }
+    }
 }
 
 // MARK: - Row cell
@@ -414,7 +428,13 @@ final class ShellSidebarViewController: UIViewController {
             if self.state == .collapsed {
                 // A hidden list is invisible to the focus engine; alpha 0 is not.
                 self.collectionView.isHidden = true
-                if self.pillHidden { self.cardView.alpha = 0 }
+                // pillHidden can flip mid-morph: a below-top focus change posts
+                // while this animator is in flight, and setPillHidden bails on a
+                // live transition. Reconcile BOTH the card and its chevron here,
+                // or the chevron is left stranded visible over a hidden pill.
+                let pillAlpha: CGFloat = self.pillHidden ? 0 : 1
+                self.cardView.alpha = pillAlpha
+                self.pillChevron.alpha = pillAlpha
             }
             self.setNeedsFocusUpdate()
             self.updateFocusIfNeeded()

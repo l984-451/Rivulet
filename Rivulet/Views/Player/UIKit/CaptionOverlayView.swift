@@ -26,8 +26,9 @@
 //  Within those, a cue that gave an exact position keeps it. Vertically the
 //  position names the box's TOP edge (WebVTT's default `line-align: start`),
 //  so the box hangs down from it, which is where AVPlayer draws it.
-//  Horizontally the box is centred on the position. A cue that gave only a
-//  coarse band (teletext) takes that band's resting anchor instead.
+//  Horizontally the cue's own left/centre/right alignment decides which box
+//  edge the position names. A cue that gave only a coarse band (teletext)
+//  takes that band's resting anchor instead.
 //
 //  Only the user's Height stepper is placement-exempt.
 //
@@ -372,7 +373,9 @@ final class CaptionOverlayView: UIView {
     /// `\pos`) the line position names the box's TOP edge: WebVTT's default
     /// `line-align` is `start`, so the box hangs DOWN from the stated line, and
     /// that is where AVPlayer draws it. Anchoring the centre on it instead sits
-    /// half a box high.
+    /// half a box high. Horizontally the cue's alignment picks the anchored
+    /// edge, and the box wraps into the room between that anchor and the far
+    /// side of the picture.
     ///
     /// **Without one** (teletext through the engine demux, which quantises the
     /// grid row to a coarse `\an` and supplies no percentage) the numpad band is
@@ -407,25 +410,39 @@ final class CaptionOverlayView: UIView {
             ?? (col == 0 ? Metrics.bandSideFraction
                 : col == 2 ? 1 - Metrics.bandSideFraction : nil)
 
-        let sideSafe = rect.width * Metrics.sideSafeFraction
-        let usable = max(0, rect.width - sideSafe * 2)
-        // Smallest half-width worth wrapping into, so a cue anchored near an
-        // edge is nudged inward rather than squeezed to a column one word wide.
-        let minHalf = usable * 0.15
+        // The anchor names the edge the cue's OWN alignment names: a left
+        // column's left edge, a right column's right edge, a centre column's
+        // midpoint. Centring every box on the anchor regardless of alignment
+        // is what wrapped `align:left position:10%` into a 27%-wide column
+        // four lines tall, pinned at 18.5% instead of starting at 10%.
+        let safeMinX = rect.minX + rect.width * Metrics.sideSafeFraction
+        let safeMaxX = rect.maxX - rect.width * Metrics.sideSafeFraction
+        let requested = anchorX.map { rect.minX + $0 * rect.width } ?? rect.midX
+        let anchor = min(max(requested, safeMinX), max(safeMinX, safeMaxX))
 
-        var centreX = rect.midX
-        var widthLimit = usable
-        if let anchorX {
-            let lo = sideSafe + minHalf
-            let hi = max(lo, rect.width - sideSafe - minHalf)
-            let centre = min(max(anchorX * rect.width, lo), hi)
-            let half = max(minHalf, min(centre - sideSafe, rect.width - sideSafe - centre))
-            centreX = rect.minX + centre
-            widthLimit = half * 2
+        // A side-anchored cue wraps into the room between its anchor and the
+        // FAR safe edge, which is what WebVTT gives it. Wrapping into the
+        // whole safe width instead would overflow and drag the box off its
+        // anchor; wrapping into the near half squeezes it into a column.
+        let widthLimit: CGFloat
+        switch col {
+        case 0: widthLimit = safeMaxX - anchor
+        case 2: widthLimit = anchor - safeMinX
+        default: widthLimit = max(0, safeMaxX - safeMinX)
         }
 
         box.apply(pointSize: pointSize)
         let fitted = box.fittingSize(maxWidth: widthLimit)
+
+        // Clamped as well as limited: `fittingSize` can exceed `maxWidth` for
+        // a single unbreakable word.
+        let requestedX: CGFloat
+        switch col {
+        case 0: requestedX = anchor
+        case 2: requestedX = anchor - fitted.width
+        default: requestedX = anchor - fitted.width / 2
+        }
+        let originX = min(max(requestedX, safeMinX), max(safeMinX, safeMaxX - fitted.width))
 
         // Vertical. A fine position wins; the band is the fallback.
         //
@@ -447,7 +464,7 @@ final class CaptionOverlayView: UIView {
             centreY = rect.maxY - max(0, floor - letterbox) - fitted.height / 2
         }
 
-        box.frame = CGRect(x: (centreX - fitted.width / 2).rounded(),
+        box.frame = CGRect(x: originX.rounded(),
                            y: (centreY - fitted.height / 2).rounded(),
                            width: fitted.width,
                            height: fitted.height)

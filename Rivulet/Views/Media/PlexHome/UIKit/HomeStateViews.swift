@@ -27,7 +27,10 @@ final class HomeStateView: UIView {
         case notConnected               // "Connect to your Plex server in Settings."
         case loading                    // "Loading" + spinner
         case error(message: String)     // "Unable to Load" + retry
-        case empty                      // "No Content" + refresh
+        // "No Content" + refresh. Carries its message because the surfaces do
+        // not share one: Discover is fed by TMDB and has nothing to do with the
+        // Plex library.
+        case empty(message: String)
 
         var iconSystemName: String? {
             switch self {
@@ -52,7 +55,7 @@ final class HomeStateView: UIView {
             case .notConnected: return "Connect to your Plex server in Settings."
             case .loading: return nil
             case .error(let message): return message
-            case .empty: return "Your Plex library appears to be empty."
+            case .empty(let message): return message
             }
         }
 

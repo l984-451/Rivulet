@@ -21,7 +21,12 @@ struct SettingDescriptor {
 
 enum SettingsDescriptorStore {
     static func descriptor(for id: String) -> SettingDescriptor? {
-        descriptors[id]
+        if let exact = descriptors[id] { return exact }
+        // Rows built per item at runtime carry the item's identity in their id,
+        // so they cannot have their own entry. Fall back on the row KIND, which
+        // is what the panel wants to explain anyway.
+        if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
+        return nil
     }
 
     private static let descriptors: [String: SettingDescriptor] = [
@@ -65,6 +70,18 @@ enum SettingsDescriptorStore {
             description: "Scale all interface elements up or down. Useful for different TV sizes and viewing distances."
         ),
 
+        "homeRows": SettingDescriptor(
+            icon: "rectangle.grid.1x2",
+            description: "Choose which rows appear on Home. The rows themselves, their titles and their order come from your Plex account, so they match the Plex app. Turn one off here to hide it on this Apple TV only."
+        ),
+        "showAllHomeRows": SettingDescriptor(
+            icon: "eye",
+            description: "Show every row your Plex account puts on Home again."
+        ),
+        "homeRowItem": SettingDescriptor(
+            icon: "rectangle.grid.1x2",
+            description: "Turn this row off to hide it on this Apple TV. Your Plex account is unchanged, so the row keeps showing in the Plex app and on your other devices."
+        ),
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",
             description: "Shows a large featured content banner at the top of the Home screen with artwork and quick actions."
@@ -352,6 +369,7 @@ enum SettingsDescriptorStore {
         case .plex: return ("server.rack", .systemOrange)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
+        case .homeRows: return ("rectangle.grid.1x2", .systemTeal)
         case .cache: return ("internaldrive", .systemGray)
         case .displaySizePicker: return ("textformat.size", .systemOrange)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)

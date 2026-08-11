@@ -169,6 +169,21 @@ class LibrarySettingsManager: ObservableObject {
     // MARK: - Public Methods
 
     /// Check if a library is visible
+    /// Sidebar visibility is THIS DEVICE'S own preference, deliberately.
+    ///
+    /// There is no Plex-side sidebar pin list to follow. Measured against a live
+    /// PMS 1.43.3 and plex.tv: the server exposes no pin field, plex.tv exposes
+    /// no pinned-sources endpoint, and `/hubs/promoted` returns the same rows
+    /// whatever `pinnedContentDirectoryID` you pass it. The client PASSES that
+    /// parameter, which is the tell: the server has to be told, because it does
+    /// not know. Every Plex app keeps its own pinned list, so "the user's Plex
+    /// sidebar" is not one thing to match.
+    ///
+    /// `PlexLibrary.hidden` is NOT it. On the reference account Audio Books
+    /// (`hidden == 1`) was pinned while musicDemo (`hidden == 0`) was not, so
+    /// the two are independent. `hidden` governs HOME (see
+    /// `PlexDataStore.projectHomeItems`), which IS account-level and shared, and
+    /// that is the one Rivulet follows.
     func isLibraryVisible(_ libraryKey: String) -> Bool {
         !hiddenLibraryKeys.contains(libraryKey)
     }

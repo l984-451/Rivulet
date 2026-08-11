@@ -116,7 +116,30 @@ final class ExpandedDetailContainerView: UIView {
     private var seasonPills: [SeasonPillView] = []
     private var seasonRefIDs: [String] = []   // parallel to seasonPills (pill → season ref.itemID)
     private var selectedSeasonIndex = 0
-    private var seasonsToken: UInt64 = 0
+
+    /// Season info strip — poster + counts + summary for the season the pills
+    /// are tracking, between the pill row and the episode rail. Display-only and
+    /// never focusable: it follows pill selection and the rail's episode
+    /// tracking, so it adds no focus surface to reason about.
+    private let seasonInfoStrip = UIView()
+    private let stripPoster = UIImageView()
+    private let stripMeta = UILabel()
+    private let stripSummary = UILabel()
+    private static let seasonStripHeight: CGFloat = 132
+    /// The full season items behind the pills. The pills only ever needed the
+    /// labels, so the poster/summary/progress used to be discarded at build.
+    private var seasonItems: [MediaItem] = []
+    private var stripPosterToken: UInt64 = 0
+    /// The season the strip is currently showing (nil = hidden). `selectSeasonPill`
+    /// fires on every episode focus move as the rail tracks seasons, so without a
+    /// same-season no-op the poster load would restart on each one and flicker.
+    private var stripSeasonID: String?
+    /// Watched counts recomputed from the rail's own episodes after a watch-state
+    /// change, keyed by season ref itemID. `seasonItems` comes from the seasons
+    /// fetch, which only re-runs on a full `configure` — so without this the strip
+    /// kept saying "3 watched" while the episode cell directly below it had
+    /// already picked up its watched glyph.
+    private var seasonProgressOverrides: [String: ChildProgress] = [:]
 
     /// Which row of the details has focus. The VC sets this before requesting a
     /// focus update so `belowFoldFocusEnvironment` routes to the right place.
@@ -195,6 +218,9 @@ final class ExpandedDetailContainerView: UIView {
         get { belowFoldCollection.onSelectPerson }
         set { belowFoldCollection.onSelectPerson = newValue }
     }
+    /// Season pill Select → open that season's own page. Unwired, the pill falls
+    /// back to re-affirming the season in the rail.
+    var onOpenSeason: ((MediaItem) -> Void)?
 
     /// True briefly after focus first lands on the episodes row (same-press guard
     /// for the episodes→pills jump).
@@ -316,6 +342,43 @@ final class ExpandedDetailContainerView: UIView {
             seasonPillRow.bottomAnchor.constraint(equalTo: pillContent.bottomAnchor, constant: -Self.seasonPillFocusPad),
         ])
 
+        // Season info strip: display-only, under the pills. Hidden until a
+        // season is applied; alpha/transform ride the same scroll choreography
+        // as the pills.
+        seasonInfoStrip.translatesAutoresizingMaskIntoConstraints = false
+        seasonInfoStrip.alpha = 0
+        seasonInfoStrip.isHidden = true
+        addSubview(seasonInfoStrip)
+        stripPoster.translatesAutoresizingMaskIntoConstraints = false
+        stripPoster.contentMode = .scaleAspectFill
+        stripPoster.clipsToBounds = true
+        stripPoster.layer.cornerRadius = 10
+        stripPoster.layer.cornerCurve = .continuous
+        stripPoster.backgroundColor = UIColor.white.withAlphaComponent(0.08)
+        seasonInfoStrip.addSubview(stripPoster)
+        stripMeta.translatesAutoresizingMaskIntoConstraints = false
+        stripMeta.font = .systemFont(ofSize: 26, weight: .semibold)
+        stripMeta.textColor = UIColor.white.withAlphaComponent(0.9)
+        seasonInfoStrip.addSubview(stripMeta)
+        stripSummary.translatesAutoresizingMaskIntoConstraints = false
+        stripSummary.font = .systemFont(ofSize: 24)
+        stripSummary.textColor = UIColor.white.withAlphaComponent(0.65)
+        stripSummary.numberOfLines = 3
+        seasonInfoStrip.addSubview(stripSummary)
+        NSLayoutConstraint.activate([
+            stripPoster.leadingAnchor.constraint(equalTo: seasonInfoStrip.leadingAnchor),
+            stripPoster.topAnchor.constraint(equalTo: seasonInfoStrip.topAnchor),
+            stripPoster.bottomAnchor.constraint(equalTo: seasonInfoStrip.bottomAnchor),
+            stripPoster.widthAnchor.constraint(equalTo: stripPoster.heightAnchor, multiplier: 2.0 / 3.0),
+            stripMeta.topAnchor.constraint(equalTo: seasonInfoStrip.topAnchor, constant: 2),
+            stripMeta.leadingAnchor.constraint(equalTo: stripPoster.trailingAnchor, constant: 24),
+            stripMeta.trailingAnchor.constraint(lessThanOrEqualTo: seasonInfoStrip.trailingAnchor),
+            stripSummary.topAnchor.constraint(equalTo: stripMeta.bottomAnchor, constant: 8),
+            stripSummary.leadingAnchor.constraint(equalTo: stripMeta.leadingAnchor),
+            stripSummary.trailingAnchor.constraint(equalTo: seasonInfoStrip.trailingAnchor),
+            stripSummary.bottomAnchor.constraint(lessThanOrEqualTo: seasonInfoStrip.bottomAnchor),
+        ])
+
         episodesClip.translatesAutoresizingMaskIntoConstraints = false
         episodesClip.clipsToBounds = true
         episodesClip.alpha = 0  // cascades in with the chrome via setCurrent()
@@ -394,6 +457,15 @@ final class ExpandedDetailContainerView: UIView {
             seasonsHeader.trailingAnchor.constraint(equalTo: trailingAnchor),
             // No fixed height/width — the pill row hugs the header (equality pins
             // below), so the chunky pills define both. They were crushed to 44pt.
+
+            // Season info strip: under the pills, on the shared content edge.
+            // Width capped for summary readability. The show-family details
+            // landing (BelowFoldCollectionView.showDetailsTopY) is what reserves
+            // the vertical room this occupies.
+            seasonInfoStrip.topAnchor.constraint(equalTo: seasonsHeader.bottomAnchor, constant: 8),
+            seasonInfoStrip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: PreviewCarouselGeometry.expandedChromeInset),
+            seasonInfoStrip.widthAnchor.constraint(equalToConstant: 1040),
+            seasonInfoStrip.heightAnchor.constraint(equalToConstant: Self.seasonStripHeight),
         ])
 
         buildPlaceholderSections()
@@ -474,15 +546,17 @@ final class ExpandedDetailContainerView: UIView {
         scrollOffset = off
         smallTitleLogo.alpha = belowFoldTitleOpacity
         seasonsHeader.alpha = scrollProgress
-        // The title logo + season pills are overlays, but should scroll WITH the
-        // rail rather than float in place: translate them by the rail's offset
-        // past the details-rest position, so they ride up and out as the user
-        // scrolls into the lower rows (and follow the episodes down on
-        // entry/collapse). This runs synchronously inside the scroll animation,
-        // so it animates in sync with the rail.
+        seasonInfoStrip.alpha = scrollProgress
+        // The title logo + season pills + info strip are overlays, but should
+        // scroll WITH the rail rather than float in place: translate them by the
+        // rail's offset past the details-rest position, so they ride up and out
+        // as the user scrolls into the lower rows (and follow the episodes down
+        // on entry/collapse). This runs synchronously inside the scroll
+        // animation, so it animates in sync with the rail.
         let dy = belowFoldCollection.detailsRestOff - off
         let scroll = CGAffineTransform(translationX: 0, y: dy)
         seasonsHeader.transform = scroll
+        seasonInfoStrip.transform = scroll
         smallTitleLogo.transform = scroll
         onScrollProgress?(scrollProgress)
     }
@@ -499,8 +573,21 @@ final class ExpandedDetailContainerView: UIView {
         guard let item else { return }
         setBelowFoldScrollActive(false)
         belowFoldCollection.alpha = 1
+        // Installed BEFORE configure, which is what fires it: the loader's own
+        // season fetch now feeds the pills and the info strip, where
+        // populateSeasonPills used to run a second /children of its own.
+        belowFoldCollection.onSeasonsLoaded = { [weak self] seasons, selectedIndex in
+            self?.applySeasons(seasons, selectedIndex: selectedIndex)
+        }
+        // The watch-state refresh reconfigures episode cells only; the strip's
+        // counts come from the seasons fetch, which it does not re-run. Take the
+        // recomputed counts off the refreshed episodes instead.
+        belowFoldCollection.onSeasonProgressRefreshed = { [weak self] progress in
+            guard let self, !progress.isEmpty else { return }
+            self.seasonProgressOverrides.merge(progress) { _, new in new }
+            self.refreshSeasonStripMeta()
+        }
         belowFoldCollection.configure(item: item, detail: nil)
-        populateSeasonPills(for: item)
         // Entering details starts on the episodes; the selected pill tracks the
         // focused episode's season (set when an episode takes focus).
         detailsFocusTarget = .episodes
@@ -594,6 +681,7 @@ final class ExpandedDetailContainerView: UIView {
         layoutIfNeeded()  // keep the reserve push locked to the translation (§6)
         smallTitleLogo.alpha = belowFoldTitleOpacity
         seasonsHeader.alpha = scrollProgress
+        seasonInfoStrip.alpha = scrollProgress
         onScrollProgress?(scrollProgress)
     }
 
@@ -687,6 +775,11 @@ final class ExpandedDetailContainerView: UIView {
         // Load the centered item's episodes into the single rail (episodes-only
         // in carousel-stable; cast/related are added on expand).
         if let item { belowFoldCollection.configureEpisodesOnly(item: item) }
+        // The previous item's pills and strip describe a different show; they
+        // rebuild from the loader's seasons on reveal (onSeasonsLoaded). The
+        // episodes-only peek load does not fetch seasons, so nothing refills
+        // them before then.
+        applySeasons([], selectedIndex: 0)
 
         logoLoadToken &+= 1
         let token = logoLoadToken
@@ -801,38 +894,78 @@ final class ExpandedDetailContainerView: UIView {
     func armPillEntryFocus() { belowFoldCollection.pillEntryArmed = true }
     func disarmPillEntryFocus() { belowFoldCollection.pillEntryArmed = false }
 
-    func populateSeasonPills(for item: MediaItem) {
-        seasonsToken &+= 1
-        let token = seasonsToken
-        let showRef: MediaItemRef?
-        switch item.kind {
-        case .show: showRef = item.ref
-        case .episode: showRef = item.grandparentRef
-        case .season: showRef = item.parentRef
-        default: showRef = nil
+    /// Apply the loader's seasons to the pills AND the info strip.
+    ///
+    /// Called from `onSeasonsLoaded`, which fires as soon as the below-fold
+    /// loader has the seasons — it already resolved which one to open on, so
+    /// there is nothing to re-derive here and no second `/children` fetch.
+    func applySeasons(_ seasons: [MediaItem], selectedIndex: Int) {
+        seasonItems = seasons
+        // A fresh seasons fetch carries current counts, so the post-playback
+        // overrides have nothing left to correct. Also stops a previous item's
+        // counts surviving the reset `applySeasons([], …)` on a carousel move.
+        seasonProgressOverrides = [:]
+        setSeasonPills(seasons.map { SeasonPillView.seasonLabel(for: $0) },
+                       seasonRefIDs: seasons.map { $0.ref.itemID },
+                       selectedIndex: selectedIndex)
+        // The strip shows for ANY season count — a single-season show still gets
+        // its summary and progress even though the pills (a chooser) stay hidden.
+        updateSeasonStrip(seasons.isEmpty ? nil : min(max(0, selectedIndex), seasons.count - 1))
+    }
+
+    /// "Season 3 · 10 episodes · 4 watched". The counts prefer a post-playback
+    /// refresh over the seasons fetch's own snapshot: that fetch only re-runs on
+    /// a full `configure`, so after finishing an episode it still reports the
+    /// pre-playback count (see `seasonProgressOverrides`).
+    private func seasonMetaText(for season: MediaItem) -> String {
+        var meta = SeasonPillView.seasonLabel(for: season)
+        let progress = seasonProgressOverrides[season.ref.itemID] ?? season.childProgress
+        if let progress, progress.total > 0 {
+            meta += " · \(progress.total) episode\(progress.total == 1 ? "" : "s")"
+            if progress.played >= progress.total {
+                meta += " · all watched"
+            } else if progress.played > 0 {
+                meta += " · \(progress.played) watched"
+            }
         }
-        guard let showRef,
-              let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
-            setSeasonPills([], seasonRefIDs: [], selectedIndex: 0); return
+        return meta
+    }
+
+    /// Re-render the counts for the season the strip is ALREADY showing. Separate
+    /// from `updateSeasonStrip` on purpose: that one is keyed on a season change
+    /// and would either no-op here or restart the poster load and flicker.
+    private func refreshSeasonStripMeta() {
+        guard let id = stripSeasonID,
+              let season = seasonItems.first(where: { $0.ref.itemID == id }) else { return }
+        stripMeta.text = seasonMetaText(for: season)
+    }
+
+    /// Fill the info strip from a season (nil hides it). Display-only; the poster
+    /// load is token-guarded like the logo's.
+    private func updateSeasonStrip(_ index: Int?) {
+        guard let index, index >= 0, index < seasonItems.count else {
+            stripSeasonID = nil
+            seasonInfoStrip.isHidden = true
+            return
         }
+        let season = seasonItems[index]
+        // Same-season calls no-op: `selectSeasonPill` fires on every episode
+        // focus move as the rail tracks seasons, and restarting the poster load
+        // on each one would flicker the strip.
+        guard stripSeasonID != season.ref.itemID else { return }
+        stripSeasonID = season.ref.itemID
+        seasonInfoStrip.isHidden = false
+        stripMeta.text = seasonMetaText(for: season)
+        stripSummary.text = season.overview
+        stripPosterToken &+= 1
+        let token = stripPosterToken
+        stripPoster.image = nil
+        guard let url = season.artwork.thumbnail ?? season.artwork.poster else { return }
         Task { [weak self] in
-            let seasons = (try? await provider.children(of: showRef)) ?? []
+            let image = await ImageCacheManager.shared.image(for: url)
             await MainActor.run {
-                guard let self, self.seasonsToken == token else { return }
-                // Open on the season the carousel item belongs to: the item's own
-                // season ref for a .season, or the parent season for an .episode.
-                let targetSeasonID: String?
-                switch item.kind {
-                case .season: targetSeasonID = item.ref.itemID
-                case .episode: targetSeasonID = item.parentRef?.itemID
-                default: targetSeasonID = nil
-                }
-                let selected = targetSeasonID.flatMap { id in
-                    seasons.firstIndex(where: { $0.ref.itemID == id })
-                } ?? 0
-                let labels = seasons.map { SeasonPillView.seasonLabel(for: $0) }
-                let refIDs = seasons.map { $0.ref.itemID }
-                self.setSeasonPills(labels, seasonRefIDs: refIDs, selectedIndex: selected)
+                guard let self, self.stripPosterToken == token, let image else { return }
+                self.stripPoster.image = image
             }
         }
     }
@@ -849,9 +982,6 @@ final class ExpandedDetailContainerView: UIView {
         for (i, label) in labels.enumerated() {
             let pill = SeasonPillView()
             pill.configure(label: label, isSelected: i == selectedSeasonIndex)
-            // Focusing a pill marks this season current (ATV+ switches on focus).
-            // Focus only previews the pill (bright highlight) — the rail does NOT
-            // move on focus, matching ATV+. The current/selected season stays put.
             // ATV+ switches the season on FOCUS (move), not on press: as the user
             // moves Left/Right across the pills, the episode rail live-scrolls to
             // each season. The focused pill becomes the selected/current season.
@@ -875,10 +1005,17 @@ final class ExpandedDetailContainerView: UIView {
                     self.belowFoldCollection.scrollEpisodesToSeason(seasonRefID: self.seasonRefIDs[i])
                 }
             }
-            // SELECT (press) re-affirms the focused season (rail already moved on
-            // focus). Kept harmless; entering the episodes is done with Down.
+            // SELECT (press) opens that season's own page: full summary, only its
+            // episodes, its extras. Focus already switched the rail's season, so
+            // the press was spare. Unwired, it falls back to re-affirming the
+            // season in the rail. Entering the episodes is still done with Down.
             pill.onSelected = { [weak self] in
-                guard let self, i < self.seasonRefIDs.count else { return }
+                guard let self else { return }
+                if let onOpenSeason = self.onOpenSeason, i < self.seasonItems.count {
+                    onOpenSeason(self.seasonItems[i])
+                    return
+                }
+                guard i < self.seasonRefIDs.count else { return }
                 self.belowFoldCollection.scrollEpisodesToSeason(seasonRefID: self.seasonRefIDs[i])
             }
             seasonPillRow.addArrangedSubview(pill)
@@ -895,6 +1032,12 @@ final class ExpandedDetailContainerView: UIView {
         guard index >= 0, index < seasonPills.count else { return }
         selectedSeasonIndex = index
         for (i, pill) in seasonPills.enumerated() { pill.setSelected(i == index) }
+        // The strip follows the selected season, so it is refreshed from the one
+        // place that owns selection — whether that came from a pill taking focus
+        // or from the rail crossing a season boundary. Keeping it here is what
+        // lets the pill's own same-season early return stay as it is: the strip
+        // and `selectedSeasonIndex` can only move together.
+        updateSeasonStrip(index)
         // While focus is in the row the engine scrolls the pill in itself; don't
         // run a second scroll against it. This covers the other direction — the
         // pill following the focused episode's season.

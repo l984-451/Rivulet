@@ -114,11 +114,41 @@ Chasing Plexamp on the features side. Long way to go.
 git clone https://github.com/l984-451/Rivulet.git
 cd Rivulet
 
+# One-time: both app targets read Secrets.swift and will not compile without it.
+# The placeholder values are fine for a local build.
+cp RivuletCore/Config/Secrets.swift.template RivuletCore/Config/Secrets.swift
+
 open Rivulet.xcodeproj
 
 # Or from the command line
 xcodebuild -scheme Rivulet -destination 'generic/platform=tvOS' build
+
+# The iOS/iPadOS app has its own scheme
+xcodebuild -scheme "Rivulet iOS" -destination 'generic/platform=iOS' build
 ```
+
+## Repository layout
+
+```
+Rivulet/           The tvOS app — all primary surfaces are UIKit
+RivuletiOS/        The iOS/iPadOS app (early) — SwiftUI, touch-first
+RivuletCore/       Code compiled into both apps: the Plex client and models,
+                   auth, IPTV parsers, TMDB, watch-progress policy, security,
+                   diagnostics
+TopShelfExtension/ Apple TV home-screen Top Shelf
+RivuletTests/      Unit tests (run with the Rivulet scheme)
+```
+
+Two rules keep the platforms from taxing each other, and both are enforced or
+documented in `.swiftlint.yml` and `CLAUDE.md`:
+
+- **One client per service.** Anything that encodes how Plex, TMDB, or an IPTV
+  source actually behaves lives in `RivuletCore/`, once. The platform folders
+  hold UI and per-platform state only — a bug fixed in shared code is fixed for
+  both apps by construction.
+- **No `#if os(...)` in shared code** (lint-enforced). Where platforms genuinely
+  differ, the app injects the difference at launch instead of branching in the
+  shared file.
 
 ## Contributing
 

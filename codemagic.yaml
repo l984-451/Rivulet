@@ -62,14 +62,14 @@ workflows:
 
       - name: Generate Secrets.swift from env
         script: |
-          cat > Rivulet/Config/Secrets.swift <<EOF
+          cat > RivuletCore/Config/Secrets.swift <<EOF
           import Foundation
 
           enum Secrets {
               static let sentryDSN = "${SENTRY_DSN:-}"
           }
           EOF
-          echo "Wrote Rivulet/Config/Secrets.swift (dsn set: $([ -n "${SENTRY_DSN:-}" ] && echo yes || echo no))"
+          echo "Wrote RivuletCore/Config/Secrets.swift (dsn set: $([ -n "${SENTRY_DSN:-}" ] && echo yes || echo no))"
 
       - name: Set build number from the tag
         script: |
@@ -94,7 +94,13 @@ workflows:
           esac
           # Keep the ASC lookup as a guard only: a number TestFlight already has
           # is rejected at delivery, so fail here instead of after a full build.
-          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+          #
+          # --platform is REQUIRED now that iOS and tvOS share one app record.
+          # Unqualified, this can compare a tvOS tag against an iOS build and
+          # fail a perfectly good tvOS release the moment iOS runs ahead.
+          # Build numbers are tracked per platform, so the platforms are free
+          # to reuse each other's numbers.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform TV_OS 2>/dev/null || echo "")
           if [ -n "$LATEST" ] && [ "$NEXT" -le "$LATEST" ]; then
             echo "Tag asks for build $NEXT but TestFlight is already at $LATEST. Tag a higher build."
             exit 1
@@ -147,6 +153,141 @@ workflows:
             "$IPA" \
           || GH_TOKEN="$GITHUB_TOKEN" gh release upload "$CM_TAG" "$IPA" \
             --repo "$CM_REPO_SLUG" --clobber
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - $CM_BUILD_DIR/build/ios/xcarchive/*.dSYMs/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Rivulet External Plex Forum
+
+  rivulet-ios-testflight:
+    name: Rivulet iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+
+    integrations:
+      app_store_connect: codemagic
+
+    environment:
+      groups:
+        - rivulet
+      vars:
+        XCODE_SCHEME: "Rivulet iOS"
+        XCODE_PROJECT: "Rivulet.xcodeproj"
+        BUNDLE_ID: "com.gstudios.rivulet"
+        APP_STORE_APPLE_ID: 6756892857
+      xcode: latest
+
+    # Separate tag prefix from tvOS. The two platforms share one App Store
+    # Connect record but ship independently, and a single `v*` tag firing both
+    # workflows would archive an iOS build for every tvOS release.
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'ios-v*'
+          include: true
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Initialize keychain
+        script: keychain initialize
+
+      - name: Provide the distribution certificate private key
+        script: |
+          if [ -n "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            printf '%s' "$CERTIFICATE_PRIVATE_KEY" > "$CM_BUILD_DIR/cert_key.pem"
+            echo "Using persistent CERTIFICATE_PRIVATE_KEY."
+          else
+            echo "WARNING: CERTIFICATE_PRIVATE_KEY is not set, generating an"
+            echo "ephemeral key. This mints a NEW distribution certificate every"
+            echo "build and will hit Apple's cert cap. Set CERTIFICATE_PRIVATE_KEY."
+            openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
+          fi
+
+      # Same bundle id as tvOS, different profile type. `--platform IOS` is the
+      # App Store Connect bundle-id platform, which is IOS for tvOS apps too —
+      # the profile TYPE is what differs between the two workflows.
+      - name: Fetch or create signing files (iOS App Store)
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type IOS_APP_STORE \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --create
+
+      - name: Add certificates to keychain
+        script: keychain add-certificates
+
+      - name: Apply fetched signing profiles to Xcode project
+        script: xcode-project use-profiles
+
+      - name: Generate Secrets.swift from env
+        script: |
+          mkdir -p RivuletCore/Config
+          cat > RivuletCore/Config/Secrets.swift <<EOF
+          import Foundation
+
+          enum Secrets {
+              static let sentryDSN = "${SENTRY_DSN:-}"
+          }
+          EOF
+          echo "Wrote RivuletCore/Config/Secrets.swift (dsn set: $([ -n "${SENTRY_DSN:-}" ] && echo yes || echo no))"
+
+      - name: Set build number from the tag
+        script: |
+          # Tag shape is ios-vX.Y.Z-<build>, matching the tvOS rule that the tag
+          # is the source of truth. Build numbers are tracked per platform in
+          # App Store Connect, so iOS and tvOS may reuse the same number.
+          if [ -n "${CM_TAG:-}" ]; then
+            NEXT="${CM_TAG##*-}"
+          else
+            NEXT=$PROJECT_BUILD_NUMBER
+          fi
+          case "$NEXT" in
+            ''|*[!0-9]*)
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected ios-vX.Y.Z-<build>)."
+              exit 1
+              ;;
+          esac
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform IOS 2>/dev/null || echo "")
+          if [ -n "$LATEST" ] && [ "$NEXT" -le "$LATEST" ]; then
+            echo "Tag asks for build $NEXT but iOS TestFlight is already at $LATEST. Tag a higher build."
+            exit 1
+          fi
+          echo "Setting CURRENT_PROJECT_VERSION=$NEXT (tag ${CM_TAG:-none}, TestFlight latest ${LATEST:-unknown})"
+          agvtool new-version -all "$NEXT"
+
+      - name: Build & archive (iOS Release)
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --archive-flags="-destination 'generic/platform=iOS'"
+
+      # Without this the in-app frames on iOS crash and app-hang events resolve
+      # as <unknown>, which is what made RIVULET-41 unreadable on tvOS.
+      - name: Upload dSYMs to Sentry
+        ignore_failure: true
+        script: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "No SENTRY_AUTH_TOKEN set, skipping dSYM upload."
+            exit 0
+          fi
+          which sentry-cli >/dev/null 2>&1 || curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload \
+            --auth-token "$SENTRY_AUTH_TOKEN" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            --include-sources \
+            "$CM_BUILD_DIR/build/ios/xcarchive"
 
     artifacts:
       - build/ios/ipa/*.ipa

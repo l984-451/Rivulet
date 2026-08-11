@@ -35,16 +35,29 @@ The video player is **AetherPlayer** — an adapter around AetherEngine (FFmpeg 
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (6.4.0). **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (6.5.5). **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
 ## Project Structure
 
+Four code roots. `RivuletCore/` is a buildable folder compiled into BOTH app
+targets (not a module — `internal` spans each target); `Rivulet/` is the tvOS
+app, `RivuletiOS/` the iOS app. See "Platform Boundary" above for what goes
+where.
+
 ```
-Rivulet/
+RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkManager,
+│                       #   PlexAuthManager, PlexUserProfileManager), Models/Plex,
+│                       #   TMDB, IntroDBClient, WatchProgressPolicy, IPTV parsers,
+│                       #   Security (attest, keychain), Sentry startup, Secrets,
+│                       #   OpenSourceLicenses. NO #if os(...) — lint-enforced.
+RivuletiOS/             # iOS/iPadOS app (SwiftUI). Plex/ holds ONLY IOSPlexSession
+│                       #   (content store, counterpart of PlexDataStore) and
+│                       #   IOSPlexAdapters (display accessors) — no endpoint code.
+Rivulet/                # The tvOS app — everything below.
 ├── Models/
-│   ├── Plex/           # Plex API models (PlexMetadata, PlexStream, etc.)
+│   ├── Plex/           # (moved to RivuletCore/Models/Plex)
 │   └── SwiftData/      # Persistent models (Channel, EPGProgram, PlexServer)
 ├── Services/
 │   ├── Plex/
@@ -69,7 +82,7 @@ Rivulet/
 │   │   │               #   Insights* panels (in-player cast/trivia; backed by Services/Insights + TMDB)
 │   │   └── PostVideo/  # Post-playback summary overlays
 │   ├── Media/          # PreviewContext, HeroBackdropSupport, SharedMediaComponents,
-│   │                   #   CastMemberCard (CastCrewRow), FocusScrollMotion
+│   │                   #   FocusScrollMotion
 │   │   ├── UIKit/, PlexHome/UIKit/, MediaDetail/UIKit/, Person/UIKit/, Library/UIKit/, PreviewCarousel/UIKit/
 │   │   │              #   — the canonical UIKit home/detail/library/person/carousel surfaces
 │   │   └── Hero/       # HeroPlaySession + hero support (SwiftUI HeroBackdropLayer/OverlayContent removed)
@@ -89,6 +102,112 @@ Rivulet/
     ├── RIVULET_PLAYER.md   # Canonical player reference (routing, AetherPlayer + AVPlayer)
     └── DESIGN_GUIDE.md     # UI/UX documentation
 ```
+
+## Platform Boundary (tvOS / iOS)
+
+Three buildable folders, three memberships. `Rivulet/` is the tvOS app.
+`RivuletiOS/` is the iOS/iPadOS app. `RivuletCore/` is compiled into both. All
+three are `PBXFileSystemSynchronizedRootGroup`s, so a file joins its targets by
+where it sits on disk and never needs a project edit. Do not add shared code by
+hand-listing `PBXBuildFile` entries in the iOS target: that list has to be
+maintained inside `project.pbxproj`, which is the worst merge surface in the repo.
+
+**Shared code contains no `#if os(...)`.** That single rule is the boundary, and
+it is the only thing keeping the iOS app from taxing tvOS work. It is
+lint-enforced: `platform_conditional_in_shared_code` in `.swiftlint.yml` errors
+on any platform directive under `RivuletCore/`. When a shared
+file needs a platform branch, the file is in the wrong place: lift the
+platform-specific part out into `Rivulet/` or `RivuletiOS/`. Do not add the
+ifdef. PR 284 arrived with both failure modes and they are the worked examples:
+an `#if os(tvOS)` around `M3UParser.toUnifiedChannel` (the fix is to move that
+extension next to `UnifiedChannel`, after which the parser needs no conditional
+at all), and an `#if os(iOS)/#else` wrapping two unrelated `AetherPlayer`
+classes in one 1799-line file (the fix is two files).
+
+### What qualifies as shared
+
+The test is **"must a bug found on one platform be fixed on both?"**, not "does
+it compile everywhere."
+
+Yes, so it belongs in `RivuletCore/`: anything encoding how Plex or IPTV
+actually behaves. `PlexNetworkManager` (`includeGuids=1`, the three Discover
+hosts, account-vs-server token, `includeHttps=1&includeRelay=1`, the transcode
+profile params), `Models/Plex/`, `PlexLiveTVProvider` + `PlexLiveTVModels` + the
+timeline keepalive, `WatchProgressPolicy`, `ContentRouter`, `TrackIntent`,
+`MediaTrack`, `StreamBodyClassifier`, the IPTV parsers, `Services/Security/`,
+`Services/MediaProvider/`, `CacheManager`, `LibraryGUIDIndex`, `PlexAuthManager`,
+`LiveTVDataStore`.
+
+No, so it stays in `Rivulet/`: all of `Views/` (focus engine, morphs, Siri
+Remote), `Services/Input/`, `Services/Focus/`, the Top Shelf composer and
+extension, `Services/Siri/`, `DisplayCriteriaManager` (`AVDisplayManager` is
+tvOS-only), and `PlexDataStore` — it carries tvOS-home-shaped state (the
+`mergedItems` cache, the Continue Watching merge), so iOS goes through
+`Services/MediaProvider/` instead.
+
+**An import of UIKit or SwiftUI does not make a file tvOS-only.** Both exist on
+iOS, and `ObservableObject` / `@Published` are the only reason most of the
+service layer imports them. Of ~33k lines across `Services/` and `Models/`,
+exactly four files touch genuinely tvOS-only API: the three in `Services/Input/`
+plus `DisplayCriteriaManager`. Judge by tvOS-only frameworks (`TVServices`,
+`TVUIKit`, `AVDisplayManager`) and focus/press API, nothing else.
+
+Move files into `RivuletCore/` when a slice actually needs them, not
+speculatively. The list above is the destination, not a migration order.
+
+The Plex stack is already across: `PlexNetworkManager`, `PlexAuthManager`,
+`PlexUserProfileManager`, `Models/Plex/`, the TMDB client, `IntroDBClient`,
+`WatchProgressPolicy`, the attested `URLSession`, and the Sentry startup.
+**There is exactly one Plex client.** `RivuletiOS/Plex/` holds only
+`IOSPlexSession` (the iOS content store, counterpart of `PlexDataStore`) and
+`IOSPlexAdapters` (display accessors). Never add a second decoder for a Plex
+endpoint to the iOS folder; a bug fixed in the shared client must be the fix
+for both apps.
+
+### Host injection instead of platform conditionals
+
+Where shared code genuinely differs per platform, the app injects the
+difference at launch — the shared file stays free of `#if os(...)` and of
+references to per-platform types:
+
+- `PlexAPI.platform` / `PlexAPI.deviceName` are `static var`s defaulting to
+  the tvOS values; `RivuletiOSApp.init` overrides them before any request is
+  built. Not `UIDevice.systemName`, which splits iPads across "iOS"/"iPadOS".
+- `PlexAuthManager.onAuthenticated` / `.onSignedOut` and
+  `PlexUserProfileManager.onProfileChanged` / `.onInitialProfileSelected` are
+  closures the host sets at launch (tvOS → `PlexDataStore`, iOS →
+  `IOSPlexSession`). The managers own identity; content stores are per
+  platform. `onAuthenticated` is awaited on purpose — it prefetches the
+  libraries the tvOS sidebar needs on its first build.
+- `SentryStartup.start(platform:)` takes the platform from the caller for the
+  same reason.
+
+RivuletCore is compiled into each app target, not built as a module, so
+`internal` visibility spans the whole target and no `public` is needed. That
+also means an extension on a shared type inside `RivuletiOS/` is not a
+retroactive conformance.
+
+### The player split
+
+`AetherPlayer` is three pieces in two homes. The engine mapping (state and track
+translation, cue conversion, background→foreground reload, mute persistence
+across Aether's internal player swaps) is platform-neutral and belongs in
+`RivuletCore`. The `PlayerProtocol` conformance stays tvOS. iOS gets its own thin
+`ObservableObject` on top. This is not bookkeeping: keeping both classes in one
+file also forced `@preconcurrency import AVFoundation` above the conditional,
+which silently loosened Swift 6 Sendable checking on the *shipping tvOS player*
+for the iOS half's benefit.
+
+### Folders, not a SwiftPM package
+
+A local `RivuletCore` package would enforce the boundary at compile time, but
+every shared symbol would need `public` — a mechanical diff across 170+ files
+touching every access modifier. The folder buys the same boundary for a day's
+work, and the lint rule above makes the no-`#if` half mechanical. What lint
+cannot catch is a shared file quietly referencing a per-platform type; if that
+starts happening, the package is the escalation — it is the enforcement
+mechanism for a rule that discipline is failing to hold, not an upgrade to
+reach for on its own.
 
 ## Key Architectural Patterns
 
@@ -402,21 +521,24 @@ CachedAsyncImage(url: imageURL) { phase in
 
 ## Build & Run
 
-One-time setup: `Rivulet/Config/Secrets.swift` is gitignored and required for the app target to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):
+One-time setup: `RivuletCore/Config/Secrets.swift` is gitignored and required for **both** app targets to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):
 
 ```bash
-cp Rivulet/Config/Secrets.swift.template Rivulet/Config/Secrets.swift
+cp RivuletCore/Config/Secrets.swift.template RivuletCore/Config/Secrets.swift
 ```
 
-`Secrets.swift` is the only gitignored file in `Rivulet/Config/` — the rest (`TMDBConfig`, `InsightsConfig`, `InputConfig`) are tracked and present in a fresh clone. Copying the template is the whole step: all three targets use Xcode buildable-folder references (`PBXFileSystemSynchronizedRootGroup`), so files are picked up from disk and never need adding to the project. `RivuletApp.swift` reads `Secrets.sentryDSN`, so the app target will not compile without it.
+It lives in `RivuletCore/` rather than `Rivulet/Config/` because tvOS and iOS both start Sentry through `RivuletCore/Diagnostics/SentryStartup.swift`. The rest of `Rivulet/Config/` (`TMDBConfig`, `InsightsConfig`, `InputConfig`) is tracked, tvOS-only, and present in a fresh clone. Copying the template is the whole step: every target uses Xcode buildable-folder references (`PBXFileSystemSynchronizedRootGroup`), so files are picked up from disk and never need adding to the project. Both `RivuletApp.swift` and `RivuletiOSApp.swift` read `Secrets.sentryDSN`, so neither app compiles without it.
 
-There is a single shared scheme, `Rivulet`. No SwiftFormat is configured.
+Two shared schemes: `Rivulet` (tvOS) and `Rivulet iOS`. No SwiftFormat is configured.
 
 SwiftLint is configured, but **every stock rule is off** (`only_rules: [custom_rules]`
 in `.swiftlint.yml`). It is not a style checker here and has no opinion about force
-casts, line length, or naming. It runs three project-specific rules: no SwiftUI on a
-UIKit surface, no `UIHostingController` in a cell, and no UIKit context menus (dead on
-tvOS 26). A PR gate runs them on Linux; there is no local hook.
+casts, line length, or naming. It runs four project-specific rules: no SwiftUI on a
+UIKit surface, no `UIHostingController` in a cell, no UIKit context menus (dead on
+tvOS 26, iOS exempt), and no `#if os(...)` in `RivuletCore/` (the platform boundary;
+the regex is line-anchored so comments may discuss the directive, and it deliberately
+avoids `match_kinds` — a wrong kind name silently disables a custom rule). A PR gate
+runs them on Linux; there is no local hook.
 
 ```bash
 swiftlint lint --strict     # or: docker run --rm -v "$PWD":/work -w /work \
@@ -448,7 +570,7 @@ xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple
 
 Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature — Parsers, Playback, Player, Preferences, Services, Siri, etc.), with shared fixtures/mocks in `RivuletTests/Fixtures/`, `RivuletTests/Helpers/`, `RivuletTests/Mocks/`. A few sit at the `RivuletTests/` root (`PlexDeviceDecodingTests.swift`).
 
-**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is no CI test run today — `codemagic.yaml` only builds/archives/publishes to TestFlight on tag push; the two GitHub workflows (`.github/workflows/`) are Claude Code review/mention bots, not test runners. Run tests locally.
+**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (`v*` → tvOS, `ios-v*` → iOS), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
 
 **The Simulator does not fully mimic Apple TV**, especially for focus-engine behavior. Treat Simulator-only verification of tvOS focus/remote-input changes as provisional; say so rather than declaring it fixed.
 

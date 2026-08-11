@@ -7,7 +7,8 @@
 //
 //  SwiftUI seam for the UIKit navigation shell. TVSidebarView mounts this in
 //  place of the old TabView(.sidebarAdaptable); tab content is still built by
-//  TVSidebarView.tabContent so every existing behavior keeps its home.
+//  TVSidebarView, which decides per tab whether the content is a plain UIKit
+//  view controller or needs hosting (see `contentViewController(for:)`).
 //
 
 import SwiftUI
@@ -27,11 +28,11 @@ struct RootShellHost: UIViewControllerRepresentable {
     var interactionBlocked: Bool
     var pillSuppressed: Bool
     var sections: [ShellSidebarSection]
-    let content: (SidebarTab) -> AnyView
+    let content: (SidebarTab) -> UIViewController
 
     func makeUIViewController(context: Context) -> RootShellViewController {
         let shell = RootShellViewController()
-        shell.makeContent = { tab in RootShellHostingController(rootView: content(tab)) }
+        shell.makeContent = content
         shell.onTabChange = { tab in
             // Async: the shell reports intent mid-focus-update; writing the
             // binding synchronously would mutate state during a view update.
@@ -43,8 +44,11 @@ struct RootShellHost: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ shell: RootShellViewController, context: Context) {
-        shell.makeContent = { tab in RootShellHostingController(rootView: content(tab)) }
-        shell.refreshContentRoots { tab in RootShellHostingController(rootView: content(tab)) }
+        shell.makeContent = content
+        // Only hosted tabs are rebuilt here; `refreshContentRoots` checks the
+        // cached controller's type BEFORE calling this, so a directly-mounted
+        // UIKit surface is never reconstructed just to be thrown away.
+        shell.refreshContentRoots(content)
         shell.interactionBlocked = interactionBlocked
         shell.pillSuppressed = pillSuppressed
         shell.updateSections(sections)

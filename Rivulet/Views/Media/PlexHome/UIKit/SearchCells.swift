@@ -98,6 +98,12 @@ final class SearchPromptCell: UICollectionViewCell {
         ])
     }
 
+    /// The cell is the collection view's focus item, but it is a big empty area
+    /// and should never hold focus itself — redirect straight into the pills.
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        pillScroll.isHidden ? super.preferredFocusEnvironments : pillStack.arrangedSubviews
+    }
+
     func configure(recentSearches: [String]) {
         pillStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let hasRecents = !recentSearches.isEmpty
@@ -166,6 +172,13 @@ final class SearchStateCell: UICollectionViewCell {
         case searching
         case error(message: String)
         case noResults
+
+        /// Only the error state renders Try Again, so only it is worth making
+        /// the cell focusable for.
+        var hasFocusableAction: Bool {
+            if case .error = self { return true }
+            return false
+        }
     }
 
     var onRetry: (() -> Void)?
@@ -235,6 +248,12 @@ final class SearchStateCell: UICollectionViewCell {
             stack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40)
         ])
+    }
+
+    /// Same redirect as `SearchPromptCell`: the cell is the focus item the
+    /// collection view offers, Try Again is what should actually take focus.
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        retryButton.isHidden ? super.preferredFocusEnvironments : [retryButton]
     }
 
     func configure(state: State) {

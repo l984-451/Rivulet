@@ -31,7 +31,6 @@ final class SettingsContainerCoordinator: ObservableObject {
 struct SettingsUIKitBridge: UIViewControllerRepresentable {
     let coordinator: SettingsContainerCoordinator
     var onSubPageChange: (Bool) -> Void
-    var onRequestLibraryApply: () -> Void
 
     func makeUIViewController(context: Context) -> SettingsContainerViewController {
         let vc = SettingsContainerViewController()
@@ -51,8 +50,6 @@ struct SettingsUIKitBridge: UIViewControllerRepresentable {
             coord.isSubPage = isSub
             onSub(isSub)
         }
-        let apply = onRequestLibraryApply
-        vc.onRequestLibraryApply = { apply() }
     }
 }
 
@@ -66,8 +63,6 @@ struct UIKitSettingsContainer: View {
     var body: some View {
         SettingsUIKitBridge(coordinator: coordinator, onSubPageChange: { isSub in
             nestedNavState.isSettingsSubPage = isSub
-        }, onRequestLibraryApply: {
-            AppRestartCoordinator.shared.softRestart()
         })
         .ignoresSafeArea()
         // Conditional: consume Menu (→ pop) only in a sub-page; at the root

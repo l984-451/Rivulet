@@ -22,11 +22,13 @@ final class SeasonPillView: UIControl {
     private var isSelectedSeason = false
     private var isFocusedPill = false
 
-    /// Invoked when this pill takes focus (just previews — bright highlight, the
-    /// rail does NOT move on focus in ATV+).
+    /// Invoked when this pill takes focus. The host scrolls the rail to the
+    /// season from here: moving across the pills live-scrolls the episodes, so
+    /// the focused pill IS the current season.
     var onFocused: (() -> Void)?
-    /// Invoked when this pill is pressed/selected — THIS is what moves the rail
-    /// to the season (ATV+ requires a select, not just focus).
+    /// Invoked when this pill is pressed/selected. Focus already switched the
+    /// season, so Select opens that season's own detail page. Where the host
+    /// leaves that unwired it falls back to re-affirming the season in the rail.
     var onSelected: (() -> Void)?
 
     /// Host-controlled focusability. Pills are focusable ONLY while the user is
@@ -43,7 +45,21 @@ final class SeasonPillView: UIControl {
         if focused { onFocused?() }
     }
 
-    @objc private func handleSelect() { onSelected?() }
+    // Select does not fire .primaryActionTriggered on a plain UIControl on
+    // tvOS, so the wired target never ran and pill Select has never fired.
+    // Consume the press in BOTH began/ended so the focused pill owns the cycle
+    // (mirrors AboutCardControl, a UIControl in this same directory).
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .select }) { return }
+        super.pressesBegan(presses, with: event)
+    }
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .select }) {
+            onSelected?()
+            return
+        }
+        super.pressesEnded(presses, with: event)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -55,7 +71,6 @@ final class SeasonPillView: UIControl {
 
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
-        addTarget(self, action: #selector(handleSelect), for: .primaryActionTriggered)
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
         layer.borderColor = UIColor.clear.cgColor

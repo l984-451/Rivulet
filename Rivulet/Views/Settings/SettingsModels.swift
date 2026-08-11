@@ -48,6 +48,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case root
     case appearance, playback, music, liveTV, servers, about
     case plex, iptv, libraries, cache
+    case homeRows
     case liveTVSourceDetail
     case addLiveTVSource, addOwnServer, addPlaylistURL
     case displaySizePicker, autoplayCountdownPicker, skipIntervalPicker
@@ -69,6 +70,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .addOwnServer: return "My Own Server"
         case .addPlaylistURL: return "Playlist URL"
         case .libraries: return "Sidebar Libraries"
+        case .homeRows: return "Home Rows"
         case .cache: return "Cache & Storage"
         case .displaySizePicker: return "Display Size"
         case .autoplayCountdownPicker: return "Autoplay Countdown"

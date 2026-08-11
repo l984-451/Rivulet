@@ -385,8 +385,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             guard isRailPanelOpen != oldValue else { return }
             if isRailPanelOpen {
                 cancelPausedPosterTimer()
-            } else if playbackState == .paused {
-                startPausedPosterTimer()
+            } else {
+                // A panel suspends the controls-hide timer (see
+                // `startControlsHideTimer`); closing it has to re-arm, or the
+                // rail sits there forever after one Info visit.
+                startControlsHideTimer()
+                if playbackState == .paused { startPausedPosterTimer() }
             }
         }
     }
@@ -3494,13 +3498,16 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Enter transport-control focus mode: the SwiftUI content layer
     /// stops being focusable, the focus engine lands on the transport
-    /// bar's buttons, and the auto-hide timer is suspended while the
-    /// user is navigating the controls. Menu exits back to playback.
+    /// bar's buttons, and Menu exits back to playback.
+    ///
+    /// Called from the container's `didUpdateFocus` on EVERY landing inside
+    /// the rail, including moves between two rail buttons, so it doubles as
+    /// the "user is still interacting" signal that restarts the auto-hide
+    /// timer.
     func enterControlsFocus() {
         guard showControls, !isScrubbing, postVideoState == .hidden else { return }
-        controlsTimer?.invalidate()
-        controlsTimer = nil
         controlsFocusActive = true
+        startControlsHideTimer()
     }
 
     /// Leave transport-control focus mode; controls stay visible and
@@ -3512,21 +3519,29 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     private func startControlsHideTimer() {
-        // Never auto-hide out from under focused transport controls, or out from
-        // under an open rail panel — focus inside a panel is NOT inside the rail,
-        // so `controlsFocusActive` is false there and the rail used to slide away
-        // behind the Info popup while the user was reading it.
-        guard !controlsFocusActive, !isRailPanelOpen else { return }
+        // An OPEN rail panel is the only thing that suspends auto-hide: it is a
+        // reading surface (Info, track lists, Insights), and the rail sliding
+        // away behind it looks broken.
+        //
+        // `controlsFocusActive` must NOT be a suspend condition, even though it
+        // reads like one. It means "the rail owns focus", and since it became
+        // DERIVED from focus location the rail owns focus for as long as it is
+        // on screen — so gating on it meant the timer was never armed at all and
+        // the chrome sat there until the user pressed Menu (issue #277). Hiding
+        // out from under a focused rail button is fine and is what every tvOS
+        // player does: `showControls`'s didSet clears the flag, and the
+        // container's `$controlsFocusActive` sink re-resolves focus onto the
+        // content layer (the same path Menu already takes).
+        guard !isRailPanelOpen else { return }
         controlsTimer?.invalidate()
         controlsTimer = Timer.scheduledTimer(withTimeInterval: controlsHideDelay, repeats: false) { [weak self] _ in
             guard let self else { return }
             let isPlaying = self.playbackState == .playing
             Task { @MainActor [weak self] in
                 guard let self, isPlaying else { return }
-                // Re-check at FIRE time: a panel can open, or focus can enter the
-                // rail, after the timer was already armed. The arm-time guard
-                // alone leaves that timer running.
-                guard !self.controlsFocusActive, !self.isRailPanelOpen else { return }
+                // Re-check at FIRE time: a panel can open after the timer was
+                // already armed. The arm-time guard alone leaves that timer running.
+                guard !self.isRailPanelOpen else { return }
                 withAnimation(.easeOut(duration: 0.3)) {
                     self.showControls = false
                 }

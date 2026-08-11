@@ -20,18 +20,9 @@ struct PlexHomeUIKitBridge: UIViewControllerRepresentable {
     /// the container by library key so a key change rebuilds the VC.
     var mode: HomeMode = .home
     @Binding var selectedMusicItem: PlexMetadata?
-    /// Search mode only: the live `.searchable` query text, pushed into the
-    /// controller on every SwiftUI update; and a monotonically-increasing
-    /// submit counter (keyboard Search key) that triggers an immediate search.
-    var searchQuery: String = ""
-    var searchSubmitCount: Int = 0
-    /// Search mode only: mirror controller-driven query changes (recents
-    /// pills) back into the `.searchable` field.
-    var searchQueryBinding: Binding<String>? = nil
 
     final class Coordinator {
         var selectedMusicItem: Binding<PlexMetadata?>
-        var lastSearchSubmitCount = 0
         init(selectedMusicItem: Binding<PlexMetadata?>) {
             self.selectedMusicItem = selectedMusicItem
         }
@@ -50,14 +41,6 @@ struct PlexHomeUIKitBridge: UIViewControllerRepresentable {
     /// reparents the view to the newest host automatically). Library mode is
     /// NOT cached: each library gets a fresh controller via .id(key).
     @MainActor private static var sharedHomeVC: PlexHomeViewController?
-
-    /// Drop the cached home controller so the next `make` builds a fresh one.
-    /// Called on a soft restart: reparenting the cached singleton into the
-    /// rebuilt shell leaves its rows stale, so a restart gets a clean home that
-    /// re-inits (fast, from cache) and renders current data — like a launch.
-    @MainActor static func resetSharedHome() {
-        sharedHomeVC = nil
-    }
 
     func makeUIViewController(context: Context) -> PlexHomeViewController {
         if case .library = mode { StartupTimer.mark("bridge.makeUIViewController (library)") }
@@ -86,18 +69,6 @@ struct PlexHomeUIKitBridge: UIViewControllerRepresentable {
         // Refresh the callbacks to capture the latest bindings.
         uiViewController.onSelectMusic = { meta in
             context.coordinator.selectedMusicItem.wrappedValue = meta
-        }
-        if case .search = mode {
-            if let binding = searchQueryBinding {
-                uiViewController.onSearchQueryChangedByController = { query in
-                    binding.wrappedValue = query
-                }
-            }
-            uiViewController.updateSearchQuery(searchQuery)
-            if searchSubmitCount != context.coordinator.lastSearchSubmitCount {
-                context.coordinator.lastSearchSubmitCount = searchSubmitCount
-                uiViewController.submitSearch()
-            }
         }
     }
 }

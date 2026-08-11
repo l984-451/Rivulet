@@ -363,6 +363,61 @@ final class BelowFoldSectionHeader: UICollectionReusableView {
     func configure(title: String) { titleLabel.text = title }
 }
 
+// MARK: - Season divider
+
+/// Slim, non-focusable boundary marker between seasons in the flat episode
+/// rail: a broken vertical hairline through the thumb band with a compact
+/// season chip ("S3" / "SP") in the gap. Structure only — the season's full
+/// identity lives in the info strip and the pills. The focus engine skips it
+/// (canBecomeFocused false + the collection's canFocusItemAt exclusion), so
+/// the rail's focus order is unchanged.
+final class SeasonDividerCell: UICollectionViewCell {
+    static let reuseID = "SeasonDividerCell"
+    static let cardWidth: CGFloat = 100
+
+    private let topLine = UIView()
+    private let bottomLine = UIView()
+    private let chip = UILabel()
+
+    override var canBecomeFocused: Bool { false }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        for line in [topLine, bottomLine] {
+            line.translatesAutoresizingMaskIntoConstraints = false
+            line.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+            line.layer.cornerRadius = 1
+            contentView.addSubview(line)
+        }
+        chip.translatesAutoresizingMaskIntoConstraints = false
+        chip.font = .systemFont(ofSize: 29, weight: .semibold)
+        chip.textColor = UIColor.white.withAlphaComponent(0.55)
+        chip.textAlignment = .center
+        contentView.addSubview(chip)
+        NSLayoutConstraint.activate([
+            // Centered on the thumb band (the cell spans the full card height,
+            // text zone included, so the marker aligns with the artwork).
+            chip.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            chip.centerYAnchor.constraint(equalTo: contentView.topAnchor, constant: EpisodeCell.thumbHeight / 2),
+            topLine.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            topLine.widthAnchor.constraint(equalToConstant: 2),
+            topLine.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            topLine.bottomAnchor.constraint(equalTo: chip.topAnchor, constant: -12),
+            bottomLine.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            bottomLine.widthAnchor.constraint(equalToConstant: 2),
+            bottomLine.topAnchor.constraint(equalTo: chip.bottomAnchor, constant: 12),
+            bottomLine.bottomAnchor.constraint(equalTo: contentView.topAnchor, constant: EpisodeCell.thumbHeight - 8),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("SeasonDividerCell is not Storyboard-backed") }
+
+    func configure(label: String) {
+        chip.text = label
+    }
+}
+
 // MARK: - Helpers
 
 private extension UICollectionViewCell {

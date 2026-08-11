@@ -99,22 +99,26 @@ struct MusicHomeView: View {
     }
 
     var body: some View {
-        MusicFocusContainedView(blockLeftEscape: true, onLeftBlocked: {}) {
-            NavigationStack {
-                HStack(alignment: .top, spacing: 0) {
-                    sidebar
-                    content
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .navigationDestination(item: $selectedArtist) { artist in
-                    MusicArtistDetailView(artist: artist)
-                }
-                .navigationDestination(item: $selectedAlbum) { album in
-                    MusicAlbumDetailView(album: album)
-                }
-                .navigationDestination(item: $selectedPlaylist) { playlist in
-                    MusicPlaylistView(playlist: playlist)
-                }
+        // No left-escape block here. It dates from the SwiftUI
+        // `TabView(.sidebarAdaptable)` shell, which owned Left itself; under the
+        // UIKit shell the exit is the edge catcher at x=0, and blocking the move
+        // with an empty `onLeftBlocked` left Music with no way back to the
+        // sidebar at all. Left now walks content -> Music's own sidebar -> the
+        // catcher, which is what every other tab does.
+        NavigationStack {
+            HStack(alignment: .top, spacing: 0) {
+                sidebar
+                content
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .navigationDestination(item: $selectedArtist) { artist in
+                MusicArtistDetailView(artist: artist)
+            }
+            .navigationDestination(item: $selectedAlbum) { album in
+                MusicAlbumDetailView(album: album)
+            }
+            .navigationDestination(item: $selectedPlaylist) { playlist in
+                MusicPlaylistView(playlist: playlist)
             }
         }
         .onChange(of: selectedArtist) { _, new in
@@ -915,47 +919,3 @@ private struct MusicGridCard: View {
 /// to block leftward focus escape — preventing the system tvOS sidebar tab bar from
 /// stealing focus when the user navigates left within the music section.
 ///
-/// Mirrors the `FocusContainedView` used in SettingsView.swift.
-private struct MusicFocusContainedView<Content: View>: UIViewControllerRepresentable {
-    let blockLeftEscape: Bool
-    let onLeftBlocked: () -> Void
-    let content: Content
-
-    init(blockLeftEscape: Bool, onLeftBlocked: @escaping () -> Void, @ViewBuilder content: () -> Content) {
-        self.blockLeftEscape = blockLeftEscape
-        self.onLeftBlocked = onLeftBlocked
-        self.content = content()
-    }
-
-    func makeUIViewController(context: Context) -> MusicFocusContainedHostingController<Content> {
-        let vc = MusicFocusContainedHostingController(rootView: content)
-        vc.view.backgroundColor = .clear
-        vc.blockLeftEscape = blockLeftEscape
-        vc.onLeftBlocked = onLeftBlocked
-        return vc
-    }
-
-    func updateUIViewController(_ vc: MusicFocusContainedHostingController<Content>, context: Context) {
-        vc.blockLeftEscape = blockLeftEscape
-        vc.onLeftBlocked = onLeftBlocked
-        vc.rootView = content
-    }
-}
-
-private final class MusicFocusContainedHostingController<Content: View>: UIHostingController<Content> {
-    var blockLeftEscape = false
-    var onLeftBlocked: (() -> Void)?
-
-    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        if blockLeftEscape,
-           context.focusHeading == .left,
-           let nextView = context.nextFocusedView,
-           !nextView.isDescendant(of: view) {
-            DispatchQueue.main.async { [weak self] in
-                self?.onLeftBlocked?()
-            }
-            return false
-        }
-        return super.shouldUpdateFocus(in: context)
-    }
-}

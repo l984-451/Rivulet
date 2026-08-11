@@ -361,6 +361,18 @@ final class PreviewCarouselViewController: UIViewController {
         expandedDetail.onShowRelatedDetails = { [weak self] item in
             self?.presentStandaloneDetail(item)
         }
+
+        // Season pill Select → that season's own standalone page (full summary,
+        // only its episodes, its extras). Same-season guard: on a season's own
+        // page, re-selecting its pill must not stack a duplicate of the page it
+        // is already on. SIBLING seasons still open — presentStandaloneDetail
+        // walks to the topmost presented controller, so season-to-season hopping
+        // stacks naturally, and each hop keeps the focus-restore contract.
+        expandedDetail.onOpenSeason = { [weak self] season in
+            guard let self else { return }
+            if self.standaloneDetail, self.items.first?.ref == season.ref { return }
+            self.presentStandaloneDetail(season)
+        }
         // Cast / crew cell Select → person detail page (full-screen).
         expandedDetail.onSelectPerson = { [weak self] person in
             guard let self else { return }

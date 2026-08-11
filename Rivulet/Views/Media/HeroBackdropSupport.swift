@@ -13,7 +13,6 @@
 
 import SwiftUI
 import UIKit
-import Combine
 
 struct HeroBackdropRequest: Hashable {
     let cacheKey: String
@@ -22,187 +21,20 @@ struct HeroBackdropRequest: Hashable {
     let logoURL: URL?
 }
 
-struct HeroBackdropResolution: Equatable {
-    let displayedBackdropURL: URL?
-    let pendingUpgradeURL: URL?
-    let logoURL: URL?
-    let thumbnailURL: URL?
-
-    var canUpgradeAfterSettle: Bool {
-        pendingUpgradeURL != nil && pendingUpgradeURL != displayedBackdropURL
-    }
-}
-
-struct HeroBackdropSession: Equatable {
-    var displayedBackdropURL: URL?
-    var pendingUpgradeURL: URL?
-    var logoURL: URL?
-    var thumbnailURL: URL?
-    private(set) var motionLocked = false
-    private(set) var lastUnlockedAt: Date? = Date()
-
-    init() {}
-
-    init(seed request: HeroBackdropRequest) {
-        displayedBackdropURL = request.backdropURL ?? request.thumbnailURL
-        thumbnailURL = request.thumbnailURL
-        logoURL = request.logoURL
-    }
-
-    var canUpgradeAfterSettle: Bool {
-        pendingUpgradeURL != nil && pendingUpgradeURL != displayedBackdropURL
-    }
-
-    mutating func stage(_ resolution: HeroBackdropResolution) {
-        logoURL = resolution.logoURL
-        thumbnailURL = resolution.thumbnailURL
-
-        if resolution.pendingUpgradeURL == nil {
-            displayedBackdropURL = resolution.displayedBackdropURL
-        } else if displayedBackdropURL == nil {
-            displayedBackdropURL = resolution.displayedBackdropURL
-        }
-
-        pendingUpgradeURL = resolution.pendingUpgradeURL
-    }
-
-    mutating func setMotionLocked(_ locked: Bool, now: Date = Date()) {
-        guard motionLocked != locked else { return }
-        motionLocked = locked
-        lastUnlockedAt = locked ? nil : now
-    }
-
-    @discardableResult
-    mutating func applyPendingUpgradeIfReady(
-        now: Date = Date(),
-        minimumStableDuration: TimeInterval = 0.15
-    ) -> Bool {
-        guard !motionLocked,
-              let pendingUpgradeURL,
-              let lastUnlockedAt,
-              now.timeIntervalSince(lastUnlockedAt) >= minimumStableDuration else {
-            return false
-        }
-
-        displayedBackdropURL = pendingUpgradeURL
-        self.pendingUpgradeURL = nil
-        return true
-    }
-}
-
-struct HeroBackdropLoadGate {
-    private(set) var generation = 0
-
-    @discardableResult
-    mutating func begin() -> Int {
-        generation += 1
-        return generation
-    }
-
-    func isCurrent(_ token: Int) -> Bool {
-        token == generation
-    }
-}
-
 actor HeroBackdropResolver {
     static let shared = HeroBackdropResolver()
 
-    func resolveAssets(for request: HeroBackdropRequest) async -> HeroBackdropResolution {
-        HeroBackdropResolution(
-            displayedBackdropURL: request.backdropURL ?? request.thumbnailURL,
-            pendingUpgradeURL: nil,
-            logoURL: request.logoURL,
-            thumbnailURL: request.thumbnailURL
-        )
-    }
-
     func playerLoadingImages(for request: HeroBackdropRequest) async -> (UIImage?, UIImage?) {
-        let resolution = await resolveAssets(for: request)
-        let backdropURL = resolution.pendingUpgradeURL ?? resolution.displayedBackdropURL
+        let backdropURL = request.backdropURL ?? request.thumbnailURL
 
         async let backdropTask: UIImage? = backdropURL != nil
             ? ImageCacheManager.shared.imageFullSize(for: backdropURL!)
             : nil
-        async let thumbnailTask: UIImage? = resolution.thumbnailURL != nil
-            ? ImageCacheManager.shared.image(for: resolution.thumbnailURL!)
+        async let thumbnailTask: UIImage? = request.thumbnailURL != nil
+            ? ImageCacheManager.shared.image(for: request.thumbnailURL!)
             : nil
 
         return await (backdropTask, thumbnailTask)
-    }
-}
-
-@MainActor
-final class HeroBackdropCoordinator: ObservableObject {
-    @Published private(set) var session = HeroBackdropSession()
-
-    private var request: HeroBackdropRequest?
-    private var loadGate = HeroBackdropLoadGate()
-    private var loadTask: Task<Void, Never>?
-    private var upgradeTask: Task<Void, Never>?
-
-    deinit {
-        loadTask?.cancel()
-        upgradeTask?.cancel()
-    }
-
-    func load(request: HeroBackdropRequest?, motionLocked: Bool) {
-        if request == self.request {
-            setMotionLocked(motionLocked)
-            return
-        }
-
-        self.request = request
-        loadTask?.cancel()
-        upgradeTask?.cancel()
-
-        guard let request else {
-            session = HeroBackdropSession()
-            return
-        }
-
-        var seededSession = HeroBackdropSession(seed: request)
-        seededSession.setMotionLocked(motionLocked)
-        session = seededSession
-
-        let token = loadGate.begin()
-        loadTask = Task { [weak self] in
-            let resolution = await HeroBackdropResolver.shared.resolveAssets(for: request)
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                guard let self, self.loadGate.isCurrent(token), self.request == request else { return }
-
-                var nextSession = self.session
-                nextSession.stage(resolution)
-                self.session = nextSession
-                self.schedulePendingUpgradeIfNeeded()
-            }
-        }
-    }
-
-    func setMotionLocked(_ locked: Bool) {
-        var nextSession = session
-        nextSession.setMotionLocked(locked)
-        session = nextSession
-        schedulePendingUpgradeIfNeeded()
-    }
-
-    private func schedulePendingUpgradeIfNeeded() {
-        upgradeTask?.cancel()
-        guard session.canUpgradeAfterSettle, !session.motionLocked else { return }
-
-        upgradeTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 150_000_000)
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                guard let self else { return }
-
-                var nextSession = self.session
-                guard nextSession.applyPendingUpgradeIfReady() else { return }
-                self.session = nextSession
-            }
-        }
     }
 }
 

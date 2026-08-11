@@ -17,8 +17,9 @@
 //  handles, not from swipes — the same ceiling the other sheets have for an
 //  over-tall row.
 //
-//  The title block stays pinned at the top; the summary is centered in
-//  whatever height is left under it (see `setupViews`).
+//  The title block sits at the top with the summary directly under it; a short
+//  summary leaves the rest of the fixed-height panel empty rather than floating
+//  in the middle of it (see `setupViews`).
 //
 
 import UIKit
@@ -26,8 +27,7 @@ import UIKit
 final class CardDescriptionView: UIView, InfoTabSheet {
 
     private enum Metrics {
-        /// Minimum gap between the title block and the summary. Only binds when
-        /// the summary is too tall to center.
+        /// Gap between the title block and the summary.
         static let headerGap: CGFloat = 20
         /// Gap between summary paragraphs.
         static let paragraphSpacing: CGFloat = 12
@@ -38,8 +38,6 @@ final class CardDescriptionView: UIView, InfoTabSheet {
     private let content = UIView()
     private let headerRow = InfoFocusRowView()
     private let summaryStack = UIStackView()
-    /// The region the summary is centered in: header bottom → content bottom.
-    private let summarySpace = UILayoutGuide()
 
     /// Fires when focus enters/leaves this sheet, so the hosting panel can
     /// brighten its ring (the sheet draws no focus treatment of its own).
@@ -58,19 +56,16 @@ final class CardDescriptionView: UIView, InfoTabSheet {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// Title pinned at the top, summary centered in the height left under it.
+    /// Title at the top, summary directly under it. Both read from the top
+    /// down, which is the only arrangement that looks deliberate.
     ///
-    /// The centering is one breakable constraint, not a pair of spacer views:
-    /// spacers inside a `.fill` stack do NOT split the slack evenly, whatever
-    /// equal-height constraint they carry. The stack stretches the FIRST view
-    /// with the lowest hugging priority and leaves the rest at zero, which put
-    /// the summary flush against the bottom of the sheet (measured: 350pt above
-    /// it, 12pt below).
-    ///
-    /// So: `summarySpace` spans header-bottom → content-bottom, the summary
-    /// centers in it at `.defaultHigh`, and required inequalities keep it
-    /// inside. A summary taller than the space makes those inequalities bind,
-    /// the center breaks, and the sheet scrolls from its top as normal.
+    /// The summary used to be CENTERED in the height left under the title,
+    /// because the panel is a fixed 520pt viewport and a short summary leaves
+    /// most of it empty. That is what issue #278 reported: on a two-sentence
+    /// synopsis it floated with roughly 190pt of nothing above it and 260pt
+    /// below, reading as a layout bug rather than as breathing room. Empty
+    /// space at the BOTTOM of a fixed sheet is unremarkable; a paragraph
+    /// hovering in the middle of one is not.
     private func setupViews() {
         summaryStack.axis = .vertical
         summaryStack.spacing = Metrics.paragraphSpacing
@@ -81,7 +76,6 @@ final class CardDescriptionView: UIView, InfoTabSheet {
         }
         content.addSubview(headerRow)
         content.addSubview(summaryStack)
-        content.addLayoutGuide(summarySpace)
         scrollView.addSubview(content)
         addSubview(scrollView)
 
@@ -100,9 +94,6 @@ final class CardDescriptionView: UIView, InfoTabSheet {
         // sheet is scrollable. Short content still hugs (hugging is only 250).
         scrollHeight.priority = .defaultHigh - 1
 
-        let centerSummary = summaryStack.centerYAnchor.constraint(equalTo: summarySpace.centerYAnchor)
-        centerSummary.priority = .defaultHigh
-
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -115,25 +106,21 @@ final class CardDescriptionView: UIView, InfoTabSheet {
             content.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             content.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
             content.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-            // At least a viewport tall, so short content has slack to center in.
+            // At least a viewport tall, so a short sheet doesn't collapse and
+            // leave the panel shorter than its siblings.
             content.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.heightAnchor),
 
             headerRow.topAnchor.constraint(equalTo: content.topAnchor),
             headerRow.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             headerRow.trailingAnchor.constraint(equalTo: content.trailingAnchor),
 
-            summarySpace.topAnchor.constraint(equalTo: headerRow.bottomAnchor),
-            summarySpace.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-
+            summaryStack.topAnchor.constraint(equalTo: headerRow.bottomAnchor,
+                                              constant: Metrics.headerGap),
             summaryStack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             summaryStack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            // The region starts AT the title, so centering it gives equal gaps
-            // above and below. `headerGap` is only the floor, for the tall case
-            // where the center breaks and the summary sits under the title.
-            summaryStack.topAnchor.constraint(greaterThanOrEqualTo: summarySpace.topAnchor,
-                                              constant: Metrics.headerGap),
-            summaryStack.bottomAnchor.constraint(lessThanOrEqualTo: summarySpace.bottomAnchor),
-            centerSummary,
+            // Required, so a summary taller than the viewport GROWS the scroll
+            // content instead of overflowing it unscrollably.
+            summaryStack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
         ])
     }
 

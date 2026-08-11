@@ -25,34 +25,3 @@ struct CardButtonStyle: ButtonStyle {
             .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }
-
-// MARK: - Watched Corner Tag
-
-/// A rounded-rectangle badge indicating the item has been watched.
-/// Sits inside the top-trailing corner of artwork with a dark
-/// translucent fill and a white checkmark.
-struct WatchedCornerTag: View {
-    var cornerRadius: CGFloat = ScaledDimensions.posterCornerRadius
-
-    private let size: CGFloat = 44
-    private let checkSize: CGFloat = 20
-
-    var body: some View {
-        UnevenRoundedRectangle(
-            cornerRadii: .init(
-                topLeading: 0,
-                bottomLeading: cornerRadius,
-                bottomTrailing: 0,
-                topTrailing: 0
-            ),
-            style: .continuous
-        )
-        .fill(.black.opacity(0.55))
-        .frame(width: size, height: size)
-        .overlay {
-            Image(systemName: "checkmark")
-                .font(.system(size: checkSize, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-    }
-}

@@ -27,9 +27,6 @@ final class SettingsContainerViewController: UIViewController {
 
     /// Fired (post-transition) with the new sub-page state (`true` = depth > 1).
     var onDepthChange: ((Bool) -> Void)?
-    /// Fired when the user confirms "Save & Apply" after editing the Sidebar
-    /// Libraries page → the shell runs the Home-context rebuild.
-    var onRequestLibraryApply: (() -> Void)?
 
     private let titleLabel = UILabel()
     private let leftPanel = SettingsLeftPanelView()
@@ -150,14 +147,6 @@ final class SettingsContainerViewController: UIViewController {
 
     func pop() {
         guard !isAnimating, pages.count > 1 else { return }
-        // Intercept Back on an edited Sidebar Libraries page: confirm BEFORE
-        // leaving (the popup appears over the page itself, not after navigating
-        // back). Save & Apply soft-restarts; Not Now clears the flag and pops.
-        if let top = topPage, top.page == .libraries, top.librariesDidEdit,
-           presentedViewController == nil {
-            presentLibraryApplyConfirmation()
-            return
-        }
         let oldVC = pages.removeLast()
         let newVC = topPage
         if let newVC {
@@ -182,24 +171,6 @@ final class SettingsContainerViewController: UIViewController {
         updateChrome(for: topPage?.page ?? .root, animated: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
-    }
-
-    /// Presented over the Sidebar Libraries page (before leaving it) when it has
-    /// unsaved edits. Save & Apply soft-restarts; Not Now clears the dirty flag
-    /// and pops back normally (changes still take effect on next launch).
-    private func presentLibraryApplyConfirmation() {
-        guard presentedViewController == nil else { return }
-        let popup = ConfirmationPopupViewController(
-            title: "Apply Library Changes?",
-            message: "Rivulet will quickly reload to update your sidebar and return you to the Home screen.",
-            confirmTitle: "Save & Apply",
-            cancelTitle: "Not Now",
-            onConfirm: { [weak self] in self?.onRequestLibraryApply?() },
-            onCancel: { [weak self] in
-                self?.topPage?.acknowledgeLibraryEdits()
-                self?.pop()
-            })
-        present(popup, animated: true)
     }
 
     /// Custom directional cross-dissolve. forward (push): new from right, old

@@ -5,8 +5,8 @@
 //  CastCell.swift
 //  Rivulet
 //
-//  UIKit port of the SwiftUI `PersonCard` (CastMemberCard.swift). A cast/crew
-//  member: circular photo over a name + subtitle (role / "Director").
+//  A cast/crew member: circular photo over a name + subtitle (role /
+//  "Director"). Replaced the SwiftUI `PersonCard`, since deleted.
 //
 //  Focus treatment is ENLARGE-ONLY: the avatar scales up on focus, nothing else
 //  (no ring, no glow — a TVCardView's rectangular card can't be round, and the

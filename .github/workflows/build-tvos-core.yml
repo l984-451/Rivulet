@@ -1,0 +1,71 @@
+name: tvOS Build (shared code)
+
+# The mirror of build-ios.yml, scoped narrower: the maintainer's daily loop
+# builds tvOS constantly, so tvOS-only changes don't need a CI compile. The
+# hole this closes is a RivuletCore or project-file change made from the iOS
+# side that breaks the tvOS target — the one direction local habit doesn't
+# cover. RivuletiOS/ is deliberately absent from the paths: it never compiles
+# into the tvOS app.
+
+on:
+  pull_request:
+    paths:
+      - 'RivuletCore/**'
+      - 'Rivulet.xcodeproj/**'
+      - '.github/workflows/build-tvos-core.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'RivuletCore/**'
+      - 'Rivulet.xcodeproj/**'
+      - '.github/workflows/build-tvos-core.yml'
+
+concurrency:
+  group: build-tvos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$XCODE" ]; then
+            echo "::warning::No Xcode 26 on this image. Available:"
+            ls -d /Applications/Xcode*.app
+            XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Generate placeholder Secrets.swift
+        run: cp RivuletCore/Config/Secrets.swift.template RivuletCore/Config/Secrets.swift
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Rivulet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # ARCHS=arm64: a generic simulator destination otherwise builds the
+      # x86_64 slice too, and LibDovi's tvOS-simulator xcframework carries no
+      # x86_64 dovi_* symbols — the fat link fails. Runners are arm64 anyway.
+      - name: Build Rivulet (Debug, simulator)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Rivulet.xcodeproj \
+            -scheme "Rivulet" \
+            -configuration Debug \
+            -destination 'generic/platform=tvOS Simulator' \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            build

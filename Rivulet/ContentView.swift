@@ -23,7 +23,6 @@ struct ContentView: View {
     @StateObject private var dataStore = PlexDataStore.shared
     @StateObject private var authManager = PlexAuthManager.shared
     @StateObject private var profileManager = PlexUserProfileManager.shared
-    @StateObject private var restartCoordinator = AppRestartCoordinator.shared
     #if DEBUG
     @State private var showSplash = false
     #else
@@ -38,11 +37,6 @@ struct ContentView: View {
 
     var body: some View {
         TVSidebarView()
-            // Soft restart: bumping the token recreates the whole sidebar shell
-            // (launch-like) so the .sidebarAdaptable sidebar is rebuilt with the
-            // current library set instead of mutated in place (which wedges
-            // focus). Singletons persist, so it's near-instant.
-            .id(restartCoordinator.token)
             .modifier(AutoPlayLauncherModifier())
             .overlay {
                 if showSplash {
@@ -50,14 +44,7 @@ struct ContentView: View {
                         .transition(.opacity)
                 }
             }
-            .overlay {
-                if restartCoordinator.isRestarting {
-                    restartingOverlay
-                        .transition(.opacity)
-                }
-            }
             .animation(.easeOut(duration: 0.4), value: showSplash)
-            .animation(.easeInOut(duration: 0.2), value: restartCoordinator.isRestarting)
         .onChange(of: authManager.hasCredentials) { _, hasCredentials in
             splashLog.info("hasCredentials changed to \(hasCredentials)")
             if !hasCredentials {
@@ -177,18 +164,6 @@ struct ContentView: View {
                 heroCapTask = nil
             }
         }
-    }
-
-    // Brief cover shown while the sidebar shell rebuilds on a soft restart.
-    private var restartingOverlay: some View {
-        ZStack {
-            VisualEffectBlur(style: .dark)
-                .ignoresSafeArea()
-            ProgressView()
-                .controlSize(.large)
-                .tint(.white)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var splashOverlay: some View {

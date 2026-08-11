@@ -61,5 +61,16 @@ extension Notification.Name {
     /// TV app), false once focus returns to the top row or leaves the page.
     /// Change-only: posted when the value flips, not on every focus move.
     static let contentFocusBelowTopChanged = Notification.Name("contentFocusBelowTopChanged")
+
+    /// Posted by a content page the moment it goes from having nothing
+    /// focusable (a loading or splash state) to showing its collection view.
+    ///
+    /// The focus engine has no notion of "this surface just became focusable":
+    /// it re-resolves on a press, a presentation, or an explicit request, and a
+    /// page that finishes loading is none of those. So a page that mounts empty
+    /// and fills in later strands focus wherever it was parked, and every arrow
+    /// press is dead until the user leaves the tab. `RootShellViewController`
+    /// listens and re-drives focus into the content.
+    static let contentBecameFocusable = Notification.Name("contentBecameFocusable")
 }
 

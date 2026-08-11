@@ -42,7 +42,7 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
         XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 1, to: nil, movingLeft: false, pillCount: 3))
     }
 
-    // MARK: - Description tab: title on top, summary centered below it
+    // MARK: - Description tab: title on top, summary directly under it
 
     private func descriptionView(summary: String) -> CardDescriptionView {
         var episode = PlexMetadata()
@@ -68,7 +68,10 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
         return nil
     }
 
-    func testShortSummaryIsVerticallyCenteredUnderTheTitle() throws {
+    /// Issue #278: a short summary used to be centered in the leftover height,
+    /// which read as a spacing bug. It starts under the title now, and it must
+    /// start there at BOTH lengths — the gap can't change with the summary.
+    func testShortSummaryStartsDirectlyUnderTheTitle() throws {
         let summary = "A short summary."
         let view = descriptionView(summary: summary)
         let title = try XCTUnwrap(label(withText: "The Pilot", in: view))
@@ -76,17 +79,14 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
 
         let titleFrame = title.convert(title.bounds, to: view)
         let bodyFrame = body.convert(body.bounds, to: view)
-        let gapAbove = bodyFrame.minY - titleFrame.maxY
-        let gapBelow = view.bounds.height - bodyFrame.maxY
 
-        XCTAssertGreaterThan(gapAbove, 40, "summary should not be hugging the title")
-        XCTAssertEqual(gapAbove, gapBelow, accuracy: 14,
-                       "summary should sit midway between the title and the sheet's bottom")
+        XCTAssertEqual(bodyFrame.minY - titleFrame.maxY, 20, accuracy: 2,
+                       "short summary must sit one fixed gap under the title, not float mid-sheet")
     }
 
-    func testLongSummaryCollapsesTheSpacersAndStartsBelowTheTitle() throws {
-        // Enough paragraphs to overflow 448pt, so centering must give way to
-        // scrolling from the top.
+    func testLongSummaryStartsAtTheSameGapBelowTheTitle() throws {
+        // Enough paragraphs to overflow 448pt: the sheet scrolls from the top
+        // and the header gap is unchanged.
         let paragraphs = (1...12).map { "Paragraph number \($0) of a very long summary that wraps onto more than one line on its own." }
         let view = descriptionView(summary: paragraphs.joined(separator: "\n"))
         let title = try XCTUnwrap(label(withText: "The Pilot", in: view))
@@ -95,8 +95,8 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
         let titleFrame = title.convert(title.bounds, to: view)
         let firstFrame = first.convert(first.bounds, to: view)
 
-        XCTAssertLessThan(firstFrame.minY - titleFrame.maxY, 30,
-                          "spacers must collapse once the summary overflows the sheet")
+        XCTAssertEqual(firstFrame.minY - titleFrame.maxY, 20, accuracy: 2,
+                       "the header gap is fixed; it must not depend on how long the summary is")
     }
 
     // MARK: - Focus only where there is something to scroll

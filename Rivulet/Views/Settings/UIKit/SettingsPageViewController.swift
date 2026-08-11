@@ -24,15 +24,6 @@ final class SettingsPageViewController: UIViewController {
     var onPop: (() -> Void)?
     /// A row gained focus → container updates the left description panel.
     var onFocusRow: ((String?) -> Void)?
-    /// True once the user has changed any library setting on the Sidebar
-    /// Libraries page this visit (toggle / Add All / Remove All / reorder). The
-    /// container reads it on pop to decide whether to offer "Save & Apply"
-    /// (rebuild the sidebar). Resets when the page VC is recreated (next visit).
-    private(set) var librariesDidEdit = false
-    private func markLibraryEdit() { if page == .libraries { librariesDidEdit = true } }
-    /// User chose "Not Now" on the apply prompt: stop intercepting Back so the
-    /// page pops normally (edits still persist and apply on next launch).
-    func acknowledgeLibraryEdits() { librariesDidEdit = false }
 
     private(set) var collectionView: UICollectionView!
     private var rows: [SettingsRowItem] = []
@@ -162,7 +153,6 @@ final class SettingsPageViewController: UIViewController {
         guard toItem >= 0, toItem < rows.count, rows[toItem].isReorderable else { return }
         let to = IndexPath(item: toItem, section: 0)
         rows[from.item].onReorder?(up)        // persist the single-step move
-        markLibraryEdit()
         let moved = rows.remove(at: from.item)
         rows.insert(moved, at: toItem)
         collectionView.performBatchUpdates { collectionView.moveItem(at: from, to: to) }
@@ -272,13 +262,11 @@ extension SettingsPageViewController: UICollectionViewDataSource, UICollectionVi
             set(!get())
             (collectionView.cellForItem(at: indexPath) as? SettingsCell)?.updateValue(get() ? "On" : "Off")
             refreshDimmedRows()
-            markLibraryEdit()
         case .cycle(let value, let next):
             next()
             (collectionView.cellForItem(at: indexPath) as? SettingsCell)?.updateValue(value())
         case .action(_, let handler):
             handler(self)
-            if item.id == "addAllLibraries" || item.id == "removeAllLibraries" { markLibraryEdit() }
         case .option(_, let select):
             select()
             onPop?()

@@ -44,11 +44,6 @@ struct TVSidebarView: View {
     @State private var showWhatsNew = false
     @State private var didApplyDebugLaunch = false
     @State private var musicLibraryEntryToken = UUID()
-    // Fresh sign-in: a returning user already has credentials at launch (the
-    // sidebar populates via the normal Home sync), so we mark it handled in
-    // onAppear and DON'T prompt. Only a genuine sign-in this session (libraries
-    // 0→N while signed in) offers a quick reload to populate the sidebar.
-    @State private var freshSignInHandled = false
 
     @Namespace private var contentNamespace
 
@@ -112,7 +107,7 @@ struct TVSidebarView: View {
             interactionBlocked: nestedNavState.isNested || nestedNavState.isSettingsSubPage,
             pillSuppressed: isMusicLibrarySelected,
             sections: shellSections,
-            content: { tab in AnyView(tabContent(for: tab)) })
+            content: { tab in contentViewController(for: tab) })
         .ignoresSafeArea()
         .onChange(of: selectedTab) { _, newTab in
             nestedNavState.isNested = false
@@ -340,9 +335,6 @@ struct TVSidebarView: View {
             if show { presentWhatsNewPopup() }
         }
         .onAppear {
-            // Returning user already authed at launch → sidebar populates via the
-            // normal Home sync; don't offer the fresh-sign-in reload.
-            if authManager.selectedServerToken != nil { freshSignInHandled = true }
             applyDebugLaunchTab()
             // Defer What's New check if profile picker needs to be shown first
             if profileManager.showProfilePickerOnLaunch && authManager.selectedServerToken != nil {
@@ -353,11 +345,6 @@ struct TVSidebarView: View {
         // DEBUG: launch straight into a named library, e.g.
         // `xcrun simctl launch --setenv RIVULET_OPEN_LIBRARY="TV Shows" ...`
         .onChange(of: dataStore.libraries.count) { _, _ in applyDebugLaunchTab() }
-        // Fresh sign-in: libraries just arrived this session → offer a quick
-        // reload to populate the sidebar now (instead of only on reaching Home).
-        .onChange(of: visibleLibraryCount) { _, count in
-            handleVisibleLibraryCountChange(count)
-        }
         // Profile picker overlay (launch-time "Who's Watching")
         .fullScreenCover(isPresented: $showProfilePicker) {
             ProfilePickerOverlay(isPresented: $showProfilePicker)
@@ -404,6 +391,41 @@ struct TVSidebarView: View {
 
     // MARK: - Tab Content
 
+    /// Builds one tab's content view controller for the UIKit shell.
+    ///
+    /// A surface that is ALREADY UIKit mounts directly, with no
+    /// `UIHostingController` in between. That sandwich is not free: a hosting
+    /// controller is not focusable in the runloop turn it mounts in, which is
+    /// the whole reason `RootShellViewController.driveFocusIntoContent` has to
+    /// retry at all (issue #280), and every hosted tab's root is rebuilt on
+    /// every SwiftUI update of this view.
+    ///
+    /// Still hosted, and correctly so: Music and Live TV are genuinely
+    /// SwiftUI, and Home carries the welcome / profile-gate overlays.
+    private func contentViewController(for tab: SidebarTab) -> UIViewController {
+        switch tab {
+        case .discover:
+            return PlexHomeViewController(mode: .discover)
+        case .search:
+            let search = SearchContainerViewController()
+            search.onNestedChange = { [nestedNavState] isNested in
+                nestedNavState.isNested = isNested
+            }
+            return search
+        case .library(let key):
+            // The shell caches per `SidebarTab`, so each library key already
+            // gets its own controller — this is what the SwiftUI `.id(key)`
+            // was buying. Music libraries render MusicHomeView, so they fall
+            // through to hosting.
+            if let lib = dataStore.libraries.first(where: { $0.key == key }), !lib.isMusicLibrary {
+                return PlexHomeViewController(mode: .library(key: lib.key, title: lib.title))
+            }
+        default:
+            break
+        }
+        return RootShellHostingController(rootView: AnyView(tabContent(for: tab)))
+    }
+
     /// Settings tab content. The Settings surface is pure UIKit
     /// (`UIKitSettingsContainer` → `SettingsContainerViewController`); the old
     /// SwiftUI `SettingsView` has been retired.
@@ -426,10 +448,10 @@ struct TVSidebarView: View {
             case .account:
                 Color.clear
             case .search:
-                // UIKit Search: the home VC in .search mode under the system
-                // `.searchable` keyboard. (The retired SwiftUI PlexSearchView
-                // was removed — see git history.)
-                UIKitSearchContainer()
+                // Unreachable: `contentViewController(for:)` mounts
+                // SearchContainerViewController directly. Kept so this switch
+                // stays exhaustive over SidebarTab.
+                Color.clear
             case .home:
                 // PlexHomeRoot is ALWAYS rendered (never an if/else branch) so
                 // its SwiftUI identity — and the singleton UIKit home VC it
@@ -541,44 +563,6 @@ struct TVSidebarView: View {
         let popup = SettingsContent.makeChangelogPopup()
         popup.onDismiss = { showWhatsNew = false }
         top.present(popup, animated: true)
-    }
-
-    /// Sidebar-relevant library count (kept out of `body` to ease type-checking).
-    private var visibleLibraryCount: Int { dataStore.visibleMediaLibraries.count }
-
-    private func handleVisibleLibraryCountChange(_ count: Int) {
-        guard !freshSignInHandled, count > 0,
-              authManager.selectedServerToken != nil else { return }
-        freshSignInHandled = true
-        presentFreshSignInReloadPopup()
-    }
-
-    /// First sign-in: offer a quick soft-restart so the freshly-loaded libraries
-    /// populate the sidebar immediately (the same glass confirm as the toggle
-    /// flow). "Later" leaves it — the sidebar still fills in when you reach Home.
-    private func presentFreshSignInReloadPopup(attempt: Int = 0) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            let top = Self.topPresentedViewController()
-            let name = top.map { String(describing: type(of: $0)) } ?? "nil"
-            // Right after sign-in the Plex auth screen is still the top VC and is
-            // about to dismiss; presenting on a transitioning VC is swallowed.
-            // Wait until the main UI is on top.
-            let transient = top == nil
-                || top!.isBeingDismissed
-                || top!.isBeingPresented
-                || name.contains("Auth")
-            if transient {
-                if attempt < 12 { self.presentFreshSignInReloadPopup(attempt: attempt + 1) }
-                return
-            }
-            let popup = ConfirmationPopupViewController(
-                title: "Load Your Libraries?",
-                message: "Rivulet will quickly reload to add your libraries to the sidebar and return you to the Home screen.",
-                confirmTitle: "Reload",
-                cancelTitle: "Later",
-                onConfirm: { AppRestartCoordinator.shared.softRestart() })
-            top!.present(popup, animated: true)
-        }
     }
 
     private static func topPresentedViewController() -> UIViewController? {

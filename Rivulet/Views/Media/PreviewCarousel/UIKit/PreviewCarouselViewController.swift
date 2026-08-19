@@ -337,7 +337,7 @@ final class PreviewCarouselViewController: UIViewController {
         expandedDetail.onPlayEpisode = { [weak self] episode in
             self?.playMediaItem(episode)
         }
-        // Trailer / extra Select → play that video (no resume). Routed on the
+        // Trailer / extra Select → play that video. Routed on the
         // extra's playbackKey, NOT its id: IVA extras have no library ratingKey.
         expandedDetail.onPlayTrailer = { [weak self] trailer in
             self?.presentExtraPlayer(trailer)
@@ -1076,7 +1076,12 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     /// Resolve a Plex ratingKey → metadata → present the player. Used for the
-    /// hero/episode play AND trailer/extra playback (resumeOffset nil for those).
+    /// hero/episode play AND trailer/extra playback.
+    ///
+    /// A nil `resumeOffset` means "ask the server", not "start from zero": the
+    /// metadata we fetch here is the only place a library-addressable extra's
+    /// resume point appears (issue #303 — extras always restarted), and it is
+    /// also fresher than a MediaItem's cached userState.
     private func presentPlayer(ratingKey: String, resumeOffset: Double?) {
         Task { [weak self] in
             guard let serverURL = PlexAuthManager.shared.selectedServerURL,
@@ -1098,8 +1103,16 @@ final class PreviewCarouselViewController: UIViewController {
                     return
                 }
             }
+            // `viewOffset` is ms. Gated on the shared policy rather than
+            // `> 0` so a few accidental seconds don't become a resume point
+            // and a nearly-finished extra restarts instead of resuming at
+            // the credits.
+            let serverResume = playItem.isInProgress
+                ? playItem.viewOffset.map { Double($0) / 1000 }
+                : nil
             await MainActor.run {
-                self?.present(playItem: playItem, serverURL: serverURL, token: token, resumeOffset: resumeOffset)
+                self?.present(playItem: playItem, serverURL: serverURL, token: token,
+                              resumeOffset: resumeOffset ?? serverResume)
             }
         }
     }
@@ -1141,9 +1154,12 @@ final class PreviewCarouselViewController: UIViewController {
 
         switch route {
         case .libraryMetadata(let ratingKey):
+            // nil = resume from whatever the server has for this extra.
             presentPlayer(ratingKey: ratingKey, resumeOffset: nil)
 
         case .directPartPath(let path):
+            // IVA extras aren't library items, so /:/timeline never recorded a
+            // position for them — there is nothing to resume from.
             guard let serverURL = PlexAuthManager.shared.selectedServerURL,
                   let token = PlexAuthManager.shared.selectedServerToken else {
                 previewCarouselLog.error("[PCV] extra play: no server/token")

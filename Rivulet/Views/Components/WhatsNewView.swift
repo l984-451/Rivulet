@@ -140,6 +140,9 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.0.5 (81)", [
+            "Extras and special features now resume where you left off",
+        ]),
         ("1.0.5 (80)", [
             "Updated AetherEngine to 6.32.0",
             "Playback errors now say what went wrong instead of one generic message",

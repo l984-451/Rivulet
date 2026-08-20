@@ -418,10 +418,31 @@ final class CaptionOverlayView: UIView {
     /// cannot disagree.
     ///
     /// An unplaced cue centres, as the default band always has.
+    /// Which column a positioned cue anchors to: 0 left, 1 centre, 2 right.
+    ///
+    /// An explicit numpad `alignment` wins. When the source gives none, a fine
+    /// `position.x` STILL names an edge — WebVTT's `position:` is the box's
+    /// start edge, not its centre — so a cue placed on the left anchors left.
+    /// Centre-anchoring it lets a longer second line widen the box
+    /// symmetrically and drag the first line sideways, which is the drift
+    /// the line alignment was meant to stop and could not, because the box
+    /// itself was on the wrong anchor.
+    ///
+    /// `layoutPlaced` and `lineAlignment` both read this, so the edge the box
+    /// is pinned on and the edge the lines align to cannot disagree.
+    static func captionColumn(for placement: AetherSubtitleCue.TextPlacement) -> Int {
+        if let alignment = placement.alignment {
+            return (min(max(alignment, 1), 9) - 1) % 3
+        }
+        guard let x = placement.position?.x else { return 1 }
+        if x <= 0.4 { return 0 }
+        if x >= 0.6 { return 2 }
+        return 1
+    }
+
     static func lineAlignment(for placement: AetherSubtitleCue.TextPlacement?) -> NSTextAlignment {
         guard let placement else { return .center }
-        // Numpad: columns 1/4/7 left, 2/5/8 centre, 3/6/9 right.
-        switch ((placement.alignment ?? 2) - 1) % 3 {
+        switch captionColumn(for: placement) {
         case 0: return .left
         case 2: return .right
         default: return .center
@@ -454,7 +475,7 @@ final class CaptionOverlayView: UIView {
         // Numpad: rows 7-9 top, 4-6 middle, 1-3 bottom; columns 1/4/7 left,
         // 2/5/8 centre, 3/6/9 right. 2 (bottom-centre) is the ASS default.
         let an = placement.alignment ?? 2
-        let col = (an - 1) % 3
+        let col = Self.captionColumn(for: placement)
         let row = (an - 1) / 3
 
         // Clamped so a wild coordinate cannot push a caption off screen.

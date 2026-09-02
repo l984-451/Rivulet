@@ -753,23 +753,34 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func attachNativeLegible(to item: AVPlayerItem) {
         guard isNativeHLSRoute, Self.isRemoteItem(item), nativeLegibleItem !== item else { return }
 
+        // Attached NOW, not after readiness. AVFoundation makes its automatic
+        // legible selection around `readyToPlay` (t+4.5s on device) and renders
+        // that option natively from the very first cue. An output attached
+        // after has already lost the first pass — which is why captions came up
+        // in AVPlayer's own rendering on a live HLS channel until the user
+        // toggled them off and on, at which point the now-attached output took
+        // over and they became ours.
+        //
+        // Being early is free: `suppressesPlayerRendering` applies to whatever
+        // option is or later becomes selected, so the output does not need a
+        // selection to exist yet. Waiting was defensive — "nothing attached
+        // until the item loads, so this can never be why a stream fails" — but
+        // an AVPlayerItemLegibleOutput is a passive attachment, and the cost of
+        // the caution was a wrong first render on every channel.
+        ensureNativeLegibleOutput(on: item)
+        nativeLegibleActive = true
+
         Task { @MainActor [weak self] in
-            // Nothing is attached until the item has loaded successfully, so
-            // this pipeline can never be the reason a stream fails to load.
-            // Cues do not start flowing until playback does, well after
-            // readiness, so there is nothing to miss by waiting.
+            // The GROUP is only needed so the subtitle panel can list and switch
+            // renditions, and it genuinely does need a loaded asset. Cue
+            // delivery does not depend on it: the output is already on the item
+            // and receives whatever automatic selection settles on.
             guard await Self.itemBecameReady(item) else { return }
             guard let self,
                   self.isNativeHLSRoute,
-                  self.nativeLegibleItem !== item,
+                  self.nativeLegibleItem === item,
                   item === self.aetherPlayer?.currentAVPlayer?.currentItem else { return }
 
-            self.ensureNativeLegibleOutput(on: item)
-            self.nativeLegibleActive = true
-
-            // Only needed so the subtitle panel can list and switch renditions.
-            // Cue delivery does not depend on it: the output is on the item and
-            // receives whatever automatic selection settles on.
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible),
                   !group.options.isEmpty, self.nativeLegibleItem === item else { return }
             self.nativeLegibleGroup = group

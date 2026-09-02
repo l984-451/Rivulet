@@ -299,7 +299,9 @@ final class CaptionOverlayView: UIView {
                 addSubview(iv)
                 bitmapCues.append((iv, position))
             case .text, .styledText:
-                let box = CaptionBoxView(body: cue.body, style: style)
+                let box = CaptionBoxView(body: cue.body,
+                                         style: style,
+                                         alignment: Self.lineAlignment(for: cue.placement))
                 addSubview(box)
                 textCues.append((box, cue.placement))
             }
@@ -411,6 +413,42 @@ final class CaptionOverlayView: UIView {
         }
     }
 
+    /// Which edge a cue's lines align to, from the column its own alignment
+    /// names. Matches the edge `layoutPlaced` anchors the box on, so the two
+    /// cannot disagree.
+    ///
+    /// An unplaced cue centres, as the default band always has.
+    /// Which column a positioned cue anchors to: 0 left, 1 centre, 2 right.
+    ///
+    /// An explicit numpad `alignment` wins. When the source gives none, a fine
+    /// `position.x` STILL names an edge — WebVTT's `position:` is the box's
+    /// start edge, not its centre — so a cue placed on the left anchors left.
+    /// Centre-anchoring it lets a longer second line widen the box
+    /// symmetrically and drag the first line sideways, which is the drift
+    /// the line alignment was meant to stop and could not, because the box
+    /// itself was on the wrong anchor.
+    ///
+    /// `layoutPlaced` and `lineAlignment` both read this, so the edge the box
+    /// is pinned on and the edge the lines align to cannot disagree.
+    static func captionColumn(for placement: AetherSubtitleCue.TextPlacement) -> Int {
+        if let alignment = placement.alignment {
+            return (min(max(alignment, 1), 9) - 1) % 3
+        }
+        guard let x = placement.position?.x else { return 1 }
+        if x <= 0.4 { return 0 }
+        if x >= 0.6 { return 2 }
+        return 1
+    }
+
+    static func lineAlignment(for placement: AetherSubtitleCue.TextPlacement?) -> NSTextAlignment {
+        guard let placement else { return .center }
+        switch captionColumn(for: placement) {
+        case 0: return .left
+        case 2: return .right
+        default: return .center
+        }
+    }
+
     /// A cue the source positioned itself, placed against the PICTURE (so a
     /// letterboxed film's signs land on the image, not in the black bar).
     ///
@@ -437,7 +475,7 @@ final class CaptionOverlayView: UIView {
         // Numpad: rows 7-9 top, 4-6 middle, 1-3 bottom; columns 1/4/7 left,
         // 2/5/8 centre, 3/6/9 right. 2 (bottom-centre) is the ASS default.
         let an = placement.alignment ?? 2
-        let col = (an - 1) % 3
+        let col = Self.captionColumn(for: placement)
         let row = (an - 1) / 3
 
         // Clamped so a wild coordinate cannot push a caption off screen.
@@ -547,6 +585,16 @@ private final class CaptionBoxView: UIView {
     private let body: AetherSubtitleCue.Body
     private let style: CaptionStyle
 
+    /// Which edge the lines align to INSIDE the box.
+    ///
+    /// The box hugs its widest line, so a shorter line has slack. Centring that
+    /// slack is right for a centred cue and wrong for a side-anchored one: the
+    /// box grows away from its anchor as a later line runs longer, and every
+    /// shorter line then re-centres in the wider box — so a left-positioned
+    /// cue's first word visibly slides right when the line below it extends.
+    /// The anchored edge has to stay put and the growth go to the other side.
+    private let alignment: NSTextAlignment
+
     /// Point size the current attributed string was built at. Everything about
     /// the box scales with it, so a change rebuilds; an unchanged size makes
     /// `apply` free, which matters because layout runs on every rail lift.
@@ -557,9 +605,10 @@ private final class CaptionBoxView: UIView {
     /// style is 16pt, so `\fs32` means "twice normal", not "32 points".
     private static let assNominalFontSize: CGFloat = 16
 
-    init(body: AetherSubtitleCue.Body, style: CaptionStyle) {
+    init(body: AetherSubtitleCue.Body, style: CaptionStyle, alignment: NSTextAlignment = .center) {
         self.body = body
         self.style = style
+        self.alignment = alignment
         super.init(frame: .zero)
 
         isUserInteractionEnabled = false
@@ -569,7 +618,7 @@ private final class CaptionBoxView: UIView {
         layer.cornerCurve = .continuous
 
         label.numberOfLines = 0
-        label.textAlignment = .center
+        label.textAlignment = alignment
         label.backgroundColor = .clear
         addSubview(label)
     }
@@ -637,7 +686,7 @@ private final class CaptionBoxView: UIView {
         let baseFont = style.font(ofSize: pointSize)
 
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
+        paragraph.alignment = alignment
         paragraph.lineSpacing = CaptionOverlayView.Metrics.textLineSpacing
 
         let result = NSMutableAttributedString()

@@ -623,7 +623,9 @@ struct IOSAetherSubtitleOverlay: View {
                             safeRect: positionedSafe,
                             osdBoundary: osdBoundary
                         ) {
-                            subtitleText(cue.body, pointSize: pointSize)
+                            subtitleText(cue.body,
+                                         pointSize: pointSize,
+                                         alignment: Self.lineAlignment(for: placement))
                         }
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .animation(.easeInOut(duration: 0.25), value: osdBoundary)
@@ -645,12 +647,35 @@ struct IOSAetherSubtitleOverlay: View {
         .allowsHitTesting(false)
     }
 
+    /// Which edge a positioned cue's lines align to, from the column its own
+    /// alignment names. Matches the edge IOSPositionedCaptionLayout anchors the
+    /// box on, so the two cannot disagree. Unplaced cues centre, as the default
+    /// band always has.
+    private static func lineAlignment(
+        for placement: AetherPlayer.SubtitleCue.TextPlacement?
+    ) -> TextAlignment {
+        guard let placement else { return .center }
+        switch captionColumn(for: placement) {
+        case 0: return .leading
+        case 2: return .trailing
+        default: return .center
+        }
+    }
+
     private func subtitleText(
         _ body: AetherPlayer.SubtitleCue.Body,
-        pointSize: CGFloat
+        pointSize: CGFloat,
+        alignment: TextAlignment = .center
     ) -> some View {
         renderedText(body, pointSize: pointSize)
-            .multilineTextAlignment(.center)
+            // A cue's box hugs its widest line, so a shorter line has slack.
+            // Centring that slack is right for a centred cue and wrong for a
+            // side-anchored one: the box grows away from its anchor when a later
+            // line runs longer, and every shorter line then re-centres in the
+            // wider box — so a left-positioned cue's first word visibly slides
+            // right as the line beneath it extends. Rolling captions show it as
+            // the top line drifting. The anchored edge has to stay put.
+            .multilineTextAlignment(alignment)
             .padding(.horizontal, pointSize * 0.30)
             .padding(.vertical, pointSize * 0.075)
             .background(
@@ -814,6 +839,26 @@ private extension AetherPlayer.SubtitleCue {
 /// selected by the cue alignment; fine y positions name the box's top edge.
 /// Coarse ASS/teletext positions resolve to the corresponding 10/50/90% band.
 /// The measured box is clamped after wrapping, matching subtitle-refinement.
+/// Which column a positioned cue anchors to: 0 leading, 1 centre, 2 trailing.
+///
+/// An explicit numpad `alignment` wins. When the source gives none, a fine
+/// `position.x` STILL names an edge — WebVTT's `position:` is the box's start
+/// edge, not its centre — so a cue placed on the left must anchor leading.
+/// Centre-anchoring it is what let a longer second line widen the box
+/// symmetrically and drag the first line sideways.
+///
+/// The layout and the line alignment both read this, so the edge the box is
+/// pinned on and the edge the lines align to cannot disagree.
+private func captionColumn(for placement: AetherPlayer.SubtitleCue.TextPlacement) -> Int {
+    if let alignment = placement.alignment {
+        return (min(max(alignment, 1), 9) - 1) % 3
+    }
+    guard let x = placement.position?.x else { return 1 }
+    if x <= 0.4 { return 0 }
+    if x >= 0.6 { return 2 }
+    return 1
+}
+
 private struct IOSPositionedCaptionLayout: Layout {
     let placement: AetherPlayer.SubtitleCue.TextPlacement
     let pictureRect: CGRect
@@ -842,7 +887,7 @@ private struct IOSPositionedCaptionLayout: Layout {
         let width = min(fitted.width, safeRect.width)
         let height = min(fitted.height, safeRect.height)
         let alignment = min(max(placement.alignment ?? 2, 1), 9)
-        let column = (alignment - 1) % 3
+        let column = captionColumn(for: placement)
         let row = (alignment - 1) / 3
 
         let anchorX: CGFloat

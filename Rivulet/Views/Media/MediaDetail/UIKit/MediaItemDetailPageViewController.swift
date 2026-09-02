@@ -526,10 +526,10 @@ final class MediaItemDetailPageViewController: UIViewController {
     private func loadDetail() {
         Task { [weak self] in
             guard let self, let provider = self.provider else { return }
-            // For an episode, the show supplies the series title AND the genres
-            // (the episode's own detail usually has no genres).
+            // For an episode or a season, the show supplies the series title AND
+            // the genres (their own detail usually has no genres).
             var showGenres: [String] = []
-            if let showRef = self.item.grandparentRef,
+            if let showRef = self.showRef,
                let showDetail = try? await provider.fullDetail(for: showRef) {
                 showGenres = showDetail.genres
                 await MainActor.run {
@@ -672,10 +672,19 @@ final class MediaItemDetailPageViewController: UIViewController {
         (button?.subviews.compactMap { $0 as? UIImageView }.first)?.image = UIImage(systemName: name)
     }
 
+    /// The show above an episode (grandparent) or a season (parent).
+    private var showRef: MediaItemRef? {
+        item.kind == .season ? item.parentRef : item.grandparentRef
+    }
+
     private func loadBackdrop() {
         // The EPISODE's own still (same art the episode list uses), NOT the show
         // hero. Fall back to the item's backdrop/poster, never the grandparent.
-        guard let url = item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster else { return }
+        // A season's thumbnail IS its poster, so it leads with the wide art.
+        let url = item.kind == .season
+            ? item.artwork.backdrop ?? item.parentArtwork?.backdrop ?? item.artwork.thumbnail
+            : item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster
+        guard let url else { return }
         Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url, quality: .full)
             await MainActor.run { self?.backdrop.image = image }

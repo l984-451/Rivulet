@@ -594,9 +594,9 @@ struct TVSidebarView: View {
     // MARK: - Deep Link Detail
 
     /// Present detail for a `rivulet://detail` deep link (Top Shelf / Siri).
-    /// Routes exactly like the home tile menu's `selectMediaItem`: episodes
-    /// get the episode detail page, everything else the standalone expanded
-    /// detail. Both are the UIKit surfaces normal in-app navigation uses.
+    /// Routes exactly like the home tile menu's `selectMediaItem`: episodes and
+    /// seasons get the title-first detail page, everything else the standalone
+    /// expanded detail. Both are the UIKit surfaces normal in-app navigation uses.
     private func presentDetailForDeepLink(_ metadata: PlexMetadata) {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
@@ -604,7 +604,7 @@ struct TVSidebarView: View {
         let providerID = MediaProviderRegistry.shared.primaryProvider?.id ?? "plex:\(serverURL)"
         let item = PlexMediaMapper.item(metadata, providerID: providerID, serverURL: serverURL, authToken: token)
 
-        if item.kind == .episode {
+        if item.kind == .episode || item.kind == .season {
             let page = MediaItemDetailPageViewController(
                 item: item,
                 seriesTitle: nil,

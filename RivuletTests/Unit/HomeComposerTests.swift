@@ -52,16 +52,19 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
 
     var continueWatchingItems: [MediaItem] = []
     var recentlyAddedItems: [MediaItem] = []
+    /// Keyed by the parent's itemID (`children`) / the show's itemID (`allEpisodes`).
+    var childrenByParent: [String: [MediaItem]] = [:]
+    var episodesByShow: [String: [MediaItem]] = [:]
 
     func libraries() async throws -> [MediaLibrary] { [] }
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
         PagedResult(items: [], total: 0, nextPage: nil)
     }
-    func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { [] }
+    func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     func search(_ query: String) async throws -> [MediaItem] { [] }
     func collectionItems(matching collectionName: String, in library: MediaLibrary) async throws -> [MediaItem] { [] }
     func relatedItems(for itemRef: MediaItemRef) async throws -> [MediaItem] { [] }
-    func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] { [] }
+    func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] { episodesByShow[showRef.itemID] ?? [] }
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         throw MediaProviderError.notFound
     }

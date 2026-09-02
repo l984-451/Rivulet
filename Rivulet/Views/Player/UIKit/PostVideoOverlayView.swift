@@ -252,6 +252,7 @@ final class PostVideoOverlayView: UIView {
         let path = UIBezierPath(rect: bounds)
         path.append(UIBezierPath(roundedRect: hole, cornerRadius: 12))
         let mask = (backdropContainer.layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+        mask.frame = bounds
         mask.fillRule = .evenOdd
         mask.path = path.cgPath
         backdropContainer.layer.mask = mask

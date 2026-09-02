@@ -383,8 +383,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Whether the item now loaded has actually begun playing. An item cannot
     /// end before it starts, so this is what makes the end-of-playback funnel
     /// safe: a terminal `.ended` is only ever acted on for an item observed
-    /// playing since the last swap. Cleared with `itemGeneration`, set on the
-    /// first `.playing` that isn't a stale replay from the outgoing item.
+    /// playing since the last swap. Cleared with `itemGeneration`; set on the
+    /// first `.playing` that isn't a stale replay from the outgoing item, and
+    /// explicitly at the end of `playNextEpisode()` so the arming never
+    /// depends on when the engine happens to publish that state.
     private var currentItemHasStarted = false
     private var controlsTimer: Timer?
     private let controlsHideDelay: TimeInterval = 5
@@ -4961,6 +4963,14 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Safe to allow post-video detection now: the old time observer has been
         // replaced and time values reflect the new episode's actual position.
         hasTriggeredPostVideo = false
+        // We started this item, so arm the end funnel here rather than waiting
+        // for a `.playing` to arrive. Every stale event from the outgoing
+        // episode (the replayed terminal state, its own EOF) has already been
+        // delivered and dropped by this point. Waiting would leave the funnel
+        // disarmed for the whole episode if a `.playing` ever landed inside the
+        // swap window, and the symptom of that is silent: end of episode
+        // reached, no Up Next, no exit.
+        currentItemHasStarted = true
     }
 
     /// Dismiss post-video overlay and return to fullscreen video

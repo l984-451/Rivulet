@@ -362,16 +362,22 @@ final class PreviewCarouselViewController: UIViewController {
             self?.presentStandaloneDetail(item)
         }
 
-        // Season pill Select → that season's own standalone page (full summary,
-        // only its episodes, its extras). Same-season guard: on a season's own
-        // page, re-selecting its pill must not stack a duplicate of the page it
-        // is already on. SIBLING seasons still open — presentStandaloneDetail
-        // walks to the topmost presented controller, so season-to-season hopping
-        // stacks naturally, and each hop keeps the focus-restore contract.
+        // Season pill Select → the season's own title-first detail page (the
+        // same page an episode's description opens), NOT another standalone
+        // carousel detail: that page re-hosted the pills over a one-season rail,
+        // so from there every season needed a click and each click stacked
+        // another carousel. Focus already switched the rail's season; the press
+        // opens the season's summary and info on top of the show.
         expandedDetail.onOpenSeason = { [weak self] season in
             guard let self else { return }
-            if self.standaloneDetail, self.items.first?.ref == season.ref { return }
-            self.presentStandaloneDetail(season)
+            let show = self.items.indices.contains(self.selectedIndex) ? self.items[self.selectedIndex] : nil
+            let page = MediaItemDetailPageViewController(
+                item: season,
+                seriesTitle: show?.kind == .show ? show?.title : nil,
+                // playHeroItem, not playMediaItem: a season key has no media, so
+                // Play must resolve to its first unplayed episode.
+                onPlay: { [weak self] season in self?.playHeroItem(season) })
+            self.present(page, animated: true)
         }
         // Cast / crew cell Select → person detail page (full-screen).
         expandedDetail.onSelectPerson = { [weak self] person in

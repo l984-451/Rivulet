@@ -834,11 +834,6 @@ private extension AetherPlayer.SubtitleCue {
     }
 }
 
-/// Places a content-positioned text cue inside the visible picture's title-safe
-/// region. Fine x positions belong to the left/centre/right caption-box edge
-/// selected by the cue alignment; fine y positions name the box's top edge.
-/// Coarse ASS/teletext positions resolve to the corresponding 10/50/90% band.
-/// The measured box is clamped after wrapping, matching subtitle-refinement.
 /// Which column a positioned cue anchors to: 0 leading, 1 centre, 2 trailing.
 ///
 /// An explicit numpad `alignment` wins. When the source gives none, a fine
@@ -859,6 +854,11 @@ private func captionColumn(for placement: AetherPlayer.SubtitleCue.TextPlacement
     return 1
 }
 
+/// Places a content-positioned text cue inside the visible picture's title-safe
+/// region. Fine x positions belong to the left/centre/right caption-box edge
+/// selected by the cue alignment; fine y positions name the box's top edge.
+/// Coarse ASS/teletext positions resolve to the corresponding 10/50/90% band.
+/// The measured box is clamped after wrapping, matching subtitle-refinement.
 private struct IOSPositionedCaptionLayout: Layout {
     let placement: AetherPlayer.SubtitleCue.TextPlacement
     let pictureRect: CGRect

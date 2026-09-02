@@ -413,11 +413,6 @@ final class CaptionOverlayView: UIView {
         }
     }
 
-    /// Which edge a cue's lines align to, from the column its own alignment
-    /// names. Matches the edge `layoutPlaced` anchors the box on, so the two
-    /// cannot disagree.
-    ///
-    /// An unplaced cue centres, as the default band always has.
     /// Which column a positioned cue anchors to: 0 left, 1 centre, 2 right.
     ///
     /// An explicit numpad `alignment` wins. When the source gives none, a fine
@@ -440,6 +435,11 @@ final class CaptionOverlayView: UIView {
         return 1
     }
 
+    /// Which edge a cue's lines align to, from the column its own alignment
+    /// names. Matches the edge `layoutPlaced` anchors the box on, so the two
+    /// cannot disagree.
+    ///
+    /// An unplaced cue centres, as the default band always has.
     static func lineAlignment(for placement: AetherSubtitleCue.TextPlacement?) -> NSTextAlignment {
         guard let placement else { return .center }
         switch captionColumn(for: placement) {
@@ -576,9 +576,10 @@ final class CaptionOverlayView: UIView {
 /// One cue in ONE rounded box, sized to its longest line.
 ///
 /// A multi-line cue keeps its author's line breaks and stays inside a single
-/// background — the box hugs the widest line and the shorter lines centre
-/// within it. (An earlier attempt boxed each line separately; that reads as
-/// detached labels rather than one caption.)
+/// background — the box hugs the widest line, and the shorter lines align to
+/// the edge `alignment` names, centring only when the cue itself is centred.
+/// (An earlier attempt boxed each line separately; that reads as detached
+/// labels rather than one caption.)
 private final class CaptionBoxView: UIView {
 
     private let label = UILabel()

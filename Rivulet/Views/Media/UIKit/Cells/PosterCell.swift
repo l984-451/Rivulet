@@ -302,6 +302,19 @@ final class PosterCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        resetContent()
+    }
+
+    /// Blank glass card for a library-grid slot whose page has not loaded.
+    /// A slot flips to a real item through `reconfigureItems` on the same
+    /// cell, and back to this on a sort reset, so clear the previous
+    /// occupant here rather than assume `prepareForReuse` ran.
+    func configurePlaceholder() {
+        resetContent()
+        placeholderPanel.isHidden = false
+    }
+
+    private func resetContent() {
         imageLoadTask?.cancel()
         imageLoadTask = nil
         cancelSpinnerDelay()

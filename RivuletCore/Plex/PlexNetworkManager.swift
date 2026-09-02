@@ -451,6 +451,24 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return (items, totalSize)
     }
 
+    /// Per-first-character item counts for a library section, in title-sort
+    /// order ("#" first, then the letters the library actually contains).
+    /// Backs the library grid's alphabet bar.
+    func getLibraryFirstCharacters(
+        serverURL: String,
+        authToken: String,
+        sectionId: String
+    ) async throws -> [PlexFirstCharacter] {
+        guard let url = URL(string: "\(serverURL)/library/sections/\(sectionId)/firstCharacter") else {
+            throw PlexAPIError.invalidURL
+        }
+        let container: PlexFirstCharacterContainer = try await request(
+            url,
+            headers: plexHeaders(authToken: authToken)
+        )
+        return container.MediaContainer.Directory ?? []
+    }
+
     /// Get item metadata by rating key
     func getMetadata(
         serverURL: String,

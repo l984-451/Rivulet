@@ -516,31 +516,76 @@ final class PlexHomeViewController: UIViewController {
 
     // MARK: Library-mode grid state
     //
-    // Pagination pattern ported from MediaLibraryViewController: an
-    // `isLoadingGridPage` flag prevents concurrent page fetches, and a
+    // The grid is SPARSE: one slot per library item from the moment the
+    // first page reports the total, pages filling in as their slots display.
+    // That is what lets the alphabet bar (issue #308) jump to "Z" in a
+    // thousand-item library without loading the 940 items before it. A
     // monotonically-increasing `gridGeneration` token is bumped on every
     // grid reset (sort change) so an in-flight page Task discards its
     // results if the generation advanced before the await returned —
     // a stale page can never interleave into a fresh sort load.
 
-    /// Loaded grid items (first page + everything paginated in), deduped
-    /// by ratingKey.
-    private var gridItems: [PlexMetadata] = []
+    /// Grid slots, `totalGridCount` long once the first page has landed.
+    /// nil = that slot's page has not loaded. Slot identity is positional
+    /// (`gridSlotID`), so a page landing under the focused cell reconfigures
+    /// it in place instead of deleting it out from under the engine.
+    private var gridItems: [PlexMetadata?] = []
     /// Authoritative library item count from Plex (drives the sort-header
-    /// count and the pagination end condition).
+    /// count and the slot array's length).
     private var totalGridCount = 0
     /// Active sort for the grid. Initialized from LibrarySettingsManager in
     /// `init` for library mode; never read in home mode.
     private var gridSort: LibrarySortOption
-    /// Guards `loadGridNextPage` against concurrent fires (willDisplay can
-    /// trigger many times while a page is in flight).
-    private var isLoadingGridPage = false
+    /// Pages (by `gridPageSize` index) fetched or in flight this generation.
+    /// A page that fails is removed so scrolling back over it retries.
+    private var gridPagesRequested: Set<Int> = []
     /// Generation token — see the MARK comment above.
     private var gridGeneration = 0
     /// Page size matching the SwiftUI PlexLibraryView (`pageSize = 60`).
     private let gridPageSize = 60
+    /// Letter → offset table behind the alphabet bar; nil under a non-title
+    /// sort or before the counts arrive.
+    private var alphabetIndex: LibraryAlphabetIndex?
+    /// Slot revealed by the last letter jump. Consumed by
+    /// `indexPathForPreferredFocusedView` when Left leaves the bar for the
+    /// grid; cleared once focus is in the grid.
+    private var pendingGridFocusItem: Int?
+    private let alphabetBar = LibraryAlphabetBarView()
+    private let letterIndicator = LibraryLetterIndicatorView()
+    /// Desired bar state; the fade's completion reads it so an interrupted
+    /// hide cannot land after a newer show.
+    private var alphabetBarShown = false
+    /// One-shot: `preferredFocusEnvironments` routes the next focus update to
+    /// `pendingGridFocusItem` (strip idle return, letter stepping).
+    private var wantsPendingGridFocus = false
+    /// A few seconds parked on a letter hands focus back to the grid.
+    private var stripIdleWork: DispatchWorkItem?
+    private var gridSectionIndex: Int? { sectionsSnapshot.firstIndex(where: { $0.kind == .grid }) }
+
+    // MARK: Fast scroll (held Up/Down)
+    //
+    // tvOS moves focus row by row for ~1.5s of a held Up/Down, then hands
+    // focus to its own fast-scroll index bar, a hidden subview of the
+    // collection, and stops issuing focus moves. This collection scrolls
+    // itself (isScrollEnabled is false, one clock), so the system's bar can
+    // move nothing. The hand-off is used as the "fast mode" signal instead:
+    // while the arrow stays down the offset is driven here at an
+    // accelerating rate, and release (or Left / Select / Menu) lands focus on
+    // the tile nearest the screen centre.
+
+    /// Up/Down arrow currently held, tracked at the controller so a hold that
+    /// began on a tile is still known once focus sits on the hidden bar.
+    private var heldArrow: UIPress.PressType?
+    private var isOnSystemIndexBar = false
+    private var fastScrollLink: CADisplayLink?
+    private var fastScrollStart: CFTimeInterval = 0
+    private var fastScrollLastTick: CFTimeInterval = 0
     /// The single item id of the sort-header section.
     private static let sortHeaderItemID = HomeItemID(sectionID: .sortHeader, itemID: "sort-header")
+
+    private static func gridSlotID(_ index: Int) -> HomeItemID {
+        HomeItemID(sectionID: .grid, itemID: "grid-\(index)")
+    }
 
     /// Recommendations state (latched local copy — service caches itself).
     private var recommendations: [PlexMetadata] = []
@@ -707,9 +752,8 @@ final class PlexHomeViewController: UIViewController {
                 }
                 await refreshThisLibraryHubs()
             }
-            Task { @MainActor in
-                await loadGridFirstPage()
-            }
+            loadGridPage(containing: 0)
+            loadAlphabetIndex()
         case .discover:
             // Discover page: the 8 TMDB curated sections + For You + hero,
             // all fetched by the same view model the SwiftUI page used.
@@ -1078,98 +1122,190 @@ final class PlexHomeViewController: UIViewController {
 
     // MARK: - Library grid data
 
-    /// Fetches the first page of grid items for the library (library mode
-    /// only). Uses the proven SwiftUI PlexLibraryView data path:
-    /// `getLibraryItemsWithTotal` with the LibrarySortOption's Plex sort
-    /// parameter. Captures the generation token before awaiting so a sort
-    /// change mid-flight discards the result.
-    @MainActor
-    private func loadGridFirstPage() async {
+    /// Loads the page holding slot `index` unless it is loaded or in flight.
+    /// The first page to land sizes the slot array from Plex's total; a later
+    /// page resizes it if the library changed underneath. A landed page
+    /// reconfigures its slots in place (positional identity), so the focused
+    /// cell is never deleted out from under the engine, and a page that
+    /// fails is forgotten so scrolling back over it retries.
+    private func loadGridPage(containing index: Int) {
         guard case .library(let key, _) = mode,
+              index >= 0,
+              gridItems.isEmpty || index < gridItems.count,
               let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
+        let page = index / gridPageSize
+        guard gridPagesRequested.insert(page).inserted else { return }
         let gen = gridGeneration
-        do {
-            let result = try await PlexNetworkManager.shared.getLibraryItemsWithTotal(
-                serverURL: serverURL,
-                authToken: token,
-                sectionId: key,
-                start: 0,
-                size: gridPageSize,
-                sort: gridSort.apiParameter
-            )
-            guard gen == gridGeneration, !Task.isCancelled else { return }
-            // Dedupe by ratingKey — Plex can repeat keys within a page.
-            var seen = Set<String>()
-            gridItems = result.items.filter { item in
-                guard let rk = item.ratingKey else { return false }
-                return seen.insert(rk).inserted
-            }
-            totalGridCount = result.totalSize ?? gridItems.count
-        } catch {
-            // Leave the grid empty; hub rows still render. updateHomeState
-            // surfaces a library-level error only when there are no hubs
-            // either.
-            guard gen == gridGeneration, !Task.isCancelled else { return }
-        }
-        applySnapshot(animated: false)
-        refreshSortHeaderCount()
-        updateHomeState()
-    }
-
-    /// Loads the next grid page and appends (deduped by ratingKey). Guarded
-    /// by `isLoadingGridPage` so concurrent willDisplay triggers are no-ops.
-    /// Stale results (generation advanced mid-flight) are discarded; the
-    /// stale task clears the flag itself on every exit path, so exactly one
-    /// task can hold it at a time (same pattern as MediaLibraryViewController).
-    private func loadGridNextPage() {
-        guard case .library(let key, _) = mode,
-              !isLoadingGridPage,
-              gridItems.count < totalGridCount,
-              let serverURL = authManager.selectedServerURL,
-              let token = authManager.selectedServerToken else { return }
-        isLoadingGridPage = true
-        let gen = gridGeneration
-        Task { [weak self] in
+        let start = page * gridPageSize
+        Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let result = try await PlexNetworkManager.shared.getLibraryItemsWithTotal(
                     serverURL: serverURL,
                     authToken: token,
                     sectionId: key,
-                    start: self.gridItems.count,
+                    start: start,
                     size: self.gridPageSize,
                     sort: self.gridSort.apiParameter
                 )
-                guard gen == self.gridGeneration else {
-                    self.isLoadingGridPage = false
-                    return
-                }
-                let existing = Set(self.gridItems.compactMap { $0.ratingKey })
-                let newItems = result.items.filter { item in
-                    guard let rk = item.ratingKey else { return false }
-                    return !existing.contains(rk)
-                }
-                if let total = result.totalSize {
+                guard gen == self.gridGeneration else { return }
+                let total = result.totalSize ?? max(self.gridItems.count, start + result.items.count)
+                let countChanged = total != self.gridItems.count
+                if countChanged {
                     self.totalGridCount = total
+                    self.gridItems = Array(self.gridItems.prefix(total))
+                        + Array(repeating: nil, count: max(0, total - self.gridItems.count))
                 }
-                if newItems.isEmpty {
-                    // No forward progress (empty or all-duplicate page):
-                    // clamp the total so willDisplay stops re-firing.
-                    self.totalGridCount = self.gridItems.count
-                } else {
-                    self.gridItems.append(contentsOf: newItems)
+                let end = min(start + result.items.count, self.gridItems.count)
+                for (offset, item) in result.items.enumerated() where start + offset < end {
+                    self.gridItems[start + offset] = item
                 }
-                self.isLoadingGridPage = false
                 self.applySnapshot(animated: false)
-                self.refreshSortHeaderCount()
+                if countChanged || page == 0 {
+                    self.refreshSortHeaderCount()
+                    self.updateHomeState()
+                }
+                self.reconfigureGridSlots(start..<end)
             } catch {
-                // Don't mark end-of-list on error — the user can retry by
-                // continuing to scroll (matches hub pagination behavior).
-                self.isLoadingGridPage = false
+                guard gen == self.gridGeneration else { return }
+                self.gridPagesRequested.remove(page)
+                // First page: hub rows still render; updateHomeState surfaces
+                // a library-level error only when there are no hubs either.
+                if self.gridItems.isEmpty { self.updateHomeState() }
             }
         }
     }
+
+    /// Re-vend the cells of a landed page. Slot identifiers never change, so
+    /// `applySnapshot` alone leaves the placeholder cards on screen.
+    private func reconfigureGridSlots(_ range: Range<Int>) {
+        guard !range.isEmpty else { return }
+        var snap = dataSource.snapshot()
+        guard snap.sectionIdentifiers.contains(.grid) else { return }
+        snap.reconfigureItems(range.map(Self.gridSlotID))
+        dataSource.apply(snap, animatingDifferences: false)
+    }
+
+    // MARK: - Alphabet bar (issue #308)
+
+    /// Fetches the per-letter counts behind the alphabet bar. Title sorts
+    /// only: under any other order the letters do not map to offsets.
+    private func loadAlphabetIndex() {
+        alphabetIndex = nil
+        alphabetBarShown = false
+        alphabetBar.setLetters([])
+        alphabetBar.isHidden = true
+        guard case .library(let key, _) = mode,
+              gridSort == .titleAsc || gridSort == .titleDesc,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+        let gen = gridGeneration
+        let descending = gridSort == .titleDesc
+        Task { @MainActor [weak self] in
+            guard let characters = try? await PlexNetworkManager.shared.getLibraryFirstCharacters(
+                serverURL: serverURL, authToken: token, sectionId: key
+            ), let self, gen == self.gridGeneration else { return }
+            let index = LibraryAlphabetIndex(characters: characters, descending: descending)
+            guard index.entries.count > 1 else { return }
+            self.alphabetIndex = index
+            self.alphabetBar.setLetters(index.entries.map(\.title))
+            let focusedKind = self.focusedSectionForHandoff.flatMap { self.sectionsSnapshot[safe: $0]?.kind }
+            if focusedKind == .grid, let slot = TileLongPress.focusedCell(in: self.collectionView)?.item {
+                self.alphabetBar.entryIndex = index.entryIndex(containing: slot)
+            }
+            self.setAlphabetBarVisible(focusedKind == .grid)
+        }
+    }
+
+    /// The bar is up only while focus is in the grid (or on the bar itself).
+    /// Hidden, not merely transparent, so it leaves the focus graph.
+    private func setAlphabetBarVisible(_ visible: Bool) {
+        let show = visible && alphabetIndex != nil
+        guard show != alphabetBarShown else { return }
+        alphabetBarShown = show
+        if !show { letterIndicator.hide() }
+        if show { alphabetBar.isHidden = false }
+        UIView.animate(withDuration: 0.2, animations: {
+            self.alphabetBar.alpha = show ? 1 : 0
+        }, completion: { finished in
+            // An interrupted fade reports finished == false; only a fade
+            // that ran to the end may hide, and only if nothing re-showed.
+            if finished, !self.alphabetBarShown { self.alphabetBar.isHidden = true }
+        })
+    }
+
+    /// Alphabet bar: snap the grid so the first title under the focused
+    /// letter heads the viewport. Snapped, not animated: a jump can span
+    /// thousands of points, and an animated offset would dequeue hundreds of
+    /// cells per frame on the way. The pages behind the new viewport load
+    /// through willDisplay like any other scroll.
+    private func jumpGrid(toLetterAt index: Int) {
+        guard let entry = alphabetIndex?.entries[safe: index],
+              let gridSection = sectionsSnapshot.firstIndex(where: { $0.kind == .grid }),
+              entry.offset < gridItems.count,
+              let attrs = collectionView.layoutAttributesForItem(at: IndexPath(item: entry.offset, section: gridSection))
+        else { return }
+        offsetLink?.invalidate()
+        offsetLink = nil
+        // Centre the row, which is where the focus-scroll puts it anyway, so
+        // landing on it afterwards does not move the grid a second time.
+        let target = attrs.frame.midY - collectionView.bounds.height / 2
+        let maxOffset = max(0, collectionView.contentSize.height - collectionView.bounds.height)
+        collectionView.contentOffset = CGPoint(x: 0, y: max(-collectionView.adjustedContentInset.top, min(target, maxOffset)))
+        collectionView.layoutIfNeeded()
+        pendingGridFocusItem = entry.offset
+    }
+
+    /// Hand focus to the jumped-to slot. `setNeedsFocusUpdate` is honoured
+    /// because the strip and the grid both live inside this controller.
+    private func focusPendingGridSlot() {
+        guard let item = pendingGridFocusItem else { return }
+        // Explicit request: honoured wherever focus currently sits in the
+        // window's focus system, unlike setNeedsFocusUpdate, which this
+        // controller may only make while it contains focus.
+        if let gridSection = gridSectionIndex,
+           let cell = collectionView.cellForItem(at: IndexPath(item: item, section: gridSection)),
+           let system = UIFocusSystem.focusSystem(for: collectionView) {
+            system.requestFocusUpdate(to: cell)
+            system.updateFocusIfNeeded()
+            return
+        }
+        wantsPendingGridFocus = true
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    /// Left, Select, Menu or the idle timer on the strip: back to the grid at
+    /// the current letter, or failing that any visible tile.
+    private func leaveStrip() {
+        stripIdleWork?.cancel()
+        // Hidden before the request: visible, it occludes the tiles under it.
+        letterIndicator.hide()
+        focusPendingGridSlot()
+        let focused = UIFocusSystem.focusSystem(for: collectionView)?.focusedItem as? UIView
+        guard focused?.isDescendant(of: alphabetBar) == true else { return }
+        landFocusOnCenterTile()
+    }
+
+    /// From a letter, the engine's own Left search lands on the shell's edge
+    /// catcher and opens the sidebar. No engine move may leave this page
+    /// from the strip; Left is handled on the letter itself (leaveStrip).
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if let prev = context.previouslyFocusedView, prev.isDescendant(of: alphabetBar),
+           let next = context.nextFocusedView, !next.isDescendant(of: view) {
+            return false
+        }
+        return super.shouldUpdateFocus(in: context)
+    }
+
+    private func scheduleStripIdleReturn() {
+        stripIdleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.leaveStrip() }
+        stripIdleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
 
     /// Reconfigures the sort-header cell so its count + sort name reflect
     /// the latest state. Its item identifier never changes across snapshots,
@@ -1225,10 +1361,10 @@ final class PlexHomeViewController: UIViewController {
 
         applySnapshot(animated: false)
         refreshSortHeaderCount()
-
-        Task { @MainActor in
-            await loadGridFirstPage()
-        }
+        gridPagesRequested = []
+        pendingGridFocusItem = nil
+        loadGridPage(containing: 0)
+        loadAlphabetIndex()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -1917,6 +2053,45 @@ final class PlexHomeViewController: UIViewController {
             collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
 
+        // Library alphabet bar (issue #308), over the grid's trailing margin.
+        // Hidden until focus is in the grid, so Right from a hub row's last
+        // tile cannot land on it and jump a grid the user is not looking at.
+        if case .library = mode {
+            // tvOS's fast-scroll index bar stays invisible. It still takes
+            // focus ~1.5s into a held Up/Down (see didUpdateFocusIn); that
+            // hand-off is the signal for our own fast scroll below.
+            collectionView.showsVerticalScrollIndicator = false
+            collectionView.indexDisplayMode = .alwaysHidden
+            alphabetBar.translatesAutoresizingMaskIntoConstraints = false
+            alphabetBar.isHidden = true
+            alphabetBar.alpha = 0
+            alphabetBar.onLetterFocused = { [weak self] index in
+                guard let self else { return }
+                self.letterIndicator.letter = self.alphabetIndex?.entries[safe: index]?.title
+                self.jumpGrid(toLetterAt: index)
+                // Letter-to-letter moves never involve the collection view,
+                // so its focus delegate cannot reset the idle timer; do it here.
+                self.scheduleStripIdleReturn()
+            }
+            alphabetBar.onLetterSelected = { [weak self] in self?.leaveStrip() }
+            alphabetBar.onFocusContainmentChanged = { [weak self] inside in
+                if inside { self?.letterIndicator.show() } else { self?.letterIndicator.hide() }
+            }
+            letterIndicator.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(letterIndicator)
+            view.addSubview(alphabetBar)
+            NSLayoutConstraint.activate([
+                alphabetBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -4),
+                alphabetBar.widthAnchor.constraint(equalToConstant: LibraryAlphabetBarView.width),
+                alphabetBar.topAnchor.constraint(equalTo: view.topAnchor),
+                alphabetBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                letterIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                letterIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                letterIndicator.widthAnchor.constraint(equalToConstant: 220),
+                letterIndicator.heightAnchor.constraint(equalToConstant: 220)
+            ])
+        }
+
         // Leading-edge focus guide. See property doc for the why.
         leftEdgeFocusGuide = UIFocusGuide()
         view.addLayoutGuide(leftEdgeFocusGuide)
@@ -2249,8 +2424,13 @@ final class PlexHomeViewController: UIViewController {
         case .grid:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath) as! PosterCell
             if indexPath.item < section.items.count {
-                Perf.interval(.cellPrepare, key: perfKey) {
-                    cell.configure(item: section.items[indexPath.item])
+                let item = section.items[indexPath.item]
+                if item.isGridPlaceholder {
+                    cell.configurePlaceholder()
+                } else {
+                    Perf.interval(.cellPrepare, key: perfKey) {
+                        cell.configure(item: item)
+                    }
                 }
             }
             return cell
@@ -2562,11 +2742,10 @@ final class PlexHomeViewController: UIViewController {
                 // visible rows afterward (updateVisibleShelfRows).
                 ids = [HomeItemID(sectionID: section.id, itemID: Self.shelfRowItemToken)]
             case .grid:
-                ids = section.items.enumerated().compactMap { idx, item -> HomeItemID? in
-                    let raw = item.ref.itemID
-                    let id = raw.isEmpty ? "\(section.id.raw)-\(idx)" : raw
-                    return HomeItemID(sectionID: section.id, itemID: id)
-                }
+                // Positional identity: slot N is "grid-N" whether it holds an
+                // item or a placeholder, so a page landing under the focused
+                // cell reconfigures it in place instead of deleting it.
+                ids = section.items.indices.map(Self.gridSlotID)
             case .recommendationsLoading:
                 ids = [HomeItemID(sectionID: section.id, itemID: "recs-loading")]
             case .recommendationsError:
@@ -2880,6 +3059,17 @@ final class PlexHomeViewController: UIViewController {
     /// separate delivery path from presses, so adding this cannot change what
     /// Select does on any row.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            switch press.type {
+            case .upArrow, .downArrow:
+                heldArrow = press.type
+                if isOnSystemIndexBar { startFastScroll() }
+            case .leftArrow, .select:
+                if isOnSystemIndexBar { landFocusOnCenterTile() }
+            default:
+                break
+            }
+        }
         for press in presses where press.type == .playPause {
             isHandlingPlayPausePress = true
             playFocusedTile()
@@ -2889,6 +3079,7 @@ final class PlexHomeViewController: UIViewController {
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        releaseHeldArrow(presses)
         for press in presses where press.type == .playPause && isHandlingPlayPausePress {
             isHandlingPlayPausePress = false
             return
@@ -2897,6 +3088,7 @@ final class PlexHomeViewController: UIViewController {
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        releaseHeldArrow(presses)
         for press in presses where press.type == .playPause && isHandlingPlayPausePress {
             isHandlingPlayPausePress = false
             return
@@ -2961,8 +3153,9 @@ final class PlexHomeViewController: UIViewController {
             return nil
         }
         let section = sectionsSnapshot[indexPath.section]
-        guard case .grid = section.kind, indexPath.item < section.items.count else { return nil }
-        return playableItem(section.items[indexPath.item])
+        guard case .grid = section.kind, let item = section.items[safe: indexPath.item],
+              !item.isGridPlaceholder else { return nil }
+        return playableItem(item)
     }
 
     /// Per-shelf-kind resolution of a focused tile index to a playable item.
@@ -3236,7 +3429,7 @@ final class PlexHomeViewController: UIViewController {
         // empty grid section lays out at zero height). gridItems is the
         // network-loaded PlexMetadata store; map to MediaItem for the cell.
         sections.append(.sortHeader(title: libraryTitle))
-        sections.append(.grid(items: mapToMediaItems(gridItems)))
+        sections.append(.grid(items: mapGridSlots(gridItems)))
 
         return sections
     }
@@ -3315,12 +3508,21 @@ final class PlexHomeViewController: UIViewController {
     /// Used by pagination appends + the library grid, which fetch pages as
     /// `[PlexMetadata]` and must convert before rendering from MediaItem.
     private func mapToMediaItems(_ metas: [PlexMetadata]) -> [MediaItem] {
+        metas.map(mediaItemMapper())
+    }
+
+    /// Grid slots → cell items, position for position. An unloaded slot
+    /// becomes `MediaItem.gridPlaceholder`.
+    private func mapGridSlots(_ slots: [PlexMetadata?]) -> [MediaItem] {
+        let map = mediaItemMapper()
+        return slots.map { $0.map(map) ?? .gridPlaceholder }
+    }
+
+    private func mediaItemMapper() -> (PlexMetadata) -> MediaItem {
         let serverURL = authManager.selectedServerURL ?? ""
         let token = authManager.selectedServerToken ?? ""
         let providerID = MediaProviderRegistry.shared.primaryProvider?.id ?? "plex:\(serverURL)"
-        return metas.map {
-            PlexMediaMapper.item($0, providerID: providerID, serverURL: serverURL, authToken: token)
-        }
+        return { PlexMediaMapper.item($0, providerID: providerID, serverURL: serverURL, authToken: token) }
     }
 
     private func isRecentlyAdded(_ hub: PlexHub) -> Bool {
@@ -3882,19 +4084,19 @@ final class PlexHomeViewController: UIViewController {
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid:
             return  // shelf rows route taps through their own delegate (handleShelfTap)
         case .grid:
-            guard indexPath.item < section.items.count else { return }
+            guard let item = section.items[safe: indexPath.item], !item.isGridPlaceholder else { return }
             presentPreview(forSection: section, indexPath: indexPath)
         }
     }
 
 
     /// Navigate to detail for a MediaItem (tile-menu "More Info" /
-    /// "Go to …") — always the UIKit surfaces: episodes get the episode
-    /// detail page, everything else the standalone expanded detail (the
-    /// same page a hero Info press opens). The SwiftUI detail stack is not
+    /// "Go to …") — always the UIKit surfaces: episodes and seasons get the
+    /// title-first detail page, everything else the standalone expanded detail
+    /// (the same page a hero Info press opens). The SwiftUI detail stack is not
     /// used from the tile menu.
     private func selectMediaItem(_ item: MediaItem) {
-        if item.kind == .episode {
+        if item.kind == .episode || item.kind == .season {
             let page = MediaItemDetailPageViewController(
                 item: item,
                 seriesTitle: nil,
@@ -3948,19 +4150,22 @@ final class PlexHomeViewController: UIViewController {
 
     private func presentPreview(forSection section: HomeSectionData, indexPath: IndexPath) {
         guard indexPath.item < section.items.count else { return }
-        let mediaItems = section.items
-        let tapped = mediaItems[indexPath.item]
-        let sourceItemID = tapped.ref.itemID.isEmpty
-            ? "\(section.id.raw)-\(indexPath.item)"
-            : tapped.ref.itemID
+        // The library grid is sparse (unloaded slots are placeholders), so the
+        // carousel gets only what has loaded, with the tapped slot remapped to
+        // its index in that list. Every other section maps 1:1 and keeps its
+        // nil index map, which the shelf entry morph reads as "all tiles".
+        let allIDs = sourceItemIDs(for: section)
+        let loaded = section.items.indices.filter { !section.items[$0].isGridPlaceholder }
+        guard let selected = loaded.firstIndex(of: indexPath.item) else { return }
 
         presentPreviewOverlay(
-            items: mediaItems,
-            selectedIndex: indexPath.item,
+            items: loaded.map { section.items[$0] },
+            selectedIndex: selected,
             sourceRowID: section.id.raw,
-            sourceItemID: sourceItemID,
+            sourceItemID: allIDs[indexPath.item],
             sourceIndexPath: indexPath,
-            sourceItemIDs: sourceItemIDs(for: section)
+            sourceIndexMap: section.kind == .grid ? [indexPath.item: selected] : nil,
+            sourceItemIDs: loaded.map { allIDs[$0] }
         )
     }
 
@@ -4591,6 +4796,10 @@ final class PlexHomeViewController: UIViewController {
             guard let owner else { link.invalidate(); return }
             owner.stepOffset(link)
         }
+        @objc func fastTick(_ link: CADisplayLink) {
+            guard let owner else { link.invalidate(); return }
+            owner.stepFastScroll(link)
+        }
     }
 
     @objc fileprivate func stepOffset(_ link: CADisplayLink) {
@@ -4604,9 +4813,77 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
+    private func releaseHeldArrow(_ presses: Set<UIPress>) {
+        guard let heldArrow, presses.contains(where: { $0.type == heldArrow }) else { return }
+        self.heldArrow = nil
+        guard isOnSystemIndexBar else { return }
+        stopFastScroll()
+        landFocusOnCenterTile()
+    }
+
+    private func startFastScroll() {
+        guard fastScrollLink == nil, heldArrow != nil else { return }
+        offsetLink?.invalidate()
+        offsetLink = nil
+        fastScrollStart = CACurrentMediaTime()
+        fastScrollLastTick = fastScrollStart
+        let link = CADisplayLink(target: DisplayLinkProxy(self), selector: #selector(DisplayLinkProxy.fastTick(_:)))
+        link.add(to: .main, forMode: .common)
+        fastScrollLink = link
+    }
+
+    private func stopFastScroll() {
+        fastScrollLink?.invalidate()
+        fastScrollLink = nil
+    }
+
+    /// Ramps from a brisk row-a-time pace to about a screen every tenth of a
+    /// second over ~2.5s of holding; clamps at either end of the content.
+    @objc fileprivate func stepFastScroll(_ link: CADisplayLink) {
+        guard let heldArrow else { stopFastScroll(); return }
+        let now = CACurrentMediaTime()
+        let dt = now - fastScrollLastTick
+        fastScrollLastTick = now
+        let velocity = min(9000.0, 1500.0 + 3000.0 * (now - fastScrollStart))
+        let direction: CGFloat = heldArrow == .upArrow ? -1 : 1
+        let insetTop = collectionView.adjustedContentInset.top
+        let maxOffset = max(-insetTop, collectionView.contentSize.height - collectionView.bounds.height)
+        let y = max(-insetTop, min(maxOffset, collectionView.contentOffset.y + direction * CGFloat(velocity * dt)))
+        collectionView.contentOffset = CGPoint(x: 0, y: y)
+        if y <= -insetTop || y >= maxOffset { stopFastScroll() }
+    }
+
+    /// Fast mode over: focus the grid tile nearest the screen centre.
+    private func landFocusOnCenterTile() {
+        stopFastScroll()
+        guard let grid = gridSectionIndex else { return }
+        collectionView.layoutIfNeeded()
+        let centerY = collectionView.contentOffset.y + collectionView.bounds.height / 2
+        let nearest = collectionView.indexPathsForVisibleItems
+            .filter { $0.section == grid }
+            .min { a, b in
+                let ya = collectionView.layoutAttributesForItem(at: a)?.frame.midY ?? 0
+                let yb = collectionView.layoutAttributesForItem(at: b)?.frame.midY ?? 0
+                return abs(ya - centerY) < abs(yb - centerY)
+            }
+        guard let nearest, let cell = collectionView.cellForItem(at: nearest),
+              let system = UIFocusSystem.focusSystem(for: collectionView) else { return }
+        isOnSystemIndexBar = false
+        system.requestFocusUpdate(to: cell)
+        system.updateFocusIfNeeded()
+    }
+
     // MARK: - UIFocusEnvironment override
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        // Strip idle return / letter stepping: land on the jumped-to slot.
+        if wantsPendingGridFocus {
+            wantsPendingGridFocus = false
+            if let item = pendingGridFocusItem, let gridSection = gridSectionIndex,
+               let cell = collectionView.cellForItem(at: IndexPath(item: item, section: gridSection)) {
+                return [cell]
+            }
+        }
         // Explicit row hand-off (Up out of a lower row). First, because it is a
         // deliberate one-shot and must beat every heuristic below it.
         if let section = pendingRowFocusSection {
@@ -4655,6 +4932,17 @@ final class PlexHomeViewController: UIViewController {
 extension PlexHomeViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         handleTap(at: indexPath)
+    }
+
+    /// After a letter jump, Left off the alphabet bar lands on the slot the
+    /// jump revealed, not on the tile the collection remembers from before
+    /// the jump (which would drag the grid straight back).
+    func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
+        guard let item = pendingGridFocusItem,
+              let gridSection = sectionsSnapshot.firstIndex(where: { $0.kind == .grid })
+        else { return nil }
+        let path = IndexPath(item: item, section: gridSection)
+        return collectionView.cellForItem(at: path) != nil ? path : nil
     }
 
     /// Shelf rows are containers — focus dives through to their tiles.
@@ -4746,12 +5034,12 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList:
             return  // Shelf rows paginate from their own willDisplay (shelfWillDisplay)
         case .grid:
-            // Grid pagination: trigger the next page when displaying a cell
-            // within 12 items of the loaded tail (ported from
-            // MediaLibraryViewController's willDisplay).
-            let threshold = gridItems.count - 12
-            guard indexPath.item >= threshold, gridItems.count < totalGridCount else { return }
-            loadGridNextPage()
+            // Sparse grid: fetch the page this slot lives in, plus a
+            // look-ahead either side so a held Down/Up does not reach blank
+            // slots before their page lands (12 = the old tail threshold).
+            loadGridPage(containing: indexPath.item)
+            loadGridPage(containing: indexPath.item + 12)
+            loadGridPage(containing: indexPath.item - 12)
         }
     }
 
@@ -4768,8 +5056,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             return
         }
         let section = sectionsSnapshot[indexPath.section]
-        guard case .grid = section.kind, indexPath.item < section.items.count else { return }
-        let item = section.items[indexPath.item]
+        guard case .grid = section.kind, let item = section.items[safe: indexPath.item],
+              !item.isGridPlaceholder else { return }
         presentTileMenu(sections: tileMenuSections(for: item, isContinueWatching: false))
     }
 
@@ -5061,6 +5349,33 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         }
         // Resolve the section that owns the newly-focused view.
         guard let nextSectionIndex = focusedSectionIndex(in: context) else {
+            // The alphabet bar counts as the grid for chrome purposes: the
+            // page stays below-top and the bar stays up while focus walks
+            // its letters.
+            if context.nextFocusedView?.isDescendant(of: alphabetBar) == true {
+                // The collection's remembered path names the tile from before
+                // the jump, off-screen now; armed, it makes Left off the strip
+                // find nothing to enter and fall through to the sidebar. Off
+                // while on the strip, back on once the grid has focus again.
+                collectionView.remembersLastFocusedIndexPath = false
+                scheduleStripIdleReturn()
+                return
+            }
+            // tvOS's fast-scroll index bar: the one focusable thing inside
+            // the collection that is not in a cell. Fast mode begins.
+            if let next = context.nextFocusedView, next.isDescendant(of: collectionView),
+               !sequence(first: next, next: { $0.superview }).contains(where: { $0 is UICollectionViewCell }) {
+                isOnSystemIndexBar = true
+                offsetLink?.invalidate()
+                offsetLink = nil
+                setAlphabetBarVisible(false)
+                if heldArrow != nil { startFastScroll() }
+                return
+            }
+            isOnSystemIndexBar = false
+            stopFastScroll()
+            stripIdleWork?.cancel()
+            setAlphabetBarVisible(false)
             updateLeftEdgeGuide(for: nil)
             // Focus left the page (sidebar, modal). Chrome must be back
             // before the sidebar can be interacted with.
@@ -5080,6 +5395,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             return
         }
         postFocusBelowTop(nextSectionIndex > topSectionIndex)
+        isOnSystemIndexBar = false
+        stopFastScroll()
         // Kept AFTER focus leaves the page, so a press hand-off can still say
         // which row it came from. `focusedSectionForHandoff` is nil by then.
         lastFocusedSection = nextSectionIndex
@@ -5113,10 +5430,18 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 needsInitialHeroFocus = false
             }
         }
+        setAlphabetBarVisible(kind == .grid)
         switch kind {
         case .hero:
             scrollHeroIntoView()
         case .grid:
+            // Focus is in the grid, so any letter jump has been consumed.
+            pendingGridFocusItem = nil
+            stripIdleWork?.cancel()
+            collectionView.remembersLastFocusedIndexPath = true
+            if let slot = context.nextFocusedIndexPath?.item {
+                alphabetBar.entryIndex = alphabetIndex?.entryIndex(containing: slot)
+            }
             // Multi-row grid: centring the SECTION (its first item) would
             // pin the viewport to the grid's top — centre the focused
             // cell's own row instead. Grid cells are NOT orthogonal, so
@@ -5226,6 +5551,18 @@ extension PlexHomeViewController: MenuBackHandling {
     /// `TVSidebarView.onExitCommand` returns to Home (stage 3).
     func handleMenuBack() -> Bool {
         guard isViewLoaded, let window = view.window, window.isKeyWindow else { return false }
+        // From the A–Z strip or the (hidden) fast-scroll bar, Menu goes back
+        // to a tile, never out to the sidebar.
+        if let focused = UIFocusSystem.focusSystem(for: collectionView)?.focusedItem as? UIView {
+            if focused.isDescendant(of: alphabetBar) {
+                leaveStrip()
+                return true
+            }
+            if isOnSystemIndexBar {
+                landFocusOnCenterTile()
+                return true
+            }
+        }
         // Focus must be inside THIS page's collection. When a player, detail
         // carousel, tile menu or Settings page is up, focus lives inside it —
         // this page declines and Menu keeps its normal meaning there.

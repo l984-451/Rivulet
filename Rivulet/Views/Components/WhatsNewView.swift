@@ -142,6 +142,9 @@ struct WhatsNewView: View {
     static let changelogs: [(version: String, features: [String])] = [
         ("1.0.5 (81)", [
             "Extras and special features now resume where you left off",
+            "Selecting a season pill now opens the season's detail page, not another carousel",
+            "Jump straight to a letter with the new A to Z bar in title-sorted libraries",
+            "Holding Up or Down in a library now keeps scrolling instead of losing focus",
         ]),
         ("1.0.5 (80)", [
             "Updated AetherEngine to 6.32.0",

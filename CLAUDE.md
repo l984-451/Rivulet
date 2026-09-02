@@ -287,6 +287,25 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   from the start, which is why only the shell absorbed the press.
 - The player's tap-vs-hold sites are duration-based and deliberately
   untouched pending InputProbe field data on IR repeat codes (#212).
+- **The focus engine's occlusion test is geometric, not hit-test based.** Any
+  non-hidden view with alpha above zero that sits above an item's frame makes
+  that item unfocusable, even with a clear background and a `hitTest`
+  override returning nil. `UIFocusDebugger.checkFocusability(for:)` names the
+  occluder. The library's A–Z strip shipped full-bleed once to host its centre
+  letter and silently made every grid tile unfocusable: Left from a letter
+  went to the shell's edge catcher, Select and Menu did nothing. A view that
+  overlays a focus surface must be exactly its own footprint, and anything
+  larger (the letter indicator) must be `isHidden` before a focus request.
+- **A held Up/Down hands focus to tvOS's fast-scroll index bar after ~1.5s.**
+  The engine moves row by row, then focuses `_UIFocusFastScrollingIndexBarView`
+  (a hidden subview of the collection, the "dots") and stops issuing focus
+  moves. That hand-off bypasses `shouldUpdateFocus` and happens even under
+  `indexDisplayMode = .alwaysHidden`; on this self-scrolling collection the
+  system bar scrolls nothing, so focus just vanishes. `PlexHomeViewController`
+  treats the hand-off as the fast-mode signal and drives the offset itself
+  while the arrow stays down (`heldArrow`, `stepFastScroll`), landing on the
+  centre tile on release. Do not refuse the engine's repeat moves instead:
+  after the same ~1.5s it escalates past the collection to the sidebar.
 
 ### Context Menus (long-press)
 

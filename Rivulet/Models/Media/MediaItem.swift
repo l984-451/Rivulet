@@ -90,6 +90,32 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
 }
 
 extension MediaItem {
+    /// Stand-in for a library-grid slot whose page has not loaded. The empty
+    /// itemID is the marker: cells draw a blank card for it and tap / menu /
+    /// play paths ignore it.
+    static let gridPlaceholder = MediaItem(
+        ref: MediaItemRef(providerID: "", itemID: ""),
+        kind: .unknown,
+        title: "",
+        sortTitle: nil,
+        overview: nil,
+        year: nil,
+        runtime: nil,
+        parentRef: nil,
+        grandparentRef: nil,
+        episodeNumber: nil,
+        seasonNumber: nil,
+        childProgress: nil,
+        userState: MediaUserState(isPlayed: false, viewOffset: 0, isFavorite: false, lastViewedAt: nil),
+        artwork: MediaArtwork(poster: nil, backdrop: nil, thumbnail: nil, logo: nil),
+        parentArtwork: nil,
+        grandparentArtwork: nil
+    )
+
+    var isGridPlaceholder: Bool { ref.itemID.isEmpty }
+}
+
+extension MediaItem {
     /// Returns a copy with `artwork.logo` filled in if it's currently nil.
     /// Used by the prefetch ring to splice a TMDB-resolved logo URL into a
     /// MediaItem whose provider mapper didn't have one at construction time.

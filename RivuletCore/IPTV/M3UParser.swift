@@ -24,6 +24,27 @@ actor M3UParser {
         let channelNumber: Int?
         let name: String
         let streamURL: URL
+        let httpHeaders: [String: String]
+
+        init(
+            tvgId: String?,
+            tvgName: String?,
+            tvgLogo: String?,
+            groupTitle: String?,
+            channelNumber: Int?,
+            name: String,
+            streamURL: URL,
+            httpHeaders: [String: String] = [:]
+        ) {
+            self.tvgId = tvgId
+            self.tvgName = tvgName
+            self.tvgLogo = tvgLogo
+            self.groupTitle = groupTitle
+            self.channelNumber = channelNumber
+            self.name = name
+            self.streamURL = streamURL
+            self.httpHeaders = httpHeaders
+        }
 
         /// Whether this appears to be an HD channel (based on name)
         var isHD: Bool {
@@ -97,10 +118,16 @@ actor M3UParser {
             } else if line.hasPrefix("#") {
                 // Skip other directives
                 continue
-            } else if let extInf = currentExtInf, let url = URL(string: line) {
-                // This is a stream URL following an EXTINF
-                if let channel = parseChannel(extInf: extInf, streamURL: url) {
-                    channels.append(channel)
+            } else if let extInf = currentExtInf {
+                if let parsedStream = LiveTVClientIdentity.parseStreamURL(line) {
+                    // This is a stream URL following an EXTINF
+                    if let channel = parseChannel(
+                        extInf: extInf,
+                        streamURL: parsedStream.url,
+                        httpHeaders: parsedStream.headers
+                    ) {
+                        channels.append(channel)
+                    }
                 }
                 currentExtInf = nil
             }
@@ -112,7 +139,11 @@ actor M3UParser {
     // MARK: - Private Methods
 
     /// Parse a single channel from EXTINF line and stream URL
-    private func parseChannel(extInf: String, streamURL: URL) -> ParsedChannel? {
+    private func parseChannel(
+        extInf: String,
+        streamURL: URL,
+        httpHeaders: [String: String] = [:]
+    ) -> ParsedChannel? {
         // Parse the EXTINF line
         // Format: #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="..." tvg-chno="123",Channel Name
         // The comma separates attributes from the display name
@@ -144,7 +175,8 @@ actor M3UParser {
             groupTitle: groupTitle,
             channelNumber: channelNumber,
             name: name,
-            streamURL: streamURL
+            streamURL: streamURL,
+            httpHeaders: httpHeaders
         )
     }
 

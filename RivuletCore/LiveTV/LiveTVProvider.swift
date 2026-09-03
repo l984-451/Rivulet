@@ -50,6 +50,7 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
     let tvgId: String?
     let groupTitle: String?
     let isHD: Bool
+    let httpHeaders: [String: String]?
 
     init(
         id: String,
@@ -62,7 +63,8 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
         streamURL: URL? = nil,
         tvgId: String? = nil,
         groupTitle: String? = nil,
-        isHD: Bool = false
+        isHD: Bool = false,
+        httpHeaders: [String: String]? = nil
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -75,6 +77,7 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
         self.tvgId = tvgId
         self.groupTitle = groupTitle
         self.isHD = isHD
+        self.httpHeaders = httpHeaders
     }
 
     /// Create a unique identifier combining source and channel
@@ -277,7 +280,8 @@ extension M3UParser.ParsedChannel {
             streamURL: streamURL,
             tvgId: tvgId,
             groupTitle: groupTitle,
-            isHD: isHD
+            isHD: isHD,
+            httpHeaders: httpHeaders.isEmpty ? nil : httpHeaders
         )
     }
 }

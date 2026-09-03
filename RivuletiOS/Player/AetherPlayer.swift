@@ -259,11 +259,14 @@ final class AetherPlayer: ObservableObject {
 
     func loadLive(url: URL, headers: [String: String]? = nil) async throws {
         state = .loading
-        let isHLS = url.pathExtension.lowercased() == "m3u8"
-            || url.absoluteString.lowercased().contains("format=hls")
+        let resolved = LiveTVClientIdentity.resolveStream(url: url, baseHeaders: headers ?? [:])
+        let streamURL = resolved.url
+        let streamHeaders = resolved.headers
+        let isHLS = streamURL.pathExtension.lowercased() == "m3u8"
+            || streamURL.absoluteString.lowercased().contains("format=hls")
         let options = LoadOptions(
             suppressDisplayCriteria: false,
-            httpHeaders: headers ?? [:],
+            httpHeaders: streamHeaders,
             matchContentEnabled: true,
             panelIsInHDRMode: false,
             audioBridgeMode: .lossless,

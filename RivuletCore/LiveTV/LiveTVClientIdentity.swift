@@ -38,4 +38,66 @@ enum LiveTVClientIdentity {
     /// Headers attached to every Live TV stream load. Kept as a single value so
     /// the player call sites cannot drift apart from one another.
     static let streamHeaders: [String: String] = ["User-Agent": userAgent]
+
+    /// Parses a raw stream URL string that may contain pipe-delimited headers
+    /// (e.g. `http://host/stream.m3u8|User-Agent=CustomUA&Referer=...` or
+    /// `%7CUser-Agent=...`) into a sanitized URL and extracted headers dictionary.
+    ///
+    /// Popular IPTV players (such as TiviMate and Kodi IPTV Simple Client) support
+    /// appending HTTP headers to stream URLs after a pipe delimiter `|`.
+    static func parseStreamURL(_ rawString: String) -> (url: URL, headers: [String: String])? {
+        let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let components: [String]
+        if let pipeRange = trimmed.range(of: "|") {
+            components = [String(trimmed[..<pipeRange.lowerBound]), String(trimmed[pipeRange.upperBound...])]
+        } else if let encPipeRange = trimmed.range(of: "%7C", options: .caseInsensitive) {
+            components = [String(trimmed[..<encPipeRange.lowerBound]), String(trimmed[encPipeRange.upperBound...])]
+        } else {
+            components = [trimmed]
+        }
+
+        guard let cleanURL = URL(string: components[0].trimmingCharacters(in: .whitespaces)) else {
+            return nil
+        }
+        var headers: [String: String] = [:]
+
+        if components.count > 1 {
+            let rawHeaderString = components[1]
+            let pairs = rawHeaderString.components(separatedBy: "&")
+            for pair in pairs {
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { continue }
+                let rawKey = parts[0].trimmingCharacters(in: .whitespaces)
+                let rawVal = parts[1].trimmingCharacters(in: .whitespaces)
+                let val = rawVal.removingPercentEncoding ?? rawVal
+                guard !rawKey.isEmpty, !val.isEmpty else { continue }
+
+                if rawKey.caseInsensitiveCompare("User-Agent") == .orderedSame {
+                    headers["User-Agent"] = val
+                } else if rawKey.caseInsensitiveCompare("Referer") == .orderedSame {
+                    headers["Referer"] = val
+                } else {
+                    headers[rawKey] = val
+                }
+            }
+        }
+
+        return (cleanURL, headers)
+    }
+
+    /// Resolves and sanitizes a stream URL by stripping any pipe-delimited headers
+    /// and merging any discovered headers (such as `User-Agent`) into the provided stream headers.
+    static func resolveStream(url: URL, baseHeaders: [String: String] = streamHeaders) -> (url: URL, headers: [String: String]) {
+        guard let parsed = parseStreamURL(url.absoluteString) else {
+            return (url, baseHeaders)
+        }
+        guard !parsed.headers.isEmpty || parsed.url != url else {
+            return (url, baseHeaders)
+        }
+        var merged = baseHeaders
+        for (k, v) in parsed.headers {
+            merged[k] = v
+        }
+        return (parsed.url, merged)
+    }
 }

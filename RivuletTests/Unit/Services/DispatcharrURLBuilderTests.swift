@@ -168,4 +168,20 @@ final class DispatcharrURLBuilderTests: XCTestCase {
         XCTAssertTrue(agent.hasPrefix("Rivulet/"), "unexpected user agent: \(agent)")
         XCTAssertEqual(LiveTVClientIdentity.streamHeaders["User-Agent"], agent)
     }
+
+    func test_parseStreamURL_extractsUserAgentAndCleansURL() {
+        let raw = "http://example.com/live/ch1.m3u8|User-Agent=CustomUA%201.0&Referer=http://example.org"
+        let parsed = LiveTVClientIdentity.parseStreamURL(raw)
+        XCTAssertNotNil(parsed)
+        XCTAssertEqual(parsed?.url.absoluteString, "http://example.com/live/ch1.m3u8")
+        XCTAssertEqual(parsed?.headers["User-Agent"], "CustomUA 1.0")
+        XCTAssertEqual(parsed?.headers["Referer"], "http://example.org")
+    }
+
+    func test_resolveStream_overridesUserAgentFromURL() {
+        let url = URL(string: "http://example.com/live/ch1.m3u8%7CUser-Agent=CustomPlayer")!
+        let resolved = LiveTVClientIdentity.resolveStream(url: url)
+        XCTAssertEqual(resolved.url.absoluteString, "http://example.com/live/ch1.m3u8")
+        XCTAssertEqual(resolved.headers["User-Agent"], "CustomPlayer")
+    }
 }

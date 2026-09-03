@@ -82,13 +82,17 @@ public final class AppIconManager: ObservableObject {
         #if canImport(UIKit)
         DispatchQueue.main.async {
             guard UIApplication.shared.supportsAlternateIcons else {
+                print("AppIconManager: System reports supportsAlternateIcons = false")
                 return
             }
             let targetIconName = option.alternateIconName
+            print("AppIconManager: Applying icon '\(String(describing: targetIconName))' (current='\(String(describing: UIApplication.shared.alternateIconName))')")
             if UIApplication.shared.alternateIconName != targetIconName {
                 UIApplication.shared.setAlternateIconName(targetIconName) { error in
                     if let error = error {
                         print("AppIconManager: Failed to set alternate icon to '\(String(describing: targetIconName))': \(error.localizedDescription)")
+                    } else {
+                        print("AppIconManager: Successfully set alternate icon to '\(String(describing: targetIconName))'")
                     }
                 }
             }

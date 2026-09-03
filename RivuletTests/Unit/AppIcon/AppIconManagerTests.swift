@@ -58,4 +58,9 @@ final class AppIconManagerTests: XCTestCase {
 
         NotificationCenter.default.removeObserver(observer)
     }
+
+    func testSystemSupportsAlternateIcons() {
+        XCTAssertTrue(UIApplication.shared.supportsAlternateIcons)
+    }
 }
+

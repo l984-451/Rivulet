@@ -9,8 +9,9 @@ import CoreGraphics
 ///
 /// The picture fills the canvas here, so picture fractions read straight off
 /// the numbers: `sideSafeFraction` 5% is x=50/950, `bandSideFraction` 10% is
-/// x=100/900, and `placementFloor` is 6% of 1000 = 60, so the shared floor
-/// puts a bottom-resting box's maxY at 940.
+/// x=100/900, `bandEdgeFraction` 10% is y=100/900, and `placementFloor` is 6%
+/// of 1000 = 60, so the shared floor puts an unplaced bottom-resting box's
+/// maxY at 940.
 @MainActor
 final class CaptionOverlayPlacementTests: XCTestCase {
 
@@ -71,12 +72,27 @@ final class CaptionOverlayPlacementTests: XCTestCase {
     }
 
     /// Teletext arrives with a coarse `\an` and no percentage, so the column
-    /// borrows the 10% anchor the WebVTT proxy writes for the same page.
-    func testCoarseLeftBandUsesTheColumnAnchorAndFloor() {
+    /// borrows the 10% anchor the WebVTT proxy writes for the same page, and
+    /// the bottom band rests at the symmetric 10% margin above the shared floor.
+    func testCoarseLeftBandUsesTheColumnAnchorAndBandMargin() {
         let frame = captionFrame(placement: .init(alignment: 1, position: nil))
 
         XCTAssertEqual(frame.minX, 100, accuracy: 0.5)
-        XCTAssertEqual(frame.maxY, 940, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 900, accuracy: 0.5)
+    }
+
+    /// When the floor rises above the 10% band margin (such as when controls
+    /// are visible), the floor still lifts the bottom teletext cue.
+    func testCoarseLeftBandStillLiftsWhenFloorExceedsBandMargin() {
+        let frame = captionFrame(
+            placement: .init(alignment: 1, position: nil),
+            controlsVisible: true)
+
+        XCTAssertEqual(frame.minX, 100, accuracy: 0.5)
+        XCTAssertEqual(
+            frame.maxY,
+            canvas.height - SubtitleAdjustments.controlsFloor(pictureHeight: canvas.height),
+            accuracy: 0.5)
     }
 
     func testUnplacedCueSitsInTheDefaultBand() {

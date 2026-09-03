@@ -7,16 +7,17 @@ import UIKit
 struct IOSGuideView: View {
     let channels: [IOSIPTVChannel]
     let programsByChannel: [String: [IOSEPGProgram]]
+    var snapToken: Int = 0
 
     @State private var selection: IOSGuideSelection?
     @State private var playbackRequest: IOSPlaybackRequest?
-    @State private var snapGeneration = 0
+    @State private var internalSnapToken = 0
 
     var body: some View {
         IOSGuideCollectionView(
             channels: channels,
             programsByChannel: programsByChannel,
-            snapToken: snapGeneration
+            snapToken: snapToken + internalSnapToken
         ) { channel, program in
             if let program {
                 selection = IOSGuideSelection(channel: channel, program: program)
@@ -36,7 +37,7 @@ struct IOSGuideView: View {
                 .presentationBackground(.clear)
         }
         .fullScreenCover(item: $playbackRequest, onDismiss: {
-            snapGeneration += 1
+            internalSnapToken += 1
         }) { request in
             IOSAetherPlayerView(
                 request: request,

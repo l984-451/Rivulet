@@ -7,6 +7,7 @@ struct IOSLiveTVView: View {
     @StateObject private var store = IOSLiveTVStore()
     @State private var showingSourceEditor = false
     @State private var selectedGroup: String?
+    @State private var snapToNowToken = 0
     let showSettings: () -> Void
 
     init(showSettings: @escaping () -> Void = {}) {
@@ -62,6 +63,12 @@ struct IOSLiveTVView: View {
 
             HStack(spacing: 4) {
                 if !store.channels.isEmpty {
+                    Button("Jump to now", systemImage: "arrow.right.and.line.vertical.and.arrow.left") {
+                        snapToNowToken += 1
+                    }
+                    .labelStyle(.iconOnly)
+                    .frame(width: 42, height: 42)
+
                     Button("Refresh", systemImage: "arrow.clockwise") {
                         Task { await store.load() }
                     }
@@ -125,7 +132,8 @@ struct IOSLiveTVView: View {
 
             IOSGuideView(
                 channels: visibleChannels,
-                programsByChannel: store.programsByChannel
+                programsByChannel: store.programsByChannel,
+                snapToken: snapToNowToken
             )
         }
         .overlay {

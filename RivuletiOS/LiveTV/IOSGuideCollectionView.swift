@@ -132,7 +132,7 @@ struct IOSGuideCollectionView: UIViewRepresentable {
             self.parent = parent
             if parent.snapToken != lastSnapToken {
                 lastSnapToken = parent.snapToken
-                resetWindow()
+                snapToNow()
                 return
             }
 
@@ -140,6 +140,16 @@ struct IOSGuideCollectionView: UIViewRepresentable {
             guard signature != lastDataSignature else { return }
             lastDataSignature = signature
             rebuildData(reload: true)
+        }
+
+        func snapToNow() {
+            let anchor = Self.floorToHalfHour(Date())
+            let end = windowStart.addingTimeInterval(TimeInterval(totalMinutes * 60))
+            if anchor >= windowStart && anchor < end {
+                setLeftEdge(to: anchor, animated: true)
+            } else {
+                resetWindow()
+            }
         }
 
         func resetWindow() {

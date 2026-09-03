@@ -192,7 +192,6 @@ private struct IOSLiveTVSourceView: View {
 
     @State private var m3uURL: String
     @State private var xmltvURL: String
-    @State private var userAgent: String
     @State private var authorizationHeader: String
     @State private var referer: String
 
@@ -200,7 +199,6 @@ private struct IOSLiveTVSourceView: View {
         self.store = store
         _m3uURL = State(initialValue: store.m3uURLString)
         _xmltvURL = State(initialValue: store.xmltvURLString)
-        _userAgent = State(initialValue: store.userAgentString)
         _authorizationHeader = State(initialValue: store.authorizationHeaderString)
         _referer = State(initialValue: store.refererString)
     }
@@ -233,12 +231,6 @@ private struct IOSLiveTVSourceView: View {
                 }
 
                 Section {
-                    LabeledContent("User-Agent") {
-                        TextField(LiveTVClientIdentity.userAgent, text: $userAgent)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
                     LabeledContent("Authorization") {
                         SecureField("Optional", text: $authorizationHeader)
                             .multilineTextAlignment(.trailing)
@@ -255,7 +247,7 @@ private struct IOSLiveTVSourceView: View {
                 } header: {
                     Text("HTTP headers (optional)")
                 } footer: {
-                    Text("A bare Authorization value is treated as a Dispatcharr API token; otherwise enter the complete Bearer, Basic, or Token value. Blank User-Agent uses \(LiveTVClientIdentity.userAgent). Authorization is only forwarded to same-host streams; User-Agent and Referer apply to all requests.")
+                    Text("A bare Authorization value is treated as a Dispatcharr API token; otherwise enter the complete Bearer, Basic, or Token value. Authorization is only forwarded to same-host streams; Referer applies to all requests. Streams identify as \(LiveTVClientIdentity.userAgent) unless a custom User-Agent is specified in the stream URL via |User-Agent=.")
                 }
 
                 if case .failed(let message) = store.state {
@@ -271,7 +263,6 @@ private struct IOSLiveTVSourceView: View {
                             let loaded = await store.configureAndLoad(
                                 m3uURL: m3uURL,
                                 xmltvURL: xmltvURL,
-                                userAgent: userAgent,
                                 authorizationHeader: authorizationHeader,
                                 referer: referer
                             )

@@ -365,4 +365,35 @@ final class M3UParserTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Pipe-delimited headers
+
+    func testParsesStreamURLWithUserAgentPipe() async throws {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1,Test Channel
+        http://example.com/live/stream.m3u8|User-Agent=CustomPlayer/1.0
+        """
+
+        let channels = try await parser.parse(content: content)
+
+        XCTAssertEqual(channels.count, 1)
+        XCTAssertEqual(channels[0].streamURL.absoluteString, "http://example.com/live/stream.m3u8")
+        XCTAssertEqual(channels[0].httpHeaders["User-Agent"], "CustomPlayer/1.0")
+    }
+
+    func testParsesStreamURLWithMultiplePipeHeaders() async throws {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1,Test Channel
+        http://example.com/live/stream.m3u8|user-agent=Custom%20Player%202.0&Referer=http://foo.bar
+        """
+
+        let channels = try await parser.parse(content: content)
+
+        XCTAssertEqual(channels.count, 1)
+        XCTAssertEqual(channels[0].streamURL.absoluteString, "http://example.com/live/stream.m3u8")
+        XCTAssertEqual(channels[0].httpHeaders["User-Agent"], "Custom Player 2.0")
+        XCTAssertEqual(channels[0].httpHeaders["Referer"], "http://foo.bar")
+    }
 }

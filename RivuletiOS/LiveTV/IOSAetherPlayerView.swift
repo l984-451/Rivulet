@@ -559,13 +559,13 @@ struct IOSAetherSubtitleOverlay: View {
     let landscapeOSDTop: CGFloat?
     let videoSize: CGSize
 
-    private enum Metrics {
+    fileprivate enum Metrics {
         // iPhone captions need a smaller curve than the 10-foot tvOS UI.
         // 0.039675 is a 25% reduction from tvOS's 0.0529, equivalent to
         // reducing a 0.20 scale factor to 0.15.
         static let fontHeightFraction: CGFloat = 0.039675
         static let minimumPointSize: CGFloat = 10
-        static let positionedSafeFraction: CGFloat = 0.10
+        static let sideSafeFraction: CGFloat = 0.05
         static let unpositionedBottomFraction: CGFloat = 0.05
     }
 
@@ -583,7 +583,6 @@ struct IOSAetherSubtitleOverlay: View {
                 in: picture,
                 container: proxy.size
             )
-            let positionedSafe = positionedSafeRect(in: picture)
             let defaultBand = defaultBandRect(
                 in: picture,
                 osdBoundary: osdBoundary
@@ -620,7 +619,6 @@ struct IOSAetherSubtitleOverlay: View {
                         IOSPositionedCaptionLayout(
                             placement: placement,
                             pictureRect: picture,
-                            safeRect: positionedSafe,
                             osdBoundary: osdBoundary
                         ) {
                             subtitleText(cue.body,
@@ -765,34 +763,27 @@ struct IOSAetherSubtitleOverlay: View {
         )
     }
 
-    private func positionedSafeRect(in picture: CGRect) -> CGRect {
-        picture.insetBy(
-            dx: picture.width * Metrics.positionedSafeFraction,
-            dy: picture.height * Metrics.positionedSafeFraction
-        )
-    }
-
-    /// Matches the subtitle-refinement renderer: clamp authored text and DVB/
-    /// PGS bitmap boxes into the picture's central 80%, then move an overlapping
-    /// cue only far enough upward to keep the 5%-of-picture OSD clearance.
+    /// Keeps authored bitmap boxes inside the picture's safe bounds.
+    /// If the OSD would obscure it, the OSD wins and the box moves upward.
     private func adjustedPositionedFrame(
         _ frame: CGRect,
         in picture: CGRect,
         osdBoundary: CGFloat?
     ) -> CGRect {
-        let safe = positionedSafeRect(in: picture)
-        let maxX = max(safe.minX, safe.maxX - frame.width)
-        var originX = min(max(frame.minX, safe.minX), maxX)
-        let maxY = max(safe.minY, safe.maxY - frame.height)
-        var originY = min(max(frame.minY, safe.minY), maxY)
+        let safeMinX = picture.minX + picture.width * Metrics.sideSafeFraction
+        let safeMaxX = picture.maxX - picture.width * Metrics.sideSafeFraction
+        let maxX = max(safeMinX, safeMaxX - frame.width)
+        var originX = min(max(frame.minX, safeMinX), maxX)
+        let maxY = max(picture.minY, picture.maxY - frame.height)
+        var originY = min(max(frame.minY, picture.minY), maxY)
 
         if let osdBoundary {
             originY = min(originY, osdBoundary - frame.height)
             originY = max(picture.minY, originY)
         }
 
-        if !originX.isFinite { originX = safe.minX }
-        if !originY.isFinite { originY = safe.minY }
+        if !originX.isFinite { originX = safeMinX }
+        if !originY.isFinite { originY = picture.minY }
         return CGRect(origin: CGPoint(x: originX, y: originY), size: frame.size)
     }
 
@@ -800,7 +791,7 @@ struct IOSAetherSubtitleOverlay: View {
         in picture: CGRect,
         osdBoundary: CGFloat?
     ) -> CGRect {
-        let sideInset = picture.width * Metrics.positionedSafeFraction
+        let sideInset = picture.width * Metrics.sideSafeFraction
         let restingMaxY = picture.maxY
             - picture.height * Metrics.unpositionedBottomFraction
         let maxY = min(restingMaxY, osdBoundary ?? restingMaxY)
@@ -854,15 +845,15 @@ private func captionColumn(for placement: AetherPlayer.SubtitleCue.TextPlacement
     return 1
 }
 
-/// Places a content-positioned text cue inside the visible picture's title-safe
-/// region. Fine x positions belong to the left/centre/right caption-box edge
-/// selected by the cue alignment; fine y positions name the box's top edge.
-/// Coarse ASS/teletext positions resolve to the corresponding 10/50/90% band.
-/// The measured box is clamped after wrapping, matching subtitle-refinement.
+/// Places a content-positioned text cue inside the visible picture.
+/// Fine x positions belong to the leading/centre/trailing caption-box edge
+/// selected by the cue alignment; fine y positions name the box's top edge directly.
+/// Coarse teletext positions resolve to the corresponding 10/50/90% band.
+/// A side-anchored cue wraps into the room between its anchor and the far safe edge,
+/// matching tvOS and AVPlayer.
 private struct IOSPositionedCaptionLayout: Layout {
     let placement: AetherPlayer.SubtitleCue.TextPlacement
     let pictureRect: CGRect
-    let safeRect: CGRect
     let osdBoundary: CGFloat?
 
     func sizeThatFits(
@@ -879,41 +870,54 @@ private struct IOSPositionedCaptionLayout: Layout {
         subviews: Subviews,
         cache: inout ()
     ) {
-        guard let subview = subviews.first, safeRect.width > 0, safeRect.height > 0 else { return }
+        guard let subview = subviews.first, pictureRect.width > 0, pictureRect.height > 0 else { return }
 
-        let fitted = subview.sizeThatFits(
-            ProposedViewSize(width: safeRect.width, height: safeRect.height)
-        )
-        let width = min(fitted.width, safeRect.width)
-        let height = min(fitted.height, safeRect.height)
         let alignment = min(max(placement.alignment ?? 2, 1), 9)
         let column = captionColumn(for: placement)
         let row = (alignment - 1) / 3
 
-        let anchorX: CGFloat
+        let safeMinX = pictureRect.minX + pictureRect.width * IOSAetherSubtitleOverlay.Metrics.sideSafeFraction
+        let safeMaxX = pictureRect.maxX - pictureRect.width * IOSAetherSubtitleOverlay.Metrics.sideSafeFraction
+
+        let requestedAnchor: CGFloat
         if let x = placement.position?.x {
-            anchorX = pictureRect.minX
-                + min(max(x, 0.10), 0.90) * pictureRect.width
+            requestedAnchor = pictureRect.minX + min(max(x, 0), 1) * pictureRect.width
         } else if column == 0 {
-            anchorX = pictureRect.minX + pictureRect.width * 0.10
+            requestedAnchor = pictureRect.minX + pictureRect.width * 0.10
         } else if column == 2 {
-            anchorX = pictureRect.minX + pictureRect.width * 0.90
+            requestedAnchor = pictureRect.minX + pictureRect.width * 0.90
         } else {
-            anchorX = pictureRect.midX
+            requestedAnchor = pictureRect.midX
         }
+        let anchor = min(max(requestedAnchor, safeMinX), max(safeMinX, safeMaxX))
+
+        // A side-anchored cue wraps into the room between its anchor and the
+        // far safe edge, matching tvOS and AVPlayer.
+        let widthLimit: CGFloat
+        switch column {
+        case 0: widthLimit = max(CGFloat(0), safeMaxX - anchor)
+        case 2: widthLimit = max(CGFloat(0), anchor - safeMinX)
+        default: widthLimit = max(CGFloat(0), safeMaxX - safeMinX)
+        }
+
+        let fitted = subview.sizeThatFits(
+            ProposedViewSize(width: widthLimit, height: pictureRect.height)
+        )
+        let width = min(fitted.width, widthLimit)
+        let height = fitted.height
 
         let requestedX: CGFloat
         switch column {
-        case 0: requestedX = anchorX
-        case 2: requestedX = anchorX - width
-        default: requestedX = anchorX - width / 2
+        case 0: requestedX = anchor
+        case 2: requestedX = anchor - width
+        default: requestedX = anchor - width / 2
         }
+        let originX = min(max(requestedX, safeMinX), max(safeMinX, safeMaxX - width))
 
         let requestedY: CGFloat
         if let y = placement.position?.y {
-            // Fine positions describe the caption box's top edge.
-            requestedY = pictureRect.minY
-                + min(max(y, 0.10), 0.90) * pictureRect.height
+            // Fine positions describe the caption box's top edge directly.
+            requestedY = pictureRect.minY + min(max(y, 0), 1) * pictureRect.height
         } else if row == 2 {
             requestedY = pictureRect.minY + pictureRect.height * 0.10
         } else if row == 1 {
@@ -922,16 +926,14 @@ private struct IOSPositionedCaptionLayout: Layout {
             requestedY = pictureRect.minY + pictureRect.height * 0.90 - height
         }
 
-        let maximumX = max(safeRect.minX, safeRect.maxX - width)
-        let originX = min(max(requestedX, safeRect.minX), maximumX)
-        let maximumY = max(safeRect.minY, safeRect.maxY - height)
-        var originY = min(max(requestedY, safeRect.minY), maximumY)
+        let maximumY = max(pictureRect.minY, pictureRect.maxY - height)
+        var originY = min(max(requestedY, pictureRect.minY), maximumY)
         if let osdBoundary {
             originY = min(originY, osdBoundary - height)
             originY = max(pictureRect.minY, originY)
         }
         subview.place(
-            at: CGPoint(x: originX, y: originY),
+            at: CGPoint(x: originX.rounded(), y: originY.rounded()),
             anchor: .topLeading,
             proposal: ProposedViewSize(width: width, height: height)
         )

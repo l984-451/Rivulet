@@ -57,20 +57,20 @@
 		</dict>
 		<key>CFBundleAlternateIcons</key>
 		<dict>
-			<key>AppIconSimpleDark</key>
+			<key>AppIconSimpleColor</key>
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconSimpleDark</string>
+					<string>AppIconSimpleColor</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
 			</dict>
-			<key>AppIconSimpleLight</key>
+			<key>AppIconSimpleWhite</key>
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconSimpleLight</string>
+					<string>AppIconSimpleWhite</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
@@ -97,20 +97,20 @@
 		</dict>
 		<key>CFBundleAlternateIcons</key>
 		<dict>
-			<key>AppIconSimpleDark</key>
+			<key>AppIconSimpleColor</key>
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconSimpleDark</string>
+					<string>AppIconSimpleColor</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
 			</dict>
-			<key>AppIconSimpleLight</key>
+			<key>AppIconSimpleWhite</key>
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconSimpleLight</string>
+					<string>AppIconSimpleWhite</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>

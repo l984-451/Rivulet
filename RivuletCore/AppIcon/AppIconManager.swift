@@ -16,17 +16,44 @@ import UIKit
 
 public enum AppIconOption: String, CaseIterable, Identifiable, Sendable {
     case defaultIcon = "default"
-    case simpleDark = "simple-dark"
-    case simpleLight = "simple-light"
+    case simpleColor = "simple-color"
+    case simpleWhite = "simple-white"
     case pixel = "pixel"
+
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "default":
+            self = .defaultIcon
+        case "simple-color", "simple-colour", "simple_color", "simple_colour", "simple-dark", "simple_dark":
+            self = .simpleColor
+        case "simple-white", "simple_white", "simple-light", "simple_light":
+            self = .simpleWhite
+        case "pixel":
+            self = .pixel
+        default:
+            return nil
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+        case .defaultIcon: return "default"
+        case .simpleColor: return "simple-color"
+        case .simpleWhite: return "simple-white"
+        case .pixel: return "pixel"
+        }
+    }
+
+    public static var simpleDark: AppIconOption { .simpleColor }
+    public static var simpleLight: AppIconOption { .simpleWhite }
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .defaultIcon: return "Default"
-        case .simpleDark: return "Simple (Dark)"
-        case .simpleLight: return "Simple (Light)"
+        case .simpleColor: return "Simple (Colour)"
+        case .simpleWhite: return "Simple (White)"
         case .pixel: return "Pixel"
         }
     }
@@ -36,8 +63,8 @@ public enum AppIconOption: String, CaseIterable, Identifiable, Sendable {
     public var alternateIconName: String? {
         switch self {
         case .defaultIcon: return nil
-        case .simpleDark: return "AppIconSimpleDark"
-        case .simpleLight: return "AppIconSimpleLight"
+        case .simpleColor: return "AppIconSimpleColor"
+        case .simpleWhite: return "AppIconSimpleWhite"
         case .pixel: return "AppIconPixel"
         }
     }
@@ -46,8 +73,8 @@ public enum AppIconOption: String, CaseIterable, Identifiable, Sendable {
     public var previewImageName: String {
         switch self {
         case .defaultIcon: return "AppIconPreviewDefault"
-        case .simpleDark: return "AppIconPreviewSimpleDark"
-        case .simpleLight: return "AppIconPreviewSimpleLight"
+        case .simpleColor: return "AppIconPreviewSimpleColor"
+        case .simpleWhite: return "AppIconPreviewSimpleWhite"
         case .pixel: return "AppIconPreviewPixel"
         }
     }

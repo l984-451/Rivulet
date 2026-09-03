@@ -26,17 +26,17 @@ final class AppIconManagerTests: XCTestCase {
     }
 
     func testAppIconOptionCases() {
-        XCTAssertEqual(AppIconOption.allCases.map(\.rawValue), ["default", "simple-dark", "simple-light", "pixel"])
+        XCTAssertEqual(AppIconOption.allCases.map(\.rawValue), ["default", "simple-color", "simple-white", "pixel"])
         XCTAssertEqual(AppIconOption.defaultIcon.title, "Default")
-        XCTAssertEqual(AppIconOption.simpleDark.title, "Simple (Dark)")
-        XCTAssertEqual(AppIconOption.simpleLight.title, "Simple (Light)")
+        XCTAssertEqual(AppIconOption.simpleColor.title, "Simple (Colour)")
+        XCTAssertEqual(AppIconOption.simpleWhite.title, "Simple (White)")
         XCTAssertEqual(AppIconOption.pixel.title, "Pixel")
     }
 
     func testAppIconOptionAlternateNames() {
         XCTAssertNil(AppIconOption.defaultIcon.alternateIconName)
-        XCTAssertEqual(AppIconOption.simpleDark.alternateIconName, "AppIconSimpleDark")
-        XCTAssertEqual(AppIconOption.simpleLight.alternateIconName, "AppIconSimpleLight")
+        XCTAssertEqual(AppIconOption.simpleColor.alternateIconName, "AppIconSimpleColor")
+        XCTAssertEqual(AppIconOption.simpleWhite.alternateIconName, "AppIconSimpleWhite")
         XCTAssertEqual(AppIconOption.pixel.alternateIconName, "AppIconPixel")
     }
 

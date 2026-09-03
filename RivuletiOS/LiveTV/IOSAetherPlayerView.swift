@@ -560,23 +560,22 @@ struct IOSAetherSubtitleOverlay: View {
     let videoSize: CGSize
 
     fileprivate enum Metrics {
-        // iPhone captions need a smaller curve than the 10-foot tvOS UI.
-        // 0.039675 is a 25% reduction from tvOS's 0.0529, equivalent to
-        // reducing a 0.20 scale factor to 0.15.
-        static let fontHeightFraction: CGFloat = 0.039675
-        static let minimumPointSize: CGFloat = 10
+        // Captions scale proportionally with the video height in both orientations:
+        // ~16pt in fullscreen landscape (393 * 0.0407), scaling down to ~9pt in
+        // portrait (221.1 * 0.0407) to maintain exact 16:9 picture proportion.
+        static let fontHeightFraction: CGFloat = 0.0407
+        static let minimumPointSize: CGFloat = 8
         static let sideSafeFraction: CGFloat = 0.05
-        static let unpositionedBottomFraction: CGFloat = 0.05
+        static let unpositionedBottomFraction: CGFloat = 0.06
     }
 
     var body: some View {
         GeometryReader { proxy in
             let allCues = cues + nativeCues
+            let videoHeight = captionSizingHeight(in: proxy.size)
             let pointSize = max(
                 Metrics.minimumPointSize,
-                min(proxy.size.width, proxy.size.height)
-                    * Metrics.fontHeightFraction
-                    * style.fontScale
+                videoHeight * Metrics.fontHeightFraction * style.fontScale
             )
             let picture = pictureRect(in: proxy.size)
             let osdBoundary = landscapeCaptionMaxY(
@@ -746,6 +745,17 @@ struct IOSAetherSubtitleOverlay: View {
             font = UIFont(descriptor: descriptor, size: size)
         }
         return font
+    }
+
+    /// Height the caption size is derived from.
+    ///
+    /// Falls back to the tallest 16:9 picture the container could hold, which
+    /// is what broadcast actually is, rather than to the container itself when
+    /// videoSize is unknown.
+    private func captionSizingHeight(in container: CGSize) -> CGFloat {
+        let rect = pictureRect(in: container)
+        if videoSize.width > 0, videoSize.height > 0 { return rect.height }
+        return min(container.height, container.width * 9.0 / 16.0)
     }
 
     private func pictureRect(in container: CGSize) -> CGRect {

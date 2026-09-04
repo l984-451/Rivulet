@@ -704,7 +704,12 @@ final class AetherPlayer: PlayerProtocol {
     /// rejects AVPlayer's request pattern).
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
-        let options = LoadOptions(
+        // Forced onto the engine demuxer AND the source is a playlist: the Plex
+        // direct-play case. See the ingest branch below.
+        let usesHLSIngest = !isHLS && Self.isHLSURL(url)
+
+        func makeOptions(nativeRemoteHLS: Bool) -> LoadOptions {
+            LoadOptions(
             suppressDisplayCriteria: false,
             httpHeaders: headers ?? [:],
             // Same rich config as VOD, plus the live-specific flags.
@@ -714,7 +719,7 @@ final class AetherPlayer: PlayerProtocol {
             isLive: true,
             // ~30-minute DVR rewind window (engine retains it disk-backed).
             dvrWindowSeconds: 1800,
-            nativeRemoteHLS: isHLS,
+            nativeRemoteHLS: nativeRemoteHLS,
             preserveASSMarkup: true,
             probesize: 5 * 1024 * 1024,
             maxAnalyzeDuration: 5_000_000,
@@ -727,7 +732,11 @@ final class AetherPlayer: PlayerProtocol {
             // captions on 801 without that flag, so auto-detect returns nothing.
             // Region-default to 801 for AU, otherwise auto-detect.
             teletextPage: Self.regionTeletextPage()
-        )
+            )
+        }
+
+        let options = makeOptions(nativeRemoteHLS: isHLS)
+
         // Same reason as the VOD path: a zap is new content, and broadcast
         // mixes 4:3 SD with 16:9 HD channel to channel, so a reused slot must
         // not measure the new channel against the old one's picture rect.
@@ -745,9 +754,49 @@ final class AetherPlayer: PlayerProtocol {
             // (Engine flag is labeled test-only but is the exact switch for
             // this; reset immediately after dispatch. Not applied to the
             // native-HLS shortcut, which never enters the demux dispatch.)
-            if !isHLS { AetherEngine.setForceSoftwarePathForTesting(true) }
-            defer { if !isHLS { AetherEngine.setForceSoftwarePathForTesting(false) } }
-            try await engine.load(url: url, startPosition: nil, options: options)
+            //
+            // ...but only where the channel actually needs it. A 720p or
+            // 1080p50 broadcast has no fields to weave and should not pay for
+            // the deinterlacing path. PMS reports the scan type on the tune, so
+            // the answer is known before the load — see `needsDeinterlacing`.
+            let forceSoftware = !isHLS && Self.needsDeinterlacing(url)
+            if forceSoftware { AetherEngine.setForceSoftwarePathForTesting(true) }
+            defer { if forceSoftware { AetherEngine.setForceSoftwarePathForTesting(false) } }
+
+            // A Plex direct-play part key is an HLS PLAYLIST
+            // (/livetv/sessions/{uuid}/{consumer}/index.m3u8), not the raw
+            // transport stream the engine's raw live path expects. Handing it
+            // an m3u8 body fails closed by design (AE#140), and the host's
+            // fallback then re-tuned and landed on nativeRemoteHLS — so every
+            // granted direct play was quietly played by AVPlayer, which cannot
+            // decode mp2 or DVB teletext. Those two are the entire reason for
+            // wanting direct play here, so the grant was being thrown away.
+            //
+            // HLSLiveIngestReader demuxes the playlist's underlying MPEG-TS, so
+            // teletext and broadcast audio reach the engine and our own caption
+            // renderer. It is also why this route costs ONE tune: the old path
+            // needed a second grab to discover it had to fall back.
+            if usesHLSIngest {
+                do {
+                    try await engine.load(
+                        source: .custom(HLSLiveIngestReader(playlistURL: url), formatHint: "mpegts"),
+                        options: options
+                    )
+                } catch is HLSIngestError {
+                    // Encryption or an fMP4 playlist the ingest reader will not
+                    // open. Retry natively on the SAME session rather than
+                    // throwing: letting the host fall back costs another tune,
+                    // and on a single-tuner box that competes with the grab we
+                    // are already holding.
+                    try await engine.load(
+                        url: url,
+                        startPosition: nil,
+                        options: makeOptions(nativeRemoteHLS: true)
+                    )
+                }
+            } else {
+                try await engine.load(url: url, startPosition: nil, options: options)
+            }
         } catch {
             // The caller left the slot / retuned while the load was in flight.
             // Rethrow untouched so the type survives; wrapping it in a
@@ -769,6 +818,25 @@ final class AetherPlayer: PlayerProtocol {
     /// is inert on `.nativeHLS`.
     static func liveRoute(for url: URL, forceEngineDemux: Bool) -> LiveJoinRoute {
         (isHLSURL(url) && !forceEngineDemux) ? .nativeHLS : .loopback
+    }
+
+    /// Whether this live source has to take the deinterlacing path.
+    ///
+    /// Reads `rivuletLiveScanType`, which `PlexLiveTVProvider` puts on the URL
+    /// from the tune response — the same carry-on-the-URL trick the keepalive's
+    /// ratingKey uses, so nothing has to be threaded through LiveTVDataStore.
+    ///
+    /// **Absence means yes.** Only an explicit "progressive" from the server
+    /// opts out. A missing or unrecognised value keeps the previous behaviour,
+    /// because a needless software decode costs some CPU while a missed
+    /// deinterlace is combing the user can see — and broadcast H.264 is known
+    /// to mis-signal progressive, which is why we do not read the codec's own
+    /// field order here.
+    static func needsDeinterlacing(_ url: URL) -> Bool {
+        guard let scan = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "rivuletLiveScanType" })?.value?
+            .lowercased() else { return true }
+        return scan != "progressive"
     }
 
     private static func isHLSURL(_ url: URL) -> Bool {

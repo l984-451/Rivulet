@@ -2089,9 +2089,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             headers: plexHeaders(authToken: authToken)
         )
 
-        guard let dvr = dvrContainer.MediaContainer.Dvr?.first,
-              let lineup = dvr.lineup,
-              let dvrKey = dvr.key else {
+        // Every DVR, not just the first. A server with two tuners exposes two
+        // DVRs with separate lineups, and taking `.first` silently dropped one
+        // lineup's channels entirely — the guide simply never showed them.
+        let dvrs = (dvrContainer.MediaContainer.Dvr ?? []).filter {
+            $0.lineup != nil && $0.key != nil
+        }
+        guard !dvrs.isEmpty else {
             print("🌐 PlexNetwork: No DVR or lineup found for Live TV")
             // Log missing DVR/lineup (GitHub #64 - DVB diagnostics)
             let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
@@ -2109,28 +2113,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         // No direct tuner (HDHomeRun) handoff: raw tuner URLs are LAN-only
         // and bypass the server's session/tuner management entirely.
 
-        // Extract provider path using DVR key (e.g., tv.plex.providers.epg.xmltv:28)
-        let providerPath = extractProviderPath(from: lineup, dvrKey: dvrKey)
-
         // Grid requires time parameters to return data
         let now = Int(Date().timeIntervalSince1970)
         let sixHoursLater = now + (6 * 3600)
-
-        guard var components = URLComponents(string: "\(serverURL)/\(providerPath)/grid") else {
-            print("🌐 PlexNetwork: Could not build grid URL from lineup: \(lineup)")
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "type", value: "1,4"),
-            URLQueryItem(name: "sort", value: "beginsAt"),
-            URLQueryItem(name: "beginsAt<=", value: "\(sixHoursLater)"),
-            URLQueryItem(name: "endsAt>=", value: "\(now)")
-        ]
-
-        guard let gridURL = components.url else {
-            throw PlexAPIError.invalidURL
-        }
 
         // The grid returns programs with channel info in each program's Media array
         nonisolated struct GridContainer: Codable {
@@ -2153,16 +2138,55 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let channelVcn: String?  // Visual channel number
         }
 
-        let container: GridContainer = try await request(
-            gridURL,
-            headers: plexHeaders(authToken: authToken)
-        )
-
-        // Extract unique channels from all programs' Media arrays
+        // Extract unique channels from all programs' Media arrays, across every
+        // DVR. Dedupe is by channel identifier and FIRST WINS: a channel two
+        // tuners both carry is attributed to whichever DVR the server listed
+        // first, rather than appearing twice under two groups.
         var seenChannels = Set<String>()
         var channels: [PlexLiveTVChannel] = []
 
-        for program in container.MediaContainer.Metadata ?? [] {
+        for dvr in dvrs {
+            guard let lineup = dvr.lineup, let dvrKey = dvr.key else { continue }
+
+            // Extract provider path using DVR key (e.g., tv.plex.providers.epg.xmltv:28)
+            let providerPath = extractProviderPath(from: lineup, dvrKey: dvrKey)
+            // Named only when there is something to tell apart. One tuner means
+            // its tab would list exactly what All Channels already does, so the
+            // grouping stays off and the bar is just Favourites + All Channels.
+            let tunerName = dvrs.count > 1 ? dvr.guideGroupName : nil
+
+            guard var components = URLComponents(string: "\(serverURL)/\(providerPath)/grid") else {
+                print("🌐 PlexNetwork: Could not build grid URL from lineup: \(lineup)")
+                continue
+            }
+            components.queryItems = [
+                URLQueryItem(name: "type", value: "1,4"),
+                URLQueryItem(name: "sort", value: "beginsAt"),
+                URLQueryItem(name: "beginsAt<=", value: "\(sixHoursLater)"),
+                URLQueryItem(name: "endsAt>=", value: "\(now)")
+            ]
+            guard let gridURL = components.url else { continue }
+
+            // One unreachable DVR must not cost the user every other tuner's
+            // channels, so a failure here is logged and skipped rather than
+            // thrown. Only a total wipeout surfaces, as an empty list.
+            let container: GridContainer
+            do {
+                container = try await request(gridURL, headers: plexHeaders(authToken: authToken))
+            } catch {
+                let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
+                breadcrumb.message = "Grid fetch failed for one DVR; continuing with the rest"
+                breadcrumb.data = [
+                    "dvr_key": dvrKey,
+                    "tuner_name": tunerName ?? "unnamed",
+                    "provider_path": providerPath,
+                    "dvr_count": dvrs.count
+                ]
+                SentryBridge.addBreadcrumb(breadcrumb)
+                continue
+            }
+
+            for program in container.MediaContainer.Metadata ?? [] {
             for media in program.Media ?? [] {
                 guard let channelId = media.channelIdentifier,
                       !seenChannels.contains(channelId) else {
@@ -2198,10 +2222,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                     channelNumber: channelNumber,
                     // No direct tuner handoff — all Plex Live TV plays through
                     // the server (tune → /livetv/sessions).
-                    streamURL: nil
+                    streamURL: nil,
+                    // Groups the guide by tuner. Assigned here because this is
+                    // the only point that knows which DVR served the lineup.
+                    tunerName: tunerName,
+                    dvrKey: dvrKey
                 )
 
                 channels.append(channel)
+            }
             }
         }
 
@@ -2214,6 +2243,45 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         SentryBridge.addBreadcrumb(summaryBreadcrumb)
 
         return channels
+    }
+
+    /// Channel identifiers the user has favourited, in the order they arranged
+    /// them in Plex's own guide.
+    ///
+    /// This lives on the ACCOUNT, not the server — `epg.provider.plex.tv`, a
+    /// fourth provider host alongside the three in the Discover section. That is
+    /// why nothing under `/livetv/dvrs/…` carries a favourite flag, and why one
+    /// list can span a local tuner and Plex's free channels. Account token, like
+    /// every other provider call.
+    ///
+    /// `FavoriteChannel[].id` is the same `channelIdentifier` the grid and the
+    /// tune endpoint use, so no mapping is needed. Array order is the user's
+    /// order and is the whole point: favourites are arranged by hand, and the
+    /// merged channel list is sorted by number, which would destroy it.
+    func getFavoriteChannelIdentifiers(authToken: String) async -> [String] {
+        guard let url = URL(string: "https://epg.provider.plex.tv/settings/favoriteChannels") else {
+            return []
+        }
+
+        var headers = plexHeaders(authToken: authToken)
+        headers["Accept"] = "application/json"
+        // Plex Web sends this on every provider call.
+        headers["X-Plex-Provider-Version"] = "5.1"
+
+        do {
+            let data = try await requestData(url, headers: headers)
+            let container = try JSONDecoder().decode(PlexFavoriteChannelContainer.self, from: data)
+            let ids = (container.MediaContainer.FavoriteChannel ?? []).map(\.id)
+            return ids
+        } catch {
+            // Best effort: an account with no favourites and a call that failed
+            // both mean the same thing here — no Favourites tab.
+            let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
+            breadcrumb.message = "Favourite channels unavailable"
+            breadcrumb.data = ["error": String(describing: error)]
+            SentryBridge.addBreadcrumb(breadcrumb)
+            return []
+        }
     }
 
     /// Tune a Plex Live TV channel and return its playback handshake values.
@@ -2256,6 +2324,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
         var headers = plexHeaders(authToken: authToken)
         headers["Accept"] = "application/json"
+
         let data = try await requestData(url, method: "POST", headers: headers)
 
         // The response shape varies between PMS versions and EPG providers:
@@ -2356,6 +2425,31 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             return nil
         }
 
+        /// Scan type of the first VIDEO stream (Stream.streamType == 1) anywhere
+        /// in the tune payload. PMS reports this on the dashboard, and the tune
+        /// response already carries the stream tree — so the interlaced/progressive
+        /// question is answerable at tune time, before the engine is asked to load.
+        ///
+        /// Walks rather than decodes, for the same reason the session key does:
+        /// the nesting varies by PMS version and EPG provider.
+        func firstVideoScanType(in node: Any) -> String? {
+            if let dict = node as? [String: Any] {
+                let isVideoStream = (dict["streamType"] as? Int) == 1
+                    || (dict["streamType"] as? String) == "1"
+                if isVideoStream, let scan = dict["scanType"] as? String, !scan.isEmpty {
+                    return scan.lowercased()
+                }
+                for value in dict.values {
+                    if let scan = firstVideoScanType(in: value) { return scan }
+                }
+            } else if let array = node as? [Any] {
+                for value in array {
+                    if let scan = firstVideoScanType(in: value) { return scan }
+                }
+            }
+            return nil
+        }
+
         // The Part key inside the grab is the DIRECT-PLAY stream: the DVR's
         // own HLS of the raw broadcast (/livetv/sessions/<uuid>/<tuner>/index.m3u8),
         // served without the universal transcoder.
@@ -2377,13 +2471,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidResponse
         }
 
+        let scanType = firstVideoScanType(in: mediaContainer)
         let sessionUUID = sessionPath.split(separator: "/").dropFirst(2).first.map(String.init)
             ?? sessionIdentifier
         return PlexLiveTVTuneResult(
             sessionUUID: sessionUUID,
             sessionPath: sessionPath,
             sessionIdentifier: sessionIdentifier,
-            ratingKey: firstNumericRatingKey(in: mediaContainer)
+            ratingKey: firstNumericRatingKey(in: mediaContainer),
+            videoScanType: scanType
         )
     }
 
@@ -2417,9 +2513,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         )
         // Consensus wire form for the profile: '+' clause separators must be
         // %2B (a raw '+' in a query decodes as a space on strict parsers).
-        components.percentEncodedQuery = components.percentEncodedQuery?
-            .replacingOccurrences(of: "+", with: "%2B")
-        guard let url = components.url else { throw PlexAPIError.invalidURL }
+        guard let url = PlexLiveTVChannel.finalizedLiveURL(components) else {
+            throw PlexAPIError.invalidURL
+        }
 
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -2968,6 +3064,27 @@ extension PlexNetworkManager: URLSessionDelegate {
 // MARK: - Live TV Tune Result
 
 /// Result of tuning a Plex Live TV channel.
+/// Account-level favourite channels (`epg.provider.plex.tv/settings/favoriteChannels`).
+nonisolated struct PlexFavoriteChannelContainer: Codable, Sendable {
+    let MediaContainer: PlexFavoriteChannelMediaContainer
+}
+
+nonisolated struct PlexFavoriteChannelMediaContainer: Codable, Sendable {
+    let size: Int?
+    let FavoriteChannel: [PlexFavoriteChannel]?
+}
+
+nonisolated struct PlexFavoriteChannel: Codable, Sendable {
+    /// Matches `channelIdentifier` on the grid and the tune endpoint.
+    let id: String
+    /// `server://{machineIdentifier}/{providerPath}` — which server and DVR the
+    /// favourite belongs to. Unused for now: ids already carry the provider's
+    /// own channel id, so a cross-server collision would be the same channel.
+    let source: String?
+    let title: String?
+    let vcn: String?
+}
+
 nonisolated struct PlexLiveTVTuneResult: Sendable {
     /// The livetv session uuid (derived from the session path).
     let sessionUUID: String
@@ -2980,6 +3097,12 @@ nonisolated struct PlexLiveTVTuneResult: Sendable {
     /// Numeric ratingKey of the live-session metadata item the tune created.
     /// The /:/timeline keepalive needs it to resolve the playing item.
     let ratingKey: String?
+
+    /// Scan type PMS reported for the video stream ("interlaced" / "progressive"),
+    /// or nil when this PMS/provider does not report one. Decides whether the
+    /// channel needs the deinterlacing path; nil must be treated as "assume
+    /// interlaced", since combing is far worse than a decode we didn't need.
+    let videoScanType: String?
 }
 
 /// Universal-transcoder verdict for a tuned live session.

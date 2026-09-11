@@ -26,6 +26,7 @@ enum SettingsDescriptorStore {
         // so they cannot have their own entry. Fall back on the row KIND, which
         // is what the panel wants to explain anyway.
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
+        if id.hasPrefix("appIcon_") { return descriptors["appIcon"] }
         return nil
     }
 
@@ -105,6 +106,10 @@ enum SettingsDescriptorStore {
         "discoverAboveLibraries": SettingDescriptor(
             icon: "arrow.up.arrow.down",
             description: "Moves the Discover tab above your Media libraries in the sidebar for quicker access."
+        ),
+        "appIcon": SettingDescriptor(
+            icon: "app.badge",
+            description: "Choose an alternate app icon for Rivulet on your home screen."
         ),
         // MARK: Playback
         "autoSkipIntro": SettingDescriptor(
@@ -380,6 +385,7 @@ enum SettingsDescriptorStore {
         case .addLiveTVSource: return ("plus.circle.fill", .systemBlue)
         case .addOwnServer: return ("server.rack", .systemBlue)
         case .addPlaylistURL: return ("list.bullet.rectangle", .systemGreen)
+        case .appIconPicker: return ("app.badge", .systemPurple)
         }
     }
 }

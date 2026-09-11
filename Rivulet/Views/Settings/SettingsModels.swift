@@ -53,6 +53,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case addLiveTVSource, addOwnServer, addPlaylistURL
     case displaySizePicker, autoplayCountdownPicker, skipIntervalPicker
     case contentFilter, contentFilterStrength
+    case appIconPicker
 
     var title: String {
         switch self {
@@ -77,6 +78,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .skipIntervalPicker: return "Skip Length"
         case .contentFilter: return "Content Filtering"
         case .contentFilterStrength: return "Profanity Strength"
+        case .appIconPicker: return "App Icon"
         }
     }
 }

@@ -168,10 +168,19 @@ enum SettingsContent {
         case .skipIntervalPicker:     return skipIntervalPicker
         case .contentFilter:          return contentFilter
         case .contentFilterStrength:  return contentFilterStrength
+        case .appIconPicker:          return appIconPicker
         }
     }
 
     // MARK: Picker pages (checkmark option rows; select-and-pop)
+
+    private static var appIconPicker: [SettingsRowItem] {
+        AppIconOption.allCases.map { opt in
+            SettingsRowItem(id: "appIcon_\(opt.rawValue)", title: opt.title, kind: .option(
+                isSelected: { AppIconManager.shared.currentIcon == opt },
+                select: { AppIconManager.shared.setIcon(opt) }))
+        }
+    }
 
     private static var displaySizePicker: [SettingsRowItem] {
         DisplaySize.allCases.map { opt in
@@ -263,7 +272,13 @@ enum SettingsContent {
             SettingsRowItem(id: "defaultLayout", title: "Default Layout",
                             kind: .cycle(value: { LiveTVLayout(rawValue: SettingsStore.string("liveTVLayout", default: LiveTVLayout.guide.rawValue))?.description ?? "" },
                                          next: { cycleLiveTVLayout() })),
-            toggle("classicTVMode", "Classic TV Mode", key: "classicTVMode", default: false)
+            toggle("classicTVMode", "Classic TV Mode", key: "classicTVMode", default: false),
+
+            .header("App Icon"),
+            SettingsRowItem(id: "appIcon", title: "App Icon",
+                            kind: .navigationValue(.appIconPicker, value: {
+                                AppIconManager.shared.currentIcon.title
+                            }))
         ]
         return rows
     }

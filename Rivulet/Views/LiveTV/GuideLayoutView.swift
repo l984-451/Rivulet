@@ -40,17 +40,50 @@ struct GuideLayoutView: View {
         return dataStore.channels
     }
 
-    /// Distinct, sorted M3U group titles used as category tabs.
+    /// Tab title for the source's own favourites list. Not a `groupTitle` — a
+    /// favourite keeps its tuner group too, and this tab sorts by the order the
+    /// user arranged rather than by channel number.
+    static let favouritesTab = "Plex Favourites"
+
+    /// Tabs that lead the bar regardless of the alphabet, in this order. A list
+    /// the user curated outranks a source's own grouping — burying "Favourites"
+    /// under F is the kind of correctness that reads as a bug.
+    private static let pinnedGroups = [favouritesTab]
+
+    /// Distinct group titles used as category tabs: pinned ones first, then
+    /// everything else alphabetically. Fed by an M3U's `group-title` and, for
+    /// Plex sources, by the DVR's user-set tuner name.
     private var groupTitles: [String] {
-        let groups = sourceChannels.compactMap {
-            $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }
-        return Array(Set(groups)).sorted()
+        let groups = Set(
+            sourceChannels
+                .compactMap { $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        var available = groups
+        // Offered only when the source actually reported favourites, so a
+        // server without them shows no empty tab.
+        if sourceChannels.contains(where: \.isFavourite) {
+            available.insert(Self.favouritesTab)
+        }
+        let pinned = Self.pinnedGroups.filter(available.contains)
+        let rest = available.subtracting(pinned).sorted()
+        return pinned + rest
     }
 
     /// Channels shown in the grid: source-filtered, then category-filtered.
     private var channels: [UnifiedChannel] {
         guard let group = selectedGroup else { return sourceChannels }
+
+        // Favourites is a view over the flag, not a group match, and it keeps
+        // the source's arrangement instead of the merged channel-number sort
+        // every other tab inherits. Unranked favourites fall to the end rather
+        // than to the front, which is what an unset rank of 0 would do.
+        if group == Self.favouritesTab {
+            return sourceChannels
+                .filter(\.isFavourite)
+                .sorted { ($0.favouriteRank ?? .max) < ($1.favouriteRank ?? .max) }
+        }
+
         return sourceChannels.filter {
             $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) == group
         }

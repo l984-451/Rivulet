@@ -21,7 +21,6 @@ final class IOSLiveTVStore: ObservableObject {
 
     private(set) var m3uURLString: String
     private(set) var xmltvURLString: String
-    private(set) var userAgentString: String
     private(set) var authorizationHeaderString: String
     private(set) var refererString: String
     private var attemptedAutomaticLoad = false
@@ -29,7 +28,6 @@ final class IOSLiveTVStore: ObservableObject {
     private let defaults: UserDefaults
     private let m3uKey = "ios.liveTV.m3uURL"
     private let xmltvKey = "ios.liveTV.xmltvURL"
-    private let userAgentKey = "ios.liveTV.userAgent"
     private let authorizationHeaderKey = "ios.liveTV.authorizationHeader"
     private let refererKey = "ios.liveTV.referer"
 
@@ -37,7 +35,6 @@ final class IOSLiveTVStore: ObservableObject {
         self.defaults = defaults
         m3uURLString = defaults.string(forKey: m3uKey) ?? ""
         xmltvURLString = defaults.string(forKey: xmltvKey) ?? ""
-        userAgentString = defaults.string(forKey: userAgentKey) ?? ""
         authorizationHeaderString = defaults.string(forKey: authorizationHeaderKey) ?? ""
         refererString = defaults.string(forKey: refererKey) ?? ""
     }
@@ -66,13 +63,11 @@ final class IOSLiveTVStore: ObservableObject {
     func configureAndLoad(
         m3uURL: String,
         xmltvURL: String,
-        userAgent: String,
         authorizationHeader: String,
         referer: String
     ) async -> Bool {
         let playlist = m3uURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let guide = xmltvURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedUserAgent = userAgent.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAuthorization = authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedReferer = referer.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -87,12 +82,10 @@ final class IOSLiveTVStore: ObservableObject {
 
         m3uURLString = playlist
         xmltvURLString = guide
-        userAgentString = trimmedUserAgent
         authorizationHeaderString = trimmedAuthorization
         refererString = trimmedReferer
         defaults.set(playlist, forKey: m3uKey)
         defaults.set(guide, forKey: xmltvKey)
-        defaults.set(trimmedUserAgent, forKey: userAgentKey)
         defaults.set(trimmedAuthorization, forKey: authorizationHeaderKey)
         defaults.set(trimmedReferer, forKey: refererKey)
         await load()
@@ -159,12 +152,11 @@ final class IOSLiveTVStore: ObservableObject {
     func clearSource() {
         defaults.removeObject(forKey: m3uKey)
         defaults.removeObject(forKey: xmltvKey)
-        defaults.removeObject(forKey: userAgentKey)
+        defaults.removeObject(forKey: "ios.liveTV.userAgent")
         defaults.removeObject(forKey: authorizationHeaderKey)
         defaults.removeObject(forKey: refererKey)
         m3uURLString = ""
         xmltvURLString = ""
-        userAgentString = ""
         authorizationHeaderString = ""
         refererString = ""
         channels = []
@@ -209,10 +201,12 @@ final class IOSLiveTVStore: ObservableObject {
             // endpoints keep their streams on the same host.
             let sameOrigin = channel.streamURL.host?.caseInsensitiveCompare(sourceHost ?? "")
                 == .orderedSame
+            let customUA = channel.httpHeaders["User-Agent"]
+            let customReferer = channel.httpHeaders["Referer"]
             let channelHeaders = IOSPlaybackHeaders(
-                userAgent: playbackHeaders.userAgent,
+                userAgent: customUA ?? playbackHeaders.userAgent,
                 authorization: sameOrigin ? playbackHeaders.authorization : nil,
-                referer: playbackHeaders.referer
+                referer: customReferer ?? playbackHeaders.referer
             )
             let guideCandidates = [channel.tvgId, channel.tvgName, channel.name]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
@@ -322,9 +316,7 @@ final class IOSLiveTVStore: ObservableObject {
 
     private var playbackHeaders: IOSPlaybackHeaders {
         IOSPlaybackHeaders(
-            userAgent: userAgentString.isEmpty
-                ? LiveTVClientIdentity.userAgent
-                : userAgentString,
+            userAgent: LiveTVClientIdentity.userAgent,
             authorization: normalizedAuthorizationHeader,
             referer: refererString.nilIfEmpty
         )

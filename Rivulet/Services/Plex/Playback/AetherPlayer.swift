@@ -703,10 +703,13 @@ final class AetherPlayer: PlayerProtocol {
     /// native path fails against a server (e.g. a Plex transcode session that
     /// rejects AVPlayer's request pattern).
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
-        let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
+        let resolved = LiveTVClientIdentity.resolveStream(url: url, baseHeaders: headers ?? [:])
+        let streamURL = resolved.url
+        let streamHeaders = resolved.headers
+        let isHLS = Self.liveRoute(for: streamURL, forceEngineDemux: forceEngineDemux) == .nativeHLS
         let options = LoadOptions(
             suppressDisplayCriteria: false,
-            httpHeaders: headers ?? [:],
+            httpHeaders: streamHeaders,
             // Same rich config as VOD, plus the live-specific flags.
             matchContentEnabled: true,
             panelIsInHDRMode: Self.panelIsInHDRMode(),

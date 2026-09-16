@@ -364,13 +364,19 @@ final class ChannelRowButton: UIControl {
     /// poster as the fallback: in a channel list, identifying the channel
     /// beats showing a sliver of programme art.
     private func loadThumbnail(channel: UnifiedChannel, program: UnifiedProgram?) {
-        let landscape = program?.landscapeURL
-        guard let url = landscape ?? channel.logoURL ?? program?.posterURL ?? program?.iconURL else { return }
-        if landscape == nil { thumbView.contentMode = .scaleAspectFit }
+        let candidateLandscape = program?.landscapeURL
+            ?? (program?.iconURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil })
+            ?? (program?.posterURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil })
+        let isLandscape = candidateLandscape != nil
+        guard let url = candidateLandscape ?? channel.logoURL ?? program?.posterURL ?? program?.iconURL else { return }
+        thumbView.contentMode = isLandscape ? .scaleAspectFill : .scaleAspectFit
         imageLoadTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url)
             guard let self, !Task.isCancelled else { return }
             self.thumbView.image = image
+            if !isLandscape, let image, image.size.height > 0, image.size.width / image.size.height >= 1.25 {
+                self.thumbView.contentMode = .scaleAspectFill
+            }
         }
     }
 

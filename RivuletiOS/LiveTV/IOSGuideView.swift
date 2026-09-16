@@ -62,53 +62,45 @@ struct IOSGuideView: View {
 /// The guide has no focus-driven programme artwork on touch devices, so it
 /// always uses the tvOS no-art ambient state. Programme artwork belongs to the
 /// play menu, where the selected programme is unambiguous.
-struct IOSGuideDefaultBackdrop: View {
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // tvOS's stock no-art surface is a neutral charcoal vignette:
-                // softly illuminated in the centre and darker at every edge.
-                // It contains no brand-blue or cyan tint.
-                Color(white: 0.045)
-                RadialGradient(
-                    stops: [
-                        .init(color: Color(white: 0.145), location: 0),
-                        .init(color: Color(white: 0.105), location: 0.52),
-                        .init(color: Color(white: 0.055), location: 1)
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: hypot(geometry.size.width, geometry.size.height) * 0.62
-                )
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.12), location: 0),
-                        .init(color: .clear, location: 0.38),
-                        .init(color: .black.opacity(0.18), location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-    }
-}
+/// The guide has no focus-driven programme artwork on touch devices, so it
+/// always uses the tvOS no-art ambient state. Programme artwork belongs to the
+/// play menu, where the selected programme is unambiguous.
+typealias IOSGuideDefaultBackdrop = GuideDefaultBackdrop
 
 private struct IOSProgramDetailView: View {
     let selection: IOSGuideSelection
     let onPlay: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var resolvedLandscapeURL: URL?
+
+    /// Prioritise 16:9 landscape, fallback to 2:3 poster, fallback to programme icon.
+    /// Never fallback to channel logo.
+    private var artworkURL: URL? {
+        if let landscape = selection.program.landscapeURL {
+            return landscape
+        }
+        if let icon = selection.program.iconURL, EPGImageClassifier.shared.isLandscape(icon) {
+            return icon
+        }
+        if let poster = selection.program.posterURL, EPGImageClassifier.shared.isLandscape(poster) {
+            return poster
+        }
+        if let resolved = resolvedLandscapeURL {
+            return resolved
+        }
+        if let poster = selection.program.posterURL {
+            return poster
+        }
+        if let icon = selection.program.iconURL {
+            return icon
+        }
+        return nil
+    }
 
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
                 let portrait = iosGuideInterfaceIsPortrait(fallback: geometry.size)
-                let artworkURL = portrait
-                    ? selection.program.posterURL
-                    : selection.program.landscapeURL
 
                 ZStack {
                     IOSProgramDetailArtworkBackdrop(url: artworkURL)
@@ -174,6 +166,22 @@ private struct IOSProgramDetailView: View {
                             alignment: .leading
                         )
                         .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .task(id: selection.program.id) {
+                if selection.program.landscapeURL == nil {
+                    let candidate = selection.program.iconURL ?? selection.program.posterURL
+                    if let candidate, !EPGImageClassifier.shared.isPortrait(candidate) {
+                        if let image = await IOSArtworkCache.shared.image(for: candidate) {
+                            guard !Task.isCancelled else { return }
+                            let ratio = image.size.width / max(image.size.height, 1)
+                            let kind: EPGImageKind = ratio >= 1.25 ? .landscape : .portrait
+                            EPGImageClassifier.shared.register(url: candidate, kind: kind)
+                            if kind == .landscape {
+                                resolvedLandscapeURL = candidate
+                            }
+                        }
                     }
                 }
             }

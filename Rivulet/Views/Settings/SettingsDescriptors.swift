@@ -102,6 +102,10 @@ enum SettingsDescriptorStore {
             icon: "safari",
             description: "Shows the Discover tab in the sidebar for browsing Popular, Top Rated, Upcoming, and more from TMDB."
         ),
+        "showWatchlistTab": SettingDescriptor(
+            icon: "bookmark",
+            description: "Shows a Watchlist tab in the sidebar with everything on your Plex Watchlist."
+        ),
         "discoverAboveLibraries": SettingDescriptor(
             icon: "arrow.up.arrow.down",
             description: "Moves the Discover tab above your Media libraries in the sidebar for quicker access."

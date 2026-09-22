@@ -54,6 +54,10 @@ protocol WatchlistCacheProtocol: Sendable {
 }
 
 final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
+    /// Items per watchlist request. Plex accepts up to its own ceiling; 100
+    /// keeps a typical watchlist to a single round trip.
+    private static let pageSize = 100
+
     private let session: URLSession
     private let discoverHost = URL(string: "https://discover.provider.plex.tv")!
     private let metadataHost = URL(string: "https://metadata.provider.plex.tv")!
@@ -63,17 +67,48 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
     }
 
     func fetchAll(token: String) async throws -> [PlexWatchlistItem] {
+        // Page until the container's own totalSize is covered. Plex's default
+        // page is larger than most watchlists, so the common case is one
+        // request, but a long watchlist would otherwise be silently truncated
+        // at whatever the default happens to be — and the grid surface shows
+        // every entry, so a short read is visible.
+        var items: [PlexWatchlistItem] = []
+        var start = 0
+        while true {
+            let page = try await fetchPage(token: token, start: start)
+            items += page.items
+            // Advance and terminate on the RAW entry count, never on the
+            // decoded one: a page holding only unsupported types decodes to
+            // zero items while Plex still has more to give, and treating that
+            // as the end would truncate the watchlist at that page.
+            start += max(page.pageSize, page.rawCount)
+            guard page.rawCount > 0, start < page.totalSize else { break }
+        }
+        return items
+    }
+
+    private struct WatchlistPage {
+        let items: [PlexWatchlistItem]
+        /// Entries Plex returned, before movie/show filtering.
+        let rawCount: Int
+        let totalSize: Int
+        let pageSize: Int
+    }
+
+    private func fetchPage(token: String, start: Int) async throws -> WatchlistPage {
         let url = discoverHost.appendingPathComponent("library/sections/watchlist/all")
         var components = URLComponents(url: url, resolvingAgainstBaseURL: true)!
-        // Plex Discover rejects X-Plex-Container-Size on this endpoint with a
-        // 400 ("Invalid value provided for x-plex-container-size!"). The
-        // watchlist is small in practice, so the default response is fine.
+        // Container-Start is what makes Container-Size stick on Plex (the same
+        // pairing rule the PMS endpoints follow); size alone is honoured here
+        // too, but both are sent so the offset is never ambiguous.
         //
         // includeGuids=1 is required — without it, the `Guid` array is
         // omitted from the response and we can't resolve items to tmdb:// for
         // library matching or context-menu navigation.
         components.queryItems = [
             URLQueryItem(name: "includeGuids", value: "1"),
+            URLQueryItem(name: "X-Plex-Container-Start", value: "\(start)"),
+            URLQueryItem(name: "X-Plex-Container-Size", value: "\(Self.pageSize)"),
             URLQueryItem(name: "X-Plex-Token", value: token)
         ]
 
@@ -95,6 +130,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
 
         struct Container: Decodable {
             struct MediaContainer: Decodable {
+                let totalSize: Int?
                 let Metadata: [Raw]?
             }
             let MediaContainer: MediaContainer
@@ -113,7 +149,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
         let decoded = try JSONDecoder().decode(Container.self, from: data)
         let raws = decoded.MediaContainer.Metadata ?? []
 
-        return raws.compactMap { raw -> PlexWatchlistItem? in
+        let items = raws.compactMap { raw -> PlexWatchlistItem? in
             guard let title = raw.title, let id = raw.ratingKey else { return nil }
             let watchType: PlexWatchlistItem.WatchlistType
             switch raw.type {
@@ -142,6 +178,10 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
                 plexGUID: raw.guid
             )
         }
+        return WatchlistPage(items: items,
+                             rawCount: raws.count,
+                             totalSize: decoded.MediaContainer.totalSize ?? raws.count,
+                             pageSize: Self.pageSize)
     }
 
     func add(guids: [String], type: PlexWatchlistItem.WatchlistType?, token: String) async throws {

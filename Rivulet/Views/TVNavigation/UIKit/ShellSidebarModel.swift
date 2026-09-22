@@ -36,6 +36,7 @@ enum ShellSidebarModel {
         combineLiveTV: Bool,
         showDiscover: Bool,
         discoverAbove: Bool,
+        showWatchlist: Bool,
         liveTVAbove: Bool,
         serverName: String?,
         profileName: String
@@ -50,6 +51,11 @@ enum ShellSidebarModel {
         let discover = ShellSidebarItem(tab: .discover, title: "Discover", icon: "sparkles")
         if showDiscover && discoverAbove {
             top.append(discover)
+        }
+        // The watchlist is account-level, not a library, so it sits with the
+        // other whole-app destinations rather than in the server section.
+        if showWatchlist {
+            top.append(ShellSidebarItem(tab: .watchlist, title: "Watchlist", icon: "bookmark.fill"))
         }
         sections.append(ShellSidebarSection(title: nil, items: top))
 

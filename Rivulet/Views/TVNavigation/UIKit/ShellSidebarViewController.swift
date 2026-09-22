@@ -581,6 +581,7 @@ final class ShellSidebarViewController: UIViewController {
             combineLiveTV: flag("combineLiveTVSources", default: true),
             showDiscover: flag("showDiscoverTab", default: true),
             discoverAbove: flag("discoverAboveLibraries", default: true),
+            showWatchlist: flag("showWatchlistTab", default: true),
             liveTVAbove: flag("liveTVAboveLibraries", default: false),
             serverName: PlexAuthManager.shared.savedServerName,
             profileName: profileName)

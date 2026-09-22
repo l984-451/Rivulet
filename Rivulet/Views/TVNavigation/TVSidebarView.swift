@@ -34,6 +34,7 @@ struct TVSidebarView: View {
     @AppStorage("liveTVAboveLibraries") private var liveTVAboveLibraries = false
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("discoverAboveLibraries") private var discoverAboveLibraries = true
+    @AppStorage("showWatchlistTab") private var showWatchlistTab = true
     @AppStorage("displaySize") private var displaySizeRaw = DisplaySize.normal.rawValue
     @State private var selectedTab: SidebarTab = .home
     @State private var showProfilePicker = false
@@ -89,6 +90,7 @@ struct TVSidebarView: View {
             combineLiveTV: combineLiveTVSources,
             showDiscover: showDiscoverTab,
             discoverAbove: discoverAboveLibraries,
+            showWatchlist: showWatchlistTab,
             liveTVAbove: liveTVAboveLibraries,
             serverName: authManager.savedServerName,
             profileName: profileName)
@@ -149,6 +151,11 @@ struct TVSidebarView: View {
         // back to Home so they're not stuck on a hidden tab.
         .onChange(of: showDiscoverTab) { _, shown in
             if !shown && selectedTab == .discover {
+                selectedTab = .home
+            }
+        }
+        .onChange(of: showWatchlistTab) { _, shown in
+            if !shown && selectedTab == .watchlist {
                 selectedTab = .home
             }
         }
@@ -424,6 +431,8 @@ struct TVSidebarView: View {
         switch tab {
         case .discover:
             return PlexHomeViewController(mode: .discover)
+        case .watchlist:
+            return PlexHomeViewController(mode: .watchlist)
         case .search:
             let search = SearchContainerViewController()
             search.onNestedChange = { [nestedNavState] isNested in
@@ -492,6 +501,10 @@ struct TVSidebarView: View {
                                 .background(.black)
                         }
                     }
+            case .watchlist:
+                // Unreachable: mounted directly as a UIKit VC above. Kept so
+                // this switch stays exhaustive over SidebarTab.
+                Color.clear
             case .discover:
                 // UIKit Discover: same hero + shelf surface as the home,
                 // TMDB-fed (HomeMode.discover). (The retired SwiftUI

@@ -141,9 +141,10 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         // confirm build number at release
-        ("1.0.6 (86)", [
+        ("1.0.6 (87)", [
             "New Watchlist tab in the sidebar shows everything you saved",
             "The Watchlist row on Home no longer stops at 20 items",
+            "Fixed search results drawing underneath the keyboard",
         ]),
         ("1.0.6 (85)", [
             "Updated AetherEngine to 7.7.0",

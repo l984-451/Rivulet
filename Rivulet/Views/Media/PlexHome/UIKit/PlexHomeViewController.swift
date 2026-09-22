@@ -660,6 +660,13 @@ final class PlexHomeViewController: UIViewController {
 
     // MARK: - Lifecycle
 
+    /// Search mode's top inset IS the safe area (see `updateContentTopInset`),
+    /// so it has to be re-read whenever the search chrome grows or collapses.
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        updateContentTopInset()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // Diagnostic only — the embedded orthogonal scrollers are NOT
@@ -1629,21 +1636,28 @@ final class PlexHomeViewController: UIViewController {
     /// reserves space below the connection banner when it's visible
     /// (mirrors SwiftUI's banner positioning above the content).
     private func updateContentTopInset() {
-        // Search needs no extra top inset: `UISearchContainerViewController`
-        // already sizes the results view to the area BELOW the keyboard, so
-        // nothing scrolls under the chrome and content starts where the view
-        // starts. (Measured: results view is [0,207 1920x873] on 1080p.)
+        // Search reads the SAFE AREA, because that is how the search controller
+        // hands us its chrome height. It does NOT size the results view below
+        // the keyboard — measured on tvOS 26.5, the view stays full screen at
+        // (0,0) 1920x1080 and publishes `safeAreaInsets.top = 306` (field
+        // 60..130, keyboard 165..231, separator 274). This page sets
+        // `contentInsetAdjustmentBehavior = .never` for the hero's full-bleed
+        // layout, so that 306 is dropped on the floor unless it is read here,
+        // and the recents row drew from y=0 straight through the keyboard.
+        // Reading only the top keeps `.never` doing its job on the sides: the
+        // chrome also publishes an 80pt left/right inset, which would shift
+        // every full-bleed row off its tuned leading margin.
+        //
+        // `viewSafeAreaInsetsDidChange` re-runs this, so the inset tracks the
+        // chrome collapsing when focus moves into the results and growing back
+        // when it returns.
+        //
         // With no hero the first row's title IS the top of the page, and the
         // collapsed sidebar pill draws over it (#298), so clear the pill rather
-        // than just giving the row breathing room. Search keeps the old margin:
-        // its container carries the same clearance already.
-        // Search takes no FIXED inset. The search controller already sizes the
-        // results view to the area below its chrome, and the recents cell adds
-        // the small remainder itself, so a constant on top of that just stacked
-        // (48 + 48 put the first row 139pt below the keyboard's separator, twice
-        // the Apple TV app's gap).
+        // than just giving the row breathing room. Search has the pill
+        // suppressed instead (`TVSidebarView`), so it needs no pill clearance.
         var noHeroTop = ShellPillMetrics.contentClearance
-        if case .search = mode { noHeroTop = 0 }
+        if case .search = mode { noHeroTop = view.safeAreaInsets.top }
         let topInset: CGFloat = showHomeHero ? 0 : noHeroTop
         if collectionView.contentInset.top != topInset {
             collectionView.contentInset.top = topInset

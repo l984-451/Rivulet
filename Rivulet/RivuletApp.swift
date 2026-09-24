@@ -62,6 +62,7 @@ struct RivuletApp: App {
         // which returns false for an unset key, so register the default here
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
+        AppIconManager.shared.syncWithSystem()
 
         // PlexAuthManager owns identity and lives in RivuletCore; the content
         // store it hands off to is per platform. Set BEFORE any sign-in can

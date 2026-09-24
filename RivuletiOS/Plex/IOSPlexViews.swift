@@ -321,6 +321,7 @@ struct IOSPlexSearchView: View {
 struct IOSPlexSettingsView: View {
     @EnvironmentObject private var plex: IOSPlexSession
     @EnvironmentObject private var navigation: IOSNavigationSettings
+    @ObservedObject private var appIconManager = AppIconManager.shared
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipCredits") private var autoSkipCredits = false
     @AppStorage("autoSkipAds") private var autoSkipAds = false
@@ -415,6 +416,17 @@ struct IOSPlexSettingsView: View {
                     Text("Choose bottom tabs")
                 } footer: {
                     Text("Choose up to five. Settings remains available from the account button at the top even when its tab is turned off.")
+                }
+
+                Section("App Icon") {
+                    Picker("App Icon", selection: Binding(
+                        get: { appIconManager.currentIcon },
+                        set: { appIconManager.setIcon($0) }
+                    )) {
+                        ForEach(AppIconOption.allCases) { opt in
+                            Text(opt.title).tag(opt)
+                        }
+                    }
                 }
 
                 Section {

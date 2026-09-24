@@ -560,10 +560,84 @@ struct IOSAetherSubtitleOverlay: View {
     let videoSize: CGSize
 
     private enum Metrics {
-        // iPhone captions need a smaller curve than the 10-foot tvOS UI.
-        // 0.039675 is a 25% reduction from tvOS's 0.0529, equivalent to
-        // reducing a 0.20 scale factor to 0.15.
-        static let fontHeightFraction: CGFloat = 0.039675
+        /// Caption line PITCH (baseline to baseline) as a fraction of the VIDEO
+        /// view height, for each size the system reports. MEASURED against
+        /// AVPlayerViewController on an iPhone 16 Pro, not derived.
+        ///
+        /// Method: full-screen captures of the same broadcast at each caption
+        /// size, landscape and portrait. The video rect was found by its
+        /// letterbox/pillarbox bounds (714.7x402.0pt landscape, 402.0x226.0pt
+        /// portrait, both exactly 16:9), and pitch by autocorrelating the
+        /// per-row ink profile of the caption glyphs — which is immune to the
+        /// band-splitting that catches a naive "find the text rows" pass at the
+        /// larger sizes.
+        ///
+        ///     setting    pitch px   pitch pt   /videoH    ratio
+        ///     small         53.97      17.99   0.04475    0.620
+        ///     default       87.01      29.00   0.07215    1.000
+        ///     large        135.44      45.15   0.11231    1.557
+        ///     xlarge       168.18      56.06   0.13945    1.933
+        ///
+        /// **The curve is not tvOS's.** There the same settings measure 1.69x
+        /// and 2.25x at the top two rungs against 1.557x and 1.933x here, so
+        /// the platform's ladder cannot be reused — an earlier guess that the
+        /// non-linearity was a shared MediaAccessibility behaviour was wrong.
+        ///
+        /// Captions scale with the VIDEO view, confirmed rather than assumed:
+        /// portrait/landscape video height is 226/402 = 0.5622, and the
+        /// portrait pitch matches that prediction to within 4%. Screen height
+        /// would make portrait captions LARGER, and screen width predicts a
+        /// pitch 21% too small; neither survives the measurement. This also
+        /// means the old `min(width, height)` basis was wrong in portrait,
+        /// where it silently switches from being the height to the width.
+        ///
+        /// Stored as PITCH rather than point size on purpose: the conversion
+        /// needs the font's leading multiple, and `pointSize(videoHeight:…)`
+        /// takes that from the font it is about to draw with, so no constant
+        /// has to be measured or guessed here.
+        /// The x-axis is MediaAccessibility's quantised buckets, confirmed on
+        /// device: iOS's four caption sizes report exactly 0.6, 1.0, 1.5 and
+        /// 2.0 — four of the five `CaptionAppearance.fontScale(forRelativeSize:)`
+        /// documents. There is no 0.35 rung on iOS.
+        ///
+        /// The y-axis is measured, not derived: each fraction is
+        /// AVPlayerViewController's own line pitch over the video height at
+        /// that setting. Do not "simplify" this to a multiplier — the system
+        /// is not linear in the reported value, which is the whole point of
+        /// #299.
+        static let pitchLadder: [(reported: CGFloat, pitchFraction: CGFloat)] = [
+            (0.60, 0.04475),
+            (1.00, 0.07215),
+            (1.50, 0.11231),
+            (2.00, 0.13945)
+        ]
+
+        /// Caption point size for a video height and the system's reported
+        /// relative character size.
+        ///
+        /// Interpolates between the measured rungs, so a value iOS does not
+        /// currently report still lands sensibly rather than falling back to a
+        /// wrong multiply.
+        static func pointSize(videoHeight: CGFloat, reported: CGFloat, font: UIFont) -> CGFloat {
+            let targetPitch = videoHeight * pitchFraction(forReported: reported)
+            // Leading multiple of the ACTUAL caption font. AVKit and this
+            // overlay draw the same face at the same size, so matching pitch
+            // matches apparent size without anyone having to measure a constant.
+            let leading = font.lineHeight / max(font.pointSize, 1)
+            return max(minimumPointSize, targetPitch / max(leading, 0.5))
+        }
+
+        static func pitchFraction(forReported reported: CGFloat) -> CGFloat {
+            guard let first = pitchLadder.first, let last = pitchLadder.last else { return 0 }
+            if reported <= first.reported { return first.pitchFraction }
+            if reported >= last.reported { return last.pitchFraction }
+            for (lo, hi) in zip(pitchLadder, pitchLadder.dropFirst()) where reported <= hi.reported {
+                let t = (reported - lo.reported) / (hi.reported - lo.reported)
+                return lo.pitchFraction + t * (hi.pitchFraction - lo.pitchFraction)
+            }
+            return last.pitchFraction
+        }
+
         static let minimumPointSize: CGFloat = 10
         static let positionedSafeFraction: CGFloat = 0.10
         static let unpositionedBottomFraction: CGFloat = 0.05
@@ -572,13 +646,18 @@ struct IOSAetherSubtitleOverlay: View {
     var body: some View {
         GeometryReader { proxy in
             let allCues = cues + nativeCues
-            let pointSize = max(
-                Metrics.minimumPointSize,
-                min(proxy.size.width, proxy.size.height)
-                    * Metrics.fontHeightFraction
-                    * style.fontScale
-            )
             let picture = pictureRect(in: proxy.size)
+            // Sized from the VIDEO height, not `min(width, height)` of the
+            // container: in portrait the container is tall and the video a short
+            // band, so min() silently became the WIDTH and captions came out
+            // sized off the wrong axis. `style.fontScale` is the raw value
+            // MediaAccessibility reports (fontScale(forRelativeSize:) is
+            // identity inside its clamp), which is what the ladder is keyed on.
+            let pointSize = Metrics.pointSize(
+                videoHeight: captionSizingHeight(in: proxy.size),
+                reported: style.fontScale,
+                font: style.font(ofSize: 100)   // reference size; only its leading ratio is read
+            )
             let osdBoundary = landscapeCaptionMaxY(
                 in: picture,
                 container: proxy.size
@@ -748,6 +827,23 @@ struct IOSAetherSubtitleOverlay: View {
             font = UIFont(descriptor: descriptor, size: size)
         }
         return font
+    }
+
+    /// Height the caption size is derived from.
+    ///
+    /// NOT `pictureRect(in:).height`. That falls back to the whole container
+    /// when `videoSize` is unknown, which is fine for positioning but ruinous
+    /// for sizing: in portrait the container is ~874pt tall against a ~226pt
+    /// video band, so captions come out nearly 4x too large. And unknown is not
+    /// a rare state — the software decode path publishes no `presentationSize`
+    /// at all, so it can persist for a whole session.
+    ///
+    /// Falls back to the tallest 16:9 picture the container could hold, which
+    /// is what broadcast actually is, rather than to the container itself.
+    private func captionSizingHeight(in container: CGSize) -> CGFloat {
+        let rect = pictureRect(in: container)
+        if videoSize.width > 0, videoSize.height > 0 { return rect.height }
+        return min(container.height, container.width * 9.0 / 16.0)
     }
 
     private func pictureRect(in container: CGSize) -> CGRect {

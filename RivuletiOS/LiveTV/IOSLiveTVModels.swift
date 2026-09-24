@@ -7,6 +7,9 @@ struct IOSPlaybackHeaders: Hashable, Sendable {
     let userAgent: String
     let authorization: String?
     let referer: String?
+    /// Headers the playlist authored on this stream (`url|Header=value`).
+    /// Applied last, so they override the source-level values above.
+    var streamHeaders: [String: String] = [:]
 
     var dictionary: [String: String] {
         var headers = ["User-Agent": userAgent]
@@ -16,6 +19,7 @@ struct IOSPlaybackHeaders: Hashable, Sendable {
         if let referer, !referer.isEmpty {
             headers["Referer"] = referer
         }
+        headers.merge(streamHeaders) { _, stream in stream }
         return headers
     }
 }

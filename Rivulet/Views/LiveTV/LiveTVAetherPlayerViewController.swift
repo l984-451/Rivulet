@@ -322,16 +322,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             isNativeHLSRoute = route == .nativeHLS
             joinTelemetry?.resolveFinished(url: url, route: route)
             startLiveSessionKeepAlive(for: url)
-            var headers = LiveTVClientIdentity.streamHeaders
-            if let customHeaders = channel.httpHeaders {
-                for (k, v) in customHeaders {
-                    headers[k] = v
-                }
-            }
             do {
                 try await aether.loadLive(
                     url: url,
-                    headers: headers,
+                    headers: LiveTVClientIdentity.streamHeaders(for: channel),
                     forceEngineDemux: forceEngineDemux
                 )
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
@@ -1245,16 +1239,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 let retryURL = Self.forcingDirectStream(freshURL)
                 let isPlaylist = AetherPlayer.liveRoute(for: retryURL,
                                                         forceEngineDemux: false) == .nativeHLS
-                var headers = LiveTVClientIdentity.streamHeaders
-                if let customHeaders = channel.httpHeaders {
-                    for (k, v) in customHeaders {
-                        headers[k] = v
-                    }
-                }
                 do {
                     aetherPlayer?.stop()
                     try await aetherPlayer?.loadLive(url: retryURL,
-                                                     headers: headers,
+                                                     headers: LiveTVClientIdentity.streamHeaders(for: channel),
                                                      forceEngineDemux: !isPlaylist)
                     if Task.isCancelled { return }
                     aetherPlayer?.play()

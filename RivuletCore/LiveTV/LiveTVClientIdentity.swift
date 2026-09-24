@@ -39,65 +39,48 @@ enum LiveTVClientIdentity {
     /// the player call sites cannot drift apart from one another.
     static let streamHeaders: [String: String] = ["User-Agent": userAgent]
 
-    /// Parses a raw stream URL string that may contain pipe-delimited headers
-    /// (e.g. `http://host/stream.m3u8|User-Agent=CustomUA&Referer=...` or
-    /// `%7CUser-Agent=...`) into a sanitized URL and extracted headers dictionary.
-    ///
-    /// Popular IPTV players (such as TiviMate and Kodi IPTV Simple Client) support
-    /// appending HTTP headers to stream URLs after a pipe delimiter `|`.
-    static func parseStreamURL(_ rawString: String) -> (url: URL, headers: [String: String])? {
-        let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
-        let components: [String]
-        if let pipeRange = trimmed.range(of: "|") {
-            components = [String(trimmed[..<pipeRange.lowerBound]), String(trimmed[pipeRange.upperBound...])]
-        } else if let encPipeRange = trimmed.range(of: "%7C", options: .caseInsensitive) {
-            components = [String(trimmed[..<encPipeRange.lowerBound]), String(trimmed[encPipeRange.upperBound...])]
-        } else {
-            components = [trimmed]
-        }
-
-        guard let cleanURL = URL(string: components[0].trimmingCharacters(in: .whitespaces)) else {
-            return nil
-        }
-        var headers: [String: String] = [:]
-
-        if components.count > 1 {
-            let rawHeaderString = components[1]
-            let pairs = rawHeaderString.components(separatedBy: "&")
-            for pair in pairs {
-                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
-                guard parts.count == 2 else { continue }
-                let rawKey = parts[0].trimmingCharacters(in: .whitespaces)
-                let rawVal = parts[1].trimmingCharacters(in: .whitespaces)
-                let val = rawVal.removingPercentEncoding ?? rawVal
-                guard !rawKey.isEmpty, !val.isEmpty else { continue }
-
-                if rawKey.caseInsensitiveCompare("User-Agent") == .orderedSame {
-                    headers["User-Agent"] = val
-                } else if rawKey.caseInsensitiveCompare("Referer") == .orderedSame {
-                    headers["Referer"] = val
-                } else {
-                    headers[rawKey] = val
-                }
-            }
-        }
-
-        return (cleanURL, headers)
+    /// Headers for one channel's stream: the base identity, overridden by any
+    /// headers the playlist authored for that channel (`url|User-Agent=...`).
+    /// The only place the two are merged, so the call sites cannot drift.
+    static func streamHeaders(for channel: UnifiedChannel) -> [String: String] {
+        streamHeaders.merging(channel.httpHeaders ?? [:]) { _, custom in custom }
     }
 
-    /// Resolves and sanitizes a stream URL by stripping any pipe-delimited headers
-    /// and merging any discovered headers (such as `User-Agent`) into the provided stream headers.
-    static func resolveStream(url: URL, baseHeaders: [String: String] = streamHeaders) -> (url: URL, headers: [String: String]) {
-        guard let parsed = parseStreamURL(url.absoluteString) else {
-            return (url, baseHeaders)
+    /// Splits a playlist stream line of the form `url|Header=value&Header=value`
+    /// (the Kodi / TiviMate convention) into the URL and its headers.
+    ///
+    /// Only a literal `|` is a delimiter. An encoded `%7C` is ordinary URL data
+    /// (a signed token, an Xtream password) and is left in the URL untouched.
+    nonisolated static func parseStreamURL(_ rawString: String) -> (url: URL, headers: [String: String])? {
+        let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = parts.first,
+              let url = URL(string: first.trimmingCharacters(in: .whitespaces)) else {
+            return nil
         }
-        guard !parsed.headers.isEmpty || parsed.url != url else {
-            return (url, baseHeaders)
+
+        var headers: [String: String] = [:]
+        if parts.count > 1 {
+            for pair in parts[1].split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1).map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+                guard kv.count == 2, !kv[0].isEmpty else { continue }
+                let value = kv[1].removingPercentEncoding ?? kv[1]
+                guard !value.isEmpty else { continue }
+                headers[canonicalHeaderName(kv[0])] = value
+            }
         }
-        var merged = baseHeaders
-        for (k, v) in parsed.headers {
-            merged[k] = v
+        return (url, headers)
+    }
+
+    /// Normalises the case of the headers Rivulet itself sends, so a playlist's
+    /// `user-agent=` replaces the base `User-Agent` instead of sending both.
+    private nonisolated static func canonicalHeaderName(_ name: String) -> String {
+        for known in ["User-Agent", "Referer", "Authorization"]
+        where name.caseInsensitiveCompare(known) == .orderedSame {
+            return known
         }
-        return (parsed.url, merged)
+        return name
     }
 }

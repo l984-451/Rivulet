@@ -259,13 +259,8 @@ final class MultiStreamViewModel: ObservableObject {
             ]
             SentryBridge.addBreadcrumb(breadcrumb)
 
-            var headers = LiveTVClientIdentity.streamHeaders
-            if let customHeaders = channel.httpHeaders {
-                for (k, v) in customHeaders { headers[k] = v }
-            }
-
             do {
-                try await slot.load(url: url, headers: headers)
+                try await slot.load(url: url, headers: LiveTVClientIdentity.streamHeaders(for: channel))
                 slot.setMuted(isMuted)
                 slot.play()
                 recoveryAttempts[slot.id] = 0
@@ -537,13 +532,8 @@ final class MultiStreamViewModel: ObservableObject {
             ]
             SentryBridge.addBreadcrumb(breadcrumb)
 
-            var headers = LiveTVClientIdentity.streamHeaders
-            if let customHeaders = channel.httpHeaders {
-                for (k, v) in customHeaders { headers[k] = v }
-            }
-
             do {
-                try await newSlot.load(url: url, headers: headers)
+                try await newSlot.load(url: url, headers: LiveTVClientIdentity.streamHeaders(for: channel))
                 newSlot.setMuted(isMuted)
                 newSlot.play()
             } catch {
@@ -956,11 +946,7 @@ final class MultiStreamViewModel: ObservableObject {
         do {
             let slot = streams[slotIndex]
             let muted = slot.isMuted
-            var headers = LiveTVClientIdentity.streamHeaders
-            if let customHeaders = channel.httpHeaders {
-                for (k, v) in customHeaders { headers[k] = v }
-            }
-            try await slot.load(url: url, headers: headers)
+            try await slot.load(url: url, headers: LiveTVClientIdentity.streamHeaders(for: channel))
             guard !Task.isCancelled,
                   !intentionallyStoppedSlots.contains(slotId),
                   streams.contains(where: { $0.id == slotId }) else { return }

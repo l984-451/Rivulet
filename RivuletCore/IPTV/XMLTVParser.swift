@@ -173,12 +173,9 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
                 currentIconURL = src
             } else if currentProgramChannelId != nil, let src {
                 if currentProgramIcon == nil { currentProgramIcon = src }
-                let w = attributeDict["width"].flatMap { Int($0) }
-                let h = attributeDict["height"].flatMap { Int($0) }
-                currentProgramIcons.append((url: src, w: w, h: h))
-                if let url = URL(string: src), let w, let h {
-                    EPGImageClassifier.shared.register(url: url, width: w, height: h)
-                }
+                currentProgramIcons.append((url: src,
+                                            w: attributeDict["width"].flatMap { Int($0) },
+                                            h: attributeDict["height"].flatMap { Int($0) }))
             }
 
         case "new":
@@ -264,42 +261,40 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
         self.parseError = parseError
     }
 
-    /// Programme poster: the icon closest to 2:3 (portrait) when dimensions are
-    /// declared (aspect ratio < 1.25) or when pre-classified as portrait.
-    /// If only landscape icons are provided, returns nil so the UI falls back
-    /// to the channel logo (tvOS) or landscape backdrop (iOS).
+    /// Programme poster: the declared-portrait icon closest to 2:3, else the
+    /// first icon with no declared dimensions (the views measure that one
+    /// before trusting it). An icon declared landscape is never a poster, so a
+    /// feed whose only art is landscape yields nil and the poster slot falls
+    /// back to the channel logo.
+    ///
+    /// Declared dimensions only: parsing must not depend on anything the UI
+    /// has measured, or the same feed would parse differently per session.
     static func posterIcon(from icons: [(url: String, w: Int?, h: Int?)]) -> String? {
-        guard !icons.isEmpty else { return nil }
-        let sized = icons.compactMap { icon -> (url: String, ratio: Double)? in
-            if let w = icon.w, let h = icon.h, h > 0 {
-                return (icon.url, Double(w) / Double(h))
-            }
-            if let url = URL(string: icon.url), let kind = EPGImageClassifier.shared.kind(for: url) {
-                return (icon.url, kind == .landscape ? 1.778 : 0.667)
-            }
-            return nil
+        let portraits = icons.compactMap { icon -> (url: String, ratio: Double)? in
+            guard let ratio = declaredRatio(icon), ratio < EPGImageClassifier.landscapeThreshold else { return nil }
+            return (icon.url, ratio)
         }
-        let portraits = sized.filter { $0.ratio < 1.25 }
         if let best = portraits.min(by: { abs($0.ratio - 2.0 / 3.0) < abs($1.ratio - 2.0 / 3.0) }) {
             return best.url
         }
-        return nil
+        return icons.first(where: { declaredRatio($0) == nil })?.url
     }
 
-    /// Programme background: an icon that is genuinely landscape (aspect ratio ≥ 1.25)
-    /// based on declared dimensions or known classification.
+    /// Programme background: ONLY an icon declared landscape. Icons without
+    /// dimensions, or square/portrait ones (e.g. a channel logo used as the
+    /// programme icon), are never treated as a background here — so the
+    /// backdrop stays empty rather than showing a stretched logo.
     static func landscapeIcon(from icons: [(url: String, w: Int?, h: Int?)]) -> String? {
-        let sized = icons.compactMap { icon -> (url: String, ratio: Double)? in
-            if let w = icon.w, let h = icon.h, h > 0 {
-                return (icon.url, Double(w) / Double(h))
-            }
-            if let url = URL(string: icon.url), let kind = EPGImageClassifier.shared.kind(for: url) {
-                return (icon.url, kind == .landscape ? 1.778 : 0.667)
-            }
-            return nil
+        let landscape = icons.compactMap { icon -> (url: String, ratio: Double)? in
+            guard let ratio = declaredRatio(icon), ratio >= EPGImageClassifier.landscapeThreshold else { return nil }
+            return (icon.url, ratio)
         }
-        let landscapes = sized.filter { $0.ratio >= 1.25 }
-        return landscapes.min(by: { abs($0.ratio - 16.0 / 9.0) < abs($1.ratio - 16.0 / 9.0) })?.url
+        return landscape.min(by: { abs($0.ratio - 16.0 / 9.0) < abs($1.ratio - 16.0 / 9.0) })?.url
+    }
+
+    private static func declaredRatio(_ icon: (url: String, w: Int?, h: Int?)) -> Double? {
+        guard let w = icon.w, let h = icon.h, w > 0, h > 0 else { return nil }
+        return Double(w) / Double(h)
     }
 
     // MARK: - Helpers

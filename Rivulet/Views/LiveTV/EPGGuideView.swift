@@ -1541,25 +1541,12 @@ private struct GuidePosterImage<Fallback: View>: View {
                 }
             }
             .task(id: url) {
-                if EPGImageClassifier.shared.isLandscape(url) {
-                    isLandscape = true
-                    return
+                let kind = await EPGImageClassifier.shared.classify(url) {
+                    await ImageCacheManager.shared.image(for: url)?.size
                 }
-                if EPGImageClassifier.shared.isPortrait(url) {
-                    isLandscape = false
-                    return
-                }
-                if let image = await ImageCacheManager.shared.image(for: url) {
-                    guard !Task.isCancelled else { return }
-                    let ratio = image.size.width / max(image.size.height, 1)
-                    let kind: EPGImageKind = ratio >= 1.25 ? .landscape : .portrait
-                    EPGImageClassifier.shared.register(url: url, kind: kind)
-                    if kind == .landscape {
-                        isLandscape = true
-                    }
-                }
+                guard !Task.isCancelled else { return }
+                isLandscape = kind == .landscape
             }
         }
     }
 }
-

@@ -354,9 +354,10 @@ final class ChannelRowButton: UIControl {
     }
 
     /// Fills the 16:9 box with genuinely landscape programme art whenever the
-    /// EPG offers it (`landscapeURL`, which XMLTVParser only populates for an
-    /// icon declaring an aspect ratio >= 1.3 — so it is never a logo or a
-    /// poster in disguise).
+    /// EPG offers it: `landscapeURL` (an icon declaring an aspect ratio at or
+    /// above `EPGImageClassifier.landscapeThreshold`, so never a logo or a
+    /// poster in disguise), or programme art the guide has already measured
+    /// as landscape.
     ///
     /// Everything else is FIT, not filled. `iconURL` / `posterURL` are
     /// routinely 2:3 posters, and cropping a portrait poster to 16:9 keeps
@@ -364,19 +365,15 @@ final class ChannelRowButton: UIControl {
     /// poster as the fallback: in a channel list, identifying the channel
     /// beats showing a sliver of programme art.
     private func loadThumbnail(channel: UnifiedChannel, program: UnifiedProgram?) {
-        let candidateLandscape = program?.landscapeURL
-            ?? (program?.iconURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil })
-            ?? (program?.posterURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil })
-        let isLandscape = candidateLandscape != nil
-        guard let url = candidateLandscape ?? channel.logoURL ?? program?.posterURL ?? program?.iconURL else { return }
-        thumbView.contentMode = isLandscape ? .scaleAspectFill : .scaleAspectFit
+        let measured = [program?.iconURL, program?.posterURL].compactMap { $0 }
+            .first(where: { EPGImageClassifier.shared.isLandscape($0) })
+        let landscape = program?.landscapeURL ?? measured
+        guard let url = landscape ?? channel.logoURL ?? program?.posterURL ?? program?.iconURL else { return }
+        thumbView.contentMode = landscape != nil ? .scaleAspectFill : .scaleAspectFit
         imageLoadTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url)
             guard let self, !Task.isCancelled else { return }
             self.thumbView.image = image
-            if !isLandscape, let image, image.size.height > 0, image.size.width / image.size.height >= 1.25 {
-                self.thumbView.contentMode = .scaleAspectFill
-            }
         }
     }
 

@@ -285,8 +285,18 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   next press took the collapse branch and worked: **every other Menu press
   did nothing at all.** `PlexHomeViewController.handleMenuBack` had the check
   from the start, which is why only the shell absorbed the press.
-- The player's tap-vs-hold sites are duration-based and deliberately
-  untouched pending InputProbe field data on IR repeat codes (#212).
+- **The VOD player's content state has ONE press owner.**
+  `PlayerContainerViewController`'s `pressesBegan`/`Ended` ("Content-state
+  presses") handle Left/Right/Up/Down/Select whenever no control holds focus,
+  reached from `ContentFocusAnchorView`, an invisible UIKit focus stop. Do not
+  put focus back on a SwiftUI layer there (arrow presses to a focused SwiftUI
+  item never reliably reached UIKit, which is why IR/CEC and clicks-only Siri
+  Remotes could not skip: #212, #232, #305), and do not add a GameController
+  listener for anything that also arrives as a `UIPress`:
+  `RemoteInputHandler.uikitOwnsPresses` limits the player's GameController path
+  to input with no `UIPress` (clickpad rotation, shoulders, X). Tap-vs-hold is
+  still duration-based (`DirectionalPressDetector`); how a held IR button
+  arrives (#212) still wants InputProbe field data.
 - **The focus engine's occlusion test is geometric, not hit-test based.** Any
   non-hidden view with alpha above zero that sits above an item's frame makes
   that item unfocusable, even with a clear background and a `hitTest`

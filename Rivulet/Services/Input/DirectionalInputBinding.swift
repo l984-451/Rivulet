@@ -16,8 +16,7 @@
 //  half the remotes in the field. This binding installs BOTH:
 //
 //  - per-direction arrow-press taps, plus optional native long-press holds
-//    (tap requires the long to fail — the same mechanism
-//    `PlayerContainerViewController.setupDirectionalGestures` uses)
+//    (tap requires the long to fail)
 //  - per-direction `UISwipeGestureRecognizer`s constrained to `.indirect`
 //    touches with `allowedPressTypes = []` (a tvOS swipe recognizer otherwise
 //    waits on a `.select` press)

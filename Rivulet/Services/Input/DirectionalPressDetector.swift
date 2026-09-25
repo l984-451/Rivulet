@@ -8,17 +8,12 @@
 //  One tap-vs-hold state machine for a Left/Right directional input slot: a
 //  quick release fires a tap, holding past `InputConfig.holdThreshold` fires a
 //  hold instead. Shared by every input source that delivers seek/scrub as a
-//  discrete begin/end pair rather than through UIKit's own gesture-recognizer
-//  fail-requirement machinery — `RemoteInputHandler` (GameController dpad/
-//  shoulder buttons, keyboard arrows) and `ScrubberFocusProxyView` (the
-//  focused-scrubber `UIPress` path) each hand-rolled an identical Timer before
-//  this existed, and the duplication is exactly what made the seek-drop bug
-//  hard to pin down — a fix to one copy's edge case silently left the other
-//  two unfixed. `PlayerContainerViewController`'s IR-remote gesture
-//  recognizers (`setupDirectionalGestures`) deliberately do NOT use this: a
-//  `UILongPressGestureRecognizer` + `require(toFail:)` already gets the same
-//  tap-vs-hold split from native UIKit state, so there is no hand-rolled timer
-//  there to consolidate.
+//  discrete begin/end pair — `PlayerContainerViewController`'s content-state
+//  presses, `ScrubberFocusProxyView` (the focused-scrubber `UIPress` path), and
+//  `RemoteInputHandler` (GameController d-pad / keyboard arrows, for the hosts
+//  that still listen to those) each hand-rolled an identical Timer before this
+//  existed, and the duplication is exactly what made the seek-drop bug hard to
+//  pin down — a fix to one copy's edge case silently left the others unfixed.
 //
 
 import Foundation

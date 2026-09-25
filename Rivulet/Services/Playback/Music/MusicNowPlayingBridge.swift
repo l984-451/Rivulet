@@ -47,6 +47,7 @@ final class MusicNowPlayingBridge {
             mode: .default,
             owner: "MusicNowPlaying"
         )
+        claimRemoteCommands()
 
         var info = [String: Any]()
 
@@ -110,24 +111,56 @@ final class MusicNowPlayingBridge {
 
     // MARK: - Remote Commands
 
+    /// Music's half of the one shared command center: next/previous, shuffle
+    /// and repeat on; the video player's skip and seek off (their handlers do
+    /// nothing without a video, and left enabled they compete with
+    /// next/previous for the system's transport buttons). `NowPlayingService.attach` claims
+    /// the other half. Both used to be set once, at each service's first use,
+    /// so whichever player started second kept its layout for the whole
+    /// session: after the first film, Music's next/previous stayed disabled.
+    func claimRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        center.nextTrackCommand.isEnabled = true
+        center.previousTrackCommand.isEnabled = true
+        center.changeShuffleModeCommand.isEnabled = true
+        center.changeRepeatModeCommand.isEnabled = true
+        center.skipForwardCommand.isEnabled = false
+        center.skipBackwardCommand.isEnabled = false
+        center.seekForwardCommand.isEnabled = false
+        center.seekBackwardCommand.isEnabled = false
+    }
+
+    // Every handler below stands down while a video owns Now Playing: both
+    // players register targets on the same shared center, so a command sent
+    // during a film can reach the queue too (see
+    // `MusicQueue.videoOwnsNowPlaying`).
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
 
         // Play/Pause
         let playTarget = center.playCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.play() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.play()
+            }
             return .success
         }
         commandTargets.append(playTarget)
 
         let pauseTarget = center.pauseCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.pause() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.pause()
+            }
             return .success
         }
         commandTargets.append(pauseTarget)
 
         let toggleTarget = center.togglePlayPauseCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.togglePlayPause() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.togglePlayPause()
+            }
             return .success
         }
         commandTargets.append(toggleTarget)
@@ -135,14 +168,20 @@ final class MusicNowPlayingBridge {
         // Next/Previous track
         center.nextTrackCommand.isEnabled = true
         let nextTarget = center.nextTrackCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.skipToNext() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.skipToNext()
+            }
             return .success
         }
         commandTargets.append(nextTarget)
 
         center.previousTrackCommand.isEnabled = true
         let prevTarget = center.previousTrackCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.skipToPrevious() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.skipToPrevious()
+            }
             return .success
         }
         commandTargets.append(prevTarget)
@@ -153,7 +192,11 @@ final class MusicNowPlayingBridge {
             guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
-            Task { @MainActor in MusicQueue.shared.seek(to: positionEvent.positionTime) }
+            let position = positionEvent.positionTime
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.seek(to: position)
+            }
             return .success
         }
         commandTargets.append(seekTarget)
@@ -161,7 +204,10 @@ final class MusicNowPlayingBridge {
         // Shuffle
         center.changeShuffleModeCommand.isEnabled = true
         let shuffleTarget = center.changeShuffleModeCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.toggleShuffle() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.toggleShuffle()
+            }
             return .success
         }
         commandTargets.append(shuffleTarget)
@@ -169,7 +215,10 @@ final class MusicNowPlayingBridge {
         // Repeat
         center.changeRepeatModeCommand.isEnabled = true
         let repeatTarget = center.changeRepeatModeCommand.addTarget { _ in
-            Task { @MainActor in MusicQueue.shared.cycleRepeatMode() }
+            Task { @MainActor in
+                guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
+                MusicQueue.shared.cycleRepeatMode()
+            }
             return .success
         }
         commandTargets.append(repeatTarget)

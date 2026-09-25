@@ -30,6 +30,8 @@ final class RemoteInputHandler: ObservableObject {
     private var directionalDetectors: [DirectionalInputKey: DirectionalPressDetector] = [:]
     private var clickedDirection: Bool?
     private var currentDpadDirection: Bool?
+    /// Last touch position on the clickpad, frozen while a click is down.
+    private var lastTouch: (x: Float, y: Float)?
     private var isButtonDown = false
 
     // Click wheel rotation tracking (iPod-style)
@@ -60,6 +62,37 @@ final class RemoteInputHandler: ObservableObject {
 
     var onAction: ((PlaybackInputAction, PlaybackInputSource) -> Void)?
 
+    /// Set by a host whose own responder chain handles every input tvOS ALSO
+    /// delivers as a `UIPress`: clickpad-ring clicks (arrow presses), a game
+    /// controller's d-pad and B, a keyboard's arrows and Escape. For those the
+    /// GameController copy is a mirror of a press the host already acted on,
+    /// and listening to both is what made one click land zero, one or two
+    /// skips depending on which copy arrived first (and when the two paths
+    /// disagreed on direction, a left click and a phantom right click summed
+    /// to no skip at all). With this set, the handler only acts on what has
+    /// no `UIPress` at all: clickpad rotation, shoulder buttons, X, and the
+    /// keyboard's Space / Return / I. The VOD player sets it
+    /// (`PlayerContainerViewController` owns its presses); Live TV's
+    /// Channels layout still relies on the mirrors and leaves it off.
+    var uikitOwnsPresses = false
+
+    /// The monitoring handler, so the VOD container can ask where the finger
+    /// rested before a click without owning GameController itself (its
+    /// handlers are single-slot, so a second listener would clobber this one).
+    private(set) static weak var active: RemoteInputHandler?
+
+    /// Horizontal edge the finger rested on just before the current (or last)
+    /// clickpad click: true = right, false = left, nil = centre, vertical, or
+    /// no touch reported (a clicks-only clickpad reports none). Frozen for the
+    /// duration of a click, because the click itself disturbs touch sensing.
+    /// Uses the stricter `edgeClickThreshold`: it decides whether a centre
+    /// `.select` was really an edge click, and a wrong yes skips the video.
+    var clickpadEdge: Bool? {
+        guard let lastTouch else { return nil }
+        return InputConfig.clickpadHorizontalDirection(
+            x: lastTouch.x, y: lastTouch.y, threshold: InputConfig.edgeClickThreshold)
+    }
+
     private var controllerObserver: NSObjectProtocol?
     private var controllerDisconnectObserver: NSObjectProtocol?
     private var keyboardConnectObserver: NSObjectProtocol?
@@ -70,6 +103,7 @@ final class RemoteInputHandler: ObservableObject {
     }
 
     func startMonitoring() {
+        Self.active = self
         for controller in GCController.controllers() {
             setupController(controller)
         }
@@ -121,6 +155,7 @@ final class RemoteInputHandler: ObservableObject {
     }
 
     func stopMonitoring() {
+        if Self.active === self { Self.active = nil }
         for controller in GCController.controllers() {
             teardownController(controller)
         }
@@ -180,14 +215,6 @@ final class RemoteInputHandler: ObservableObject {
                 return
             }
 
-            let dir: Bool? = if xValue > InputConfig.dpadThreshold {
-                true  // right
-            } else if xValue < -InputConfig.dpadThreshold {
-                false  // left
-            } else {
-                nil  // center
-            }
-
             // Calculate radius and angle for click wheel rotation
             let radius = sqrt(xValue * xValue + yValue * yValue)
             let angle = atan2(yValue, xValue)
@@ -195,6 +222,9 @@ final class RemoteInputHandler: ObservableObject {
             Task { @MainActor in
                 // Ignore dpad changes while button is pressed (click disrupts touch sensing)
                 guard !self.isButtonDown else { return }
+
+                self.lastTouch = (xValue, yValue)
+                let dir = InputConfig.clickpadHorizontalDirection(x: xValue, y: yValue)
 
                 // Track left/right direction for tap/hold detection
                 if self.currentDpadDirection != dir {
@@ -241,29 +271,37 @@ final class RemoteInputHandler: ObservableObject {
                 // visible as a click that arrived.
                 InputProbe.gamepad("micro buttonA \(pressed ? "down" : "up")")
 
-                // Don't capture clicks in error state - let SwiftUI dismiss button work
-                if self.isErrorCheck?() == true {
-                    return
-                }
+                // Physical state first, before any gate. The gates below used
+                // to return before this, and they are not symmetric in time: an
+                // Up/Down click that raises the rail passes the gate on the way
+                // down and hits it on the way up. That stranded `isButtonDown`
+                // true, which froze the tracked touch position (clickpad
+                // rotation went dead) until some later click happened to
+                // release ungated, and that click then skipped in whatever
+                // direction was frozen, not the one the user clicked.
+                self.isButtonDown = pressed
 
-                // Don't capture clicks when post-video overlay is showing - let buttons work
-                if self.isPostVideoCheck?() == true {
-                    return
-                }
+                // The host acts on this click as the arrow or select UIPress it
+                // also arrives as. See `uikitOwnsPresses`.
+                if self.uikitOwnsPresses { return }
 
-                // Don't capture clicks while the transport bar's buttons own
-                // focus - Select belongs to the focused control (the same
-                // click also arrives as a .select press), not play/pause.
-                if self.isControlsFocusCheck?() == true {
-                    return
-                }
+                // Error state: let the SwiftUI dismiss button work. Post-video:
+                // let its buttons work. Transport bar focused: Select belongs to
+                // the focused control (the same click also arrives as a .select
+                // press), not play/pause.
+                let gated = self.isErrorCheck?() == true
+                    || self.isPostVideoCheck?() == true
+                    || self.isControlsFocusCheck?() == true
 
                 if pressed {
-                    self.isButtonDown = true
+                    guard !gated else { return }
                     // Use tracked dpad direction (captured before click disrupted sensing)
                     self.handleClickDown(direction: self.currentDpadDirection)
+                } else if gated {
+                    // Released into a state that owns the click elsewhere: drop
+                    // it, so nothing fires later from a stale direction.
+                    self.cancelClick()
                 } else {
-                    self.isButtonDown = false
                     self.handleClickUp(source: .siriMicroGamepad)
                 }
             }
@@ -300,7 +338,12 @@ final class RemoteInputHandler: ObservableObject {
         extended.buttonB.pressedChangedHandler = { [weak self] _, _, pressed in
             guard pressed else { return }
             Task { @MainActor [weak self] in
-                self?.emit(.back, source: .extendedGamepad)
+                // B also arrives as a .menu press. When the host owns presses,
+                // acting on this copy too peels TWO layers per press (hide the
+                // controls, then exit the player) whenever the pair lands
+                // further apart than the coordinator's dedupe window.
+                guard let self, !self.uikitOwnsPresses else { return }
+                self.emit(.back, source: .extendedGamepad)
             }
         }
 
@@ -313,7 +356,8 @@ final class RemoteInputHandler: ObservableObject {
 
         extended.dpad.left.pressedChangedHandler = { [weak self] _, _, pressed in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                // The d-pad also arrives as arrow presses; see `uikitOwnsPresses`.
+                guard let self, !self.uikitOwnsPresses else { return }
                 if pressed {
                     self.beginDirectionalInput(key: .extendedLeft, forward: false, source: .extendedGamepad)
                 } else {
@@ -324,7 +368,7 @@ final class RemoteInputHandler: ObservableObject {
 
         extended.dpad.right.pressedChangedHandler = { [weak self] _, _, pressed in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, !self.uikitOwnsPresses else { return }
                 if pressed {
                     self.beginDirectionalInput(key: .extendedRight, forward: true, source: .extendedGamepad)
                 } else {
@@ -341,13 +385,20 @@ final class RemoteInputHandler: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
 
+                // Arrow keys also arrive as arrow presses, and a host that owns
+                // presses reads Shift itself (`isShiftHeld`).
+                if self.uikitOwnsPresses, keyCode == .leftArrow || keyCode == .rightArrow {
+                    return
+                }
+
                 switch keyCode {
                 case .spacebar:
                     if pressed { self.emit(.playPause, source: .keyboard) }
                 case .returnOrEnter:
                     if pressed { self.emit(.playPause, source: .keyboard) }
                 case .escape:
-                    if pressed { self.emit(.back, source: .keyboard) }
+                    // Escape also arrives as a .menu press (see buttonB above).
+                    if pressed, !self.uikitOwnsPresses { self.emit(.back, source: .keyboard) }
                 case .keyI:
                     if pressed { self.emit(.showInfo, source: .keyboard) }
                 case .leftArrow:
@@ -385,6 +436,22 @@ final class RemoteInputHandler: ObservableObject {
         let leftShift = keyboard.button(forKeyCode: .leftShift)?.isPressed ?? false
         let rightShift = keyboard.button(forKeyCode: .rightShift)?.isPressed ?? false
         return leftShift || rightShift
+    }
+
+    /// Whether a connected keyboard is holding Shift right now. Read by a host
+    /// that handles arrow keys as presses, so Shift+arrow still jumps.
+    static var isShiftHeld: Bool {
+        guard let keyboard = GCKeyboard.coalesced?.keyboardInput else { return false }
+        let leftShift = keyboard.button(forKeyCode: .leftShift)?.isPressed ?? false
+        let rightShift = keyboard.button(forKeyCode: .rightShift)?.isPressed ?? false
+        return leftShift || rightShift
+    }
+
+    /// Whether the Siri Remote clickpad is physically depressed right now.
+    /// Read synchronously (not from `isButtonDown`, which trails by an async
+    /// hop) so a gesture recognizer can decide in `gestureRecognizerShouldBegin`.
+    static var isClickpadDown: Bool {
+        GCController.controllers().contains { $0.microGamepad?.buttonA.isPressed == true }
     }
 
     private func emit(_ action: PlaybackInputAction, source: PlaybackInputSource) {
@@ -452,6 +519,12 @@ final class RemoteInputHandler: ObservableObject {
         clickedDirection = nil
     }
 
+    /// Abandon an in-progress click without firing its tap or its hold.
+    private func cancelClick() {
+        directionalDetectors[.microClick]?.cancel()
+        clickedDirection = nil
+    }
+
     /// Lazily creates the one `DirectionalPressDetector` slot owns per key —
     /// each key tracks an independent press (e.g. an extended gamepad's Left
     /// AND a keyboard's Right could both be held at once).
@@ -499,6 +572,7 @@ final class RemoteInputHandler: ObservableObject {
         directionalDetectors.values.forEach { $0.cancel() }
         clickedDirection = nil
         currentDpadDirection = nil
+        lastTouch = nil
         isButtonDown = false
         // Reset rotation tracking
         lastAngle = nil
@@ -850,13 +924,13 @@ struct UniversalPlayerView: View {
         .animation(.easeInOut(duration: 0.25), value: viewModel.showControls)
         .animation(.spring(response: 0.2, dampingFraction: 0.7), value: viewModel.seekIndicator)
         .animation(.easeInOut(duration: 0.5), value: viewModel.pausePresentation)
-        .onPlayPauseCommand {
-            handleSelectCommand()
-        }
-        // Note: Menu/Back button handling is done in PlayerContainerViewController
-        // to intercept the event before SwiftUI can dismiss the player.
-        // Do NOT add onExitCommand here - it would fire after PlayerContainerViewController
-        // has already processed the event, causing double-handling.
+        // No press handling in this view at all: no .onPlayPauseCommand,
+        // .onExitCommand, .onMoveCommand or .onTapGesture. Every press is
+        // PlayerContainerViewController's (see its "Content-state presses"),
+        // which is the only presenter of this view. A focused SwiftUI layer here
+        // kept arrow presses away from the container, so remotes with no
+        // GameController copy of the press (IR, HDMI-CEC, a clicks-only Siri
+        // Remote) could not skip (#212, #232, #305).
         .onAppear {
             // App Hang triage: mark the player screen as foreground (RIVULET-41).
             AppHangContext.setScreen("player")
@@ -891,8 +965,8 @@ struct UniversalPlayerView: View {
                 // for its own content, and focus inside it is NOT inside the rail,
                 // so `controlsFocusActive` is false there. Without this term the
                 // GameController path kept seeking behind an open popup — the
-                // container's own recognizers already stand down for a live panel
-                // (`containerOwnsDirectionalInput`), and this is its twin.
+                // container's own press handling already stands down for a live
+                // panel (`contentOwnsPresses`), and this is its twin.
                 return viewModel.controlsFocusActive || viewModel.isRailPanelOpen
             }
             remoteInput.isSkipPillFocusCheck = { [weak viewModel] in
@@ -901,6 +975,9 @@ struct UniversalPlayerView: View {
             remoteInput.onAction = { [inputCoordinator] action, source in
                 inputCoordinator.handle(action: action, source: source)
             }
+            // The container acts on every press that also arrives as a UIPress;
+            // GameController only adds what has no UIPress (rotation, shoulders).
+            remoteInput.uikitOwnsPresses = true
             remoteInput.startMonitoring()
         }
         .task {
@@ -1004,40 +1081,9 @@ struct UniversalPlayerView: View {
             }
 
         }
-        // Focusable when skip button is not focused, post-video is not showing, and not in error state
-        // When in error state, let the dismiss button receive focus instead
-        // Not focusable while controlsFocusActive: releasing focus here
-        // is what lets the focus engine land on the UIKit transport
-        // bar's buttons (PlayerContainerViewController routes it there).
-        // Also release focus when the skip pill owns it (chrome hidden + a
-        // marker up): that lets the focus engine land on the UIKit pill so a
-        // single Select jumps forward. PlayerContainerViewController routes it.
-        .focusable(viewModel.postVideoState == .hidden
-                   && !viewModel.playbackState.isFailed
-                   && !viewModel.controlsFocusActive
-                   && !viewModel.skipPillOwnsFocus)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Don't toggle controls if in error state
-            guard !viewModel.playbackState.isFailed else { return }
-
-            // Tap anywhere to show/hide controls
-            withAnimation(.easeInOut(duration: 0.25)) {
-                if viewModel.showControls {
-                    viewModel.showControls = false
-                } else {
-                    viewModel.showControlsTemporarily()
-                }
-            }
-        }
-        .onMoveCommand { direction in
-            // When post-video is showing, don't handle - let SwiftUI manage button focus
-            guard viewModel.postVideoState == .hidden else { return }
-
-            // Left/right are handled by GameController via RemoteHoldDetector
-            // for tap vs hold detection. Only handle up/down here.
-            handleMoveCommand(direction)
-        }
+        // Deliberately NOT focusable. The content-state focus stop is the
+        // container's UIKit `ContentFocusAnchorView`; only the error overlay's
+        // own buttons take focus in this hierarchy.
     }
 
     // MARK: - Player Layer
@@ -1261,61 +1307,6 @@ struct UniversalPlayerView: View {
             default: return "Playback Error"
             }
         }
-    }
-
-    // MARK: - Input Handling
-
-    private func handleMoveCommand(_ direction: MoveCommandDirection) {
-        // Hide paused poster on any d-pad input
-        viewModel.hidePausedPoster()
-
-        switch direction {
-        case .left, .right:
-            // Left/right are owned by the GameController/UIKit long-press path
-            // (RemoteHoldDetector) for tap-vs-hold shuttle detection, which
-            // emits .scrubNudge. Handling them here too fired a second
-            // .stepSeek → .seekRelative that bumped the shuttle a second time
-            // (one press jumping 2x→6x). Ignore them in the SwiftUI move
-            // handler — this handler only owns up/down.
-            break
-        case .down:
-            // Scrubbing: cancel. Otherwise surface the controls and land focus
-            // on the scrubber in the same press — enterControlsFocus targets the
-            // rail, whose preferredFocus puts the scrubber first. (Up from the
-            // scrubber then reaches the transport buttons.)
-            if viewModel.isScrubbing {
-                inputCoordinator.handle(action: .scrubCancel, source: .swiftUICommand)
-            } else {
-                surfaceControlsAndFocusScrubber()
-            }
-        case .up:
-            // Scrubbing: snap to the next/previous chapter boundary in the
-            // direction of travel. Otherwise, same as Down: surface the controls
-            // with focus already on the scrubber.
-            if viewModel.isScrubbing {
-                viewModel.chapterSnap()
-            } else {
-                surfaceControlsAndFocusScrubber()
-            }
-        @unknown default:
-            break
-        }
-    }
-
-    /// Bring the chrome up (if hidden) and move focus straight onto the
-    /// scrubber. `enterControlsFocus` targets the rail, whose `preferredFocus`
-    /// lands on the scrubber proxy first; the container's controlsFocusActive
-    /// sink refreshes the proxy's focus gate before resolving, so this reliably
-    /// lands on the scrubber in a single press.
-    private func surfaceControlsAndFocusScrubber() {
-        if !viewModel.showControls {
-            viewModel.showControlsTemporarily()
-        }
-        viewModel.enterControlsFocus()
-    }
-
-    private func handleSelectCommand() {
-        inputCoordinator.handle(action: .playPause, source: .swiftUICommand)
     }
 
     // MARK: - Progress Reporting

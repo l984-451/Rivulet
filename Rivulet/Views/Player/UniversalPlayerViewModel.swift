@@ -395,6 +395,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Aether's `seekEvents`; inert on the hls route, whose AVPlayer seek
     /// completion already means landed.
     private var seekHold = SeekHoldLogic()
+    /// Target of a relative seek that has not returned yet. A second skip
+    /// issued before the first lands builds on this instead of on a
+    /// `currentTime` that has not moved yet, which silently dropped it (two
+    /// quick Right clicks landing 10s ahead instead of 20s). Matters most on the
+    /// hls route, where `currentTime` only moves on the periodic observer.
+    private var inFlightRelativeSeekTarget: TimeInterval?
     private var wheelScrubbingTimer: Timer?
     private let wheelScrubbingIdleDelay: TimeInterval = 0.8
     private var appBecameActiveObserver: Any?
@@ -1842,6 +1848,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // Ids are monotonic per engine instance, so a fresh player starts over.
         seekHold = SeekHoldLogic()
+        inFlightRelativeSeekTarget = nil
         player.seekEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
@@ -2915,12 +2922,17 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func seekRelative(by seconds: TimeInterval) async {
         hidePausedPoster()
-        let targetTime = max(0, min(currentTime + seconds, duration))
+        let base = inFlightRelativeSeekTarget ?? currentTime
+        let targetTime = max(0, min(base + seconds, duration))
+        inFlightRelativeSeekTarget = targetTime
         if let ap = aetherPlayer {
             await ap.seek(to: targetTime)
         } else {
             await player?.seek(to: CMTime(seconds: targetTime, preferredTimescale: 600))
         }
+        // Only the newest skip clears it; an older one returning late must not
+        // drop the base a newer one is still building on.
+        if inFlightRelativeSeekTarget == targetTime { inFlightRelativeSeekTarget = nil }
         // REFRESH the auto-hide timer when the chrome is already up; never
         // SUMMON it. A skip is a skip, not a request for chrome. The seek
         // indicator below is the feedback for a hidden-chrome skip.

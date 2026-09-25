@@ -139,6 +139,7 @@ final class NowPlayingService: ObservableObject {
         // Pick up any Skip Length change for this session's Control Center glyphs.
         // Settings can't change mid-playback, so refreshing per attach suffices.
         refreshSkipIntervals()
+        claimRemoteCommands()
 
         // CRITICAL: Ensure audio session is active BEFORE setting Now Playing info
         // This is required for tvOS to register us as the Now Playing app
@@ -340,7 +341,25 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
-        // Disable commands we don't support
+        // Which commands are ENABLED is set per attach (`claimRemoteCommands`),
+        // not here: Music shares this center and flips them for its own layout.
+    }
+
+    /// The video's half of the one shared command center: skip and seek on,
+    /// Music's next/previous, shuffle and repeat off. Asserted on every attach
+    /// because `MusicNowPlayingBridge.claimRemoteCommands` flips them back
+    /// whenever a song starts; set only once at init, a song played between
+    /// two films left the second film with no skip buttons.
+    private func claimRemoteCommands() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.skipForwardCommand.isEnabled = true
+        commandCenter.skipBackwardCommand.isEnabled = true
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
+        commandCenter.seekForwardCommand.isEnabled = true
+        commandCenter.seekBackwardCommand.isEnabled = true
         commandCenter.nextTrackCommand.isEnabled = false
         commandCenter.previousTrackCommand.isEnabled = false
         commandCenter.changeRepeatModeCommand.isEnabled = false

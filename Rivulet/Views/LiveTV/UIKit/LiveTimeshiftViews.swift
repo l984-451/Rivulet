@@ -5,9 +5,10 @@
 //  LiveTimeshiftViews.swift
 //  Rivulet
 //
-//  The two small pieces the live player's timeline needs beyond the shared
-//  progress bar: a badge that says where the picture is relative to live, and
-//  a scrim so the timeline reads over video when the rail is not behind it.
+//  The small pieces the live player's timeline needs beyond the shared
+//  progress bar: a badge that says where the picture is relative to live, a
+//  scrim so the timeline reads over video when the rail is not behind it, and
+//  a passing notice for what the engine did on its own.
 //
 
 import UIKit
@@ -115,4 +116,54 @@ final class LiveBottomScrimView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
+/// A one-line note that fades in at the top of the picture and goes again,
+/// for something the viewer did not ask for but should know happened (the
+/// engine jumping a long pause forward). Never interactive, and hidden while
+/// invisible.
+final class LiveNoticeView: UIView {
+
+    private let label = UILabel()
+    private var hideWork: DispatchWorkItem?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isHidden = true
+        alpha = 0
+        backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        layer.cornerRadius = 22
+        layer.cornerCurve = .continuous
+
+        label.font = .systemFont(ofSize: 24, weight: .semibold)
+        label.textColor = .white
+        label.numberOfLines = 2
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 760),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(_ text: String, for seconds: TimeInterval = 4) {
+        label.text = text
+        hideWork?.cancel()
+        isHidden = false
+        UIView.animate(withDuration: 0.25) { self.alpha = 1 }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            UIView.animate(withDuration: 0.3, animations: { self.alpha = 0 }, completion: { _ in
+                if self.alpha == 0 { self.isHidden = true }
+            })
+        }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
 }

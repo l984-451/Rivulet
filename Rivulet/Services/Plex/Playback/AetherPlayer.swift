@@ -1169,9 +1169,16 @@ final class AetherPlayer: PlayerProtocol {
     /// second behind. False when there is no window to move in.
     @discardableResult
     func seekLive(by seconds: Double) async -> Bool {
+        await seekLive(to: liveTimeshift.playhead + seconds)
+    }
+
+    /// Move a live session to `sessionSeconds` on the session axis (the one
+    /// `liveTimeshift` reports), with the same clamping and snap to live.
+    @discardableResult
+    func seekLive(to sessionSeconds: Double) async -> Bool {
         let shift = liveTimeshift
         guard let range = shift.seekableRange else { return false }
-        let target = min(max(shift.playhead + seconds, range.lowerBound), shift.edgeTime)
+        let target = min(max(sessionSeconds, range.lowerBound), shift.edgeTime)
         if shift.edgeTime - target < 1 {
             await engine.seekToLiveEdge()
         } else {

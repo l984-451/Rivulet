@@ -253,6 +253,44 @@ final class NowPlayingService: ObservableObject {
         clearNowPlayingInfo()
     }
 
+    // MARK: - Live TV
+
+    /// Attach a Live TV session. There is no VOD view model here: remote
+    /// commands (a Siri Remote Play/Pause the system delivers as a command,
+    /// Control Center, an IR remote's transport keys) reach the live player
+    /// through the same deduping coordinator its own button presses use, so a
+    /// press that arrives both ways still toggles once.
+    func attachLive(inputCoordinator: PlaybackInputCoordinator) {
+        detach()
+        self.inputCoordinator = inputCoordinator
+        refreshSkipIntervals()
+        ensureAudioSessionActive()
+    }
+
+    /// Detach a Live TV session, but only the one that is attached: a VOD
+    /// player that took over in the meantime keeps its registration.
+    func detachLive(inputCoordinator: PlaybackInputCoordinator) {
+        guard viewModel == nil, self.inputCoordinator === inputCoordinator else { return }
+        detach()
+    }
+
+    /// Now Playing text for the live channel. A live stream publishes no
+    /// duration or elapsed time: `IsLiveStream` has the system draw a live
+    /// indicator instead of a scrubber.
+    func updateLive(title: String, channelName: String?, isPlaying: Bool) {
+        guard viewModel == nil, inputCoordinator != nil else { return }
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPNowPlayingInfoPropertyIsLiveStream: true,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+        ]
+        if let channelName, channelName != title {
+            info[MPMediaItemPropertyArtist] = channelName
+        }
+        setNowPlayingInfoOnAllCenters(info)
+    }
+
     // MARK: - Remote Command Center Setup
 
     /// Configure remote commands on the shared command center.

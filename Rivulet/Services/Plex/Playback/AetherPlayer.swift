@@ -716,7 +716,8 @@ final class AetherPlayer: PlayerProtocol {
     }
 
     /// Live TV load. Sets `isLive` so the engine treats the source as live
-    /// (seek becomes a no-op, live-edge/reconnect behavior). HLS sources use
+    /// (live-edge tracking, reconnect behavior, and seeks confined to the
+    /// rewind window set below). HLS sources use
     /// `nativeRemoteHLS` so AVPlayer plays the remote playlist directly (no
     /// demuxer probe / loopback — "HLS straight to AVPlayer"); everything else
     /// (raw MPEG-TS, etc.) goes through the engine's demux/remux to a loopback
@@ -745,9 +746,15 @@ final class AetherPlayer: PlayerProtocol {
         // direct-play case. See the ingest branch below.
         let usesHLSIngest = !isHLS && Self.isHLSURL(url)
         let httpHeaders = headers ?? [:]
+        // A wireless receiver (HomePod, an AirPlay speaker) buffers about two
+        // seconds before its first sample sounds. A join that starts the clock
+        // the moment a frame is ready plays that stretch as silent picture and
+        // then snaps into sync (issue #319). Mount paused instead, and let the
+        // start wait for the route: see the priming step after the load.
+        let joinsWirelessAudio = Self.isWirelessAudioRoute()
 
         func makeOptions(nativeRemoteHLS: Bool) -> LoadOptions {
-            LoadOptions(
+            var options = LoadOptions(
                 suppressDisplayCriteria: false,
                 httpHeaders: httpHeaders,
                 // Same rich config as VOD, plus the live-specific flags.
@@ -786,6 +793,22 @@ final class AetherPlayer: PlayerProtocol {
                 preferredDecodePath: (role == .fullscreen && !nativeRemoteHLS && Self.needsDeinterlacing(url))
                     ? .software : .automatic
             )
+            if role == .multiviewSlot {
+                // A tile never scrubs and zaps often: segments cut at every
+                // keyframe join in seconds rather than waiting out the
+                // standard ~18s holdback, and field-rate deinterlacing on a
+                // quarter-screen tile only doubles decoder output for nothing.
+                options.liveJoinProfile = .fastZap
+                options.deinterlaceFieldRate = .frame
+            }
+            if joinsWirelessAudio {
+                // AVPlayer's own start-up wait is what rides out the receiver's
+                // buffer on the native routes; the one-shot that cuts it short
+                // is exactly wrong here.
+                options.liveJoinStartsImmediately = false
+                options.autoplay = false
+            }
+            return options
         }
 
         let options = makeOptions(nativeRemoteHLS: isHLS)
@@ -835,6 +858,15 @@ final class AetherPlayer: PlayerProtocol {
             } else {
                 try await engine.load(url: url, startPosition: nil, options: options)
             }
+            if joinsWirelessAudio && isOnSoftwareRoute {
+                // The software backend renders on a sample-buffer synchronizer
+                // with no player to wait on the route, so hold the mounted,
+                // paused session for the receiver's latency. A live source keeps
+                // filling while paused, so when the caller's play() starts the
+                // clock the audio renderer already has that much queued and the
+                // receiver starts in sync instead of catching up.
+                try? await Task.sleep(for: .seconds(Self.wirelessAudioPrimeSeconds()))
+            }
         } catch {
             // The caller left the slot / retuned while the load was in flight.
             // Rethrow untouched so the type survives; wrapping it in a
@@ -844,6 +876,21 @@ final class AetherPlayer: PlayerProtocol {
             errorSubject.send(pe)
             throw pe
         }
+    }
+
+    /// Whether audio is leaving this device for an AirPlay receiver.
+    private static func isWirelessAudioRoute() -> Bool {
+        AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .airPlay }
+    }
+
+    /// How long a software-route live join holds for a wireless receiver: the
+    /// route's own reported latency, bounded so a route that reports nothing
+    /// useful still gets the typical two seconds and a bad reading cannot
+    /// stall the join.
+    private static func wirelessAudioPrimeSeconds() -> Double {
+        let reported = AVAudioSession.sharedInstance().outputLatency
+        guard reported > 0.2 else { return 2.0 }
+        return min(max(reported, 1.0), 3.0)
     }
 
     /// Which path `loadLive` will take for this URL. Single source of truth: the
@@ -941,7 +988,8 @@ final class AetherPlayer: PlayerProtocol {
         // (VOD MKVs with broken duration headers are too common), so the
         // host must declare live sources. Enables the engine's live path:
         // clock live-edge tracking, LiveReloadPolicy reconnect, and
-        // seek(to:) becoming a no-op.
+        // seek(to:) becoming a no-op (this load sets no rewind window;
+        // `loadLive` does).
         // externalSubtitles: registered at load (not addExternalSubtitleTrack)
         // so the engine can also serve them as native WebVTT renditions if
         // that path is ever enabled; httpHeaders nil inherits the media's
@@ -1058,6 +1106,88 @@ final class AetherPlayer: PlayerProtocol {
         currentAVPlayer?.isMuted = muted
     }
     func seek(to time: TimeInterval) async { await engine.seek(to: time) }
+
+    // MARK: - Live timeshift
+
+    /// The live rewind window, as a host draws it. Every time here is on the
+    /// session axis, the one `currentTime` reports and `seek(to:)` takes on a
+    /// live session. Never `sourceTime`: on the software live path that axis is
+    /// offset by the session zero.
+    struct LiveTimeshift: Equatable {
+        /// What a seek can reach. nil when the session has no rewind window
+        /// (a live-only load, or before the first segment lands).
+        var seekableRange: ClosedRange<Double>?
+        var edgeTime: Double
+        var playhead: Double
+        var behindLiveSeconds: Double
+        var isAtLiveEdge: Bool
+
+        /// No session yet: nothing to rewind, and nothing behind.
+        static let idle = LiveTimeshift(seekableRange: nil, edgeTime: 0, playhead: 0,
+                                        behindLiveSeconds: 0, isAtLiveEdge: true)
+    }
+
+    /// A snapshot of the live window. Cheap: these are the clock's own
+    /// published values, which the engine keeps current even while paused.
+    var liveTimeshift: LiveTimeshift {
+        let clock = engine.clock
+        return LiveTimeshift(
+            seekableRange: clock.seekableLiveRange,
+            edgeTime: clock.liveEdgeTime,
+            playhead: clock.currentTime,
+            behindLiveSeconds: clock.behindLiveSeconds,
+            isAtLiveEdge: clock.isAtLiveEdge
+        )
+    }
+
+    /// Move a live session by `seconds`, clamped to what the rewind window
+    /// still holds. Landing within a second of the edge snaps to the edge
+    /// itself, so skipping forward to "now" reads as live rather than as one
+    /// second behind. False when there is no window to move in.
+    @discardableResult
+    func seekLive(by seconds: Double) async -> Bool {
+        let shift = liveTimeshift
+        guard let range = shift.seekableRange else { return false }
+        let target = min(max(shift.playhead + seconds, range.lowerBound), shift.edgeTime)
+        if shift.edgeTime - target < 1 {
+            await engine.seekToLiveEdge()
+        } else {
+            await engine.seek(to: target)
+        }
+        return true
+    }
+
+    /// Back to the live edge. Works without a rewind window too.
+    func seekToLiveEdge() async {
+        await engine.seekToLiveEdge()
+    }
+
+    /// A still from the rewind window at `sessionSeconds`, decoded from what
+    /// the session already holds (no network). nil outside the window, on the
+    /// remote-HLS bypass, or across a channel change.
+    func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
+        await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// Fires when the engine has given up on a live source (a transcode that
+    /// respawned from byte 0, a frozen playlist, the reopen budget spent). The
+    /// session is parked; only a fresh URL and a new load revive it, which for
+    /// Plex means a new tune. Without a subscriber a dead channel just looks
+    /// slow forever.
+    var liveSourceResets: AnyPublisher<Void, Never> {
+        engine.liveSourceReset.eraseToAnyPublisher()
+    }
+
+    /// Seconds skipped when resuming a paused live session whose rewind window
+    /// had already dropped the paused position.
+    var liveResumeSkips: AnyPublisher<Double, Never> {
+        engine.liveResumeClamped.map(\.skippedSeconds).eraseToAnyPublisher()
+    }
+
+    /// True while the software backend is serving the session. Live joins use
+    /// it: that backend has no player of its own to ride out a wireless audio
+    /// route's start-up latency (see `loadLive`).
+    var isOnSoftwareRoute: Bool { engine.videoRoute == .software }
 
     // MARK: - Tracks
 

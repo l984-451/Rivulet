@@ -275,15 +275,15 @@ final class AetherPlayer: ObservableObject {
             maxAnalyzeDuration: 5_000_000,
             preferredAudioLanguages: [],
             preferredSubtitleLanguages: [],
-            teletextPage: Locale.current.region?.identifier == "AU" ? 801 : nil
+            teletextPage: Locale.current.region?.identifier == "AU" ? 801 : nil,
+            // Broadcast MPEG-TS frequently carries interlaced H.264 without
+            // reliable stream metadata. Match the tvOS live path so Aether's
+            // software route can deinterlace it before display. Per session:
+            // the engine's test switch this used to flip is process-wide.
+            preferredDecodePath: isHLS ? .automatic : .software
         )
 
         do {
-            // Broadcast MPEG-TS frequently carries interlaced H.264 without
-            // reliable stream metadata. Match the tvOS live path so Aether's
-            // software route can deinterlace it before display.
-            if !isHLS { AetherEngine.setForceSoftwarePathForTesting(true) }
-            defer { if !isHLS { AetherEngine.setForceSoftwarePathForTesting(false) } }
             try await engine.load(url: url, startPosition: nil, options: options)
 
             // The software backend has no AVPlayerItem, so presentationSize

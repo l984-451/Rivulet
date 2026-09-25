@@ -463,11 +463,17 @@ final class PlayerProgressBarView: UIView {
 
     /// Live TV keeps the progress bar's existing geometry and fill treatment,
     /// but labels the programme window with wall-clock times: air start at the
-    /// left edge, air end at the right, and the current clock time following
-    /// the playhead. Non-seekable — callers never pass scrub state.
-    func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date) {
+    /// left edge, air end at the right, and the clock time of the picture on
+    /// screen following the playhead. Never enters scrub mode.
+    ///
+    /// `liveEdgeTime` is "now" when the viewer is timeshifted behind it: the
+    /// stretch from the playhead to the edge is already buffered and is drawn
+    /// in the dimmer ghost, so the distance back to live is visible. nil at the
+    /// edge.
+    func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date, liveEdgeTime: Date? = nil) {
         let duration = endTime.timeIntervalSince(startTime)
         guard duration > 0 else { return }
+        defer { applyLiveEdgeGhost(startTime: startTime, duration: duration, playhead: currentTime, edge: liveEdgeTime) }
 
         let elapsed = min(max(0, currentTime.timeIntervalSince(startTime)), duration)
         update(
@@ -504,6 +510,24 @@ final class PlayerProgressBarView: UIView {
         let endLabelWidth = remainingTimeLabel.intrinsicContentSize.width
         currentTimeLabel.alpha = (x - half) < (startLabelWidth + clearance) ? 0 : 1
         remainingTimeLabel.alpha = (x + half) > (width - endLabelWidth - clearance) ? 0 : 1
+    }
+
+    /// The buffered-ahead stretch of a timeshifted live session, in the ghost
+    /// the scrub state otherwise uses (it sits under the fill, so only the part
+    /// past the playhead shows). Assigned after `update(...)`, which hides the
+    /// ghost whenever it is not scrubbing.
+    private func applyLiveEdgeGhost(startTime: Date, duration: TimeInterval, playhead: Date, edge: Date?) {
+        guard let edge, edge.timeIntervalSince(playhead) > 1 else {
+            currentPositionGhost.isHidden = true
+            return
+        }
+        let edgeProgress = min(max(0, edge.timeIntervalSince(startTime)), duration) / duration
+        currentPositionGhost.isHidden = false
+        currentPositionGhost.frame = CGRect(
+            x: 0, y: 0,
+            width: trackBackground.bounds.width * CGFloat(edgeProgress),
+            height: trackHeightConstraint.constant
+        )
     }
 
     /// Loading placeholder: keeps the locked geometry and vertical rhythm

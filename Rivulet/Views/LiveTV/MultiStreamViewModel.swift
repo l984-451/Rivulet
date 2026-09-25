@@ -628,7 +628,10 @@ final class MultiStreamViewModel: ObservableObject {
             guard let self,
                   let index = self.streams.firstIndex(where: { $0.id == focusedSlotId }) else { return }
 
-            await self.streams[index].aetherPlayer.seekRelative(by: seconds)
+            // A live tile has no duration, so the generic relative seek clamps
+            // every target to 0 — the far end of the rewind window. Seek within
+            // the window instead.
+            await self.streams[index].aetherPlayer.seekLive(by: seconds)
             // Ensure stream is playing after seek attempt.
             self.streams[index].play()
         }
@@ -743,17 +746,24 @@ final class MultiStreamViewModel: ObservableObject {
         }
     }
 
+    /// The scrubbing tile's reachable range. Live tiles have no duration; what
+    /// a seek can reach is the engine's rewind window, on the same session
+    /// axis `currentTime` reports.
     private func focusedStreamDurationForScrub() -> TimeInterval? {
         guard let scrubSlotID,
               let index = streams.firstIndex(where: { $0.id == scrubSlotID }) else { return nil }
-        return streams[index].duration
+        return streams[index].aetherPlayer.liveTimeshift.seekableRange?.upperBound
+            ?? streams[index].duration
     }
 
     private func clampedScrubTime(_ time: TimeInterval, duration: TimeInterval) -> TimeInterval {
+        let floor = scrubSlotID
+            .flatMap { id in streams.first(where: { $0.id == id }) }
+            .flatMap { $0.aetherPlayer.liveTimeshift.seekableRange?.lowerBound } ?? 0
         if duration > 0 {
-            return max(0, min(duration, time))
+            return max(floor, min(duration, time))
         }
-        return max(0, time)
+        return max(floor, time)
     }
 
     // MARK: - Controls Visibility

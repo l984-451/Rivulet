@@ -20,6 +20,15 @@
 //  guide-fed info card (LiveGuideInfoCardView). Select shows the rail,
 //  Menu hides it (or dismisses the player when it's already hidden).
 //
+//  Transport (issue #316): the engine keeps a rewind window on every live
+//  load, so the stream can be paused and skipped like a recording. With the
+//  rail hidden, Left/Right skip within that window and Play/Pause pauses; a
+//  timeline (programme bar, a LIVE / "−2:15" badge) comes up on its own for
+//  both without taking focus, so the remote keeps skipping. "Go to Live" on
+//  the rail returns to the edge. Play/Pause is taken through the same
+//  deduping coordinator VOD uses, because it can arrive as a press AND as a
+//  system remote command for one click.
+//
 //  Subtitles (including DVB/teletext decoded engine-side) render through
 //  CaptionOverlayView, the same overlay Aether VOD uses.
 //
@@ -215,8 +224,38 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
     private let focusCatcher = FocusCatcherView()
 
-    /// Called once when the player is dismissed, so the guide can restore state.
-    var onDismiss: (() -> Void)?
+    /// One front door for transport input. A Play/Pause can reach this VC as a
+    /// press and ALSO as a system remote command for the same click; both go
+    /// through here and it dedupes them, so the stream toggles once.
+    private let inputCoordinator = PlaybackInputCoordinator()
+    private var isHandlingPlayPausePress = false
+
+    /// Left/Right skip and Up/Down while the chrome is hidden, for every remote
+    /// transport. Installed on the focus catcher, so it only sees input while
+    /// the catcher holds focus: exactly while this surface is focusless.
+    private var directionalBinding: DirectionalInputBinding?
+
+    /// The viewer's own pause. Kept apart from engine state: a paused live
+    /// session keeps buffering, and the timeline stays up while paused.
+    private var isUserPaused = false
+
+    /// Timeline without the rail: the programme bar and live badge, shown for
+    /// a skip or a pause. Focus stays on the catcher, so Left/Right keep
+    /// skipping instead of walking the rail buttons.
+    private var timelineVisible = false
+    private var timelineHideTimer: Timer?
+    /// Refreshes the bar and badge once a second while either is on screen.
+    private var timelineTicker: Timer?
+    private let timeshiftBadge = LiveTimeshiftBadgeView()
+    private let timelineScrim = LiveBottomScrimView()
+
+    /// Called once when the player is dismissed, with the channel on screen at
+    /// that moment (the viewer may have changed channels in the player), so
+    /// the guide can put focus back on it.
+    var onDismiss: ((UnifiedChannel) -> Void)?
+
+    /// The channel currently playing.
+    var playingChannel: UnifiedChannel { channel }
 
     init(channel: UnifiedChannel) {
         self.channel = channel
@@ -253,6 +292,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         observeCaptionAppearance()
         setupChrome()
 
+        inputCoordinator.target = self
+        NowPlayingService.shared.attachLive(inputCoordinator: inputCoordinator)
+        // Live TV is watched lean-back for long stretches with no input; the
+        // screensaver must not take over mid-programme.
+        UIApplication.shared.isIdleTimerDisabled = true
+
         startPlayback()
     }
 
@@ -262,6 +307,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// matching half.
     private func startPlayback() {
         loadingSpinner.startAnimating()
+        isUserPaused = false
 
         // Sticky per-channel subtitle delay (OSD stepper). Re-read per channel:
         // the key is derived from the channel id.
@@ -286,6 +332,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     // exactly where the user stops waiting. Finishing is
                     // idempotent, so later resumes don't reopen the join.
                     self.finishJoinTelemetry { $0.joined() }
+                    self.updateRailContent()
                 case .failed:
                     self.finishJoinTelemetry { $0.failed(reason: "state_failed") }
                     guard !self.isFallbackInFlight else { return }
@@ -294,6 +341,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     break
                 }
             }
+            .store(in: &cancellables)
+
+        // The engine parked a source it cannot revive (a transcode that
+        // respawned from byte 0, a frozen playlist). Only a fresh URL and a new
+        // load bring it back, which for Plex means a new tune.
+        aether.liveSourceResets
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.rejoinAfterSourceReset() }
             .store(in: &cancellables)
 
         // Keep the rail's audio meta line current as the engine reports tracks.
@@ -309,8 +364,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             guard let url = await LiveTVDataStore.shared.resolveStreamURL(for: channel) else {
                 finishJoinTelemetry { $0.failed(reason: "resolve_failed") }
                 if Task.isCancelled { return }
-                onDismiss?()
-                dismiss(animated: true)
+                dismissPlayer()
                 return
             }
             if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
@@ -358,7 +412,34 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             name: CaptionAppearance.changedNotification,
             object: nil
         )
-        onDismiss?()
+        timelineHideTimer?.invalidate()
+        timelineHideTimer = nil
+        stopTimelineTicker()
+        NowPlayingService.shared.detachLive(inputCoordinator: inputCoordinator)
+        inputCoordinator.invalidate()
+        UIApplication.shared.isIdleTimerDisabled = false
+        onDismiss?(channel)
+    }
+
+    /// Leaves the player entirely, past every chrome layer. The layered
+    /// `dismiss(animated:)` override below peels one layer per Menu press, so
+    /// a programmatic exit clears the layers first.
+    private func dismissPlayer() {
+        activePanel?.dismissPanel()
+        activePanel = nil
+        railVisible = false
+        timelineVisible = false
+        blockNextDismiss = false
+        super.dismiss(animated: true, completion: nil)
+    }
+
+    /// A whole new join on the same channel, after the engine gave up on the
+    /// source. Not counted against the fallback ladder: the source died, the
+    /// route did not fail.
+    private func rejoinAfterSourceReset() {
+        guard !isFallbackInFlight, !isBeingDismissed else { return }
+        teardownPlaybackSession()
+        startPlayback()
     }
 
     /// Unwinds everything `startPlayback()` set up, leaving the VC's chrome
@@ -409,6 +490,24 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         focusCatcher.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
         focusCatcher.backgroundColor = .clear
         view.addSubview(focusCatcher)
+        directionalBinding = DirectionalInputBinding(
+            view: focusCatcher,
+            directions: [.left, .right, .up, .down],
+            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) }
+        )
+
+        // Behind the timeline when the rail's glass is not there to carry it.
+        // Added before the rail so it can never sit above a rail button.
+        timelineScrim.isHidden = true
+        timelineScrim.alpha = 0
+        view.addSubview(timelineScrim)
+        timelineScrim.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            timelineScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            timelineScrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            timelineScrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            timelineScrim.heightAnchor.constraint(equalToConstant: 320),
+        ])
 
         // The Up Next slot becomes the channel list on live (same button,
         // same action hook — see PlayerRailView.setChannelListAvailable).
@@ -439,10 +538,22 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             progressBar.bottomAnchor.constraint(equalTo: railView.bottomAnchor, constant: -34),
         ])
 
+        // Where the picture sits relative to live. Right-aligned just above the
+        // track, which keeps it below the rail's button row.
+        timeshiftBadge.isHidden = true
+        timeshiftBadge.alpha = 0
+        view.addSubview(timeshiftBadge)
+        timeshiftBadge.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            timeshiftBadge.trailingAnchor.constraint(equalTo: progressBar.trailingAnchor),
+            timeshiftBadge.bottomAnchor.constraint(equalTo: progressBar.topAnchor, constant: -10),
+        ])
+
         railView.onSubtitles = { [weak self] in self?.presentSubtitlePanel() }
         railView.onAudio = { [weak self] in self?.presentAudioPanel() }
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
         railView.onUpNext = { [weak self] in self?.presentChannelListPanel() }
+        railView.onGoLive = { [weak self] in self?.goLive() }
 
         updateRailContent()
 
@@ -453,9 +564,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     /// Rail metadata from GUIDE data: programme title, channel line, air
-    /// window, and the engine's current audio track.
+    /// window, and the engine's current audio track. Timeshift-aware: a viewer
+    /// behind live is watching the past, so the programme, the bar and the
+    /// clock label describe the picture on screen, not the wall clock.
     private func updateRailContent() {
-        let current = LiveTVDataStore.shared.getCurrentProgram(for: channel)
+        let store = LiveTVDataStore.shared
+        let shift = aetherPlayer?.liveTimeshift ?? AetherPlayer.LiveTimeshift.idle
+        let hasRewindWindow = shift.seekableRange != nil
+        let behind = hasRewindWindow ? max(0, shift.behindLiveSeconds) : 0
+        let now = Date()
+        let onScreenAt = now.addingTimeInterval(-behind)
+        let current = store.program(for: channel, at: onScreenAt) ?? store.getCurrentProgram(for: channel)
 
         let eyebrow = [channel.channelNumber.map(String.init), channel.name]
             .compactMap { $0 }
@@ -471,18 +590,26 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             runtime = "\(formatter.string(from: current.startTime)) – \(formatter.string(from: current.endTime))"
         }
 
-        // Programme progress bar (non-seekable): map the show's air window onto
-        // the VOD scrubber. Hidden when there's no guide data to anchor to.
+        let isBehindLive = hasRewindWindow && behind >= LiveTimeshiftBadgeView.liveToleranceSeconds
+
+        // Programme progress bar: the show's air window, the playhead at the
+        // picture on screen, and (when timeshifted) the buffered stretch up to
+        // now. Hidden when there's no guide data to anchor to.
         if let current, current.endTime > current.startTime {
             progressBar.isHidden = false
             progressBar.updateLiveTimeline(
                 startTime: current.startTime,
-                currentTime: Date(),
-                endTime: current.endTime
+                currentTime: onScreenAt,
+                endTime: current.endTime,
+                liveEdgeTime: isBehindLive ? now : nil
             )
         } else {
             progressBar.isHidden = true
         }
+
+        timeshiftBadge.update(behindLiveSeconds: behind, hasRewindWindow: hasRewindWindow,
+                              isPaused: isUserPaused)
+        railView.setGoLiveAvailable(isBehindLive)
 
         var audioDescription: String?
         if let aether = aetherPlayer,
@@ -493,18 +620,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 .joined(separator: " ")
         }
 
-        railView.setMeta(rating: "LIVE", runtime: runtime, audio: audioDescription)
+        // The badge says LIVE / how far behind; the chip only repeats it at the
+        // edge, where it is the programme's defining fact.
+        railView.setMeta(rating: isBehindLive ? nil : "LIVE", runtime: runtime, audio: audioDescription)
+
+        NowPlayingService.shared.updateLive(
+            title: current?.title ?? channel.name,
+            channelName: channel.name,
+            isPlaying: !isUserPaused
+        )
     }
 
     private func showRail() {
         guard !railVisible else { return }
         railVisible = true
+        timelineHideTimer?.invalidate()
+        timelineHideTimer = nil
         updateRailContent()
+        setTimelineElementsVisible(true)
         UIView.animate(withDuration: 0.25) {
             self.railView.alpha = 1
             self.railView.transform = .identity
-            self.progressBar.alpha = 1
-            self.progressBar.transform = .identity
         }
         syncSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
@@ -521,8 +657,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         UIView.animate(withDuration: 0.2) {
             self.railView.alpha = 0
             self.railView.transform = CGAffineTransform(translationX: 0, y: 24)
-            self.progressBar.alpha = 0
-            self.progressBar.transform = CGAffineTransform(translationX: 0, y: 24)
+        }
+        // A paused picture keeps its timeline: it is the only sign the stream
+        // is paused rather than frozen.
+        if isUserPaused {
+            timelineVisible = true
+        } else {
+            setTimelineElementsVisible(false)
         }
         syncSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
@@ -540,6 +681,75 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 self.hideRail()
             }
         }
+    }
+
+    // MARK: - Timeline (without the rail)
+
+    /// The programme bar, the live badge and the scrim behind them. Shown with
+    /// the rail, and on their own for a skip or a pause.
+    private func setTimelineElementsVisible(_ visible: Bool) {
+        if visible {
+            [timelineScrim, timeshiftBadge].forEach { $0.isHidden = false }
+            startTimelineTicker()
+        } else {
+            stopTimelineTicker()
+        }
+        UIView.animate(withDuration: visible ? 0.25 : 0.2, animations: {
+            self.progressBar.alpha = visible ? 1 : 0
+            self.progressBar.transform = visible ? .identity : CGAffineTransform(translationX: 0, y: 24)
+            self.timeshiftBadge.alpha = visible ? 1 : 0
+            // The rail's own glass carries the bar when it is up.
+            self.timelineScrim.alpha = visible ? 1 : 0
+        }, completion: { _ in
+            // Hidden, not just transparent: nothing may sit over a focus
+            // target at alpha 0 and still count in the occlusion test.
+            guard !visible, !self.timelineVisible, !self.railVisible else { return }
+            self.timelineScrim.isHidden = true
+            self.timeshiftBadge.isHidden = true
+        })
+        if !visible { timelineVisible = false }
+    }
+
+    /// Bring the timeline up without the rail and without moving focus, then
+    /// let it go again after a few seconds unless the stream is paused. With
+    /// the rail already up this only refreshes it.
+    private func flashTimeline() {
+        updateRailContent()
+        if railVisible {
+            restartAutoHide()
+            return
+        }
+        if !timelineVisible {
+            timelineVisible = true
+            setTimelineElementsVisible(true)
+            syncSubtitleOverlay(animated: true)
+        }
+        timelineHideTimer?.invalidate()
+        timelineHideTimer = nil
+        guard !isUserPaused else { return }
+        timelineHideTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.hideTimeline() }
+        }
+    }
+
+    private func hideTimeline() {
+        timelineHideTimer?.invalidate()
+        timelineHideTimer = nil
+        guard timelineVisible, !railVisible else { return }
+        setTimelineElementsVisible(false)
+        syncSubtitleOverlay(animated: true)
+    }
+
+    private func startTimelineTicker() {
+        guard timelineTicker == nil else { return }
+        timelineTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.updateRailContent() }
+        }
+    }
+
+    private func stopTimelineTicker() {
+        timelineTicker?.invalidate()
+        timelineTicker = nil
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -1122,8 +1332,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             switch press.type {
             case .menu:
                 // Route through dismiss(animated:): its override peels one
-                // layer at a time (panel → rail → player) and is the SAME
-                // funnel the parallel system Menu gesture hits, so both
+                // layer at a time (panel → rail → timeline → player) and is the
+                // SAME funnel the parallel system Menu gesture hits, so both
                 // delivery routes make one consistent decision.
                 dismiss(animated: true)
                 return
@@ -1133,7 +1343,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     return
                 }
             case .playPause:
-                togglePlayPause()
+                // Honored whatever holds focus. The coordinator dedupes this
+                // against the same click arriving as a system remote command.
+                isHandlingPlayPausePress = true
+                inputCoordinator.handle(action: .playPause, source: .irPress)
+                return
+            case .pageUp:
+                // The channel keys some IR and HDMI-CEC remotes carry.
+                zapChannel(by: 1)
+                return
+            case .pageDown:
+                zapChannel(by: -1)
                 return
             default:
                 break
@@ -1144,15 +1364,29 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         // Menu is fully consumed at began; an unswallowed ended phase bubbles
-        // to the system and peels an extra layer.
+        // to the system and peels an extra layer. Same for a Play/Pause taken
+        // at began: its ended phase must not reach the system as a second one.
         for press in presses where press.type == .menu { return }
+        for press in presses where press.type == .playPause && isHandlingPlayPausePress {
+            isHandlingPlayPausePress = false
+            return
+        }
+        for press in presses where press.type == .pageUp || press.type == .pageDown { return }
         super.pressesEnded(presses, with: event)
     }
 
-    /// Menu peels ONE layer at a time: panel → rail → player. Both delivery
-    /// routes — the responder-chain press (pressesBegan) and tvOS's parallel
-    /// system Menu gesture — reach dismiss(), so the layering decision lives
-    /// HERE and stays consistent whichever fires first.
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses where press.type == .playPause && isHandlingPlayPausePress {
+            isHandlingPlayPausePress = false
+            return
+        }
+        super.pressesCancelled(presses, with: event)
+    }
+
+    /// Menu peels ONE layer at a time: panel → rail → timeline → player. Both
+    /// delivery routes — the responder-chain press (pressesBegan) and tvOS's
+    /// parallel system Menu gesture — reach dismiss(), so the layering
+    /// decision lives HERE and stays consistent whichever fires first.
     override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
         if blockNextDismiss {
             blockNextDismiss = false
@@ -1171,6 +1405,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             completion?()
             return
         }
+        if timelineVisible {
+            hideTimeline()
+            armDismissEchoBlock()
+            completion?()
+            return
+        }
         super.dismiss(animated: flag, completion: completion)
     }
 
@@ -1185,12 +1425,80 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
-    private func togglePlayPause() {
-        if let lastResortPlayer {
-            lastResortPlayer.rate == 0 ? lastResortPlayer.play() : lastResortPlayer.pause()
-        } else if let aetherPlayer {
-            aetherPlayer.isPlaying ? aetherPlayer.pause() : aetherPlayer.play()
+    // MARK: - Transport
+
+    /// Directions while the chrome is hidden (the binding only fires then):
+    /// Left/Right skip within the rewind window, Up/Down bring the rail up.
+    private func handleHiddenChromeDirection(_ direction: DirectionalInputBinding.Direction) {
+        switch direction {
+        case .left:
+            skip(by: -InputConfig.tapSeekSeconds)
+        case .right:
+            skip(by: InputConfig.tapSeekSeconds)
+        case .up, .down:
+            showRail()
         }
+    }
+
+    private func pausePlayback() {
+        guard !isUserPaused else { return }
+        isUserPaused = true
+        if let lastResortPlayer {
+            lastResortPlayer.pause()
+        } else {
+            aetherPlayer?.pause()
+        }
+        // The timeline stays up for as long as the stream is paused.
+        autoHideTimer?.invalidate()
+        autoHideTimer = nil
+        flashTimeline()
+    }
+
+    private func resumePlayback() {
+        guard isUserPaused else { return }
+        isUserPaused = false
+        if let lastResortPlayer {
+            lastResortPlayer.play()
+        } else {
+            aetherPlayer?.play()
+        }
+        flashTimeline()
+    }
+
+    private func togglePlayPause() {
+        isUserPaused ? resumePlayback() : pausePlayback()
+    }
+
+    /// Skip within the engine's rewind window, clamped to it; forward stops at
+    /// live. Shows where that landed either way, so a skip with nothing to skip
+    /// into (a source with no window) still answers the press.
+    private func skip(by seconds: TimeInterval) {
+        if let aether = aetherPlayer, lastResortPlayer == nil {
+            Task { @MainActor [weak self] in
+                await aether.seekLive(by: seconds)
+                self?.updateRailContent()
+            }
+        }
+        flashTimeline()
+    }
+
+    private func goLive() {
+        guard let aether = aetherPlayer else { return }
+        if isUserPaused { resumePlayback() }
+        Task { @MainActor [weak self] in
+            await aether.seekToLiveEdge()
+            self?.updateRailContent()
+        }
+    }
+
+    /// Next or previous channel in guide order, wrapping at the ends.
+    private func zapChannel(by offset: Int) {
+        let channels = LiveTVDataStore.shared.channels
+        guard !channels.isEmpty,
+              let index = channels.firstIndex(where: { $0.id == channel.id }) else { return }
+        let next = channels[(index + offset % channels.count + channels.count) % channels.count]
+        switchChannel(to: next)
+        flashTimeline()
     }
 
     // MARK: - Failure ladder
@@ -1344,7 +1652,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         overlay.videoSize = aetherPlayer?.videoSize ?? .zero
         // Height is sticky per channel, like the delay stepper.
         overlay.heightUnits = subtitleHeightUnits
-        overlay.setControlsVisible(railVisible, animated: animated)
+        overlay.setControlsVisible(railVisible || timelineVisible, animated: animated)
     }
 
     private func bindAetherSubtitles(_ aether: AetherPlayer) {
@@ -1390,5 +1698,35 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     @objc private func captionAppearanceDidChange() {
         captionStyle = CaptionAppearance.current()
         syncSubtitleOverlay()
+    }
+}
+
+// MARK: - Transport input
+
+extension LiveTVAetherPlayerViewController: PlaybackInputTarget {
+    /// Live TV never enters a scrub mode: every seek is a discrete skip.
+    var isScrubbingForInput: Bool { false }
+
+    func handleInputAction(_ action: PlaybackInputAction, source: PlaybackInputSource) {
+        switch action {
+        case .play:
+            resumePlayback()
+        case .pause:
+            pausePlayback()
+        case .playPause:
+            togglePlayPause()
+        case .seekRelative(let seconds):
+            skip(by: seconds)
+        case .stepSeek(let forward), .scrubNudge(let forward):
+            skip(by: forward ? InputConfig.tapSeekSeconds : -InputConfig.tapSeekSeconds)
+        case .jumpSeek(let forward):
+            skip(by: forward ? InputConfig.jumpSeekSeconds : -InputConfig.jumpSeekSeconds)
+        case .showInfo:
+            showRail()
+        default:
+            // Absolute positions (Control Center) mean nothing on a live
+            // stream's wall-clock bar, and scrub commits never start here.
+            break
+        }
     }
 }

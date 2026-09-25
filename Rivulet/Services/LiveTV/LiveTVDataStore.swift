@@ -911,6 +911,13 @@ class LiveTVDataStore: ObservableObject {
         return programs.first { $0.startTime <= now && $0.endTime > now }
     }
 
+    /// The programme airing on `channel` at `date`. A timeshifted viewer is
+    /// watching the past, so "current" is the programme at the playhead, not
+    /// at the wall clock.
+    func program(for channel: UnifiedChannel, at date: Date) -> UnifiedProgram? {
+        epg[channel.id]?.first { $0.startTime <= date && $0.endTime > date }
+    }
+
     /// Get the next program for a channel
     func getNextProgram(for channel: UnifiedChannel) -> UnifiedProgram? {
         guard let programs = epg[channel.id] else { return nil }

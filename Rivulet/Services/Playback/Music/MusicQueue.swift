@@ -332,6 +332,13 @@ final class MusicQueue: ObservableObject {
                     playbackState = .idle
                     return
                 }
+                // A film started while this was resolving. Loading now would
+                // start the song over it and switch the audio session away from
+                // movie playback; leave it for the user to start again.
+                guard !videoOwnsNowPlaying else {
+                    playbackState = .idle
+                    return
+                }
                 player.load(url: url, headers: [:])
 
                 // Update Now Playing

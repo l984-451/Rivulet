@@ -439,6 +439,10 @@ class PlayerContainerViewController: UIViewController {
         if let panel = activeRailPanel, panel.window != nil {
             return [panel]
         }
+        // The SwiftUI error overlay (its own default focus picks the button).
+        if viewModel?.playbackState.isFailed == true, let hostingController {
+            return [hostingController]
+        }
         // Chrome hidden + a skip marker up: the pill is the lone affordance, so
         // it owns focus and a single Select jumps forward. (Ownership is false
         // whenever the rail/panel is up, so this never fights the checks above.)
@@ -694,10 +698,17 @@ class PlayerContainerViewController: UIViewController {
             if press.type == .select {
                 if let vm = viewModel, vm.isScrubbing {
                     isHandlingSelectPress = true
-                    inputCoordinator.handle(action: .scrubCommit, source: .irPress)
+                    // A 1st-gen Siri Remote edge click while shuttling bumps the
+                    // speed, as an arrow press does on later remotes; a centre
+                    // click commits.
+                    if vm.scrubSpeed != 0, contentOwnsPress(.select), let forward = edgeClickDirection() {
+                        inputCoordinator.handle(action: .scrubNudge(forward: forward), source: .irPress)
+                    } else {
+                        inputCoordinator.handle(action: .scrubCommit, source: .irPress)
+                    }
                     return
                 }
-                if contentOwnsPresses {
+                if contentOwnsPress(.select) {
                     beginContentSelect()
                 }
                 return
@@ -712,7 +723,7 @@ class PlayerContainerViewController: UIViewController {
             }
             if Self.isArrow(press.type) {
                 if RemoteInputHandler.isClickpadDown { Self.clickpadRingSeen = true }
-                if contentOwnsPresses {
+                if contentOwnsPress(press.type) {
                     beginContentArrow(press.type)
                 }
                 return
@@ -809,7 +820,7 @@ class PlayerContainerViewController: UIViewController {
 
     /// Whether a directional or Select press that reached this controller
     /// belongs to the content-state grammar.
-    private var contentOwnsPresses: Bool {
+    private func contentOwnsPress(_ type: UIPress.PressType) -> Bool {
         guard let vm = viewModel,
               vm.postVideoState == .hidden,
               !vm.playbackState.isFailed
@@ -820,7 +831,17 @@ class PlayerContainerViewController: UIViewController {
         // Rail buttons and the scrubber proxy: the focus engine (or the proxy's
         // own press handling) already acted on this press.
         guard let focusedView = focused as? UIView else { return false }
-        return focusedView === contentAnchor || focusedView === skipPill
+        if focusedView === contentAnchor { return true }
+        if focusedView === skipPill {
+            // Only Left/Right seek behind the pill. Its Up/Down are its own
+            // (chrome hidden) or the focus engine's (chrome up), and an Up that
+            // reaches here is usually the SAME press that just moved focus from
+            // the rail onto the pill (the engine moves focus before the press
+            // is delivered); treating it as content Up bounced focus straight
+            // back to the scrubber, so the pill was unreachable by click.
+            return type == .leftArrow || type == .rightArrow
+        }
+        return false
     }
 
     private func setupContentAnchor() {
@@ -843,10 +864,16 @@ class PlayerContainerViewController: UIViewController {
         // The anchor is full screen, so the engine never has a vertical move to
         // make from it and claiming the swipe steals nothing. Left/Right swipes
         // stay with the swipe-to-scrub pan.
+        // Not while the clickpad is down: a click jolts the reported touch
+        // position into a fake swipe (see the pan's gate), and a vertical ring
+        // click already arrives as its own arrow press.
         contentSwipeBinding = DirectionalInputBinding(
             gatedSwipesOn: anchor,
             directions: [.up, .down],
-            shouldHandle: { [weak self] _ in self?.contentOwnsPresses ?? false },
+            shouldHandle: { [weak self] direction in
+                guard let self, !RemoteInputHandler.isClickpadDown else { return false }
+                return self.contentOwnsPress(direction == .up ? .upArrow : .downArrow)
+            },
             onSwipe: { [weak self] direction in self?.handleContentVertical(up: direction == .up) }
         )
 
@@ -925,9 +952,11 @@ class PlayerContainerViewController: UIViewController {
     /// "click the right edge to skip" can only be recovered from where the
     /// finger rested before the click (tracked by RemoteInputHandler). Later
     /// remotes report edge clicks as arrow presses, which is authoritative;
-    /// once one has been seen, a `.select` is only ever a centre click.
+    /// once one has been seen, a `.select` is only ever a centre click. The
+    /// clickpad must be physically down, so a Select from anything else (IR,
+    /// CEC, a keyboard's Return, a gamepad's A) never reads a stale touch.
     private func edgeClickDirection() -> Bool? {
-        guard !Self.clickpadRingSeen else { return nil }
+        guard !Self.clickpadRingSeen, RemoteInputHandler.isClickpadDown else { return nil }
         return RemoteInputHandler.active?.clickpadEdge
     }
 
@@ -1343,8 +1372,17 @@ class PlayerContainerViewController: UIViewController {
         vm.$postVideoState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                self?.applyChromeVisibility()
-                self?.applyPostVideoState(state)
+                // Order follows focus: mount the page BEFORE the chrome gives up
+                // focus, and restore the chrome (re-enabling the content anchor)
+                // BEFORE the page is removed, so each focus update runs while its
+                // target can take focus.
+                if state != .hidden {
+                    self?.applyPostVideoState(state)
+                    self?.applyChromeVisibility()
+                } else {
+                    self?.applyChromeVisibility()
+                    self?.applyPostVideoState(state)
+                }
             }
             .store(in: &cancellables)
 
@@ -1779,21 +1817,30 @@ class PlayerContainerViewController: UIViewController {
         // while the rail owns it, not while the skip pill does, not over
         // post-video, and not in the error state, where it is also HIDDEN so
         // its full-screen frame cannot occlude the SwiftUI error buttons below
-        // it. Unlike the SwiftUI layer it replaces, this gate is synchronous,
-        // so the focus update each state change triggers lands on the anchor
-        // instead of on a view that only becomes focusable after SwiftUI's next
-        // render (which could leave focus nowhere).
+        // it. Unlike the SwiftUI layer it replaces, this gate is synchronous.
+        let failed = vm.playbackState.isFailed
         let anchorEnabled = vm.postVideoState == .hidden
-            && !vm.playbackState.isFailed
+            && !failed
             && !vm.controlsFocusActive
             && !vm.skipPillOwnsFocus
-        let anchorLosingFocus = contentAnchor?.isFocused == true && !anchorEnabled
-        // Leaving the error state (Try Again): focus is on an error button that
-        // is about to disappear, so hand it back explicitly.
-        let anchorReturning = contentAnchor?.isHidden == true && !vm.playbackState.isFailed
-        contentAnchor?.isFocusEnabled = anchorEnabled
-        contentAnchor?.isHidden = vm.playbackState.isFailed
-        if vm.postVideoState != .hidden || vm.playbackState.isFailed {
+        // Focus must move when the anchor gives it up, and when it comes back
+        // from the error state (focus is on an error button that is about to
+        // disappear). The request is made AFTER the alpha writes below, like
+        // the pill's: the pill and the rail only accept focus once their model
+        // alpha is 1, and a request made before that lands nowhere.
+        var anchorNeedsFocusUpdate = false
+        if failed {
+            // Handed off one beat later, once SwiftUI has mounted the overlay
+            // (see `handOffFocusToErrorOverlay`); until then the anchor keeps
+            // focus, so the request is made from an environment that holds it.
+            scheduleErrorOverlayHandoff()
+        } else {
+            anchorNeedsFocusUpdate = (contentAnchor?.isFocused == true && !anchorEnabled)
+                || contentAnchor?.isHidden == true
+            contentAnchor?.isFocusEnabled = anchorEnabled
+            contentAnchor?.isHidden = false
+        }
+        if vm.postVideoState != .hidden || failed {
             // A press or hold in flight must not complete against a state that
             // no longer takes content presses (a tap landing as a skip behind
             // post-video). Keyed on those states, NOT on `anchorEnabled`: the
@@ -1802,10 +1849,6 @@ class PlayerContainerViewController: UIViewController {
             contentPressDetector.cancel()
             contentDirectionalPressType = nil
             contentSelectPending = false
-        }
-        if anchorLosingFocus || anchorReturning {
-            setNeedsFocusUpdate()
-            updateFocusIfNeeded()
         }
 
         // The skip pill lives independently of the rail: it stays up whenever a
@@ -1861,7 +1904,13 @@ class PlayerContainerViewController: UIViewController {
         let captionLiftChanged = captionOverlay.map { $0.controlsVisible != chromeVisible } ?? false
         captionOverlay?.controlsVisible = chromeVisible
         guard targetsChanged || railAmbientChanged || ownershipChanged
-                || pillOffsetChanged || captionLiftChanged else { return }
+                || pillOffsetChanged || captionLiftChanged else {
+            if anchorNeedsFocusUpdate {
+                setNeedsFocusUpdate()
+                updateFocusIfNeeded()
+            }
+            return
+        }
         UIView.animate(withDuration: 0.25) {
             for (view, alpha) in targets { view?.alpha = alpha }
             self.rail?.setAmbient(ambient, keepTitle: keepRailTitle)
@@ -1869,11 +1918,40 @@ class PlayerContainerViewController: UIViewController {
             if captionLiftChanged { self.captionOverlay?.layoutIfNeeded() }
         }
         // Model alpha is now 1 for a visible pill, so the engine will accept it
-        // as a focus target. Re-resolve toward/away from the pill exactly once.
-        if ownershipChanged {
+        // as a focus target. Re-resolve toward/away from the pill (or off the
+        // anchor) exactly once.
+        if ownershipChanged || anchorNeedsFocusUpdate {
             setNeedsFocusUpdate()
             updateFocusIfNeeded()
         }
+    }
+
+    /// Set while a handoff to the error overlay is waiting to run.
+    private var errorOverlayHandoffPending = false
+
+    private func scheduleErrorOverlayHandoff() {
+        guard let contentAnchor, !contentAnchor.isHidden, !errorOverlayHandoffPending else { return }
+        errorOverlayHandoffPending = true
+        // The overlay makes its own focus claim 0.05s after it appears for the
+        // same reason (the engine takes a beat to register a new SwiftUI focus
+        // container); this runs just after it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.handOffFocusToErrorOverlay()
+        }
+    }
+
+    /// Hide the anchor and move focus into the SwiftUI hierarchy, where the
+    /// error overlay's default focus picks its button. Done while the anchor
+    /// still holds focus, because a request from an environment that does not
+    /// contain focus is ignored, and SwiftUI's own claim cannot pull focus out
+    /// of a UIKit view outside its hosting view.
+    private func handOffFocusToErrorOverlay() {
+        errorOverlayHandoffPending = false
+        guard viewModel?.playbackState.isFailed == true, let contentAnchor else { return }
+        contentAnchor.isFocusEnabled = false
+        contentAnchor.isHidden = true
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
     }
 
     /// Sync the pill's title (including any live countdown suffix) and

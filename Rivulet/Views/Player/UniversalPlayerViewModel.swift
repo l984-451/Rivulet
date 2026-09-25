@@ -401,6 +401,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// quick Right clicks landing 10s ahead instead of 20s). Matters most on the
     /// hls route, where `currentTime` only moves on the periodic observer.
     private var inFlightRelativeSeekTarget: TimeInterval?
+    /// Bumped by every seek, so only the newest relative seek clears the
+    /// in-flight target (two targets can be EQUAL when both clamp to an end).
+    private var seekGeneration = 0
     private var wheelScrubbingTimer: Timer?
     private let wheelScrubbingIdleDelay: TimeInterval = 0.8
     private var appBecameActiveObserver: Any?
@@ -1849,6 +1852,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Ids are monotonic per engine instance, so a fresh player starts over.
         seekHold = SeekHoldLogic()
         inFlightRelativeSeekTarget = nil
+        seekGeneration += 1
         player.seekEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
@@ -2912,6 +2916,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     ///   skip taken while the chrome is hidden passes `false` so the jump
     ///   doesn't pop the rail open.
     func seek(to time: TimeInterval, revealsControls: Bool = true) async {
+        // An absolute seek (scrub commit, marker skip) supersedes any relative
+        // one still in flight; the next skip starts from where this lands.
+        seekGeneration += 1
+        inFlightRelativeSeekTarget = nil
         if let ap = aetherPlayer {
             await ap.seek(to: time)
         } else {
@@ -2925,14 +2933,16 @@ final class UniversalPlayerViewModel: ObservableObject {
         let base = inFlightRelativeSeekTarget ?? currentTime
         let targetTime = max(0, min(base + seconds, duration))
         inFlightRelativeSeekTarget = targetTime
+        seekGeneration += 1
+        let generation = seekGeneration
         if let ap = aetherPlayer {
             await ap.seek(to: targetTime)
         } else {
             await player?.seek(to: CMTime(seconds: targetTime, preferredTimescale: 600))
         }
-        // Only the newest skip clears it; an older one returning late must not
+        // Only the newest seek clears it; an older one returning late must not
         // drop the base a newer one is still building on.
-        if inFlightRelativeSeekTarget == targetTime { inFlightRelativeSeekTarget = nil }
+        if seekGeneration == generation { inFlightRelativeSeekTarget = nil }
         // REFRESH the auto-hide timer when the chrome is already up; never
         // SUMMON it. A skip is a skip, not a request for chrome. The seek
         // indicator below is the feedback for a hidden-chrome skip.

@@ -69,11 +69,12 @@ final class RemoteInputHandler: ObservableObject {
     /// and listening to both is what made one click land zero, one or two
     /// skips depending on which copy arrived first (and when the two paths
     /// disagreed on direction, a left click and a phantom right click summed
-    /// to no skip at all). With this set, the handler only acts on what has
-    /// no `UIPress` at all: clickpad rotation, shoulder buttons, X, and the
-    /// keyboard's Space / Return / I. The VOD player sets it
-    /// (`PlayerContainerViewController` owns its presses); Live TV's
-    /// Channels layout still relies on the mirrors and leaves it off.
+    /// to no skip at all). With this set, the handler only acts on clickpad
+    /// rotation, shoulder buttons, X, a gamepad's A and the keyboard's Space /
+    /// Return / I. A and Return still double as Select presses (so they toggle
+    /// playback here and the controls in the host), as they always have. The
+    /// VOD player sets it (`PlayerContainerViewController` owns its presses);
+    /// Live TV's Channels layout still relies on the mirrors and leaves it off.
     var uikitOwnsPresses = false
 
     /// The monitoring handler, so the VOD container can ask where the finger
@@ -210,11 +211,6 @@ final class RemoteInputHandler: ObservableObject {
         micro.dpad.valueChangedHandler = { [weak self] (dpad, xValue, yValue) in
             guard let self else { return }
 
-            // Don't capture dpad when post-video is showing - let SwiftUI handle focus
-            if self.isPostVideoCheck?() == true {
-                return
-            }
-
             // Calculate radius and angle for click wheel rotation
             let radius = sqrt(xValue * xValue + yValue * yValue)
             let angle = atan2(yValue, xValue)
@@ -223,6 +219,8 @@ final class RemoteInputHandler: ObservableObject {
                 // Ignore dpad changes while button is pressed (click disrupts touch sensing)
                 guard !self.isButtonDown else { return }
 
+                // Position is tracked in every state, so the edge a click reads
+                // is never left over from before post-video appeared.
                 self.lastTouch = (xValue, yValue)
                 let dir = InputConfig.clickpadHorizontalDirection(x: xValue, y: yValue)
 
@@ -231,6 +229,14 @@ final class RemoteInputHandler: ObservableObject {
                     InputProbe.gamepad("micro dpad dir=\(dir.map { $0 ? "right" : "left" } ?? "center")")
                 }
                 self.currentDpadDirection = dir
+
+                // Don't drive rotation while post-video is showing - its
+                // buttons own the remote.
+                if self.isPostVideoCheck?() == true {
+                    self.lastAngle = nil
+                    self.accumulatedRotation = 0
+                    return
+                }
 
                 // Click wheel rotation: only track when finger is on outer edge
                 if radius > InputConfig.wheelRadiusThreshold {

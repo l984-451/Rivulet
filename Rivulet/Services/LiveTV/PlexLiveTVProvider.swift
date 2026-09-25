@@ -601,3 +601,153 @@ actor PlexLiveTVProvider: LiveTVProvider {
         }
     }
 }
+
+// MARK: - DVR
+
+extension PlexLiveTVProvider: LiveTVRecordingProvider {
+
+    /// Plex's own ways to record this airing, from the subscription template,
+    /// relabelled plainly. A show rule whose template carries the new-airings
+    /// preference is offered twice: every airing, and new episodes only.
+    func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption] {
+        guard program.endTime > Date() else { throw LiveTVRecordingError.programEnded }
+        guard let guid = program.sourceGuid, !guid.isEmpty else { throw LiveTVRecordingError.noGuideIdentity }
+
+        let templates = try await networkManager.getSubscriptionTemplate(
+            serverURL: serverURL,
+            authToken: authToken,
+            guid: guid
+        )
+        let encoder = JSONEncoder()
+        var options: [LiveTVRecordOption] = []
+        for (index, template) in templates.enumerated() {
+            let isSeries = template.type == 2
+            let title: String
+            switch template.type {
+            case 1: title = "Record Movie"
+            case 2: title = "Record Series"
+            case 4: title = "Record Episode"
+            default: title = "Record \(template.title)"
+            }
+            guard let payload = try? String(decoding: encoder.encode(template), as: UTF8.self) else { continue }
+            options.append(LiveTVRecordOption(
+                id: "\(guid)#\(index)",
+                title: title,
+                scope: isSeries ? .series : .single,
+                payload: payload
+            ))
+            // Same rule, new airings only, when the template lets us ask.
+            if isSeries, template.prefs["onlyNewAirings"] != nil {
+                let newOnly = PlexSubscriptionTemplateOption(
+                    title: template.title,
+                    type: template.type,
+                    parameters: template.parameters,
+                    targetLibrarySectionID: template.targetLibrarySectionID,
+                    targetSectionLocationID: template.targetSectionLocationID,
+                    librarySectionTitle: template.librarySectionTitle,
+                    airingsType: template.airingsType,
+                    prefs: template.prefs.merging(["onlyNewAirings": "true"]) { _, new in new },
+                    selected: false
+                )
+                if let newPayload = try? String(decoding: encoder.encode(newOnly), as: UTF8.self) {
+                    options.append(LiveTVRecordOption(
+                        id: "\(guid)#\(index)#new",
+                        title: "Record New Episodes",
+                        scope: .series,
+                        payload: newPayload
+                    ))
+                }
+            }
+        }
+        // Single airing first, then the series options.
+        return options.sorted { lhs, rhs in lhs.scope == .single && rhs.scope == .series }
+    }
+
+    func record(_ option: LiveTVRecordOption, program: UnifiedProgram, on channel: UnifiedChannel) async throws {
+        let template = try JSONDecoder().decode(PlexSubscriptionTemplateOption.self, from: Data(option.payload.utf8))
+        try await networkManager.createSubscription(serverURL: serverURL, authToken: authToken, option: template)
+    }
+
+    func scheduledRecordings() async throws -> [LiveTVScheduledRecording] {
+        let grabs = try await networkManager.getScheduledRecordings(serverURL: serverURL, authToken: authToken)
+        // Rule types say which grabs belong to a series rule. Best effort: a
+        // failure here only loses the "cancel series" distinction.
+        let rules = (try? await networkManager.getSubscriptions(serverURL: serverURL, authToken: authToken)) ?? []
+        let seriesRuleIds = Set(rules.filter { $0.type == 2 }.map(\.id))
+
+        return grabs.compactMap { grab -> LiveTVScheduledRecording? in
+            guard let start = grab.beginsAt, let end = grab.endsAt else { return nil }
+            let status: LiveTVScheduledRecording.Status
+            switch grab.status {
+            case "inprogress", "postprocessing": status = .recording
+            case "complete": status = .completed
+            case "error": status = .failed
+            case "cancelled": status = .cancelled
+            default: status = .scheduled
+            }
+            let channelId = grab.channelIdentifier.map {
+                UnifiedChannel.makeId(sourceType: .plex, sourceId: sourceId, channelId: $0)
+            }
+            var recording = LiveTVScheduledRecording(
+                id: grab.id,
+                sourceId: sourceId,
+                title: grab.grandparentTitle ?? grab.title,
+                subtitle: grab.grandparentTitle != nil ? grab.title : nil,
+                startTime: start,
+                endTime: end,
+                status: status,
+                channelName: grab.channelTitle,
+                channelId: channelId,
+                programGuid: grab.guid,
+                ruleId: grab.subscriptionId,
+                posterURL: grab.thumb.flatMap { Self.imageURL($0, serverURL: serverURL, authToken: authToken) }
+            )
+            recording.ruleIsSeries = grab.subscriptionId.map { seriesRuleIds.contains($0) } ?? false
+            return recording
+        }
+        .sorted { $0.startTime < $1.startTime }
+    }
+
+    /// One airing. A single-airing rule is removed outright (cancelling its
+    /// only grab would leave an empty rule behind); a series rule keeps going
+    /// and only this airing's grab is cancelled.
+    func cancel(_ recording: LiveTVScheduledRecording) async throws {
+        if let ruleId = recording.ruleId, !recording.ruleIsSeries {
+            try await networkManager.deleteSubscription(serverURL: serverURL, authToken: authToken, id: ruleId)
+        } else {
+            try await networkManager.cancelGrab(serverURL: serverURL, authToken: authToken, operationId: recording.id)
+        }
+    }
+
+    func recordingRules() async throws -> [LiveTVRecordingRule] {
+        let rules = try await networkManager.getSubscriptions(serverURL: serverURL, authToken: authToken)
+        return rules.map { rule in
+            var detail: [String] = []
+            switch rule.type {
+            case 1: detail.append("Movie")
+            case 2: detail.append(rule.airingsType ?? "Series")
+            case 4: detail.append("Episode")
+            default: break
+            }
+            if rule.scheduledCount > 0 {
+                detail.append(rule.scheduledCount == 1 ? "1 scheduled" : "\(rule.scheduledCount) scheduled")
+            }
+            if let library = rule.librarySectionTitle { detail.append(library) }
+            return LiveTVRecordingRule(
+                id: rule.id,
+                sourceId: sourceId,
+                title: rule.title,
+                detail: detail.isEmpty ? nil : detail.joined(separator: " · ")
+            )
+        }
+    }
+
+    func delete(_ rule: LiveTVRecordingRule) async throws {
+        try await networkManager.deleteSubscription(serverURL: serverURL, authToken: authToken, id: rule.id)
+    }
+
+    private static func imageURL(_ path: String, serverURL: String, authToken: String) -> URL? {
+        if path.hasPrefix("http://") || path.hasPrefix("https://") { return URL(string: path) }
+        return URL(string: "\(serverURL)\(path)?X-Plex-Token=\(authToken)")
+    }
+}

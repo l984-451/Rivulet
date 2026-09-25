@@ -41,6 +41,15 @@ struct TileMenuAction {
     let handler: () -> Void
 }
 
+/// What a menu is about, shown above its actions: the programme a Live TV
+/// menu acts on, with its time and a few lines of description. Optional; tile
+/// menus leave it out.
+struct TileMenuHeader {
+    let title: String
+    var detail: String? = nil
+    var summary: String? = nil
+}
+
 /// Installs the select long-press that opens tile menus. One shared
 /// permissive delegate: the recognizer must be allowed to run alongside
 /// the collection view's own press recognizers or the system's
@@ -86,6 +95,7 @@ final class TileMenuPopupViewController: UIViewController {
     /// Action groups; a hairline divider is drawn between groups, matching
     /// the SwiftUI menu's `Divider()`s.
     private let sections: [[TileMenuAction]]
+    private let header: TileMenuHeader?
     /// The pressed tile's frame in window coordinates. The popup is
     /// full-screen, so window coords map 1:1 onto its view. The panel
     /// top-aligns with the tile and sits beside it.
@@ -98,8 +108,9 @@ final class TileMenuPopupViewController: UIViewController {
 
     /// Present with `animated: false` — entrance/exit run in-controller so
     /// the panel can grow from / shrink to the tile's corner.
-    init(sections: [[TileMenuAction]], sourceFrame: CGRect? = nil) {
+    init(sections: [[TileMenuAction]], sourceFrame: CGRect? = nil, header: TileMenuHeader? = nil) {
         self.sections = sections.filter { !$0.isEmpty }
+        self.header = header
         self.sourceFrame = sourceFrame
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .overFullScreen
@@ -122,6 +133,11 @@ final class TileMenuPopupViewController: UIViewController {
         view.backgroundColor = .clear
 
         var arranged: [UIView] = []
+        let headerView = header.map(Self.makeHeaderView)
+        if let headerView {
+            arranged.append(headerView)
+            if !sections.isEmpty { arranged.append(DividerView()) }
+        }
         for (sectionIndex, section) in sections.enumerated() {
             if sectionIndex > 0 {
                 arranged.append(DividerView())
@@ -156,13 +172,24 @@ final class TileMenuPopupViewController: UIViewController {
             stack.bottomAnchor.constraint(equalTo: panel.contentView.bottomAnchor, constant: -panelInset),
         ])
 
-        // Panel size: rows + dividers, wide enough for the longest title.
+        // Panel size: rows + dividers, wide enough for the longest title. A
+        // header asks for a wider panel so its description reads as prose.
         let actionCount = sections.reduce(0) { $0 + $1.count }
-        let dividerCount = max(0, sections.count - 1)
+        let dividerCount = max(0, sections.count - 1) + (headerView != nil && !sections.isEmpty ? 1 : 0)
+        let minimumWidth: CGFloat = headerView == nil ? 440 : 620
+        let panelWidth = min(max(Self.widestRowWidth(for: sections) + panelInset * 2, minimumWidth), 680)
+        var headerHeight: CGFloat = 0
+        if let headerView {
+            headerHeight = ceil(headerView.systemLayoutSizeFitting(
+                CGSize(width: panelWidth - panelInset * 2, height: UIView.layoutFittingCompressedSize.height),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            ).height)
+        }
         let panelHeight = CGFloat(actionCount) * rowHeight
             + CGFloat(dividerCount) * (1 + dividerVerticalPad * 2)
+            + headerHeight
             + panelInset * 2
-        let panelWidth = min(max(Self.widestRowWidth(for: sections) + panelInset * 2, 440), 680)
 
         // Beside the tile, top edges aligned: right of it when there's
         // room, else left. Clamped into the overscan-safe region.
@@ -202,6 +229,50 @@ final class TileMenuPopupViewController: UIViewController {
         let menuTap = UITapGestureRecognizer(target: self, action: #selector(menuPressed))
         menuTap.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         view.addGestureRecognizer(menuTap)
+    }
+
+    /// Title, a detail line, and up to four lines of summary, inset to line up
+    /// with the row titles below.
+    private static func makeHeaderView(_ header: TileMenuHeader) -> UIView {
+        let title = UILabel()
+        title.text = header.title
+        title.font = .systemFont(ofSize: 32, weight: .bold)
+        title.textColor = .white
+        title.numberOfLines = 2
+
+        let stack = UIStackView(arrangedSubviews: [title])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.alignment = .fill
+
+        if let detail = header.detail, !detail.isEmpty {
+            let label = UILabel()
+            label.text = detail
+            label.font = .systemFont(ofSize: 22, weight: .medium)
+            label.textColor = UIColor.white.withAlphaComponent(0.65)
+            label.numberOfLines = 2
+            stack.addArrangedSubview(label)
+        }
+        if let summary = header.summary, !summary.isEmpty {
+            let label = UILabel()
+            label.text = summary
+            label.font = .systemFont(ofSize: 21, weight: .regular)
+            label.textColor = UIColor.white.withAlphaComponent(0.8)
+            label.numberOfLines = 4
+            stack.setCustomSpacing(14, after: stack.arrangedSubviews.last ?? title)
+            stack.addArrangedSubview(label)
+        }
+
+        let container = UIView()
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 14),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 26),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -26),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8),
+        ])
+        return container
     }
 
     private static func widestRowWidth(for sections: [[TileMenuAction]]) -> CGFloat {

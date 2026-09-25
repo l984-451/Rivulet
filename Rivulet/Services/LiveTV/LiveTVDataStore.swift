@@ -931,6 +931,121 @@ class LiveTVDataStore: ObservableObject {
         return programs.filter { $0.endTime > startDate && $0.startTime < endDate }
     }
 
+    // MARK: - DVR
+
+    /// Upcoming and in-progress recordings across every source that records.
+    /// Drives the guide's recording marks and the Recordings page; refreshed
+    /// when a Live TV surface appears and after every change made here.
+    @Published private(set) var scheduledRecordings: [LiveTVScheduledRecording] = []
+
+    private func recordingProvider(for sourceId: String) -> (any LiveTVRecordingProvider)? {
+        providers[sourceId] as? any LiveTVRecordingProvider
+    }
+
+    /// Whether any configured source can record at all.
+    var hasRecordingSources: Bool {
+        providers.values.contains { $0 is any LiveTVRecordingProvider }
+    }
+
+    /// Whether `channel`'s source can record.
+    func canRecord(_ channel: UnifiedChannel) -> Bool {
+        recordingProvider(for: channel.sourceId) != nil
+    }
+
+    /// The ways `channel`'s source can record `program`.
+    func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption] {
+        guard let provider = recordingProvider(for: channel.sourceId) else {
+            throw LiveTVRecordingError.notSupported
+        }
+        return try await provider.recordOptions(for: program, on: channel)
+    }
+
+    func record(_ option: LiveTVRecordOption, program: UnifiedProgram, on channel: UnifiedChannel) async throws {
+        guard let provider = recordingProvider(for: channel.sourceId) else {
+            throw LiveTVRecordingError.notSupported
+        }
+        try await provider.record(option, program: program, on: channel)
+        await refreshScheduledRecordings()
+    }
+
+    /// The live recording (scheduled or in progress) that covers `program`.
+    func activeRecording(for program: UnifiedProgram) -> LiveTVScheduledRecording? {
+        scheduledRecordings.first {
+            ($0.status == .scheduled || $0.status == .recording) && $0.covers(program)
+        }
+    }
+
+    /// Ids of the guide programmes set to record, for the guide's marks. Only
+    /// the channels a recording names are looked at, so this stays cheap on
+    /// a large lineup.
+    func recordingProgramIds(in guide: [String: [UnifiedProgram]]) -> Set<String> {
+        let active = scheduledRecordings.filter { $0.status == .scheduled || $0.status == .recording }
+        guard !active.isEmpty else { return [] }
+        var ids = Set<String>()
+        for (channelId, recordings) in Dictionary(grouping: active, by: { $0.channelId ?? "" })
+        where !channelId.isEmpty {
+            for program in guide[channelId] ?? [] where recordings.contains(where: { $0.covers(program) }) {
+                ids.insert(program.id)
+            }
+        }
+        return ids
+    }
+
+    func refreshScheduledRecordings() async {
+        let recorders = providers.values.compactMap { $0 as? any LiveTVRecordingProvider }
+        guard !recorders.isEmpty else {
+            if !scheduledRecordings.isEmpty { scheduledRecordings = [] }
+            return
+        }
+        var all: [LiveTVScheduledRecording] = []
+        for provider in recorders {
+            // One source failing must not blank the others' recordings.
+            if let recordings = try? await provider.scheduledRecordings() {
+                all.append(contentsOf: recordings)
+            }
+        }
+        all.sort { $0.startTime < $1.startTime }
+        if all != scheduledRecordings { scheduledRecordings = all }
+    }
+
+    func cancel(_ recording: LiveTVScheduledRecording) async throws {
+        guard let provider = recordingProvider(for: recording.sourceId) else {
+            throw LiveTVRecordingError.notSupported
+        }
+        try await provider.cancel(recording)
+        await refreshScheduledRecordings()
+    }
+
+    /// Every standing rule, across sources.
+    func recordingRules() async -> [LiveTVRecordingRule] {
+        var rules: [LiveTVRecordingRule] = []
+        for provider in providers.values.compactMap({ $0 as? any LiveTVRecordingProvider }) {
+            if let sourceRules = try? await provider.recordingRules() {
+                rules.append(contentsOf: sourceRules)
+            }
+        }
+        return rules
+    }
+
+    /// Cancel the series rule that made `recording`.
+    func cancelSeries(of recording: LiveTVScheduledRecording) async throws {
+        guard let ruleId = recording.ruleId,
+              let provider = recordingProvider(for: recording.sourceId) else {
+            throw LiveTVRecordingError.notSupported
+        }
+        try await provider.delete(LiveTVRecordingRule(id: ruleId, sourceId: recording.sourceId,
+                                                      title: recording.title, detail: nil))
+        await refreshScheduledRecordings()
+    }
+
+    func delete(_ rule: LiveTVRecordingRule) async throws {
+        guard let provider = recordingProvider(for: rule.sourceId) else {
+            throw LiveTVRecordingError.notSupported
+        }
+        try await provider.delete(rule)
+        await refreshScheduledRecordings()
+    }
+
     // MARK: - Favorites
 
     func toggleFavorite(_ channel: UnifiedChannel) {

@@ -215,6 +215,7 @@ struct GuideLayoutView: View {
                 await dataStore.loadEPG(startDate: timelineStart, hours: EPGTheme.initialGuideHours)
             }
             seedFocus()
+            await dataStore.refreshScheduledRecordings()
         }
         .onChange(of: channels.count) { _, _ in seedFocus() }
         .onReceive(tick) { t in now = t }
@@ -253,7 +254,13 @@ struct GuideLayoutView: View {
                 transparent: true,                 // dark see-through boxes + rounded clipping
                 // Reserve the info bar + category bar above the ruler.
                 topInset: EPGTheme.infoBarHeight + EPGTheme.categoryBarHeight,
-                focusRequest: gridFocusRequest
+                focusRequest: gridFocusRequest,
+                onLongPress: { channel, program, frame in
+                    presentProgramMenu(channel: channel, program: program, frame: frame)
+                },
+                recordingProgramIds: dataStore.recordingProgramIds(in: dataStore.epg),
+                categoryActionTitle: dataStore.hasRecordingSources ? "Recordings" : nil,
+                onCategoryAction: { presentRecordings() }
             )
 
             GuideInfoBar(channel: focusedChannel, program: focusedProgram)
@@ -503,6 +510,22 @@ struct GuideLayoutView: View {
             gridFocusRequest = EPGFocusRequest(channelId: lastChannel.id, token: UUID())
         }
         top.present(vc, animated: true)
+    }
+
+    // MARK: - Programme menu and recordings
+
+    private func presentProgramMenu(channel: UnifiedChannel, program: UnifiedProgram?, frame: CGRect?) {
+        guard let top = LiveProgramMenu.topViewController() else { return }
+        LiveProgramMenu.present(program: program, channel: channel, from: top, sourceFrame: frame) { channel in
+            selectChannel(channel)
+        }
+    }
+
+    private func presentRecordings() {
+        guard let top = LiveProgramMenu.topViewController() else { return }
+        let recordings = LiveRecordingsViewController()
+        recordings.modalPresentationStyle = .fullScreen
+        top.present(recordings, animated: true)
     }
 
     // MARK: - Helpers

@@ -1184,6 +1184,14 @@ final class AetherPlayer: PlayerProtocol {
         engine.liveResumeClamped.map(\.skippedSeconds).eraseToAnyPublisher()
     }
 
+    /// The DVB teletext page captions come from; nil means the engine's
+    /// auto-detect. Changing it re-decodes at once.
+    var teletextPage: Int? { engine.teletextPage }
+
+    func setTeletextPage(_ page: Int?) {
+        engine.setTeletextPage(page)
+    }
+
     /// True while the software backend is serving the session. Live joins use
     /// it: that backend has no player of its own to ride out a wireless audio
     /// route's start-up latency (see `loadLive`).

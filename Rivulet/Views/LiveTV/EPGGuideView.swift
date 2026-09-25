@@ -110,6 +110,15 @@ struct EPGGuide: UIViewRepresentable {
     /// Put focus on this channel's live programme. A new token re-requests the
     /// same channel (the guide uses it when the player closes).
     var focusRequest: EPGFocusRequest? = nil
+    /// Long-press (held Select) on a programme: the programme menu. The frame
+    /// is the pressed cell's, in window coordinates.
+    var onLongPress: ((UnifiedChannel, UnifiedProgram?, CGRect?) -> Void)? = nil
+    /// Programmes set to record, marked in their cells.
+    var recordingProgramIds: Set<String> = []
+    /// An extra pill at the end of the category bar that opens something
+    /// rather than filtering (Recordings).
+    var categoryActionTitle: String? = nil
+    var onCategoryAction: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -157,13 +166,21 @@ struct EPGGuide: UIViewRepresentable {
         jump.allowedPressTypes = [NSNumber(value: UIPress.PressType.playPause.rawValue)]
         cv.addGestureRecognizer(jump)
 
+        // Held Select opens the programme menu, the same long-press every
+        // other surface uses for its menus.
+        cv.addGestureRecognizer(TileLongPress.makeRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))))
+
         let container = EPGContainerView()
         container.contentTopInset = infoBarInset
         container.install(collectionView: cv)
         container.configureCategories(
             titles: categoryTitles,
             selected: selectedCategory,
-            onSelect: onCategorySelect)
+            onSelect: onCategorySelect,
+            actionTitle: categoryActionTitle,
+            onAction: onCategoryAction)
         container.setTransparent(transparent)
         return container
     }
@@ -176,7 +193,10 @@ struct EPGGuide: UIViewRepresentable {
         uiView.configureCategories(
             titles: categoryTitles,
             selected: selectedCategory,
-            onSelect: onCategorySelect)
+            onSelect: onCategorySelect,
+            actionTitle: categoryActionTitle,
+            onAction: onCategoryAction)
+        context.coordinator.updateRecordingMarks(recordingProgramIds)
         let timelineMoved = context.coordinator.lastTimelineStart.map { $0 != timelineStart } ?? false
         let dataChanged = context.coordinator.apply(self, to: layout)
         if dataChanged {
@@ -311,7 +331,7 @@ struct EPGGuide: UIViewRepresentable {
             let cell = cv.dequeueReusableCell(withReuseIdentifier: ProgramCellView.reuseID, for: indexPath) as! ProgramCellView
             cell.transparent = parent.transparent
             if let program = programs[safe: indexPath.section]?[safe: indexPath.item] {
-                cell.configure(program)
+                cell.configure(program, isRecording: recordingIds.contains(program.id))
             }
             return cell
         }
@@ -481,6 +501,32 @@ struct EPGGuide: UIViewRepresentable {
             let current = row.first { $0.isLive(at: now) } ?? row.last { $0.start <= now }
             // Hand selection back to SwiftUI, which launches Rivulet's player.
             parent.onSelect(channel, current)
+        }
+
+        /// Programme ids currently marked as recording.
+        private var recordingIds: Set<String> = []
+
+        /// Re-mark the visible cells when what is set to record changes. No
+        /// reload: that would drop focus for a change to a dot.
+        func updateRecordingMarks(_ ids: Set<String>) {
+            guard ids != recordingIds else { return }
+            recordingIds = ids
+            guard let cv = collectionView else { return }
+            for indexPath in cv.indexPathsForVisibleItems {
+                guard let cell = cv.cellForItem(at: indexPath) as? ProgramCellView,
+                      let program = programs[safe: indexPath.section]?[safe: indexPath.item] else { continue }
+                cell.setRecording(ids.contains(program.id))
+            }
+        }
+
+        @objc func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let cv = collectionView,
+                  let indexPath = TileLongPress.focusedCell(in: cv),
+                  let channel = sections[safe: indexPath.section] else { return }
+            let program = programs[safe: indexPath.section]?[safe: indexPath.item]
+            let frame = cv.cellForItem(at: indexPath).map { $0.convert($0.bounds, to: nil) }
+            parent.onLongPress?(channel, program, frame)
         }
 
         // Play/Pause → move focus to the now-playing programme in the current row.
@@ -686,9 +732,12 @@ final class EPGContainerView: UIView {
     func configureCategories(
         titles: [String],
         selected: String?,
-        onSelect: @escaping (String?) -> Void
+        onSelect: @escaping (String?) -> Void,
+        actionTitle: String? = nil,
+        onAction: (() -> Void)? = nil
     ) {
-        categoryBar.configure(titles: titles, selected: selected, onSelect: onSelect)
+        categoryBar.configure(titles: titles, selected: selected, onSelect: onSelect,
+                              actionTitle: actionTitle, onAction: onAction)
     }
 
     func setClock(_ date: Date) {
@@ -832,11 +881,14 @@ final class GuideCategoryBarView: UIView {
     private struct Item: Equatable {
         let title: String
         let group: String?
+        /// An action pill (Recordings): opens something instead of filtering.
+        var isAction = false
     }
 
     private var items: [Item] = []
     private var selectedGroup: String?
     private var onSelect: ((String?) -> Void)?
+    private var onAction: (() -> Void)?
     private var lastFocusedIndexPath: IndexPath?
     var onMoveDown: (() -> Void)?
     private var downSwipeBinding: DirectionalInputBinding?
@@ -893,16 +945,22 @@ final class GuideCategoryBarView: UIView {
     func configure(
         titles: [String],
         selected: String?,
-        onSelect: @escaping (String?) -> Void
+        onSelect: @escaping (String?) -> Void,
+        actionTitle: String? = nil,
+        onAction: (() -> Void)? = nil
     ) {
-        let nextItems = [Item(title: "All Channels", group: nil)]
+        var nextItems = [Item(title: "All Channels", group: nil)]
             + titles.map { Item(title: $0, group: $0) }
+        if let actionTitle {
+            nextItems.append(Item(title: actionTitle, group: nil, isAction: true))
+        }
         let itemsChanged = items != nextItems
         let selectionChanged = selectedGroup != selected
 
         items = nextItems
         selectedGroup = selected
         self.onSelect = onSelect
+        self.onAction = onAction
 
         if itemsChanged {
             collectionView.reloadData()
@@ -916,13 +974,13 @@ final class GuideCategoryBarView: UIView {
             guard let item = items[safe: indexPath.item],
                   let cell = collectionView.cellForItem(at: indexPath) as? GuideCategoryPillCell
             else { continue }
-            cell.configure(title: item.title, selected: item.group == selectedGroup)
+            cell.configure(title: item.title, selected: !item.isAction && item.group == selectedGroup)
         }
     }
 
     func preferredFocusTarget() -> UIView? {
         collectionView.layoutIfNeeded()
-        let selectedIndex = items.firstIndex { $0.group == selectedGroup }
+        let selectedIndex = items.firstIndex { !$0.isAction && $0.group == selectedGroup }
             .map { IndexPath(item: $0, section: 0) }
         let targetIndex = lastFocusedIndexPath ?? selectedIndex ?? IndexPath(item: 0, section: 0)
         return collectionView.cellForItem(at: targetIndex)
@@ -944,7 +1002,7 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
             withReuseIdentifier: GuideCategoryPillCell.reuseIdentifier,
             for: indexPath) as! GuideCategoryPillCell
         if let item = items[safe: indexPath.item] {
-            cell.configure(title: item.title, selected: item.group == selectedGroup)
+            cell.configure(title: item.title, selected: !item.isAction && item.group == selectedGroup)
         }
         cell.onDeclinedDownPress = { [weak self] in
             self?.onMoveDown?()
@@ -964,9 +1022,12 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard let item = items[safe: indexPath.item],
-              item.group != selectedGroup
-        else { return }
+        guard let item = items[safe: indexPath.item] else { return }
+        if item.isAction {
+            onAction?()
+            return
+        }
+        guard item.group != selectedGroup else { return }
         onSelect?(item.group)
     }
 
@@ -1300,12 +1361,33 @@ final class ProgramCellView: UICollectionViewCell {
         contentView.layer.mask = clipMask
     }
 
-    func configure(_ program: UnifiedProgram) {
+    func configure(_ program: UnifiedProgram, isRecording: Bool = false) {
         titleLabel.text = program.title
         let sub = program.subtitle
         subtitleLabel.text = sub
         subtitleLabel.isHidden = (sub?.isEmpty ?? true)
+        setRecording(isRecording)
         applyFocus(false)
+    }
+
+    /// A red dot in the top-right corner while the programme is set to record.
+    private let recordingDot = UIView()
+
+    func setRecording(_ recording: Bool) {
+        if recordingDot.superview == nil {
+            recordingDot.backgroundColor = .systemRed
+            recordingDot.layer.cornerRadius = 6
+            recordingDot.isUserInteractionEnabled = false
+            recordingDot.translatesAutoresizingMaskIntoConstraints = false
+            card.addSubview(recordingDot)
+            NSLayoutConstraint.activate([
+                recordingDot.widthAnchor.constraint(equalToConstant: 12),
+                recordingDot.heightAnchor.constraint(equalToConstant: 12),
+                recordingDot.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+                recordingDot.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
+            ])
+        }
+        recordingDot.isHidden = !recording
     }
 
     override func layoutSubviews() {

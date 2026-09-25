@@ -299,6 +299,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         UIApplication.shared.isIdleTimerDisabled = true
 
         startPlayback()
+
+        // What is already set to record, for the rail's record button.
+        Task { @MainActor [weak self] in
+            await LiveTVDataStore.shared.refreshScheduledRecordings()
+            self?.updateRailContent()
+        }
     }
 
     /// Builds the player for `channel` and starts the join. Called on load and
@@ -554,6 +560,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
         railView.onUpNext = { [weak self] in self?.presentChannelListPanel() }
         railView.onGoLive = { [weak self] in self?.goLive() }
+        railView.onRecord = { [weak self] in self?.presentRecordPanel() }
 
         updateRailContent()
 
@@ -610,6 +617,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         timeshiftBadge.update(behindLiveSeconds: behind, hasRewindWindow: hasRewindWindow,
                               isPaused: isUserPaused)
         railView.setGoLiveAvailable(isBehindLive)
+        railView.setRecordState(
+            available: store.canRecord(channel) && current != nil,
+            isRecording: current.map { store.activeRecording(for: $0) != nil } ?? false
+        )
 
         var audioDescription: String?
         if let aether = aetherPlayer,
@@ -805,12 +816,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // AE#154 mirrors of AVPlayer's legible options and selecting one hands
         // rendering to AVPlayerLayer instead of our overlay.
         if !isPlayingRemoteHLSDirectly, !aether.subtitleTracks.isEmpty {
+            var steppers = subtitleAdjustmentSteppers()
+            if aether.subtitleTracks.contains(where: { ($0.codec ?? "").lowercased().contains("teletext") }) {
+                steppers.append(teletextPageStepper())
+            }
             let list = CardTrackListView(
                 header: "Subtitles",
                 tracks: aether.subtitleTracks,
                 selectedTrackId: aether.currentSubtitleTrackId,
                 showsOffRow: true,
-                steppers: subtitleAdjustmentSteppers()
+                steppers: steppers
             ) { [weak self] trackId in
                 self?.aetherPlayer?.selectSubtitleTrack(id: trackId)
                 self?.activePanel?.dismissPanel()
@@ -1127,6 +1142,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         ]
     }
 
+    /// Teletext captions live on a page, and not every broadcaster flags
+    /// theirs, so auto-detect can come up empty. Steps through the pages
+    /// captions are commonly carried on; the engine re-decodes immediately.
+    private static let teletextPages: [Int?] = [nil, 801, 888, 777, 150, 199]
+
+    private func teletextPageStepper() -> CardStepperConfig {
+        CardStepperConfig(
+            title: "Teletext Page",
+            value: { [weak self] in
+                guard let page = self?.aetherPlayer?.teletextPage else { return "Auto" }
+                return String(page)
+            },
+            onStep: { [weak self] step in
+                guard let aether = self?.aetherPlayer else { return }
+                let pages = Self.teletextPages
+                let index = pages.firstIndex(of: aether.teletextPage) ?? 0
+                let next = (index + step % pages.count + pages.count) % pages.count
+                aether.setTeletextPage(pages[next])
+            })
+    }
+
     /// Steps this channel's subtitle height, applies it live, and persists it.
     private func adjustSubtitleHeight(bySteps steps: Int) {
         SubtitleAdjustments.setHeightUnits(subtitleHeightUnits + steps,
@@ -1311,6 +1347,95 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // new one resolves.
         updateRailContent()
         startPlayback()
+    }
+
+    // MARK: - Recording
+
+    /// The programme on screen right now (behind live, that is an earlier one).
+    private func programOnScreen() -> UnifiedProgram? {
+        let store = LiveTVDataStore.shared
+        let shift = aetherPlayer?.liveTimeshift ?? AetherPlayer.LiveTimeshift.idle
+        let behind = shift.seekableRange == nil ? 0 : max(0, shift.behindLiveSeconds)
+        return store.program(for: channel, at: Date().addingTimeInterval(-behind))
+            ?? store.getCurrentProgram(for: channel)
+    }
+
+    /// Record the programme on screen, or cancel its recording, in the rail's
+    /// own panel rather than a modal over the player.
+    private func presentRecordPanel() {
+        let store = LiveTVDataStore.shared
+        guard let program = programOnScreen(), store.canRecord(channel) else { return }
+        let channel = self.channel
+
+        if let recording = store.activeRecording(for: program) {
+            var rows = [CardTrackListView.Row(title: "Cancel Recording", subtitle: program.title,
+                                              trackId: 0, isSelected: false)]
+            if recording.ruleIsSeries {
+                rows.append(CardTrackListView.Row(title: "Cancel Series", subtitle: "Stop recording \(recording.title)",
+                                                  trackId: 1, isSelected: false))
+            }
+            let list = CardTrackListView(header: "Recording", rows: rows) { [weak self] choice in
+                self?.activePanel?.dismissPanel()
+                Task { @MainActor [weak self] in
+                    do {
+                        if choice == 1 {
+                            try await store.cancelSeries(of: recording)
+                        } else {
+                            try await store.cancel(recording)
+                        }
+                    } catch {
+                        self?.presentMessagePanel(title: "Couldn't Cancel", message: error.localizedDescription)
+                    }
+                    self?.updateRailContent()
+                }
+            }
+            presentPanel(content: list, width: 520)
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            let options: [LiveTVRecordOption]
+            do {
+                options = try await store.recordOptions(for: program, on: channel)
+            } catch {
+                self?.presentMessagePanel(title: "Can't Record", message: error.localizedDescription)
+                return
+            }
+            guard let self, self.channel.id == channel.id else { return }
+            guard !options.isEmpty else {
+                self.presentMessagePanel(title: "Can't Record",
+                                         message: "The server offered no way to record this programme.")
+                return
+            }
+            let rows = options.enumerated().map { index, option in
+                CardTrackListView.Row(title: option.title, subtitle: nil, trackId: index, isSelected: false)
+            }
+            let list = CardTrackListView(header: program.title, rows: rows) { [weak self] choice in
+                self?.activePanel?.dismissPanel()
+                guard let choice, choice < options.count else { return }
+                Task { @MainActor [weak self] in
+                    do {
+                        try await store.record(options[choice], program: program, on: channel)
+                    } catch {
+                        self?.presentMessagePanel(title: "Couldn't Record", message: error.localizedDescription)
+                    }
+                    self?.updateRailContent()
+                }
+            }
+            self.presentPanel(content: list, width: 560)
+        }
+    }
+
+    /// A one-row panel that says what went wrong; selecting it closes it.
+    private func presentMessagePanel(title: String, message: String) {
+        guard activePanel == nil else { return }
+        let list = CardTrackListView(
+            header: title,
+            rows: [CardTrackListView.Row(title: "OK", subtitle: message, trackId: 0, isSelected: false)]
+        ) { [weak self] _ in
+            self?.activePanel?.dismissPanel()
+        }
+        presentPanel(content: list, width: 560)
     }
 
     private func presentInfoPanel() {

@@ -39,8 +39,8 @@ final class CardTrackListView: UIView {
     /// re-resolves through the panel's focus fence.
     private weak var lastFocusedControl: UIView?
 
-    init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool,
-         steppers: [CardStepperConfig] = [], onSelect: @escaping (Int?) -> Void) {
+    convenience init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool,
+                     steppers: [CardStepperConfig] = [], onSelect: @escaping (Int?) -> Void) {
         var rows: [Row] = []
         if showsOffRow {
             rows.append(Row(title: "Off", subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil))
@@ -53,6 +53,13 @@ final class CardTrackListView: UIView {
                 isSelected: track.id == selectedTrackId
             )
         })
+        self.init(header: header, rows: rows, steppers: steppers, onSelect: onSelect)
+    }
+
+    /// A plain list of choices in the same card: each row's `trackId` is what
+    /// `onSelect` receives. Live TV uses it for recording options.
+    init(header: String, rows: [Row], steppers: [CardStepperConfig] = [],
+         onSelect: @escaping (Int?) -> Void) {
         self.rows = rows
         self.steppers = steppers
         self.onSelect = onSelect

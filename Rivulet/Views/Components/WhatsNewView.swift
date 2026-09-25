@@ -141,6 +141,22 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         // confirm build number at release
+        ("1.0.6 (88)", [
+            "New Browse layout for Live TV with rows of what is on now, like the Apple TV app. Choose it under Default Layout in Settings",
+            "Watch up to four live channels at once in the new Multiview, with the sound following the one you select",
+            "Record a programme, a whole series, or only new episodes from the guide with Plex DVR or Dispatcharr",
+            "Hold Select on a programme in the guide to see what it is about and record it",
+            "Pause, rewind and return to live on any channel",
+            "While a channel is paused, press Left or Right to preview earlier moments, then Play to watch from there",
+            "Going back from a channel now keeps it playing in the corner of the guide",
+            "The guide now shows channel numbers and the current time",
+            "Plex favourite channels now have their own tab in the guide",
+            "Live TV now reads the guide from every Plex DVR, not just the first",
+            "Dispatcharr sources now take an API key, which turns on recording",
+            "Fixed Play and Pause doing nothing in Live TV",
+            "Fixed the guide jumping hours ahead after going back from a channel",
+            "Fixed a short silence at the start of a channel on HomePod and AirPlay speakers",
+        ]),
         ("1.0.6 (87)", [
             "New Watchlist tab in the sidebar shows everything you saved",
             "The Watchlist row on Home no longer stops at 20 items",

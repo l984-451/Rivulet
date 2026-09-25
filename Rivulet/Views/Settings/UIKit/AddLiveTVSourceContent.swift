@@ -205,7 +205,7 @@ extension SettingsContent {
                             kind: .textEntry(value: { draft.displayName }, placeholder: "Live TV",
                                              hint: nil, suggestions: [], keyboardType: .default,
                                              set: { draft.displayName = $0 })),
-            SettingsRowItem(id: "apiTokenField", title: "API Token",
+            SettingsRowItem(id: "apiTokenField", title: "API Key",
                             kind: .textEntry(value: { draft.apiToken }, placeholder: "Optional",
                                              hint: nil, suggestions: [], keyboardType: .default,
                                              set: { draft.apiToken = $0 })),
@@ -295,6 +295,17 @@ extension SettingsContent {
                                            : "Connected, but that channel profile has no channels. Check the name.")
                     page?.reloadRows()
                     return
+                }
+                // The playlist needs no key, so a wrong one would otherwise
+                // only show up the first time a recording fails. Check it now.
+                // Only a rejection counts: a server that is not Dispatcharr
+                // has no such endpoint, and its playlist already loaded.
+                if token != nil {
+                    do {
+                        _ = try await service.fetchChannelSummaries()
+                    } catch DispatcharrError.unauthorized {
+                        throw DispatcharrError.unauthorized
+                    } catch {}
                 }
                 let store = LiveTVDataStore.shared
                 await store.addDispatcharrSource(
@@ -416,7 +427,7 @@ extension SettingsContent {
     private static func failureCopy(for error: Error) -> String {
         if let dispatcharr = error as? DispatcharrError {
             switch dispatcharr {
-            case .unauthorized: return "That server rejected the API token."
+            case .unauthorized: return "That server rejected the API key."
             case .invalidResponse, .notFound, .serverError, .httpError:
                 return "Couldn't reach that server. Check the address and port."
             }
@@ -426,7 +437,7 @@ extension SettingsContent {
         }
         let ns = error as NSError
         if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorUserAuthenticationRequired {
-            return "That server rejected the API token."
+            return "That server rejected the API key."
         }
         return "Couldn't reach that server. Check the address and port."
     }

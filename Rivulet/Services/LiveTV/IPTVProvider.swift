@@ -37,10 +37,10 @@ actor IPTVProvider: LiveTVProvider {
     /// when the profile appears as a path segment. See `DispatcharrService`.
     nonisolated let channelProfile: String?
 
-    private let dispatcharrService: DispatcharrService?
+    let dispatcharrService: DispatcharrService?
 
     // Cached data
-    private var cachedChannels: [UnifiedChannel] = []
+    private(set) var cachedChannels: [UnifiedChannel] = []
     private var cachedEPG: [String: [UnifiedProgram]] = [:]
 
     /// Channel logos parsed from XMLTV `<channel><icon>`, keyed by unified
@@ -53,6 +53,12 @@ actor IPTVProvider: LiveTVProvider {
     // Cache duration
     private let channelCacheDuration: TimeInterval = 300  // 5 minutes
     private let epgCacheDuration: TimeInterval = 3600     // 1 hour
+
+    // Dispatcharr DVR lookups (IPTVProvider+DVR.swift). The API knows
+    // channels by integer id and guide entries by the EPG source's tvg_id,
+    // neither of which the playlist carries.
+    var dvrChannelIndex: DispatcharrChannelIndex?
+    var dvrEPGData: [Int: DispatcharrEPGData] = [:]
 
     // MARK: - Initialization
 

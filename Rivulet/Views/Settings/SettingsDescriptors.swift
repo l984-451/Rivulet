@@ -267,7 +267,7 @@ enum SettingsDescriptorStore {
         ),
         "apiTokenField": SettingDescriptor(
             icon: "key",
-            description: "Only needed if your server asks for one. Leave it empty otherwise."
+            description: "For Dispatcharr, an API key from your Dispatcharr user lets Rivulet schedule recordings and series from the guide. Leave it empty to just watch. Other servers rarely need one."
         ),
         "channelProfileField": SettingDescriptor(
             icon: "line.3.horizontal.decrease.circle",

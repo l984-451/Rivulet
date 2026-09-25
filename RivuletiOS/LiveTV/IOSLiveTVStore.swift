@@ -334,13 +334,13 @@ final class IOSLiveTVStore: ObservableObject {
 
     private var normalizedAuthorizationHeader: String? {
         guard !authorizationHeaderString.isEmpty else { return nil }
-        // Match the tvOS Dispatcharr editor: a bare API token uses DRF's
-        // `Token` scheme. Advanced users can supply a complete Bearer/Basic/etc.
-        // value and it is preserved exactly.
+        // A bare key uses Dispatcharr's `ApiKey` scheme, the one its API
+        // accepts (it never accepted DRF's `Token`). Advanced users can supply
+        // a complete Bearer/Basic/etc. value and it is preserved exactly.
         if authorizationHeaderString.contains(where: { $0.isWhitespace }) {
             return authorizationHeaderString
         }
-        return "Token \(authorizationHeaderString)"
+        return "ApiKey \(authorizationHeaderString)"
     }
 
     private nonisolated static func fetchData(

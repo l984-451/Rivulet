@@ -939,12 +939,24 @@ class LiveTVDataStore: ObservableObject {
     @Published private(set) var scheduledRecordings: [LiveTVScheduledRecording] = []
 
     private func recordingProvider(for sourceId: String) -> (any LiveTVRecordingProvider)? {
-        providers[sourceId] as? any LiveTVRecordingProvider
+        providers[sourceId].flatMap(Self.recorder)
+    }
+
+    /// `provider` as a recorder, when it records. Every IPTV source has the
+    /// recording methods (Dispatcharr and plain M3U share a type), but only
+    /// Dispatcharr with an API key can use them.
+    private static func recorder(_ provider: any LiveTVProvider) -> (any LiveTVRecordingProvider)? {
+        if let iptv = provider as? IPTVProvider, !iptv.supportsRecording { return nil }
+        return provider as? any LiveTVRecordingProvider
+    }
+
+    private var recordingProviders: [any LiveTVRecordingProvider] {
+        providers.values.compactMap(Self.recorder)
     }
 
     /// Whether any configured source can record at all.
     var hasRecordingSources: Bool {
-        providers.values.contains { $0 is any LiveTVRecordingProvider }
+        !recordingProviders.isEmpty
     }
 
     /// Whether `channel`'s source can record.
@@ -992,7 +1004,7 @@ class LiveTVDataStore: ObservableObject {
     }
 
     func refreshScheduledRecordings() async {
-        let recorders = providers.values.compactMap { $0 as? any LiveTVRecordingProvider }
+        let recorders = recordingProviders
         guard !recorders.isEmpty else {
             if !scheduledRecordings.isEmpty { scheduledRecordings = [] }
             return
@@ -1019,7 +1031,7 @@ class LiveTVDataStore: ObservableObject {
     /// Every standing rule, across sources.
     func recordingRules() async -> [LiveTVRecordingRule] {
         var rules: [LiveTVRecordingRule] = []
-        for provider in providers.values.compactMap({ $0 as? any LiveTVRecordingProvider }) {
+        for provider in recordingProviders {
             if let sourceRules = try? await provider.recordingRules() {
                 rules.append(contentsOf: sourceRules)
             }

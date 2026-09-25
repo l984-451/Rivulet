@@ -24,12 +24,12 @@ actor DispatcharrService {
     /// not something the API token implies: `apps/output/urls.py` routes
     /// `^m3u(?:/(?P<profile_name>[^/]+))?/?$`, and `generate_m3u` only filters on
     /// `channelprofilemembership__channel_profile` when that segment is present.
-    /// A DRF `Authorization: Token` header authenticates the request but does not
-    /// scope it, so without this segment the server correctly returns every
-    /// channel regardless of which profiles exist. See GitHub issue #246.
+    /// The API key does not scope the playlist (the output endpoints do not
+    /// even authenticate), so without this segment the server correctly returns
+    /// every channel regardless of which profiles exist. See GitHub issue #246.
     let channelProfile: String?
 
-    private let session: URLSession
+    let session: URLSession
 
     // MARK: - Initialization
 
@@ -185,16 +185,32 @@ actor DispatcharrService {
 
     // MARK: - Private Methods
 
-    private func authenticatedRequest(for url: URL, method: String = "GET") -> URLRequest {
+    func authenticatedRequest(for url: URL, method: String = "GET") -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
-        if let token = apiToken, !token.isEmpty {
-            request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let token = apiToken, let header = Self.authorizationHeader(for: token) {
+            request.setValue(header.value, forHTTPHeaderField: header.field)
         }
         return request
     }
 
-    private func validateResponse(_ response: URLResponse) throws {
+    /// How Dispatcharr wants `token` presented. Its API authenticates an API
+    /// key (what its UI generates, sent as `X-API-Key`) or a JWT access token
+    /// (`Authorization: Bearer`). It has never accepted DRF's
+    /// `Authorization: Token`, which is what this used to send; nobody noticed
+    /// because the playlist and guide are not authenticated at all (they are
+    /// allowed by network), and nothing else here called the API.
+    static func authorizationHeader(for token: String) -> (field: String, value: String)? {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let segments = trimmed.split(separator: ".", omittingEmptySubsequences: false)
+        if segments.count == 3, trimmed.hasPrefix("eyJ") {
+            return ("Authorization", "Bearer \(trimmed)")
+        }
+        return ("X-API-Key", trimmed)
+    }
+
+    func validateResponse(_ response: URLResponse) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DispatcharrError.invalidResponse
         }

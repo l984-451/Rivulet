@@ -212,11 +212,18 @@ final class CaptionOverlayView: UIView {
         /// quantises the 24-row grid to three bands and supplies no percentage.
         ///
         /// Free to tune, because nothing measurable pins it: the source
-        /// genuinely does not say where in the top third the caption belongs.
+        /// genuinely does not say where in the third the caption belongs.
         /// Set near where the same page's proxied WebVTT resolves (it carries an
         /// exact `line:`, typically around 10%), so the two routes look similar
         /// even though only one of them can be precise.
-        static let bandTopFraction: CGFloat = 0.10
+        ///
+        /// Used for the TOP and BOTTOM bands alike. Teletext is equally vague in
+        /// both directions, so it should rest the same distance from whichever
+        /// edge it names — and the bottom band in particular must NOT fall back
+        /// to the default 6% floor, because that is exactly where an UNPLACED
+        /// cue sits. A cue that stated a position landing at the no-position
+        /// height makes its placement invisible.
+        static let bandEdgeFraction: CGFloat = 0.10
 
         /// Anchor for a LEFT or RIGHT column that came with no fine position.
         /// Deliberately the same 10% / 90% the proxy writes into its WebVTT
@@ -542,11 +549,17 @@ final class CaptionOverlayView: UIView {
             let requestedCentre = (1 - ay) * rect.height - halfBox
             centreY = rect.maxY - max(requestedCentre, lowestCentre)
         } else if row == 2 {
-            centreY = rect.minY + rect.height * Metrics.bandTopFraction + fitted.height / 2
+            centreY = rect.minY + rect.height * Metrics.bandEdgeFraction + fitted.height / 2
         } else if row == 1 {
             centreY = rect.midY
         } else {
-            centreY = rect.maxY - max(0, floor - letterbox) - fitted.height / 2
+            // The band's resting place, symmetric with the top band and the
+            // 10%/90% side anchors. `floor` still applies underneath it, so a
+            // letterboxed picture or a raised rail can push the cue higher —
+            // it is a floor, never a ceiling.
+            let band = rect.height * Metrics.bandEdgeFraction
+            let lowest = max(0, floor - letterbox)
+            centreY = rect.maxY - max(band, lowest) - fitted.height / 2
         }
 
         box.frame = CGRect(x: originX.rounded(),

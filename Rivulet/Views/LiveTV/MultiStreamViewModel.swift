@@ -389,6 +389,34 @@ final class MultiStreamViewModel: ObservableObject {
 
         // Stop and cleanup player
         slot.stop()
+        dropSlot(at: index)
+    }
+
+    /// Take a tile's running session out of multiview without stopping it,
+    /// for another surface (full screen) to adopt with no new tune. nil while
+    /// the tile has nothing playing yet.
+    func detachStream(at index: Int) -> LiveTVSessionHandoff? {
+        guard index >= 0, index < streams.count else { return nil }
+        let slot = streams[index]
+        switch slot.playbackState {
+        case .playing, .paused, .buffering: break
+        default: return nil
+        }
+        if isScrubbing, slot.id == scrubSlotID {
+            cancelScrubFocused()
+        }
+        markSlotAsIntentionallyStopped(slot.id)
+        slot.setMuted(false)
+        dropSlot(at: index)
+        return LiveTVSessionHandoff(channel: slot.channel, player: slot.aetherPlayer,
+                                    keepalive: slot.liveKeepalive,
+                                    isNativeHLSRoute: slot.aetherPlayer.isOnNativeLiveRoute)
+    }
+
+    /// Forget the tile at `index` (already stopped or handed off) and settle
+    /// layout and audio on what is left.
+    private func dropSlot(at index: Int) {
+        let slot = streams[index]
 
         // Remove subscriptions
         cancellables.removeValue(forKey: slot.id)
@@ -408,6 +436,9 @@ final class MultiStreamViewModel: ObservableObject {
         // Adjust focus if needed
         if streams.isEmpty {
             focusedSlotIndex = 0
+        } else if index < focusedSlotIndex {
+            // The audible tile moved down one place; follow it.
+            focusedSlotIndex -= 1
         } else if focusedSlotIndex >= streams.count {
             setFocus(to: streams.count - 1)
         } else if index == focusedSlotIndex {

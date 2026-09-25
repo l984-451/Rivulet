@@ -167,11 +167,11 @@ enum SettingsDescriptorStore {
         ),
         "defaultLayout": SettingDescriptor(
             icon: "tv",
-            description: "Choose between the channel grid layout or the TV guide layout as your default Live TV view."
+            description: "Choose your default Live TV view: the channel grid, the TV guide, or Browse, with rows of what is on now and multiview like the Apple TV app."
         ),
         "keepPlayingInGuide": SettingDescriptor(
             icon: "pip",
-            description: "When you go back from a live channel, it keeps playing with its sound in the corner of the guide. Select it again to return to full screen."
+            description: "When you go back from a live channel, it keeps playing with its sound in the corner of the guide or Browse. Select it again to return to full screen."
         ),
         "confirmExitMultiview": SettingDescriptor(
             icon: "rectangle.split.2x2",

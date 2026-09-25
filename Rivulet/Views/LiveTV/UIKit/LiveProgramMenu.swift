@@ -19,17 +19,20 @@ enum LiveProgramMenu {
 
     /// Present the menu for `program` on `channel` over `presenter`.
     /// `program` is nil for a row with no guide data; the menu then offers
-    /// only what the channel itself supports.
+    /// only what the channel itself supports. `onMultiview` adds "Watch in
+    /// Multiview" where the host has a multiview to open.
     static func present(
         program: UnifiedProgram?,
         channel: UnifiedChannel,
         from presenter: UIViewController,
         sourceFrame: CGRect? = nil,
-        onWatch: @escaping (UnifiedChannel) -> Void
+        onWatch: @escaping (UnifiedChannel) -> Void,
+        onMultiview: ((UnifiedChannel) -> Void)? = nil
     ) {
         Task { @MainActor in
             let sections = await makeSections(program: program, channel: channel,
-                                              presenter: presenter, onWatch: onWatch)
+                                              presenter: presenter, onWatch: onWatch,
+                                              onMultiview: onMultiview)
             let popup = TileMenuPopupViewController(
                 sections: sections,
                 sourceFrame: sourceFrame,
@@ -69,7 +72,8 @@ enum LiveProgramMenu {
         program: UnifiedProgram?,
         channel: UnifiedChannel,
         presenter: UIViewController,
-        onWatch: @escaping (UnifiedChannel) -> Void
+        onWatch: @escaping (UnifiedChannel) -> Void,
+        onMultiview: ((UnifiedChannel) -> Void)?
     ) async -> [[TileMenuAction]] {
         let store = LiveTVDataStore.shared
         var watch: [TileMenuAction] = []
@@ -80,6 +84,11 @@ enum LiveProgramMenu {
             title: airingNow ? "Watch Now" : "Watch \(channel.name)",
             systemImage: "play.fill"
         ) { onWatch(channel) })
+        if let onMultiview, airingNow {
+            watch.append(TileMenuAction(title: "Watch in Multiview", systemImage: "rectangle.split.2x2") {
+                onMultiview(channel)
+            })
+        }
 
         if let program, !program.id.contains(":placeholder:"),
            program.endTime > Date(), store.canRecord(channel) {

@@ -46,6 +46,15 @@ struct LiveCardItem: Hashable {
     }
 }
 
+extension Array where Element == LiveCardItem {
+    /// First of each id. A diffable snapshot traps on a repeated identifier,
+    /// and a merged lineup can list a channel twice.
+    func uniquedById() -> [LiveCardItem] {
+        var seen = Set<String>()
+        return filter { seen.insert($0.id).inserted }
+    }
+}
+
 final class LiveCardCell: UICollectionViewCell {
     static let reuseID = "LiveCardCell"
     static let aspect: CGFloat = 9.0 / 16.0
@@ -237,9 +246,11 @@ final class LiveCardCell: UICollectionViewCell {
         progressFraction = CGFloat(min(max(progress ?? 0, 0), 1))
         setNeedsLayout()
 
-        // Art: the programme's own 16:9 image, else the channel's logo on the
+        // Art: the programme's own 16:9 image (its icon counts once the
+        // classifier has seen it is wide), else the channel's logo on the
         // card's dark fill.
-        let art = program?.landscapeURL ?? item.recording?.posterURL
+        let wideIcon = program?.iconURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil }
+        let art = program?.landscapeURL ?? wideIcon ?? item.recording?.posterURL
         let logo = channel?.logoURL
         load(art: art)
         load(logo: logo, asFallback: art == nil)

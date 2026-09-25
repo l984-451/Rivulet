@@ -57,7 +57,7 @@ struct ChannelPickerSheet: View {
 
                 // Content based on layout preference
                 switch layout {
-                case .channels:
+                case .channels, .browse:
                     channelGridContent
                 case .guide:
                     guideListContent

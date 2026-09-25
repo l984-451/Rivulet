@@ -739,9 +739,15 @@ final class AetherPlayer: PlayerProtocol {
         case multiviewSlot
     }
 
+    /// Whether the last live load handed the origin's HLS to AVPlayer as is
+    /// (who renders its captions depends on it). Travels with the player when
+    /// a session moves between surfaces.
+    private(set) var isOnNativeLiveRoute = false
+
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
                   role: LiveLoadRole = .fullscreen) async throws {
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
+        isOnNativeLiveRoute = isHLS
         // Forced onto the engine demuxer AND the source is a playlist: the Plex
         // direct-play case. See the ingest branch below.
         let usesHLSIngest = !isHLS && Self.isHLSURL(url)

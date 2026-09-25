@@ -5,8 +5,8 @@
 //  LiveTVContainerView.swift
 //  Rivulet
 //
-//  Container view that switches between Channel Layout and Guide Layout
-//  based on user settings
+//  Container view that switches between the Channel, Guide and Browse
+//  layouts based on user settings
 //
 
 import SwiftUI
@@ -16,6 +16,8 @@ import SwiftUI
 enum LiveTVLayout: String, CaseIterable, CustomStringConvertible {
     case channels = "Channels"
     case guide = "Guide"
+    /// Shelves of live cards, after the Apple TV app (UIKit).
+    case browse = "Browse"
 
     var description: String { rawValue }
 }
@@ -40,6 +42,10 @@ struct LiveTVContainerView: View {
                 ChannelListView(sourceIdFilter: sourceIdFilter)
             case .guide:
                 GuideLayoutView(sourceIdFilter: sourceIdFilter)
+            case .browse:
+                LiveBrowseBridge(sourceIdFilter: sourceIdFilter)
+                    .ignoresSafeArea()
+                    .id(sourceIdFilter ?? "all")
             }
         }
         .task {
@@ -53,6 +59,18 @@ struct LiveTVContainerView: View {
             await dataStore.refreshIfStale()
         }
     }
+}
+
+/// Hosts the UIKit Browse layout. `.id` on the source rebuilds it when the
+/// sidebar switches Live TV sources.
+private struct LiveBrowseBridge: UIViewControllerRepresentable {
+    let sourceIdFilter: String?
+
+    func makeUIViewController(context: Context) -> LiveBrowseViewController {
+        LiveBrowseViewController(sourceIdFilter: sourceIdFilter)
+    }
+
+    func updateUIViewController(_ uiViewController: LiveBrowseViewController, context: Context) {}
 }
 
 #Preview {

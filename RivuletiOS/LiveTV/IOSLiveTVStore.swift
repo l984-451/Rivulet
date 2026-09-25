@@ -212,7 +212,8 @@ final class IOSLiveTVStore: ObservableObject {
             let channelHeaders = IOSPlaybackHeaders(
                 userAgent: playbackHeaders.userAgent,
                 authorization: sameOrigin ? playbackHeaders.authorization : nil,
-                referer: playbackHeaders.referer
+                referer: playbackHeaders.referer,
+                streamHeaders: channel.httpHeaders
             )
             let guideCandidates = [channel.tvgId, channel.tvgName, channel.name]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }

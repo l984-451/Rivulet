@@ -168,4 +168,31 @@ final class DispatcharrURLBuilderTests: XCTestCase {
         XCTAssertTrue(agent.hasPrefix("Rivulet/"), "unexpected user agent: \(agent)")
         XCTAssertEqual(LiveTVClientIdentity.streamHeaders["User-Agent"], agent)
     }
+
+    func test_parseStreamURL_extractsUserAgentAndCleansURL() {
+        let raw = "http://example.com/live/ch1.m3u8|User-Agent=CustomUA%201.0&Referer=http://example.org"
+        let parsed = LiveTVClientIdentity.parseStreamURL(raw)
+        XCTAssertNotNil(parsed)
+        XCTAssertEqual(parsed?.url.absoluteString, "http://example.com/live/ch1.m3u8")
+        XCTAssertEqual(parsed?.headers["User-Agent"], "CustomUA 1.0")
+        XCTAssertEqual(parsed?.headers["Referer"], "http://example.org")
+    }
+
+    func test_parseStreamURL_keepsEncodedPipeInURL() {
+        let raw = "http://cdn.example.com/live.m3u8?token=abc%7Cdef&expires=170"
+        let parsed = LiveTVClientIdentity.parseStreamURL(raw)
+        XCTAssertEqual(parsed?.url.absoluteString, raw)
+        XCTAssertEqual(parsed?.headers, [:])
+    }
+
+    @MainActor
+    func test_streamHeaders_channelHeadersOverrideBase() {
+        let channel = UnifiedChannel(
+            id: "c", sourceType: .genericM3U, sourceId: "s", channelNumber: nil, name: "C",
+            httpHeaders: ["User-Agent": "CustomPlayer", "Origin": "http://example.org"]
+        )
+        let headers = LiveTVClientIdentity.streamHeaders(for: channel)
+        XCTAssertEqual(headers["User-Agent"], "CustomPlayer")
+        XCTAssertEqual(headers["Origin"], "http://example.org")
+    }
 }

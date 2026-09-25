@@ -797,7 +797,8 @@ class LiveTVDataStore: ObservableObject {
                 streamURL: channel.streamURL,
                 tvgId: channel.tvgId,
                 groupTitle: channel.groupTitle,
-                isHD: channel.isHD
+                isHD: channel.isHD,
+                httpHeaders: channel.httpHeaders
             )
         }
         if didChange { channels = updated }

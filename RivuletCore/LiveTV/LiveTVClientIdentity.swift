@@ -38,4 +38,49 @@ enum LiveTVClientIdentity {
     /// Headers attached to every Live TV stream load. Kept as a single value so
     /// the player call sites cannot drift apart from one another.
     static let streamHeaders: [String: String] = ["User-Agent": userAgent]
+
+    /// Headers for one channel's stream: the base identity, overridden by any
+    /// headers the playlist authored for that channel (`url|User-Agent=...`).
+    /// The only place the two are merged, so the call sites cannot drift.
+    static func streamHeaders(for channel: UnifiedChannel) -> [String: String] {
+        streamHeaders.merging(channel.httpHeaders ?? [:]) { _, custom in custom }
+    }
+
+    /// Splits a playlist stream line of the form `url|Header=value&Header=value`
+    /// (the Kodi / TiviMate convention) into the URL and its headers.
+    ///
+    /// Only a literal `|` is a delimiter. An encoded `%7C` is ordinary URL data
+    /// (a signed token, an Xtream password) and is left in the URL untouched.
+    nonisolated static func parseStreamURL(_ rawString: String) -> (url: URL, headers: [String: String])? {
+        let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmed.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let first = parts.first,
+              let url = URL(string: first.trimmingCharacters(in: .whitespaces)) else {
+            return nil
+        }
+
+        var headers: [String: String] = [:]
+        if parts.count > 1 {
+            for pair in parts[1].split(separator: "&") {
+                let kv = pair.split(separator: "=", maxSplits: 1).map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+                guard kv.count == 2, !kv[0].isEmpty else { continue }
+                let value = kv[1].removingPercentEncoding ?? kv[1]
+                guard !value.isEmpty else { continue }
+                headers[canonicalHeaderName(kv[0])] = value
+            }
+        }
+        return (url, headers)
+    }
+
+    /// Normalises the case of the headers Rivulet itself sends, so a playlist's
+    /// `user-agent=` replaces the base `User-Agent` instead of sending both.
+    private nonisolated static func canonicalHeaderName(_ name: String) -> String {
+        for known in ["User-Agent", "Referer", "Authorization"]
+        where name.caseInsensitiveCompare(known) == .orderedSame {
+            return known
+        }
+        return name
+    }
 }

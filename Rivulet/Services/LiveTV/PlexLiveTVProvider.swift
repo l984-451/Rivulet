@@ -164,9 +164,8 @@ actor PlexLiveTVProvider: LiveTVProvider {
         // document. Read the account token directly for this one call.
         var favouriteRanks: [String: Int] = [:]
         if let accountToken = await PlexAuthManager.shared.authToken {
-            for (index, identifier) in await networkManager
-                .getFavoriteChannelIdentifiers(authToken: accountToken)
-                .enumerated() {
+            let favourites = await networkManager.getFavoriteChannelIdentifiers(authToken: accountToken)
+            for (index, identifier) in favourites.enumerated() where favouriteRanks[identifier] == nil {
                 favouriteRanks[identifier] = index
             }
         }
@@ -509,7 +508,10 @@ actor PlexLiveTVProvider: LiveTVProvider {
                     }
                     items.append(URLQueryItem(name: "X-Plex-Token", value: authToken))
                     dp.queryItems = items
-                    if let url = dp.url { return url }
+                    // Reassigning queryItems re-serialises whatever the part key
+                    // carried, so it goes through the same '+' rule as every
+                    // other live URL.
+                    if let url = PlexLiveTVChannel.finalizedLiveURL(dp) { return url }
                 }
             }
 

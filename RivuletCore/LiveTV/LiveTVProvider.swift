@@ -100,6 +100,31 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
     nonisolated static func makeId(sourceType: LiveTVSourceType, sourceId: String, channelId: String) -> String {
         "\(sourceType.rawValue):\(sourceId):\(channelId)"
     }
+
+    /// This channel with a different logo and every other field carried over.
+    ///
+    /// The one place a channel is rebuilt field by field. Hand-rolled copies
+    /// compile cleanly when a defaulted field is added and then silently reset
+    /// it: the XMLTV logo pass dropped playlist headers and the favourite rank
+    /// exactly that way.
+    func withLogo(_ logo: URL?) -> UnifiedChannel {
+        UnifiedChannel(
+            id: id,
+            sourceType: sourceType,
+            sourceId: sourceId,
+            channelNumber: channelNumber,
+            name: name,
+            callSign: callSign,
+            logoURL: logo,
+            streamURL: streamURL,
+            tvgId: tvgId,
+            groupTitle: groupTitle,
+            isHD: isHD,
+            httpHeaders: httpHeaders,
+            isFavourite: isFavourite,
+            favouriteRank: favouriteRank
+        )
+    }
 }
 
 // MARK: - Unified Program (EPG)
@@ -121,6 +146,12 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
     let landscapeURL: URL?
     let episodeNumber: String?
     let isNew: Bool
+    /// The source's own identifier for what is airing (Plex `plex://episode/…`).
+    /// DVR scheduling is keyed by it; nil for sources without one.
+    let sourceGuid: String?
+    let year: Int?
+    let contentRating: String?
+    let isMovie: Bool
 
     init(
         id: String,
@@ -135,7 +166,11 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         posterURL: URL? = nil,
         landscapeURL: URL? = nil,
         episodeNumber: String? = nil,
-        isNew: Bool = false
+        isNew: Bool = false,
+        sourceGuid: String? = nil,
+        year: Int? = nil,
+        contentRating: String? = nil,
+        isMovie: Bool = false
     ) {
         self.id = id
         self.channelId = channelId
@@ -150,6 +185,10 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         self.landscapeURL = landscapeURL
         self.episodeNumber = episodeNumber
         self.isNew = isNew
+        self.sourceGuid = sourceGuid
+        self.year = year
+        self.contentRating = contentRating
+        self.isMovie = isMovie
     }
 
     /// Check if this program is currently airing

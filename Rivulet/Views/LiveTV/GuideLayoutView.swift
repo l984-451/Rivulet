@@ -43,7 +43,7 @@ struct GuideLayoutView: View {
     /// Tab title for the source's own favourites list. Not a `groupTitle` — a
     /// favourite keeps its tuner group too, and this tab sorts by the order the
     /// user arranged rather than by channel number.
-    static let favouritesTab = "Plex Favourites"
+    static let favouritesTab = "Plex Favorites"
 
     /// Tabs that lead the bar regardless of the alphabet, in this order. A list
     /// the user curated outranks a source's own grouping — burying "Favourites"
@@ -72,7 +72,11 @@ struct GuideLayoutView: View {
 
     /// Channels shown in the grid: source-filtered, then category-filtered.
     private var channels: [UnifiedChannel] {
-        guard let group = selectedGroup else { return sourceChannels }
+        // A tab whose channels vanished on a refresh (favourites are best
+        // effort, and a lineup can change) falls back to everything. Filtering
+        // to nothing would replace the grid AND its tab bar with a spinner and
+        // leave no way to pick another tab.
+        guard let group = selectedGroup, groupTitles.contains(group) else { return sourceChannels }
 
         // Favourites is a view over the flag, not a group match, and it keeps
         // the source's arrangement instead of the merged channel-number sort

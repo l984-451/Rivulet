@@ -786,20 +786,7 @@ class LiveTVDataStore: ObservableObject {
         let updated = channels.map { channel -> UnifiedChannel in
             guard channel.logoURL == nil, let logo = logos[channel.id] else { return channel }
             didChange = true
-            return UnifiedChannel(
-                id: channel.id,
-                sourceType: channel.sourceType,
-                sourceId: channel.sourceId,
-                channelNumber: channel.channelNumber,
-                name: channel.name,
-                callSign: channel.callSign,
-                logoURL: logo,
-                streamURL: channel.streamURL,
-                tvgId: channel.tvgId,
-                groupTitle: channel.groupTitle,
-                isHD: channel.isHD,
-                httpHeaders: channel.httpHeaders
-            )
+            return channel.withLogo(logo)
         }
         if didChange { channels = updated }
     }

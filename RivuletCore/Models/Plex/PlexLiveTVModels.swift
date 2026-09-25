@@ -79,9 +79,6 @@ nonisolated struct PlexLiveTVChannel: Codable, Identifiable, Sendable {
     /// when there is only one, since a lone tab would duplicate All Channels.
     var tunerName: String?
 
-    /// Key of that DVR. Assigned alongside `tunerName`.
-    var dvrKey: String?
-
     var id: String { ratingKey }
 
     /// Parse channel number as Int
@@ -146,6 +143,10 @@ nonisolated struct PlexLiveTVProgram: Codable, Identifiable, Sendable {
     let premiere: Bool?
     let Genre: [PlexGenreTag]?
     let Media: [PlexMedia]?
+    /// Episode and season numbers, for the "S2 E5" line in programme info.
+    let index: Int?
+    let parentIndex: Int?
+    let contentRating: String?
 
     var id: String { ratingKey ?? "\(beginsAt ?? 0):\(title)" }
 
@@ -442,22 +443,22 @@ extension PlexLiveTVChannel {
             // codecs and let the server grant passthrough when it can.
             //
             // Video is deliberately left at the three codecs broadcast actually
-            // uses. Audio is the full set FFmpegBuild decodes, because a channel
-            // whose only mismatch is its audio would otherwise be converted over
-            // something the client could have taken as-is — and DTS in
-            // particular shows up on cable and satellite feeds.
+            // uses. Audio adds DTS, which shows up on cable and satellite feeds
+            // and would otherwise pull a channel into a conversion over audio
+            // the client could have taken as-is. Codecs an MPEG-TS cannot carry
+            // (FLAC, ALAC, Vorbis, PCM) are left out: declaring them buys nothing.
             //
             // `subtitleCodec=dvb_teletext` is the reason this matters most: it
             // tells PMS we can take teletext untouched, so it has no cause to
             // convert the page to WebVTT. Without it, a stream that would
             // otherwise direct-play can be pulled into a conversion purely by
             // its subtitles, and the teletext the caption renderer wants is gone.
-            "add-direct-play-profile(type=videoProfile&protocol=hls&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts%2Ctruehd%2Cflac%2Calac%2Copus%2Cvorbis%2Cpcm&subtitleCodec=dvb_teletext)",
-            "add-direct-play-profile(type=videoProfile&protocol=http&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts%2Ctruehd%2Cflac%2Calac%2Copus%2Cvorbis%2Cpcm&subtitleCodec=dvb_teletext)",
+            "add-direct-play-profile(type=videoProfile&protocol=hls&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts&subtitleCodec=dvb_teletext%2Cdvb_subtitle%2Ceia_608)",
+            "add-direct-play-profile(type=videoProfile&protocol=http&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts&subtitleCodec=dvb_teletext%2Cdvb_subtitle%2Ceia_608)",
 
             // Direct-stream target: keep mp2/mp3 so a remux COPIES broadcast
             // audio instead of re-encoding it (the engine decodes mp2 fine).
-            "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts%2Ctruehd%2Cflac%2Calac%2Copus%2Cvorbis%2Cpcm&replace=true)",
+            "add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mpegts&videoCodec=h264%2Chevc%2Cmpeg2video&audioCodec=aac%2Cac3%2Ceac3%2Cmp2%2Cmp3%2Cdts&replace=true)",
 
             // Subtitle transcode target. Only reached when direct play was
             // refused for some other reason; the clause above is what keeps
@@ -600,6 +601,11 @@ extension PlexLiveTVProgram {
         let poster = Self.plexImageURL(posterPath, serverURL: serverURL, authToken: authToken)
         let background = Self.plexImageURL(backgroundPath, serverURL: serverURL, authToken: authToken)
 
+        var episodeLine: String?
+        if isEpisode, let episode = index {
+            episodeLine = parentIndex.map { "S\($0) E\(episode)" } ?? "E\(episode)"
+        }
+
         return UnifiedProgram(
             id: programId,
             channelId: unifiedChannelId,
@@ -612,8 +618,14 @@ extension PlexLiveTVProgram {
             iconURL: poster,          // keep icon = poster for existing callers
             posterURL: poster,        // 2:3 poster (Plex `thumb`)
             landscapeURL: background, // 16:9 background (Plex `art`)
-            episodeNumber: nil,
-            isNew: premiere ?? false
+            episodeNumber: episodeLine,
+            isNew: premiere ?? false,
+            // What the DVR schedules against: the subscription template is
+            // keyed by the airing's own guid (plex://episode/…, plex://movie/…).
+            sourceGuid: guid,
+            year: isEpisode ? nil : year,
+            contentRating: contentRating,
+            isMovie: type?.lowercased() == "movie"
         )
     }
 

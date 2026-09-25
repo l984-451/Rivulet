@@ -726,7 +726,20 @@ final class AetherPlayer: PlayerProtocol {
     /// demuxer opens the playlist instead — used as a fallback when AVPlayer's
     /// native path fails against a server (e.g. a Plex transcode session that
     /// rejects AVPlayer's request pattern).
-    func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
+    /// What a live load is for.
+    enum LiveLoadRole {
+        /// The one channel on screen: full rewind window, and the software
+        /// deinterlacer wherever the channel may be interlaced.
+        case fullscreen
+        /// One of up to four multiview tiles decoding at once. Keeps the
+        /// engine's own decode routing (it still sends MPEG-2 and declared
+        /// interlace to software) rather than forcing four software decodes,
+        /// and a short rewind window, since a tile is never scrubbed.
+        case multiviewSlot
+    }
+
+    func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
+                  role: LiveLoadRole = .fullscreen) async throws {
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
         // Forced onto the engine demuxer AND the source is a playlist: the Plex
         // direct-play case. See the ingest branch below.
@@ -743,7 +756,7 @@ final class AetherPlayer: PlayerProtocol {
                 audioBridgeMode: .lossless,
                 isLive: true,
                 // ~30-minute DVR rewind window (engine retains it disk-backed).
-                dvrWindowSeconds: 1800,
+                dvrWindowSeconds: role == .fullscreen ? 1800 : 120,
                 nativeRemoteHLS: nativeRemoteHLS,
                 preserveASSMarkup: true,
                 probesize: 5 * 1024 * 1024,
@@ -770,7 +783,7 @@ final class AetherPlayer: PlayerProtocol {
                 // the answer is known before the load — see `needsDeinterlacing`.
                 // The engine ignores this on the native-HLS shortcut, which never
                 // enters the demux dispatch.
-                preferredDecodePath: (!nativeRemoteHLS && Self.needsDeinterlacing(url))
+                preferredDecodePath: (role == .fullscreen && !nativeRemoteHLS && Self.needsDeinterlacing(url))
                     ? .software : .automatic
             )
         }

@@ -73,10 +73,16 @@ final class MultiStreamViewModel: ObservableObject {
         }
 
         func load(url: URL, headers: [String: String]?) async throws {
-            // isLive: engine auto-detection is off upstream; declaring it
-            // enables the live clock (live-edge tracking) and the engine's
-            // LiveReloadPolicy reconnect path for this slot.
-            try await aetherPlayer.load(url: url, headers: headers, startTime: nil, isLive: true)
+            // The same live load the fullscreen player uses, so a tile routes a
+            // URL exactly as fullscreen does. The two used to differ: a Plex
+            // direct-play grant is an HLS playlist that has to go through the
+            // engine's ingest, and a tile handed it to the raw live path, which
+            // fails closed on a playlist body (AE#140). Every channel granted
+            // direct play then played fullscreen and not in multiview.
+            let forceEngineDemux = url.path.hasPrefix("/livetv/sessions/")
+            try await aetherPlayer.loadLive(url: url, headers: headers,
+                                            forceEngineDemux: forceEngineDemux,
+                                            role: .multiviewSlot)
             liveKeepalive.start(url: url)
         }
     }

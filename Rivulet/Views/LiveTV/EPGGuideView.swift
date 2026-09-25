@@ -1389,11 +1389,24 @@ struct GuideInfoBar: View {
     let channel: UnifiedChannel?
     let program: UnifiedProgram?
 
-    /// Programme artwork for the poster, prioritising a 2:3 portrait image and
-    /// falling back to any programme icon. The channel logo is handled
-    /// separately so it can be letterboxed into a 2:3 frame.
+    /// Programme artwork for the poster, prioritising a 2:3 portrait image.
+    /// Landscape images are NEVER shown in the 2:3 poster slot — they route
+    /// to the guide backdrop instead, while the poster slot falls back to the
+    /// channel logo.
     private var programImageURL: URL? {
-        program?.posterURL ?? program?.iconURL
+        if let poster = program?.posterURL {
+            if EPGImageClassifier.shared.isLandscape(poster) {
+                return nil
+            }
+            return poster
+        }
+        if let icon = program?.iconURL {
+            if program?.landscapeURL == icon || EPGImageClassifier.shared.isLandscape(icon) {
+                return nil
+            }
+            return icon
+        }
+        return nil
     }
 
     var body: some View {
@@ -1460,14 +1473,10 @@ struct GuideInfoBar: View {
 
     @ViewBuilder private var posterContent: some View {
         if let url = programImageURL {
-            CachedAsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fit)
-                default:
-                    logoInset
-                }
+            GuidePosterImage(url: url) {
+                logoInset
             }
+            .id(url)
         } else {
             logoInset
         }
@@ -1503,5 +1512,41 @@ struct GuideInfoBar: View {
     private func timeRange(_ program: UnifiedProgram) -> String {
         let f = Date.FormatStyle.dateTime.hour().minute()
         return "\(program.startTime.formatted(f)) — \(program.endTime.formatted(f))"
+    }
+}
+
+/// Dynamically inspects artwork aspect ratio to guarantee landscape images
+/// are never placed in the 2:3 poster slot, falling back to the channel logo.
+private struct GuidePosterImage<Fallback: View>: View {
+    let url: URL
+    @ViewBuilder let logoFallback: () -> Fallback
+    @State private var isLandscape: Bool
+
+    init(url: URL, @ViewBuilder logoFallback: @escaping () -> Fallback) {
+        self.url = url
+        self.logoFallback = logoFallback
+        self._isLandscape = State(initialValue: EPGImageClassifier.shared.isLandscape(url))
+    }
+
+    var body: some View {
+        if isLandscape {
+            logoFallback()
+        } else {
+            CachedAsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(contentMode: .fit)
+                default:
+                    logoFallback()
+                }
+            }
+            .task(id: url) {
+                let kind = await EPGImageClassifier.shared.classify(url) {
+                    await ImageCacheManager.shared.image(for: url)?.size
+                }
+                guard !Task.isCancelled else { return }
+                isLandscape = kind == .landscape
+            }
+        }
     }
 }

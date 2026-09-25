@@ -289,6 +289,7 @@ final class IOSLiveTVStore: ObservableObject {
                         description: program.description,
                         category: program.category,
                         episodeNumber: program.episodeNum,
+                        iconURL: program.icon.flatMap(URL.init(string:)),
                         posterURL: program.posterIcon.flatMap(URL.init(string:)),
                         landscapeURL: program.landscapeIcon.flatMap(URL.init(string:)),
                         start: program.start,

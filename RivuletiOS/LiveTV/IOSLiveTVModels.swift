@@ -40,11 +40,42 @@ struct IOSEPGProgram: Identifiable, Hashable, Sendable {
     let description: String?
     let category: String?
     let episodeNumber: String?
+    let iconURL: URL?
     let posterURL: URL?
     let landscapeURL: URL?
     let start: Date
     let end: Date
     let isNew: Bool
+
+    init(
+        id: String,
+        channelID: String,
+        title: String,
+        subtitle: String? = nil,
+        description: String? = nil,
+        category: String? = nil,
+        episodeNumber: String? = nil,
+        iconURL: URL? = nil,
+        posterURL: URL? = nil,
+        landscapeURL: URL? = nil,
+        start: Date,
+        end: Date,
+        isNew: Bool = false
+    ) {
+        self.id = id
+        self.channelID = channelID
+        self.title = title
+        self.subtitle = subtitle
+        self.description = description
+        self.category = category
+        self.episodeNumber = episodeNumber
+        self.iconURL = iconURL
+        self.posterURL = posterURL
+        self.landscapeURL = landscapeURL
+        self.start = start
+        self.end = end
+        self.isNew = isNew
+    }
 
     func isAiring(at date: Date) -> Bool {
         start <= date && end > date

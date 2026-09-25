@@ -101,14 +101,36 @@ private struct IOSProgramDetailView: View {
     let selection: IOSGuideSelection
     let onPlay: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var resolvedLandscapeURL: URL?
+
+    /// Prioritise 16:9 landscape, fallback to 2:3 poster, fallback to programme icon.
+    /// Never fallback to channel logo.
+    private var artworkURL: URL? {
+        if let landscape = selection.program.landscapeURL {
+            return landscape
+        }
+        if let icon = selection.program.iconURL, EPGImageClassifier.shared.isLandscape(icon) {
+            return icon
+        }
+        if let poster = selection.program.posterURL, EPGImageClassifier.shared.isLandscape(poster) {
+            return poster
+        }
+        if let resolved = resolvedLandscapeURL {
+            return resolved
+        }
+        if let poster = selection.program.posterURL {
+            return poster
+        }
+        if let icon = selection.program.iconURL {
+            return icon
+        }
+        return nil
+    }
 
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
                 let portrait = iosGuideInterfaceIsPortrait(fallback: geometry.size)
-                let artworkURL = portrait
-                    ? selection.program.posterURL
-                    : selection.program.landscapeURL
 
                 ZStack {
                     IOSProgramDetailArtworkBackdrop(url: artworkURL)
@@ -176,6 +198,15 @@ private struct IOSProgramDetailView: View {
                         .frame(maxWidth: .infinity)
                     }
                 }
+            }
+            .task(id: selection.program.id) {
+                guard selection.program.landscapeURL == nil,
+                      let candidate = selection.program.iconURL ?? selection.program.posterURL else { return }
+                let kind = await EPGImageClassifier.shared.classify(candidate) {
+                    await IOSArtworkCache.shared.image(for: candidate)?.size
+                }
+                guard !Task.isCancelled, kind == .landscape else { return }
+                resolvedLandscapeURL = candidate
             }
             .navigationTitle("Programme")
             .navigationBarTitleDisplayMode(.inline)

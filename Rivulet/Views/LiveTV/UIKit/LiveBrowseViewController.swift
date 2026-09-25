@@ -391,7 +391,11 @@ final class LiveBrowseViewController: UIViewController {
 
         let favourites = channels
             .filter { $0.isFavourite || store.isFavorite($0) }
-            .sorted { ($0.favouriteRank ?? .max, $0.channelNumber ?? .max) < ($1.favouriteRank ?? .max, $1.channelNumber ?? .max) }
+            .sorted { lhs, rhs in
+                let left: (Int, Int) = (lhs.favouriteRank ?? Int.max, lhs.channelNumber ?? Int.max)
+                let right: (Int, Int) = (rhs.favouriteRank ?? Int.max, rhs.channelNumber ?? Int.max)
+                return left < right
+            }
         if !favourites.isEmpty {
             shelves.append(Shelf(id: "favorites", title: "Favorites", items: onNow(favourites, section: "favorites")))
         }

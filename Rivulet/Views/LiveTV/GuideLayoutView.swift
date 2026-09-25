@@ -150,6 +150,9 @@ struct GuideLayoutView: View {
     @State private var now = Date()
     @State private var focusedChannel: UnifiedChannel?
     @State private var focusedProgram: UnifiedProgram?
+    /// Set when the player closes, so the grid comes back on the channel that
+    /// was playing (issue #317).
+    @State private var gridFocusRequest: EPGFocusRequest?
 
     // Backdrop transition state. The wash crossfades to the new programme's
     // image while the crisp artwork fades in over it.
@@ -249,7 +252,8 @@ struct GuideLayoutView: View {
                 },
                 transparent: true,                 // dark see-through boxes + rounded clipping
                 // Reserve the info bar + category bar above the ruler.
-                topInset: EPGTheme.infoBarHeight + EPGTheme.categoryBarHeight
+                topInset: EPGTheme.infoBarHeight + EPGTheme.categoryBarHeight,
+                focusRequest: gridFocusRequest
             )
 
             GuideInfoBar(channel: focusedChannel, program: focusedProgram)
@@ -490,6 +494,14 @@ struct GuideLayoutView: View {
 
         let vc = LiveTVAetherPlayerViewController(channel: channel)
         vc.modalPresentationStyle = .fullScreen
+        vc.onDismiss = { lastChannel in
+            // The viewer may have changed channels in the player; land on the
+            // one that was on screen, at the programme airing now.
+            if !channels.contains(where: { $0.id == lastChannel.id }) {
+                selectedGroup = nil
+            }
+            gridFocusRequest = EPGFocusRequest(channelId: lastChannel.id, token: UUID())
+        }
         top.present(vc, animated: true)
     }
 

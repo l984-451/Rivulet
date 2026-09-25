@@ -385,6 +385,128 @@ final class XMLTVParserTests: XCTestCase {
         XCTAssertEqual(result.programs["ch1"]?.first?.icon, "http://example.com/program.jpg")
     }
 
+    func testExtractsLandscapeProgramIconWithDimensions() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Test</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Landscape Show</title>
+            <icon src="http://example.com/landscape.jpg" width="1920" height="1080"/>
+          </programme>
+        </tv>
+        """
+        let data = xml.data(using: .utf8)!
+
+        let result = try await parser.parse(data: data)
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(program.icon, "http://example.com/landscape.jpg")
+        XCTAssertEqual(program.landscapeIcon, "http://example.com/landscape.jpg")
+        XCTAssertNil(program.posterIcon, "Landscape image must not be misclassified as a 2:3 poster")
+    }
+
+    func testExtractsPortraitProgramIconWithDimensions() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Test</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Portrait Show</title>
+            <icon src="http://example.com/poster.jpg" width="600" height="900"/>
+          </programme>
+        </tv>
+        """
+        let data = xml.data(using: .utf8)!
+
+        let result = try await parser.parse(data: data)
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(program.icon, "http://example.com/poster.jpg")
+        XCTAssertEqual(program.posterIcon, "http://example.com/poster.jpg")
+        XCTAssertNil(program.landscapeIcon, "Portrait image must not be used as landscape backdrop")
+    }
+
+    func testExtractsBothLandscapeAndPortraitProgramIcons() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Test</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Full Artwork Show</title>
+            <icon src="http://example.com/landscape.jpg" width="1920" height="1080"/>
+            <icon src="http://example.com/poster.jpg" width="600" height="900"/>
+          </programme>
+        </tv>
+        """
+        let data = xml.data(using: .utf8)!
+
+        let result = try await parser.parse(data: data)
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(program.landscapeIcon, "http://example.com/landscape.jpg")
+        XCTAssertEqual(program.posterIcon, "http://example.com/poster.jpg")
+    }
+
+    func testUnlabelledIconIsPosterButNeverLandscape() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Test</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Unlabelled</title>
+            <icon src="http://example.com/unlabelled.jpg"/>
+          </programme>
+        </tv>
+        """
+        let data = xml.data(using: .utf8)!
+
+        let result = try await parser.parse(data: data)
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(program.posterIcon, "http://example.com/unlabelled.jpg")
+        XCTAssertNil(program.landscapeIcon, "Only declared dimensions may make an icon a backdrop")
+    }
+
+    func testDeclaredLandscapeIsSkippedForUnlabelledPoster() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>Test</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Mixed</title>
+            <icon src="http://example.com/landscape.jpg" width="1280" height="720"/>
+            <icon src="http://example.com/unlabelled.jpg"/>
+          </programme>
+        </tv>
+        """
+        let data = xml.data(using: .utf8)!
+
+        let result = try await parser.parse(data: data)
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(program.landscapeIcon, "http://example.com/landscape.jpg")
+        XCTAssertEqual(program.posterIcon, "http://example.com/unlabelled.jpg")
+    }
+
+    func testLandscapeThresholdIsInclusive() {
+        XCTAssertEqual(EPGImageClassifier.kind(width: 5, height: 4), .landscape)
+        XCTAssertEqual(EPGImageClassifier.kind(width: 16, height: 9), .landscape)
+        XCTAssertEqual(EPGImageClassifier.kind(width: 1, height: 1), .portrait)
+        XCTAssertEqual(EPGImageClassifier.kind(width: 2, height: 3), .portrait)
+        XCTAssertNil(EPGImageClassifier.kind(width: 100, height: 0))
+    }
+
     // MARK: - Text Accumulation Tests
 
     func testAccumulatesTextCorrectly() async throws {

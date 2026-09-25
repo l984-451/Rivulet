@@ -121,6 +121,9 @@ struct GuideLayoutView: View {
     @State private var backdropProgress: Double = 1
     @State private var displayedArtworkImage: UIImage?
     @State private var artworkOpacity: Double = 0
+    /// Unlabelled programme art measured as landscape, keyed to the programme it
+    /// was measured for so a late result never paints behind another programme.
+    @State private var resolvedLandscape: (programID: String, url: URL)?
 
     /// How long focus has to rest on a programme before its backdrop loads.
     /// Holding a direction to cross the guide should not fire an image load or
@@ -175,6 +178,9 @@ struct GuideLayoutView: View {
         }
         .onChange(of: channels.count) { _, _ in seedFocus() }
         .onReceive(tick) { t in now = t }
+        .task(id: focusedProgram?.id) {
+            await resolveLandscape(for: focusedProgram)
+        }
     }
 
     // MARK: - Guide (grid + info bar)
@@ -218,21 +224,43 @@ struct GuideLayoutView: View {
 
     /// The focused programme's image, strong at the top and dimming to a faint
     /// ambiance over the grid.
-    /// The guide backdrop: a 16:9 landscape programme image that is DISTINCT from
-    /// the poster artwork. If the programme's only image is a single reused one
-    /// (e.g. a channel logo serving as the programme icon), there's no real
-    /// backdrop and the stock settings background shows instead.
+    /// The guide backdrop: the programme's declared 16:9 image, else its
+    /// unlabelled art once measured as landscape. Anything else leaves the
+    /// backdrop empty and the stock settings background shows instead.
     private var guideBackdropURL: URL? {
-        guard let prog = focusedProgram, let landscape = prog.landscapeURL else { return nil }
-        guard let posterSource = prog.posterURL ?? prog.iconURL else { return landscape }
-        return landscape == posterSource ? nil : landscape
+        guard let prog = focusedProgram else { return nil }
+        if let landscape = prog.landscapeURL { return landscape }
+        if let candidate = prog.iconURL ?? prog.posterURL,
+           EPGImageClassifier.shared.isLandscape(candidate) {
+            return candidate
+        }
+        guard let resolved = resolvedLandscape, resolved.programID == prog.id else { return nil }
+        return resolved.url
+    }
+
+    /// Measures unlabelled programme art after the same settle delay as the
+    /// backdrop, so crossing the guide does not download an icon per channel.
+    private func resolveLandscape(for program: UnifiedProgram?) async {
+        guard let program, program.landscapeURL == nil,
+              let candidate = program.iconURL ?? program.posterURL,
+              EPGImageClassifier.shared.kind(for: candidate) == nil else { return }
+        do {
+            try await Task.sleep(for: backdropSettleDelay)
+        } catch {
+            return
+        }
+        let kind = await EPGImageClassifier.shared.classify(candidate) {
+            await ImageCacheManager.shared.image(for: candidate)?.size
+        }
+        guard !Task.isCancelled, kind == .landscape else { return }
+        resolvedLandscape = (program.id, candidate)
     }
 
     /// A constant full-screen layer. The backdrop image is drawn INSIDE it as an
     /// overlay, so toggling the image (as focus moves between programmes with and
     /// without a backdrop) never changes this layer's geometry — which is what
-    /// was nudging the grid. Only a genuine 16:9 image distinct from the poster
-    /// is used; otherwise the stock settings background shows through the clear.
+    /// was nudging the grid. Only landscape programme art is used; otherwise the
+    /// stock settings background shows through the clear.
     private var ambiance: some View {
         GeometryReader { geo in
             ZStack(alignment: .topTrailing) {

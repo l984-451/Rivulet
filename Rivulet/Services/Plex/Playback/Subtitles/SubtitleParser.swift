@@ -58,33 +58,46 @@ nonisolated struct SRTParser: SubtitleParser {
             throw SubtitleParseError.emptyContent
         }
 
-        var cues: [SubtitleCue] = []
-
-        // Cues are separated by a blank line. Normalize line endings first.
-        let normalizedContent = content
+        // Read line by line, starting a cue at each timing line, rather than
+        // splitting on blank lines: files in the wild separate cues with lines
+        // of spaces, or with nothing at all, and a missed separator would fold
+        // one cue's text into the one before it.
+        let lines = content
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
-        let blocks = normalizedContent.components(separatedBy: "\n\n")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
 
-        for block in blocks {
-            let lines = block.components(separatedBy: "\n").map {
-                $0.trimmingCharacters(in: .whitespaces)
-            }.filter { !$0.isEmpty }
+        var cues: [SubtitleCue] = []
+        var timing: (start: TimeInterval, end: TimeInterval)?
+        var textLines: [String] = []
 
-            // The timing line follows an optional sequence number.
-            guard let timingLineIndex = lines.firstIndex(where: { $0.contains("-->") }),
-                  let (start, end) = parseTimingLine(lines[timingLineIndex]) else { continue }
-
-            let text = lines[(timingLineIndex + 1)...].joined(separator: "\n")
-            guard !text.isEmpty else { continue }
-
-            cues.append(SubtitleCue(
-                id: cues.count,
-                startTime: start,
-                endTime: end,
-                text: stripHTMLTags(text)
-            ))
+        func flush() {
+            if let timing, !textLines.isEmpty {
+                cues.append(SubtitleCue(
+                    id: cues.count,
+                    startTime: timing.start,
+                    endTime: timing.end,
+                    text: stripHTMLTags(textLines.joined(separator: "\n"))
+                ))
+            }
+            timing = nil
+            textLines = []
         }
+
+        for (index, line) in lines.enumerated() {
+            if line.contains("-->"), let (start, end) = parseTimingLine(line) {
+                flush()
+                timing = (start, end)
+                continue
+            }
+            guard timing != nil, !line.isEmpty else { continue }
+            // A bare number right before a timing line is the next cue's
+            // sequence number, not dialogue.
+            if Int(line) != nil, index + 1 < lines.count, lines[index + 1].contains("-->") { continue }
+            textLines.append(line)
+        }
+        flush()
 
         return ParsedSubtitleTrack(cues: cues.sorted { $0.startTime < $1.startTime })
     }

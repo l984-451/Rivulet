@@ -103,27 +103,35 @@ nonisolated enum ContentFilterSources {
     private static let unreservedCharacters = CharacterSet(
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
-    /// Try each candidate in order until one holds a usable list.
+    /// Try each candidate in order until one holds a usable list. Only a
+    /// clean sweep, every candidate answering that it has nothing, counts as
+    /// `.absent`: one that couldn't be reached, or that returned something
+    /// that isn't a filter list at all (a captive portal's login page), might
+    /// have been the one, so the cache stands.
     static func fetchList(from candidates: [URL], mediaDuration: TimeInterval?) async -> ListOutcome {
+        var inconclusive = false
         for url in candidates {
             if Task.isCancelled { return .unreachable }
             switch await fetchText(url) {
             case .body(let content):
-                // A file that exists but holds nothing usable (empty,
-                // unparseable, or timed to another release) is as good as
-                // absent: fall through to the next candidate.
-                if let list = try? ContentFilterParser.parse(content: content, url: url,
-                                                            mediaDuration: mediaDuration),
-                   !list.isEmpty {
-                    return .found(list)
+                do {
+                    let list = try ContentFilterParser.parse(content: content, url: url,
+                                                             mediaDuration: mediaDuration)
+                    if !list.isEmpty { return .found(list) }
+                } catch ContentFilterParseError.empty, ContentFilterParseError.unsynchronized {
+                    // An empty list, or one timed to another release: the
+                    // source answered, with nothing usable for this title.
+                } catch {
+                    // Not a filter list at all.
+                    inconclusive = true
                 }
             case .missing:
                 continue
             case .failed:
-                return .unreachable
+                inconclusive = true
             }
         }
-        return .absent
+        return inconclusive ? .unreachable : .absent
     }
 
     // MARK: - List cache
@@ -238,10 +246,11 @@ nonisolated enum ContentFilterSources {
 
     nonisolated enum FetchResult: Sendable {
         case body(String)
-        /// The server answered that this file isn't there (any 4xx: static
-        /// hosts such as S3 answer 403 for a missing object).
+        /// The server answered that this file isn't there: 404/410, or 403,
+        /// which static hosts such as S3 send for a missing object.
         case missing
-        /// No answer, or a server error.
+        /// No answer, a server error, or a refusal that may pass (401, 408,
+        /// 429): says nothing about whether the file exists.
         case failed
     }
 
@@ -250,7 +259,7 @@ nonisolated enum ContentFilterSources {
         request.timeoutInterval = 15
         guard let (data, response) = try? await URLSession.shared.data(for: request) else { return .failed }
         if let http = response as? HTTPURLResponse {
-            if (400..<500).contains(http.statusCode) { return .missing }
+            if [403, 404, 410].contains(http.statusCode) { return .missing }
             guard (200..<300).contains(http.statusCode) else { return .failed }
         }
         guard let text = decodeText(data) else { return .missing }

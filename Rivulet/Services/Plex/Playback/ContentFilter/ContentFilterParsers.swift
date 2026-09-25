@@ -191,12 +191,22 @@ nonisolated enum EDLFilterParser {
     /// times in seconds or as clock times. action 0 = cut/skip, 1 = mute,
     /// 2 = scene marker (ignored), 3 = commercial (skip). An optional 4th token
     /// names a category for finer control.
+    ///
+    /// Throws `.unrecognizedFormat` when no line is EDL at all, so a web page
+    /// served at a `.edl` URL isn't mistaken for a list with nothing in it.
     static func parse(_ content: String) throws -> ContentFilterList {
         var regions: [FilterRegion] = []
+        var sawEDLLine = false
+        var sawOtherLine = false
 
         for rawLine in content.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { continue }
+            guard looksLikeEDLLine(line) else {
+                sawOtherLine = true
+                continue
+            }
+            sawEDLLine = true
 
             let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
             guard fields.count >= 3,
@@ -232,6 +242,9 @@ nonisolated enum EDLFilterParser {
             ))
         }
 
+        if sawOtherLine && !sawEDLLine {
+            throw ContentFilterParseError.unrecognizedFormat
+        }
         return ContentFilterList(regions: regions)
     }
 

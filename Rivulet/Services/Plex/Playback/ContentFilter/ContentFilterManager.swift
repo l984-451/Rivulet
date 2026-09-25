@@ -141,10 +141,13 @@ final class ContentFilterManager: ObservableObject {
     func timeDidUpdate(_ time: TimeInterval, allowSkip: Bool = true) -> TimeInterval? {
         currentTime = time
 
-        // Rewind reset: any skip window now ahead of the playhead is armed
-        // again. Runs while paused too, so a rewind made then still counts.
+        // Re-arm a consumed skip window once the playhead is outside it: it
+        // stays consumed only while inside, where stale ticks from the seek
+        // still in flight would otherwise trigger it twice. Landing past it
+        // re-arms it, so a skip back into the scene is skipped again. Runs
+        // while paused too, so a seek made then still counts.
         if !skippedRegionIDs.isEmpty {
-            for region in regions where skippedRegionIDs.contains(region.id) && time < region.start {
+            for region in regions where skippedRegionIDs.contains(region.id) && !region.contains(time) {
                 skippedRegionIDs.remove(region.id)
             }
         }

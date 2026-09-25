@@ -400,8 +400,10 @@ Rules that look wrong until you know them:
   supported route. An MCF file is a full annotation, not a per-user filter, which is
   why `FilterCategory(mcfName:)` drops topics like product placement and kissing.
 - **The list cache is keyed by the URLs a list would be fetched from**, not the
-  rating key, so clearing or changing the source can't resurrect an old list. A
-  source that now answers "not found" deletes the cached copy.
+  rating key, so clearing or changing the source can't resurrect an old list. The
+  cached copy is deleted only when every candidate answers "not found" (404/410, or
+  S3's 403) or holds nothing usable; a timeout, a 5xx, a 401/429, or a page that
+  isn't a filter list at all (a captive portal) leaves it in place.
 - **Profanity Strength applies to profanity from every source**, imported lists
   included. EDL entries carry no severity and count as strong.
 - **Only "fuck" matches inside a word.** Every other term is whole-word, because

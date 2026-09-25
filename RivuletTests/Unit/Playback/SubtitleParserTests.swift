@@ -102,6 +102,16 @@ final class SubtitleParserTests: XCTestCase {
         XCTAssertEqual(track.cues.map(\.text), ["Kept"])
     }
 
+    func testSRTSurvivesSloppySeparators() throws {
+        // A separator line of spaces, then no separator at all: each cue must
+        // keep its own text rather than absorb the next one.
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\nFirst\n   \n2\n00:00:03,000 --> 00:00:04,000\nSecond\n"
+            + "3\n00:00:05,000 --> 00:00:06,000\nThird"
+        let track = try SRTParser().parse(srt)
+        XCTAssertEqual(track.cues.map(\.text), ["First", "Second", "Third"])
+        XCTAssertEqual(track.cues.map(\.startTime), [1, 3, 5])
+    }
+
     // MARK: ASS/SSA
 
     func testASSReadsDialogueAndDropsOverrides() throws {

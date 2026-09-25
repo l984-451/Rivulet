@@ -141,16 +141,22 @@ nonisolated enum ProfanityDictionary {
     private static func candidateForms(_ token: String) -> [String] {
         // Stub expansion ("f" → "fuck") only makes sense when the token was
         // actually masked with a censor glyph; without this guard, innocent
-        // short tokens ("B1") would expand into hits.
-        let wasMasked = token.contains { censorGlyphs.contains($0) }
+        // short tokens ("B1") would expand into hits. A one-letter stub needs
+        // two glyphs, so a musical key ("F#", "B#") never reads as one.
+        let glyphCount = token.filter { censorGlyphs.contains($0) }.count
         var forms: [String] = []
         func add(_ raw: String) {
             guard !raw.isEmpty else { return }
-            let form = (wasMasked ? maskedStubs[raw] : nil) ?? raw
+            let expands = glyphCount >= (raw.count == 1 ? 2 : 1)
+            let form = (expands ? maskedStubs[raw] : nil) ?? raw
             if !forms.contains(form) { forms.append(form) }
         }
-        // Apostrophes never carry meaning for the lookup; strip them once.
-        // ("fuckin'" → "fuckin")
+        // A possessive is its word ("bitch's" → "bitch").
+        if token.hasSuffix("'s") {
+            add(String(token.dropLast(2)).filter { !maskingCharacters.contains($0) })
+        }
+        // Other apostrophes never carry meaning for the lookup; strip them
+        // once. ("fuckin'" → "fuckin")
         let base = token.filter { $0 != "'" && $0 != "’" }
         // Reading 1: masking characters are punctuation — drop them.
         // ("shit!" → "shit", "f***" → "f" → stub)

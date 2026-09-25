@@ -148,6 +148,12 @@ final class ContentFilterParserTests: XCTestCase {
         XCTAssertEqual(list.regions.first?.severity, .strong)
     }
 
+    func testWebPageAtAnEDLURLIsNotAnEmptyList() {
+        // A captive portal's login page must not read as "no filters here".
+        let url = URL(string: "https://example.com/title.edl")!
+        XCTAssertThrowsError(try ContentFilterParser.parse(content: "<html>Sign in</html>", url: url))
+    }
+
     func testEDLOwnCategoryNamesRoundTrip() throws {
         let list = try ContentFilterParser.parse(content: "1 2 1 sexualLanguage", url: nil)
         XCTAssertEqual(list.regions.first?.category, .sexualLanguage)
@@ -351,6 +357,51 @@ final class ContentFilterSourcesTests: XCTestCase {
         XCTAssertEqual(ContentFilterItem.baseName(ofPath: "noext"), "noext")
     }
 
+    // Fetch outcomes, over file URLs so no network is involved: a file that
+    // can't be read stands in for an unreachable server.
+
+    private func tempFile(_ name: String, _ contents: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: url)
+        return url
+    }
+
+    func testFetchKeepsSearchingPastAFailure() async throws {
+        let missing = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).mcf")
+        let edl = try tempFile("title.edl", "10 20 0\n")
+        let outcome = await ContentFilterSources.fetchList(from: [missing, edl], mediaDuration: nil)
+        guard case .found(let list) = outcome else { return XCTFail("expected .found, got \(outcome)") }
+        XCTAssertEqual(list.regions.count, 1)
+    }
+
+    func testFetchTreatsANonListPageAsInconclusive() async throws {
+        // A captive portal answers every URL with its login page. That says
+        // nothing about the list, so the cached copy must survive.
+        let page = try tempFile("title.mcf", "<html><body>Sign in to continue</body></html>")
+        let outcome = await ContentFilterSources.fetchList(from: [page], mediaDuration: nil)
+        guard case .unreachable = outcome else { return XCTFail("expected .unreachable, got \(outcome)") }
+    }
+
+    func testFetchReportsAbsentOnlyWhenEveryAnswerIsEmpty() async throws {
+        // Timed to another release: the source answered, with nothing usable.
+        let other = try tempFile("title.mcf", """
+        WEBVTT MovieContentFilter 1.1.0
+
+        NOTE
+        START 00:00:00.000
+        END 99:59:59.999
+
+        50:00:00.000 --> 50:00:30.000
+        violence=high=both
+        """)
+        let outcome = await ContentFilterSources.fetchList(from: [other], mediaDuration: 7200)
+        guard case .absent = outcome else { return XCTFail("expected .absent, got \(outcome)") }
+    }
+
     func testDecodeTextHandlesBOMAndLegacyEncodings() {
         let bom = Data([0xEF, 0xBB, 0xBF]) + Data("WEBVTT".utf8)
         XCTAssertEqual(ContentFilterSources.decodeText(bom), "WEBVTT")
@@ -532,6 +583,17 @@ final class ProfanityDictionaryTests: XCTestCase {
         XCTAssertFalse(muted("My goddess", categories: [.blasphemy]))
     }
 
+    func testPossessivesMatchTheirWord() {
+        XCTAssertTrue(muted("That bitch's car"))
+        XCTAssertFalse(muted("It's the boss's car"))
+    }
+
+    func testMusicalKeysAreNotCensoredWords() {
+        XCTAssertFalse(muted("It's in F# minor"))
+        XCTAssertFalse(muted("Play it in B#"))
+        XCTAssertTrue(muted("What the f##k"))
+    }
+
     func testHitsReportStrongestProfanity() {
         let hits = ProfanityDictionary.hits(in: "Damn it, you stupid shit")
         XCTAssertEqual(hits.categories, [.profanity])
@@ -594,6 +656,15 @@ final class ContentFilterManagerTests: XCTestCase {
         // Rewinding to before the window re-arms it.
         XCTAssertNil(manager.timeDidUpdate(95))
         XCTAssertNotNil(manager.timeDidUpdate(101))
+    }
+
+    func testSkippingBackIntoASkippedSceneSkipsItAgain() {
+        manager.applyList(regions([(100, 110, .violence, .skip)]))
+        XCTAssertNotNil(manager.timeDidUpdate(100.5))
+        XCTAssertNil(manager.timeDidUpdate(110.25))   // landed past it
+        // A 10s skip-back lands inside the scene: it must not play.
+        let target = manager.timeDidUpdate(100.25)
+        XCTAssertEqual(target ?? 0, 110.25, accuracy: 0.01)
     }
 
     func testOverlappingSkipWindowsJumpToFurthestEnd() {

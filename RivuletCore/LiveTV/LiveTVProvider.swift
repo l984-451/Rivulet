@@ -52,6 +52,18 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
     let isHD: Bool
     let httpHeaders: [String: String]?
 
+    /// Marked a favourite on the source (Plex "Favourite Channels").
+    ///
+    /// Separate from `groupTitle` rather than being another group name, for two
+    /// reasons the group field cannot express: a favourite stays in its tuner's
+    /// group as well, and the guide has to honour the ORDER the user arranged
+    /// on the source, which is not channel-number order.
+    let isFavourite: Bool
+
+    /// Position within the source's favourites list. Lower sorts first; nil
+    /// falls to the end, ordered by channel number as usual.
+    let favouriteRank: Int?
+
     init(
         id: String,
         sourceType: LiveTVSourceType,
@@ -64,7 +76,9 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
         tvgId: String? = nil,
         groupTitle: String? = nil,
         isHD: Bool = false,
-        httpHeaders: [String: String]? = nil
+        httpHeaders: [String: String]? = nil,
+        isFavourite: Bool = false,
+        favouriteRank: Int? = nil
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -78,6 +92,8 @@ struct UnifiedChannel: Identifiable, Hashable, Sendable {
         self.groupTitle = groupTitle
         self.isHD = isHD
         self.httpHeaders = httpHeaders
+        self.isFavourite = isFavourite
+        self.favouriteRank = favouriteRank
     }
 
     /// Create a unique identifier combining source and channel

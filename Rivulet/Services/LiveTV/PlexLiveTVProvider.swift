@@ -152,12 +152,33 @@ actor PlexLiveTVProvider: LiveTVProvider {
             throw error
         }
 
+        // Favourites are account-level, not per-DVR, so this is ONE call for the
+        // whole lineup. Rank is array position: that is the order the user
+        // arranged, and the merged channel list is sorted by number, which would
+        // otherwise throw it away. Best effort — an account with none, or a call
+        // that fails, simply yields no Favourites tab.
+        //
+        // NOT `self.authToken`. This provider is constructed with
+        // `selectedServerToken`, and a server token is rejected by the provider
+        // hosts — the same account-vs-server trap the Discover endpoints
+        // document. Read the account token directly for this one call.
+        var favouriteRanks: [String: Int] = [:]
+        if let accountToken = await PlexAuthManager.shared.authToken {
+            for (index, identifier) in await networkManager
+                .getFavoriteChannelIdentifiers(authToken: accountToken)
+                .enumerated() {
+                favouriteRanks[identifier] = index
+            }
+        }
+
         // Convert to UnifiedChannel
         let channels = plexChannels.map { plexChannel in
-            plexChannel.toUnifiedChannel(
+            let rank = plexChannel.channelIdentifier.flatMap { favouriteRanks[$0] }
+            return plexChannel.toUnifiedChannel(
                 sourceId: sourceId,
                 serverURL: serverURL,
-                authToken: authToken
+                authToken: authToken,
+                favouriteRank: rank
             )
         }
 
@@ -373,7 +394,10 @@ actor PlexLiveTVProvider: LiveTVProvider {
         }
 
         components.queryItems = queryItems
-        let newURL = components.url ?? originalURL
+        // Reassigning queryItems decoded the profile's %2B separators back to
+        // raw '+'. Without this the rebuilt URL reaches PMS with spaces between
+        // the client-profile clauses. See finalizedLiveURL.
+        let newURL = PlexLiveTVChannel.finalizedLiveURL(components) ?? originalURL
 
         // Log session ID regeneration (GitHub #64 - DVB diagnostics)
         let breadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
@@ -480,6 +504,9 @@ actor PlexLiveTVProvider: LiveTVProvider {
                     if let ratingKey = tune.ratingKey {
                         items.append(URLQueryItem(name: "rivuletLiveRatingKey", value: ratingKey))
                     }
+                    if let scan = tune.videoScanType {
+                        items.append(URLQueryItem(name: "rivuletLiveScanType", value: scan))
+                    }
                     items.append(URLQueryItem(name: "X-Plex-Token", value: authToken))
                     dp.queryItems = items
                     if let url = dp.url { return url }
@@ -499,12 +526,14 @@ actor PlexLiveTVProvider: LiveTVProvider {
             if let ratingKey = tune.ratingKey {
                 items.append(URLQueryItem(name: "rivuletLiveRatingKey", value: ratingKey))
             }
-            start?.queryItems = items
-            if let escapedQuery = start?.percentEncodedQuery?
-                .replacingOccurrences(of: "+", with: "%2B") {
-                start?.percentEncodedQuery = escapedQuery
+            // Carried on the URL rather than threaded through LiveTVDataStore,
+            // matching how the ratingKey above already reaches the keepalive.
+            // `AetherPlayer.needsDeinterlacing` reads it back.
+            if let scan = tune.videoScanType {
+                items.append(URLQueryItem(name: "rivuletLiveScanType", value: scan))
             }
-            return start?.url ?? base
+            start?.queryItems = items
+            return start.flatMap { PlexLiveTVChannel.finalizedLiveURL($0) } ?? base
         } catch {
             SentryBridge.capture(error: error) { scope in
                 scope.setTag(value: "plex_livetv", key: "component")

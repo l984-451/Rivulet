@@ -1281,7 +1281,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         items[index] = URLQueryItem(name: "directPlay", value: "0")
         components.queryItems = items
-        return components.url ?? url
+        // Reassigning queryItems decodes the client profile's %2B clause
+        // separators back to raw '+', which PMS reads as spaces. Visible in the
+        // wild: a retry URL logged with ')+add-' where the first attempt had
+        // ')%2Badd-'. See PlexLiveTVChannel.finalizedLiveURL.
+        return PlexLiveTVChannel.finalizedLiveURL(components) ?? url
     }
 
     override func viewDidLayoutSubviews() {

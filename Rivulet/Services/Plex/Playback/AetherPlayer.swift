@@ -728,40 +728,55 @@ final class AetherPlayer: PlayerProtocol {
     /// rejects AVPlayer's request pattern).
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false) async throws {
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
-        let options = LoadOptions(
-            suppressDisplayCriteria: false,
-            httpHeaders: headers ?? [:],
-            // Same rich config as VOD, plus the live-specific flags.
-            matchContentEnabled: true,
-            panelIsInHDRMode: Self.panelIsInHDRMode(),
-            audioBridgeMode: .lossless,
-            isLive: true,
-            // ~30-minute DVR rewind window (engine retains it disk-backed).
-            dvrWindowSeconds: 1800,
-            nativeRemoteHLS: isHLS,
-            preserveASSMarkup: true,
-            probesize: 5 * 1024 * 1024,
-            maxAnalyzeDuration: 5_000_000,
-            // Honor the user's saved audio/subtitle language preferences, same
-            // as VOD, so the right tracks are picked on the first frame.
-            preferredAudioLanguages: Self.livePreferredAudioLanguages(),
-            preferredSubtitleLanguages: Self.livePreferredSubtitleLanguages(),
-            // DVB teletext caption page. libzvbi auto-detect (nil) only finds a
-            // page the broadcast FLAGS as a subtitle page; AU FTA channels carry
-            // captions on 801 without that flag, so auto-detect returns nothing.
-            // Region-default to 801 for AU, otherwise auto-detect.
-            teletextPage: Self.regionTeletextPage(),
-            // Broadcast H.264 routinely mis-signals interlaced content as
-            // progressive (codecpar fieldOrder=0; MBAFF is only flagged
-            // per-frame), which routes it down the engine's NATIVE path with
-            // no deinterlacer — visible combing. Ask for the software path on
-            // live demux sessions: bwdif deinterlaces genuinely interlaced
-            // frames and passes true progressive through untouched, so a
-            // correctly-signalled progressive channel only pays a SW decode.
-            // The engine ignores this on the native-HLS shortcut, which never
-            // enters the demux dispatch, so it is scoped to `!isHLS` anyway.
-            preferredDecodePath: isHLS ? .automatic : .software
-        )
+        // Forced onto the engine demuxer AND the source is a playlist: the Plex
+        // direct-play case. See the ingest branch below.
+        let usesHLSIngest = !isHLS && Self.isHLSURL(url)
+        let httpHeaders = headers ?? [:]
+
+        func makeOptions(nativeRemoteHLS: Bool) -> LoadOptions {
+            LoadOptions(
+                suppressDisplayCriteria: false,
+                httpHeaders: httpHeaders,
+                // Same rich config as VOD, plus the live-specific flags.
+                matchContentEnabled: true,
+                panelIsInHDRMode: Self.panelIsInHDRMode(),
+                audioBridgeMode: .lossless,
+                isLive: true,
+                // ~30-minute DVR rewind window (engine retains it disk-backed).
+                dvrWindowSeconds: 1800,
+                nativeRemoteHLS: nativeRemoteHLS,
+                preserveASSMarkup: true,
+                probesize: 5 * 1024 * 1024,
+                maxAnalyzeDuration: 5_000_000,
+                // Honor the user's saved audio/subtitle language preferences, same
+                // as VOD, so the right tracks are picked on the first frame.
+                preferredAudioLanguages: Self.livePreferredAudioLanguages(),
+                preferredSubtitleLanguages: Self.livePreferredSubtitleLanguages(),
+                // DVB teletext caption page. libzvbi auto-detect (nil) only finds a
+                // page the broadcast FLAGS as a subtitle page; AU FTA channels carry
+                // captions on 801 without that flag, so auto-detect returns nothing.
+                // Region-default to 801 for AU, otherwise auto-detect.
+                teletextPage: Self.regionTeletextPage(),
+                // Broadcast H.264 routinely mis-signals interlaced content as
+                // progressive (codecpar fieldOrder=0; MBAFF is only flagged
+                // per-frame), which routes it down the engine's NATIVE path with
+                // no deinterlacer — visible combing. Ask for the software path on
+                // live demux sessions: bwdif deinterlaces genuinely interlaced
+                // frames and passes true progressive through untouched.
+                //
+                // ...but only where the channel actually needs it. A 720p or
+                // 1080p50 broadcast has no fields to weave and should not pay for
+                // the software decode. PMS reports the scan type on the tune, so
+                // the answer is known before the load — see `needsDeinterlacing`.
+                // The engine ignores this on the native-HLS shortcut, which never
+                // enters the demux dispatch.
+                preferredDecodePath: (!nativeRemoteHLS && Self.needsDeinterlacing(url))
+                    ? .software : .automatic
+            )
+        }
+
+        let options = makeOptions(nativeRemoteHLS: isHLS)
+
         // Same reason as the VOD path: a zap is new content, and broadcast
         // mixes 4:3 SD with 16:9 HD channel to channel, so a reused slot must
         // not measure the new channel against the old one's picture rect.
@@ -769,7 +784,44 @@ final class AetherPlayer: PlayerProtocol {
         userIntendsToPlay = true
         pendingReloadSince = nil
         do {
-            try await engine.load(url: url, startPosition: nil, options: options)
+            // A Plex direct-play part key is an HLS PLAYLIST
+            // (/livetv/sessions/{uuid}/{consumer}/index.m3u8), not the raw
+            // transport stream the engine's raw live path expects. Handing it
+            // an m3u8 body fails closed by design (AE#140), and the host's
+            // fallback then re-tuned and landed on nativeRemoteHLS — so every
+            // granted direct play was quietly played by AVPlayer, which cannot
+            // decode mp2 or DVB teletext. Those two are the entire reason for
+            // wanting direct play here, so the grant was being thrown away.
+            //
+            // HLSLiveIngestReader demuxes the playlist's underlying MPEG-TS, so
+            // teletext and broadcast audio reach the engine and our own caption
+            // renderer. It is also why this route costs ONE tune: the old path
+            // needed a second grab to discover it had to fall back.
+            if usesHLSIngest {
+                // The reader does its own HTTP on its own session, so the
+                // headers have to be handed to it here: `LoadOptions.httpHeaders`
+                // never reaches a custom IOReader (AE#119).
+                let reader = HLSLiveIngestReader(playlistURL: url, httpHeaders: httpHeaders)
+                do {
+                    try await engine.load(source: .custom(reader, formatHint: "mpegts"), options: options)
+                } catch {
+                    // The reader does not throw out of `read`: it records why it
+                    // gave up and the probe fails as a `DemuxerError`, so the
+                    // error type says nothing. Its own verdict does. Encryption or
+                    // an fMP4 playlist it will not open: retry natively on the
+                    // SAME session rather than letting the host fall back, which
+                    // costs another tune and, on a single-tuner box, competes with
+                    // the grab we are already holding.
+                    guard reader.terminalError != nil, !isCancellationError(error) else { throw error }
+                    try await engine.load(
+                        url: url,
+                        startPosition: nil,
+                        options: makeOptions(nativeRemoteHLS: true)
+                    )
+                }
+            } else {
+                try await engine.load(url: url, startPosition: nil, options: options)
+            }
         } catch {
             // The caller left the slot / retuned while the load was in flight.
             // Rethrow untouched so the type survives; wrapping it in a
@@ -791,6 +843,25 @@ final class AetherPlayer: PlayerProtocol {
     /// is inert on `.nativeHLS`.
     static func liveRoute(for url: URL, forceEngineDemux: Bool) -> LiveJoinRoute {
         (isHLSURL(url) && !forceEngineDemux) ? .nativeHLS : .loopback
+    }
+
+    /// Whether this live source has to take the deinterlacing path.
+    ///
+    /// Reads `rivuletLiveScanType`, which `PlexLiveTVProvider` puts on the URL
+    /// from the tune response — the same carry-on-the-URL trick the keepalive's
+    /// ratingKey uses, so nothing has to be threaded through LiveTVDataStore.
+    ///
+    /// **Absence means yes.** Only an explicit "progressive" from the server
+    /// opts out. A missing or unrecognised value keeps the previous behaviour,
+    /// because a needless software decode costs some CPU while a missed
+    /// deinterlace is combing the user can see — and broadcast H.264 is known
+    /// to mis-signal progressive, which is why we do not read the codec's own
+    /// field order here.
+    static func needsDeinterlacing(_ url: URL) -> Bool {
+        guard let scan = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "rivuletLiveScanType" })?.value?
+            .lowercased() else { return true }
+        return scan != "progressive"
     }
 
     private static func isHLSURL(_ url: URL) -> Bool {

@@ -65,7 +65,11 @@ worktrees/
 RivuletCore/Config/Secrets.swift
 
 # Internal developer docs — kept locally, not in the repo.
-Docs/
+Docs/*
+# TEMP: exposed for a cloud agent to reference; revert this carve-out after.
+!Docs/atv_ref/
+Docs/atv_ref/*
+!Docs/atv_ref/live_tv/
 
 # Playwright MCP session scratch (browser snapshots, traces, etc.)
 .playwright-mcp/

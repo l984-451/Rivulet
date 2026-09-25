@@ -1395,8 +1395,22 @@ class PlayerContainerViewController: UIViewController {
                 width: 640, from: rail.insightsButton)
         }
 
-        // Content filter is not exposed in the player yet — the button stays
-        // hidden (its default in PlayerRailView) until the feature is ready.
+        // Content filter: present only while filtering is on in Settings, so
+        // nobody who doesn't use it pays a rail slot for it. A press pauses it
+        // for this title (the next one is filtered again); the glyph is filled
+        // while filtering and outlined while paused.
+        rail.onFilter = { [weak self] in
+            guard let filter = self?.viewModel?.contentFilter else { return }
+            filter.setPaused(!filter.isPaused)
+        }
+        vm.contentFilter.$isEnabled
+            .combineLatest(vm.contentFilter.$isPaused)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak rail] enabled, paused in
+                rail?.setFilterAvailable(enabled)
+                rail?.setFilterActive(!paused)
+            }
+            .store(in: &cancellables)
     }
 
     /// Spoiler filtering is forced OFF for everyone for now, and the Appearance

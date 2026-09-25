@@ -280,10 +280,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// which PlayerContainerViewController mounts above the video surface.
     let aetherSubtitleModel = SubtitleModel()
 
-    /// Local content filter (VidAngel/ClearPlay-style). Mutes language from the
-    /// subtitle track and skips scenes from imported MCF/EDL lists. VOD only.
-    /// Fed time + active cue text from the observers below; its `isFilterMuting`
-    /// output is mirrored onto the active player.
+    /// Local content filter (VidAngel/ClearPlay-style). Mutes language found in
+    /// the title's subtitle file or on screen, and skips scenes from imported
+    /// MCF/EDL lists. VOD only. Fed time + active cue text from the observers
+    /// below; its `isFilterMuting` output is mirrored onto the active player.
     let contentFilter = ContentFilterManager()
 
     // MARK: - Subtitle delay (OSD stepper, sticky per item)
@@ -586,9 +586,16 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func applyContentFilter(at time: TimeInterval) {
         // Feed the currently on-screen dialogue so language cues mute in sync.
         // Cues resolve on the sourceTime axis, honoring the subtitle delay. The
-        // HLS route has no app-side cue source, so it contributes nothing here
-        // and language filtering is Aether-only.
+        // HLS route has no app-side cue source, so it contributes nothing here;
+        // there, language muting comes from the subtitle file the filter reads
+        // itself (see `contentFilterItem()`).
         contentFilter.activeSubtitlesDidChange(texts: activeSubtitleTextForFilter())
+        // The delay stepper only moves what's on screen on the aether route.
+        contentFilter.displayedSubtitleDidChange(
+            streamKey: aetherPlayer == nil
+                ? nil
+                : subtitleTracks.first(where: { $0.id == currentSubtitleTrackId })?.subtitleKey,
+            delay: aetherSubtitleModel.delaySeconds)
 
         guard let skipTarget = contentFilter.timeDidUpdate(time, allowSkip: !isScrubbing) else { return }
         // A window that runs to (or past) the end of the item would otherwise
@@ -597,6 +604,35 @@ final class UniversalPlayerViewModel: ObservableObject {
         Task { [weak self] in
             await self?.seek(to: target, revealsControls: false)
         }
+    }
+
+    /// What the content filter needs to know about the current item. The
+    /// subtitle file is one of Plex's external streams, fetched with the same
+    /// URL shape the engine registers them with (`aetherExternalSubtitles`).
+    private func contentFilterItem() -> ContentFilterItem {
+        let guids = metadata.Guid?.compactMap(\.id) ?? []
+        let part = metadata.Media?.first?.Part?.first
+
+        var transcript: ContentFilterItem.TranscriptSource?
+        if let stream = ContentFilterSources.transcriptStream(in: part?.Stream ?? []),
+           let key = stream.key,
+           var components = URLComponents(string: "\(serverURL)\(key)") {
+            components.queryItems = (components.queryItems ?? [])
+                + [URLQueryItem(name: "X-Plex-Token", value: authToken)]
+            if let url = components.url {
+                transcript = ContentFilterItem.TranscriptSource(url: url, format: stream.codec ?? "", streamKey: key)
+            }
+        }
+
+        return ContentFilterItem(
+            ratingKey: metadata.ratingKey,
+            imdbID: guids.lazy.compactMap { PlexMetadata.extractImdbId(from: $0) }.first,
+            tmdbID: guids.lazy.compactMap { PlexMetadata.extractTmdbId(from: $0) }.first.map { String($0) },
+            tvdbID: guids.lazy.compactMap { PlexMetadata.extractTvdbId(from: $0) }.first.map { String($0) },
+            fileName: part?.file.flatMap { ContentFilterItem.baseName(ofPath: $0) },
+            duration: metadata.duration.map { TimeInterval($0) / 1000 },
+            transcript: transcript
+        )
     }
 
     /// The subtitle lines currently on screen, as plain text, for the content
@@ -1224,10 +1260,6 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     func startPlayback() async {
-        // Arm the local content filter for this item: reload settings, restore
-        // any cached filter list, and (if a source URL is set) refresh it.
-        contentFilter.beginItem(ratingKey: metadata.ratingKey)
-
         // Fetch detailed metadata if markers or chapters are missing
         let hasMarkers = !(metadata.Marker ?? []).isEmpty
         let hasChapters = !(metadata.Chapter ?? []).isEmpty
@@ -1235,6 +1267,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         if !hasMarkers || !hasChapters || !hasStreamDetails {
             await fetchMarkersIfNeeded()
         }
+
+        // Arm the local content filter for this item: reload settings, restore
+        // any cached filter list, then refresh it and read the subtitle file.
+        // After the fetch above, because both key off the file, the external
+        // ids and the subtitle streams that hub items arrive without.
+        contentFilter.beginItem(contentFilterItem())
 
         // IntroDB backup markers (opt-in). Runs AFTER the Plex fetch above so
         // Plex stays authoritative — the backfill only adds kinds Plex didn't
@@ -4202,6 +4240,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             if metadata.summary == nil { metadata.summary = detailedMetadata.summary }
             if metadata.Genre == nil { metadata.Genre = detailedMetadata.Genre }
             if metadata.contentRating == nil { metadata.contentRating = detailedMetadata.contentRating }
+            // External ids (imdb://, tmdb://): the content filter can key its
+            // list lookup on them, and hub items arrive without them.
+            if metadata.Guid == nil { metadata.Guid = detailedMetadata.Guid }
         } catch {
             print("⏭️ [Skip] Failed to fetch detailed metadata: \(error)")
         }

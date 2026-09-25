@@ -11,7 +11,7 @@
 import Foundation
 
 /// A single subtitle cue with start time, end time, and text content
-struct SubtitleCue: Identifiable, Equatable, Sendable {
+nonisolated struct SubtitleCue: Identifiable, Equatable, Sendable {
     let id: Int
     let startTime: TimeInterval
     let endTime: TimeInterval
@@ -23,10 +23,9 @@ struct SubtitleCue: Identifiable, Equatable, Sendable {
     }
 }
 
-/// Collection of parsed subtitle cues. Domain-specific to the playback
-/// subtitle pipeline (parsed from SRT/ASS/etc.) — distinct from the
+/// Collection of parsed subtitle cues (from SRT/ASS/VTT) — distinct from the
 /// agnostic-layer `SubtitleTrack` in `Models/Media/`.
-struct ParsedSubtitleTrack: Sendable {
+nonisolated struct ParsedSubtitleTrack: Sendable {
     let cues: [SubtitleCue]
 
     /// Find all cues that should be displayed at the given time

@@ -6,14 +6,16 @@
 //  Rivulet
 //
 //  Runtime for the local content filter. Owned by UniversalPlayerViewModel
-//  (VOD only). Two independent sources feed it:
+//  (VOD only). Three sources feed it:
 //
-//    1. Subtitle-driven language muting — the active subtitle line is matched
-//       against ProfanityDictionary; a hit mutes the whole cue window. Works on
-//       any title with a subtitle track, no external data.
-//    2. Imported time-coded lists (MCF/EDL) — precise mute + scene-skip windows
-//       fetched per title from a user-configured source URL. This is the only
-//       way to skip scenes (violence, nudity) that dialogue can't reveal.
+//    1. The title's own subtitle file — read in full when Plex has it as an
+//       external text stream, and matched against ProfanityDictionary up
+//       front. Mutes language with subtitles off, on either route.
+//    2. The subtitles on screen — the active line is matched live. Covers
+//       titles whose only subtitles are embedded in the file.
+//    3. Imported time-coded lists (MCF/EDL) — precise mute + scene-skip
+//       windows fetched per title from a user-configured source. This is the
+//       only way to skip scenes (violence, nudity) that dialogue can't reveal.
 //
 //  Nothing here modifies the media. Muting sets the player volume to zero for
 //  the window; skipping seeks past it. Both are undone the instant the window
@@ -32,19 +34,12 @@ final class ContentFilterManager: ObservableObject {
     /// mirrors this onto the active player.
     @Published private(set) var isFilterMuting = false
 
-    /// Master switch state, mirrored for quick UI reads (rail toggle).
+    /// The master switch from Settings.
     @Published private(set) var isEnabled = false
 
-    /// Bumped each time a scene is skipped, so the player can flash a brief
-    /// "Scene skipped" note without the manager owning any UI.
-    @Published private(set) var lastSkip: SkipEvent?
-
-    struct SkipEvent: Equatable {
-        let category: FilterCategory
-        let toTime: TimeInterval
-        /// Monotonic counter so identical skips still publish a change.
-        let sequence: Int
-    }
+    /// Filtering suspended for the current title from the player rail. Cleared
+    /// on the next item, so a pause never outlives the title it was made on.
+    @Published private(set) var isPaused = false
 
     // MARK: - Settings snapshot
 
@@ -54,17 +49,25 @@ final class ContentFilterManager: ObservableObject {
 
     // MARK: - Per-item runtime
 
+    /// Windows from the imported list.
     private var regions: [FilterRegion] = []
+    /// Windows from the title's subtitle file.
+    private var transcriptWindows: [LanguageWindow] = []
+    /// Which Plex stream those windows came from, and the subtitle delay to
+    /// apply to them (see `displayedSubtitleDidChange`).
+    private var transcriptStreamKey: String?
+    private var transcriptDelay: TimeInterval = 0
     private var skippedRegionIDs: Set<Int> = []
     private var currentTime: TimeInterval = 0
     private var subtitleMatched = false
     private var lastSubtitleTexts: [String] = []
-    private var itemRatingKey: String?
-    private var skipSequence = 0
-    private var sidecarTask: Task<Void, Never>?
+    private var listTask: Task<Void, Never>?
+    private var transcriptTask: Task<Void, Never>?
 
     /// Seek a hair past a skip window so the next tick doesn't re-enter it.
     private let skipEpsilon: TimeInterval = 0.25
+
+    private var isActive: Bool { isEnabled && !isPaused }
 
     // MARK: - Lifecycle
 
@@ -98,30 +101,34 @@ final class ContentFilterManager: ObservableObject {
         recomputeMute()
     }
 
-    /// Begin filtering a new item. Clears prior state, loads any cached list for
-    /// this rating key, then refreshes it from the source URL in the background.
-    func beginItem(ratingKey: String?) {
+    /// Begin filtering a new item. Clears prior state, restores any cached list
+    /// for it, then refreshes the list and reads the subtitle file in the
+    /// background. Call once full metadata is known: the list lookup keys on
+    /// the file name and external ids, and the subtitle file is a Plex stream.
+    func beginItem(_ item: ContentFilterItem) {
         reset()
-        itemRatingKey = ratingKey
         refreshSettings()
-        guard isEnabled, let ratingKey else { return }
-
-        if let cached = Self.loadCachedList(ratingKey: ratingKey) {
-            regions = cached.regions
-        }
-        loadSidecarIfConfigured(ratingKey: ratingKey)
+        guard isEnabled else { return }
+        transcriptStreamKey = item.transcript?.streamKey
+        loadList(for: item)
+        loadTranscript(for: item)
     }
 
     /// Tear down per-item state (call on stop / item change).
     func reset() {
-        sidecarTask?.cancel()
-        sidecarTask = nil
+        listTask?.cancel()
+        listTask = nil
+        transcriptTask?.cancel()
+        transcriptTask = nil
         regions = []
+        transcriptWindows = []
+        transcriptStreamKey = nil
+        transcriptDelay = 0
         skippedRegionIDs = []
         subtitleMatched = false
         lastSubtitleTexts = []
         currentTime = 0
-        itemRatingKey = nil
+        if isPaused { isPaused = false }
         if isFilterMuting { isFilterMuting = false }
     }
 
@@ -133,16 +140,18 @@ final class ContentFilterManager: ObservableObject {
     /// sync without consuming (or fighting) a scene skip they're seeking through.
     func timeDidUpdate(_ time: TimeInterval, allowSkip: Bool = true) -> TimeInterval? {
         currentTime = time
-        guard isEnabled else {
-            if isFilterMuting { isFilterMuting = false }
-            return nil
-        }
 
-        // Rewind reset: any skip window now ahead of the playhead is armed again.
+        // Rewind reset: any skip window now ahead of the playhead is armed
+        // again. Runs while paused too, so a rewind made then still counts.
         if !skippedRegionIDs.isEmpty {
             for region in regions where skippedRegionIDs.contains(region.id) && time < region.start {
                 skippedRegionIDs.remove(region.id)
             }
+        }
+
+        guard isActive else {
+            if isFilterMuting { isFilterMuting = false }
+            return nil
         }
 
         guard allowSkip else {
@@ -150,15 +159,24 @@ final class ContentFilterManager: ObservableObject {
             return nil
         }
 
+        // Jump past every window containing the playhead, then past any that
+        // contain the landing point, so back-to-back annotations ("violence"
+        // then "gore") cost one seek instead of a visible stutter per window.
         var skipTarget: TimeInterval?
-        for region in regions where region.action == .skip {
-            guard enabledCategories.contains(region.category) else { continue }
-            guard !skippedRegionIDs.contains(region.id), region.contains(time) else { continue }
-            skippedRegionIDs.insert(region.id)
-            let target = min(region.end + skipEpsilon, .greatestFiniteMagnitude)
-            skipTarget = max(skipTarget ?? 0, target)  // if windows stack, jump to the furthest
-            skipSequence += 1
-            lastSkip = SkipEvent(category: region.category, toTime: target, sequence: skipSequence)
+        var probe = time
+        var extended = true
+        while extended {
+            extended = false
+            for region in regions where region.action == .skip && acts(on: region) {
+                guard !skippedRegionIDs.contains(region.id), region.contains(probe) else { continue }
+                skippedRegionIDs.insert(region.id)
+                let target = region.end + skipEpsilon
+                if target > (skipTarget ?? 0) {
+                    skipTarget = target
+                }
+                extended = true
+            }
+            if let skipTarget { probe = skipTarget }
         }
 
         recomputeMute()
@@ -169,7 +187,7 @@ final class ContentFilterManager: ObservableObject {
     /// A match mutes for as long as the cue stays active. Cheap to call every
     /// tick: it early-outs when the on-screen text hasn't changed.
     func activeSubtitlesDidChange(texts: [String]) {
-        guard isEnabled, !enabledCategories.isEmpty else {
+        guard isActive, !enabledCategories.isEmpty else {
             lastSubtitleTexts = texts
             if subtitleMatched { subtitleMatched = false; recomputeMute() }
             return
@@ -188,132 +206,112 @@ final class ContentFilterManager: ObservableObject {
         }
     }
 
-    // MARK: - Master toggle (rail)
-
-    /// Flip the master switch and persist it (used by the player rail toggle).
-    func setEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: Keys.enabled)
-        if enabled, let ratingKey = itemRatingKey {
-            refreshSettings()
-            if regions.isEmpty {
-                if let cached = Self.loadCachedList(ratingKey: ratingKey) { regions = cached.regions }
-                loadSidecarIfConfigured(ratingKey: ratingKey)
-            }
-        } else {
-            refreshSettings()
-        }
-    }
-
-    /// Install an imported list as this item's regions and re-evaluate the
-    /// mute state. The application step for both the disk cache and the
-    /// sidecar fetch.
-    func applyList(_ list: ContentFilterList) {
-        regions = list.regions
+    /// Tell the filter which external subtitle file is on screen (its Plex
+    /// stream key, nil for none or an embedded track) and the user's delay for
+    /// it. The delay shifts the subtitle-file windows only when that file is
+    /// the one the filter read: the one case where the user's adjustment is
+    /// known to describe it. Cheap to call every tick.
+    func displayedSubtitleDidChange(streamKey: String?, delay: TimeInterval) {
+        let applied = streamKey != nil && streamKey == transcriptStreamKey ? delay : 0
+        guard applied != transcriptDelay else { return }
+        transcriptDelay = applied
         recomputeMute()
     }
 
-    // MARK: - Mute recompute
+    // MARK: - Pause (rail)
+
+    /// Suspend or resume filtering for the current title only (the player
+    /// rail's toggle). The Settings switch is untouched, so the next title is
+    /// filtered again.
+    func setPaused(_ paused: Bool) {
+        guard paused != isPaused else { return }
+        isPaused = paused
+        // Re-judge the line on screen from scratch when filtering resumes.
+        lastSubtitleTexts = []
+        subtitleMatched = false
+        recomputeMute()
+    }
+
+    /// Install an imported list as this item's regions and re-evaluate the
+    /// mute state. The application step for both the disk cache and the fetch.
+    func applyList(_ list: ContentFilterList) {
+        regions = list.regions
+        skippedRegionIDs = []
+        recomputeMute()
+    }
+
+    /// Install the language windows read from the title's subtitle file.
+    func applyTranscript(_ windows: [LanguageWindow]) {
+        transcriptWindows = windows
+        recomputeMute()
+    }
+
+    // MARK: - Decisions
+
+    /// Whether an imported region applies under the current settings.
+    /// Profanity Strength governs profanity wherever it's found, so a list's
+    /// low-severity swearing is kept exactly like the dictionary's mild words.
+    private func acts(on region: FilterRegion) -> Bool {
+        guard enabledCategories.contains(region.category) else { return false }
+        return region.category != .profanity || region.severity >= profanityThreshold
+    }
 
     private func recomputeMute() {
-        guard isEnabled else {
+        guard isActive else {
             if isFilterMuting { isFilterMuting = false }
             return
         }
-        let inMuteRegion = regions.contains { region in
-            region.action == .mute
-                && enabledCategories.contains(region.category)
-                && region.contains(currentTime)
-        }
-        let shouldMute = subtitleMatched || inMuteRegion
+        let time = currentTime
+        // A positive delay shows each cue later, exactly as SubtitleModel does.
+        let transcriptTime = time - transcriptDelay
+        let shouldMute = subtitleMatched
+            || regions.contains { $0.action == .mute && $0.contains(time) && acts(on: $0) }
+            || transcriptWindows.contains {
+                $0.contains(transcriptTime)
+                    && $0.hits.mutes(enabledCategories: enabledCategories, profanityThreshold: profanityThreshold)
+            }
         if shouldMute != isFilterMuting {
             isFilterMuting = shouldMute
         }
     }
 
-    // MARK: - Sidecar loading
+    // MARK: - Loading
 
-    private func loadSidecarIfConfigured(ratingKey: String) {
-        let template = listSourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !template.isEmpty else { return }
-        let candidates = Self.sidecarURLs(template: template, ratingKey: ratingKey)
+    /// Restore the cached list for this title, then refresh it from the source.
+    private func loadList(for item: ContentFilterItem) {
+        let candidates = ContentFilterSources.listURLs(template: listSourceURL, item: item)
         guard !candidates.isEmpty else { return }
+        let cacheKey = ContentFilterSources.cacheKey(for: candidates)
+        if let cached = ContentFilterSources.loadCachedList(key: cacheKey) {
+            applyList(cached)
+        }
 
-        sidecarTask?.cancel()
-        // Runs on the main actor (the parsers share VTTParser with the subtitle
-        // pipeline, which is main-actor); only the fetch suspends. Lists are a
-        // few KB, so parsing here is negligible.
-        sidecarTask = Task { [weak self] in
-            for url in candidates {
-                if Task.isCancelled { return }
-                guard let (content, sourceURL) = await Self.fetch(url) else { continue }
-                guard let list = try? ContentFilterParser.parse(content: content, url: sourceURL),
-                      !list.isEmpty else { continue }
-                Self.cacheList(list, ratingKey: ratingKey)
-                guard let self, !Task.isCancelled, self.itemRatingKey == ratingKey else { return }
-                self.applyList(list)
-                return
+        listTask = Task { [weak self] in
+            let outcome = await ContentFilterSources.fetchList(from: candidates, mediaDuration: item.duration)
+            guard !Task.isCancelled else { return }
+            switch outcome {
+            case .found(let list):
+                ContentFilterSources.cacheList(list, key: cacheKey)
+                self?.applyList(list)
+            case .absent:
+                // The source no longer has a list for this title: drop the
+                // cached copy rather than keep acting on a deleted file.
+                ContentFilterSources.removeCachedList(key: cacheKey)
+                self?.applyList(.empty)
+            case .unreachable:
+                break  // offline: the cached list stands
             }
         }
     }
 
-    /// Build the ordered list of URLs to try for a rating key. If the template
-    /// points straight at a `.mcf`/`.edl` file it's used verbatim; if it
-    /// contains `{id}` that's substituted; otherwise it's treated as a directory
-    /// and `<id>.mcf` then `<id>.edl` are appended.
-    nonisolated static func sidecarURLs(template: String, ratingKey: String) -> [URL] {
-        let encodedID = ratingKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ratingKey
-        if template.contains("{id}") {
-            let filled = template.replacingOccurrences(of: "{id}", with: encodedID)
-            return URL(string: filled).map { [$0] } ?? []
+    /// Read the title's subtitle file for language windows.
+    private func loadTranscript(for item: ContentFilterItem) {
+        guard let source = item.transcript else { return }
+        transcriptTask = Task { [weak self] in
+            guard let windows = await ContentFilterSources.loadTranscript(source),
+                  !Task.isCancelled else { return }
+            self?.applyTranscript(windows)
         }
-        let lower = template.lowercased()
-        if lower.hasSuffix(".mcf") || lower.hasSuffix(".edl") {
-            return URL(string: template).map { [$0] } ?? []
-        }
-        let base = template.hasSuffix("/") ? template : template + "/"
-        return [base + encodedID + ".mcf", base + encodedID + ".edl"].compactMap { URL(string: $0) }
-    }
-
-    nonisolated private static func fetch(_ url: URL) async -> (content: String, url: URL)? {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 15
-        guard let (data, response) = try? await URLSession.shared.data(for: request) else { return nil }
-        if let http = response as? HTTPURLResponse, http.statusCode != 200 { return nil }
-        guard let content = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-            return nil
-        }
-        return (content, url)
-    }
-
-    // MARK: - Disk cache
-
-    nonisolated private static var cacheDirectory: URL? {
-        guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let dir = support.appendingPathComponent("ContentFilters", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-
-    nonisolated private static func cacheURL(ratingKey: String) -> URL? {
-        let safe = ratingKey.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ratingKey
-        return cacheDirectory?.appendingPathComponent("\(safe).json")
-    }
-
-    nonisolated private static func loadCachedList(ratingKey: String) -> ContentFilterList? {
-        guard let url = cacheURL(ratingKey: ratingKey),
-              let data = try? Data(contentsOf: url),
-              let list = try? JSONDecoder().decode(ContentFilterList.self, from: data) else {
-            return nil
-        }
-        return list
-    }
-
-    nonisolated private static func cacheList(_ list: ContentFilterList, ratingKey: String) {
-        guard let url = cacheURL(ratingKey: ratingKey),
-              let data = try? JSONEncoder().encode(list) else { return }
-        try? data.write(to: url, options: .atomic)
     }
 }
 

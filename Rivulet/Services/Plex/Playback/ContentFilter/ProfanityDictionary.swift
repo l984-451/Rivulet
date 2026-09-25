@@ -9,37 +9,77 @@
 //  subtitle track — the same idea as cleanvid and the Kodi "mute profanity"
 //  add-on, but applied live instead of re-encoding the file. The lists are
 //  intentionally compact and easy to edit; they are a starting point, not an
-//  exhaustive dictionary.
+//  exhaustive dictionary. They hold the forms subtitles actually use
+//  ("fuckin'", "dammit"), because an entry only ever matches a whole word.
 //
 
 import Foundation
 
 /// A single dictionary entry: a lowercased word or phrase, its category, and
 /// how strong it is.
-struct ProfanityEntry: Sendable {
+nonisolated struct ProfanityEntry: Sendable {
     let term: String
     let category: FilterCategory
     let severity: FilterSeverity
 }
 
+/// Which language categories a line of dialogue contains, independent of the
+/// user's settings. Lets a whole subtitle file be scanned once and re-judged
+/// cheaply when a setting changes.
+nonisolated struct LanguageHits: Sendable, Equatable {
+    private(set) var categories: Set<FilterCategory> = []
+    /// Strongest profanity in the line; nil when there is none.
+    private(set) var strongestProfanity: FilterSeverity?
+
+    var isEmpty: Bool { categories.isEmpty }
+
+    mutating func record(_ entry: ProfanityEntry) {
+        categories.insert(entry.category)
+        if entry.category == .profanity {
+            strongestProfanity = max(strongestProfanity ?? entry.severity, entry.severity)
+        }
+    }
+
+    /// Profanity honors the user's strength threshold; every other language
+    /// category (slurs, blasphemy, crude/sexual) is all-or-nothing.
+    func mutes(enabledCategories: Set<FilterCategory>, profanityThreshold: FilterSeverity) -> Bool {
+        for category in categories where enabledCategories.contains(category) {
+            guard category == .profanity else { return true }
+            if let strongestProfanity, strongestProfanity >= profanityThreshold { return true }
+        }
+        return false
+    }
+}
+
 /// The bundled language dictionary plus the matcher that decides whether a
 /// subtitle line should be muted for the user's enabled categories.
-enum ProfanityDictionary {
+nonisolated enum ProfanityDictionary {
 
     // MARK: - Matching
 
     /// Whether `text` should be muted, given the enabled categories and the
     /// minimum profanity severity the user wants filtered.
-    ///
-    /// - Single words match on whole-word boundaries so "class" never trips
-    ///   "ass"; masked spellings (f***, sh!t) are matched too.
-    /// - Multi-word phrases (e.g. "god damn") match on the normalized line.
     static func shouldMute(text: String,
                            enabledCategories: Set<FilterCategory>,
                            profanityThreshold: FilterSeverity) -> Bool {
-        guard !text.isEmpty, !enabledCategories.isEmpty else { return false }
+        guard !enabledCategories.isEmpty else { return false }
+        return hits(in: text).mutes(enabledCategories: enabledCategories,
+                                    profanityThreshold: profanityThreshold)
+    }
+
+    /// Every language category `text` contains.
+    ///
+    /// - Single words match on whole-word boundaries so "class" never trips
+    ///   "ass"; masked spellings (f***, sh!t) are matched too.
+    /// - "fuck" also matches inside a word ("clusterfuck"): no innocent English
+    ///   word contains it. No other term gets that treatment, because every
+    ///   other one does ("Scunthorpe", "cocktail", romanized Japanese names).
+    /// - Multi-word phrases (e.g. "god damn") match on the normalized line.
+    static func hits(in text: String) -> LanguageHits {
+        var hits = LanguageHits()
+        guard !text.isEmpty else { return hits }
         let normalized = normalize(text)
-        guard !normalized.isEmpty else { return false }
+        guard !normalized.isEmpty else { return hits }
 
         // Phrase pass (multi-word terms) on the normalized line with masking
         // characters stripped, so "God damn!" still ends in a word boundary.
@@ -47,31 +87,24 @@ enum ProfanityDictionary {
             .filter { !maskingCharacters.contains($0) }
             .split(separator: " ").joined(separator: " ")
         let paddedLine = " \(phraseLine) "
-        for entry in phraseEntries where enabledCategories.contains(entry.category) {
-            guard passesThreshold(entry, threshold: profanityThreshold) else { continue }
-            if paddedLine.contains(" \(entry.term) ") { return true }
+        for entry in phraseEntries where paddedLine.contains(" \(entry.term) ") {
+            hits.record(entry)
         }
 
         // Word pass: tokenize once, test each token's candidate spellings
         // against the single-word set.
-        let tokens = normalized.split(separator: " ").map(String.init)
-        for token in tokens {
-            for candidate in candidateForms(token) {
-                if let entry = wordIndex[candidate],
-                   enabledCategories.contains(entry.category),
-                   passesThreshold(entry, threshold: profanityThreshold) {
-                    return true
+        for token in normalized.split(separator: " ") {
+            for candidate in candidateForms(String(token)) {
+                if let entry = wordIndex[candidate] {
+                    hits.record(entry)
+                } else {
+                    for entry in infixEntries where candidate.contains(entry.term) {
+                        hits.record(entry)
+                    }
                 }
             }
         }
-        return false
-    }
-
-    /// Profanity honors the user's strength threshold; every other language
-    /// category (slurs, blasphemy, crude/sexual) is all-or-nothing.
-    private static func passesThreshold(_ entry: ProfanityEntry, threshold: FilterSeverity) -> Bool {
-        guard entry.category == .profanity else { return true }
-        return entry.severity >= threshold
+        return hits
     }
 
     // MARK: - Normalization
@@ -117,6 +150,7 @@ enum ProfanityDictionary {
             if !forms.contains(form) { forms.append(form) }
         }
         // Apostrophes never carry meaning for the lookup; strip them once.
+        // ("fuckin'" → "fuckin")
         let base = token.filter { $0 != "'" && $0 != "’" }
         // Reading 1: masking characters are punctuation — drop them.
         // ("shit!" → "shit", "f***" → "f" → stub)
@@ -142,14 +176,22 @@ enum ProfanityDictionary {
     /// Characters that mark a token as deliberately censored ("f***", "s#it").
     private static let censorGlyphs: Set<Character> = ["*", "#", "%", "&"]
 
-    /// Short residues of masked strong words → canonical term.
+    /// Short residues of masked words → canonical term.
     private static let maskedStubs: [String: String] = [
         "f": "fuck",
         "fk": "fuck",
         "fck": "fuck",
+        "fin": "fucking",
+        "fing": "fucking",
+        "fkin": "fucking",
+        "fking": "fucking",
+        "fckin": "fucking",
+        "fcking": "fucking",
         "sh": "shit",
         "sht": "shit",
-        "b": "bitch"
+        "b": "bitch",
+        "btch": "bitch",
+        "ahole": "asshole"
     ]
 
     // MARK: - Dictionary
@@ -161,71 +203,67 @@ enum ProfanityDictionary {
         return index
     }()
 
+    /// Terms that also match inside a longer word. See `hits(in:)` before
+    /// adding one.
+    private static let infixEntries: [ProfanityEntry] = [
+        .init(term: "fuck", category: .profanity, severity: .strong)
+    ]
+
+    private static func entries(_ terms: [String], _ category: FilterCategory,
+                                _ severity: FilterSeverity) -> [ProfanityEntry] {
+        terms.map { ProfanityEntry(term: $0, category: category, severity: severity) }
+    }
+
     /// Single-word terms. Kept deliberately small and legible; extend as needed.
     private static let wordEntries: [ProfanityEntry] = [
-        // Profanity — mild
-        .init(term: "damn", category: .profanity, severity: .mild),
-        .init(term: "damned", category: .profanity, severity: .mild),
-        .init(term: "hell", category: .profanity, severity: .mild),
-        .init(term: "crap", category: .profanity, severity: .mild),
-        .init(term: "bloody", category: .profanity, severity: .mild),
-        .init(term: "piss", category: .profanity, severity: .mild),
-        .init(term: "pissed", category: .profanity, severity: .mild),
-        .init(term: "bugger", category: .profanity, severity: .mild),
-        .init(term: "git", category: .profanity, severity: .mild),
-        // Profanity — moderate
-        .init(term: "ass", category: .profanity, severity: .moderate),
-        .init(term: "arse", category: .profanity, severity: .moderate),
-        .init(term: "asshole", category: .profanity, severity: .moderate),
-        .init(term: "arsehole", category: .profanity, severity: .moderate),
-        .init(term: "bastard", category: .profanity, severity: .moderate),
-        .init(term: "bitch", category: .profanity, severity: .moderate),
-        .init(term: "bitches", category: .profanity, severity: .moderate),
-        .init(term: "dick", category: .profanity, severity: .moderate),
-        .init(term: "prick", category: .profanity, severity: .moderate),
-        .init(term: "douche", category: .profanity, severity: .moderate),
-        .init(term: "douchebag", category: .profanity, severity: .moderate),
-        .init(term: "bollocks", category: .profanity, severity: .moderate),
-        .init(term: "wanker", category: .profanity, severity: .moderate),
-        // Profanity — strong
-        .init(term: "fuck", category: .profanity, severity: .strong),
-        .init(term: "fucker", category: .profanity, severity: .strong),
-        .init(term: "fucking", category: .profanity, severity: .strong),
-        .init(term: "fucked", category: .profanity, severity: .strong),
-        .init(term: "motherfucker", category: .profanity, severity: .strong),
-        .init(term: "shit", category: .profanity, severity: .strong),
-        .init(term: "shitty", category: .profanity, severity: .strong),
-        .init(term: "bullshit", category: .profanity, severity: .strong),
-        // Crude & sexual language
-        .init(term: "cock", category: .sexualLanguage, severity: .strong),
-        .init(term: "pussy", category: .sexualLanguage, severity: .strong),
-        .init(term: "cunt", category: .sexualLanguage, severity: .strong),
-        .init(term: "twat", category: .sexualLanguage, severity: .strong),
-        .init(term: "whore", category: .sexualLanguage, severity: .moderate),
-        .init(term: "slut", category: .sexualLanguage, severity: .moderate),
-        .init(term: "boobs", category: .sexualLanguage, severity: .mild),
-        .init(term: "tits", category: .sexualLanguage, severity: .moderate),
-        .init(term: "horny", category: .sexualLanguage, severity: .moderate),
-        // Blasphemy (single word)
-        .init(term: "goddamn", category: .blasphemy, severity: .moderate),
-        .init(term: "goddammit", category: .blasphemy, severity: .moderate),
-        .init(term: "goddamnit", category: .blasphemy, severity: .moderate)
-    ]
+        entries(["damn", "damned", "dammit", "damnit", "hell", "crap", "crappy", "bloody",
+                 "piss", "pissed", "pisses", "pissing", "bugger", "git"],
+                .profanity, .mild),
+        entries(["ass", "asses", "arse", "arses", "asshole", "assholes", "arsehole", "arseholes",
+                 "jackass", "jackasses", "dumbass", "dumbasses", "smartass", "badass", "fatass",
+                 "bastard", "bastards", "bitch", "bitches", "bitching", "bitchy", "bitchin",
+                 "sumbitch", "dick", "dicks", "dickhead", "dickheads", "prick", "pricks",
+                 "douche", "douchebag", "douchebags", "bollocks", "wanker", "wankers"],
+                .profanity, .moderate),
+        entries(["fuck", "fucker", "fucking", "fucked", "motherfucker",
+                 "shit", "shits", "shitty", "shitting", "shitted", "shite", "shithead",
+                 "shitheads", "shithole", "shitholes", "shitload", "shitless", "shitstorm",
+                 "bullshit", "bullshitting", "bullshitter", "horseshit", "dipshit", "dipshits",
+                 "apeshit", "batshit", "chickenshit", "jackshit",
+                 "cocksucker", "cocksuckers", "sonofabitch"],
+                .profanity, .strong),
+        entries(["boobs"], .sexualLanguage, .mild),
+        entries(["whore", "whores", "slut", "sluts", "slutty", "tits", "titties", "horny"],
+                .sexualLanguage, .moderate),
+        entries(["cock", "cocks", "pussy", "pussies", "cunt", "cunts", "twat", "twats",
+                 "blowjob", "blowjobs", "handjob", "dildo"],
+                .sexualLanguage, .strong),
+        entries(["goddamn", "goddamned", "goddam", "goddammit", "goddamnit", "omg"],
+                .blasphemy, .moderate),
+        // Slurs are all-or-nothing, so their severity is never read. A slur
+        // that doubles as an idiom ("a chink in the armor") still mutes: for a
+        // filter, a muted idiom is the cheaper mistake.
+        entries(["nigger", "niggers", "nigga", "niggas", "chink", "chinks", "gook", "gooks",
+                 "spic", "spics", "wetback", "wetbacks", "kike", "kikes", "beaner", "beaners",
+                 "raghead", "ragheads", "towelhead", "towelheads", "paki", "pakis", "wop", "wops",
+                 "jap", "japs", "kraut", "krauts", "polack", "polacks", "chinaman", "honkies",
+                 "faggot", "faggots", "fag", "fags", "dyke", "dykes", "tranny", "trannies",
+                 "retard", "retards", "retarded"],
+                .slur, .strong)
+    ].flatMap { $0 }
 
     /// Multi-word phrases. Matched against the normalized line, so word order
     /// and boundaries are respected. Blasphemy is phrase-led on purpose so the
-    /// word "god" alone never mutes ordinary dialogue.
+    /// word "god" alone never mutes ordinary dialogue ("thank god").
     private static let phraseEntries: [ProfanityEntry] = [
-        .init(term: "god damn", category: .blasphemy, severity: .moderate),
-        .init(term: "god damn it", category: .blasphemy, severity: .moderate),
-        .init(term: "goddamn it", category: .blasphemy, severity: .moderate),
-        .init(term: "jesus christ", category: .blasphemy, severity: .moderate),
-        .init(term: "christ almighty", category: .blasphemy, severity: .moderate),
-        .init(term: "for christ's sake", category: .blasphemy, severity: .moderate),
-        .init(term: "for god's sake", category: .blasphemy, severity: .mild),
-        .init(term: "son of a bitch", category: .profanity, severity: .strong),
-        .init(term: "piss off", category: .profanity, severity: .moderate),
-        .init(term: "dumb ass", category: .profanity, severity: .moderate),
-        .init(term: "jack ass", category: .profanity, severity: .moderate)
-    ]
+        entries(["god's sake"], .blasphemy, .mild),
+        entries(["god damn", "jesus christ", "jesus h christ", "jesus fucking christ",
+                 "sweet jesus", "christ almighty", "christ's sake", "god almighty",
+                 "my god", "oh god", "good god", "swear to god", "love of god"],
+                .blasphemy, .moderate),
+        entries(["piss off", "dumb ass", "jack ass"], .profanity, .moderate),
+        entries(["son of a bitch"], .profanity, .strong),
+        entries(["jerk off", "jerking off"], .sexualLanguage, .moderate),
+        entries(["half breed"], .slur, .strong)
+    ].flatMap { $0 }
 }

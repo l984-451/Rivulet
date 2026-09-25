@@ -64,8 +64,9 @@ Rivulet/                # The tvOS app — everything below.
 │   │   ├── (PlexNetworkManager, PlexAuthManager, PlexDataStore, …)
 │   │   └── Playback/   # AetherPlayer + routing/remux (see Docs/RIVULET_PLAYER.md)
 │   │       ├── Pipeline/     # ContentRouter (routing decisions)
+│   │       ├── ContentFilter/ # Local mute/skip filter (see "Content Filter (VOD)")
 │   │       └── Subtitles/    # CaptionAppearance (system caption settings), SubtitleCue,
-│   │                          #   VTTParser (content-filter only; captions are not app-parsed)
+│   │                          #   VTT/SRT/ASS parsers (content-filter only; captions are not app-parsed)
 │   ├── LiveTV/         # PlexLiveTVProvider, IPTVProvider, LiveTVDataStore
 │   ├── IPTV/           # M3UParser, XMLTVParser, DispatcharrService
 │   ├── Insights/       # InsightsTriviaClient, InsightsShowIDResolver (in-player cast/trivia panel)
@@ -359,11 +360,12 @@ Key components:
   of `SubtitleManager.load` with it, leaving a permanently empty track feeding a view
   that rendered nothing. All deleted. On that route subtitles come from the server
   (burn-in, or the WebVTT rendition the client profile requests).
-- `SubtitleParser.swift` survived that cull and is NOT dead: `VTTParser` is live,
-  parsing `text/mcf+vtt` for the content filter (`ContentFilterParsers`). `SRTParser`,
-  `ASSParser` and `SubtitleFormat` in the same file have no production caller and are
-  held up only by their own unit test. Check for the type, not the filename, before
-  deleting anything here.
+- `SubtitleParser.swift` survived that cull and is NOT dead, but nothing in it
+  renders: it serves the content filter. `VTTParser` reads `text/mcf+vtt` lists
+  (`ContentFilterParsers`), and all three parsers (VTT, SRT, ASS) read a title's
+  external subtitle file in full so language muting works with subtitles off and on
+  the `hls` route (`ContentFilterSources`). Check for the type, not the filename,
+  before deleting anything here.
 
 **Playback States** (PlayerProtocol): `.idle`, `.loading`, `.playing`, `.paused`, `.buffering`, `.ended`, `.failed`
 
@@ -374,6 +376,38 @@ Key components:
 
 #### Live TV
 Routes through **AetherPlayer** per grid slot (`MultiStreamViewModel` / `StreamSlotView` instantiate `AetherPlayer()`, rendered via `AetherSlotPlayerView`). The grid supports up to 4 concurrent slots (opt-in past 2). HDHomeRun delivers a direct stream; DVB tuners require a Plex transcode URL with full client-profile parameters (see Plex Live TV section below).
+
+### Content Filter (VOD)
+
+A local VidAngel/ClearPlay-style filter: mute language, skip scenes, never touch the
+file. Off by default (Settings → Playback → Content Filtering).
+`ContentFilterManager`, owned by `UniversalPlayerViewModel`, merges three sources and
+judges all of them against the user's settings at playback time:
+1. **The title's own subtitle file**: the English external text stream Plex serves
+   (`ContentFilterSources.transcriptStream`), fetched and scanned against
+   `ProfanityDictionary` up front. This is what makes language muting work with
+   subtitles off, and it is the only language source on the `hls` route.
+2. **The subtitles on screen**: the active cue, matched live. Covers titles whose
+   only subtitles are embedded (no `key`, so Plex can't serve them on their own).
+3. **An imported MCF/EDL list** from the user's list source, the only source of
+   scene skips. A folder source is searched by file name, IMDb id, then rating key.
+
+Rules that look wrong until you know them:
+- **moviecontentfilter.com's `.mcf` download is not in real time.** It rescales the
+  title onto 0–99:59:59.999 and leaves the player to map it back with the release's
+  own start and end, which Rivulet can't know, so such a file is rejected as
+  `.unsynchronized`. That site's EDL export takes the start and end and is the
+  supported route. An MCF file is a full annotation, not a per-user filter, which is
+  why `FilterCategory(mcfName:)` drops topics like product placement and kissing.
+- **The list cache is keyed by the URLs a list would be fetched from**, not the
+  rating key, so clearing or changing the source can't resurrect an old list. A
+  source that now answers "not found" deletes the cached copy.
+- **Profanity Strength applies to profanity from every source**, imported lists
+  included. EDL entries carry no severity and count as strong.
+- **Only "fuck" matches inside a word.** Every other term is whole-word, because
+  every other term has an innocent host ("Scunthorpe", "cocktail", romanized names).
+- **The rail button pauses filtering for the current title only.** It shows only
+  while filtering is on in Settings, and `reset()` clears the pause on every item.
 
 ### Plex Metadata Hierarchy
 

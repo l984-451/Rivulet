@@ -301,9 +301,9 @@ enum SettingsContent {
 
     // MARK: Content Filtering
 
-    /// VidAngel/ClearPlay-style local filter. Language categories are detected
-    /// live from the subtitle track; scene categories need an imported filter
-    /// list (see the source URL row).
+    /// VidAngel/ClearPlay-style local filter. Language categories are found in
+    /// the title's subtitles; scene categories need an imported filter list
+    /// (see the source URL row).
     private static var contentFilter: [SettingsRowItem] {
         var rows: [SettingsRowItem] = [
             toggle("cf_master", "Content Filter",
@@ -331,7 +331,7 @@ enum SettingsContent {
                                     kind: .textEntry(
                                         value: { SettingsStore.string(ContentFilterManager.Keys.listSourceURL, default: "") },
                                         placeholder: "Optional",
-                                        hint: "A URL where per-title MCF or EDL filter files are hosted. Use {id} for the Plex rating key, or a folder that contains <ratingKey>.mcf files.",
+                                        hint: "A folder or URL with per-title MCF or EDL files. A folder is searched by video file name, IMDb id, then Plex rating key. A URL can use {file}, {imdb}, {tmdb}, {tvdb} or {id}.",
                                         suggestions: [],
                                         keyboardType: .URL,
                                         set: { SettingsStore.setString(ContentFilterManager.Keys.listSourceURL, $0) })))

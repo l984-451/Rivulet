@@ -13,7 +13,6 @@
 //
 
 import Foundation
-import SwiftUI
 
 // MARK: - Severity
 
@@ -111,34 +110,6 @@ nonisolated enum FilterCategory: String, Codable, Sendable, CaseIterable, Identi
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .profanity: return "exclamationmark.bubble.fill"
-        case .blasphemy: return "hands.clap.fill"
-        case .slur: return "person.fill.xmark"
-        case .sexualLanguage: return "heart.slash.fill"
-        case .violence: return "burst.fill"
-        case .sexNudity: return "eye.slash.fill"
-        case .frightening: return "theatermasks.fill"
-        case .substances: return "pills.fill"
-        case .other: return "line.3.horizontal.decrease.circle.fill"
-        }
-    }
-
-    var iconColor: Color {
-        switch self {
-        case .profanity: return .orange
-        case .blasphemy: return .yellow
-        case .slur: return .red
-        case .sexualLanguage: return .pink
-        case .violence: return .red
-        case .sexNudity: return .purple
-        case .frightening: return .indigo
-        case .substances: return .teal
-        case .other: return .gray
-        }
-    }
-
     /// UserDefaults key for this category's on/off state.
     var enabledDefaultsKey: String { "contentFilter.\(rawValue).enabled" }
 
@@ -151,10 +122,14 @@ nonisolated enum FilterCategory: String, Codable, Sendable, CaseIterable, Identi
         .violence, .sexNudity, .frightening, .substances
     ]
 
-    /// Map an arbitrary MCF/EDL category token onto our set. Resilient to the
-    /// many spellings community filter files use in the wild.
+    /// Map a free-form category token (an EDL's optional 4th field, or an MCF
+    /// name outside the spec) onto our set. Resilient to the many spellings
+    /// community filter files use in the wild. Order matters: the first match
+    /// wins, so language entries come before "sex" catches "sexual humor".
     static func matching(_ raw: String) -> FilterCategory {
         let key = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        // Our own names round-trip ("sexualLanguage" must not land on "sex").
+        if let exact = allCases.first(where: { $0.rawValue.lowercased() == key }) { return exact }
         for (needles, category) in categoryAliases {
             if needles.contains(where: { key.contains($0) }) { return category }
         }
@@ -163,13 +138,71 @@ nonisolated enum FilterCategory: String, Codable, Sendable, CaseIterable, Identi
 
     private static let categoryAliases: [(needles: [String], category: FilterCategory)] = [
         (["blasphem", "deity", "religio"], .blasphemy),
-        (["slur", "racial", "racism", "ethnic"], .slur),
+        (["slur", "racial", "racism", "ethnic", "discrimin", "sexism", "homophob"], .slur),
+        (["sexualdialogue", "sexual dialogue", "sexual language", "sexual humor", "sexual-humor", "innuendo", "crude"], .sexualLanguage),
         (["nudity", "nude", "sex", "porn", "erotic", "intercourse"], .sexNudity),
-        (["gore", "violen", "blood", "brutal", "torture", "murder"], .violence),
-        (["fright", "horror", "disturb", "intense", "jump", "scary"], .frightening),
-        (["drug", "alcohol", "smok", "substance", "narcotic", "drink"], .substances),
+        (["gore", "violen", "blood", "brutal", "torture", "murder", "fight", "weapon"], .violence),
+        (["fright", "fear", "horror", "disturb", "intense", "jump", "scary", "scare"], .frightening),
+        (["drug", "alcohol", "smok", "substance", "narcotic", "drink", "cigar", "tobacco"], .substances),
         (["profan", "language", "curse", "swear", "vulgar"], .profanity)
     ]
+
+    /// Map a Movie Content Filter category name onto our set, following MCF's
+    /// own topics (moviecontentfilter.com/specification). An MCF file is the
+    /// full annotation of a title, not a per-user filter, so it also tags
+    /// things no content filter should act on (product placement, "tedious"
+    /// scenes, kisses). Those return nil and are dropped at parse time. Names
+    /// outside the spec fall back to `matching`, and are dropped if that finds
+    /// nothing either, rather than riding the master switch as `.other`.
+    init?(mcfName raw: String) {
+        let key = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        if Self.ignoredMCFNames.contains(key) { return nil }
+        if let mapped = Self.mcfNames[key] {
+            self = mapped
+            return
+        }
+        let fallback = Self.matching(key)
+        guard fallback != .other else { return nil }
+        self = fallback
+    }
+
+    private static let ignoredMCFNames: Set<String> = [
+        // Commercial content topic
+        "commercial", "advertbreak", "consumerism", "productplacement",
+        // Dispensable scenes topic
+        "dispensable", "idiocy", "tedious",
+        // Filed under the Sex topic, but not what a family filter means by it
+        "kissing"
+    ]
+
+    /// Every category in the MCF 1.1.0 spec, lowercased, by topic.
+    private static let mcfNames: [String: FilterCategory] = {
+        var names: [String: FilterCategory] = [:]
+        func add(_ category: FilterCategory, _ list: [String]) {
+            for name in list { names[name] = category }
+        }
+        add(.profanity, ["language", "swearing", "namecalling"])
+        add(.blasphemy, ["blasphemy"])
+        add(.sexualLanguage, ["sexualdialogue", "vulgarity"])
+        add(.slur, ["discrimination", "adultism", "antisemitism", "genderism", "homophobia",
+                    "misandry", "misogyny", "racism", "sexism", "supremacism", "transphobia",
+                    "xenophobia"])
+        add(.sexNudity, ["nudity", "barebuttocks", "exposedgenitalia", "fullnudity", "toplessness",
+                         "sex", "adultery", "analsex", "coitus", "masturbation", "objectification",
+                         "oralsex", "premaritalsex", "promiscuity", "prostitution"])
+        add(.violence, ["violence", "choking", "crueltytoanimals", "culturalviolence", "desecration",
+                        "emotionalviolence", "kicking", "massacre", "murder", "punching", "rape",
+                        "slapping", "slavery", "stabbing", "torture", "warfare", "weapons"])
+        add(.frightening, ["fear", "accident", "acrophobia", "aliens", "arachnophobia", "astraphobia",
+                           "aviophobia", "chemophobia", "claustrophobia", "coulrophobia", "cynophobia",
+                           "death", "dentophobia", "emetophobia", "enochlophobia", "explosion", "fire",
+                           "gerascophobia", "ghosts", "grave", "hemophobia", "hylophobia",
+                           "melissophobia", "misophonia", "musophobia", "mysophobia", "nosocomephobia",
+                           "nyctophobia", "siderodromophobia", "thalassophobia", "vampires"])
+        add(.substances, ["drugs", "alcohol", "antipsychotics", "cigarettes", "depressants", "gambling",
+                          "hallucinogens", "stimulants"])
+        return names
+    }()
 }
 
 // MARK: - Region
@@ -202,4 +235,43 @@ nonisolated struct ContentFilterList: Codable, Sendable {
     var isEmpty: Bool { regions.isEmpty }
 
     static let empty = ContentFilterList(regions: [])
+}
+
+// MARK: - Item
+
+/// What the filter knows about the title being played. Built by the player once
+/// full metadata is in hand, so a list lookup can key on identifiers that
+/// survive a library rebuild or a second server (IMDb id, file name), not only
+/// the server-local rating key.
+nonisolated struct ContentFilterItem: Sendable, Equatable {
+    var ratingKey: String?
+    var imdbID: String?
+    var tmdbID: String?
+    var tvdbID: String?
+    /// Media file name without directory or extension, e.g. "The Matrix (1999)".
+    /// The name cleanvid, Kodi and MPlayer give a sidecar EDL.
+    var fileName: String?
+    /// Runtime in seconds. Used to spot an MCF list timed to another release.
+    var duration: TimeInterval?
+    /// The title's own external subtitle file, read in full for language
+    /// muting when it is in a format the filter can parse.
+    var transcript: TranscriptSource?
+
+    nonisolated struct TranscriptSource: Sendable, Equatable {
+        let url: URL
+        /// Plex stream codec ("srt", "ass", "vtt", …); picks the parser.
+        let format: String
+        /// The stream's `/library/streams/…` path, to recognize the same file
+        /// when it is the subtitle track on screen.
+        let streamKey: String
+    }
+
+    /// "/media/Movies/The Matrix (1999)/The Matrix (1999).mkv" → "The Matrix (1999)".
+    /// Plex reports the server's own path, so Windows separators are handled too.
+    static func baseName(ofPath path: String) -> String? {
+        guard let last = path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last else { return nil }
+        let name = String(last)
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return name }
+        return String(name[..<dot])
+    }
 }

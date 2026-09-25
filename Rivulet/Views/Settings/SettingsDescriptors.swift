@@ -311,31 +311,31 @@ enum SettingsDescriptorStore {
         // MARK: Content Filtering
         "cat_contentFilter": SettingDescriptor(
             icon: "hand.raised.fill",
-            description: "Mute strong language and skip scenes during playback, without ever changing the file. Language is detected live from the subtitle track; scene skips come from an imported filter list."
+            description: "Mute strong language and skip scenes during playback, without ever changing the file. Language is found in the title's subtitles, even with subtitles turned off; scene skips come from an imported filter list."
         ),
         "cf_master": SettingDescriptor(
             icon: "hand.raised.fill",
-            description: "Turn the local content filter on. Rivulet then mutes and skips in real time based on the categories below."
+            description: "Turn the local content filter on. Rivulet then mutes and skips in real time based on the categories below. While it's on, a button in the player pauses filtering for the title you're watching."
         ),
         "cf_profanity": SettingDescriptor(
             icon: "exclamationmark.bubble.fill",
-            description: "Mutes profane words as they appear in the subtitle line. Requires a subtitle track to be active. Use Profanity Strength to choose how much is filtered."
+            description: "Mutes profane words in the dialogue. Rivulet reads the title's subtitle file even when subtitles are off; a title whose only subtitles are inside the video file needs them turned on. Use Profanity Strength to choose how much is filtered."
         ),
         "cf_strength": SettingDescriptor(
             icon: "dial.medium.fill",
-            description: "How much profanity to mute: mild and up, moderate and up, or strong words only."
+            description: "How much profanity to mute: mild and up, moderate and up, or strong words only. Also applies to profanity in imported filter lists."
         ),
         "cf_blasphemy": SettingDescriptor(
             icon: "hands.clap.fill",
-            description: "Mutes irreverent uses of religious names and phrases detected in the subtitle line. Ordinary dialogue is left alone."
+            description: "Mutes religious names used as exclamations, such as \"oh my god\". The word god on its own is never muted."
         ),
         "cf_slur": SettingDescriptor(
             icon: "person.fill.xmark",
-            description: "Mutes racial and other slurs detected in the subtitle line."
+            description: "Mutes racial, homophobic and other slurs in the dialogue."
         ),
         "cf_sexualLanguage": SettingDescriptor(
             icon: "heart.slash.fill",
-            description: "Mutes crude and sexual language detected in the subtitle line."
+            description: "Mutes crude and sexual language in the dialogue."
         ),
         "cf_violence": SettingDescriptor(
             icon: "burst.fill",
@@ -355,7 +355,7 @@ enum SettingsDescriptorStore {
         ),
         "cf_sourceURL": SettingDescriptor(
             icon: "link",
-            description: "Optional. A location where per-title filter files live, in the open MCF (movie content filter) or EDL format. Use {id} for the Plex rating key, or point at a folder that holds <ratingKey>.mcf files. Rivulet loads the matching file when a title starts. It ships no filter data of its own."
+            description: "Optional. Where per-title filter files live, in the open MCF (movie content filter) or EDL format. For a folder, Rivulet looks for a file named after the video file, then the IMDb id (tt0133093.edl), then the Plex rating key. An address can use {file}, {imdb}, {tmdb}, {tvdb} or {id} instead. From moviecontentfilter.com, download the EDL format with your copy's start and end times. Rivulet ships no filter data of its own."
         ),
     ]
 

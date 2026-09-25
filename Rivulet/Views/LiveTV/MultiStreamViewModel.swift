@@ -30,8 +30,9 @@ final class MultiStreamViewModel: ObservableObject {
         let aetherPlayer: AetherPlayer
         /// Timeline keepalive for tuned Plex sessions (no-op for other
         /// sources): each grid slot holds its own tuner grab, and PMS
-        /// releases an unreported grab after its 300s rolling timer.
-        let liveKeepalive = PlexLiveTimelineKeepalive()
+        /// releases an unreported grab after its 300s rolling timer. A slot
+        /// that adopted a running session keeps that session's keepalive.
+        var liveKeepalive = PlexLiveTimelineKeepalive()
 
         var playbackState: UniversalPlaybackState
         var currentProgram: UnifiedProgram?
@@ -192,6 +193,44 @@ final class MultiStreamViewModel: ObservableObject {
         Task {
             await addChannel(initialChannel)
         }
+    }
+
+    /// Multiview that starts from a session already running elsewhere (the
+    /// full-screen player, the guide's corner player) as its first tile, with
+    /// no new tune, then optionally adds `channel` beside it.
+    init(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?) {
+        Self.activeSessionCount += 1
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        if let session { adoptStream(session) }
+        if let channel, channel.id != session?.channel.id {
+            Task { await addChannel(channel) }
+        }
+    }
+
+    /// Take over a running session as a tile. Stops it instead when there is
+    /// no room or the channel is already on screen.
+    func adoptStream(_ session: LiveTVSessionHandoff) {
+        guard canAddStream, !activeChannelIds.contains(session.channel.id) else {
+            session.stop()
+            return
+        }
+        let isMuted = !streams.isEmpty
+        var slot = StreamSlot(
+            channel: session.channel,
+            aetherPlayer: session.player,
+            liveKeepalive: session.keepalive,
+            playbackState: .playing,
+            isMuted: isMuted
+        )
+        slot.currentProgram = LiveTVDataStore.shared.getCurrentProgram(for: session.channel)
+        streams.append(slot)
+        let index = streams.count - 1
+        subscribeToSlot(at: index)
+        ensureHealthMonitorRunning()
+        slot.setMuted(isMuted)
+        if !isMuted { focusedSlotIndex = index }
+        if streams.count <= 1 { layoutMode = .grid }
     }
 
     // MARK: - Stream Management

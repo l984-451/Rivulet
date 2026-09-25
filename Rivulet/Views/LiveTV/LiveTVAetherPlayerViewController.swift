@@ -80,7 +80,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Plex releases a tuned /livetv/sessions grab unless the client reports
     /// a timeline periodically (300s rolling stop-grab timer server-side).
-    private let liveKeepalive = PlexLiveTimelineKeepalive()
+    /// A `var` because a handed-off session brings its own (see
+    /// `detachSession()`).
+    private var liveKeepalive = PlexLiveTimelineKeepalive()
+
+    /// A running session to adopt instead of joining, consumed by the first
+    /// `startPlayback()`.
+    private var pendingAdoption: LiveTVSessionHandoff?
 
     /// The in-flight stream resolve/load (and its fallback retries). Held so it
     /// can be cancelled on dismissal — otherwise a slow Plex tune could finish
@@ -202,9 +208,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     // MARK: Chrome state
 
-    /// Same glass rail as Aether VOD; Up Next and Insights are hidden (they
-    /// have no meaning for a live broadcast).
-    private let railView = PlayerRailView()
+    /// Which chrome the player wears. `.rail` is the glass rail shared with
+    /// VOD (Up Next and Insights hidden: they mean nothing on a broadcast);
+    /// `.showcase` is the Browse layout's Apple TV-style chrome.
+    enum ChromeStyle {
+        case rail
+        case showcase
+    }
+
+    private let chromeStyle: ChromeStyle
+    private let railView: any LivePlayerChrome
     /// The SAME scrubber component VOD uses (same assets + spot in the rail),
     /// but driven non-seekably: it shows the current programme's air window
     /// (start/end wall-clock at the edges, current time on the playhead) with
@@ -257,8 +270,23 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// The channel currently playing.
     var playingChannel: UnifiedChannel { channel }
 
-    init(channel: UnifiedChannel) {
-        self.channel = channel
+    /// Back with the chrome down keeps the channel going somewhere else (the
+    /// guide's corner) instead of stopping it, when the host offers a place.
+    /// The session is handed over running; the player then closes.
+    var onMinimize: ((LiveTVSessionHandoff) -> Void)?
+
+    /// Multiview from the showcase chrome: the running session moves into the
+    /// first tile. The host presents multiview once this player has closed.
+    var onOpenMultiview: ((LiveTVSessionHandoff) -> Void)?
+
+    init(channel: UnifiedChannel, chromeStyle: ChromeStyle = .rail, adopting session: LiveTVSessionHandoff? = nil) {
+        self.channel = session?.channel ?? channel
+        self.chromeStyle = chromeStyle
+        self.pendingAdoption = session
+        switch chromeStyle {
+        case .rail: railView = PlayerRailView()
+        case .showcase: railView = LiveShowcaseChromeView()
+        }
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -321,7 +349,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
         subtitleModel.delaySeconds = subtitleDelaySeconds
 
-        let aether = AetherPlayer()
+        let adopted = pendingAdoption
+        pendingAdoption = nil
+        let aether = adopted?.player ?? AetherPlayer()
+        if let adopted {
+            liveKeepalive = adopted.keepalive
+            isNativeHLSRoute = adopted.isNativeHLSRoute
+        }
         aetherPlayer = aether
         aether.bind(view: engineSurfaceView)
         bindAetherSubtitles(aether)
@@ -362,6 +396,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateRailContent() }
             .store(in: &cancellables)
+
+        if adopted != nil {
+            // Already joined elsewhere and still running: this surface only
+            // takes over the picture. No resolve, no tune, no load.
+            loadingSpinner.stopAnimating()
+            if !aether.intendsToPlay { aether.play() }
+            updateRailContent()
+            return
+        }
 
         streamLoadTask = Task { @MainActor in
             // Resolve performs the Plex tune step for cloud-EPG/DVB channels;
@@ -430,13 +473,21 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Leaves the player entirely, past every chrome layer. The layered
     /// `dismiss(animated:)` override below peels one layer per Menu press, so
     /// a programmatic exit clears the layers first.
-    private func dismissPlayer() {
+    private func dismissPlayer(completion: (() -> Void)? = nil) {
         activePanel?.dismissPanel()
         activePanel = nil
         railVisible = false
         timelineVisible = false
         blockNextDismiss = false
-        super.dismiss(animated: true, completion: nil)
+        super.dismiss(animated: true, completion: completion)
+    }
+
+    /// Carry the running channel into multiview as its first tile.
+    private func openMultiview() {
+        guard let onOpenMultiview, let session = detachSession() else { return }
+        dismissPlayer {
+            onOpenMultiview(session)
+        }
     }
 
     /// A whole new join on the same channel, after the engine gave up on the
@@ -447,6 +498,43 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         teardownPlaybackSession()
         startPlayback()
     }
+
+    /// Hands the running session to another surface without stopping it: no
+    /// re-tune, no gap in the picture. Everything this player hooked onto the
+    /// session is unhooked, and the player is left with nothing to tear down.
+    /// nil while there is no engine session to hand over (still joining, or
+    /// on the last-resort AVPlayer).
+    private func detachSession() -> LiveTVSessionHandoff? {
+        guard let aether = aetherPlayer, lastResortPlayer == nil, !isJoining else { return nil }
+        streamLoadTask?.cancel()
+        streamLoadTask = nil
+        finishJoinTelemetry { $0.abandoned() }
+        cancellables.removeAll()
+        nativeItemObservation = nil
+        nativeLegibleActive = false
+        if let output = nativeLegibleOutput, let item = nativeLegibleItem {
+            item.remove(output)
+        }
+        nativeLegibleOutput = nil
+        nativeLegibleBridge = nil
+        nativeLegibleItem = nil
+        nativeLegibleGroup = nil
+        resetNativeLegibleState()
+        subtitleModel.update(cues: [])
+        aether.unbind(view: engineSurfaceView)
+
+        let handoff = LiveTVSessionHandoff(channel: channel, player: aether,
+                                           keepalive: liveKeepalive, isNativeHLSRoute: isNativeHLSRoute)
+        aetherPlayer = nil
+        // The handed-off session keeps its keepalive; teardown stops this one.
+        liveKeepalive = PlexLiveTimelineKeepalive()
+        isNativeHLSRoute = false
+        return handoff
+    }
+
+    /// True between the start of a join and the first frame: the engine is
+    /// still loading, so there is nothing yet worth handing over.
+    private var isJoining: Bool { loadingSpinner.isAnimating }
 
     /// Unwinds everything `startPlayback()` set up, leaving the VC's chrome
     /// (rail, overlay host, observers) intact. Used both by dismissal and by
@@ -515,34 +603,52 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             timelineScrim.heightAnchor.constraint(equalToConstant: 320),
         ])
 
-        // The Up Next slot becomes the channel list on live (same button,
-        // same action hook — see PlayerRailView.setChannelListAvailable).
-        railView.setChannelListAvailable(true)
-        railView.setInsightsAvailable(false)
-        railView.setLoading(false)
         railView.alpha = 0
         railView.transform = CGAffineTransform(translationX: 0, y: 24)
         view.addSubview(railView)
         railView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            railView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
-            railView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
-            railView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -84),
-            railView.heightAnchor.constraint(equalToConstant: PlayerRailView.railHeight),
-        ])
-
-        // Programme progress bar — placed exactly where VOD puts its scrubber
-        // (132pt side insets, 34pt up from the rail bottom) so it looks
-        // identical; fades with the rail.
         progressBar.alpha = 0
         progressBar.transform = CGAffineTransform(translationX: 0, y: 24)
         view.addSubview(progressBar)
         progressBar.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            progressBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 132),
-            progressBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -132),
-            progressBar.bottomAnchor.constraint(equalTo: railView.bottomAnchor, constant: -34),
-        ])
+
+        switch chromeStyle {
+        case .rail:
+            if let rail = railView as? PlayerRailView {
+                // The Up Next slot becomes the channel list on live (same
+                // button, same action hook — see setChannelListAvailable).
+                rail.setChannelListAvailable(true)
+                rail.setInsightsAvailable(false)
+                rail.setLoading(false)
+            }
+            NSLayoutConstraint.activate([
+                railView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
+                railView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
+                railView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -84),
+                railView.heightAnchor.constraint(equalToConstant: PlayerRailView.railHeight),
+                // Programme progress bar — placed exactly where VOD puts its
+                // scrubber (132pt side insets, 34pt up from the rail bottom) so
+                // it looks identical; fades with the rail.
+                progressBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 132),
+                progressBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -132),
+                progressBar.bottomAnchor.constraint(equalTo: railView.bottomAnchor, constant: -34),
+            ])
+        case .showcase:
+            if let showcase = railView as? LiveShowcaseChromeView {
+                NSLayoutConstraint.activate([
+                    showcase.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                    showcase.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                    showcase.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                    showcase.heightAnchor.constraint(equalToConstant: LiveShowcaseChromeView.height),
+                    // The timeline runs through the chrome's own slot for it.
+                    progressBar.leadingAnchor.constraint(equalTo: showcase.timelineGuide.leadingAnchor),
+                    progressBar.trailingAnchor.constraint(equalTo: showcase.timelineGuide.trailingAnchor),
+                    progressBar.topAnchor.constraint(equalTo: showcase.timelineGuide.topAnchor),
+                ])
+                showcase.onMultiview = { [weak self] in self?.openMultiview() }
+                showcase.setMultiviewAvailable(onOpenMultiview != nil)
+            }
+        }
 
         // Where the picture sits relative to live. Right-aligned just above the
         // track, which keeps it below the rail's button row.
@@ -616,6 +722,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
         timeshiftBadge.update(behindLiveSeconds: behind, hasRewindWindow: hasRewindWindow,
                               isPaused: isUserPaused)
+        railView.setTimeshift(behindLiveSeconds: behind, hasRewindWindow: hasRewindWindow,
+                              isPaused: isUserPaused)
         railView.setGoLiveAvailable(isBehindLive)
         railView.setRecordState(
             available: store.canRecord(channel) && current != nil,
@@ -673,6 +781,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // is paused rather than frozen.
         if isUserPaused {
             timelineVisible = true
+            UIView.animate(withDuration: 0.2) { self.timeshiftBadge.alpha = 1 }
         } else {
             setTimelineElementsVisible(false)
         }
@@ -708,7 +817,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         UIView.animate(withDuration: visible ? 0.25 : 0.2, animations: {
             self.progressBar.alpha = visible ? 1 : 0
             self.progressBar.transform = visible ? .identity : CGAffineTransform(translationX: 0, y: 24)
-            self.timeshiftBadge.alpha = visible ? 1 : 0
+            self.timeshiftBadge.alpha = (visible && self.badgeShowsWithChrome) ? 1 : 0
             // The rail's own glass carries the bar when it is up.
             self.timelineScrim.alpha = visible ? 1 : 0
         }, completion: { _ in
@@ -719,6 +828,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.timeshiftBadge.isHidden = true
         })
         if !visible { timelineVisible = false }
+    }
+
+    /// The showcase chrome says LIVE / how far behind in its own pill, so the
+    /// separate badge only shows there while the chrome itself is down.
+    private var badgeShowsWithChrome: Bool {
+        chromeStyle == .rail || !railVisible
     }
 
     /// Bring the timeline up without the rail and without moving focus, then
@@ -786,8 +901,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             content: content,
             width: width,
             in: view,
-            aboveRail: railView,
-            towards: railView
+            aboveRail: railView.panelAnchor,
+            towards: railView.panelAnchor
         )
         panel.onDismiss = { [weak self] in
             guard let self else { return }
@@ -1513,6 +1628,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// parallel system Menu gesture — reach dismiss(), so the layering
     /// decision lives HERE and stays consistent whichever fires first.
     override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        // Something presented over the player (an alert) is dismissing
+        // itself, which UIKit routes through here. That is its dismissal, not
+        // a Menu press on the player.
+        if presentedViewController != nil {
+            super.dismiss(animated: flag, completion: completion)
+            return
+        }
         if blockNextDismiss {
             blockNextDismiss = false
             completion?()
@@ -1535,6 +1657,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             armDismissEchoBlock()
             completion?()
             return
+        }
+        // Leaving: hand the channel to the host's corner player when it keeps
+        // one (issue #318), so it goes on playing with its audio.
+        if let onMinimize, let session = detachSession() {
+            onMinimize(session)
         }
         super.dismiss(animated: flag, completion: completion)
     }

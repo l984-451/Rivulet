@@ -1094,6 +1094,23 @@ final class AetherPlayer: PlayerProtocol {
         engine.unbind(view: view)
     }
 
+    /// A render surface typed as a plain view, so a host can show video
+    /// without naming the engine's own view type. Bind it with
+    /// `bind(surface:)`.
+    static func makeRenderSurface() -> UIView {
+        AetherPlayerView()
+    }
+
+    func bind(surface: UIView) {
+        guard let view = surface as? AetherPlayerView else { return }
+        engine.bind(view: view)
+    }
+
+    func unbind(surface: UIView) {
+        guard let view = surface as? AetherPlayerView else { return }
+        engine.unbind(view: view)
+    }
+
     /// Mute/unmute the underlying AVPlayer. Persisted in `isMuted` so it's
     /// reapplied when Aether swaps its player across internal reloads.
     func setMuted(_ muted: Bool) {

@@ -154,6 +154,12 @@ struct GuideLayoutView: View {
     /// was playing (issue #317).
     @State private var gridFocusRequest: EPGFocusRequest?
 
+    /// The channel still playing, with sound, in the corner after Back
+    /// (issue #318). Owned here until it is handed back full screen, replaced,
+    /// or the guide goes away.
+    @State private var miniSession: LiveTVSessionHandoff?
+    @AppStorage("liveTVKeepPlayingInGuide") private var keepPlayingInGuide = true
+
     // Backdrop transition state. The wash crossfades to the new programme's
     // image while the crisp artwork fades in over it.
     @State private var outgoingBackdropImage: UIImage?
@@ -205,6 +211,16 @@ struct GuideLayoutView: View {
                     liveTVPlayerLayer(channel: channel, screenSize: geo.size)
                         .zIndex(displayMode == .fullscreen ? 100 : 10)
                 }
+
+                if let miniSession {
+                    LiveMiniPlayerRepresentable(session: miniSession)
+                        .frame(width: 448, height: 252)
+                        .padding(.top, 40)
+                        .padding(.trailing, 60)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .allowsHitTesting(false)
+                        .zIndex(20)
+                }
             }
         }
         .ignoresSafeArea(edges: [.bottom, .trailing])
@@ -219,6 +235,13 @@ struct GuideLayoutView: View {
         }
         .onChange(of: channels.count) { _, _ in seedFocus() }
         .onReceive(tick) { t in now = t }
+        .onDisappear {
+            // Leaving the guide (another tab, a full-screen page) ends the
+            // corner player. Opening the player takes the session first, so
+            // this never stops a channel that is being handed back.
+            miniSession?.stop()
+            miniSession = nil
+        }
         .task(id: focusedProgram?.id) {
             await resolveLandscape(for: focusedProgram)
         }
@@ -491,16 +514,27 @@ struct GuideLayoutView: View {
         // straight to AVPlayer, everything else is remuxed by the engine.
         // Presented as a full-screen modal so it escapes the guide's
         // TabView / safe-area insets.
-        guard let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-              let root = (scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first)?.rootViewController
-        else { return }
+        guard let top = LiveProgramMenu.topViewController() else { return }
 
-        var top = root
-        while let presented = top.presentedViewController { top = presented }
+        // The corner player's channel comes back full screen as it is, with
+        // no new tune. Any other channel replaces it.
+        var adopting: LiveTVSessionHandoff?
+        if let mini = miniSession {
+            miniSession = nil
+            if mini.channel.id == channel.id {
+                adopting = mini
+            } else {
+                mini.stop()
+            }
+        }
 
-        let vc = LiveTVAetherPlayerViewController(channel: channel)
+        let vc = LiveTVAetherPlayerViewController(channel: channel, adopting: adopting)
         vc.modalPresentationStyle = .fullScreen
+        if keepPlayingInGuide {
+            vc.onMinimize = { session in
+                miniSession = session
+            }
+        }
         vc.onDismiss = { lastChannel in
             // The viewer may have changed channels in the player; land on the
             // one that was on screen, at the programme airing now.
@@ -523,6 +557,8 @@ struct GuideLayoutView: View {
 
     private func presentRecordings() {
         guard let top = LiveProgramMenu.topViewController() else { return }
+        miniSession?.stop()
+        miniSession = nil
         let recordings = LiveRecordingsViewController()
         recordings.modalPresentationStyle = .fullScreen
         top.present(recordings, animated: true)
@@ -592,5 +628,26 @@ private struct EPGIssueBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - Corner player
+
+/// Hosts the UIKit corner player that keeps a channel going after Back.
+private struct LiveMiniPlayerRepresentable: UIViewRepresentable {
+    let session: LiveTVSessionHandoff
+
+    func makeUIView(context: Context) -> LiveMiniPlayerView {
+        let view = LiveMiniPlayerView()
+        view.show(session)
+        return view
+    }
+
+    func updateUIView(_ uiView: LiveMiniPlayerView, context: Context) {
+        uiView.show(session)
+    }
+
+    static func dismantleUIView(_ uiView: LiveMiniPlayerView, coordinator: ()) {
+        uiView.release()
     }
 }

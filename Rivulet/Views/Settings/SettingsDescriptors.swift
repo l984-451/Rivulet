@@ -169,6 +169,10 @@ enum SettingsDescriptorStore {
             icon: "tv",
             description: "Choose between the channel grid layout or the TV guide layout as your default Live TV view."
         ),
+        "keepPlayingInGuide": SettingDescriptor(
+            icon: "pip",
+            description: "When you go back from a live channel, it keeps playing with its sound in the corner of the guide. Select it again to return to full screen."
+        ),
         "confirmExitMultiview": SettingDescriptor(
             icon: "rectangle.split.2x2",
             description: "Shows a confirmation dialog before closing multiview mode to prevent accidentally ending multiple streams."

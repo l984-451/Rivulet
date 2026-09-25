@@ -375,6 +375,7 @@ enum SettingsContent {
         [
             SettingsRowItem(id: "liveTVSources", title: "Live TV Sources", kind: .navigation(.iptv)),
             toggle("combineSources", "Combine Sources", key: "combineLiveTVSources", default: true),
+            toggle("keepPlayingInGuide", "Keep Playing in Guide", key: "liveTVKeepPlayingInGuide", default: true),
             toggle("confirmExitMultiview", "Confirm Exit Multiview", key: "confirmExitMultiview", default: true),
             toggle("allowFourStreams", "Allow 3 or 4 Streams", key: "allowFourStreams", default: false)
         ]

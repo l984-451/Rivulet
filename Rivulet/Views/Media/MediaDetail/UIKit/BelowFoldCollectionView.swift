@@ -1134,7 +1134,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// can't do this itself: it's a pure query called mid-update, and returning
     /// the host cell's path would hand focus to the nested collection, which
     /// restarts at item 0.
-    func restoreShelfRowFocusIfNeeded() {
+    func restoreShelfRowFocusIfNeeded(requestingFocus: Bool = true) {
         // Find the shelf host by identity, not by `lastFocusedIndexPath`: a shelf
         // row is ONE cell, so its index path is the same value for every tile in
         // it and can never say which tile had focus. The tile index lives on the
@@ -1148,7 +1148,11 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // can't find the cell. Lay the collection out first so the tile exists.
         collectionView.layoutIfNeeded()
         // Position the row's horizontal window and arm the tile...
-        shelf.prepareFocusRestore(on: item)
+        if requestingFocus {
+            shelf.prepareFocusRestore(on: item)
+        } else {
+            shelf.armFocusRestore(on: item)
+        }
         // ...and route the pending focus update INTO this cell, so the engine
         // asks the row which tile it wants instead of picking the first
         // focusable cell in the whole collection (the primary row).

@@ -170,8 +170,8 @@ final class ExpandedDetailContainerView: UIView {
 
     /// Re-arm focus inside a shelf-host row (Related) after a modal. No-op
     /// unless focus was in such a row when the modal went up.
-    func restoreShelfRowFocusIfNeeded() {
-        belowFoldCollection.restoreShelfRowFocusIfNeeded()
+    func restoreShelfRowFocusIfNeeded(requestingFocus: Bool = true) {
+        belowFoldCollection.restoreShelfRowFocusIfNeeded(requestingFocus: requestingFocus)
     }
 
     /// Release the one-shot shelf-restore target after the focus update, so it

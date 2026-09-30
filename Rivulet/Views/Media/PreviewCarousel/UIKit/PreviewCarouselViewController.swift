@@ -1012,6 +1012,20 @@ final class PreviewCarouselViewController: UIViewController {
     /// Present an item's FULL expanded detail standalone (no carousel) — reuses
     /// this same VC in `standaloneDetail` mode. Used for Related drill-ins.
     private func presentStandaloneDetail(_ item: MediaItem) {
+        // A collection tile opens the collection page. Arm the shelf row's
+        // restore first, while the tile still exists: the carousel cannot
+        // resolve focus while the page is up, and on dismissal the engine
+        // may resolve before any callback runs. The page's onDismiss re-arms
+        // and applies it, so focus returns to the tile with the row unscrolled.
+        // No focus request here: focus is still on the tile, so a request
+        // would be honoured now and spend the row's one-shot tile index.
+        if item.kind == .collection {
+            expandedDetail.restoreShelfRowFocusIfNeeded(requestingFocus: false)
+            PlexHomeViewController.openCollectionIfNeeded(item, from: self) { [weak self] in
+                self?.restoreBelowFoldFocusAfterReturn()
+            }
+            return
+        }
         // The standalone detail is presented .overFullScreen, so THIS controller
         // never disappears and therefore never re-appears — viewDidAppear does
         // not fire on the way back. Restore focus from the dismiss callback,

@@ -418,6 +418,15 @@ final class PlexHomeViewController: UIViewController {
     /// byte-identical to before the mode was introduced.
     let mode: HomeMode
 
+    /// Collection mode: runs once the page has been dismissed, never when it
+    /// only covers itself with a carousel or detail. The carousel passes one
+    /// that puts focus back on the below-fold tile that opened the page.
+    var onDismiss: (() -> Void)?
+    /// Collection mode's blur-fade transition. UIKit holds a transitioning
+    /// delegate weakly, so the page keeps it alive (PersonDetailViewController
+    /// does the same).
+    private let blurFade = BlurFadeTransitioningDelegate()
+
     init(mode: HomeMode = .home) {
         self.mode = mode
         // Library mode restores the user's persisted per-library sort (the
@@ -429,6 +438,13 @@ final class PlexHomeViewController: UIViewController {
             self.gridSort = .addedAtDesc
         }
         super.init(nibName: nil, bundle: nil)
+        if case .collection = mode {
+            // A drill-in like the person page and the standalone detail: the
+            // shell has no navigation controller, so it blur-fades in over
+            // whatever presented it.
+            modalPresentationStyle = .overFullScreen
+            transitioningDelegate = blurFade
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) not supported") }
@@ -1504,6 +1520,14 @@ final class PlexHomeViewController: UIViewController {
         loadAlphabetIndex()
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Collection page: own Menu from the start of the blur-fade (see
+        // handleMenuBack). The library that presented it already installed
+        // the interceptor; viewDidAppear registering again is harmless.
+        if case .collection = mode { MenuPressInterceptor.register(self) }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if !hasMarkedFirstFrame {
@@ -1529,6 +1553,13 @@ final class PlexHomeViewController: UIViewController {
         // keep the handler list from growing by one per page visited. A fresh
         // appearance re-registers.
         MenuPressInterceptor.resign(self)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Only a real dismissal. A carousel presented over the collection page
+        // (.overFullScreen) never makes it disappear at all.
+        if isBeingDismissed { onDismiss?() }
     }
 
     /// Nonblocking stale-while-revalidate whenever the home surface comes back
@@ -4399,8 +4430,44 @@ final class PlexHomeViewController: UIViewController {
 
     // MARK: - Preview presentation
 
+    /// Opens a collection tile on its own page. Returns false for anything
+    /// that is not a collection, so the caller carries on as before.
+    ///
+    /// The walk covers the whole modal stack, not only what sits above
+    /// `presenter`: a member's detail is presented ON TOP of the page it came
+    /// from, so the loop page → member → trailing collection tile finds the
+    /// page below it and unwinds to it instead of stacking a second one.
+    @discardableResult
+    static func openCollectionIfNeeded(_ item: MediaItem,
+                                       from presenter: UIViewController,
+                                       onDismiss: (() -> Void)? = nil) -> Bool {
+        guard item.kind == .collection else { return false }
+        var top = presenter
+        while let presented = top.presentedViewController { top = presented }
+        var node: UIViewController? = top
+        while let vc = node {
+            if let page = vc as? PlexHomeViewController,
+               case .collection(let open) = page.mode,
+               open.ref.itemID == item.ref.itemID {
+                // dismiss on a presenter unwinds what it presented. On a page
+                // that is already on top it would dismiss the page itself.
+                if page.presentedViewController != nil { page.dismiss(animated: true) }
+                return true
+            }
+            node = vc.presentingViewController
+        }
+        let page = PlexHomeViewController(mode: .collection(item))
+        page.onDismiss = onDismiss
+        top.present(page, animated: true)
+        return true
+    }
+
     private func presentPreview(forSection section: HomeSectionData, indexPath: IndexPath) {
         guard indexPath.item < section.items.count else { return }
+        // Grid taps, every shelf row (handleShelfTap) and search
+        // (handleSearchTap) all come through here. A collection never opens
+        // the carousel, whose Play would hand the collection's key to the player.
+        if Self.openCollectionIfNeeded(section.items[indexPath.item], from: self) { return }
         // The library grid is sparse (unloaded slots are placeholders), so the
         // carousel gets only what has loaded, with the tapped slot remapped to
         // its index in that list. Every other section maps 1:1 and keeps its
@@ -5142,6 +5209,13 @@ final class PlexHomeViewController: UIViewController {
     // MARK: - UIFocusEnvironment override
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        // Collection page with page 0 in flight: the grid is hidden, so the
+        // anchor is the only target inside this modal. Without it focus stays
+        // on the library tile underneath, where the library's staged Menu back
+        // would swallow Menu and arrows / Select would drive the hidden page.
+        if case .collection = mode, case .loading = pageZero {
+            return [collectionFocusAnchor]
+        }
         // Strip idle return / letter stepping: land on the jumped-to slot.
         if wantsPendingGridFocus {
             wantsPendingGridFocus = false
@@ -5344,6 +5418,9 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     private func tileMenuSections(for item: MediaItem,
                                   isContinueWatching: Bool,
                                   shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil) -> [[TileMenuAction]] {
+        // Select already opens a collection's page, and every action below
+        // needs a playable item. Empty sections present no popup.
+        if item.kind == .collection { return [] }
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
               !item.ref.itemID.isEmpty
@@ -5833,6 +5910,10 @@ extension PlexHomeViewController: MenuBackHandling {
     /// the system performs its native sidebar reveal (stage 2), and from there
     /// `TVSidebarView.onExitCommand` returns to Home (stage 3).
     func handleMenuBack() -> Bool {
+        // Collection page mid blur-fade: asked before the library under it,
+        // whose tile may still hold focus. Drop the press. Before the window
+        // guard, because the page's view may not be in the window yet.
+        if case .collection = mode, !hasMarkedFirstFrame { return true }
         guard isViewLoaded, let window = view.window, window.isKeyWindow else { return false }
         // From the A–Z strip or the (hidden) fast-scroll bar, Menu goes back
         // to a tile, never out to the sidebar.

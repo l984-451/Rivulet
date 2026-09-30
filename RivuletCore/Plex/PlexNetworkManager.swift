@@ -936,13 +936,55 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Hub ?? []
     }
 
+    /// URL for one page of a hub.
+    ///
+    /// The hub key's own query is kept and the paging parameters are appended.
+    /// Many keys ARE their row's definition (`movie.recentlyadded.1` is
+    /// `/library/sections/1/all?sort=addedAt:desc`, a genre row carries
+    /// `unwatched=1&genre=80&audienceRating>=7.0`), so replacing the query
+    /// pages the whole library in title order instead.
+    ///
+    /// Returns nil for `/hubs/items` without an identifier (Plex answers 404)
+    /// or a key URLComponents cannot parse.
+    nonisolated static func hubItemsURL(
+        serverURL: String,
+        hubKey: String,
+        hubIdentifier: String?,
+        start: Int,
+        count: Int
+    ) -> URL? {
+        // The hubKey might be a full path like "/hubs/sections/1/continueWatching"
+        // or just the section like "hub.movies.recentlyadded"
+        let fullPath = hubKey.hasPrefix("/") ? "\(serverURL)\(hubKey)" : "\(serverURL)/\(hubKey)"
+        guard var components = URLComponents(string: fullPath) else { return nil }
+
+        // Start and Size go together: Plex ignores X-Plex-Container-Size unless
+        // X-Plex-Container-Start comes with it.
+        var queryItems = (components.queryItems ?? []) + [
+            URLQueryItem(name: "X-Plex-Container-Start", value: "\(start)"),
+            URLQueryItem(name: "X-Plex-Container-Size", value: "\(count)")
+        ]
+
+        // The /hubs/items endpoint requires an identifier parameter to specify which hub
+        // Without it, Plex returns 404. See: https://plexapi.dev/api-reference/hubs/get-a-hubs-items
+        if hubKey == "/hubs/items" || hubKey.hasSuffix("/hubs/items") {
+            guard let hubIdentifier, !hubIdentifier.isEmpty else { return nil }
+            queryItems.append(URLQueryItem(name: "identifier", value: hubIdentifier))
+        }
+
+        components.queryItems = queryItems
+        return components.url
+    }
+
     /// Get more items from a hub using its key (for pagination/infinite scroll)
     /// - Parameters:
     ///   - hubKey: The hub's key path (e.g., "/hubs/sections/1/continueWatching")
     ///   - hubIdentifier: The hub's identifier (e.g., "home.movies.recent") - required when hubKey is "/hubs/items"
     ///   - start: Starting index for pagination
     ///   - count: Number of items to fetch
-    /// - Returns: Tuple of (items, totalSize) where totalSize indicates if more items exist
+    /// - Returns: The page's items and the hub's total under its own query
+    ///   (`totalSize`, or the page's `size` when the server sends no total).
+    ///   `loadMoreIfNeeded` ends the row once it has loaded that many.
     func getHubItems(
         serverURL: String,
         authToken: String,
@@ -951,40 +993,19 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         start: Int = 0,
         count: Int = 24
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
-        // The hubKey might be a full path like "/hubs/sections/1/continueWatching"
-        // or just the section like "hub.movies.recentlyadded"
-        let fullPath: String
-        if hubKey.hasPrefix("/") {
-            fullPath = "\(serverURL)\(hubKey)"
-        } else {
-            fullPath = "\(serverURL)/\(hubKey)"
-        }
-
-        guard var components = URLComponents(string: fullPath) else {
-            throw PlexAPIError.invalidURL
-        }
-
-        var queryItems = [
-            URLQueryItem(name: "X-Plex-Container-Start", value: "\(start)"),
-            URLQueryItem(name: "X-Plex-Container-Size", value: "\(count)")
-        ]
-
-        // The /hubs/items endpoint requires an identifier parameter to specify which hub
-        // Without it, Plex returns 404. See: https://plexapi.dev/api-reference/hubs/get-a-hubs-items
-        if hubKey == "/hubs/items" || hubKey.hasSuffix("/hubs/items") {
-            if let identifier = hubIdentifier, !identifier.isEmpty {
-                queryItems.append(URLQueryItem(name: "identifier", value: identifier))
-            } else {
-                // No identifier available - this request will fail, so skip it
-                print("⚠️ PlexNetworkManager: Cannot paginate /hubs/items without hubIdentifier")
-                return (items: [], totalSize: nil)
-            }
-        }
-
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw PlexAPIError.invalidURL
+        guard let url = Self.hubItemsURL(
+            serverURL: serverURL,
+            hubKey: hubKey,
+            hubIdentifier: hubIdentifier,
+            start: start,
+            count: count
+        ) else {
+            // Two cases reach here: /hubs/items without an identifier (Plex
+            // answers 404) and a key URLComponents cannot parse. Neither can
+            // ever page, so this returns an empty page and the caller ends the
+            // row, where an unparseable key used to throw.
+            print("⚠️ PlexNetworkManager: Cannot build a page URL for this hub")
+            return (items: [], totalSize: nil)
         }
 
         let container: PlexMediaContainerWrapper = try await request(
@@ -993,7 +1014,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         )
 
         let items = container.MediaContainer.Metadata ?? []
-        let totalSize = container.MediaContainer.size
+        let totalSize = container.MediaContainer.totalSize ?? container.MediaContainer.size
 
         return (items, totalSize)
     }

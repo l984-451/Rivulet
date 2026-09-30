@@ -12,6 +12,7 @@
 		A740D1192F59C56300B9820B /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A740D1182F59C56300B9820B /* AVKit.framework */; };
 		A7F159552F04124A001B2177 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 		B2000001AAAA000000000001 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
+		B2000001AAAA000000000002 /* Libass in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000002 /* Libass */; };
 		B30000190000000000000019 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
 		B30000210000000000000021 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 /* End PBXBuildFile section */
@@ -132,6 +133,7 @@
 			files = (
 				A740D1192F59C56300B9820B /* AVKit.framework in Frameworks */,
 				B2000001AAAA000000000001 /* AetherEngine in Frameworks */,
+				B2000001AAAA000000000002 /* Libass in Frameworks */,
 				A7F159552F04124A001B2177 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -236,6 +238,7 @@
 			packageProductDependencies = (
 				A7F159542F04124A001B2177 /* Sentry */,
 				B2000010AAAA000000000001 /* AetherEngine */,
+				B2000010AAAA000000000002 /* Libass */,
 			);
 			productName = Rivulet;
 			productReference = A72E03DA2EDA297D003A73DA /* Rivulet.app */;
@@ -326,6 +329,7 @@
 			packageReferences = (
 				A700F81A2EFBA1610042C07D /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				B2000020AAAA000000000001 /* XCRemoteSwiftPackageReference "AetherEngine" */,
+				B2000020AAAA000000000002 /* XCRemoteSwiftPackageReference "LibassBuild" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A72E03DB2EDA297D003A73DA /* Products */;
@@ -922,6 +926,14 @@
 				version = 7.7.0;
 			};
 		};
+		B2000020AAAA000000000002 /* XCRemoteSwiftPackageReference "LibassBuild" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/l984-451/LibassBuild";
+			requirement = {
+				kind = exactVersion;
+				version = "0.17.5-2";
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -934,6 +946,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B2000020AAAA000000000001 /* XCRemoteSwiftPackageReference "AetherEngine" */;
 			productName = AetherEngine;
+		};
+		B2000010AAAA000000000002 /* Libass */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B2000020AAAA000000000002 /* XCRemoteSwiftPackageReference "LibassBuild" */;
+			productName = Libass;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

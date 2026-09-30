@@ -1,5 +1,5 @@
 {
-  "originHash" : "df32142ac53bceac7d6a27dc0bc0ee42530cabdde75c1fb9a0573c694b660a2b",
+  "originHash" : "81c05ff5b286ae2a06fe415b7b167a19f667a47f4d854912c4caa76ec5f49be9",
   "pins" : [
     {
       "identity" : "aetherengine",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "9ee46ba4fb533e35efa6492eb1a903ca4f8058fc",
         "version" : "3.4.0"
+      }
+    },
+    {
+      "identity" : "libassbuild",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/l984-451/LibassBuild",
+      "state" : {
+        "revision" : "434a18a439ece78631d671cce0ee7bab1622f725",
+        "version" : "0.17.5-2"
       }
     },
     {

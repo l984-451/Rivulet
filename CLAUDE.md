@@ -365,6 +365,28 @@ Key components:
   Do not add a third view, and do not mount it through a `UIHostingController`: that
   applies the tvOS title-safe inset to the content, so every caption margin is
   measured against the wrong box.
+- **ASS/SSA renders through libass**, inside `CaptionOverlayView` as `ASSOverlayView`
+  (one caption renderer, now with a libass layer). VOD loads with
+  `preserveASSMarkup: true`, so an ASS track's cues arrive as raw event lines
+  (`Body.assEvents`). `AetherPlayer` publishes `ASSTrackSource` (header plus the
+  file's `fontAttachments`) and `sourceTime(atHostTime:)`, the frame-accurate
+  clock the display link renders against. libass comes from our own
+  `l984-451/LibassBuild` (one static xcframework, pinned `exactVersion`); do not
+  swap in swift-ass-renderer, AssKit or mpvkit binaries.
+  - **Video Override decides the path.** All three `allowsContent*` true (the
+    default): libass. Any pinned: plain captions in the system style, keeping
+    `\an`/`\pos`, dropping drawings. libass's selective style override is NOT a
+    substitute: it never touches inline tags and skips positioned events.
+  - **libass's ReadOrder dedupe is off** (`ass_set_check_readorder(track, 0)`):
+    real files hardcode ReadOrder 0. `ASSOverlayView` dedupes on
+    start, duration and line instead.
+  - **Rail and Height stepper lift dialogue through `ass_set_line_position`**,
+    which libass applies to non-positioned events only.
+  - **Bumping libass**: run LibassBuild's `build.sh`, tag `<libass>-<rev>` (pinned
+    `0.17.5-2` today) and never move a published tag, because SwiftPM records each
+    tag's revision and refuses one that changes. The module map stays in
+    `Headers/Libass/`: at the `Headers` root it collides with LibDovi's in the
+    shared `include/` directory.
 - **The `hls` route has no app-side captions at all.** `SubtitleManager`,
   `SubtitleClockSyncController` and the SwiftUI `SubtitleOverlayView` were RPlayer's
   sidecar pipeline; `390ebec` removed RPlayer's VOD branches and took the last caller
@@ -658,6 +680,7 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature â
 | Aether render surface | `Views/Player/Aether/AetherVideoSurfaceView.swift` |
 
 | Caption renderer | `Views/Player/UIKit/CaptionOverlayView.swift` |
+| libass layer (ASS/SSA) | `Views/Player/UIKit/ASSOverlayView.swift` |
 | Focus memory | `Services/Focus/FocusMemory.swift` |
 | Watch progress rule | `Models/Media/WatchProgressPolicy.swift` |
 | Plex star rating / favorite | `Models/Plex/PlexUserRating.swift` |

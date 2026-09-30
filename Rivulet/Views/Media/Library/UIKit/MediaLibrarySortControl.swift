@@ -7,9 +7,10 @@
 //
 //  Full-width sort header cell for MediaLibraryViewController.
 //
-//  Layout: library title (left, 34pt bold) + item count (below, 17pt dimmed) and
-//  a focusable sort button (right, glass style). The CELL itself is not focusable;
-//  only the embedded SortButton receives focus.
+//  Layout: library title (left, 34pt bold) + item count (below, 17pt dimmed) and,
+//  on the right in glass style, a focusable sort button and the Titles /
+//  Collections switch (outermost). The CELL itself is not focusable; only the
+//  two embedded SortButtons receive focus.
 //
 //  Glass + focus appearance mirrors FocusableActionButton.swift and the
 //  AppStoreActionButtonStyle values in GlassRowStyle.swift:
@@ -118,8 +119,11 @@ final class SortButton: UIControl {
 
     // MARK: - Configure
 
-    func configure(sortName: String) {
+    func configure(sortName: String, symbol: String = "arrow.up.arrow.down") {
         sortLabel.text = sortName
+        iconView.image = UIImage(
+            systemName: symbol,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
     }
 
     // MARK: - Focus
@@ -171,8 +175,9 @@ final class SortButton: UIControl {
 
 // MARK: - MediaLibrarySortControl
 
-/// Full-width UICollectionViewCell hosting the library title, item count, and
-/// a focusable sort button. The CELL is not focusable; only the SortButton is.
+/// Full-width UICollectionViewCell hosting the library title, item count, a
+/// focusable sort button and the Titles / Collections switch. The CELL is not
+/// focusable; only the two SortButtons are.
 final class MediaLibrarySortControl: UICollectionViewCell {
 
     static let reuseID = "library.sortHeader"
@@ -201,12 +206,36 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         return b
     }()
 
+    /// Titles / Collections switch: shows the current state, Select flips it.
+    /// A SortButton, so the glass focus, select debounce and press overrides
+    /// come with it.
+    private let viewButton: SortButton = {
+        let b = SortButton()
+        b.translatesAutoresizingMaskIntoConstraints = false
+        return b
+    }()
+
+    /// The sort button's trailing edge: beside the switch while both show,
+    /// otherwise at the cell edge (alone, or hidden under the switch). Not a
+    /// UIStackView: its hiding constraint (width 0, required) fights
+    /// SortButton's required internal padding and logs a conflict each toggle.
+    private lazy var sortBesideSwitch: NSLayoutConstraint = sortButton.trailingAnchor.constraint(
+        equalTo: viewButton.leadingAnchor, constant: -16)
+    private lazy var sortAtEdge: NSLayoutConstraint = sortButton.trailingAnchor.constraint(
+        equalTo: contentView.trailingAnchor, constant: -32)
+
     // MARK: - Public API
 
     /// Called by the ViewController when the sort action sheet should appear (Task 10).
     var onSortTapped: (() -> Void)? {
         get { sortButton.onSortTapped }
         set { sortButton.onSortTapped = newValue }
+    }
+
+    /// Called when the Titles / Collections switch is selected.
+    var onViewTapped: (() -> Void)? {
+        get { viewButton.onSortTapped }
+        set { viewButton.onSortTapped = newValue }
     }
 
     // MARK: - Init
@@ -222,10 +251,11 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     // MARK: - Layout
 
     private func setup() {
-        // Cell must NOT be focusable; only sortButton is.
+        // Cell must NOT be focusable; only the two buttons are.
         contentView.addSubview(titleLabel)
         contentView.addSubview(countLabel)
         contentView.addSubview(sortButton)
+        contentView.addSubview(viewButton)
 
         NSLayoutConstraint.activate([
             // Title: left-aligned, vertically centered on the top text cluster.
@@ -236,33 +266,60 @@ final class MediaLibrarySortControl: UICollectionViewCell {
             countLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             countLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
 
-            // Sort button: right edge, vertically centered, fixed size.
-            sortButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -32),
+            // Switch: pinned to the right edge, so it never moves under focus
+            // when the sort button hides.
+            viewButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -32),
+            viewButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            viewButton.heightAnchor.constraint(equalToConstant: 44),
+            viewButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
+
+            // Sort button: left of the switch, or at the edge (configure()
+            // swaps these two). Starts at the edge: no switch until the
+            // collection list arrives.
+            sortAtEdge,
             sortButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             sortButton.heightAnchor.constraint(equalToConstant: 44),
             sortButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
 
-            // Keep sort button from overrunning the title.
+            // Keep the buttons from overrunning the title. Both stay active: a
+            // hidden sort button parks under the switch, so either way the
+            // leftmost visible button binds.
             sortButton.leadingAnchor.constraint(
+                greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16),
+            viewButton.leadingAnchor.constraint(
                 greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16),
         ])
     }
 
     // MARK: - Configure
 
-    func configure(title: String, count: Int, sortName: String) {
+    /// `collections`: nil hides the switch (the library has no non-empty
+    /// collection); false shows "Titles" with "N items"; true shows
+    /// "Collections" with "N collections" and hides the sort button, which
+    /// also takes it out of the focus graph.
+    func configure(title: String, count: Int, sortName: String, collections: Bool?) {
         titleLabel.text = title
-        countLabel.text = "\(count) items"
+        countLabel.text = collections == true ? "\(count) collections" : "\(count) items"
         sortButton.configure(sortName: sortName)
+        sortButton.isHidden = collections == true
+        viewButton.isHidden = collections == nil
+        viewButton.configure(
+            sortName: collections == true ? "Collections" : "Titles",
+            symbol: collections == true ? "square.stack" : "square.grid.2x2")
+        // Deactivate before activate, so the two are never active together.
+        let beside = collections == false
+        NSLayoutConstraint.deactivate([beside ? sortAtEdge : sortBesideSwitch])
+        NSLayoutConstraint.activate([beside ? sortBesideSwitch : sortAtEdge])
     }
 
     // MARK: - Focus
 
     override var canBecomeFocused: Bool { false }
 
-    // Forward focus to the sort button (so the engine lands there on Up/Down into
-    // this section rather than skipping past it entirely).
+    // Forward focus to the buttons (so the engine moves there on Up/Down into
+    // this section rather than skipping past it entirely). A hidden sort button
+    // is not focusable, so a programmatic request falls through to the switch.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        [sortButton]
+        [sortButton, viewButton]
     }
 }

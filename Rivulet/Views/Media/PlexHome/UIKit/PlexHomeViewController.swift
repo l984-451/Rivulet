@@ -118,10 +118,12 @@ enum HomeSectionKind: Equatable {
     /// the kind is just a tag so the layout/render code can pick it.
     case recommendationsError
     /// Library mode only — full-width sort header (library title + item
-    /// count + focusable sort button, `MediaLibrarySortControl`).
+    /// count + focusable sort button and Titles / Collections switch,
+    /// `MediaLibrarySortControl`).
     case sortHeader
     /// Library mode only — 6-across paginated poster grid of the whole
-    /// library, sorted by `gridSort`.
+    /// library, sorted by `gridSort`; or, on the Collections switch, the
+    /// library's collection list whole.
     case grid
     /// Discover mode only — a TMDB curated list (or "For You") shelf.
     /// Renders identically to a poster hub row; differs in tap routing
@@ -351,8 +353,9 @@ struct HomeSectionData {
     }
 
     /// Library mode: the sort-header section. `title` carries the library
-    /// title for `MediaLibrarySortControl.configure(title:count:sortName:)`;
-    /// count + sort name live on the controller (totalGridCount / gridSort).
+    /// title for `MediaLibrarySortControl.configure(title:count:sortName:collections:)`;
+    /// count, sort name and switch state live on the controller
+    /// (totalGridCount / gridSort / gridShowsCollections).
     static func sortHeader(title: String) -> HomeSectionData {
         HomeSectionData(
             id: .sortHeader,
@@ -465,8 +468,9 @@ final class PlexHomeViewController: UIViewController {
     private var isLoadingLibraryHubs = false
     private var libraryHubsError: String?
     /// This library's non-empty collections in server order, filled by
-    /// refreshThisLibraryHubs. Feeds the Collections row. Kept as-is when a
-    /// fetch fails.
+    /// refreshThisLibraryHubs. Feeds the Collections row and, while the
+    /// Titles / Collections switch is on Collections, the grid. Kept as-is
+    /// when a fetch fails.
     private var libraryCollections: [PlexMetadata] = []
 
     private let dataStore = PlexDataStore.shared
@@ -612,6 +616,11 @@ final class PlexHomeViewController: UIViewController {
     /// `indexPathForPreferredFocusedView` when Left leaves the bar for the
     /// grid; cleared once focus is in the grid.
     private var pendingGridFocusItem: Int?
+    /// Titles / Collections switch in the sort header. Session only: the
+    /// shell caches one controller per library tab, so it survives tab
+    /// switches and resets on relaunch. While on, `gridItems` is
+    /// `libraryCollections` in server order.
+    private var gridShowsCollections = false
     private let alphabetBar = LibraryAlphabetBarView()
     private let letterIndicator = LibraryLetterIndicatorView()
     /// Desired bar state; the fade's completion reads it so an interrupted
@@ -1246,10 +1255,13 @@ final class PlexHomeViewController: UIViewController {
         isLoadingLibraryHubs = false
         applySnapshotKeepingFocusedRowStill()
         // The sort header's item id never changes, so the apply above never
-        // re-vends it; without this it keeps whatever list it first saw.
+        // re-vends it; without this it keeps whatever list it first saw, and
+        // the Titles / Collections switch (shown only while the list is not
+        // empty) would stay hidden, or linger after the list emptied.
         if collectionsChanged { refreshSortHeaderCount() }
         selectHeroItemsIfNeeded()
         updateHomeState()
+        syncCollectionsGrid()
     }
 
     /// The apply for refreshThisLibraryHubs. The Collections row has no
@@ -1295,6 +1307,9 @@ final class PlexHomeViewController: UIViewController {
     /// cell is never deleted out from under the engine, and a page that
     /// fails is forgotten so scrolling back over it retries.
     private func loadGridPage(containing index: Int) {
+        // Collections state: the grid is `libraryCollections`, already whole,
+        // so `willDisplay`'s look-ahead paging goes inert.
+        guard !gridShowsCollections else { return }
         guard index >= 0,
               gridItems.isEmpty || index < gridItems.count,
               let serverURL = authManager.selectedServerURL,
@@ -1414,6 +1429,7 @@ final class PlexHomeViewController: UIViewController {
         alphabetBar.setLetters([])
         alphabetBar.isHidden = true
         guard case .library(let key, _) = mode,
+              !gridShowsCollections,
               gridSort == .titleAsc || gridSort == .titleDesc,
               let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
@@ -1571,17 +1587,104 @@ final class PlexHomeViewController: UIViewController {
         guard case .library(let key, _) = mode, option != gridSort else { return }
         gridSort = option
         LibrarySettingsManager.shared.setSortOption(option, for: key)
+        resetGrid()
+        applySnapshot(animated: false)
+        refreshSortHeaderCount()
+        loadGridPage(containing: 0)
+        loadAlphabetIndex()
+    }
 
+    /// Empties the grid for a new source: a sort change or the Titles /
+    /// Collections switch. The generation bump makes any in-flight page
+    /// discard itself. The remembered focus path goes off because it can name
+    /// a slot the new grid lacks (titles slot 500 in a 71-slot collections
+    /// grid), and entering the collection view on such a path moves focus
+    /// nowhere. The `.grid` focus branch turns it back on.
+    private func resetGrid() {
         gridGeneration += 1
         gridItems = []
         totalGridCount = 0
-
-        applySnapshot(animated: false)
-        refreshSortHeaderCount()
         gridPagesRequested = []
         pendingGridFocusItem = nil
-        loadGridPage(containing: 0)
+        collectionView.remembersLastFocusedIndexPath = false
+    }
+
+    /// Puts the whole collection list into the grid slots, in server order.
+    /// `[PlexMetadata]` upcasts to `[PlexMetadata?]` implicitly. Touches no
+    /// snapshot: each caller applies in its own order.
+    private func fillGridWithCollections() {
+        gridItems = libraryCollections
+        totalGridCount = libraryCollections.count
+    }
+
+    /// The Titles / Collections switch. Collections come whole from
+    /// `libraryCollections` in server order: no paging, no A-Z bar, and no
+    /// sort (`gridSort` is never forwarded; `sort=mediaHeight:desc` returns
+    /// an empty list). Makes no focus request: the header reconfigure
+    /// re-vends the same cell, so focus stays on the switch, and Down enters
+    /// the grid by geometry.
+    private func setGridShowsCollections(_ on: Bool) {
+        gridShowsCollections = on
+        resetGrid()
+        if on { fillGridWithCollections() }
+        applySnapshot(animated: false)
+        refreshSortHeaderCount()
+        // Required: `grid-N` ids are the same in both states, so the apply
+        // alone leaves the old posters on screen.
+        reconfigureGridSlots(0..<gridItems.count)
+        if !on { loadGridPage(containing: 0) }
         loadAlphabetIndex()
+    }
+
+    /// Runs after every library refresh. While the grid shows collections it
+    /// holds its own copy of `libraryCollections`; a refreshed list replaces
+    /// that copy in place (no `resetGrid()`, which is for user toggles only)
+    /// unless the grid is busy.
+    private func syncCollectionsGrid() {
+        guard gridShowsCollections else { return }
+        // Busy: focus in the grid, or anything presented over this page (a
+        // collection page opened from the grid, the tile menu popup). Slot
+        // ids are positional, so a swap would repaint the focused tile, or
+        // the tile focus returns to, with a different collection.
+        let focusedSection = focusedSectionForHandoff
+        let busy = (focusedSection != nil && focusedSection == gridSectionIndex)
+            || presentedViewController != nil
+        switch Self.collectionsGridUpdate(
+            gridKeys: gridItems.map { $0?.ratingKey },
+            listKeys: libraryCollections.map(\.ratingKey),
+            isGridBusy: busy
+        ) {
+        case .unchanged:
+            break
+        case .hold:
+            // ponytail: a held swap waits for the next list fetch (the next
+            // .plexDataNeedsRefresh); apply it when focus leaves the grid if
+            // stale collection posters ever show up in use.
+            break
+        case .titles:
+            setGridShowsCollections(false)
+        case .apply:
+            fillGridWithCollections()
+            applySnapshot(animated: false)
+            refreshSortHeaderCount()
+            reconfigureGridSlots(0..<gridItems.count)
+        }
+    }
+
+    /// What a refreshed collection list does to a grid showing collections.
+    nonisolated enum CollectionsGridUpdate { case unchanged, titles, hold, apply }
+
+    /// An empty list returns to Titles first, even under focus and even when
+    /// the grid is already empty: with no collections the header hides the
+    /// switch, so an empty collections grid would have no way out. Any other
+    /// change waits while the grid is busy. Order counts, because the slots
+    /// are positional: a reordered list is a change.
+    nonisolated static func collectionsGridUpdate(
+        gridKeys: [String?], listKeys: [String?], isGridBusy: Bool
+    ) -> CollectionsGridUpdate {
+        if listKeys.isEmpty { return .titles }
+        if gridKeys == listKeys { return .unchanged }
+        return isGridBusy ? .hold : .apply
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -2741,8 +2844,20 @@ final class PlexHomeViewController: UIViewController {
 
         case .sortHeader:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: MediaLibrarySortControl.reuseID, for: indexPath) as! MediaLibrarySortControl
-            cell.configure(title: section.title ?? "", count: totalGridCount, sortName: gridSort.displayName)
+            // Read only when the cell is dequeued or reconfigured, which is why
+            // a changed list calls refreshSortHeaderCount(). nil hides the
+            // switch: the library has no non-empty collection.
+            cell.configure(
+                title: section.title ?? "",
+                count: totalGridCount,
+                sortName: gridSort.displayName,
+                collections: libraryCollections.isEmpty ? nil : gridShowsCollections
+            )
             cell.onSortTapped = { [weak self] in self?.presentSortPicker() }
+            cell.onViewTapped = { [weak self] in
+                guard let self else { return }
+                self.setGridShowsCollections(!self.gridShowsCollections)
+            }
             return cell
 
         case .recommendationsLoading:

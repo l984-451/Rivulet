@@ -1121,13 +1121,21 @@ class PlexDataStore: ObservableObject {
     /// profile can no longer see (measured on PMS 1.43.4), so the pin could
     /// never render again. Any other error keeps the last-known items.
     ///
-    /// The results belong to the profile and token that asked. If either
+    /// The results belong to the pin store and token that asked. If either
     /// changed while the requests were out, everything is dropped: the new
     /// profile's dictionary must not take the old one's pages, and an old
     /// profile's 404 must not unpin the new profile's pin of the same
     /// collection (`HomeCollectionPins.unpin` acts on the CURRENT profile).
+    ///
+    /// The profile half compares `HomeCollectionPins.storageKey` (derived from
+    /// UserDefaults `selectedPlexUserId`), not `profileManager.selectedUserId`.
+    /// The manager's value is nil on every cold launch until the deferred
+    /// `fetchHomeUsers` restore lands (10 to 28s), so `nil != X` dropped fresh
+    /// results whenever the restore arrived mid-fetch. The pin store key is what
+    /// the pins were read from, so it is the right identity, and it also covers
+    /// the first sign-in (base key to `_user_{id}`).
     func loadPinnedCollections(serverURL: String, token: String) async {
-        let userId = profileManager.selectedUserId
+        let pinStoreKey = HomeCollectionPins.storageKey
         let libraryUUIDs = Set(librariesPinnedToHome.filter(\.isVideoLibrary).map(\.uuid))
         let pins = HomeCollectionPins.pins.filter { libraryUUIDs.contains($0.libraryUUID) }
         guard !pins.isEmpty else { return }
@@ -1158,7 +1166,7 @@ class PlexDataStore: ObservableObject {
             return fetches
         }
 
-        guard profileManager.selectedUserId == userId,
+        guard HomeCollectionPins.storageKey == pinStoreKey,
               authManager.selectedServerToken == token else { return }
 
         for fetch in fetches {

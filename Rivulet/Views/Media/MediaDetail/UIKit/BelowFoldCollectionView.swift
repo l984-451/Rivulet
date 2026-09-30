@@ -648,6 +648,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         refreshToken &+= 1
         let refresh = refreshToken
         let load = loadToken
+        // Nothing to repaint in the carousel-stable episodes-only phase
+        // (`ingestEpisodesOnly` clears both), so skip /related and the
+        // collection fetch. Read before the await: the stores can change under it.
+        let hasShelves = collectionRow != nil || !cachedRelated.isEmpty
         Task { [weak self] in
             guard let self else { return }
             let eps: [MediaItem]
@@ -663,7 +667,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             // Collection and Related tiles carry watch glyphs too. Same call
             // and same kinds as the loader's collection row; it runs after the
             // rail repaint so the rail never waits on a second GET.
-            guard item.kind == .movie || item.kind == .show,
+            guard hasShelves, item.kind == .movie || item.kind == .show,
                   let fresh = try? await provider.related(for: item.ref, kind: item.kind),
                   self.refreshToken == refresh, self.loadToken == load else { return }
             self.applyRefreshedShelves(fresh)

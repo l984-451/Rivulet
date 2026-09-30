@@ -1417,10 +1417,13 @@ final class PlexHomeViewController: UIViewController {
     /// Re-requests every loaded grid page in place. Slots are positional, so
     /// a focused tile is reconfigured in place unless the collection shrank
     /// below it (loadGridPage clamps that case). The collection page calls
-    /// this when a member's watch state may have changed.
+    /// this when a member's watch state may have changed. The generation bump
+    /// discards any page still in flight, which is in `gridPagesRequested` and
+    /// so is re-requested below.
     // ponytail: re-requests every loaded page (7 at most for the largest
     // measured collection, 416 members); fetch only visible pages if it shows up.
     private func reloadLoadedGridPages() {
+        gridGeneration += 1
         let pages = gridPagesRequested
         gridPagesRequested = []
         pages.forEach { loadGridPage(containing: $0 * gridPageSize) }

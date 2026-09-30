@@ -128,8 +128,9 @@ enum HomeCollectionPins {
 
     private static var defaults: UserDefaults { .standard }
 
-    /// Per profile, for the same reason as `HomeRowSettings.hiddenKey`.
-    private static var storageKey: String {
+    /// Per profile, for the same reason as `HomeRowSettings.hiddenKey`. Internal
+    /// so the pin loader can compare it before and after its fetch.
+    static var storageKey: String {
         guard let userId = defaults.object(forKey: "selectedPlexUserId") as? Int else {
             return baseKey
         }

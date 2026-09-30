@@ -123,6 +123,20 @@ final class HomeCollectionPinsTests: XCTestCase {
         XCTAssertEqual(HomeCollectionPins.pins, [bond])
     }
 
+    /// `PlexDataStore.loadPinnedCollections` keeps its fetch results only while
+    /// this key is unchanged: same key keeps them, a different key drops them.
+    /// It must follow `selectedPlexUserId` (the first sign-in moves the base
+    /// key to a profile key) and stay put otherwise.
+    func test_storageKey_changesOnlyWithSelectedProfile() {
+        let keyA = HomeCollectionPins.storageKey
+        XCTAssertEqual(keyA, "homeCollectionPins_user_\(profileA)")
+        XCTAssertEqual(HomeCollectionPins.storageKey, keyA, "unchanged profile keeps the key")
+        UserDefaults.standard.set(profileB, forKey: userIdKey)
+        XCTAssertNotEqual(HomeCollectionPins.storageKey, keyA, "another profile drops the results")
+        UserDefaults.standard.removeObject(forKey: userIdKey)
+        XCTAssertEqual(HomeCollectionPins.storageKey, "homeCollectionPins", "no profile yet uses the base key")
+    }
+
     func test_pin_postsChangedNotification() {
         expectation(forNotification: HomeCollectionPins.changedNotification, object: nil)
         HomeCollectionPins.pin(bond)

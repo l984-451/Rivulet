@@ -218,4 +218,34 @@ final class PlexMediaMapperTests: XCTestCase {
         meta.viewCount = 1
         XCTAssertTrue(PlexMediaMapper.userState(meta).isPlayed)
     }
+
+    // MARK: - Artwork
+
+    /// A collection with no custom poster carries a composite thumb with its
+    /// own query. Measured on PMS 1.43.4: with a second '?' the token lands
+    /// inside `height` and the server answers 401; with '&' it answers 200.
+    func test_artworkURL_pathWithQuery_appendsTokenWithAmpersand() {
+        let url = PlexMediaMapper.artworkURL(
+            "/library/collections/63794/composite/1581446773?width=400&height=600",
+            serverURL: "https://example.plex.direct:32400",
+            authToken: "TOK"
+        )
+        XCTAssertEqual(
+            url?.absoluteString,
+            "https://example.plex.direct:32400/library/collections/63794/composite/1581446773?width=400&height=600&X-Plex-Token=TOK"
+        )
+        XCTAssertEqual(url?.absoluteString.filter { $0 == "?" }.count, 1)
+    }
+
+    func test_artworkURL_pathWithoutQuery_isUnchanged() {
+        let url = PlexMediaMapper.artworkURL(
+            "/library/metadata/9144/thumb/1790714299",
+            serverURL: "https://example.plex.direct:32400",
+            authToken: "TOK"
+        )
+        XCTAssertEqual(
+            url?.absoluteString,
+            "https://example.plex.direct:32400/library/metadata/9144/thumb/1790714299?X-Plex-Token=TOK"
+        )
+    }
 }

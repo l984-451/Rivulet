@@ -279,6 +279,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// publishers in bindAetherPublishers(); rendered by `CaptionOverlayView`,
     /// which PlayerContainerViewController mounts above the video surface.
     let aetherSubtitleModel = SubtitleModel()
+    /// The active ASS/SSA track's script, for the caption overlay's libass layer.
+    @Published private(set) var assTrack: ASSTrackSource?
 
     /// Local content filter (VidAngel/ClearPlay-style). Mutes language found in
     /// the title's subtitle file or on screen, and skips scenes from imported
@@ -646,12 +648,26 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// The subtitle lines currently on screen, as plain text, for the content
     /// filter's language matching.
+    /// Cue-axis time the video shows at `hostTime`, for the libass layer's
+    /// display link. nil when there is no Aether presentation timebase.
+    func subtitleSourceTime(atHostTime hostTime: CFTimeInterval) -> Double? {
+        aetherPlayer?.sourceTime(atHostTime: hostTime)
+    }
+
     private func activeSubtitleTextForFilter() -> [String] {
         aetherSubtitleModel.activeCues.compactMap { cue in
             switch cue.body {
             case .text(let string): return string
             case .styledText(let runs): return runs.map(\.text).joined()
             case .image: return nil
+            case .assEvents(let lines):
+                // Words only: the Style, Name and Effect fields and the tag
+                // names would otherwise reach the profanity matcher as words.
+                let text = ASSEventLine.lines(in: lines)
+                    .filter { !$0.isDrawing }
+                    .map(\.plainText)
+                    .joined(separator: "\n")
+                return text.isEmpty ? nil : text
             }
         }
     }
@@ -1948,6 +1964,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
             .store(in: &aetherCancellables)
 
+        player.$assTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] track in self?.assTrack = track }
+            .store(in: &aetherCancellables)
+
         // Mirrored onto the view model because AetherPlayer is not an
         // ObservableObject: a SwiftUI view reading `aetherPlayer.videoSize`
         // directly would never re-render, since `$aetherPlayer` only fires
@@ -2801,6 +2822,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         aetherPlayer?.stop()
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])
+        assTrack = nil
 
         teardownAVPlayerObservers()
         player?.pause()

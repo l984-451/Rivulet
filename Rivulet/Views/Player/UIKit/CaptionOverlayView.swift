@@ -305,6 +305,9 @@ final class CaptionOverlayView: UIView {
                 iv.layer.magnificationFilter = .trilinear
                 addSubview(iv)
                 bitmapCues.append((iv, position))
+            case .assEvents:
+                // Task 7 draws these; until then nothing renders them.
+                continue
             case .text, .styledText:
                 let box = CaptionBoxView(body: cue.body,
                                          style: style,
@@ -734,7 +737,7 @@ private final class CaptionBoxView: UIView {
                 result.append(NSAttributedString(string: run.text, attributes: attributes))
             }
 
-        case .image:
+        case .image, .assEvents:
             break
         }
 

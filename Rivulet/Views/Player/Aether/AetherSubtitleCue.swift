@@ -44,6 +44,11 @@ struct AetherSubtitleCue: Identifiable {
         /// `position` is the bitmap's origin+size in [0, 1] of the source
         /// video frame; the overlay multiplies by the on-screen video rect.
         case image(cgImage: CGImage, position: CGRect)
+        /// Raw ASS event lines (`ReadOrder,Layer,Style,...,Text`), one per
+        /// line, from an ASS/SSA track under the engine's
+        /// `preserveASSMarkup`. libass draws them (`ASSOverlayView`); with
+        /// Video Override pinned the overlay draws their plain text instead.
+        case assEvents(String)
     }
 
     /// One run of a styled text cue, mirroring AetherEngine's
@@ -116,6 +121,7 @@ struct AetherSubtitleCue: Identifiable {
             case text(String)
             case styledText([StyledRun])
             case image(image: ObjectIdentifier, position: CGRect)
+            case assEvents(String)
         }
 
         let startTime: Double
@@ -134,7 +140,25 @@ struct AetherSubtitleCue: Identifiable {
                 self.body = .styledText(runs)
             case .image(let cgImage, let position):
                 self.body = .image(image: ObjectIdentifier(cgImage), position: position)
+            case .assEvents(let lines):
+                self.body = .assEvents(lines)
             }
         }
+    }
+}
+
+/// The active ASS/SSA track's script header plus the loaded file's embedded
+/// fonts, mapped from the engine at the AetherPlayer boundary. A class so the
+/// overlay can tell tracks apart by identity without comparing font payloads
+/// (10 to 30 MB): AetherPlayer publishes a new instance per track and per load.
+final class ASSTrackSource {
+    let trackId: Int
+    let header: String
+    let fonts: [LibassRenderer.Font]
+
+    init(trackId: Int, header: String, fonts: [LibassRenderer.Font]) {
+        self.trackId = trackId
+        self.header = header
+        self.fonts = fonts
     }
 }

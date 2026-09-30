@@ -1251,6 +1251,13 @@ final class PlexHomeViewController: UIViewController {
             // changes then, so an equal ratingKey sequence skips the follow-ups.
             collectionsChanged = collections.map(\.ratingKey) != libraryCollections.map(\.ratingKey)
             libraryCollections = collections
+            // Pinned Home rows take Plex's current collection titles. Every
+            // successful fetch, not only a changed list: a rename keeps the
+            // ratingKey, so it reads as an unchanged list. Writes nothing
+            // unless a pinned title differs.
+            if let libraryUUID = dataStore.libraries.first(where: { $0.key == key })?.uuid {
+                HomeCollectionPins.updateTitles(from: collections, libraryUUID: libraryUUID)
+            }
         }
         isLoadingLibraryHubs = false
         applySnapshotKeepingFocusedRowStill()

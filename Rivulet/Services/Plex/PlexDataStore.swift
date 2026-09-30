@@ -51,6 +51,11 @@ class PlexDataStore: ObservableObject {
     /// fetch, and wholesale on sign-out / profile switch.
     private var libraryHubFetchFailures: Set<String> = []
 
+    /// First page of each pinned collection (see `HomeCollectionPins`), keyed
+    /// by `Pin.id`. nil means not fetched this session; [] means fetched and
+    /// empty. `pinRowDecision` needs the difference.
+    private var pinnedCollectionItems: [String: [PlexMetadata]] = [:]
+
     /// Increments whenever hubs content changes (not just count)
     /// Views should watch this to trigger UI updates when items change
     @Published private(set) var hubsVersion: UUID = UUID()
@@ -214,9 +219,11 @@ class PlexDataStore: ObservableObject {
     ///
     /// 1. Plex's own pin (`isPinnedToHome`, the server-side `hidden` field) says
     ///    which libraries Plex itself would put on Home. Rivulet can subtract
-    ///    from that set but never add to it, which is what keeps the row set a
-    ///    single source of truth (see `HomeRowSettings` for the same rule at row
-    ///    granularity).
+    ///    from that set but never add to it, which keeps the library set a
+    ///    single source of truth. `HomeRowSettings` applies the same rule to
+    ///    rows, with one user-created exception: a collection pinned with
+    ///    `HomeCollectionPins` adds a row inside its library's block, and only
+    ///    for a library this gate already lets through.
     /// 2. The sidebar toggle in Settings → Libraries. One "hidden" means hidden:
     ///    a library you switched off leaves the sidebar, the hero AND its Home
     ///    rows together. It used to leave only the first two, so hiding a
@@ -311,6 +318,23 @@ class PlexDataStore: ObservableObject {
             forName: HomeRowSettings.changedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.projectHomeItems() }
+        }
+
+        // A pin change is also a data change: a new pin has nothing fetched.
+        // Project first so an unpin vanishes at once, then fetch and project
+        // again. Kept apart from the observer above so a hide toggle never
+        // fetches.
+        NotificationCenter.default.addObserver(
+            forName: HomeCollectionPins.changedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.projectHomeItems()
+                guard let serverURL = self.authManager.selectedServerURL,
+                      let token = self.authManager.selectedServerToken else { return }
+                await self.loadPinnedCollections(serverURL: serverURL, token: token)
+                self.projectHomeItems()
+            }
         }
 
         // Same for the sidebar order — it decides Home's row order too
@@ -594,6 +618,7 @@ class PlexDataStore: ObservableObject {
         libraries = []
         hasLoadedLibraries = false
         libraryHubs.removeAll()
+        pinnedCollectionItems.removeAll()
         lastRecentlyAddedStamp = nil
         libraryHubFetchFailures.removeAll()
         homeItems = []
@@ -1054,6 +1079,21 @@ class PlexDataStore: ObservableObject {
             isLoadingLibraryHubs = false
             // Stage 1: final projection refresh after all library hubs land.
             projectAllLoadedItems()
+
+            // Pinned collections load in their own task. The projection above
+            // has already painted every promoted row and library page, and
+            // neither it nor a caller awaiting this task waits on a pin fetch,
+            // which can take up to the request timeout. This one site covers
+            // launch, the #315 content-added poll and `refreshLibraryHubs`.
+            // No pins, no second projection: `setHomeItems` bumps
+            // `homeItemsVersion` unconditionally, and an identical repaint
+            // behind every hub load is a cost only a pinned collection earns.
+            if !HomeCollectionPins.pins.isEmpty {
+                Task {
+                    await self.loadPinnedCollections(serverURL: serverURL, token: token)
+                    self.projectHomeItems()
+                }
+            }
         }
 
         await libraryHubsLoadTask?.value
@@ -1066,6 +1106,80 @@ class PlexDataStore: ObservableObject {
         libraryHubFetchFailures.removeAll()
         await cacheManager.clearLibraryHubsCache()
         await loadLibraryHubsIfNeeded()
+    }
+
+    /// Fetches the first page of every pinned collection (see
+    /// `HomeCollectionPins`) into `pinnedCollectionItems`. Callers project
+    /// afterwards; this never touches `homeItems`.
+    ///
+    /// Only pins whose library is a video library pinned to Home are
+    /// requested. That filter is load-bearing: without it one server's pins
+    /// are requested against another, answer 404, and are pruned below.
+    ///
+    /// Per pin: success stores the page, even an empty one. A 404 unpins,
+    /// because PMS answers 404 for a deleted collection and for one this
+    /// profile can no longer see (measured on PMS 1.43.4), so the pin could
+    /// never render again. Any other error keeps the last-known items.
+    ///
+    /// The results belong to the profile and token that asked. If either
+    /// changed while the requests were out, everything is dropped: the new
+    /// profile's dictionary must not take the old one's pages, and an old
+    /// profile's 404 must not unpin the new profile's pin of the same
+    /// collection (`HomeCollectionPins.unpin` acts on the CURRENT profile).
+    func loadPinnedCollections(serverURL: String, token: String) async {
+        let userId = profileManager.selectedUserId
+        let libraryUUIDs = Set(librariesPinnedToHome.filter(\.isVideoLibrary).map(\.uuid))
+        let pins = HomeCollectionPins.pins.filter { libraryUUIDs.contains($0.libraryUUID) }
+        guard !pins.isEmpty else { return }
+
+        typealias Fetch = (pin: HomeCollectionPins.Pin, items: [PlexMetadata]?, gone: Bool)
+        let fetches = await withTaskGroup(of: Fetch.self) { group in
+            for pin in pins {
+                group.addTask {
+                    do {
+                        let page = try await self.networkManager.getHubItems(
+                            serverURL: serverURL,
+                            authToken: token,
+                            hubKey: pin.childrenKey,
+                            hubIdentifier: nil,
+                            start: 0,
+                            count: 24
+                        )
+                        return (pin, page.items, false)
+                    } catch PlexAPIError.httpError(let statusCode, _) where statusCode == 404 {
+                        return (pin, nil, true)
+                    } catch {
+                        return (pin, nil, false)
+                    }
+                }
+            }
+            var fetches: [Fetch] = []
+            for await fetch in group { fetches.append(fetch) }
+            return fetches
+        }
+
+        guard profileManager.selectedUserId == userId,
+              authManager.selectedServerToken == token else { return }
+
+        for fetch in fetches {
+            if fetch.gone {
+                pinnedCollectionItems[fetch.pin.id] = nil
+                HomeCollectionPins.unpin(ratingKey: fetch.pin.ratingKey, libraryUUID: fetch.pin.libraryUUID)
+            } else if let items = fetch.items {
+                pinnedCollectionItems[fetch.pin.id] = items
+            }
+        }
+    }
+
+    /// The `key` of every hub Plex promotes to Home for this library, which for
+    /// a collection's promoted hub is the same string as
+    /// `HomeCollectionPins.Pin.childrenKey`. A pinned collection whose key is
+    /// in this set is already a Plex row (P1 wins). `projectHomeItems` uses it
+    /// to drop that duplicate, and the tile menu's Pin to Home uses it to not
+    /// offer a pin Plex already provides, so both must read this one
+    /// derivation. Empty for a library whose hubs have not loaded.
+    func promotedHubKeys(forLibraryKey key: String) -> Set<String> {
+        Set((libraryHubs[key] ?? []).filter { $0.promoted == true }.compactMap(\.key))
     }
 
     /// Apply one library's hub-fetch outcome. Success stores the hubs and
@@ -1203,6 +1317,7 @@ class PlexDataStore: ObservableObject {
         // sidebar's (see `librariesPinnedToHome`); the rows WITHIN a library
         // stay in the server's order, which is where Plex's own drag-to-reorder
         // in Manage Recommendations lands.
+        let pins = HomeCollectionPins.pins
         for library in librariesPinnedToHome {
             for hub in libraryHubs[library.key] ?? [] {
                 guard hub.promoted == true else { continue }
@@ -1221,6 +1336,33 @@ class PlexDataStore: ObservableObject {
                     hubIdentifier: hub.hubIdentifier,
                     metas: metas
                 ))
+            }
+
+            // Collections pinned in Rivulet (see `HomeCollectionPins`), after
+            // Plex's own rows for this library, in pin order.
+            let promotedKeys = promotedHubKeys(forLibraryKey: library.key)
+            for pin in pins where pin.libraryUUID == library.uuid {
+                let rowID = "hub:\(pin.rowIdentifier)"
+                let cachedRow = homeItems.first { $0.id == rowID }
+                switch Self.pinRowDecision(
+                    isPromotedDuplicate: promotedKeys.contains(pin.childrenKey),
+                    fetched: pinnedCollectionItems[pin.id],
+                    hasCachedRow: cachedRow != nil
+                ) {
+                case .render:
+                    rail.append(makeCachedHub(
+                        id: rowID,
+                        title: pin.title,
+                        isContinueWatching: false,
+                        hubKey: pin.childrenKey,
+                        hubIdentifier: pin.rowIdentifier,
+                        metas: pinnedCollectionItems[pin.id] ?? []
+                    ))
+                case .carryOver:
+                    if let cachedRow { rail.append(cachedRow) }
+                case .omit:
+                    break
+                }
             }
         }
 
@@ -1521,6 +1663,31 @@ class PlexDataStore: ObservableObject {
     ///   empty (or has the row disabled server-side); omit it.
     nonisolated static func shouldCarryOverRecentlyAddedRow(hubs: [PlexHub]?, fetchFailed: Bool) -> Bool {
         hubs == nil || fetchFailed
+    }
+
+    /// What `projectHomeItems` does with one pinned collection (see
+    /// `HomeCollectionPins`). Plain values so it can be tested.
+    nonisolated enum PinRowDecision { case render, carryOver, omit }
+
+    /// - A hub Plex already promotes for the same collection wins (P1).
+    /// - `fetched == nil` means not fetched this session. The row already in
+    ///   `homeItems` (warm-launch cache or an earlier pass) carries over:
+    ///   `projectHomeItems` runs from the Continue Watching poll before the pin
+    ///   loader finishes, and `setHomeItems` re-persists whatever it gets, so
+    ///   dropping the row here would wipe the pin from the next warm launch
+    ///   (the #236 trap).
+    /// - Fetched and empty: no members right now. Omit the row; the pin stays,
+    ///   since a smart collection can refill.
+    ///
+    /// No hidden branch: pins are never `HomeRowSettings` hide toggles.
+    nonisolated static func pinRowDecision(
+        isPromotedDuplicate: Bool,
+        fetched: [PlexMetadata]?,
+        hasCachedRow: Bool
+    ) -> PinRowDecision {
+        if isPromotedDuplicate { return .omit }
+        guard let fetched else { return hasCachedRow ? .carryOver : .omit }
+        return fetched.isEmpty ? .omit : .render
     }
 
     /// Replica of `PlexHomeViewController.isContinueWatchingHub(_:)` for the
@@ -2033,6 +2200,7 @@ class PlexDataStore: ObservableObject {
         libraries = []
         hasLoadedLibraries = false
         libraryHubs.removeAll()
+        pinnedCollectionItems.removeAll()
         lastRecentlyAddedStamp = nil
         libraryHubFetchFailures.removeAll()
         homeItems = []

@@ -50,6 +50,14 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
         var linePosition = 0.0
     }
 
+    /// The libass handles, carried to `queue` for teardown. Only ever touched
+    /// there, which is the confinement that makes the unchecked conformance hold.
+    private struct Handles: @unchecked Sendable {
+        let library: OpaquePointer
+        let renderer: OpaquePointer
+        let track: UnsafeMutablePointer<ASS_Track>
+    }
+
     private let queue = DispatchQueue(label: "com.rivulet.libass", qos: .userInteractive)
     private let library: OpaquePointer
     private let renderer: OpaquePointer
@@ -93,11 +101,11 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
     deinit {
         // Async: the last reference can drop inside a render closure running
         // on `queue`, where a sync hop would deadlock.
-        let (library, renderer, track) = (library, renderer, track)
+        let handles = Handles(library: library, renderer: renderer, track: track)
         queue.async {
-            ass_free_track(track)
-            ass_renderer_done(renderer)
-            ass_library_done(library)
+            ass_free_track(handles.track)
+            ass_renderer_done(handles.renderer)
+            ass_library_done(handles.library)
         }
     }
 

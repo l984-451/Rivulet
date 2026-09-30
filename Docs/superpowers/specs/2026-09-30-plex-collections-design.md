@@ -1,7 +1,7 @@
 # Plex Collections: Design
 
 Date: 2026-09-30
-Status: Draft, revised after the written-spec review
+Status: Draft, revised after the written-spec review, then amended to match the implementation (§13)
 Issues: #321 (collections in Movie and TV libraries), #240 (collections pinned to Home), #56 (a movie's collection on its detail page)
 
 ## 1. Goal and issues addressed
@@ -44,7 +44,7 @@ This spec adds five pieces on the UIKit surfaces:
 | Who owns the collection list | VC-local `[MediaItem]` (row map) vs VC-local `[PlexMetadata]` (switch map); fetched in `refreshThisLibraryHubs` vs `viewDidLoad` | VC-local `[PlexMetadata]`, fetched in `refreshThisLibraryHubs` | The grid stores `PlexMetadata?`, and the row maps through `mapToMediaItems`. Fetching beside the hubs gives the list the hubs' refresh triggers, which is the only mid-session path for a collection Kometa adds. An unchanged list costs the request and nothing else (§5.4). |
 | Tile menu on a collection tile | `[]` (row map, switch map) vs Open plus Pin/Unpin (pins map) | Pin to Home / Unpin from Home only, in library mode; `[]` elsewhere | P2 needs an entry point. Select already opens the collection, so an Open action repeats it. |
 | Detail row source | `/related`'s `collection.related` hub (detail map) vs Collection tag id, then lookup, then children (API map) | `/related` hub | The detail page already makes this call. Plex has already picked the collection and ordered its members. The change also fixes two live Related defects (§5.6). `MediaItemDetail.collections` stays `[String]`, since nothing reads it. |
-| Collection lookup for the trailing tile | `/library/sections/{sid}/collections?index=` (detail map) vs `/library/all?type=18&index=` (API map) | `/library/all?type=18&index={tagId}`, requested only when the collection hub reports `more` | Section-free, 869 bytes, verified for tag 61303. A collection of 12 or fewer shows every member already, so it costs no extra request. |
+| Collection lookup for the trailing tile | `/library/sections/{sid}/collections?index=` (detail map) vs `/library/all?type=18&index=` (API map) | `/library/sections/{sid}/all?type=18&index={tagId}`, with the section taken from the collection hub's own key, requested only when the collection hub reports `more` | Section-scoped, 1125 to 1142 bytes, about 10ms. The section-free form returns two collections when Kometa made same-named movie and show collections that share one tag, so a show page would get the movie collection as its trailing tile (§4). A collection of 12 or fewer shows every member already, so it costs no extra request. |
 | Detail tile to collection page | New `onShowCollection` callback through `ExpandedDetailContainerView` (detail map) vs a guard in `presentStandaloneDetail` (page map) | The guard. Every tile keeps using `onShowRelatedDetails` | No new callback plumbing. The carousel arms its shelf-row restore before presenting, and the page's `onDismiss` closure re-runs it (§5.2). |
 | Collection page header | Add subtitle and summary labels to `HubHeaderView` (page map) | Title only, `HubHeaderView` unchanged | This matches the Watchlist page. `HubHeaderView.configure` documents that row headers show no amounts, and the view is shared by every row header. Title only is a user decision (§2). |
 | `showLibraryCollections` toggle | Add one (row map) | Not added | No decision asks for it (YAGNI). |
@@ -108,7 +108,8 @@ PMS 1.43.4, Movies section 1 unless noted. GET only, except the one P1 promotion
 - `/library/metadata/{rk}/related` returns at most one collection hub per section: hubIdentifier `collection.related.{sid}.{sid}`, context `hub.collection.related`, title "<Name> Collection". Members come in the collection's order and include the current movie. `more` is set when the collection holds more than count=12.
 - Raiders of the Lost Ark (87157): today's Related row is 12 IMDb Top 250 tiles, Raiders among them. "More by Steven Spielberg" and "More with Harrison Ford" never show. Diamonds Are Forever (55947): Related is the four Bond films, itself included.
 - Spider-Man: No Way Home carries 4 collection tags and gets one hub (Avengers). The rule looks like "first tag whose collection has 2 or more members" (moderate confidence).
-- A movie's Collection tag id (61303) is not the collection ratingKey (9144). It equals the collection's `index`. `/library/all?type=18&index=61303` returns rk 9144 (869 bytes). Tag 353397 maps to rk 118562.
+- A movie's Collection tag id (61303) is not the collection ratingKey (9144). It equals the collection's `index`. `/library/sections/1/all?type=18&index=61303` returns rk 9144. Tag 353397 maps to rk 118562 in section 1.
+- Collection tags are shared across sections. Where Kometa built same-named collections in Movies and TV, the section-free `/library/all?type=18&index={tagId}` returns both, movie first: 353397 returns 118562 (movie) and 118567 (show), 353395 returns 118561 and 118566. `/library/sections/{sid}/all?type=18&index={tagId}` returns exactly one (1125 to 1142 bytes, about 10ms), and a miss returns 200 with nothing (425 bytes).
 - Smart collections never appear as Collection tags. Grid-list items carry Collection tags without ids.
 - For the show UNTAMED, the first collection hub is the movie-typed "Movies in IMDb Popular Collection" (`collection.related.1.1`).
 
@@ -127,7 +128,7 @@ PMS 1.43.4, Movies section 1 unless noted. GET only, except the one P1 promotion
   - Together these make `getHubItems` the collection-children pager. Collection keys carry no query, so the merge does not affect them.
 - **`getRelatedItems`**: return the raw `[PlexHub]` (`MediaContainer.Hub`, or top-level `Metadata` wrapped in one hub as a fallback) in place of the flattened, deduped, capped list. Its only caller is `PlexProvider.relatedItems`, and the flatten, dedupe and 12 cap move there. iOS and the tests do not call it.
 - **Delete `getCollectionItems`.** It has no callers, returns title order, and returns nothing for smart collections.
-- **Add `getCollection(serverURL:authToken:tagId:) async throws -> PlexMetadata?`**: `GET /library/all?type=18&index={tagId}`, returns `Metadata?.first`. Only the detail row's trailing tile uses it, and only when the collection hub has `more == true` (`PlexHub.more` already decodes).
+- **Add `getCollection(serverURL:authToken:sectionId:tagId:) async throws -> PlexMetadata?`**: `GET /library/sections/{sectionId}/all?type=18&index={tagId}`, returns `Metadata?.first`. The section comes from the collection hub's own key. It is required: the section-free form returns both collections when a movie and a show collection share one tag (§4), and `first` would hand a show page the movie collection. Only the detail row's trailing tile uses it, and only when the collection hub has `more == true` (`PlexHub.more` already decodes).
 
 Listing reuses `getLibraryItemsWithTotal(serverURL:authToken:sectionId:start: 0, size: 1000, type: 18)` with no `sort`. The call site filters `($0.childCount ?? 0) > 0`. A `// ponytail:` comment names the 1000 ceiling: a library with more collections would be truncated, and the upgrade is paging on `totalSize`.
 
@@ -149,16 +150,16 @@ the Watchlist pattern. The header is therefore first dequeued after page 0 arriv
 
 **Data.** `loadGridPage(containing:)` widens its `guard case .library` so that collection mode calls
 `getHubItems(hubKey: "/library/collections/\(rk)/children", start:, count: gridPageSize)`.
-It sends no sort, because the server applies `collectionSort`. The sparse slots, `gridGeneration`, slot sizing from `totalSize` and `reconfigureGridSlots` are reused unchanged. Never route a collection through `getChildren` or `PlexProvider.children(of:)`.
+It sends no sort, because the server applies `collectionSort`. The sparse slots, `gridGeneration`, slot sizing from `totalSize` and `reconfigureGridSlots` are reused unchanged. Never route a collection through `getChildren` or `PlexProvider.children(of:)`. `loadGridPage` clamps what a landed page may write with `nonisolated static func gridSlotRange(start:returned:slotCount:) -> Range<Int>`, which is `start..<max(start, min(start + returned, slotCount))`. A reload can answer for a page that begins past a grid that has since shrunk (a member removed in Plex, a Kometa run), and an unclamped `start..<end` with `end < start` traps. The clamp sits in the shared path, so it also applies to the library titles grid.
 
 Page 0's outcome needs its own state, because an empty `gridItems` reads the same after a failure, after an empty answer and while the request is in flight. A collection-mode `private var pageZero: PageZeroState = .loading` (`.loading`, `.loaded`, `.failed(String)`) is set by `loadGridPage`'s page-0 success and catch, and reset to `.loading` by the retry.
 
 **Mode branches.** The compiler lists the 11 `switch mode` sites. The focus and `performMenuAction` items below are `if case .collection` checks it will not list.
 - `emptyStateMessage`: "This collection is empty."
 - `showHomeHero`: `false`, like `.watchlist`.
-- `viewDidLoad`: `view.backgroundColor = .black`, because `BlurFadeAnimator` assumes an opaque page. Then load page 0. No alphabet index.
+- `viewDidLoad`: `view.backgroundColor = .black`, because `BlurFadeAnimator` assumes an opaque page. Then load page 0. No alphabet index, and the system's fast-scroll index bar stays invisible (`showsVerticalScrollIndicator = false`, `indexDisplayMode = .alwaysHidden`, as in library mode). A 416-member collection is 70 rows, and the bar still takes focus on a held Up/Down, which starts the page's own fast scroll.
 - `updateHomeState`, driven by `pageZero`: `.loading` shows the loading state with the focus anchor visible (see Menu below); `.failed` shows `.error(message:)` with Try Again; `.loaded` with no items shows the empty state; `.loaded` with items shows content. The anchor is hidden in every state except loading, so it never competes with the grid or the state view's button.
-- Focus on content: `loadGridPage` applies the snapshot while the collection view is still hidden, so no grid cell exists when `updateHomeState` un-hides it, and a request made then finds no cell and moves nothing. In collection mode the content branch therefore calls `collectionView.layoutIfNeeded()`, takes `cellForItem(at: IndexPath(item: 0, section: 0))`, and passes it to `UIFocusSystem.focusSystem(for: view)?.requestFocusUpdate(to:)` followed by `updateFocusIfNeeded()`. The page already holds focus on the anchor, so the request is honoured. `RootShellViewController`'s `.contentBecameFocusable` handler no-ops once the library tab holds focus, so the page cannot rely on it.
+- Focus on content: `loadGridPage` applies the snapshot while the collection view is still hidden, so no grid cell exists when `updateHomeState` un-hides it, and a request made then finds no cell and moves nothing. In collection mode the content branch therefore calls `collectionView.layoutIfNeeded()`, takes `cellForItem(at: IndexPath(item: 0, section: 0))`, and passes it to `UIFocusSystem.focusSystem(for: collectionView)?.requestFocusUpdate(to:)` followed by `updateFocusIfNeeded()`, the same lookup the controller's other explicit focus requests use. The page already holds focus on the anchor, so the request is honoured. `RootShellViewController`'s `.contentBecameFocusable` handler no-ops once the library tab holds focus, so the page cannot rely on it.
 - `observeDataStore` `.plexDataNeedsRefresh`: `reloadLoadedGridPages()`, a new helper that re-requests the loaded pages in place (`let pages = gridPagesRequested; gridPagesRequested = []; pages.forEach { loadGridPage(containing: $0 * gridPageSize) }`). Slots are positional, so the focused tile reconfigures and is never deleted. This covers playback and detail-page watch changes, which post the notification.
 - `performMenuAction`: in collection mode, also call `reloadLoadedGridPages()` after the server call. Mark as Watched from a member's tile menu never posts `.plexDataNeedsRefresh` (the method calls `refreshHubs()` and `refreshLibraryHubs()` only), so without this the grid keeps stale watched badges. The library titles grid has the same gap today; this spec does not change it.
 - `observeDataStore` publisher switch: join the `.discover, .search, .watchlist: break` arm.
@@ -179,15 +180,17 @@ static func openCollectionIfNeeded(_ item: MediaItem,
                                    onDismiss: (() -> Void)? = nil) -> Bool
 ```
 
-It returns false unless `item.kind == .collection`. Otherwise it walks `presentedViewController` to the top. If the walk passes a `PlexHomeViewController` in `.collection` mode with the same ratingKey, it calls `dismiss(animated: true)` on that page, which unwinds everything above it, and returns true. This breaks the loop of collection page, member detail, that detail's trailing collection tile, and the same collection page again, which would otherwise stack two modals per lap. Otherwise it presents the page from the top controller and returns true. Two call sites, each as the first line:
+It returns false unless `item.kind == .collection`. Otherwise it walks `presentedViewController` to the top, then back down through `presentingViewController`, because a member's detail is presented over the page it came from and a walk up alone can never reach a page below the presenter. If it meets a `PlexHomeViewController` in `.collection` mode with the same ratingKey, it returns true, and it calls `dismiss(animated: true)` on that page only when something is presented over it. That unwinds everything above the page, while a dismiss on a page already on top would close the page itself. This breaks the loop of collection page, member detail, that detail's trailing collection tile, and the same collection page again, which would otherwise stack two modals per lap. Otherwise it presents the page from the top controller and returns true. Two call sites, each as the first line:
 - `PlexHomeViewController.presentPreview(forSection:indexPath:)`: grid taps, every shelf row (via `handleShelfTap`), and search (via `handleSearchTap`).
-- `PreviewCarouselViewController.presentStandaloneDetail(_:)`: below-fold Related and the new detail row. When the item is a collection, the carousel first calls `expandedDetail.restoreShelfRowFocusIfNeeded()`, then passes `onDismiss: { [weak self] in self?.restoreBelowFoldFocusAfterReturn() }`.
+- `PreviewCarouselViewController.presentStandaloneDetail(_:)`: below-fold Related and the new detail row. When the item is a collection, the carousel first calls `expandedDetail.restoreShelfRowFocusIfNeeded(requestingFocus: false)`, then passes `onDismiss: { [weak self] in self?.restoreBelowFoldFocusAfterReturn() }`.
 
-The pre-present arm is required. `restoreBelowFoldFocusAfterReturn` has never fired in practice: a standalone detail's Menu path is a bare `dismiss(animated: true)`, and the carousel calls its own `onDismiss` only from the two non-standalone morph paths. The method came in with commit `c36832a` ("TEMP"), so the collection page is its first real caller. Its `setNeedsFocusUpdate` is ignored unless the carousel contains focus, and the carousel sets `restoresFocusAfterTransition = false`, so on dismissal the engine runs a fresh resolution first. Unarmed, that resolution falls back to the shelf host's `lastFocusedIndexPath`, and the nested row restarts at item 0: focus goes to the first member and the row scrolls back to its start. Armed before presenting (the row and tile exist then, and the carousel cannot resolve focus while the modal is up), the fresh resolution consumes `armedShelfRestoreCell`, and `onDismiss` re-arms, updates and clears it. The member standalone detail keeps today's behaviour: its restore does not fire, and fixing that is outside this spec.
+The pre-present arm is required. `restoreBelowFoldFocusAfterReturn` has never fired in practice: a standalone detail's Menu path is a bare `dismiss(animated: true)`, and the carousel calls its own `onDismiss` only from the two non-standalone morph paths. The method came in with commit `c36832a` ("TEMP"), so the collection page is its first real caller. Its `setNeedsFocusUpdate` is ignored unless the carousel contains focus, and the carousel sets `restoresFocusAfterTransition = false`, so on dismissal the engine runs a fresh resolution first. Unarmed, that resolution falls back to the shelf host's `lastFocusedIndexPath`, and the nested row restarts at item 0: focus goes to the first member and the row scrolls back to its start. Armed before presenting (the row and tile exist then, and the carousel cannot resolve focus while the modal is up), the fresh resolution consumes `armedShelfRestoreCell`, and `onDismiss` re-arms, updates and clears it. The arm passes `requestingFocus: false`: `restoreShelfRowFocusIfNeeded` (on `ExpandedDetailContainerView` and `BelowFoldCollectionView`) gains the parameter with a default of true, and with false the row arms its tile through `ShelfRowCell.armFocusRestore(on:)` instead of `prepareFocusRestore(on:)`. The plain call also issues a focus request, which is honoured while the shelf still holds focus, and resolving it consumes the row's one-shot tile index before the page takes focus. The member standalone detail keeps today's behaviour: its restore does not fire, and fixing that is outside this spec.
 
 The Play key already ignores collections (`playableItem` returns nil for `.collection`). `tileMenuSections(for:isContinueWatching:shelfLocation:)` gets an early `.collection` branch (§5.5). Today the generic menu offers Watch from Beginning, which sends the collection ratingKey to `playItem`.
 
 **Menu.** The library PHVC underneath stays registered with `MenuPressInterceptor` while the page is up: it registers in `viewDidAppear` and resigns only in `viewWillDisappear`, which an `.overFullScreen` presenter never gets. Handlers are offered newest first, so the library is asked before `RootShellViewController`. If focus stayed on the tapped library tile during loading, the library's `handleMenuBack` would pass its containment check, and `StagedMenuBack.shouldReturnToTop` would pass too, because the tile always sits below the hero (the Collections row or the grid). It would run `returnToTopRow()` under the modal and swallow the press. The hidden library would jump to its hero, and the next Menu would reach the shell and expand the covered sidebar (`cfb44f1`). Arrows would scroll the hidden library, and Select would present a carousel over the loading page. The anchor prevents all of it. With focus on the anchor or on a grid tile, the page's own `handleMenuBack` declines (the anchor is outside its collection view, and every grid tile is in `topSectionIndex`), the library and the shell decline on containment, and the system dismisses the modal, the same path `PersonDetailViewController` takes with no Menu code. A separate header section would sit at index 0, and Menu would return-to-top forever without ever dismissing. That is why the header is a supplementary. If a device shows otherwise, add `MediaItemDetailPageViewController`'s `.menu` tap-to-dismiss.
+
+**Menu during the blur-fade.** The anchor holds focus only once the page is on screen. Until the 0.45s fade ends, focus can still sit on the library tile, and on a LAN page 0 can arrive mid-transition, so the library's staged back would run under the modal as described above. The page therefore registers with `MenuPressInterceptor` in `viewWillAppear`, which puts it ahead of the library in the newest-first handler list, and its `handleMenuBack` returns true without acting until `viewDidAppear` has set `hasMarkedFirstFrame`. The check sits before the window guard, because the page's view may not be in the window yet. A Menu press during the fade does nothing: the page finishes opening and stays up, and a Menu press after the first frame dismisses it as above.
 
 **Focus back on the library.** This relies on the system's post-dismiss restore to the tapped tile, which hero Info and More Info already use. If device testing loses the tile, the fallback is to set `pendingPreviewRestore` before presenting and run `applyPendingPreviewRestoreIfNeeded()` from `onDismiss`. That path already scrolls the cell into existence before `preferredFocusEnvironments` names it.
 
@@ -197,9 +200,9 @@ Not wired: `presentStandaloneExpandedDetail` (see §2) and the Top Shelf deep li
 
 - `private var libraryCollections: [PlexMetadata] = []` on `PlexHomeViewController`. One fetch serves the row and the switch.
 - **Fetch** in `refreshThisLibraryHubs`: start an `async let` of `getLibraryItemsWithTotal(type: 18)` before the hubs call and await it before `applySnapshot`. Assign only on success. A failed fetch keeps the previous list and never sets `libraryHubsError`. Filter `childCount > 0` and keep server order. The list refreshes on the hubs' triggers: launch after the cache paint, and `.plexDataNeedsRefresh`.
-- **On each successful fetch**, compare the new ratingKey sequence with the old one. `.plexDataNeedsRefresh` fires on every player exit, and the list almost never changes there, so an equal list skips the two steps below. The grid follows its own rule in §5.4, which compares against the grid's copy rather than the old list. Different:
+- **On each successful fetch**, update pin titles: `HomeCollectionPins.updateTitles(from: collections, libraryUUID:)` rewrites a stored pin whose collection was renamed in Plex, and writes nothing when no title differs. It is not gated on a changed list, because a rename keeps the ratingKey and so reads as an unchanged list.
+- **Then** compare the new ratingKey sequence with the old one. `.plexDataNeedsRefresh` fires on every player exit, and the list almost never changes there, so an equal list skips the step below. The grid follows its own rule in §5.4, which compares against the grid's copy rather than the old list. Different:
   - Call `refreshSortHeaderCount()`. The header's item id never changes, so `applySnapshot` never re-vends it, and page 0 of the titles grid usually configures the header first, with an empty list. Without this call the switch stays hidden (or stays shown after the list empties) until the cell is dequeued again.
-  - Update pin titles: `HomeCollectionPins.updateTitles(from: libraryCollections, libraryUUID:)` rewrites a stored pin whose collection was renamed in Plex, and writes nothing when no title differs.
 - **Not in `PlexDataStore.projectLibraryItems`.** That projection is written to disk, and Home's `projectAllLoadedItems` re-projects every library without this data, so the row would need a carry-over path. The row therefore has no warm-launch cache and arrives with the network refresh, below the hero, CW and recent rows.
 - **Keep the focused tile still when the row appears.** Every other library row paints from cache, so this is the one section routinely inserted into a live page, above the genre rows, the sort header and the grid. The page drives its own scroll (`isScrollEnabled = false`) and moves `contentOffset` only on focus changes, so a row inserted above the focused one pushes the focused tile down a full poster row, often off screen. When the apply in `refreshThisLibraryHubs` inserts or removes the Collections row and focus sits in a section after its slot, note the focused cell's `frame.minY` before the apply, call `collectionView.layoutIfNeeded()` after it, and add the change in `minY` to `contentOffset.y`. The page owns its offset, so a direct write is safe. The same path covers a list that goes from empty to non-empty mid-session.
 - **Rendering**: `HomeSectionID.libraryCollections = HomeSectionID(raw: "collections")`. Each library key has its own cached VC, so the id cannot collide.
@@ -256,12 +259,13 @@ Not wired: `presentStandaloneExpandedDetail` (see §2) and the Top Shelf deep li
 *Loader* `loadPinnedCollections(serverURL:token:)`:
 - Takes only pins whose `libraryUUID` matches a video library in `librariesPinnedToHome`. This filter is load-bearing. Without it, one server's pins are requested against another server, get a 404, and are pruned.
 - Fetches in parallel (`TaskGroup`) with `getHubItems(hubKey: pin.childrenKey, start: 0, count: 24)`.
+- The results belong to the profile and server token that asked. If either changed while the requests were out, everything is dropped: the new profile's dictionary must not take the old profile's pages, and an old profile's 404 must not unpin the new profile's pin of the same collection (`HomeCollectionPins.unpin` acts on the current profile).
 - Success writes the items. `PlexAPIError.httpError(404, _)` unpins silently: PMS answers 404 for a deleted collection and for one the profile can no longer see (§4), so the pin could never render again. Any other error keeps the last-known items. A collection that empties answers 200 with no items; the pin stays, costs one small request per load, and renders nothing until it refills.
-- Called from `loadLibraryHubsIfNeeded`'s task after its final `projectAllLoadedItems()`, in its own `Task`: `loadPinnedCollections`, then `projectHomeItems()`. The existing projection, which paints Home's promoted rows and every library page, never waits on a pin fetch (up to the 30s request timeout), and neither do callers awaiting the load task. That one site covers launch, the #315 content-added poll and `refreshLibraryHubs`.
+- Called from `loadLibraryHubsIfNeeded`'s task after its final `projectAllLoadedItems()`, in its own `Task`: `loadPinnedCollections`, then `projectHomeItems()`. The existing projection, which paints Home's promoted rows and every library page, never waits on a pin fetch (up to the 30s request timeout), and neither do callers awaiting the load task. That one site covers launch, the #315 content-added poll and `refreshLibraryHubs`. The task starts only when pins exist: `setHomeItems` bumps `homeItemsVersion` unconditionally, and a user with no pins should not pay an identical repaint behind every hub load.
 - An observer for `HomeCollectionPins.changedNotification` calls `projectHomeItems()` right away, so an unpin vanishes at once, then the loader, then `projectHomeItems()` again. The existing `HomeRowSettings` observer stays projection-only, so hide toggles never fetch.
 
 *Projection.* Inside `projectHomeItems`' loop over `librariesPinnedToHome`, after that library's promoted hubs, handle each of the library's pins in pin order:
-- **P1 wins:** skip the pin when a promoted hub's `key == pin.childrenKey`.
+- **P1 wins:** skip the pin when a promoted hub's `key == pin.childrenKey`. The promoted keys come from `PlexDataStore.promotedHubKeys(forLibraryKey:)`, the one derivation of that set, which the tile menu also reads so the two cannot disagree.
 - **Loaded, non-empty:** append `makeCachedHub(id: "hub:\(pin.rowIdentifier)", title: pin.title, isContinueWatching: false, hubKey: pin.childrenKey, hubIdentifier: pin.rowIdentifier, metas:)`.
 - **Not fetched yet:** carry over the row already in `homeItems` with that id. `projectHomeItems` runs from the CW poll before the loader finishes, and `setHomeItems` re-persists whatever it gets. Without the carry-over, one early projection would wipe the pin from the warm-launch cache (the #236 trap).
 - **Fetched, empty:** omit the row.
@@ -272,7 +276,7 @@ A pin whose collection has emptied is omitted from Home, and its tile is gone fr
 
 *Tile menu.* In library mode, the `.collection` branch of `tileMenuSections` returns `[[Pin to Home]]` or `[[Unpin from Home]]`. The library comes from `mode`, since a `MediaItem` carries no section id: `dataStore.libraries.first { $0.key == key }?.uuid`. The branch returns `[]` when:
 - the library is not pinned to Home (there is no block to render into), or
-- `dataStore.libraryHubs[key]` already holds a promoted hub whose key is the collection's children key (Plex already puts it on Home).
+- `dataStore.promotedHubKeys(forLibraryKey: key)` already holds the collection's children key (Plex already puts it on Home). This is the same helper the projection uses for P1 wins.
 
 The choice is a `nonisolated static func collectionPinAction(isLibraryPinned: Bool, promotedChildrenKeys: Set<String>, childrenKey: String, isPinned: Bool) -> PinAction?` (`.pin`, `.unpin`, or nil for no menu), so a wrong result, which would hide Unpin or offer a Pin that never renders, is caught by a test (§9).
 
@@ -284,8 +288,8 @@ The choice is a `nonisolated static func collectionPinAction(isLibraryPinned: Bo
 - The collection hub is the first hub whose `hubIdentifier` starts with `collection.related.` **and** whose `type` equals `kind.rawValue`, for `.movie` ("movie") and `.show` ("show") only. Any other kind gets no collection hub. The type check stops UNTAMED's movie hub from reaching a show.
 - Every other `collection.related.*` hub is dropped.
 - The current ratingKey is removed from the members.
-- The remaining hubs are flattened, deduped and capped at 12 as Related, as today.
-- When the collection hub has `more == true`, the static also returns the `tagId`, parsed from the hub's `key` (`/library/sections/1/all?type=1&tagId=61303&...`) with `URLComponents`. `related(for:kind:)` then calls `getCollection(tagId:)` and maps the result through `PlexMediaMapper.item` to a `.collection` item for the trailing tile. Without `more`, the row already holds every member, so there is no tile and no request. If the lookup fails, the row shows without the trailing tile.
+- The remaining hubs are flattened, deduped and capped at 12 as Related, as today. The dedupe set starts with the chosen collection hub's members, so a title never shows in both adjacent rows (a member that a people hub also lists stays out of Related). The cost is that Related runs a few tiles shorter for a title with a large collection.
+- When the collection hub has `more == true`, the static also returns the `tagId` and the `sectionId`, parsed from the hub's `key` (`/library/sections/1/all?type=1&tagId=353397&...`) with `URLComponents`. `RelatedSplit` carries both. `related(for:kind:)` then calls `getCollection(sectionId:tagId:)` and maps the result through `PlexMediaMapper.item` to a `.collection` item for the trailing tile. Without `more`, the row already holds every member, so there is no tile and no request. If the lookup fails, the row shows without the trailing tile.
 
 The split fixes two live defects. Today a movie appears in its own Related row, and a 12-member collection hub fills Related completely (Raiders).
 
@@ -333,8 +337,8 @@ Home (P1 + P2)
 
 Detail
   BelowFoldContentLoader → provider.related(for:kind:) → getRelatedItems (hubs)
-    → split: collection hub (type match, minus self) + Related (flatten, cap 12)
-    → getCollection(tagId:) for the trailing tile, only when the hub has more
+    → split: collection hub (type match, minus self) + Related (flatten, minus collection members, cap 12)
+    → getCollection(sectionId:tagId:) for the trailing tile (section from the hub key), only when the hub has more
 ```
 
 ## 7. Error, empty and stale states
@@ -383,10 +387,12 @@ Detail
 1. `PlexMediaMapper.artworkURL`: a path with a query yields exactly one `?` and ends in `&X-Plex-Token=...`. A path without a query is unchanged.
 2. Related split (the `PlexProvider` static):
    - Fixture hubs mirror the measured Raiders response: `collection.related.1.1` (movie, `more` true, contains the current key), `collection.related.2.2` (show), `movie.same.director`, `movie.same.actor.0`.
-   - Expected: the collection is 1.1 minus the current key, Related excludes both collection hubs, and `tagId` parses to 61303.
+   - Expected: the collection is 1.1 minus the current key, Related excludes both collection hubs and every member of the chosen one, and `tagId` parses to 353397 with `sectionId` "1". Raiders' collection hub is IMDb Top 250; 61303 is the James Bond tag, whose hub has no `more`.
    - A second case: a show item picks the show-typed hub.
    - A third case: an episode or season kind gets no collection hub.
-   - `more` unset: no `tagId` is parsed and no lookup is planned.
+   - A collection member that a people hub also lists stays out of Related.
+   - `more` unset: no `tagId` or `sectionId` is parsed and no lookup is planned.
+   - Provider, over a stub network: a `more` hub looks the tile up as section "1", tag 353397; no `more` makes no lookup; a failed lookup keeps the row without a tile.
 3. Collections row index (the `computeLibrarySections` static), over rows given as (isCW, isRecent):
    - `[CW, recent, recent, genre]` gives 3.
    - `[genre]` gives 0.
@@ -399,12 +405,14 @@ Detail
    - Loaded and non-empty: render.
    - Not fetched: carry over.
    - Fetched and empty: omit.
+   - `promotedHubKeys(forLibraryKey:)` returns only promoted hubs that carry a key.
 5. Update `StubMediaProvider` in `HomeComposerTests.swift` to `related(for:kind:)`, or the target stops compiling.
 6. `PlexNetworkManager.hubItemsURL` (the `nonisolated static` from §5.1):
    - `/library/sections/1/all?sort=addedAt:desc` at start 24 keeps `sort=addedAt:desc` and adds Start and Size.
    - `/library/collections/9144/children` gains only Start and Size.
    - `/hubs/items` with an identifier adds `identifier`. Without one the builder returns nil, and `getHubItems` keeps today's empty result for that case.
 7. Collection pin action (`collectionPinAction`): library not pinned gives nil; promoted children key gives nil; otherwise `isPinned` picks `.unpin` or `.pin`.
+8. Grid slot clamp (`gridSlotRange`): a page that starts past a shrunk grid gives an empty range and does not trap; a partial last page, a page clamped by a shrink and a full page give `start..<end` clamped to the slot count.
 
 The network call inside `getHubItems` stays device-checked, because `PlexNetworkManager.shared` has no injectable session. The URL it builds is covered by test 6.
 
@@ -444,7 +452,7 @@ The network call inside `getHubItems` stays device-checked, because `PlexNetwork
 
 ## 10. Rollout order
 
-Each step ships on its own. Each user-facing step gets one bullet in `WhatsNewView.changelogs`, keyed `"<version> (<build>)"` from the real release tag.
+Steps ship on their own, with two exceptions. Steps 1 and 2 ship together, because nothing reaches a collection tile until the Collections row exists. Step 5 is atomic: the related split alone drops the Related row for a title whose only `/related` hub is its collection, so the Collection row must ship with it. Each user-facing step gets one bullet in `WhatsNewView.changelogs`, keyed `"<version> (<build>)"` from the real release tag. The changelog is written at release time, after the tag is pushed: CI takes the build number from the tag, and a guessed key means the fresh-launch What's New shows no panel at all.
 
 | Step | Contents | Depends on | Changelog |
 |---|---|---|---|
@@ -474,7 +482,7 @@ Steps 0b and 5 edit `RivuletCore/Plex/PlexNetworkManager.swift`, which carries u
 - **Related changes visibly.** Collection members and the cross-type collection hub leave it, so Related gets shorter or different for many titles. Intended.
 - **No warm-launch cache for the library row.** It appears when the refresh completes. The focused-cell offset correction in §5.3 keeps a tile below it from being pushed off screen.
 - **Library VCs are cached per tab and survive a profile switch.** `libraryCollections`, like `gridItems`, reflects the previous profile until the next refresh. This matters only for label-restricted managed users.
-- **A late pin fetch after a profile switch** can arrive after the clear. It is harmless unless the new profile pinned the same collection. Add a generation check only if seen.
+- **A late pin fetch after a profile switch** is dropped: `loadPinnedCollections` compares the selected profile and server token before and after its requests (§5.5).
 - **Collection list ceiling** of 1000 per library (§5.1).
 - **Shared-file edits.** Two steps touch `PlexNetworkManager.swift` while it holds another session's uncommitted edits.
 
@@ -496,3 +504,23 @@ None block the plan. The three questions from review were answered (§2): title-
 - **Collection tile actions:** Pin/Unpin only. The collection page itself has no Pin action; pin from the tile.
 - **Dead below-fold code** (`BelowFoldItem.related(String)`, `RelatedPosterCell`, `relatedByID`, the `.related` branch of `didSelectItemAt`): deleted in step 5.
 - **How far Recently Added pages:** to its true total in added order, on scroll only. Today it appends one page of the whole library in title order, so this is a fix.
+
+## 13. Changes during implementation
+
+Where the build departs from the design approved above, and why. The sections above state what was built.
+
+- **Collection lookup is section-scoped.** `getCollection(sectionId:tagId:)` on `/library/sections/{sid}/all?type=18&index={tagId}`, and `RelatedSplit` carries `sectionId`. The section-free form returns the movie and the show collection that share a tag, movie first (§4).
+- **Raiders fixture expects tag 353397 and section "1".** Its collection hub is IMDb Top 250. 61303 is the James Bond tag, whose hub has no `more`.
+- **Same-page walk goes up, then down.** `openCollectionIfNeeded` walks `presentingViewController` after reaching the top and dismisses the matching page only when something is presented over it. A walk up alone never reaches a page below the presenter.
+- **Pin titles refresh on every successful collection fetch.** A rename keeps the ratingKey, so a changed-list check never sees it.
+- **The pre-present arm is `restoreShelfRowFocusIfNeeded(requestingFocus: false)`.** The plain call issues a focus request while the shelf still holds focus and consumes the row's one-shot tile index before the page takes focus.
+- **Release boundaries.** Steps 1 and 2 ship together, and step 5 is atomic. Nothing reaches a collection tile before the Collections row, and the split alone drops a Related row.
+- **The page drops Menu during the blur-fade.** It registers its Menu handler in `viewWillAppear` and returns true until its first frame. Focus can still sit on the library tile during the fade, and the library's staged back would run under the modal.
+- **The index bar is hidden on the collection page.** `showsVerticalScrollIndicator = false` and `indexDisplayMode = .alwaysHidden`, as in library mode, so a held Up/Down on a 416-member collection does not hand focus to a system bar that scrolls nothing.
+- **`loadGridPage` clamps a landed page with `gridSlotRange`.** A reload after the collection shrank can answer for a page that starts past the grid, and `start..<end` traps. The clamp is shared, so the library titles grid gets it too.
+- **The page's first-tile focus request uses `focusSystem(for: collectionView)`.** It is the lookup the controller's other explicit focus requests use.
+- **Related excludes the chosen collection's members.** Review found Rick and Morty in both adjacent rows. Related runs a few tiles shorter for a title with a large collection.
+- **`PlexDataStore.promotedHubKeys(forLibraryKey:)` is the one derivation of the promoted children keys.** The projection and the tile menu had the same expression written twice.
+- **`loadPinnedCollections` drops its results when the profile or token changed mid-fetch.** Otherwise an old profile's pages land in the new profile's dictionary and its 404 unpins the new profile's pin. This retires the accepted risk in §11.
+- **The pin fetch after the hub load runs only when pins exist.** `setHomeItems` bumps `homeItemsVersion` unconditionally, so an identical second projection is a cost only a pinned collection earns.
+- **The changelog is written at release time from the real tag.** The key must match the tag, and the fresh-launch What's New has no fallback for a miss.

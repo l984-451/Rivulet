@@ -55,6 +55,9 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// button) and the paginated poster grid below the hub rows.
     static let sortHeader = HomeSectionID(raw: "sortHeader")
     static let grid = HomeSectionID(raw: "grid")
+    /// Library-mode-only: the library's Collections shelf. Each library key
+    /// has its own cached controller, so the id cannot collide.
+    static let libraryCollections = HomeSectionID(raw: "collections")
     /// Search-mode-only sections: the empty-query prompt, the inline
     /// searching/error/no-results state, and the grouped result grids.
     static let searchPrompt = HomeSectionID(raw: "search.prompt")
@@ -461,6 +464,10 @@ final class PlexHomeViewController: UIViewController {
     /// (home mode uses dataStore.isLoadingHubs / hubsError instead).
     private var isLoadingLibraryHubs = false
     private var libraryHubsError: String?
+    /// This library's non-empty collections in server order, filled by
+    /// refreshThisLibraryHubs. Feeds the Collections row. Kept as-is when a
+    /// fetch fails.
+    private var libraryCollections: [PlexMetadata] = []
 
     private let dataStore = PlexDataStore.shared
     private let authManager = PlexAuthManager.shared
@@ -1199,6 +1206,15 @@ final class PlexHomeViewController: UIViewController {
               let token = authManager.selectedServerToken else { return }
         isLoadingLibraryHubs = (dataStore.libraryHubs[key] == nil)
         updateHomeState()
+        // The Collections list (type 18), fetched beside the hubs and awaited
+        // before the apply. No sort: the server's titleSort order is
+        // Kometa's curation.
+        // ponytail: one page of 1000; a library with more collections is
+        // truncated. Page on totalSize if one ever gets there.
+        async let collectionsFetch = PlexNetworkManager.shared.getLibraryItemsWithTotal(
+            serverURL: serverURL, authToken: token, sectionId: key,
+            start: 0, size: 1000, type: 18
+        )
         do {
             let hubs = try await PlexNetworkManager.shared.getLibraryHubs(
                 serverURL: serverURL, authToken: token, sectionId: key
@@ -1216,10 +1232,58 @@ final class PlexHomeViewController: UIViewController {
                 libraryHubsError = error.localizedDescription
             }
         }
+        // Assigned only on success: a failed fetch keeps the previous list and
+        // never surfaces as a library error. `childCount > 0` drops the empty
+        // ones (Kometa separators, emptied lists) at no request cost.
+        var collectionsChanged = false
+        if let result = try? await collectionsFetch {
+            let collections = result.items.filter { ($0.childCount ?? 0) > 0 }
+            // Every player exit comes through here and the list almost never
+            // changes then, so an equal ratingKey sequence skips the follow-ups.
+            collectionsChanged = collections.map(\.ratingKey) != libraryCollections.map(\.ratingKey)
+            libraryCollections = collections
+        }
         isLoadingLibraryHubs = false
-        applySnapshot(animated: false)
+        applySnapshotKeepingFocusedRowStill()
+        // The sort header's item id never changes, so the apply above never
+        // re-vends it; without this it keeps whatever list it first saw.
+        if collectionsChanged { refreshSortHeaderCount() }
         selectHeroItemsIfNeeded()
         updateHomeState()
+    }
+
+    /// The apply for refreshThisLibraryHubs. The Collections row has no
+    /// warm-launch cache, so it is the one row routinely inserted into, or
+    /// removed from, a live page. The page moves its own offset only on focus
+    /// changes, so a row appearing above the focused one would push the
+    /// focused tile down a whole poster row. When the row comes or goes,
+    /// shift the offset by however far the apply moved the focused section.
+    /// Its first item stands in for the focused cell: a section inserted
+    /// above moves every item below it alike, and a focused section above
+    /// the slot does not move at all.
+    private func applySnapshotKeepingFocusedRowStill() {
+        let hadCollectionsRow = sectionsSnapshot.contains { $0.id == .libraryCollections }
+        let focusedID = focusedSectionForHandoff.flatMap { sectionsSnapshot[safe: $0]?.id }
+        let minYBefore = focusedID.flatMap { firstItemMinY(ofSection: $0) }
+        applySnapshot(animated: false)
+        guard sectionsSnapshot.contains(where: { $0.id == .libraryCollections }) != hadCollectionsRow,
+              let focusedID, let minYBefore else { return }
+        collectionView.layoutIfNeeded()
+        guard let minYAfter = firstItemMinY(ofSection: focusedID) else { return }
+        let oldY = collectionView.contentOffset.y
+        let newY = max(-collectionView.adjustedContentInset.top, oldY + minYAfter - minYBefore)
+        collectionView.contentOffset.y = newY
+        // A focus scroll in flight re-derives the offset every frame from its
+        // endpoints; move them too or the next tick undoes the shift.
+        if offsetLink != nil {
+            offsetStartY += newY - oldY
+            offsetTargetY += newY - oldY
+        }
+    }
+
+    private func firstItemMinY(ofSection id: HomeSectionID) -> CGFloat? {
+        guard let section = sectionsSnapshot.firstIndex(where: { $0.id == id }) else { return nil }
+        return collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: section))?.frame.minY
     }
 
     // MARK: - Library grid data
@@ -3683,9 +3747,12 @@ final class PlexHomeViewController: UIViewController {
         let showRecentRows = (UserDefaults.standard.object(forKey: "showLibraryRecentRows") as? Bool) ?? true
         let showDiscoveryRows = (UserDefaults.standard.object(forKey: "showLibraryRecommendations") as? Bool) ?? true
 
+        let firstHubRow = sections.count
+        var hubRowKinds: [(isContinueWatching: Bool, isRecent: Bool)] = []
         for hub in dataStore.libraryItemsByKey[key] ?? [] {
             if !showRecentRows, isRecentRow(hub) { continue }
             if !showDiscoveryRows, !isEssentialRow(hub) { continue }
+            hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: isRecentRow(hub)))
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
@@ -3701,6 +3768,23 @@ final class PlexHomeViewController: UIViewController {
                 hubIdentifier: hub.hubIdentifier,
                 totalSize: merged.totalSize ?? hub.totalSize
             ))
+        }
+
+        // Collections: placed after the gates, so it follows whatever CW and
+        // recent rows survive. Not part of projectLibraryItems (that rail is
+        // written to disk and re-projected without this list), so it has no
+        // warm-launch cache and arrives with refreshThisLibraryHubs. No
+        // hubKey, so loadMoreIfNeeded never pages it.
+        if !libraryCollections.isEmpty {
+            sections.insert(.hub(
+                id: .libraryCollections,
+                title: "Collections",
+                items: mapToMediaItems(libraryCollections),
+                isContinueWatching: false,
+                hubKey: nil,
+                hubIdentifier: nil,
+                totalSize: libraryCollections.count
+            ), at: firstHubRow + Self.collectionsRowInsertionIndex(rows: hubRowKinds))
         }
 
         // Below the hub rows: the sort header (library title + count + sort
@@ -3722,6 +3806,14 @@ final class PlexHomeViewController: UIViewController {
         return id.contains("recentlyadded") || title.contains("recently added")
             || id.contains("recentlyreleased") || title.contains("recently released")
             || id.contains("newestreleases") || title.contains("newest releases")
+    }
+
+    /// Where the Collections row goes among a library's hub rows: right after
+    /// the LAST Continue Watching or recent row, else first. Keyed on the
+    /// last essential row so a genre or promoted-collection hub that an
+    /// admin moved above them cannot pull Collections up with it.
+    nonisolated static func collectionsRowInsertionIndex(rows: [(isContinueWatching: Bool, isRecent: Bool)]) -> Int {
+        rows.lastIndex { $0.isContinueWatching || $0.isRecent }.map { $0 + 1 } ?? 0
     }
 
     /// An "essential" library row: Continue Watching / On Deck, the recent rows,

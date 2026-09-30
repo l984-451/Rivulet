@@ -5626,6 +5626,47 @@ extension PlexHomeViewController: UICollectionViewDelegate {
 
     // MARK: - Tile menu builder
 
+    nonisolated enum PinAction { case pin, unpin }
+
+    /// What a collection tile's menu offers in a library: nil (no menu) when
+    /// the library has no Home block to render into, or when Plex already
+    /// promotes this collection to Home; otherwise Unpin if pinned, Pin if not.
+    nonisolated static func collectionPinAction(isLibraryPinned: Bool,
+                                                promotedChildrenKeys: Set<String>,
+                                                childrenKey: String,
+                                                isPinned: Bool) -> PinAction? {
+        guard isLibraryPinned, !promotedChildrenKeys.contains(childrenKey) else { return nil }
+        return isPinned ? .unpin : .pin
+    }
+
+    /// A collection tile's menu: Pin to Home or Unpin from Home, in library
+    /// mode only. Select already opens the collection, so there is no Open
+    /// action. A MediaItem carries no section id, so the library comes from
+    /// `mode`.
+    private func collectionTileMenuSections(for item: MediaItem) -> [[TileMenuAction]] {
+        guard case .library(let key, _) = mode,
+              !item.ref.itemID.isEmpty,
+              let libraryUUID = dataStore.libraries.first(where: { $0.key == key })?.uuid
+        else { return [] }
+        let pin = HomeCollectionPins.Pin(ratingKey: item.ref.itemID, libraryUUID: libraryUUID, title: item.title)
+        guard let action = Self.collectionPinAction(
+            isLibraryPinned: dataStore.librariesPinnedToHome.contains { $0.key == key },
+            promotedChildrenKeys: dataStore.promotedHubKeys(forLibraryKey: key),
+            childrenKey: pin.childrenKey,
+            isPinned: HomeCollectionPins.isPinned(ratingKey: pin.ratingKey, libraryUUID: libraryUUID))
+        else { return [] }
+        switch action {
+        case .pin:
+            return [[TileMenuAction(title: "Pin to Home", systemImage: "pin") {
+                HomeCollectionPins.pin(pin)
+            }]]
+        case .unpin:
+            return [[TileMenuAction(title: "Unpin from Home", systemImage: "pin.slash", destructive: true) {
+                HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
+            }]]
+        }
+    }
+
     /// Build the tile menu action groups for a cell — one sub-array per
     /// divider-separated group. This is the CANONICAL long-press menu for
     /// home rows + library grid — the only long-press menu in the app now
@@ -5634,9 +5675,9 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     private func tileMenuSections(for item: MediaItem,
                                   isContinueWatching: Bool,
                                   shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil) -> [[TileMenuAction]] {
-        // Select already opens a collection's page, and every action below
-        // needs a playable item. Empty sections present no popup.
-        if item.kind == .collection { return [] }
+        // A collection opens its page on Select and has nothing to play or
+        // mark. In a library its menu is Pin to Home or Unpin from Home.
+        if item.kind == .collection { return collectionTileMenuSections(for: item) }
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
               !item.ref.itemID.isEmpty

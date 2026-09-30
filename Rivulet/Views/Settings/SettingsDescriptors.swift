@@ -26,6 +26,7 @@ enum SettingsDescriptorStore {
         // so they cannot have their own entry. Fall back on the row KIND, which
         // is what the panel wants to explain anyway.
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
+        if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
         return nil
     }
@@ -78,6 +79,10 @@ enum SettingsDescriptorStore {
         "homeRowItem": SettingDescriptor(
             icon: "rectangle.grid.1x2",
             description: "Turn this row off to hide it on this Apple TV. Your Plex account is unchanged, so the row keeps showing in the Plex app and on your other devices."
+        ),
+        "pinnedCollection": SettingDescriptor(
+            icon: "pin",
+            description: "A collection you pinned to Home from its tile menu. Select to unpin it."
         ),
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",

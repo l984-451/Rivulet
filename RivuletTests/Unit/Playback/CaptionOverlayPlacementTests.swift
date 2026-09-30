@@ -125,7 +125,8 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         ])
         overlay.layoutIfNeeded()
 
-        XCTAssertEqual(overlay.subviews.count, 1)
-        return overlay.subviews.first?.frame ?? .zero
+        let captions = overlay.subviews.filter { !($0 is ASSOverlayView) }
+        XCTAssertEqual(captions.count, 1)
+        return captions.first?.frame ?? .zero
     }
 }

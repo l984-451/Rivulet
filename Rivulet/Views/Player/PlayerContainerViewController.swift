@@ -175,6 +175,8 @@ class PlayerContainerViewController: UIViewController {
             )
             overlay.frame = view.bounds
             overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            overlay.assTrack = vm.assTrack
+            overlay.sourceClock = { [weak vm] hostTime in vm?.subtitleSourceTime(atHostTime: hostTime) }
             view.addSubview(overlay)
             captionOverlay = overlay
         }
@@ -1311,6 +1313,12 @@ class PlayerContainerViewController: UIViewController {
         vm.$subtitleHeightUnits
             .receive(on: DispatchQueue.main)
             .sink { [weak self] units in self?.captionOverlay?.heightUnits = units }
+            .store(in: &cancellables)
+
+        // ASS/SSA track script for the overlay's libass layer.
+        vm.$assTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] track in self?.captionOverlay?.assTrack = track }
             .store(in: &cancellables)
 
         NotificationCenter.default

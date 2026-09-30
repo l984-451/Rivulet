@@ -52,8 +52,31 @@ final class CaptionOverlayView: UIView {
     var style: CaptionStyle {
         didSet {
             guard style != oldValue else { return }
+            syncASS()
             rebuildCueViews()
         }
+    }
+
+    /// The active track's ASS script when it is ASS/SSA, else nil.
+    ///
+    /// With every system Video Override allowing content styling (the
+    /// default) libass renders the track. With any of them pinned, its lines
+    /// draw as plain captions in the system style, keeping `\an` / `\pos`
+    /// and dropping vector drawings. libass's own style override cannot stand
+    /// in for that: it changes Style definitions only, never inline tags,
+    /// and skips positioned events.
+    var assTrack: ASSTrackSource? {
+        didSet {
+            guard assTrack !== oldValue else { return }
+            syncASS()
+            rebuildCueViews()
+        }
+    }
+
+    /// Frame-accurate cue-axis clock for libass (see ASSOverlayView).
+    var sourceClock: ((CFTimeInterval) -> Double?)? {
+        get { assView.sourceClock }
+        set { assView.sourceClock = newValue }
     }
 
     /// True when the player rail is visible; lifts text above it. The host
@@ -251,6 +274,9 @@ final class CaptionOverlayView: UIView {
     private let model: SubtitleModel
     private var cancellables = Set<AnyCancellable>()
 
+    /// libass layer for ASS/SSA tracks, below every text and bitmap cue.
+    private let assView: ASSOverlayView
+
     private var textCues: [(view: CaptionBoxView, placement: AetherSubtitleCue.TextPlacement?)] = []
     private var bitmapCues: [(view: UIImageView, position: CGRect)] = []
 
@@ -266,10 +292,12 @@ final class CaptionOverlayView: UIView {
         self.controlsVisible = controlsVisible
         self.videoSize = videoSize
         self.heightUnits = heightUnits
+        self.assView = ASSOverlayView(model: model)
         super.init(frame: .zero)
 
         backgroundColor = .clear
         isUserInteractionEnabled = false
+        addSubview(assView)
 
         // The model publishes the active SET, and only when it differs, so this
         // rebuilds per visible change rather than per clock tick. The cues come
@@ -282,6 +310,21 @@ final class CaptionOverlayView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // MARK: ASS
+
+    private var libassAllowed: Bool {
+        style.allowsContentColor && style.allowsContentFont && style.allowsContentFontSize
+    }
+
+    private func syncASS() {
+        assView.track = libassAllowed ? assTrack : nil
+    }
+
+    /// Whether libass is drawing the ASS track right now. Reads the renderer,
+    /// not the request, so a libass that failed to start falls back to plain
+    /// captions instead of showing nothing.
+    private var rendersWithLibass: Bool { assView.isRendering }
 
     // MARK: Cue set
 
@@ -305,9 +348,20 @@ final class CaptionOverlayView: UIView {
                 iv.layer.magnificationFilter = .trilinear
                 addSubview(iv)
                 bitmapCues.append((iv, position))
-            case .assEvents:
-                // Task 7 draws these; until then nothing renders them.
-                continue
+            case .assEvents(let lines):
+                guard !rendersWithLibass else { continue }
+                let playRes = ASSEventLine.playRes(fromHeader: assTrack?.header)
+                for event in ASSEventLine.lines(in: lines) where !event.isDrawing {
+                    let text = event.plainText
+                    guard !text.isEmpty else { continue }
+                    let placement = event.placement(playRes: playRes).map {
+                        AetherSubtitleCue.TextPlacement(alignment: $0.alignment, position: $0.position)
+                    }
+                    let box = CaptionBoxView(body: .text(text), style: style,
+                                             alignment: Self.lineAlignment(for: placement))
+                    addSubview(box)
+                    textCues.append((box, placement))
+                }
             case .text, .styledText:
                 let box = CaptionBoxView(body: cue.body,
                                          style: style,
@@ -380,6 +434,11 @@ final class CaptionOverlayView: UIView {
 
         let rect = videoRect(in: size)
         let pointSize = baseFontSize(in: size)
+
+        // libass draws over the picture only, like the bitmap cues below.
+        assView.storageSize = videoSize
+        assView.linePosition = assLinePosition(in: size, rect: rect)
+        assView.frame = rect
 
         // `SubtitleImage.position` is normalized against the SOURCE VIDEO
         // FRAME, not the player's bounds — upstream is explicit that a host
@@ -569,6 +628,20 @@ final class CaptionOverlayView: UIView {
                            y: (centreY - fitted.height / 2).rounded(),
                            width: fitted.width,
                            height: fitted.height)
+    }
+
+    /// How far libass lifts unpositioned dialogue, as its line position
+    /// (percent of the picture height): the rail's clearance while the rail
+    /// is up plus the Height stepper, the same lift a plain caption gets over
+    /// its resting floor. libass applies it to dialogue only, so positioned
+    /// signs stay where the typesetter put them.
+    ///
+    /// ponytail: the lift jumps on the next rendered frame instead of riding the rail's 0.25 s fade; interpolate linePosition in the display link if it reads as a snap on device.
+    private func assLinePosition(in size: CGSize, rect: CGRect) -> Double {
+        guard rect.height > 0 else { return 0 }
+        let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
+        let lift = bottomPadding(in: size) - resting
+        return Double(min(max(lift / rect.height * 100, 0), 100))
     }
 
     // MARK: Host API

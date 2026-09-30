@@ -120,7 +120,11 @@ final class ASSOverlayView: UIView {
             let startMs = Int64((cue.startTime * 1000).rounded())
             let durationMs = Int64(((cue.endTime - cue.startTime) * 1000).rounded())
             for line in body.split(separator: "\n") {
-                guard fedKeys.insert("\(startMs)|\(durationMs)|\(line)").inserted else { continue }
+                // Keyed without the end: the engine trims an open-ended cue's
+                // end on a later drain tick and republishes it (alignCueEnds),
+                // and libass must not get that line a second time. The line
+                // carries ReadOrder and Layer, so distinct events still differ.
+                guard fedKeys.insert("\(startMs)|\(line)").inserted else { continue }
                 events.append(.init(line: String(line), startMs: startMs, durationMs: durationMs))
             }
         }

@@ -58,11 +58,18 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
         let track: UnsafeMutablePointer<ASS_Track>
     }
 
-    private let queue = DispatchQueue(label: "com.rivulet.libass", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "com.rivulet.libass", qos: .userInitiated)
     private let library: OpaquePointer
     private let renderer: OpaquePointer
     private let track: UnsafeMutablePointer<ASS_Track>
     private var configuration = Configuration()
+    private var renderCalls = 0
+    /// The time last handed to libass, and whether anything changed since.
+    /// A paused frame repeats its time on every display tick, and
+    /// `ass_render_frame` lays out every active event before it can report
+    /// "unchanged".
+    private var lastRenderedMs: Int64?
+    private var needsRender = true
 
     /// One library per renderer, so a track's memory fonts are never shared
     /// with another track (libass guards none of its state with locks).
@@ -116,6 +123,7 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
                     ass_process_chunk(track, $0, Int32(strlen($0)), event.startMs, event.durationMs)
                 }
             }
+            needsRender = true
         }
     }
 
@@ -131,6 +139,7 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
         queue.async { [self] in
             guard next != configuration else { return }
             configuration = next
+            needsRender = true
             guard next.frameWidth > 0, next.frameHeight > 0 else { return }
             ass_set_frame_size(renderer, Int32(next.frameWidth), Int32(next.frameHeight))
             ass_set_storage_size(renderer, Int32(next.storageWidth), Int32(next.storageHeight))
@@ -158,9 +167,18 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
         queue.sync { Int(track.pointee.n_events) }
     }
 
+    /// Calls into `ass_render_frame` so far. For tests.
+    func libassRenderCount() -> Int {
+        queue.sync { renderCalls }
+    }
+
     private func renderLocked(atMs ms: Int64) -> Output {
         guard configuration.frameWidth > 0, configuration.frameHeight > 0 else { return .unchanged }
+        guard needsRender || ms != lastRenderedMs else { return .unchanged }
+        lastRenderedMs = ms
+        needsRender = false
         var change: Int32 = 0
+        renderCalls += 1
         let images = ass_render_frame(renderer, track, ms, &change)
         guard change != 0 else { return .unchanged }
 

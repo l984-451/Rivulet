@@ -54,6 +54,20 @@ final class LibassRendererTests: XCTestCase {
         }
     }
 
+    /// A paused frame, or a stretch with no change, must not run libass on
+    /// every display tick: layout of every active event happens before
+    /// libass can say "unchanged".
+    func test_repeatedTime_skipsLibassUntilSomethingChanges() throws {
+        let renderer = try makeRenderer()
+        renderer.add([.init(line: "1,0,Default,,0,0,0,,Hello", startMs: 0, durationMs: 5000)])
+        _ = renderer.renderNow(atMs: 1000)
+        _ = renderer.renderNow(atMs: 1000)
+        XCTAssertEqual(renderer.libassRenderCount(), 1)
+        renderer.add([.init(line: "2,0,Default,,0,0,0,,{\\an8}Top", startMs: 0, durationMs: 5000)])
+        XCTAssertNotNil(frame(renderer.renderNow(atMs: 1000)), "a new event at the same time must re-render")
+        XCTAssertEqual(renderer.libassRenderCount(), 2)
+    }
+
     func test_readOrderZero_keepsEveryEvent() throws {
         let renderer = try makeRenderer()
         renderer.add([

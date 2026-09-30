@@ -1098,6 +1098,11 @@ final class AetherPlayer: PlayerProtocol {
     /// Publishes `assTrack` for the active track. A new instance whenever the
     /// track id or header changes: two tracks from one release can share a
     /// header, and each needs its own libass track.
+    ///
+    /// Relies on AetherEngine 7.7.0 clearing `subtitleCues` BEFORE it publishes
+    /// a new `activeSubtitleTrackIndex` (embedded select, sidecar select and
+    /// stop all do), so the overlay's new libass track never receives the old
+    /// track's lines. Re-check that ordering on every engine bump.
     private func refreshASSTrack() {
         guard let track = activeASSTrackInfo(),
               let header = track.isExternal ? engine.sidecarASSHeader : track.assHeader else {

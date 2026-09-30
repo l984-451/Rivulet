@@ -49,6 +49,19 @@ final class ASSOverlayTests: XCTestCase {
         XCTAssertEqual(view.renderedEventCount, 2)
     }
 
+    /// The engine trims an open-ended cue's end time on a later drain tick
+    /// (alignCueEnds) and republishes it. The same line must not reach libass
+    /// twice, or it draws doubled until the trim point.
+    func test_sameLineWithEditedEnd_isAddedOnce() {
+        let model = SubtitleModel()
+        let view = ASSOverlayView(model: model)
+        view.track = track()
+        let line = "0,0,Sign,,0,0,0,,{\\pos(960,100)}Group logo"
+        model.update(cues: [cue(1, line, start: 0, end: 36_000)])
+        model.update(cues: [cue(1, line, start: 0, end: 12)])
+        XCTAssertEqual(view.renderedEventCount, 1)
+    }
+
     func test_newTrackInstance_startsEmptyAndRefeedsCurrentCues() {
         let model = SubtitleModel()
         let view = ASSOverlayView(model: model)

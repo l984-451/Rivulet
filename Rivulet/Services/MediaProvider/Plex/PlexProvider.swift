@@ -174,7 +174,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// typed like the item, for movies and shows only, since a show's first
     /// collection hub can be movie-typed. Every other collection hub is
     /// dropped and the item itself is removed. The remaining hubs flatten
-    /// into Related, deduped and capped at 12.
+    /// into Related, deduped, minus the collection's members, capped at 12.
     nonisolated static func splitRelated(hubs: [PlexHub], currentRatingKey: String, kind: MediaKind) -> RelatedSplit {
         let itemType: String? = switch kind {
         case .movie: "movie"
@@ -189,7 +189,10 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
         let members = (collectionHub?.Metadata ?? []).filter { $0.ratingKey != currentRatingKey }
 
+        // A title sits in one row only: the picked hub's members are seeded as
+        // seen, so a member a people hub also lists stays out of Related.
         var seen: Set<String> = [currentRatingKey]
+        seen.formUnion((collectionHub?.Metadata ?? []).compactMap(\.ratingKey))
         let related = hubs.filter { !isCollectionHub($0) }
             .flatMap { $0.Metadata ?? [] }
             .filter { item in

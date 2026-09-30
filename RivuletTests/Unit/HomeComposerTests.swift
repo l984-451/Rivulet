@@ -62,8 +62,12 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     func search(_ query: String) async throws -> [MediaItem] { [] }
+    /// What `related(for:kind:)` answers, and the kinds it was asked for.
+    var relatedContent = RelatedContent(items: [], collection: nil)
+    private(set) var relatedKinds: [MediaKind] = []
     func related(for ref: MediaItemRef, kind: MediaKind) async throws -> RelatedContent {
-        RelatedContent(items: [], collection: nil)
+        relatedKinds.append(kind)
+        return relatedContent
     }
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] { episodesByShow[showRef.itemID] ?? [] }
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {

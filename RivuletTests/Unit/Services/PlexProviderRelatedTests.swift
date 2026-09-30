@@ -42,7 +42,10 @@ final class PlexProviderRelatedTests: XCTestCase {
         XCTAssertEqual(split.members.map(\.ratingKey), [
             "1160", "102973", "100408", "119495", "93597", "34356", "137938", "95007", "25088", "100200", "106687",
         ])
-        XCTAssertEqual(split.related.map(\.ratingKey), ["218758", "25711", "25088", "221913", "219301", "218452"])
+        // Rick and Morty (25088) is a collection member and also in a people
+        // hub: it stays in the collection row and is gone from Related.
+        XCTAssertTrue(split.members.map(\.ratingKey).contains("25088"))
+        XCTAssertEqual(split.related.map(\.ratingKey), ["218758", "25711", "221913", "219301", "218452"])
         XCTAssertEqual(split.tagId, "353395")
         XCTAssertEqual(split.sectionId, "2")
     }
@@ -67,6 +70,19 @@ final class PlexProviderRelatedTests: XCTestCase {
         XCTAssertNil(split.tagId)
         XCTAssertNil(split.sectionId)
         XCTAssertTrue(split.related.isEmpty)
+    }
+
+    func test_movie_aCollectionMemberInAPeopleHub_staysOutOfRelated() {
+        let hubs = [
+            hub("collection.related.1.1", "movie", "Bond Collection", key: "/library/sections/1/all?type=1",
+                ["1", "2", "3"]),
+            hub("movie.same.actor.0", "movie", "More with Someone", key: "/library/sections/1/all?actor=9",
+                ["2", "4"]),
+        ]
+        let split = PlexProvider.splitRelated(hubs: hubs, currentRatingKey: "1", kind: .movie)
+
+        XCTAssertEqual(split.members.map(\.ratingKey), ["2", "3"])
+        XCTAssertEqual(split.related.map(\.ratingKey), ["4"])
     }
 
     // MARK: - Provider

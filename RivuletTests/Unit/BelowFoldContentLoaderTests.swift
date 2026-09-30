@@ -47,6 +47,32 @@ final class BelowFoldContentLoaderTests: XCTestCase {
         XCTAssertEqual(content.episodes.map(\.ref.itemID), ["e1", "e2", "e3"])
     }
 
+    /// A movie's one `/related` answer feeds both rows: the collection row
+    /// keeps Plex's hub title, its members and the trailing collection tile,
+    /// and Related gets the rest. The loader passes the item's kind, which the
+    /// provider's split needs to pick a movie-typed collection hub.
+    func test_movieFillsCollectionRowFromTheRelatedCall() async {
+        let stub = StubMediaProvider()
+        stub.relatedContent = RelatedContent(
+            items: [item("r1", .movie, parent: nil)],
+            collection: CollectionRow(
+                title: "James Bond Collection",
+                members: [item("m1", .movie, parent: nil), item("m2", .movie, parent: nil)],
+                collection: item("9144", .collection, parent: nil)
+            )
+        )
+        MediaProviderRegistry.shared.register(stub)
+        defer { MediaProviderRegistry.shared.unregister(providerID: stub.id) }
+
+        let content = await BelowFoldContentLoader().load(for: item("m0", .movie, parent: nil), detail: nil)
+
+        XCTAssertEqual(content.collection?.title, "James Bond Collection")
+        XCTAssertEqual(content.collection?.members.map(\.ref.itemID), ["m1", "m2"])
+        XCTAssertEqual(content.collection?.collection?.ref.itemID, "9144")
+        XCTAssertEqual(content.related.map(\.ref.itemID), ["r1"])
+        XCTAssertEqual(stub.relatedKinds, [.movie])
+    }
+
     private func item(_ id: String, _ kind: MediaKind, parent: String?) -> MediaItem {
         MediaItem(
             ref: MediaItemRef(providerID: "stub", itemID: id),

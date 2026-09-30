@@ -229,11 +229,7 @@ nonisolated struct ASSParser: SubtitleParser {
 
     /// Drop `{…}` override blocks and turn the line-break escapes into text.
     private func cleanText(_ text: String) -> String {
-        text.replacingOccurrences(of: #"\{[^}]*\}"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\N", with: "\n")
-            .replacingOccurrences(of: "\\n", with: "\n")
-            .replacingOccurrences(of: "\\h", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        ASSEventLine.clean(text)
     }
 }
 

@@ -1609,12 +1609,16 @@ final class PlexHomeViewController: UIViewController {
         collectionView.remembersLastFocusedIndexPath = false
     }
 
-    /// Puts the whole collection list into the grid slots, in server order.
-    /// `[PlexMetadata]` upcasts to `[PlexMetadata?]` implicitly. Touches no
-    /// snapshot: each caller applies in its own order.
-    private func fillGridWithCollections() {
+    /// Puts the whole collection list into the grid slots, in server order
+    /// (`[PlexMetadata]` upcasts to `[PlexMetadata?]` implicitly). The
+    /// reconfigure is required: `grid-N` ids are the same in both states, so
+    /// the apply alone leaves the old posters on screen.
+    private func showCollectionsInGrid() {
         gridItems = libraryCollections
         totalGridCount = libraryCollections.count
+        applySnapshot(animated: false)
+        refreshSortHeaderCount()
+        reconfigureGridSlots(0..<gridItems.count)
     }
 
     /// The Titles / Collections switch. Collections come whole from
@@ -1626,13 +1630,14 @@ final class PlexHomeViewController: UIViewController {
     private func setGridShowsCollections(_ on: Bool) {
         gridShowsCollections = on
         resetGrid()
-        if on { fillGridWithCollections() }
-        applySnapshot(animated: false)
-        refreshSortHeaderCount()
-        // Required: `grid-N` ids are the same in both states, so the apply
-        // alone leaves the old posters on screen.
-        reconfigureGridSlots(0..<gridItems.count)
-        if !on { loadGridPage(containing: 0) }
+        if on {
+            showCollectionsInGrid()
+        } else {
+            // The grid is empty, so there are no slots to reconfigure.
+            applySnapshot(animated: false)
+            refreshSortHeaderCount()
+            loadGridPage(containing: 0)
+        }
         loadAlphabetIndex()
     }
 
@@ -1664,10 +1669,7 @@ final class PlexHomeViewController: UIViewController {
         case .titles:
             setGridShowsCollections(false)
         case .apply:
-            fillGridWithCollections()
-            applySnapshot(animated: false)
-            refreshSortHeaderCount()
-            reconfigureGridSlots(0..<gridItems.count)
+            showCollectionsInGrid()
         }
     }
 

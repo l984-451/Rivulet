@@ -583,13 +583,16 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Metadata?.first
     }
 
-    /// Get related items (similar content)
+    /// The hubs `/library/metadata/{rk}/related` returns, raw: at most one
+    /// `collection.related.*` hub per library section, then people and
+    /// similar-title hubs. The caller decides which hub feeds which row.
+    /// `limit` is the per-hub `count`.
     func getRelatedItems(
         serverURL: String,
         authToken: String,
         ratingKey: String,
         limit: Int = 12
-    ) async throws -> [PlexMetadata] {
+    ) async throws -> [PlexHub] {
         guard var components = URLComponents(string: "\(serverURL)/library/metadata/\(ratingKey)/related") else {
             throw PlexAPIError.invalidURL
         }
@@ -607,18 +610,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             headers: plexHeaders(authToken: authToken)
         )
 
-        // The /related endpoint nests items inside related Hubs (e.g. "Related
-        // Movies", "More with …"); the top-level Metadata is usually empty. Flatten
-        // the hubs (deduped by ratingKey), falling back to top-level Metadata.
+        // Items normally arrive inside the hubs, with the top-level Metadata
+        // empty. When no hub holds any, fall back to the top-level Metadata as
+        // one untitled hub.
         let mc = container.MediaContainer
-        let fromHubs = (mc.Hub ?? []).flatMap { $0.Metadata ?? [] }
-        let merged = fromHubs.isEmpty ? (mc.Metadata ?? []) : fromHubs
-        var seen = Set<String>()
-        let deduped = merged.filter { item in
-            guard let key = item.ratingKey else { return true }
-            return seen.insert(key).inserted
-        }
-        return Array(deduped.prefix(limit))
+        let hubs = mc.Hub ?? []
+        if hubs.contains(where: { !($0.Metadata ?? []).isEmpty }) { return hubs }
+        return [PlexHub(Metadata: mc.Metadata ?? [])]
     }
 
     /// Get extras (trailers, behind the scenes, etc.)
@@ -639,24 +637,24 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Metadata ?? []
     }
 
-    /// Get items in a collection (other movies in the same collection)
-    /// - Parameters:
-    ///   - sectionId: The library section ID containing the collection
-    ///   - collectionId: The collection filter ID (from Collection[].id in metadata)
-    ///   - excludeRatingKey: Optional ratingKey to exclude from results (typically current movie)
-    func getCollectionItems(
+    /// The collection a `collection.related` hub points at. A title's
+    /// Collection tag id (the hub key's `tagId`) is the collection's `index`,
+    /// not its ratingKey. Scoped to the hub's section because same-named
+    /// collections in Movies and TV share one tag: `/library/all?type=18&index=`
+    /// returns both, movie first.
+    func getCollection(
         serverURL: String,
         authToken: String,
         sectionId: String,
-        collectionId: String,
-        excludeRatingKey: String? = nil
-    ) async throws -> [PlexMetadata] {
+        tagId: String
+    ) async throws -> PlexMetadata? {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
             throw PlexAPIError.invalidURL
         }
 
         components.queryItems = [
-            URLQueryItem(name: "collection", value: collectionId)
+            URLQueryItem(name: "type", value: "18"),
+            URLQueryItem(name: "index", value: tagId)
         ]
 
         guard let url = components.url else {
@@ -667,15 +665,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             url,
             headers: plexHeaders(authToken: authToken)
         )
-
-        var items = container.MediaContainer.Metadata ?? []
-
-        // Filter out the excluded item (current movie)
-        if let exclude = excludeRatingKey {
-            items = items.filter { $0.ratingKey != exclude }
-        }
-
-        return items
+        return container.MediaContainer.Metadata?.first
     }
 
     /// Get children of an item (seasons for shows, episodes for seasons, albums for artists)

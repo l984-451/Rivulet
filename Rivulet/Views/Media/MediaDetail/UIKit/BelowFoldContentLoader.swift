@@ -137,7 +137,7 @@ final class BelowFoldContentLoader {
         }
 
         // Related row.
-        content.related = (try? await provider.relatedItems(for: item.ref)) ?? []
+        content.related = (try? await provider.related(for: item.ref, kind: item.kind))?.items ?? []
 
         return content
     }

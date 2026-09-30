@@ -62,8 +62,9 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     func search(_ query: String) async throws -> [MediaItem] { [] }
-    func collectionItems(matching collectionName: String, in library: MediaLibrary) async throws -> [MediaItem] { [] }
-    func relatedItems(for itemRef: MediaItemRef) async throws -> [MediaItem] { [] }
+    func related(for ref: MediaItemRef, kind: MediaKind) async throws -> RelatedContent {
+        RelatedContent(items: [], collection: nil)
+    }
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] { episodesByShow[showRef.itemID] ?? [] }
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         throw MediaProviderError.notFound

@@ -33,12 +33,10 @@ protocol MediaProvider: Sendable, Identifiable {
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem]
     func search(_ query: String) async throws -> [MediaItem]
 
-    /// Items in the same collection as the given `collectionName`. Returns
-    /// items from the provider's library matching that collection tag.
-    func collectionItems(matching collectionName: String, in library: MediaLibrary) async throws -> [MediaItem]
-
-    /// Provider-curated "related/recommended like this" items.
-    func relatedItems(for itemRef: MediaItemRef) async throws -> [MediaItem]
+    /// Provider-curated "related/recommended like this" items, and the
+    /// collection the item belongs to when the provider picks one. `kind` is
+    /// the item's own kind, which a ref does not carry.
+    func related(for ref: MediaItemRef, kind: MediaKind) async throws -> RelatedContent
 
     /// All episodes flattened across all seasons of a show. For shows only.
     /// Plex: getAllLeaves. Jellyfin: /Shows/{id}/Episodes.
@@ -95,4 +93,19 @@ protocol MediaProvider: Sendable, Identifiable {
 
 extension MediaProvider {
     func contentAdvisory(for ref: MediaItemRef) async throws -> ContentAdvisory? { nil }
+}
+
+/// The Related row and, when the item has one, its collection row.
+nonisolated struct RelatedContent: Sendable {
+    let items: [MediaItem]
+    let collection: CollectionRow?
+}
+
+/// The item's collection: the other members in the collection's own order,
+/// and the collection itself as a trailing tile when the provider returned
+/// only some of the members.
+nonisolated struct CollectionRow: Sendable {
+    let title: String
+    let members: [MediaItem]
+    let collection: MediaItem?
 }

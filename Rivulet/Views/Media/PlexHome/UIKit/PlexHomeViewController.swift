@@ -84,6 +84,9 @@ enum HomeMode {
     /// entry (issue #287). Entries are Discover metadata, so the tiles,
     /// the tap and the tile menu all reuse the Home watchlist row's paths.
     case watchlist
+    /// Collection page: one Plex collection's members as a poster grid under
+    /// the collection's title. `ref.itemID` is the collection ratingKey.
+    case collection(MediaItem)
 }
 
 nonisolated struct HomeItemID: Hashable, Sendable {
@@ -362,14 +365,16 @@ struct HomeSectionData {
         )
     }
 
-    /// Library mode: the paginated poster grid. `items` carries the
-    /// loaded grid items.
-    static func grid(items: [MediaItem]) -> HomeSectionData {
+    /// Paginated poster grid. `items` carries the grid slots. Library mode
+    /// passes no title (its sort header names the library); the collection
+    /// page passes the collection's title, drawn in the Watchlist page's
+    /// title style.
+    static func grid(items: [MediaItem], title: String? = nil) -> HomeSectionData {
         HomeSectionData(
             id: .grid,
             kind: .grid,
-            title: nil,
-            headerStyle: .swiftUIInfiniteRow,
+            title: title,
+            headerStyle: title == nil ? .swiftUIInfiniteRow : .swiftUIWatchlist,
             totalSize: nil,
             items: items,
             watchlistItems: [],
@@ -478,6 +483,10 @@ final class PlexHomeViewController: UIViewController {
     /// action button (.error / .empty). Drives preferredFocusEnvironments so a
     /// contentless Home always has a reachable focus target.
     private var stateViewHasFocusableAction = false
+    /// Collection page only: a zero-size focus target that holds focus while
+    /// page 0 is in flight, so focus never stays on the library tile under
+    /// this modal. Visible only in the loading state (see updateHomeState).
+    private let collectionFocusAnchor = PreviewFocusAnchorView()
     /// Transient toast for watchlist-write errors. Bottom-anchored, fades
     /// in when `watchlistService.transientWriteError` becomes non-nil.
     private var watchlistToast: WatchlistToastView!
@@ -567,6 +576,12 @@ final class PlexHomeViewController: UIViewController {
     private var gridGeneration = 0
     /// Page size matching the SwiftUI PlexLibraryView (`pageSize = 60`).
     private let gridPageSize = 60
+    /// Collection page only: page 0's outcome. An empty `gridItems` reads the
+    /// same while the request is in flight, after it failed and after an
+    /// empty answer, so updateHomeState reads this instead. Set by
+    /// loadGridPage's page 0 success and catch, reset by the retry.
+    private enum PageZeroState: Equatable { case loading, loaded, failed(String) }
+    private var pageZero: PageZeroState = .loading
     /// Letter → offset table behind the alphabet bar; nil under a non-title
     /// sort or before the counts arrive.
     private var alphabetIndex: LibraryAlphabetIndex?
@@ -630,6 +645,8 @@ final class PlexHomeViewController: UIViewController {
             return "Recommendations aren't available right now."
         case .watchlist:
             return "Nothing in your Watchlist yet."
+        case .collection:
+            return "This collection is empty."
         case .home, .library, .search:
             return "Your Plex library appears to be empty."
         }
@@ -647,6 +664,8 @@ final class PlexHomeViewController: UIViewController {
             return false  // Search has no hero — keyboard + results only
         case .watchlist:
             return false  // Watchlist is the grid alone
+        case .collection:
+            return false  // A collection page is its title and grid
         }
     }
     /// `enablePersonalizedRecommendations` AppStorage gate.
@@ -716,6 +735,9 @@ final class PlexHomeViewController: UIViewController {
         // surround show through seamlessly — an opaque fill there instead reads
         // as a darker panel inset from the surround.
         view.backgroundColor = .clear
+        // Collection page: presented over the library through
+        // BlurFadeAnimator, which assumes an opaque page.
+        if case .collection = mode { view.backgroundColor = .black }
 
         Perf.event(.homeFirstRender, message: "viewDidLoad start")
 
@@ -835,6 +857,18 @@ final class PlexHomeViewController: UIViewController {
                 applySnapshot(animated: false)
                 updateHomeState()
             }
+        case .collection:
+            // Collection page: its members only. No hubs, hero or alphabet
+            // bar. The zero-size anchor is the page's focus target while
+            // page 0 loads.
+            collectionFocusAnchor.frame = .zero
+            view.addSubview(collectionFocusAnchor)
+            // A 416-member collection is 70 rows: keep tvOS's fast-scroll
+            // index bar invisible, as library mode does. It still takes focus
+            // on a held Up/Down, which starts the page's own fast scroll.
+            collectionView.showsVerticalScrollIndicator = false
+            collectionView.indexDisplayMode = .alwaysHidden
+            loadGridPage(containing: 0)
         }
     }
 
@@ -1181,11 +1215,43 @@ final class PlexHomeViewController: UIViewController {
     /// cell is never deleted out from under the engine, and a page that
     /// fails is forgotten so scrolling back over it retries.
     private func loadGridPage(containing index: Int) {
-        guard case .library(let key, _) = mode,
-              index >= 0,
+        guard index >= 0,
               gridItems.isEmpty || index < gridItems.count,
               let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
+        let network = PlexNetworkManager.shared
+        let pageSize = gridPageSize
+        let fetchPage: (Int) async throws -> (items: [PlexMetadata], totalSize: Int?)
+        if case .library(let key, _) = mode {
+            let sort = gridSort.apiParameter
+            fetchPage = { start in
+                try await network.getLibraryItemsWithTotal(
+                    serverURL: serverURL,
+                    authToken: token,
+                    sectionId: key,
+                    start: start,
+                    size: pageSize,
+                    sort: sort
+                )
+            }
+        } else if case .collection(let item) = mode {
+            // The members through the hub pager, in the collection's own
+            // collectionSort (the server ignores sort=). Never getChildren or
+            // PlexProvider.children(of:): /library/metadata/{rk}/children
+            // returns nothing for a smart collection.
+            let childrenKey = "/library/collections/\(item.ref.itemID)/children"
+            fetchPage = { start in
+                try await network.getHubItems(
+                    serverURL: serverURL,
+                    authToken: token,
+                    hubKey: childrenKey,
+                    start: start,
+                    count: pageSize
+                )
+            }
+        } else {
+            return
+        }
         let page = index / gridPageSize
         guard gridPagesRequested.insert(page).inserted else { return }
         let gen = gridGeneration
@@ -1193,15 +1259,9 @@ final class PlexHomeViewController: UIViewController {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let result = try await PlexNetworkManager.shared.getLibraryItemsWithTotal(
-                    serverURL: serverURL,
-                    authToken: token,
-                    sectionId: key,
-                    start: start,
-                    size: self.gridPageSize,
-                    sort: self.gridSort.apiParameter
-                )
+                let result = try await fetchPage(start)
                 guard gen == self.gridGeneration else { return }
+                if page == 0 { self.pageZero = .loaded }
                 let total = result.totalSize ?? max(self.gridItems.count, start + result.items.count)
                 let countChanged = total != self.gridItems.count
                 if countChanged {
@@ -1209,8 +1269,12 @@ final class PlexHomeViewController: UIViewController {
                     self.gridItems = Array(self.gridItems.prefix(total))
                         + Array(repeating: nil, count: max(0, total - self.gridItems.count))
                 }
-                let end = min(start + result.items.count, self.gridItems.count)
-                for (offset, item) in result.items.enumerated() where start + offset < end {
+                // A reload can land after the grid shrank below this page's
+                // start: the range stays empty instead of trapping on start..<end.
+                let slots = Self.gridSlotRange(
+                    start: start, returned: result.items.count, slotCount: self.gridItems.count
+                )
+                for (offset, item) in result.items.enumerated() where slots.contains(start + offset) {
                     self.gridItems[start + offset] = item
                 }
                 self.applySnapshot(animated: false)
@@ -1218,10 +1282,11 @@ final class PlexHomeViewController: UIViewController {
                     self.refreshSortHeaderCount()
                     self.updateHomeState()
                 }
-                self.reconfigureGridSlots(start..<end)
+                self.reconfigureGridSlots(slots)
             } catch {
                 guard gen == self.gridGeneration else { return }
                 self.gridPagesRequested.remove(page)
+                if page == 0 { self.pageZero = .failed(error.localizedDescription) }
                 // First page: hub rows still render; updateHomeState surfaces
                 // a library-level error only when there are no hubs either.
                 if self.gridItems.isEmpty { self.updateHomeState() }
@@ -1237,6 +1302,26 @@ final class PlexHomeViewController: UIViewController {
         guard snap.sectionIdentifiers.contains(.grid) else { return }
         snap.reconfigureItems(range.map(Self.gridSlotID))
         dataSource.apply(snap, animatingDifferences: false)
+    }
+
+    /// Slots a landed page may write: `start..<end`, with `end` clamped to the
+    /// slot count and never below `start`. A reload can answer for a page that
+    /// begins past a grid that has since shrunk, and `start..<end` with
+    /// `end < start` traps.
+    nonisolated static func gridSlotRange(start: Int, returned: Int, slotCount: Int) -> Range<Int> {
+        start..<max(start, min(start + returned, slotCount))
+    }
+
+    /// Re-requests every loaded grid page in place. Slots are positional, so
+    /// a focused tile is reconfigured in place unless the collection shrank
+    /// below it (loadGridPage clamps that case). The collection page calls
+    /// this when a member's watch state may have changed.
+    // ponytail: re-requests every loaded page (7 at most for the largest
+    // measured collection, 416 members); fetch only visible pages if it shows up.
+    private func reloadLoadedGridPages() {
+        let pages = gridPagesRequested
+        gridPagesRequested = []
+        pages.forEach { loadGridPage(containing: $0 * gridPageSize) }
     }
 
     // MARK: - Alphabet bar (issue #308)
@@ -1866,6 +1951,16 @@ final class PlexHomeViewController: UIViewController {
         stateView.isHidden = true
         stateView.onAction = { [weak self] in
             guard let self else { return }
+            // Collection page: Try Again (page 0 failed) and Refresh (empty)
+            // both ask for page 0 again. A settled empty page 0 is still
+            // marked requested, so forget it first.
+            if case .collection = self.mode {
+                self.pageZero = .loading
+                self.updateHomeState()
+                self.gridPagesRequested.remove(0)
+                self.loadGridPage(containing: 0)
+                return
+            }
             Task { await self.dataStore.refreshHubs() }
         }
         view.addSubview(stateView)
@@ -1947,6 +2042,21 @@ final class PlexHomeViewController: UIViewController {
             // correctly either way (the watchlist really has nothing to show).
             hubsError = nil
             hubsEmpty = watchlistService.watchlistItems.isEmpty
+        case .collection:
+            // Page 0's own outcome: an empty grid reads the same while the
+            // request is in flight, after it failed and after an empty answer.
+            switch pageZero {
+            case .loading:
+                isLoadingHubs = true
+                hubsError = nil
+            case .loaded:
+                isLoadingHubs = false
+                hubsError = nil
+            case .failed(let message):
+                isLoadingHubs = false
+                hubsError = message
+            }
+            hubsEmpty = gridItems.isEmpty
         }
 
         // Precedence: notConnected → loading → error → empty → content.
@@ -1955,6 +2065,7 @@ final class PlexHomeViewController: UIViewController {
         // contentless Home can trap focus — see Docs/bugs/fresh-signin-blank-home.md).
         let isWaitingForHero = shouldWaitForHeroBeforeContent(hubsEmpty: hubsEmpty)
         stateViewHasFocusableAction = false
+        var showsLoading = false
         if !hasCredentials {
             stateView.configure(kind: .notConnected)
             stateView.isHidden = false
@@ -1965,6 +2076,7 @@ final class PlexHomeViewController: UIViewController {
             stateView.isHidden = false
             collectionView.isHidden = true
             backdropView.isHidden = true
+            showsLoading = true
         } else if let error = hubsError, hubsEmpty {
             stateView.configure(kind: .error(message: error))
             stateView.isHidden = false
@@ -1993,11 +2105,33 @@ final class PlexHomeViewController: UIViewController {
             // above have their own `setNeedsFocusUpdate()`; only the content
             // path was silent, which is why Discover (the one surface that sits
             // in `.loading` long enough to matter) came up dead.
-            if wasUnfocusable {
+            if wasUnfocusable, case .collection = mode {
+                // Collection page: a modal, so the shell's re-drive does
+                // nothing for it (its handler no-ops once the library tab has
+                // held focus). Page 0's snapshot was applied while the
+                // collection view was hidden, so no cell existed until now:
+                // lay out, then ask for the first tile explicitly. Focus sits
+                // on this page's own anchor, so the request is honoured.
+                collectionView.layoutIfNeeded()
+                if let cell = collectionView.cellForItem(at: IndexPath(item: 0, section: 0)),
+                   let system = UIFocusSystem.focusSystem(for: collectionView) {
+                    system.requestFocusUpdate(to: cell)
+                    system.updateFocusIfNeeded()
+                }
+            } else if wasUnfocusable {
                 NotificationCenter.default.post(name: .contentBecameFocusable, object: nil)
             }
             backdropView.isHidden = !showHomeHero
             ConnectionAlert.presentOnceIfOffline(from: self)
+        }
+
+        // Collection page: the anchor is visible only while page 0 is in
+        // flight, so it never competes with the grid or the state view's
+        // button. Entering loading again (the retry) re-resolves focus, which
+        // moves it off the Try Again button that just vanished.
+        if case .collection = mode {
+            collectionFocusAnchor.isHidden = !showsLoading
+            if showsLoading { setNeedsFocusUpdate() }
         }
 
         // Splash handoff: the launch splash (ContentView) dismisses on
@@ -2619,6 +2753,10 @@ final class PlexHomeViewController: UIViewController {
                         }
                     case .library:
                         await self.refreshThisLibraryHubs()
+                    case .collection:
+                        // Playback and detail-page watch changes: re-request
+                        // the loaded pages so badges and progress repaint.
+                        self.reloadLoadedGridPages()
                     }
                 }
             }
@@ -2636,7 +2774,7 @@ final class PlexHomeViewController: UIViewController {
                     self?.requestHeroUpgrade()
                 }
                 .store(in: &dataStoreObservers)
-        case .discover, .search, .watchlist:
+        case .discover, .search, .watchlist, .collection:
             break
         }
     }
@@ -3375,6 +3513,16 @@ final class PlexHomeViewController: UIViewController {
     /// change recolors it via `setHeroBackdrop(url:)` — so this backs off.
     private func updateAmbientIfNeeded() {
         guard !ambientView.hasAmbient else { return }
+        // Collection page: the collection's own art when it has some (12 of
+        // 112 on the measured server), else its first loaded member. Never
+        // Home's rows, which are not on this page.
+        if case .collection(let collection) = mode {
+            let member = sectionsSnapshot.first?.items.first?.heroBackdropRequest()
+            guard let url = collection.heroBackdropRequest().backdropURL
+                    ?? member?.backdropURL ?? member?.thumbnailURL else { return }
+            ambientView.setAmbient(url: url)
+            return
+        }
         // Discover's hero is MediaItem-backed (`heroMediaItems`); everywhere
         // else it's `heroItems`. Either one means a hero owns the wash.
         let heroSection = sectionsSnapshot.first(where: { $0.kind == .hero })
@@ -3400,6 +3548,11 @@ final class PlexHomeViewController: UIViewController {
         if case .watchlist = mode {
             let items = watchlistService.watchlistItems
             return items.isEmpty ? [] : [.watchlistGrid(items: items)]
+        }
+        // One titled grid; the header is supplementary, so the grid stays
+        // section 0 (`topSectionIndex`) and Menu never stages a return-to-top.
+        if case .collection(let item) = mode {
+            return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems), title: item.title)]
         }
         if case .search = mode {
             return computeSearchSections()
@@ -3663,7 +3816,7 @@ final class PlexHomeViewController: UIViewController {
         let cacheKey: String
         let sourceHubs: [PlexHub]
         switch mode {
-        case .discover, .search, .watchlist:
+        case .discover, .search, .watchlist, .collection:
             return  // no Plex-hub hero on these surfaces
         case .home:
             cacheKey = "home"
@@ -3696,7 +3849,7 @@ final class PlexHomeViewController: UIViewController {
         switch mode {
         case .home: isTMDBEligible = true
         case .library: isTMDBEligible = trendingHeroType() != nil
-        case .discover, .search, .watchlist: isTMDBEligible = false
+        case .discover, .search, .watchlist, .collection: isTMDBEligible = false
         }
 
         if heroItems.isEmpty {
@@ -3769,7 +3922,7 @@ final class PlexHomeViewController: UIViewController {
                 items,
                 toLibraryKeys: dataStore.librariesPinnedToHome.map { $0.key }
             )
-        case .library, .discover, .search, .watchlist:
+        case .library, .discover, .search, .watchlist, .collection:
             return items
         }
     }
@@ -3871,7 +4024,7 @@ final class PlexHomeViewController: UIViewController {
             guard let t = trendingHeroType() else { lastUpgradedIndexGeneration = -1; return }
             cacheKey = key
             heroType = t
-        case .discover, .search, .watchlist:
+        case .discover, .search, .watchlist, .collection:
             return
         }
 
@@ -3971,7 +4124,7 @@ final class PlexHomeViewController: UIViewController {
         switch mode {
         case .home: sourceHubs = dataStore.hubs
         case .library(let key, _): sourceHubs = dataStore.libraryHubs[key] ?? []
-        case .discover, .search, .watchlist: return
+        case .discover, .search, .watchlist, .collection: return
         }
         let fallback = computeHubBackedHero(from: sourceHubs)
         if !fallback.isEmpty {
@@ -5321,6 +5474,9 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             do {
                 try await action()
             } catch {}
+            // Collection page: a member's watch state changed from its tile
+            // menu, which posts no .plexDataNeedsRefresh.
+            if case .collection = mode { reloadLoadedGridPages() }
             await dataStore.refreshHubs()
             await dataStore.refreshLibraryHubs()
         }

@@ -449,13 +449,26 @@ struct EPGGuide: UIViewRepresentable {
         // Snap horizontal scrolling so a full 30-min cell sits next to the date.
         func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
                                        targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-            targetContentOffset.pointee.x = Coordinator.snappedX(for: targetContentOffset.pointee.x)
+            targetContentOffset.pointee.x = Coordinator.focusScrollTargetX(
+                proposed: targetContentOffset.pointee.x, lockedX: lockedX,
+                isHorizontalMove: Date() < freeScrollUntil)
             if let layout = collectionView?.collectionViewLayout as? EPGLayout {
                 let inset = layout.rulerBottomInset
                 let rowH = EPGTheme.rowHeight
                 let y = targetContentOffset.pointee.y
                 targetContentOffset.pointee.y = (((y + inset) / rowH).rounded() * rowH) - inset
             }
+        }
+
+        /// Where a focus scroll ends horizontally. tvOS routes every focus
+        /// scroll through `scrollViewWillEndDragging`, Up/Down included, with
+        /// its own x to show more of a wide programme, and the scroll reports
+        /// decelerating, so `scrollViewDidScroll` would adopt it as the held
+        /// x and the guide would creep sideways row by row. Only a move along
+        /// the row may change x.
+        static func focusScrollTargetX(proposed: CGFloat, lockedX: CGFloat,
+                                       isHorizontalMove: Bool) -> CGFloat {
+            isHorizontalMove ? snappedX(for: proposed) : lockedX
         }
 
         /// Offset whose left grid edge lands on a 30-minute boundary.
@@ -557,11 +570,20 @@ struct EPGGuide: UIViewRepresentable {
 
         /// Veto the engine's geometric choice for Up/Down when it is not the
         /// programme airing at the anchor time, and move focus there instead.
+        ///
+        /// The redirect lands a runloop later, and the engine keeps offering
+        /// candidates meanwhile. Once every cell is vetoed its last offer is to
+        /// leave the grid, which on the Guide is the sidebar; with a row in that
+        /// direction, that offer is redirected like any other.
         private func shouldAllowVerticalMove(_ context: UICollectionViewFocusUpdateContext,
                                              in collectionView: UICollectionView) -> Bool {
-            guard let next = context.nextFocusedIndexPath,
-                  let prev = context.previouslyFocusedIndexPath,
-                  next.section != prev.section else { return true }
+            guard let prev = context.previouslyFocusedIndexPath,
+                  let section = Self.verticalTargetSection(
+                    from: prev.section, engineSection: context.nextFocusedIndexPath?.section,
+                    movingDown: context.focusHeading == .down, sectionCount: programs.count)
+            else { return true }
+            let leavingGrid = context.nextFocusedIndexPath == nil
+            let next = context.nextFocusedIndexPath ?? IndexPath(item: -1, section: section)
             let anchor = clampedAnchor(in: collectionView)
             guard let desired = programIndex(inSection: next.section, covering: anchor),
                   desired != next.item else { return true }
@@ -569,9 +591,22 @@ struct EPGGuide: UIViewRepresentable {
             // Only redirect to a cell that exists right now; otherwise the veto
             // would eat the swipe. The engine's own pick is in the same row, so
             // the row is realized, and the anchor is inside the visible window.
-            guard collectionView.cellForItem(at: target) != nil else { return true }
+            // Leaving the grid is never the better outcome, so that is vetoed
+            // even when the redirect cannot land.
+            guard collectionView.cellForItem(at: target) != nil else { return !leavingGrid }
             requestFocus(target)
             return false
+        }
+
+        /// The row an Up/Down move goes to, or nil when it is not one this
+        /// guide steers: a move along the row, or leaving the grid at the top
+        /// (to the category pills) or bottom edge. `engineSection` nil means the
+        /// engine is offering a view outside the grid.
+        nonisolated static func verticalTargetSection(from section: Int, engineSection: Int?,
+                                                      movingDown: Bool, sectionCount: Int) -> Int? {
+            if let engineSection { return engineSection == section ? nil : engineSection }
+            let next = section + (movingDown ? 1 : -1)
+            return (0..<sectionCount).contains(next) ? next : nil
         }
 
         /// The anchor, kept inside the visible time window and never in the past.

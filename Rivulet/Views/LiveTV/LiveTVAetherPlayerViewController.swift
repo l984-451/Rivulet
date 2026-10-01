@@ -713,6 +713,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
+    /// Whether the rail last showed "behind live" (Go Live, the offset badge).
+    private var showsBehindLive = false
+
+    /// Behind live once half a minute back, and live again only within ten
+    /// seconds of the edge, so a stream hovering near either line never
+    /// flips the rail back and forth.
+    nonisolated static func isBehindLive(behindSeconds: Double, wasBehind: Bool) -> Bool {
+        wasBehind ? behindSeconds > 10 : behindSeconds >= 30
+    }
+
     /// Rail metadata from GUIDE data: programme title, channel line, air
     /// window, and the engine's current audio track. Timeshift-aware: a viewer
     /// behind live is watching the past, so the programme, the bar and the
@@ -743,10 +753,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             runtime = "\(formatter.string(from: current.startTime)) – \(formatter.string(from: current.endTime))"
         }
 
-        // The engine's verdict, built for exactly this badge and chip: one
-        // segment behind the edge is as live as a client gets, with
-        // hysteresis so it does not flicker at rest.
-        let isBehindLive = hasRewindWindow && !shift.isAtLiveEdge
+        // Not the engine's `isAtLiveEdge` (one segment): streams drift that
+        // far on their own, and Go Live bounced in and out, shifting the rail.
+        let isBehindLive = hasRewindWindow
+            && Self.isBehindLive(behindSeconds: behind, wasBehind: showsBehindLive)
+        showsBehindLive = isBehindLive
 
         // Programme progress bar: the show's air window, the playhead at the
         // picture on screen, and (when timeshifted) the buffered stretch up to

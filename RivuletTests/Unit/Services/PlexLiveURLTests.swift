@@ -83,7 +83,7 @@ final class PlexLiveURLTests: XCTestCase {
                                      name: "Test", streamURL: guideEntry)
         let provider = PlexLiveTVProvider(serverURL: server, authToken: "t", serverName: "Test")
 
-        let resolved = await provider.resolveStreamURL(for: channel)
+        let resolved = try? await provider.resolveStreamURL(for: channel)
         XCTAssertNil(resolved)
     }
 }

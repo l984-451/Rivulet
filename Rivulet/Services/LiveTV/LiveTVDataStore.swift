@@ -1166,11 +1166,11 @@ class LiveTVDataStore: ObservableObject {
     /// setup first (Plex cloud-EPG/DVB channels need a tune before the
     /// transcoder will serve them). Prefer this over `buildStreamURL(for:)`
     /// at playback time; the sync variant remains for availability checks.
-    func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
+    func resolveStreamURL(for channel: UnifiedChannel) async throws -> URL? {
         guard let provider = providers[channel.sourceId] else {
             return channel.streamURL
         }
-        return await provider.resolveStreamURL(for: channel)
+        return try await provider.resolveStreamURL(for: channel)
     }
 
     func buildStreamURL(for channel: UnifiedChannel) -> URL? {

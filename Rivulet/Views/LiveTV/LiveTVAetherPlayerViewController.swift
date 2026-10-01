@@ -92,6 +92,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// can be cancelled on dismissal — otherwise a slow Plex tune could finish
     /// after teardown and spin a new player/keep-alive on an off-screen VC.
     private var streamLoadTask: Task<Void, Never>?
+    /// The join's one early check for a direct source out of connections.
+    private var busyCheckTask: Task<Void, Never>?
     private var watchCreditTask: Task<Void, Never>?
 
     /// Measures time-to-first-frame for the in-flight join, split into handshake
@@ -368,12 +370,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     // Same signal the spinner uses, so the measurement ends
                     // exactly where the user stops waiting. Finishing is
                     // idempotent, so later resumes don't reopen the join.
-                    self.finishJoinTelemetry { $0.joined() }
+                    self.finishJoinTelemetry { $0.joined(codec: self.aetherPlayer?.sourceVideoCodecName) }
                     self.updateRailContent()
-                case .failed:
+                case .failed(let error):
                     self.finishJoinTelemetry { $0.failed(reason: "state_failed") }
                     guard !self.isFallbackInFlight else { return }
-                    self.advanceFallback()
+                    self.advanceFallback(after: error)
                 default:
                     break
                 }
@@ -425,7 +427,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             // Resolve performs the Plex tune step for cloud-EPG/DVB channels;
             // other sources pass straight through.
             joinTelemetry = LiveJoinTelemetry()
-            let resolved = await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+            let resolved: URL?
+            do {
+                resolved = try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+            } catch {
+                if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
+                finishJoinTelemetry { $0.failed(reason: "resolve_failed") }
+                await endJoin(notice: Self.notice(forResolveError: error))
+                return
+            }
             if Task.isCancelled {
                 if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
                 finishJoinTelemetry { $0.abandoned() }
@@ -444,20 +454,23 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             isNativeHLSRoute = route == .nativeHLS
             joinTelemetry?.resolveFinished(url: url, route: route)
             startLiveSessionKeepAlive(for: url)
+            if channel.sourceType != .plex { startEarlyBusyCheck(for: url) }
             do {
                 try await aether.loadLive(
                     url: url,
                     headers: LiveTVClientIdentity.streamHeaders(for: channel),
                     forceEngineDemux: forceEngineDemux
                 )
+                busyCheckTask?.cancel()  // the source opened, so it had a connection
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
-                joinTelemetry?.loadFinished()
+                joinTelemetry?.loadFinished(videoRoute: aether.videoRouteName)
                 aether.play()
                 didStartPlaying()
             } catch {
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
                 finishJoinTelemetry { $0.failed(reason: "engine_load_failed") }
-                self.advanceFallback()
+                // The state sink may already have started the ladder on this failure.
+                if !isFallbackInFlight { self.advanceFallback(after: error) }
             }
         }
     }
@@ -530,6 +543,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         streamLoadTask?.cancel()
         streamLoadTask = nil
         finishJoinTelemetry { $0.abandoned() }
+        // The A/V measurement is of a fullscreen join. After the handoff other
+        // engines may run, and their lines would read as this one's.
+        aether.finishAVCapture()
         cancellables.removeAll()
         nativeItemObservation = nil
         nativeLegibleActive = false
@@ -569,6 +585,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         endScrub()
         streamLoadTask?.cancel()
         streamLoadTask = nil
+        busyCheckTask?.cancel()
+        busyCheckTask = nil
         watchCreditTask?.cancel()
         watchCreditTask = nil
         // Backing out before first frame still ends the transaction. An
@@ -1846,7 +1864,47 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         terminate(telemetry)
     }
 
-    private func advanceFallback() {
+    /// Ends a join that cannot succeed. With a notice, it stays up long enough
+    /// to read before the player closes; without one the player closes at once.
+    private func endJoin(notice: String?) async {
+        guard let notice else { dismissPlayer(); return }
+        loadingSpinner.stopAnimating()
+        noticeView.show(notice, for: 5)
+        try? await Task.sleep(for: .seconds(5))
+        if !Task.isCancelled { dismissPlayer() }
+    }
+
+    /// Plex answers a tune with no free tuner the same way as other tuner
+    /// faults, so busy is the likely reason, not a certain one.
+    private static func notice(forResolveError error: Error) -> String? {
+        error is PlexLiveTuneError ? "Couldn't tune this channel. All tuners may be busy." : nil
+    }
+
+    private static let tunersBusyNotice = "All tuners are busy. Stop another stream and try again."
+
+    /// A direct source with no free connection refuses in about 3 s, but the
+    /// engine retries for about 50 s before it gives up. So a load that has
+    /// not opened the source after 4 s asks it once. Gated on the load, not on
+    /// first frame: a healthy join is still filling its holdback then, and a
+    /// second GET is what some single-connection providers answer by dropping
+    /// the first. A free source answers with stream bytes, dropped at once.
+    private func startEarlyBusyCheck(for url: URL) {
+        busyCheckTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, !Task.isCancelled else { return }
+            let headers = LiveTVClientIdentity.streamHeaders(for: self.channel)
+            guard await LiveTunerBusy.sourceIsBusy(url, headers: headers), !Task.isCancelled else { return }
+            self.streamLoadTask?.cancel()
+            self.streamLoadTask = nil
+            self.aetherPlayer?.stop()
+            self.finishJoinTelemetry { $0.failed(reason: "tuner_busy") }
+            await self.endJoin(notice: Self.tunersBusyNotice)
+        }
+    }
+
+    private func advanceFallback(after failure: Error? = nil) {
+        // From here the ladder's own check below owns the busy question.
+        busyCheckTask?.cancel()
         fallbackStage += 1
         guard fallbackStage <= 2 else {
             loadingSpinner.stopAnimating()
@@ -1858,12 +1916,29 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         loadingSpinner.startAnimating()
         streamLoadTask = Task { @MainActor in
             defer { isFallbackInFlight = false }
-            let resolved = await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+            let resolved: URL?
+            do {
+                resolved = try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+            } catch {
+                if !Task.isCancelled { await endJoin(notice: Self.notice(forResolveError: error)) }
+                return
+            }
             if Task.isCancelled {
                 if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
                 return
             }
             guard let freshURL = resolved else { dismissPlayer(); return }
+            // A raw source that never opened may be out of connections. Every
+            // rung below would meet the same refusal, so ask once and stop.
+            // The engine reports a 503 on a live open as the source never
+            // opening; a typed 503 would arrive as rate limiting.
+            let kind = (failure as? PlayerError)?.engineKind
+            if channel.sourceType != .plex,
+               kind == EngineFailureKind.liveSourceUnavailable || kind == EngineFailureKind.sourceRateLimited,
+               await LiveTunerBusy.sourceIsBusy(freshURL, headers: LiveTVClientIdentity.streamHeaders(for: channel)) {
+                if !Task.isCancelled { await endJoin(notice: Self.tunersBusyNotice) }
+                return
+            }
             startLiveSessionKeepAlive(for: freshURL)
 
             if stage == 1 {
@@ -1891,7 +1966,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     didStartPlaying()
                 } catch {
                     if Task.isCancelled { return }
-                    advanceFallback()
+                    advanceFallback(after: error)
                 }
             } else {
                 // Last resort: bare AVPlayer on its own layer (engine is done).

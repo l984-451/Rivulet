@@ -241,7 +241,7 @@ final class MultiStreamViewModel: ObservableObject {
 
         // Start playback (resolve = Plex tune step for cloud-EPG/DVB channels)
         let loadStartTime = Date()
-        let resolved = await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+        let resolved = try? await LiveTVDataStore.shared.resolveStreamURL(for: channel)
         // A slow tune can outlive its tile (closed, or multiview dismissed).
         // Release what it tuned instead of playing it where nobody sees it.
         guard !intentionallyStoppedSlots.contains(slot.id),
@@ -543,7 +543,7 @@ final class MultiStreamViewModel: ObservableObject {
         }
 
         // Start playback (resolve = Plex tune step for cloud-EPG/DVB channels)
-        let resolved = await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+        let resolved = try? await LiveTVDataStore.shared.resolveStreamURL(for: channel)
         // Same as addChannel: a tile gone during the tune releases its tune,
         // and the stall clock waits for the tune to finish.
         guard !intentionallyStoppedSlots.contains(newSlot.id),
@@ -778,7 +778,7 @@ final class MultiStreamViewModel: ObservableObject {
         // pool is still held by the attempt this one replaces.
         streams[startIndex].liveKeepalive.stop()
 
-        let resolved = await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+        let resolved = try? await LiveTVDataStore.shared.resolveStreamURL(for: channel)
         // Find the slot again: during the await multiview may have closed
         // (every slot gone) or dropped another tile (indices shifted), and an
         // index taken before it crashed or wrote to the wrong tile.

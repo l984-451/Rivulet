@@ -766,8 +766,50 @@ final class AetherPlayer: PlayerProtocol {
     /// a session moves between surfaces.
     private(set) var isOnNativeLiveRoute = false
 
+    /// The engine's decode path and source codec for the current load, as
+    /// plain strings for telemetry.
+    var videoRouteName: String { engine.videoRoute.rawValue }
+    var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
+
+    /// The start of a fullscreen live join, measured for issue #319. See
+    /// LiveAVTelemetry.
+    private var avCapture: LiveAVCapture?
+    private var avCaptureTask: Task<Void, Never>?
+    /// Which capture holds the engine's global log handler.
+    private static var engineLogCapture: LiveAVCapture?
+
+    private func startAVCapture(url: URL) {
+        let capture = LiveAVCapture(url: url)
+        avCapture = capture
+        Self.engineLogCapture = capture
+        // @Sendable, so neither closure is inferred main-actor: the engine
+        // calls both on its own threads.
+        EngineLog.handler = { @Sendable line in capture.ingest(line: line) }
+        engine.setSoftwareVideoFrameTimeObserver { @Sendable time in
+            capture.frame(pts: time.presentation.seconds)
+        }
+    }
+
+    /// Report what the capture has, if the join got as far as sound and a
+    /// picture, and stop listening.
+    func finishAVCapture() {
+        avCaptureTask?.cancel()
+        avCaptureTask = nil
+        guard let capture = avCapture else { return }
+        avCapture = nil
+        engine.setSoftwareVideoFrameTimeObserver(nil)
+        if Self.engineLogCapture === capture {
+            // ponytail: one global handler; a second fullscreen join replaces it.
+            EngineLog.handler = nil
+            Self.engineLogCapture = nil
+        }
+        if let sample = capture.sample() { LiveAVTelemetry.report(sample) }
+    }
+
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
                   role: LiveLoadRole = .fullscreen) async throws {
+        finishAVCapture()
+        if role == .fullscreen { startAVCapture(url: url) }
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
         isOnNativeLiveRoute = isHLS
         // Forced onto the engine demuxer AND the source is a playlist: the Plex
@@ -886,6 +928,15 @@ final class AetherPlayer: PlayerProtocol {
                 }
             } else {
                 try await engine.load(url: url, startPosition: nil, options: options)
+            }
+            if let capture = avCapture {
+                capture.setCodec(engine.sourceVideoCodecName)
+                // Long enough for the prime, the start, and the 5 s from the
+                // start that vlead_min skips, with ten seconds of it measured.
+                avCaptureTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(18))
+                    if !Task.isCancelled { self?.finishAVCapture() }
+                }
             }
             if joinsWirelessAudio && isOnSoftwareRoute {
                 // The software backend renders on a sample-buffer synchronizer
@@ -1164,6 +1215,7 @@ final class AetherPlayer: PlayerProtocol {
         foregroundReloadTask?.cancel()
         pendingReloadSince = nil
         userIntendsToPlay = false
+        finishAVCapture()
         engine.stop()
     }
 

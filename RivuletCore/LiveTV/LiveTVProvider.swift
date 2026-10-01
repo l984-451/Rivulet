@@ -258,7 +258,9 @@ protocol LiveTVProvider: Sendable {
     /// Resolve a PLAYABLE stream URL, performing any server-side session setup
     /// first (e.g. the Plex Live TV tune step for cloud-EPG/DVB DVRs). Defaults
     /// to `buildStreamURL(for:)` for providers with directly playable URLs.
-    func resolveStreamURL(for channel: UnifiedChannel) async -> URL?
+    /// Throws when that setup fails, so the player can say why (a refused Plex
+    /// tune); `try?` keeps the old nil-on-failure behavior.
+    func resolveStreamURL(for channel: UnifiedChannel) async throws -> URL?
 
     /// Channel logos discovered in the EPG/XMLTV data, keyed by unified channel
     /// id. Used to fill in channel artwork when the playlist (M3U) didn't supply

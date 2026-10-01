@@ -66,7 +66,7 @@ public enum SentryStartup {
             // named measurements we actually reason from rather than just
             // thinning them.
             options.tracesSampler = { context in
-                context.transactionContext.name == "live.join"
+                ["live.join", "live.av"].contains(context.transactionContext.name)
                     ? NSNumber(value: 1.0)
                     : NSNumber(value: 0.05)
             }

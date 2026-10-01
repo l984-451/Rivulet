@@ -485,12 +485,19 @@ struct GuideLayoutView: View {
             }
         }
 
-        let vc = LiveTVAetherPlayerViewController(channel: channel, adopting: adopting)
+        presentPlayer(LiveTVAetherPlayerViewController(channel: channel, adopting: adopting), from: top)
+    }
+
+    /// The same player and multiview What's On opens, wired the same way.
+    private func presentPlayer(_ vc: LiveTVAetherPlayerViewController, from top: UIViewController) {
         vc.modalPresentationStyle = .fullScreen
         if keepPlayingInGuide {
             vc.onMinimize = { session in
                 miniSession = session
             }
+        }
+        vc.onOpenMultiview = { session in
+            presentMultiview(adopting: session, adding: nil)
         }
         vc.onDismiss = { lastChannel in
             // The viewer may have changed channels in the player; land on the
@@ -503,13 +510,43 @@ struct GuideLayoutView: View {
         top.present(vc, animated: true)
     }
 
+    /// Multiview with `session` (the player's channel, or the corner one) and
+    /// `channel`. A tile taken full screen comes back in the player.
+    private func presentMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?) {
+        guard let top = LiveProgramMenu.topViewController() else {
+            session?.stop()
+            return
+        }
+        let multiview = LiveMultiviewViewController(adopting: session, adding: channel,
+                                                    sourceIdFilter: sourceIdFilter)
+        multiview.onWatchFullScreen = { session in
+            guard let top = LiveProgramMenu.topViewController() else {
+                session.stop()
+                return
+            }
+            presentPlayer(LiveTVAetherPlayerViewController(channel: session.channel, adopting: session),
+                          from: top)
+        }
+        top.present(multiview, animated: true)
+    }
+
     // MARK: - Programme menu and recordings
 
     private func presentProgramMenu(channel: UnifiedChannel, program: UnifiedProgram?, frame: CGRect?) {
         guard let top = LiveProgramMenu.topViewController() else { return }
-        LiveProgramMenu.present(program: program, channel: channel, from: top, sourceFrame: frame) { channel in
-            selectChannel(channel)
-        }
+        LiveProgramMenu.present(
+            program: program,
+            channel: channel,
+            from: top,
+            sourceFrame: frame,
+            onWatch: { channel in selectChannel(channel) },
+            onMultiview: { channel in
+                // The corner channel joins as the first tile, as on What's On.
+                let corner = miniSession
+                miniSession = nil
+                presentMultiview(adopting: corner, adding: channel)
+            }
+        )
     }
 
     private func presentRecordings() {

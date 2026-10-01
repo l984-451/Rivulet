@@ -428,7 +428,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
     /// AetherEngine deinterlaces (bwdif) after demuxing client-side — along
     /// with the odd subtitle tracks (DVB/teletext). HDHomeRun direct URLs pass
     /// through untouched (raw TS → same engine path).
-    func resolveStreamURL(for channel: UnifiedChannel) async -> URL? {
+    func resolveStreamURL(for channel: UnifiedChannel) async throws -> URL? {
         guard let base = buildStreamURL(for: channel) else { return nil }
 
         guard let baseComponents = URLComponents(url: base, resolvingAgainstBaseURL: false),
@@ -467,7 +467,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
                 scope.setExtra(value: dvrKey, key: "dvr_key")
                 scope.setExtra(value: "tune_failed", key: "operation")
             }
-            return nil
+            throw error
         }
 
         let transcodeSessionId = UUID().uuidString

@@ -2380,16 +2380,17 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         // Some PMS variants answer a FAILED tune with HTTP 200 and a container
         // carrying status -1 plus a message ("Could not tune...").
         if let status = mediaContainer["status"] as? Int, status != 0, status != 200 {
+            let serverMessage = String((mediaContainer["message"] as? String ?? "").prefix(200))
             let breadcrumb = Breadcrumb(level: .warning, category: "plex_livetv")
             breadcrumb.message = "Tune returned failure status"
             breadcrumb.data = [
                 "dvr": dvrKey,
                 "channel": channelId,
                 "status": status,
-                "server_message": (mediaContainer["message"] as? String ?? "").prefix(200)
+                "server_message": serverMessage
             ]
             SentryBridge.addBreadcrumb(breadcrumb)
-            throw PlexAPIError.invalidResponse
+            throw PlexLiveTuneError(serverMessage: serverMessage)
         }
 
         // PRIMARY: the live session's Metadata.key (/livetv/sessions/{uuid}).
@@ -3194,6 +3195,19 @@ enum PlexAPIError: LocalizedError {
             return "Network error: \(error.localizedDescription)"
         }
     }
+}
+
+/// PMS refused a Live TV tune (status -1, "Could not tune channel..."). PMS
+/// answers the same for every tuner fault, but in practice it is usually every
+/// tuner being in use.
+///
+/// Its own type rather than a `PlexAPIError` case: a new case with a payload
+/// renumbers the NSError code of every payload-free case, which is what
+/// existing Sentry issues are grouped by.
+nonisolated struct PlexLiveTuneError: LocalizedError {
+    let serverMessage: String
+
+    var errorDescription: String? { "Tune failed: \(serverMessage)" }
 }
 
 // MARK: - Playback Decision Models

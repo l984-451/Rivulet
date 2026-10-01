@@ -78,13 +78,14 @@ final class LiveJoinTelemetry {
         resolveSpan = nil
         transaction?.setTag(value: route.rawValue, key: "live.route")
         transaction?.setTag(value: Self.sourceKind(for: url), key: "live.source")
+        transaction?.setTag(value: Self.scanKind(for: url), key: "live.scan")
         loadSpan = transaction?.startChild(operation: "engine_load")
     }
 
     /// Categorises the stream source by URL SHAPE only. Never returns any part
     /// of the URL itself: Xtream IPTV paths carry `/live/user/pass/` and Plex
     /// URLs carry tokens.
-    private static func sourceKind(for url: URL) -> String {
+    nonisolated static func sourceKind(for url: URL) -> String {
         let path = url.path
         if path.hasPrefix("/livetv/sessions/") { return "plex_tuned" }
         if path.contains("/video/:/transcode/universal") { return "plex_transcode" }
@@ -92,16 +93,34 @@ final class LiveJoinTelemetry {
         return "raw_stream"
     }
 
+    /// The scan type PMS reported on the tune: `progressive`, `interlaced`, or
+    /// `none` when the source carries none (every non-Plex channel). Anything
+    /// but progressive counts as interlaced, as in `needsDeinterlacing`.
+    nonisolated static func scanKind(for url: URL) -> String {
+        guard let scan = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "rivuletLiveScanType" })?.value else { return "none" }
+        return scan.lowercased() == "progressive" ? "progressive" : "interlaced"
+    }
+
     /// `loadLive` returned. What remains until `.playing` is the engine's
     /// startup gate: on the loopback that is the live-edge holdback fill.
-    func loadFinished() {
+    /// `videoRoute` is the decode path the engine chose, so a join can be
+    /// matched to it (issue #319).
+    func loadFinished(videoRoute: String) {
+        if let transaction {
+            transaction.setTag(value: videoRoute, key: "live.video_route")
+            LiveAudioRoute.current().record(on: transaction)
+        }
         loadSpan?.finish()
         loadSpan = nil
         firstFrameSpan = transaction?.startChild(operation: "first_frame")
     }
 
-    /// First `.playing` after the load. The join is complete.
-    func joined() {
+    /// First `.playing` after the load. The join is complete. The codec is
+    /// read here, not at load: on the remote-HLS bypass the engine learns it
+    /// only once AVPlayer has the stream.
+    func joined(codec: String?) {
+        if let codec { transaction?.setTag(value: codec, key: "live.codec") }
         finish(outcome: "joined", status: .ok)
     }
 

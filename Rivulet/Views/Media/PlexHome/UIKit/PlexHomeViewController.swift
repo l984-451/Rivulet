@@ -3483,7 +3483,7 @@ final class PlexHomeViewController: UIViewController {
     /// (TVPosterView scales its content internally, not the view), so the
     /// frame is grown by the focus scale to match what's on screen.
     private func focusedTileFrame() -> CGRect? {
-        var view = UIScreen.main.focusedView
+        var view = UIFocusSystem.focusSystem(for: self.view)?.focusedItem as? UIView
         while let current = view, !(current is UICollectionViewCell) { view = current.superview }
         guard let cell = view as? UICollectionViewCell else { return nil }
         let frame = cell.convert(cell.bounds, to: nil)

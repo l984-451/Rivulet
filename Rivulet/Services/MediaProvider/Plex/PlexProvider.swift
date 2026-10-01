@@ -132,29 +132,94 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         return full ?? localPartial
     }
 
-    func collectionItems(matching collectionName: String, in library: MediaLibrary) async throws -> [MediaItem] {
-        // PlexNetworkManager.getCollectionItems takes sectionId + collectionId;
-        // the existing detail view's Collection footer is populated indirectly
-        // by Plex embedding collection items in the show/movie's metadata
-        // response. Resolving collectionName -> collectionId in a clean async
-        // call requires a network helper that doesn't exist yet — out of
-        // scope for Wave 1.
-        //
-        // TODO(post-wave-1): add /library/sections/{id}/collections?title= query
-        // helper to PlexNetworkManager and wire it through here.
-        return []
+    func related(for ref: MediaItemRef, kind: MediaKind) async throws -> RelatedContent {
+        try await plexCall {
+            func item(_ meta: PlexMetadata) -> MediaItem {
+                PlexMediaMapper.item(meta, providerID: self.id,
+                                    serverURL: self.serverURL, authToken: self.authToken)
+            }
+            let hubs = try await networkManager.getRelatedItems(
+                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID
+            )
+            let split = Self.splitRelated(hubs: hubs, currentRatingKey: ref.itemID, kind: kind)
+            var collection: CollectionRow?
+            if let title = split.collectionTitle, !split.members.isEmpty {
+                // Only a hub that reports `more` gets the trailing tile, and a
+                // failed lookup keeps the row without it.
+                var tile: MediaItem?
+                if let tagId = split.tagId, let sectionId = split.sectionId,
+                   let meta = try? await networkManager.getCollection(
+                       serverURL: serverURL, authToken: authToken, sectionId: sectionId, tagId: tagId
+                   ) {
+                    tile = item(meta)
+                }
+                collection = CollectionRow(title: title, members: split.members.map(item), collection: tile)
+            }
+            return RelatedContent(items: split.related.map(item), collection: collection)
+        }
     }
 
-    func relatedItems(for itemRef: MediaItemRef) async throws -> [MediaItem] {
-        try await plexCall {
-            let related = try await networkManager.getRelatedItems(
-                serverURL: serverURL, authToken: authToken, ratingKey: itemRef.itemID
-            )
-            return related.map {
-                PlexMediaMapper.item($0, providerID: id,
-                                    serverURL: serverURL, authToken: authToken)
+    /// The detail page's two rows, cut from one `/related` answer.
+    nonisolated struct RelatedSplit {
+        let related: [PlexMetadata]
+        let collectionTitle: String?
+        let members: [PlexMetadata]
+        /// Set only when the collection hub reports `more`: the hub key's
+        /// `tagId` and library section, which find the collection itself.
+        let tagId: String?
+        let sectionId: String?
+    }
+
+    /// Picks the item's collection hub: the first `collection.related.*` hub
+    /// typed like the item, for movies and shows only, since a show's first
+    /// collection hub can be movie-typed. Every other collection hub is
+    /// dropped and the item itself is removed. The remaining hubs flatten
+    /// into Related, deduped, minus the collection's members, capped at 12.
+    nonisolated static func splitRelated(hubs: [PlexHub], currentRatingKey: String, kind: MediaKind) -> RelatedSplit {
+        let itemType: String? = switch kind {
+        case .movie: "movie"
+        case .show: "show"
+        default: nil
+        }
+        func isCollectionHub(_ hub: PlexHub) -> Bool {
+            hub.hubIdentifier?.hasPrefix("collection.related.") == true
+        }
+        let collectionHub = itemType.flatMap { type in
+            hubs.first { isCollectionHub($0) && $0.type == type }
+        }
+        let members = (collectionHub?.Metadata ?? []).filter { $0.ratingKey != currentRatingKey }
+
+        // A title sits in one row only: the picked hub's members are seeded as
+        // seen, so a member a people hub also lists stays out of Related.
+        var seen: Set<String> = [currentRatingKey]
+        seen.formUnion((collectionHub?.Metadata ?? []).compactMap(\.ratingKey))
+        let related = hubs.filter { !isCollectionHub($0) }
+            .flatMap { $0.Metadata ?? [] }
+            .filter { item in
+                guard let key = item.ratingKey else { return true }
+                return seen.insert(key).inserted
+            }
+
+        var tagId: String?
+        var sectionId: String?
+        if collectionHub?.more == true,
+           let key = collectionHub?.key,
+           let components = URLComponents(string: key) {
+            // /library/sections/1/all?type=1&tagId=353397&sort=...
+            let path = components.path.split(separator: "/").map(String.init)
+            if let tag = components.queryItems?.first(where: { $0.name == "tagId" })?.value,
+               let i = path.firstIndex(of: "sections"), path.indices.contains(i + 1) {
+                tagId = tag
+                sectionId = path[i + 1]
             }
         }
+        return RelatedSplit(
+            related: Array(related.prefix(12)),
+            collectionTitle: collectionHub?.title,
+            members: members,
+            tagId: tagId,
+            sectionId: sectionId
+        )
     }
 
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] {

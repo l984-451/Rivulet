@@ -443,9 +443,16 @@ final class ShelfRowCell: UICollectionViewCell {
     /// restoration): jump the window so the item is visible, then prefer its
     /// cell.
     func prepareFocusRestore(on itemIndex: Int) {
+        armFocusRestore(on: itemIndex)
+        setNeedsFocusUpdate()
+    }
+
+    /// Arm the tile for the next focus resolution without requesting one.
+    /// For a caller that still holds focus inside this row: a request would
+    /// be honoured at once and spend `pendingFocusIndex` before it is needed.
+    func armFocusRestore(on itemIndex: Int) {
         pendingFocusIndex = itemIndex
         prepareFocusRestoreLayout(on: itemIndex)
-        setNeedsFocusUpdate()
     }
 
     /// Jump the row's horizontal window so `itemIndex` is realized/visible

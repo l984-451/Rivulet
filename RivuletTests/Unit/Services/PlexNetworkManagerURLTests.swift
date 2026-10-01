@@ -473,4 +473,85 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertNotNil(headers["X-Plex-Platform"])
         XCTAssertNotNil(headers["X-Plex-Device"])
     }
+
+    // MARK: - Hub Items URL Tests
+
+    // Hub keys are real ones from /hubs/sections/{1,2}?count=24 on PMS 1.43.4
+    // (2026-09-30). The token travels in headers, so none appears here.
+
+    private let pageStart = URLQueryItem(name: "X-Plex-Container-Start", value: "24")
+    private let pageSize = URLQueryItem(name: "X-Plex-Container-Size", value: "24")
+
+    private func hubQuery(_ url: URL?) -> [URLQueryItem]? {
+        url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }
+    }
+
+    /// movie.recentlyadded.1. Dropping the key's query paged the whole
+    /// library in title order ("The Adventures of Huck Finn" at slot 25).
+    func testHubItemsURLKeepsHubKeySort() {
+        let url = PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL,
+            hubKey: "/library/sections/1/all?sort=addedAt:desc",
+            hubIdentifier: "movie.recentlyadded.1",
+            start: 24,
+            count: 24
+        )
+        XCTAssertEqual(url?.path, "/library/sections/1/all")
+        XCTAssertEqual(hubQuery(url), [URLQueryItem(name: "sort", value: "addedAt:desc"), pageStart, pageSize])
+    }
+
+    /// movie.genre.1.80. The '>' goes out percent-encoded; PMS answers
+    /// `audienceRating%3E=7.0` with the same 61 matches as the raw form.
+    func testHubItemsURLKeepsHubKeyFilters() {
+        let url = PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL,
+            hubKey: "/library/sections/1/all?unwatched=1&genre=80&audienceRating>=7.0",
+            hubIdentifier: "movie.genre.1.80",
+            start: 24,
+            count: 24
+        )
+        XCTAssertEqual(hubQuery(url), [
+            URLQueryItem(name: "unwatched", value: "1"),
+            URLQueryItem(name: "genre", value: "80"),
+            URLQueryItem(name: "audienceRating>", value: "7.0"),
+            pageStart,
+            pageSize
+        ])
+    }
+
+    func testHubItemsURLCollectionChildrenGainsOnlyPaging() {
+        let url = PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL,
+            hubKey: "/library/collections/9144/children",
+            hubIdentifier: nil,
+            start: 0,
+            count: 24
+        )
+        XCTAssertEqual(url?.path, "/library/collections/9144/children")
+        XCTAssertEqual(hubQuery(url), [
+            URLQueryItem(name: "X-Plex-Container-Start", value: "0"),
+            URLQueryItem(name: "X-Plex-Container-Size", value: "24")
+        ])
+    }
+
+    func testHubItemsURLHubsItemsAddsIdentifier() {
+        let url = PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL,
+            hubKey: "/hubs/items",
+            hubIdentifier: "home.movies.recent",
+            start: 24,
+            count: 24
+        )
+        XCTAssertEqual(url?.path, "/hubs/items")
+        XCTAssertEqual(hubQuery(url), [pageStart, pageSize, URLQueryItem(name: "identifier", value: "home.movies.recent")])
+    }
+
+    /// Plex answers 404 without the identifier; getHubItems returns an empty
+    /// page for nil, as it did before.
+    func testHubItemsURLHubsItemsWithoutIdentifierIsNil() {
+        XCTAssertNil(PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL, hubKey: "/hubs/items", hubIdentifier: nil, start: 0, count: 24))
+        XCTAssertNil(PlexNetworkManager.hubItemsURL(
+            serverURL: testServerURL, hubKey: "/hubs/items", hubIdentifier: "", start: 0, count: 24))
+    }
 }

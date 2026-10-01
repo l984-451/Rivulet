@@ -79,7 +79,11 @@ enum PlexMediaMapper {
         if path.hasPrefix("http://") || path.hasPrefix("https://") {
             return URL(string: path)
         }
-        return URL(string: "\(serverURL)\(path)?X-Plex-Token=\(authToken)")
+        // A collection's composite poster carries its own query
+        // (`/library/collections/{rk}/composite/{ts}?width=400&height=600`).
+        // A second '?' folds the token into `height` and PMS answers 401.
+        let separator = path.contains("?") ? "&" : "?"
+        return URL(string: "\(serverURL)\(path)\(separator)X-Plex-Token=\(authToken)")
     }
 
     /// Build a tokenized URL for a PLAYABLE Plex key (a Part key, an extra key).

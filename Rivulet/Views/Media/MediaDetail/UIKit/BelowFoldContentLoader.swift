@@ -14,10 +14,8 @@
 //  PosterCell. Wiring that into the container is a later, runtime-verified
 //  step; this loader is independently testable.
 //
-//  Collection items are intentionally omitted for now — the SwiftUI path uses
-//  Plex-specific sectionId/collectionId plumbing; the agnostic
-//  `collectionItems(matching:in:)` needs the collection name + library, which
-//  is follow-up plumbing.
+//  The collection row and Related come from the same `related(for:kind:)`
+//  call.
 //
 
 import Foundation
@@ -33,6 +31,9 @@ struct BelowFoldContent: Sendable {
     var trailers: [BelowFoldTrailer] = []
     var extras: [BelowFoldTrailer] = []   // non-trailer extras (behind the scenes, etc.)
     var related: [MediaItem] = []
+    /// The collection row (Plex's collection hub for a movie or show, minus
+    /// this item), from the same `related(for:kind:)` call as `related`.
+    var collection: CollectionRow?
     /// Default season to select in the pill bar.
     var selectedSeason: MediaItem?
     /// Full detail for the About + Information/Languages/Accessibility block
@@ -136,8 +137,11 @@ final class BelowFoldContentLoader {
             break  // movies: no seasons/episodes
         }
 
-        // Related row.
-        content.related = (try? await provider.relatedItems(for: item.ref)) ?? []
+        // Related row and the collection row: one `/related` call feeds both.
+        if let related = try? await provider.related(for: item.ref, kind: item.kind) {
+            content.related = related.items
+            content.collection = related.collection
+        }
 
         return content
     }

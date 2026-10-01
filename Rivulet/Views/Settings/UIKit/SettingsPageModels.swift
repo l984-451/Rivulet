@@ -543,12 +543,18 @@ enum SettingsContent {
         let entries: [(id: String, title: String)] =
             continueWatching
             + visible.compactMap { row in
-                guard let id = row.hubIdentifier else { return nil }
+                // Pinned collections are listed below with an Unpin action,
+                // never as a hide toggle.
+                guard let id = row.hubIdentifier, !id.hasPrefix("rivulet.pin.") else { return nil }
                 return (id, row.title)
             }
             + hiddenRows
 
+        let pinRows = pinnedCollectionRows(store: store)
         guard !entries.isEmpty else {
+            // A pin can outlive every Plex row (its library taken off Home),
+            // and this page is the only place left to unpin it.
+            guard pinRows.isEmpty else { return pinRows }
             return [SettingsRowItem(id: "noHomeRows",
                                     title: "Connect to a Plex server to manage Home rows",
                                     kind: .info(value: { "" }))]
@@ -568,6 +574,25 @@ enum SettingsContent {
             rows.append(SettingsRowItem(id: "homeRow_\(entry.id)", title: entry.title, kind: .toggle(
                 get: { !HomeRowSettings.isHidden(entry.id) },
                 set: { shown in HomeRowSettings.setHidden(!shown, for: entry.id) })))
+        }
+        return rows + pinRows
+    }
+
+    /// The Pinned Collections group: every pin on the current server, not only
+    /// the rows Home draws, so an emptied pin, or one whose library was taken
+    /// off Home, can still be unpinned. Omitted when there are none. Show All
+    /// never touches pins.
+    private static func pinnedCollectionRows(store: PlexDataStore) -> [SettingsRowItem] {
+        let serverLibraries = Set(store.libraries.map(\.uuid))
+        let pins = HomeCollectionPins.pins.filter { serverLibraries.contains($0.libraryUUID) }
+        guard !pins.isEmpty else { return [] }
+        var rows: [SettingsRowItem] = [.header("Pinned Collections")]
+        for pin in pins {
+            rows.append(SettingsRowItem(id: "pinnedCollection_\(pin.id)", title: pin.title,
+                                        kind: .action(destructive: true, handler: { vc in
+                HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
+                (vc as? SettingsPageViewController)?.reloadRows()
+            })))
         }
         return rows
     }

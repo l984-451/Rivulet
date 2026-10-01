@@ -1823,9 +1823,12 @@ struct GuideInfoBar: View {
         return nil
     }
 
+    @State private var loadedPoster: (url: URL, image: UIImage)?
+
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .task(id: programImageURL) { await loadPoster(programImageURL) }
     }
 
     /// Fixed poster height; width follows the image's own aspect ratio so a
@@ -1871,51 +1874,32 @@ struct GuideInfoBar: View {
     /// 2:3 poster box width.
     private var posterWidth: CGFloat { posterHeight * 2.0 / 3.0 }
 
-    /// Fixed 2:3 poster slot. Everything (programme artwork, the logo fallback,
-    /// the placeholder) is aspect-fit into the same frame, so the layout never
-    /// jumps when an image finishes loading, and nothing is stretched or cropped
-    /// (wider images get transparent bars).
+    /// The 2:3 poster slot, only when the programme has portrait artwork. No
+    /// channel-logo stand-in: the logo is already in the channel column, and
+    /// squeezed into a poster frame it read as a broken poster. Most IPTV
+    /// guides carry no portrait art, so there the info text starts at the edge.
+    /// Nothing is drawn until the image is loaded AND measured portrait:
+    /// drawing during the load showed an empty frame, or the wide art, that
+    /// then vanished.
     @ViewBuilder private var poster: some View {
-        ZStack {
-            EPGTheme.surface            // blank grey 2:3 card behind the artwork
-            posterContent
-        }
-        .frame(width: posterWidth, height: posterHeight)
-        .clipShape(RoundedRectangle(cornerRadius: EPGTheme.columnCorner))
-        .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
-    }
-
-    @ViewBuilder private var posterContent: some View {
-        if let url = programImageURL {
-            GuidePosterImage(url: url) {
-                logoInset
+        if let loaded = loadedPoster, loaded.url == programImageURL {
+            ZStack {
+                EPGTheme.surface
+                Image(uiImage: loaded.image).resizable().aspectRatio(contentMode: .fit)
             }
-            .id(url)
-        } else {
-            logoInset
+            .frame(width: posterWidth, height: posterHeight)
+            .clipShape(RoundedRectangle(cornerRadius: EPGTheme.columnCorner))
+            .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
         }
     }
 
-    /// Channel logo (or a glyph) inset on the blank grey card with padding, fit
-    /// without stretching or cropping.
-    @ViewBuilder private var logoInset: some View {
-        if let logo = channel?.logoURL {
-            CachedAsyncImage(url: logo) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fit).padding(24)
-                default:
-                    placeholderGlyph
-                }
-            }
-        } else {
-            placeholderGlyph
-        }
-    }
-
-    /// Placeholder glyph, shown while loading or when no artwork/logo exists.
-    private var placeholderGlyph: some View {
-        Image(systemName: "tv").font(.system(size: 40)).foregroundStyle(EPGTheme.textSecondary)
+    /// Loads and measures the poster; keeps it only when it is portrait.
+    private func loadPoster(_ url: URL?) async {
+        guard let url, !EPGImageClassifier.shared.isLandscape(url),
+              let image = await ImageCacheManager.shared.image(for: url) else { return }
+        let kind = await EPGImageClassifier.shared.classify(url) { image.size }
+        guard !Task.isCancelled, kind == .portrait else { return }
+        loadedPoster = (url, image)
     }
 
     private func channelLine(_ channel: UnifiedChannel) -> String {
@@ -1931,36 +1915,3 @@ struct GuideInfoBar: View {
 
 /// Dynamically inspects artwork aspect ratio to guarantee landscape images
 /// are never placed in the 2:3 poster slot, falling back to the channel logo.
-private struct GuidePosterImage<Fallback: View>: View {
-    let url: URL
-    @ViewBuilder let logoFallback: () -> Fallback
-    @State private var isLandscape: Bool
-
-    init(url: URL, @ViewBuilder logoFallback: @escaping () -> Fallback) {
-        self.url = url
-        self.logoFallback = logoFallback
-        self._isLandscape = State(initialValue: EPGImageClassifier.shared.isLandscape(url))
-    }
-
-    var body: some View {
-        if isLandscape {
-            logoFallback()
-        } else {
-            CachedAsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fit)
-                default:
-                    logoFallback()
-                }
-            }
-            .task(id: url) {
-                let kind = await EPGImageClassifier.shared.classify(url) {
-                    await ImageCacheManager.shared.image(for: url)?.size
-                }
-                guard !Task.isCancelled else { return }
-                isLandscape = kind == .landscape
-            }
-        }
-    }
-}

@@ -115,6 +115,27 @@ final class HomeCollectionPinsTests: XCTestCase {
         wait(for: [posted], timeout: 0.2)
     }
 
+    /// Settings' hold-Select reorder: one slot per call, and a move off
+    /// either end writes and posts nothing.
+    func test_move_swapsOneSlotAndStopsAtTheEnds() {
+        let spy = Pin(ratingKey: "1", libraryUUID: movies, title: "Spy")
+        HomeCollectionPins.pin(bond)
+        HomeCollectionPins.pin(newlyReleased)
+        HomeCollectionPins.pin(spy)
+
+        HomeCollectionPins.move(spy, up: true)
+        XCTAssertEqual(HomeCollectionPins.pins, [bond, spy, newlyReleased])
+        HomeCollectionPins.move(spy, up: false)
+        XCTAssertEqual(HomeCollectionPins.pins, [bond, newlyReleased, spy])
+
+        let posted = expectation(forNotification: HomeCollectionPins.changedNotification, object: nil)
+        posted.isInverted = true
+        HomeCollectionPins.move(bond, up: true)
+        HomeCollectionPins.move(spy, up: false)
+        wait(for: [posted], timeout: 0.1)
+        XCTAssertEqual(HomeCollectionPins.pins, [bond, newlyReleased, spy])
+    }
+
     func test_pins_arePerProfile() {
         HomeCollectionPins.pin(bond)
         UserDefaults.standard.set(profileB, forKey: userIdKey)

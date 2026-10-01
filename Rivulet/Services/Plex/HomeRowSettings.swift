@@ -160,6 +160,18 @@ enum HomeCollectionPins {
         write(kept)
     }
 
+    /// Swaps a pin one slot up or down, Settings' hold-Select reorder. Home
+    /// draws each library's pins in this order. No-op at either end.
+    // ponytail: swaps across libraries too, which leaves Home unchanged; group the Settings list by library if that confuses anyone.
+    static func move(_ pin: Pin, up: Bool) {
+        var current = pins
+        guard let i = current.firstIndex(where: { $0.id == pin.id }) else { return }
+        let j = up ? i - 1 : i + 1
+        guard current.indices.contains(j) else { return }
+        current.swapAt(i, j)
+        write(current)
+    }
+
     /// Adopts Plex's current title for any pin in `libraryUUID` whose
     /// collection was renamed. Writes and posts nothing when no title differs,
     /// so the library page can call it on every refresh.

@@ -588,11 +588,17 @@ enum SettingsContent {
         guard !pins.isEmpty else { return [] }
         var rows: [SettingsRowItem] = [.header("Pinned Collections")]
         for pin in pins {
+            // Same as the sidebar libraries: hold Select to reorder, Select
+            // asks before unpinning.
             rows.append(SettingsRowItem(id: "pinnedCollection_\(pin.id)", title: pin.title,
-                                        kind: .action(destructive: true, handler: { vc in
-                HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
-                (vc as? SettingsPageViewController)?.reloadRows()
-            })))
+                                        kind: .action(destructive: false, handler: { vc in
+                presentConfirm(on: vc, title: "Unpin \"\(pin.title)\"?",
+                               message: "This removes the row from Home. You can pin it again from the collection in its library.",
+                               confirmTitle: "Unpin", destructive: true) {
+                    HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
+                    (vc as? SettingsPageViewController)?.reloadRows()
+                }
+            }), onReorder: { up in HomeCollectionPins.move(pin, up: up) }))
         }
         return rows
     }

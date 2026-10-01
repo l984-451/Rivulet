@@ -579,26 +579,28 @@ enum SettingsContent {
     }
 
     /// The Pinned Collections group: every pin on the current server, not only
-    /// the rows Home draws, so an emptied pin, or one whose library was taken
-    /// off Home, can still be unpinned. Omitted when there are none. Show All
-    /// never touches pins.
-    private static func pinnedCollectionRows(store: PlexDataStore) -> [SettingsRowItem] {
+    /// the rows Home or a library page draws, so an emptied pin, or one whose
+    /// library was taken off Home, can still be unpinned. Omitted when there
+    /// are none. Show All never touches pins. Home Rows lists the Home pins,
+    /// Libraries the library-page pins.
+    private static func pinnedCollectionRows(store: PlexDataStore,
+                                             in destination: HomeCollectionPins.Destination = .home) -> [SettingsRowItem] {
         let serverLibraries = Set(store.libraries.map(\.uuid))
-        let pins = HomeCollectionPins.pins.filter { serverLibraries.contains($0.libraryUUID) }
+        let pins = HomeCollectionPins.pins(in: destination).filter { serverLibraries.contains($0.libraryUUID) }
         guard !pins.isEmpty else { return [] }
         var rows: [SettingsRowItem] = [.header("Pinned Collections")]
         for pin in pins {
             // Same as the sidebar libraries: hold Select to reorder, Select
             // asks before unpinning.
-            rows.append(SettingsRowItem(id: "pinnedCollection_\(pin.id)", title: pin.title,
+            rows.append(SettingsRowItem(id: "pinnedCollection_\(destination)_\(pin.id)", title: pin.title,
                                         kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Unpin \"\(pin.title)\"?",
-                               message: "This removes the row from Home. You can pin it again from the collection in its library.",
+                               message: "This removes the row from \(destination == .home ? "Home" : "its library"). You can pin it again from the collection in its library.",
                                confirmTitle: "Unpin", destructive: true) {
-                    HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
+                    HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID, in: destination)
                     (vc as? SettingsPageViewController)?.reloadRows()
                 }
-            }), onReorder: { up in HomeCollectionPins.move(pin, up: up) }))
+            }), onReorder: { up in HomeCollectionPins.move(pin, up: up, in: destination) }))
         }
         return rows
     }
@@ -636,7 +638,7 @@ enum SettingsContent {
                 set: { _ in LibrarySettingsManager.shared.toggleVisibility(for: lib.key) }),
                 onReorder: { up in moveMediaLibrary(key: lib.key, up: up) })
         }
-        return rows
+        return rows + pinnedCollectionRows(store: PlexDataStore.shared, in: .library)
     }
 
     /// Move a media library one slot up/down in the sidebar order. Reorders by

@@ -63,7 +63,7 @@ final class CollectionPinActionTests: XCTestCase {
     /// Pin rows carry the pin's identity in their id, so they resolve through
     /// the prefix fallback, the way homeRow_ rows do.
     func test_pinRowId_resolvesToPinnedCollectionDescriptor() {
-        XCTAssertEqual(SettingsDescriptorStore.descriptor(for: "pinnedCollection_abc123/9144")?.description,
-                       "A collection you pinned to Home from its tile menu. Select to unpin it.")
+        XCTAssertEqual(SettingsDescriptorStore.descriptor(for: "pinnedCollection_library_abc123/9144")?.description,
+                       "A collection you pinned from its tile menu. Hold Select to reorder, or Select to unpin it.")
     }
 }

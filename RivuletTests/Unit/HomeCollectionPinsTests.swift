@@ -60,6 +60,7 @@ final class HomeCollectionPinsTests: XCTestCase {
     private func removeTestPins() {
         for profile in [profileA, profileB] {
             UserDefaults.standard.removeObject(forKey: "homeCollectionPins_user_\(profile)")
+            UserDefaults.standard.removeObject(forKey: "libraryCollectionPins_user_\(profile)")
         }
     }
 
@@ -134,6 +135,47 @@ final class HomeCollectionPinsTests: XCTestCase {
         HomeCollectionPins.move(spy, up: false)
         wait(for: [posted], timeout: 0.1)
         XCTAssertEqual(HomeCollectionPins.pins, [bond, newlyReleased, spy])
+    }
+
+    // MARK: - Library pins
+
+    /// One collection can be a Home row, a library row, or both: the two
+    /// lists are stored apart and an action on one never touches the other.
+    func test_libraryPins_areStoredApartFromHomePins() {
+        HomeCollectionPins.pin(bond, in: .library)
+        XCTAssertEqual(HomeCollectionPins.pins(in: .library), [bond])
+        XCTAssertEqual(HomeCollectionPins.pins, [], "a library pin is not a Home pin")
+        XCTAssertTrue(HomeCollectionPins.isPinned(ratingKey: "9144", libraryUUID: movies, in: .library))
+        XCTAssertFalse(HomeCollectionPins.isPinned(ratingKey: "9144", libraryUUID: movies))
+
+        HomeCollectionPins.pin(bond)
+        HomeCollectionPins.unpin(ratingKey: "9144", libraryUUID: movies, in: .library)
+        XCTAssertEqual(HomeCollectionPins.pins(in: .library), [])
+        XCTAssertEqual(HomeCollectionPins.pins, [bond], "unpinning from the library leaves the Home pin")
+    }
+
+    func test_updateTitles_renamesLibraryPinsToo() {
+        HomeCollectionPins.pin(bond, in: .library)
+        HomeCollectionPins.updateTitles(from: [PlexMetadata(ratingKey: "9144", title: "007")], libraryUUID: movies)
+        XCTAssertEqual(HomeCollectionPins.pins(in: .library).first?.title, "007")
+    }
+
+    /// The library page draws its own pins, in pin order, after the
+    /// Collections row. A pin from another library, one Plex already shows
+    /// as a hub on this page, and one with nothing fetched draw no row.
+    func test_libraryPinRows_filtersToDrawableRowsInPinOrder() {
+        let spy = Pin(ratingKey: "1", libraryUUID: movies, title: "Spy")
+        let otherLibrary = Pin(ratingKey: "2", libraryUUID: tv, title: "Other")
+        let empty = Pin(ratingKey: "3", libraryUUID: movies, title: "Empty")
+        let unfetched = Pin(ratingKey: "4", libraryUUID: movies, title: "Unfetched")
+        let rows = PlexHomeViewController.libraryPinRows(
+            pins: [spy, otherLibrary, newlyReleased, empty, unfetched, bond],
+            libraryUUID: movies,
+            hubKeys: [newlyReleased.childrenKey],
+            fetched: [spy.id: members, otherLibrary.id: members, newlyReleased.id: members,
+                      empty.id: [], bond.id: members])
+        XCTAssertEqual(rows.map(\.pin), [spy, bond])
+        XCTAssertEqual(rows.first?.items.map(\.ratingKey), ["55929"])
     }
 
     func test_pins_arePerProfile() {

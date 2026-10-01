@@ -82,7 +82,7 @@ enum SettingsDescriptorStore {
         ),
         "pinnedCollection": SettingDescriptor(
             icon: "pin",
-            description: "A collection you pinned to Home from its tile menu. Select to unpin it."
+            description: "A collection you pinned from its tile menu. Hold Select to reorder, or Select to unpin it."
         ),
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",

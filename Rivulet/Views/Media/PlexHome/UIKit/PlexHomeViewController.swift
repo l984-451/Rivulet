@@ -473,6 +473,10 @@ final class PlexHomeViewController: UIViewController {
     /// when a fetch fails.
     private var libraryCollections: [PlexMetadata] = []
 
+    /// First page of each collection pinned to this library page, keyed by
+    /// `Pin.id`. Missing means not fetched; a failed fetch keeps the last page.
+    private var libraryPinItems: [String: [PlexMetadata]] = [:]
+
     private let dataStore = PlexDataStore.shared
     private let authManager = PlexAuthManager.shared
     private let watchlistService = PlexWatchlistService.shared
@@ -1259,6 +1263,7 @@ final class PlexHomeViewController: UIViewController {
                 HomeCollectionPins.updateTitles(from: collections, libraryUUID: libraryUUID)
             }
         }
+        await fetchLibraryPins()
         isLoadingLibraryHubs = false
         applySnapshotKeepingFocusedRowStill()
         // The sort header's item id never changes, so the apply above never
@@ -1271,6 +1276,55 @@ final class PlexHomeViewController: UIViewController {
         syncCollectionsGrid()
     }
 
+    /// Fetches the first page of every collection pinned to this library page.
+    /// A 404 unpins (deleted, or no longer visible to this profile), the same
+    /// rule `PlexDataStore.loadPinnedCollections` applies to Home pins.
+    private func fetchLibraryPins() async {
+        guard case .library(let key, _) = mode,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken,
+              let libraryUUID = dataStore.libraries.first(where: { $0.key == key })?.uuid else { return }
+        let pins = HomeCollectionPins.pins(in: .library).filter { $0.libraryUUID == libraryUUID }
+        await withTaskGroup(of: (HomeCollectionPins.Pin, [PlexMetadata]?, Bool).self) { group in
+            for pin in pins {
+                group.addTask {
+                    do {
+                        let page = try await PlexNetworkManager.shared.getHubItems(
+                            serverURL: serverURL, authToken: token, hubKey: pin.childrenKey)
+                        return (pin, page.items, false)
+                    } catch PlexAPIError.httpError(let statusCode, _) where statusCode == 404 {
+                        return (pin, nil, true)
+                    } catch {
+                        return (pin, nil, false)
+                    }
+                }
+            }
+            for await (pin, items, gone) in group {
+                if gone {
+                    libraryPinItems[pin.id] = nil
+                    HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: libraryUUID, in: .library)
+                } else if let items {
+                    libraryPinItems[pin.id] = items
+                }
+            }
+        }
+    }
+
+    /// The pinned rows this library page draws, in pin order: this library's
+    /// pins that have a non-empty first page and that Plex does not already
+    /// show here as a hub (an admin-promoted collection).
+    nonisolated static func libraryPinRows(pins: [HomeCollectionPins.Pin],
+                                           libraryUUID: String,
+                                           hubKeys: Set<String>,
+                                           fetched: [String: [PlexMetadata]])
+        -> [(pin: HomeCollectionPins.Pin, items: [PlexMetadata])] {
+        pins.compactMap { pin in
+            guard pin.libraryUUID == libraryUUID, !hubKeys.contains(pin.childrenKey),
+                  let items = fetched[pin.id], !items.isEmpty else { return nil }
+            return (pin, items)
+        }
+    }
+
     /// The apply for refreshThisLibraryHubs. The Collections row has no
     /// warm-launch cache, so it is the one row routinely inserted into, or
     /// removed from, a live page. The page moves its own offset only on focus
@@ -1281,11 +1335,15 @@ final class PlexHomeViewController: UIViewController {
     /// above moves every item below it alike, and a focused section above
     /// the slot does not move at all.
     private func applySnapshotKeepingFocusedRowStill() {
-        let hadCollectionsRow = sectionsSnapshot.contains { $0.id == .libraryCollections }
+        // Pinned rows arrive the same way, right after it.
+        func lateRows() -> [HomeSectionID] {
+            sectionsSnapshot.map(\.id).filter { $0 == .libraryCollections || $0.raw.hasPrefix("libraryPin:") }
+        }
+        let lateRowsBefore = lateRows()
         let focusedID = focusedSectionForHandoff.flatMap { sectionsSnapshot[safe: $0]?.id }
         let minYBefore = focusedID.flatMap { firstItemMinY(ofSection: $0) }
         applySnapshot(animated: false)
-        guard sectionsSnapshot.contains(where: { $0.id == .libraryCollections }) != hadCollectionsRow,
+        guard lateRows() != lateRowsBefore,
               let focusedID, let minYBefore else { return }
         collectionView.layoutIfNeeded()
         guard let minYAfter = firstItemMinY(ofSection: focusedID) else { return }
@@ -2984,6 +3042,20 @@ final class PlexHomeViewController: UIViewController {
             }
             .store(in: &dataStoreObservers)
 
+        // A library page draws its own pins: refetch and repaint on any change.
+        if case .library = mode {
+            NotificationCenter.default.publisher(for: HomeCollectionPins.changedNotification)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        await self.fetchLibraryPins()
+                        self.applySnapshotKeepingFocusedRowStill()
+                    }
+                }
+                .store(in: &dataStoreObservers)
+        }
+
         // The TMDB trending-hero upgrade runs on home and on typed (movie/show)
         // libraries; `requestHeroUpgrade` -> `upgradeHeroFromTMDB` self-gates
         // non-video libraries via `trendingHeroType() == nil`, so it's safe to
@@ -3912,6 +3984,31 @@ final class PlexHomeViewController: UIViewController {
                 hubIdentifier: nil,
                 totalSize: libraryCollections.count
             ), at: firstHubRow + Self.collectionsRowInsertionIndex(rows: hubRowKinds))
+        }
+
+        // Collections pinned to this page, right after the Collections row.
+        // Not gated by Recent / Discovery Rows: the user asked for each one.
+        if let libraryUUID = dataStore.libraries.first(where: { $0.key == key })?.uuid {
+            var at = firstHubRow + Self.collectionsRowInsertionIndex(rows: hubRowKinds)
+                + (libraryCollections.isEmpty ? 0 : 1)
+            let rows = Self.libraryPinRows(
+                pins: HomeCollectionPins.pins(in: .library), libraryUUID: libraryUUID,
+                hubKeys: Set((dataStore.libraryHubs[key] ?? []).compactMap(\.key)),
+                fetched: libraryPinItems)
+            for row in rows {
+                let id = HomeSectionID(raw: "libraryPin:\(row.pin.ratingKey)")
+                let merged = mergedItems(forSection: id, initial: mapToMediaItems(row.items))
+                sections.insert(.hub(
+                    id: id,
+                    title: row.pin.title,
+                    items: merged.items,
+                    isContinueWatching: false,
+                    hubKey: row.pin.childrenKey,
+                    hubIdentifier: nil,
+                    totalSize: merged.totalSize
+                ), at: at)
+                at += 1
+            }
         }
 
         // Below the hub rows: the sort header (library title + count + sort
@@ -5642,32 +5739,48 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         return isPinned ? .unpin : .pin
     }
 
-    /// A collection tile's menu: Pin to Home or Unpin from Home, in library
-    /// mode only. Select already opens the collection, so there is no Open
-    /// action. A MediaItem carries no section id, so the library comes from
-    /// `mode`.
+    /// A collection tile's menu, in library mode only: Pin to / Unpin from
+    /// Home, and Pin to / Unpin from Library. Select already opens the
+    /// collection, so there is no Open action. A MediaItem carries no section
+    /// id, so the library comes from `mode`.
     private func collectionTileMenuSections(for item: MediaItem) -> [[TileMenuAction]] {
         guard case .library(let key, _) = mode,
               !item.ref.itemID.isEmpty,
               let libraryUUID = dataStore.libraries.first(where: { $0.key == key })?.uuid
         else { return [] }
         let pin = HomeCollectionPins.Pin(ratingKey: item.ref.itemID, libraryUUID: libraryUUID, title: item.title)
-        guard let action = Self.collectionPinAction(
+        // Home: only when the library has a Home block and Plex does not
+        // already promote this collection there.
+        let homeAction = Self.collectionPinAction(
             isLibraryPinned: dataStore.librariesPinnedToHome.contains { $0.key == key },
             promotedChildrenKeys: dataStore.promotedHubKeys(forLibraryKey: key),
             childrenKey: pin.childrenKey,
             isPinned: HomeCollectionPins.isPinned(ratingKey: pin.ratingKey, libraryUUID: libraryUUID))
-        else { return [] }
-        switch action {
-        case .pin:
-            return [[TileMenuAction(title: "Pin to Home", systemImage: "pin") {
-                HomeCollectionPins.pin(pin)
-            }]]
-        case .unpin:
-            return [[TileMenuAction(title: "Unpin from Home", systemImage: "pin.slash", destructive: true) {
-                HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID)
-            }]]
+        // Library: always has a page to draw on; skipped when Plex already
+        // shows this collection as a hub here.
+        let libraryAction = Self.collectionPinAction(
+            isLibraryPinned: true,
+            promotedChildrenKeys: Set((dataStore.libraryHubs[key] ?? []).compactMap(\.key)),
+            childrenKey: pin.childrenKey,
+            isPinned: HomeCollectionPins.isPinned(ratingKey: pin.ratingKey, libraryUUID: libraryUUID, in: .library))
+
+        func action(_ pinAction: PinAction?, _ destination: HomeCollectionPins.Destination,
+                    _ name: String) -> TileMenuAction? {
+            switch pinAction {
+            case .pin:
+                return TileMenuAction(title: "Pin to \(name)", systemImage: "pin") {
+                    HomeCollectionPins.pin(pin, in: destination)
+                }
+            case .unpin:
+                return TileMenuAction(title: "Unpin from \(name)", systemImage: "pin.slash", destructive: true) {
+                    HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID, in: destination)
+                }
+            case nil:
+                return nil
+            }
         }
+        let actions = [action(homeAction, .home, "Home"), action(libraryAction, .library, "Library")].compactMap { $0 }
+        return actions.isEmpty ? [] : [actions]
     }
 
     /// Build the tile menu action groups for a cell — one sub-array per

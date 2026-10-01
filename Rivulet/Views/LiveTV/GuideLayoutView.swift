@@ -158,7 +158,7 @@ struct GuideLayoutView: View {
     /// How long focus has to rest on a programme before its backdrop loads.
     /// Holding a direction to cross the guide should not fire an image load or
     /// a transition per channel.
-    private let backdropSettleDelay = Duration.milliseconds(180)
+    private let backdropSettleDelay = Duration.milliseconds(300)
     private let backdropFadeDuration = 0.35
 
     private let tick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()

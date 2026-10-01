@@ -28,8 +28,9 @@ enum EPGTheme {
     /// Channel column box: lighter than the background, darker than guide cells.
     static let columnFill = Color(red: 0.17, green: 0.17, blue: 0.19)
     /// Shared corner radius for every guide box (timeline, date, logo, cells)
-    /// and the rounded clip where cells tuck under the column / ruler.
-    static let columnCorner: CGFloat = 8
+    /// and the rounded clip where cells tuck under the column / ruler. Large
+    /// enough that the continuous curve reads as a squircle.
+    static let columnCorner: CGFloat = 14
     static let textPrimary = Color.white
     static let textSecondary = Color.white.opacity(0.55)
 
@@ -1391,12 +1392,10 @@ final class ProgramCellView: UICollectionViewCell {
         let rect = CGRect(x: leftClip, y: topClip,
                           width: max(bounds.width - leftClip, 0),
                           height: max(bounds.height - topClip, 0))
-        var corners: UIRectCorner = []
-        if leftClip > 0 { corners.formUnion([.topLeft, .bottomLeft]) }
-        if topClip > 0 { corners.formUnion([.topLeft, .topRight]) }
-        let r = EPGTheme.columnCorner
-        clipMask.path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
-                                     cornerRadii: CGSize(width: r, height: r)).cgPath
+        // All four corners: the unclipped ones coincide with the card's own,
+        // and this initializer (unlike `byRoundingCorners:`) draws the same
+        // continuous curve as `cornerCurve = .continuous`.
+        clipMask.path = UIBezierPath(roundedRect: rect, cornerRadius: EPGTheme.columnCorner).cgPath
         contentView.layer.mask = clipMask
     }
 
@@ -1478,7 +1477,12 @@ final class ProgramCellView: UICollectionViewCell {
     }
 
     private func applyFocus(_ focused: Bool) {
-        card.backgroundColor = focused ? UIColor(white: 0.96, alpha: 1) : UIColor(white: 0, alpha: 0.32)
+        // Unfocused: the app's glass row tint (faint white fill, hairline
+        // edge), not a live UIGlassEffect per cell, which would re-sample the
+        // backdrop under ~50 scrolling cells every frame.
+        card.backgroundColor = focused ? UIColor(white: 0.96, alpha: 1) : UIColor(white: 1, alpha: 0.08)
+        card.layer.borderWidth = focused ? 0 : 1
+        card.layer.borderColor = UIColor(white: 1, alpha: 0.1).cgColor
         titleLabel.textColor = focused ? UIColor(white: 0.08, alpha: 1) : .white
         subtitleLabel.textColor = focused ? UIColor(white: 0.08, alpha: 0.6) : UIColor(white: 1, alpha: 0.7)
     }

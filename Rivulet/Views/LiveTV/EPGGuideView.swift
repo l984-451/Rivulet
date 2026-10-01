@@ -939,14 +939,14 @@ final class GuideCategoryBarView: UIView {
         layout.minimumLineSpacing = 14
         layout.minimumInteritemSpacing = 14
         layout.sectionInset = UIEdgeInsets(
-            top: 2,
+            top: 10,
             left: EPGTheme.cellSpacing,
-            bottom: 2,
+            bottom: 10,
             right: 60)
 
         let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
         view.backgroundColor = .clear
-        // The focused pill grows 1.05 past the bar's 64pt.
+        // The focused pill grows past the bar.
         view.clipsToBounds = false
         view.contentInsetAdjustmentBehavior = .never
         view.showsHorizontalScrollIndicator = false
@@ -1067,9 +1067,11 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
     ) -> CGSize {
         guard let title = items[safe: indexPath.item]?.title else { return .zero }
         let font = UIFont.systemFont(ofSize: GuideCategoryPillCell.fontSize, weight: .semibold)
-        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width)
+        // A few points of slack: a label sized to the exact measured width
+        // can still need a fraction more and truncate.
+        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 4
             + GuideCategoryPillCell.horizontalPadding * 2
-        return CGSize(width: width, height: 60)
+        return CGSize(width: width, height: 44)
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -1096,31 +1098,47 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
     }
 }
 
-/// Styled like `SeasonPillView` (the show detail's season pills): a capsule,
-/// white with black text when selected or focused, plain text otherwise, and
-/// focus grows it 1.05. Focus switches the category, so outside the Recordings
-/// action the scale is what tells a focused pill from a selected one.
+/// A capsule like `SeasonPillView` (the show detail's season pills), at the
+/// guide's smaller type. Focus switches the category, so a focused pill is
+/// also the selected one; what shows that the bar HAS focus is the focused
+/// look: solid white, raised and shadowed. With focus in the grid the
+/// selected category is a frosted capsule.
 final class GuideCategoryPillCell: UICollectionViewCell {
     static let reuseIdentifier = "GuideCategoryPillCell"
-    static let fontSize: CGFloat = 31
-    static let horizontalPadding: CGFloat = 24
+    static let fontSize: CGFloat = 24
+    static let horizontalPadding: CGFloat = 22
 
     private let titleLabel = UILabel()
+    /// The capsule. Focus scales THIS, never `contentView`: the cell lays
+    /// `contentView` out by setting its frame, and a frame set on a scaled
+    /// view shrinks its bounds, which squeezed the label and cut the title.
+    /// Auto Layout positions `pill` by bounds and center, so its scale holds.
+    private let pill = UIView()
     private var selectedCategory = false
     var onDeclinedDownPress: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
 
-        contentView.layer.cornerCurve = .continuous
+        pill.layer.cornerCurve = .continuous
+        pill.layer.shadowColor = UIColor.black.cgColor
+        pill.layer.shadowOffset = CGSize(width: 0, height: 8)
+        pill.layer.shadowRadius = 14
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(pill)
         titleLabel.textAlignment = .center
+        titleLabel.lineBreakMode = .byClipping
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(titleLabel)
+        pill.addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Self.horizontalPadding),
-            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Self.horizontalPadding),
-            titleLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            pill.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            pill.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            pill.topAnchor.constraint(equalTo: contentView.topAnchor),
+            pill.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            titleLabel.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: Self.horizontalPadding),
+            titleLabel.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -Self.horizontalPadding),
+            titleLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
         ])
     }
 
@@ -1128,11 +1146,13 @@ final class GuideCategoryPillCell: UICollectionViewCell {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        contentView.layer.cornerRadius = contentView.bounds.height / 2
+        // The cell's height, not the pill's: Auto Layout has not sized the
+        // pill yet at this point, and it always fills the cell.
+        pill.layer.cornerRadius = bounds.height / 2
     }
 
     override var isHighlighted: Bool {
-        didSet { contentView.alpha = isHighlighted ? 0.75 : 1 }
+        didSet { pill.alpha = isHighlighted ? 0.75 : 1 }
     }
 
     /// Discrete arrows reach the focused responder only when the focus engine
@@ -1162,11 +1182,20 @@ final class GuideCategoryPillCell: UICollectionViewCell {
     }
 
     private func applyAppearance(focused: Bool) {
-        let lit = focused || selectedCategory
-        titleLabel.font = .systemFont(ofSize: Self.fontSize, weight: lit ? .semibold : .medium)
-        contentView.backgroundColor = lit ? UIColor.white.withAlphaComponent(0.88) : .clear
-        titleLabel.textColor = lit ? .black : UIColor.white.withAlphaComponent(0.72)
-        contentView.transform = focused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
+        // One weight for every state: the width is measured at semibold.
+        titleLabel.font = .systemFont(ofSize: Self.fontSize, weight: .semibold)
+        if focused {
+            pill.backgroundColor = .white
+            titleLabel.textColor = .black
+        } else if selectedCategory {
+            pill.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+            titleLabel.textColor = .white
+        } else {
+            pill.backgroundColor = .clear
+            titleLabel.textColor = UIColor.white.withAlphaComponent(0.72)
+        }
+        pill.layer.shadowOpacity = focused ? 0.35 : 0
+        pill.transform = focused ? CGAffineTransform(scaleX: 1.1, y: 1.1) : .identity
     }
 }
 

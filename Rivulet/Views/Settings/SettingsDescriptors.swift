@@ -177,7 +177,7 @@ enum SettingsDescriptorStore {
         ),
         "liveTVFavoriteRow": SettingDescriptor(
             icon: "star.fill",
-            description: "Hold Select to move this channel, then press Select to drop it. Turn it off to remove it. Favorites you set in Plex come after these, in Plex's order."
+            description: "Hold Select to move this channel, then press Select to drop it. Select to remove it. Favorites you set in Plex come after these, in Plex's order."
         ),
         "noLiveTVFavorites": SettingDescriptor(
             icon: "star",

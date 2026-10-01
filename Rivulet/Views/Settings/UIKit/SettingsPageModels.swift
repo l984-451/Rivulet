@@ -404,8 +404,9 @@ enum SettingsContent {
     }
 
     /// Rivulet's favourite channels in order: hold Select to move one, Select
-    /// to remove it. The row goes at once, so a move never passes a channel
-    /// that is no longer a favourite.
+    /// asks before removing it (the Pinned Collections pattern). A removed row
+    /// goes at once, so a move never passes a channel that is no longer a
+    /// favourite.
     private static var liveTVFavorites: [SettingsRowItem] {
         let store = LiveTVDataStore.shared
         let byId = Dictionary(store.channels.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -422,11 +423,15 @@ enum SettingsContent {
             let title = [channel.channelNumber.map(String.init), channel.name, sourceNames[channel.sourceId].map { "· \($0)" }]
                 .compactMap { $0 }
                 .joined(separator: " ")
-            return SettingsRowItem(id: "fav_\(channel.id)", title: title, kind: .toggle(
-                get: { store.isFavorite(channel) },
-                set: { _ in store.toggleFavorite(channel) },
-                didChange: { _, vc in (vc as? SettingsPageViewController)?.reloadRows() }),
-                onReorder: { up in store.moveFavorite(channel.id, up: up) })
+            return SettingsRowItem(id: "fav_\(channel.id)", title: title,
+                                   kind: .action(destructive: false, handler: { vc in
+                presentConfirm(on: vc, title: "Remove \"\(channel.name)\"?",
+                               message: "This removes the channel from your favorites. You can add it again by holding Select on it in What's On or the guide.",
+                               confirmTitle: "Remove", destructive: true) {
+                    if store.isFavorite(channel) { store.toggleFavorite(channel) }
+                    (vc as? SettingsPageViewController)?.reloadRows()
+                }
+            }), onReorder: { up in store.moveFavorite(channel.id, up: up) })
         }
     }
 

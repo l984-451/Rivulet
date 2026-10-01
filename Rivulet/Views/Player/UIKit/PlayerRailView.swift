@@ -270,6 +270,9 @@ final class PlayerRailView: UIView {
     /// Live TV: multiview, where the host has one to open.
     func setMultiviewAvailable(_ available: Bool) {
         multiviewButton.isHidden = !available
+        // It leads the row, so the chrome opens on it rather than at the far
+        // right (Channels).
+        if available { defaultFocusButton = multiviewButton }
     }
 
     // MARK: - Ambient pause

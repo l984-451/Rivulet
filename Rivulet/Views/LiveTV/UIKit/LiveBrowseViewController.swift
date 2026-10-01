@@ -37,7 +37,8 @@ final class LiveBrowseViewController: UIViewController {
     private var miniSession: LiveTVSessionHandoff?
 
     // Shelves
-    private struct Shelf {
+    /// Also multiview's Add More rows (`LiveMultiviewViewController`).
+    struct Shelf {
         let id: String
         let title: String
         let items: [LiveCardItem]
@@ -414,15 +415,11 @@ final class LiveBrowseViewController: UIViewController {
         }
     }
 
-    private func channelsInScope() -> [UnifiedChannel] {
-        let channels = LiveTVDataStore.shared.channels
-        guard let sourceIdFilter else { return channels }
-        return channels.filter { $0.sourceId == sourceIdFilter }
-    }
-
-    private func buildShelves(now: Date = Date()) -> [Shelf] {
+    /// The What's On rows for a source (nil: every source). Static so
+    /// multiview's Add More offers the same rows.
+    static func buildShelves(sourceIdFilter: String?, now: Date = Date()) -> [Shelf] {
         let store = LiveTVDataStore.shared
-        let channels = channelsInScope()
+        let channels = sourceIdFilter.map { id in store.channels.filter { $0.sourceId == id } } ?? store.channels
         let channelsById = Dictionary(channels.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var shelves: [Shelf] = []
 
@@ -523,7 +520,7 @@ final class LiveBrowseViewController: UIViewController {
 
     private func rebuildShelves() {
         guard dataSource != nil else { return }
-        let built = buildShelves().filter { !$0.items.isEmpty }
+        let built = Self.buildShelves(sourceIdFilter: sourceIdFilter).filter { !$0.items.isEmpty }
         shelves = Dictionary(built.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let existing = Set(dataSource.snapshot().itemIdentifiers)
         var snapshot = NSDiffableDataSourceSnapshot<String, String>()
@@ -612,23 +609,24 @@ final class LiveBrowseViewController: UIViewController {
         presentPlayer(LiveTVAetherPlayerViewController(channel: channel, adopting: adopting))
     }
 
-    private func play(adopting session: LiveTVSessionHandoff) {
+    /// `animated: false` when multiview has just grown the tile full screen.
+    private func play(adopting session: LiveTVSessionHandoff, animated: Bool = true) {
         stopMini()
         presentPlayer(LiveTVAetherPlayerViewController(channel: session.channel,
-                                                       adopting: session))
+                                                       adopting: session), animated: animated)
     }
 
-    private func presentPlayer(_ player: LiveTVAetherPlayerViewController) {
+    private func presentPlayer(_ player: LiveTVAetherPlayerViewController, animated: Bool = true) {
         player.modalPresentationStyle = .fullScreen
         let keepPlaying = UserDefaults.standard.object(forKey: "liveTVKeepPlayingInGuide") as? Bool ?? true
         if keepPlaying {
             player.onMinimize = { [weak self] session in self?.showMini(session) }
         }
         player.onOpenMultiview = { [weak self] session in
-            self?.presentMultiview(adopting: session, adding: nil)
+            self?.presentMultiview(adopting: session, adding: nil, fromPlayer: true)
         }
         isCoveredByModal = true
-        present(player, animated: true)
+        present(player, animated: animated)
     }
 
     /// Multiview with the corner channel (when there is one) and `channel`.
@@ -636,14 +634,18 @@ final class LiveBrowseViewController: UIViewController {
         presentMultiview(adopting: takeMini(), adding: channel)
     }
 
-    private func presentMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?) {
+    /// `fromPlayer`: the full-screen player just closed without animation, and
+    /// multiview takes over its picture (see `entersFromFullScreen`).
+    private func presentMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?,
+                                  fromPlayer: Bool = false) {
         let multiview = LiveMultiviewViewController(adopting: session, adding: channel,
                                                     sourceIdFilter: sourceIdFilter)
+        multiview.entersFromFullScreen = fromPlayer
         multiview.onWatchFullScreen = { [weak self] session in
-            self?.play(adopting: session)
+            self?.play(adopting: session, animated: false)
         }
         isCoveredByModal = true
-        present(multiview, animated: true)
+        present(multiview, animated: !fromPlayer)
     }
 
     private func presentRecordings() {

@@ -475,6 +475,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Multiview's full-screen hand-off left a cover behind this screen.
+        LiveHandoffCover.hide(in: view.window)
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         guard isBeingDismissed || isMovingFromParent else { return }
@@ -506,19 +512,22 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Leaves the player entirely, past every chrome layer. The layered
     /// `dismiss(animated:)` override below peels one layer per Menu press, so
     /// a programmatic exit clears the layers first.
-    private func dismissPlayer(completion: (() -> Void)? = nil) {
+    private func dismissPlayer(animated: Bool = true, completion: (() -> Void)? = nil) {
         activePanel?.dismissPanel()
         activePanel = nil
         railVisible = false
         timelineVisible = false
         blockNextDismiss = false
-        super.dismiss(animated: true, completion: completion)
+        super.dismiss(animated: animated, completion: completion)
     }
 
     /// Carry the running channel into multiview as its first tile.
     private func openMultiview() {
         guard let onOpenMultiview, let session = detachSession() else { return }
-        dismissPlayer {
+        // No dismiss animation: multiview opens with this picture full screen
+        // and shrinks it into its tile, so the screen behind never shows.
+        LiveHandoffCover.show(under: self)
+        dismissPlayer(animated: false) {
             onOpenMultiview(session)
         }
     }

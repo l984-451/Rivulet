@@ -489,7 +489,9 @@ struct GuideLayoutView: View {
     }
 
     /// The same player and multiview What's On opens, wired the same way.
-    private func presentPlayer(_ vc: LiveTVAetherPlayerViewController, from top: UIViewController) {
+    /// `animated: false` when multiview has just grown a tile full screen.
+    private func presentPlayer(_ vc: LiveTVAetherPlayerViewController, from top: UIViewController,
+                               animated: Bool = true) {
         vc.modalPresentationStyle = .fullScreen
         if keepPlayingInGuide {
             vc.onMinimize = { session in
@@ -497,7 +499,7 @@ struct GuideLayoutView: View {
             }
         }
         vc.onOpenMultiview = { session in
-            presentMultiview(adopting: session, adding: nil)
+            presentMultiview(adopting: session, adding: nil, fromPlayer: true)
         }
         vc.onDismiss = { lastChannel in
             // The viewer may have changed channels in the player; land on the
@@ -507,27 +509,31 @@ struct GuideLayoutView: View {
             }
             gridFocusRequest = EPGFocusRequest(channelId: lastChannel.id, token: UUID())
         }
-        top.present(vc, animated: true)
+        top.present(vc, animated: animated)
     }
 
     /// Multiview with `session` (the player's channel, or the corner one) and
     /// `channel`. A tile taken full screen comes back in the player.
-    private func presentMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?) {
+    /// `fromPlayer`: the full-screen player just closed without animation, and
+    /// multiview takes over its picture (see `entersFromFullScreen`).
+    private func presentMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?,
+                                  fromPlayer: Bool = false) {
         guard let top = LiveProgramMenu.topViewController() else {
             session?.stop()
             return
         }
         let multiview = LiveMultiviewViewController(adopting: session, adding: channel,
                                                     sourceIdFilter: sourceIdFilter)
+        multiview.entersFromFullScreen = fromPlayer
         multiview.onWatchFullScreen = { session in
             guard let top = LiveProgramMenu.topViewController() else {
                 session.stop()
                 return
             }
             presentPlayer(LiveTVAetherPlayerViewController(channel: session.channel, adopting: session),
-                          from: top)
+                          from: top, animated: false)
         }
-        top.present(multiview, animated: true)
+        top.present(multiview, animated: !fromPlayer)
     }
 
     // MARK: - Programme menu and recordings

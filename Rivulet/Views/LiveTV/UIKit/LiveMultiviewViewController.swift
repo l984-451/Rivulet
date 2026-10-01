@@ -31,10 +31,15 @@ final class LiveMultiviewViewController: UIViewController {
     }
 
     /// A tile taken full screen. The host presents the player adopting it
-    /// once multiview has closed.
+    /// once multiview has closed, WITHOUT animation: the tile has already grown
+    /// to fill the screen, so an animated present would show the screen behind.
     var onWatchFullScreen: ((LiveTVSessionHandoff) -> Void)?
     /// Multiview closed with nothing handed on.
     var onExit: (() -> Void)?
+    /// Opened from the full-screen player: present without animation, and the
+    /// adopted channel starts full screen and shrinks into its tile while the
+    /// rest of the screen fades in, so the player seems to become multiview.
+    var entersFromFullScreen = false
 
     private let viewModel: MultiStreamViewModel
     private var mode: Mode = .edit
@@ -54,8 +59,21 @@ final class LiveMultiviewViewController: UIViewController {
     private var addMoreCollection: UICollectionView!
     /// Keyed by item id, so a card whose programme changes is refreshed in
     /// place instead of replaced (which would drop focus).
-    private var addMoreSource: UICollectionViewDiffableDataSource<Int, String>!
-    private var addMoreItems: [String: LiveCardItem] = [:]
+    /// One `ShelfRowCell` per row (What's On's row, so cards land on the same
+    /// columns in every row), keyed by row id.
+    private var addMoreSource: UICollectionViewDiffableDataSource<String, String>!
+    private var addMoreRows: [String: LiveBrowseViewController.Shelf] = [:]
+    /// The row on show (the rest are paged out of the clipped row area).
+    private var addMoreRow = 0
+    /// Edit mode's vertical routing, set per focus move in `routeVerticalFocus`:
+    /// under the tiles, and under the layout buttons.
+    private let belowTilesGuide = UIFocusGuide()
+    private let belowButtonsGuide = UIFocusGuide()
+    /// The tile focus was last on, so coming back up lands there rather than
+    /// on whichever tile sits above the button or card being left.
+    private weak var lastFocusedTile: LiveMultiviewTileView?
+    /// A channel just picked from Add More; its tile takes focus once it exists.
+    private var focusOnAddedChannelId: String?
     /// A re-rank was held back while focus was in the row.
     private var addMoreNeedsRank = false
 
@@ -69,7 +87,25 @@ final class LiveMultiviewViewController: UIViewController {
         static let side: CGFloat = 90
         static let gap: CGFloat = 36
         static let cardWidth: CGFloat = 340
-        static let rowHeight: CGFloat = 250
+        /// One Add More row: What's On's card plus its focus-growth room.
+        static var rowHeight: CGFloat { MediaRowMetrics.liveHeight + MediaRowMetrics.focusGrowthPadding }
+        /// Row to row.
+        static var rowPitch: CGFloat { rowHeight + MediaRowMetrics.rowTopInset + MediaRowMetrics.rowBottomInset }
+        /// How much of the next row's cards shows below the current one, so
+        /// it reads as scrollable. The show detail page's episode peek.
+        static let nextRowPeek: CGFloat = 40
+        /// The Add More area: one row, then the next row down to `nextRowPeek`
+        /// of its card (the card sits mid-row, half the growth room down).
+        static var addMoreHeight: CGFloat {
+            rowPitch + MediaRowMetrics.rowTopInset + MediaRowMetrics.focusGrowthPadding / 2 + nextRowPeek
+        }
+        /// Edit mode's tile area, shortened to make room for the peek. Its top
+        /// stays clear of the watch hint (y 16 to 96) even at the focused
+        /// scale: a tile over the hint let Right from the big focus-layout
+        /// tile land on it and switch to watch mode.
+        static let editTilesTop: CGFloat = 110
+        static let editTilesHeight: CGFloat = 450
+        static var editTilesBottom: CGFloat { editTilesTop + editTilesHeight }
     }
 
     /// The Live TV tab's source, or nil when sources are combined. Add More
@@ -114,17 +150,33 @@ final class LiveMultiviewViewController: UIViewController {
 
         setUpAddMoreRow()
 
+        // Full width, so Up from any card or button lands on the next layer
+        // up instead of whichever tile happens to sit above it.
+        view.addLayoutGuide(belowTilesGuide)
+        view.addLayoutGuide(belowButtonsGuide)
+        NSLayoutConstraint.activate([
+            belowTilesGuide.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            belowTilesGuide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            belowTilesGuide.topAnchor.constraint(equalTo: view.topAnchor, constant: Metrics.editTilesBottom + 4),
+            belowTilesGuide.bottomAnchor.constraint(equalTo: layoutButtons.topAnchor),
+            belowButtonsGuide.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            belowButtonsGuide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            belowButtonsGuide.topAnchor.constraint(equalTo: layoutButtons.bottomAnchor),
+            belowButtonsGuide.bottomAnchor.constraint(equalTo: addMoreLabel.topAnchor),
+        ])
+        routeVerticalFocus(from: nil)
+
         NSLayoutConstraint.activate([
             layoutButtons.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            layoutButtons.topAnchor.constraint(equalTo: view.topAnchor, constant: 650),
+            layoutButtons.topAnchor.constraint(equalTo: view.topAnchor, constant: Metrics.editTilesBottom + 20),
 
-            addMoreLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Metrics.side),
+            addMoreLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: MediaRowMetrics.liveLeading),
             addMoreLabel.bottomAnchor.constraint(equalTo: addMoreCollection.topAnchor, constant: -4),
 
             addMoreCollection.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             addMoreCollection.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             addMoreCollection.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
-            addMoreCollection.heightAnchor.constraint(equalToConstant: Metrics.rowHeight),
+            addMoreCollection.heightAnchor.constraint(equalToConstant: Metrics.addMoreHeight),
         ])
 
         viewModel.$streams
@@ -142,13 +194,25 @@ final class LiveMultiviewViewController: UIViewController {
             .debounce(for: .milliseconds(400), scheduler: DispatchQueue.main)
             .sink { [weak self] _, _ in self?.reloadAddMore() }
             .store(in: &cancellables)
-        // And re-ranks when the sound moves to another tile.
-        viewModel.$focusedSlotIndex
-            .removeDuplicates()
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.reloadAddMore() }
-            .store(in: &cancellables)
+
+        if entersFromFullScreen { enteringChrome.forEach { $0.alpha = 0 } }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        LiveHandoffCover.hide(in: view.window)
+        guard entersFromFullScreen else { return }
+        entersFromFullScreen = false
+        relayout(animated: true)
+        UIView.animate(withDuration: 0.4, delay: 0.1, options: [.curveEaseOut]) {
+            self.enteringChrome.forEach { $0.alpha = 1 }
+        }
+    }
+
+    /// Edit mode's chrome, held back while the adopted channel is still full
+    /// screen.
+    private var enteringChrome: [UIView] {
+        [addMoreLabel, addMoreCollection, layoutButtons, watchHint].compactMap { $0 }
     }
 
     override func viewDidLayoutSubviews() {
@@ -172,6 +236,10 @@ final class LiveMultiviewViewController: UIViewController {
         super.didUpdateFocus(in: context, with: coordinator)
         guard let next = context.nextFocusedView else { return }
         if next === pendingFocus { pendingFocus = nil }
+        if let tile = orderedTiles.first(where: { next.isDescendant(of: $0) }) {
+            lastFocusedTile = tile
+        }
+        routeVerticalFocus(from: next)
         if addMoreNeedsRank, !next.isDescendant(of: addMoreCollection) {
             // Outside the focus update, so the apply does not run inside it.
             DispatchQueue.main.async { [weak self] in self?.reloadAddMore() }
@@ -274,14 +342,14 @@ final class LiveMultiviewViewController: UIViewController {
 
     /// Close multiview. Every tile stops except `session`, which goes to the
     /// host to play full screen.
-    private func exitMultiview(handingOff session: LiveTVSessionHandoff?) {
+    private func exitMultiview(handingOff session: LiveTVSessionHandoff?, animated: Bool = true) {
         guard !isExiting else { return }
         isExiting = true
         for tile in tiles.values { tile.release() }
         viewModel.stopAllStreams()
         let onWatchFullScreen = onWatchFullScreen
         let onExit = onExit
-        closeSelf {
+        closeSelf(animated: animated) {
             if let session {
                 if let onWatchFullScreen {
                     onWatchFullScreen(session)
@@ -296,22 +364,22 @@ final class LiveMultiviewViewController: UIViewController {
 
     /// Dismissing a controller that is presenting something only takes that
     /// something down, so clear an alert or menu still on screen first.
-    private func closeSelf(completion: @escaping () -> Void) {
+    private func closeSelf(animated: Bool = true, completion: @escaping () -> Void) {
         if let presented = presentedViewController {
             if presented.isBeingDismissed {
                 // Already on its way out (an alert closing after its action):
                 // a second dismiss would be dropped along with its completion.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    self?.closeSelf(completion: completion)
+                    self?.closeSelf(animated: animated, completion: completion)
                 }
                 return
             }
             presented.dismiss(animated: false) { [weak self] in
-                self?.closeSelf(completion: completion)
+                self?.closeSelf(animated: animated, completion: completion)
             }
             return
         }
-        super.dismiss(animated: true, completion: completion)
+        super.dismiss(animated: animated, completion: completion)
     }
 
     // MARK: - Mode
@@ -335,6 +403,7 @@ final class LiveMultiviewViewController: UIViewController {
         }
 
         pendingFocus = audibleTile ?? orderedTiles.first
+        routeVerticalFocus(from: pendingFocus)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
 
@@ -363,6 +432,57 @@ final class LiveMultiviewViewController: UIViewController {
 
     private var orderedTiles: [LiveMultiviewTileView] {
         viewModel.streams.compactMap { tiles[$0.id] }
+    }
+
+    /// Points the two guides at the next layer in each direction from where
+    /// focus now is. Up: Add More, the layout buttons, then the tile with the
+    /// sound (layers that are hidden are skipped). Down retraces it.
+    private func routeVerticalFocus(from focused: UIView?) {
+        let editing = mode == .edit
+        belowTilesGuide.isEnabled = editing
+        belowButtonsGuide.isEnabled = editing
+        guard editing else { return }
+        let buttons: UIView? = layoutButtons.isHidden ? nil : layoutButtons
+        let tile = returnTile
+        let inAddMore = focused?.isDescendant(of: addMoreCollection) ?? false
+        let onButtons = focused?.isDescendant(of: layoutButtons) ?? false
+        if inAddMore {
+            belowButtonsGuide.preferredFocusEnvironments = [buttons ?? tile].compactMap { $0 }
+            belowTilesGuide.preferredFocusEnvironments = [tile].compactMap { $0 }
+        } else if onButtons {
+            belowTilesGuide.preferredFocusEnvironments = [tile].compactMap { $0 }
+            belowButtonsGuide.preferredFocusEnvironments = [addMoreCollection].compactMap { $0 }
+        } else {
+            belowTilesGuide.preferredFocusEnvironments = [buttons ?? addMoreCollection].compactMap { $0 }
+            belowButtonsGuide.preferredFocusEnvironments = [addMoreCollection].compactMap { $0 }
+        }
+    }
+
+    /// Where Up lands in the tiles: the one last focused, else the one with sound.
+    private var returnTile: LiveMultiviewTileView? {
+        if let last = lastFocusedTile, last.superview != nil { return last }
+        return audibleTile ?? orderedTiles.first
+    }
+
+    /// The focus engine's geometric Up from a layout button picks the tile
+    /// above that button, past the guide. Redirect to `returnTile`.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        // The hints switch modes when focused, so they take focus only in
+        // their own direction: Up into "Swipe up to watch", Down into the
+        // edit hint.
+        if context.nextFocusedView === watchHint, context.focusHeading != .up { return false }
+        if context.nextFocusedView === editHint, context.focusHeading != .down { return false }
+        guard mode == .edit, context.focusHeading == .up,
+              let previous = context.previouslyFocusedView, previous.isDescendant(of: layoutButtons),
+              let next = context.nextFocusedView, !next.isDescendant(of: layoutButtons),
+              let target = returnTile, next !== target, !next.isDescendant(of: target)
+        else { return super.shouldUpdateFocus(in: context) }
+        pendingFocus = target
+        DispatchQueue.main.async { [weak self] in
+            self?.setNeedsFocusUpdate()
+            self?.updateFocusIfNeeded()
+        }
+        return false
     }
 
     private var audibleTile: LiveMultiviewTileView? {
@@ -409,6 +529,16 @@ final class LiveMultiviewViewController: UIViewController {
         updateLayoutButtonIcons()
         reloadAddMore()
         relayout(animated: true)
+
+        // A channel just added from Add More takes focus, so it can be moved
+        // or made the one with sound straight away.
+        if let id = focusOnAddedChannelId,
+           let slot = streams.first(where: { $0.channel.id == id }), let tile = tiles[slot.id] {
+            focusOnAddedChannelId = nil
+            pendingFocus = tile
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        }
 
         if streams.isEmpty && mode == .watch {
             setMode(.edit)
@@ -462,14 +592,38 @@ final class LiveMultiviewViewController: UIViewController {
         present(popup, animated: false)
     }
 
+    /// The tile grows to fill the screen while the rest fades, then multiview
+    /// closes without animation and the player takes over the same picture
+    /// (the reverse of `entersFromFullScreen`). Detaching removes the tile, so
+    /// it happens after the grow.
     private func takeFullScreen(slotId: UUID) {
-        guard let index = viewModel.streams.firstIndex(where: { $0.id == slotId }) else { return }
-        guard let session = viewModel.detachStream(at: index) else {
-            // Still joining: nothing to carry over yet.
-            return
+        guard !isExiting, let tile = tiles[slotId],
+              let slot = viewModel.streams.first(where: { $0.id == slotId }) else { return }
+        switch slot.playbackState {
+        case .playing, .paused, .buffering: break
+        default: return  // Still joining: nothing to carry over yet.
         }
-        tiles[slotId]?.release()
-        exitMultiview(handingOff: session)
+        let others: [UIView] = tiles.values.filter { $0 !== tile } + placeholderViews
+            + enteringChrome + [editHint]
+        let restore = others.map { ($0, $0.alpha) }
+        view.bringSubviewToFront(tile)
+        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: {
+            tile.bounds = CGRect(origin: .zero, size: self.view.bounds.size)
+            tile.center = CGPoint(x: self.view.bounds.midX, y: self.view.bounds.midY)
+            others.forEach { $0.alpha = 0 }
+        }, completion: { _ in
+            guard let index = self.viewModel.streams.firstIndex(where: { $0.id == slotId }),
+                  let session = self.viewModel.detachStream(at: index) else {
+                // Stopped while growing: put the screen back.
+                self.lastLayoutKey = nil
+                self.relayout(animated: true)
+                UIView.animate(withDuration: 0.3) { restore.forEach { $0.0.alpha = $0.1 } }
+                return
+            }
+            tile.release()
+            LiveHandoffCover.show(under: self)
+            self.exitMultiview(handingOff: session, animated: false)
+        })
     }
 
     private func useFocusLayout() {
@@ -493,6 +647,7 @@ final class LiveMultiviewViewController: UIViewController {
         let mode: Mode
         let placeholder: Bool
         let size: CGSize
+        let fullScreen: Bool
     }
 
     private func relayout(animated: Bool) {
@@ -502,19 +657,23 @@ final class LiveMultiviewViewController: UIViewController {
         let streams = viewModel.streams
         let bounds = view.bounds
         let editing = mode == .edit
-        let rect = editing
-            ? CGRect(x: Metrics.side, y: 110, width: bounds.width - Metrics.side * 2, height: 510)
+        let fullScreen = entersFromFullScreen && streams.count == 1
+        let rect = fullScreen ? bounds
+            : editing
+            ? CGRect(x: Metrics.side, y: Metrics.editTilesTop, width: bounds.width - Metrics.side * 2,
+                     height: Metrics.editTilesHeight)
             : bounds.insetBy(dx: 48, dy: 84)
 
         var mainId: UUID?
         if case .focus(let id) = viewModel.layoutMode, streams.count > 1 { mainId = id }
         // Editing one channel shows it big beside an empty slot, as a prompt
         // to add another.
-        let wantsPlaceholder = editing && viewModel.canAddStream && (mainId != nil || streams.count == 1)
+        let wantsPlaceholder = !fullScreen && editing && viewModel.canAddStream
+            && (mainId != nil || streams.count == 1)
         if editing, streams.count == 1 { mainId = streams[0].id }
 
         let key = LayoutKey(ids: streams.map(\.id), mainId: mainId, mode: mode,
-                            placeholder: wantsPlaceholder, size: bounds.size)
+                            placeholder: wantsPlaceholder, size: bounds.size, fullScreen: fullScreen)
         guard key != lastLayoutKey else { return }
         lastLayoutKey = key
 
@@ -533,6 +692,18 @@ final class LiveMultiviewViewController: UIViewController {
             slot.alpha = 0
             view.insertSubview(slot, belowSubview: watchHint)
             return slot
+        }
+
+        // A tile just added has no frame yet; put it in its slot first so it
+        // fades in where the empty placeholder was, rather than flying in
+        // from the top-left corner.
+        UIView.performWithoutAnimation {
+            for (index, slot) in streams.enumerated() {
+                guard let tile = self.tiles[slot.id], tile.bounds.isEmpty, index < plan.tiles.count else { continue }
+                let frame = plan.tiles[index]
+                tile.bounds = CGRect(origin: .zero, size: frame.size)
+                tile.center = CGPoint(x: frame.midX, y: frame.midY)
+            }
         }
 
         let apply = {
@@ -657,77 +828,169 @@ final class LiveMultiviewViewController: UIViewController {
     // MARK: - Add More
 
     private func setUpAddMoreRow() {
-        let item = NSCollectionLayoutItem(layoutSize: .init(widthDimension: .fractionalWidth(1),
-                                                            heightDimension: .fractionalHeight(1)))
-        let group = NSCollectionLayoutGroup.horizontal(
-            layoutSize: .init(widthDimension: .absolute(Metrics.cardWidth),
-                              heightDimension: .absolute(Metrics.cardWidth * LiveCardCell.aspect)),
-            subitems: [item])
-        let section = NSCollectionLayoutSection(group: group)
-        section.orthogonalScrollingBehavior = .continuous
-        section.interGroupSpacing = 40
-        section.contentInsets = .init(top: 30, leading: Metrics.side, bottom: 30, trailing: Metrics.side)
-        let layout = UICollectionViewCompositionalLayout(section: section)
+        // What's On's layout: one full-bleed `ShelfRowCell` per section. An
+        // orthogonal section lands each card against the raw screen edge, so
+        // a scrolled row sat off the columns of the rows around it.
+        let layout = UICollectionViewCompositionalLayout { _, _ in
+            let rowSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
+                                                 heightDimension: .absolute(Metrics.rowHeight))
+            let group = NSCollectionLayoutGroup.horizontal(layoutSize: rowSize,
+                                                           subitems: [NSCollectionLayoutItem(layoutSize: rowSize)])
+            let section = NSCollectionLayoutSection(group: group)
+            section.contentInsetsReference = .none
+            section.contentInsets = .init(top: MediaRowMetrics.rowTopInset, leading: 0,
+                                          bottom: MediaRowMetrics.rowBottomInset, trailing: 0)
+            return section
+        }
 
         addMoreCollection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         addMoreCollection.backgroundColor = .clear
-        addMoreCollection.clipsToBounds = false
+        // One row plus the peek, clipped, so the rows paged above stay hidden.
+        addMoreCollection.clipsToBounds = true
+        addMoreCollection.showsVerticalScrollIndicator = false
+        addMoreCollection.contentInsetAdjustmentBehavior = .never
         addMoreCollection.remembersLastFocusedIndexPath = true
-        addMoreCollection.register(LiveCardCell.self, forCellWithReuseIdentifier: LiveCardCell.reuseID)
+        addMoreCollection.register(ShelfRowCell.self, forCellWithReuseIdentifier: ShelfRowCell.reuseID)
         addMoreCollection.delegate = self
         addMoreCollection.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(addMoreCollection)
 
         addMoreSource = UICollectionViewDiffableDataSource(collectionView: addMoreCollection) { [weak self] cv, indexPath, id in
-            let cell = cv.dequeueReusableCell(withReuseIdentifier: LiveCardCell.reuseID, for: indexPath) as! LiveCardCell
-            if let item = self?.addMoreItems[id] { cell.configure(item) }
-            return cell
+            let row = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
+            self?.configureAddMoreRow(row, id: id)
+            return row
         }
     }
 
-    /// Channels on now that are not already on screen: favourites first,
-    /// then by number.
+    /// Bind a row to one Add More shelf, the way What's On binds its rows.
+    private func configureAddMoreRow(_ row: ShelfRowCell, id: String) {
+        guard let shelf = addMoreRows[id] else { return }
+        let cards = shelf.items
+        row.cellProvider = { innerCV, indexPath in
+            let cell = innerCV.dequeueReusableCell(withReuseIdentifier: LiveCardCell.reuseID,
+                                                   for: indexPath) as! LiveCardCell
+            if indexPath.item < cards.count { cell.configure(cards[indexPath.item]) }
+            return cell
+        }
+        row.onSelect = { [weak self] index in
+            guard index < cards.count, let channel = cards[index].channel else { return }
+            self?.addFromAddMore(channel)
+        }
+        row.onFocusItem = { [weak self] _ in self?.addMoreRowFocused(id) }
+        var token = Hasher()
+        for card in cards { token.combine(card.id) }
+        row.configure(kind: .live, realCount: cards.count, hasSkeleton: false,
+                      contentToken: token.finalize(), initialOffset: 0)
+        let inner = row.rowCollectionView!
+        for case let cell as LiveCardCell in inner.visibleCells {
+            guard let indexPath = inner.indexPath(for: cell), indexPath.item < cards.count else { continue }
+            cell.configure(cards[indexPath.item])
+        }
+    }
+
+    private func addFromAddMore(_ channel: UnifiedChannel) {
+        focusOnAddedChannelId = channel.id
+        if viewModel.canAddStream {
+            Task { await viewModel.addChannel(channel) }
+        } else {
+            // Full: the channel takes the place of the one being listened to.
+            let index = viewModel.focusedSlotIndex
+            Task { await viewModel.replaceStream(at: index, with: channel) }
+        }
+    }
+
+    /// Paging between rows: the label takes the new row's title.
+    private func addMoreRowFocused(_ id: String) {
+        guard let row = addMoreSource.snapshot().indexOfSection(id), row != addMoreRow else { return }
+        addMoreRow = row
+        UIView.transition(with: addMoreLabel, duration: 0.2, options: .transitionCrossDissolve) {
+            self.addMoreLabel.text = self.addMoreRows[id]?.title ?? "Add More"
+        }
+    }
+
+    /// Add More's rows: "Recommended" (channels like the one multiview opened
+    /// with) and then What's On's own rows. One row shows at a time; Down and
+    /// Up page between them. Channels already on screen are left out.
     private func reloadAddMore() {
         guard addMoreSource != nil else { return }
-        let store = LiveTVDataStore.shared
         let active = viewModel.activeChannelIds
-        // Never re-rank under the viewer's cursor: adding a channel moves the
-        // sound to the new tile, which re-ranked the row they were picking
-        // from. While focus is in the row only channels now playing leave it,
-        // in place; the new order lands when focus leaves.
+        // Never rebuild under the viewer's cursor: while focus is in the rows
+        // only channels now playing leave them, in place; the rest lands when
+        // focus leaves.
         if let focused = UIFocusSystem.focusSystem(for: addMoreCollection)?.focusedItem as? UIView,
            focused.isDescendant(of: addMoreCollection) {
             addMoreNeedsRank = true
-            var snapshot = addMoreSource.snapshot()
-            let playing = snapshot.itemIdentifiers.filter { id in
-                addMoreItems[id]?.channel.map { active.contains($0.id) } ?? false
+            var changedRows: [String] = []
+            for (id, shelf) in addMoreRows {
+                let kept = shelf.items.filter { !($0.channel.map { active.contains($0.id) } ?? false) }
+                guard kept.count != shelf.items.count else { continue }
+                addMoreRows[id] = LiveBrowseViewController.Shelf(id: id, title: shelf.title, items: kept)
+                changedRows.append(id)
             }
-            guard !playing.isEmpty else { return }
-            snapshot.deleteItems(playing)
+            guard !changedRows.isEmpty else { return }
+            var snapshot = addMoreSource.snapshot()
+            snapshot.reconfigureItems(changedRows)
             addMoreSource.apply(snapshot, animatingDifferences: false)
             return
         }
         addMoreNeedsRank = false
-        // Most like what is being listened to first: the same kind of
-        // programme (another football game), then the same genre, then the
-        // same channel group; favourites lead within each, then number.
-        let reference = viewModel.focusedStream?.channel ?? viewModel.streams.first?.channel
-        let referenceProgram = reference.flatMap { store.getCurrentProgram(for: $0) }
-        let referenceLabels = LiveGenre.specificLabels(of: referenceProgram)
-        let referenceGenre = reference.flatMap {
-            LiveGenre.of($0, airing: referenceProgram, guide: store.epg[$0.id] ?? [])
+
+        let notPlaying = { (item: LiveCardItem) in
+            item.kind == .channel && !(item.channel.map { active.contains($0.id) } ?? true)
+        }
+        // Recordings and Starting Soon are not channels to add now.
+        let shelves = LiveBrowseViewController.buildShelves(sourceIdFilter: sourceIdFilter)
+            .filter { $0.id != "recordings" && $0.id != "soon" }
+        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: "Recommended", items: recommended())]
+                    + shelves)
+            .map { LiveBrowseViewController.Shelf(id: $0.id, title: $0.title,
+                                                  items: $0.items.filter(notPlaying).uniquedById()) }
+            .filter { !$0.items.isEmpty }
+
+        let existing = Set(addMoreSource.snapshot().itemIdentifiers)
+        addMoreRows = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        addMoreRow = min(addMoreRow, max(rows.count - 1, 0))
+        addMoreLabel.text = rows[safe: addMoreRow]?.title ?? "Add More"
+
+        // One item per row; a row's identity never changes, so reconfiguring
+        // is what hands an existing row its new cards.
+        var snapshot = NSDiffableDataSourceSnapshot<String, String>()
+        for row in rows {
+            snapshot.appendSections([row.id])
+            snapshot.appendItems([row.id], toSection: row.id)
+        }
+        snapshot.reconfigureItems(rows.map(\.id).filter(existing.contains))
+        addMoreSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    /// Channels most like what is playing: the same kind of programme
+    /// (another football game), then the same genre, then the same channel
+    /// group, against whichever playing channel each is closest to;
+    /// favourites lead within each, then number. Ranked against every tile,
+    /// not the one with sound, so the row changes when a channel is added or
+    /// removed and never when the sound moves.
+    private func recommended() -> [LiveCardItem] {
+        let store = LiveTVDataStore.shared
+        let references = viewModel.streams.map { channel -> (labels: Set<String>, genre: LiveGenre?, group: String?) in
+            let program = store.getCurrentProgram(for: channel.channel)
+            return (LiveGenre.specificLabels(of: program),
+                    LiveGenre.of(channel.channel, airing: program, guide: store.epg[channel.channel.id] ?? []),
+                    channel.channel.groupTitle)
         }
         func tier(_ channel: UnifiedChannel) -> Int {
-            guard reference != nil else { return 0 }
+            guard !references.isEmpty else { return 0 }
             let program = store.getCurrentProgram(for: channel)
-            if !referenceLabels.isDisjoint(with: LiveGenre.specificLabels(of: program)) { return 0 }
-            if let referenceGenre,
-               LiveGenre.of(channel, airing: program, guide: store.epg[channel.id] ?? []) == referenceGenre { return 1 }
-            if let group = reference?.groupTitle, !group.isEmpty, channel.groupTitle == group { return 2 }
-            return 3
+            let labels = LiveGenre.specificLabels(of: program)
+            let genre = LiveGenre.of(channel, airing: program, guide: store.epg[channel.id] ?? [])
+            return references.map { reference in
+                if !reference.labels.isDisjoint(with: labels) { return 0 }
+                if let referenceGenre = reference.genre, genre == referenceGenre { return 1 }
+                if let group = reference.group, !group.isEmpty, channel.groupTitle == group { return 2 }
+                return 3
+            }.min() ?? 3
         }
-        let ranked = store.channels
-            .filter { !active.contains($0.id) && (sourceIdFilter == nil || $0.sourceId == sourceIdFilter) }
+        return store.channels
+            .filter { sourceIdFilter == nil || $0.sourceId == sourceIdFilter }
             .map { (channel: $0, tier: tier($0)) }
             .sorted { a, b in
                 if a.tier != b.tier { return a.tier < b.tier }
@@ -736,35 +999,51 @@ final class LiveMultiviewViewController: UIViewController {
                 if fa != fb { return fa }
                 return (a.channel.channelNumber ?? Int.max) < (b.channel.channelNumber ?? Int.max)
             }
-        let channels = ranked.prefix(80).map(\.channel)
-        let items = channels
-            .map { LiveCardItem.channel($0, program: store.getCurrentProgram(for: $0), section: "add") }
-            .uniquedById()
-        let previous = addMoreItems
-        addMoreItems = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-
-        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
-        snapshot.appendSections([0])
-        snapshot.appendItems(items.map(\.id))
-        let changed = items.filter { previous[$0.id] != nil && previous[$0.id] != $0 }.map(\.id)
-        if !changed.isEmpty { snapshot.reconfigureItems(changed) }
-        addMoreSource.apply(snapshot, animatingDifferences: false)
+            .prefix(80)
+            .map { LiveCardItem.channel($0.channel, program: store.getCurrentProgram(for: $0.channel), section: "add") }
     }
 }
 
 // MARK: - Add More selection
 
 extension LiveMultiviewViewController: UICollectionViewDelegate {
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard let id = addMoreSource.itemIdentifier(for: indexPath),
-              let channel = addMoreItems[id]?.channel else { return }
-        if viewModel.canAddStream {
-            Task { await viewModel.addChannel(channel) }
-        } else {
-            // Full: the channel takes the place of the one being listened to.
-            let index = viewModel.focusedSlotIndex
-            Task { await viewModel.replaceStream(at: index, with: channel) }
-        }
+    /// Focus scrolls land with the focused row exactly in the row area; tvOS
+    /// would otherwise stop part way, showing slices of two rows.
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
+                                   targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard scrollView === addMoreCollection,
+              let first = addMoreCollection.layoutAttributesForItem(at: IndexPath(item: 0, section: addMoreRow))
+        else { return }
+        targetContentOffset.pointee.y = first.frame.minY - MediaRowMetrics.rowTopInset
+    }
+}
+
+// MARK: - Hand-off cover
+
+/// Black behind the screen being swapped out when the full-screen player and
+/// multiview hand a channel to each other. Both sides close and open without
+/// animation, and UIKit can still draw one frame between them; without this,
+/// that frame is the guide. Sits UNDER the outgoing screen, so it shows only
+/// in that gap; the incoming screen presents above it and removes it.
+enum LiveHandoffCover {
+    private static let tag = 0x4C48_4F43
+
+    static func show(under controller: UIViewController) {
+        guard let window = controller.view.window else { return }
+        hide(in: window)
+        var top: UIView = controller.view
+        while let parent = top.superview, parent !== window { top = parent }
+        let cover = UIView(frame: window.bounds)
+        cover.backgroundColor = .black
+        cover.tag = tag
+        cover.isUserInteractionEnabled = false
+        window.insertSubview(cover, belowSubview: top)
+        // Never outlive a hand-off that did not complete.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak cover] in cover?.removeFromSuperview() }
+    }
+
+    static func hide(in window: UIWindow?) {
+        window?.viewWithTag(tag)?.removeFromSuperview()
     }
 }
 

@@ -54,4 +54,16 @@ final class EPGVerticalFocusTests: XCTestCase {
         XCTAssertEqual(C.focusScrollTargetX(proposed: 229, lockedX: -129, isHorizontalMove: true),
                        C.snappedX(for: 229))
     }
+
+    // MARK: - Category pills
+
+    /// Like the season pills: focusing a category switches to it, so the
+    /// focused pill is the selected one. Recordings opens on Select only, and
+    /// re-focusing the current category does not reload the grid.
+    func test_focusingACategory_selectsIt_butNotTheActionPillOrTheCurrentOne() {
+        XCTAssertTrue(GuideCategoryBarView.selectsOnFocus(isAction: false, group: "Sports", selected: nil))
+        XCTAssertTrue(GuideCategoryBarView.selectsOnFocus(isAction: false, group: nil, selected: "Sports"))
+        XCTAssertFalse(GuideCategoryBarView.selectsOnFocus(isAction: false, group: "Sports", selected: "Sports"))
+        XCTAssertFalse(GuideCategoryBarView.selectsOnFocus(isAction: true, group: nil, selected: "Sports"))
+    }
 }

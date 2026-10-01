@@ -939,13 +939,15 @@ final class GuideCategoryBarView: UIView {
         layout.minimumLineSpacing = 14
         layout.minimumInteritemSpacing = 14
         layout.sectionInset = UIEdgeInsets(
-            top: 10,
+            top: 2,
             left: EPGTheme.cellSpacing,
-            bottom: 10,
+            bottom: 2,
             right: 60)
 
         let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
         view.backgroundColor = .clear
+        // The focused pill grows 1.05 past the bar's 64pt.
+        view.clipsToBounds = false
         view.contentInsetAdjustmentBehavior = .never
         view.showsHorizontalScrollIndicator = false
         view.showsVerticalScrollIndicator = false
@@ -1018,12 +1020,20 @@ final class GuideCategoryBarView: UIView {
         }
     }
 
+    /// Up from the grid lands on the current category, never on Recordings.
     func preferredFocusTarget() -> UIView? {
         collectionView.layoutIfNeeded()
         let selectedIndex = items.firstIndex { !$0.isAction && $0.group == selectedGroup }
             .map { IndexPath(item: $0, section: 0) }
-        let targetIndex = lastFocusedIndexPath ?? selectedIndex ?? IndexPath(item: 0, section: 0)
+        let targetIndex = selectedIndex ?? lastFocusedIndexPath ?? IndexPath(item: 0, section: 0)
         return collectionView.cellForItem(at: targetIndex)
+    }
+
+    /// Like the season pills, focusing a category switches to it, so the
+    /// focused pill and the selected one are the same pill. The Recordings
+    /// action opens on Select only.
+    nonisolated static func selectsOnFocus(isAction: Bool, group: String?, selected: String?) -> Bool {
+        !isAction && group != selected
     }
 }
 
@@ -1056,9 +1066,10 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
         guard let title = items[safe: indexPath.item]?.title else { return .zero }
-        let font = UIFont.systemFont(ofSize: 24, weight: .semibold)
-        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 44
-        return CGSize(width: width, height: 44)
+        let font = UIFont.systemFont(ofSize: GuideCategoryPillCell.fontSize, weight: .semibold)
+        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width)
+            + GuideCategoryPillCell.horizontalPadding * 2
+        return CGSize(width: width, height: 60)
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -1067,8 +1078,8 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
             onAction?()
             return
         }
-        guard item.group != selectedGroup else { return }
-        onSelect?(item.group)
+        // Focus already switched the category; Select goes to its channels.
+        onMoveDown?()
     }
 
     func collectionView(
@@ -1076,12 +1087,23 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
         didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
         with coordinator: UIFocusAnimationCoordinator
     ) {
-        if let next = context.nextFocusedIndexPath { lastFocusedIndexPath = next }
+        guard let next = context.nextFocusedIndexPath else { return }
+        lastFocusedIndexPath = next
+        if let item = items[safe: next.item],
+           Self.selectsOnFocus(isAction: item.isAction, group: item.group, selected: selectedGroup) {
+            onSelect?(item.group)
+        }
     }
 }
 
+/// Styled like `SeasonPillView` (the show detail's season pills): a capsule,
+/// white with black text when selected or focused, plain text otherwise, and
+/// focus grows it 1.05. Focus switches the category, so outside the Recordings
+/// action the scale is what tells a focused pill from a selected one.
 final class GuideCategoryPillCell: UICollectionViewCell {
     static let reuseIdentifier = "GuideCategoryPillCell"
+    static let fontSize: CGFloat = 31
+    static let horizontalPadding: CGFloat = 24
 
     private let titleLabel = UILabel()
     private var selectedCategory = false
@@ -1090,21 +1112,24 @@ final class GuideCategoryPillCell: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
 
-        contentView.layer.cornerRadius = 22
         contentView.layer.cornerCurve = .continuous
-        titleLabel.font = .systemFont(ofSize: 24, weight: .semibold)
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(titleLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 22),
-            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -22),
+            titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Self.horizontalPadding),
+            titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Self.horizontalPadding),
             titleLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        contentView.layer.cornerRadius = contentView.bounds.height / 2
+    }
 
     override var isHighlighted: Bool {
         didSet { contentView.alpha = isHighlighted ? 0.75 : 1 }
@@ -1137,16 +1162,11 @@ final class GuideCategoryPillCell: UICollectionViewCell {
     }
 
     private func applyAppearance(focused: Bool) {
-        if selectedCategory {
-            contentView.backgroundColor = .white
-            titleLabel.textColor = UIColor(EPGTheme.background)
-        } else if focused {
-            contentView.backgroundColor = UIColor.white.withAlphaComponent(0.22)
-            titleLabel.textColor = .white
-        } else {
-            contentView.backgroundColor = .clear
-            titleLabel.textColor = UIColor(EPGTheme.textSecondary)
-        }
+        let lit = focused || selectedCategory
+        titleLabel.font = .systemFont(ofSize: Self.fontSize, weight: lit ? .semibold : .medium)
+        contentView.backgroundColor = lit ? UIColor.white.withAlphaComponent(0.88) : .clear
+        titleLabel.textColor = lit ? .black : UIColor.white.withAlphaComponent(0.72)
+        contentView.transform = focused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
     }
 }
 

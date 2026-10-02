@@ -301,7 +301,7 @@ final class BelowFoldSectionHeader: UICollectionReusableView {
 /// Slim, non-focusable boundary marker between seasons in the flat episode
 /// rail: a broken vertical hairline through the thumb band with a compact
 /// season chip ("S3" / "SP") in the gap. Structure only — the season's full
-/// identity lives in the info strip and the pills. The focus engine skips it
+/// identity lives in the pills. The focus engine skips it
 /// (canBecomeFocused false + the collection's canFocusItemAt exclusion), so
 /// the rail's focus order is unchanged.
 final class SeasonDividerCell: UICollectionViewCell {

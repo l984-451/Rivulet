@@ -741,7 +741,21 @@ final class MediaDetailChromeView: UIView {
             actionButtonsStack.addArrangedSubview(watchlist)
         }
         actionButtonsStack.addArrangedSubview(info)
+        // An episode's Watched acts on the episode alone; the whole show is
+        // marked from the show's own page, which this opens.
+        if item.kind == .episode, let showRef = item.grandparentRef, !showRef.itemID.isEmpty {
+            let goToShow = makeCircleButton(systemImage: "tv")
+            goToShow.onPrimaryAction = { [weak self] in
+                guard let self, let host = self.hostViewController else { return }
+                PreviewCarouselViewController.openShowDetail(showRef, from: host)
+            }
+            actionButtonsStack.addArrangedSubview(goToShow)
+        }
         playButton = play
+    }
+
+    private var hostViewController: UIViewController? {
+        sequence(first: self as UIResponder, next: \.next).first { $0 is UIViewController } as? UIViewController
     }
 
     /// Metadata-only (TMDB) action row: Watchlist pill + Info. The pill
@@ -854,10 +868,9 @@ final class MediaDetailChromeView: UIView {
     }
 
     /// A show's Watched changes every episode at once, so it asks first and
-    /// says how many episodes each choice touches.
+    /// says how many episodes are already watched.
     private func confirmShowWatchChange(_ show: MediaItem) {
-        guard let host = sequence(first: self as UIResponder, next: \.next)
-            .first(where: { $0 is UIViewController }) as? UIViewController else { return }
+        guard let host = hostViewController else { return }
         let prompt = ShowWatchPrompt(progress: show.childProgress)
         let alert = UIAlertController(title: show.title, message: prompt.message, preferredStyle: .alert)
         for choice in prompt.choices {
@@ -1229,23 +1242,21 @@ struct ShowWatchPrompt: Equatable {
         let markWatched: Bool
     }
 
+    static let markWatched = Choice(title: "Mark All Watched", markWatched: true)
+    static let markUnwatched = Choice(title: "Mark All Unwatched", markWatched: false)
+
     let message: String?
     let choices: [Choice]
 
     init(progress: ChildProgress?) {
         guard let progress, progress.total > 0 else {
             message = nil
-            choices = [Choice(title: "Mark All Episodes as Watched", markWatched: true),
-                       Choice(title: "Mark All Episodes as Unwatched", markWatched: false)]
+            choices = [Self.markWatched, Self.markUnwatched]
             return
         }
         let total = progress.total
         let played = min(max(progress.played, 0), total)
-        func episodes(_ n: Int) -> String { n == 1 ? "1 Episode" : "\(n) Episodes" }
         message = "\(played) of \(total) episodes watched."
-        var choices: [Choice] = []
-        if total - played > 0 { choices.append(Choice(title: "Mark \(episodes(total - played)) as Watched", markWatched: true)) }
-        if played > 0 { choices.append(Choice(title: "Mark \(episodes(played)) as Unwatched", markWatched: false)) }
-        self.choices = choices
+        choices = (played < total ? [Self.markWatched] : []) + (played > 0 ? [Self.markUnwatched] : [])
     }
 }

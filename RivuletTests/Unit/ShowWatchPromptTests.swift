@@ -8,45 +8,39 @@ import XCTest
 /// offers only the directions that would change something.
 @MainActor
 final class ShowWatchPromptTests: XCTestCase {
-    private typealias Choice = ShowWatchPrompt.Choice
+    private let watched = ShowWatchPrompt.markWatched
+    private let unwatched = ShowWatchPrompt.markUnwatched
 
-    func test_partlyWatched_offersBothDirections_withCounts() {
+    func test_labels() {
+        XCTAssertEqual(watched.title, "Mark All Watched")
+        XCTAssertEqual(unwatched.title, "Mark All Unwatched")
+        XCTAssertTrue(watched.markWatched)
+        XCTAssertFalse(unwatched.markWatched)
+    }
+
+    func test_partlyWatched_offersBoth_withCount() {
         let prompt = ShowWatchPrompt(progress: ChildProgress(played: 10, total: 24))
         XCTAssertEqual(prompt.message, "10 of 24 episodes watched.")
-        XCTAssertEqual(prompt.choices, [
-            Choice(title: "Mark 14 Episodes as Watched", markWatched: true),
-            Choice(title: "Mark 10 Episodes as Unwatched", markWatched: false),
-        ])
+        XCTAssertEqual(prompt.choices, [watched, unwatched])
     }
 
     func test_fullyWatched_offersOnlyUnwatched() {
-        let prompt = ShowWatchPrompt(progress: ChildProgress(played: 24, total: 24))
-        XCTAssertEqual(prompt.choices, [Choice(title: "Mark 24 Episodes as Unwatched", markWatched: false)])
+        XCTAssertEqual(ShowWatchPrompt(progress: ChildProgress(played: 24, total: 24)).choices, [unwatched])
     }
 
     func test_unwatched_offersOnlyWatched() {
-        let prompt = ShowWatchPrompt(progress: ChildProgress(played: 0, total: 24))
-        XCTAssertEqual(prompt.choices, [Choice(title: "Mark 24 Episodes as Watched", markWatched: true)])
+        XCTAssertEqual(ShowWatchPrompt(progress: ChildProgress(played: 0, total: 24)).choices, [watched])
     }
 
-    func test_singleEpisode_isSingular() {
-        let prompt = ShowWatchPrompt(progress: ChildProgress(played: 1, total: 2))
-        XCTAssertEqual(prompt.message, "1 of 2 episodes watched.")
-        XCTAssertEqual(prompt.choices.map(\.title), ["Mark 1 Episode as Watched", "Mark 1 Episode as Unwatched"])
-    }
-
-    func test_noCounts_offersBothWithoutNumbers() {
+    func test_noCounts_offersBoth_withoutMessage() {
         let prompt = ShowWatchPrompt(progress: nil)
         XCTAssertNil(prompt.message)
-        XCTAssertEqual(prompt.choices, [
-            Choice(title: "Mark All Episodes as Watched", markWatched: true),
-            Choice(title: "Mark All Episodes as Unwatched", markWatched: false),
-        ])
+        XCTAssertEqual(prompt.choices, [watched, unwatched])
     }
 
     func test_playedAboveTotal_isClamped() {
         let prompt = ShowWatchPrompt(progress: ChildProgress(played: 30, total: 24))
         XCTAssertEqual(prompt.message, "24 of 24 episodes watched.")
-        XCTAssertEqual(prompt.choices.map(\.markWatched), [false])
+        XCTAssertEqual(prompt.choices, [unwatched])
     }
 }

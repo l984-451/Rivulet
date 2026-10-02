@@ -807,6 +807,13 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // A presented VC's next responder is its presenter, so a press the
+        // Watched prompt or the episode page declines bubbles up to here. It
+        // belongs to them, not to the carousel underneath.
+        guard presentedViewController == nil else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         for press in presses {
             switch press.type {
             // .menu is owned by the menu gesture recognizer (see viewDidLoad).
@@ -1798,6 +1805,8 @@ extension PreviewCarouselViewController: UIGestureRecognizerDelegate {
     /// recognizer has already stolen the gesture.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let swipe = gestureRecognizer as? UISwipeGestureRecognizer else { return true }
+        // Touch twin of the pressesBegan guard: nothing pages or scrolls under a prompt.
+        guard presentedViewController == nil else { return false }
         if verticalSwipeRecognizers.contains(where: { $0 === swipe }) {
             return verticalSwipeWouldNavigate(swipe.direction)
         }

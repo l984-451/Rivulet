@@ -94,12 +94,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// the season it resolved as selected. The container builds the season pills
     /// from this instead of fetching `/children` a second time of its own.
     var onSeasonsLoaded: (([MediaItem], Int) -> Void)?
-    /// Per-season watched counts recomputed from the refreshed episodes, keyed by
-    /// season ref itemID. A watch-state refresh reconfigures episode cells and
-    /// nothing else — it never re-runs the seasons fetch — so anything showing a
-    /// season's played count needs this to repaint (CLAUDE.md: "Changing watch
-    /// state must repaint").
-    var onSeasonProgressRefreshed: (([String: ChildProgress]) -> Void)?
 
     /// Which sub-target of the focused episode card is focused (thumb vs
     /// description). Set from the cell's focus reporting.
@@ -141,7 +135,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         backgroundColor = .clear
 
         collectionView = FocusScrollControlledCollectionView(frame: bounds, collectionViewLayout: makeLayout())
-        collectionView.topBand = detailsTopY
+        collectionView.topBand = Self.detailsTopY
         // Disable the collection's own (vertical) scrolling so the focus engine
         // can't spin up its centering "focus scroll animator". We drive all
         // vertical scroll ourselves (slide on entry, didUpdateFocus per section).
@@ -205,7 +199,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Small top inset = where episodes land in details (so the focus engine
         // aligns them there). The carousel-stable peek offset is provided by the
         // large TOP INSET on the episodes section (see makeLayout), not by this.
-        let topInset = detailsTopY
+        let topInset = Self.detailsTopY
         if collectionView.contentInset.top != topInset {
             collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
             collectionView.setContentOffset(CGPoint(x: 0, y: -topInset), animated: false)
@@ -230,7 +224,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             // the first section, movies (Trailers first) had a tiny inset, so the
             // slide barely moved and the blur/fade never triggered.
             let isPrimary = (index == 0)
-            let peek = max(0, self.bounds.height - Self.episodePeek - self.detailsTopY)
+            let peek = max(0, self.bounds.height - Self.episodePeek - Self.detailsTopY)
             switch self.sectionKinds[index] {
             // Episodes: LEFT-aligned (ATV+), first card at the metadata inset
             // (leading 128). The collection's small contentInset.top (= detailsTopY)
@@ -556,7 +550,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         loadToken &+= 1
         let token = loadToken
         configuredItem = item
-        setDetailsTopY(forKind: item.kind)
         Task { [weak self] in
             guard let self else { return }
             let content = await self.loader.load(for: item, detail: detail)
@@ -594,7 +587,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         loadToken &+= 1
         let token = loadToken
         configuredItem = item
-        setDetailsTopY(forKind: item.kind)
         let showRef: MediaItemRef?
         switch item.kind {
         case .show: showRef = item.ref
@@ -713,10 +705,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             changed.append(.episode(id))
         }
         guard !changed.isEmpty else { return }
-        // Published before the cell reconfigure so every watch-derived surface
-        // moves together. Derived from these same episodes rather than a second
-        // seasons fetch — the counts are already in hand.
-        onSeasonProgressRefreshed?(Self.seasonProgress(from: episodes))
         var snapshot = dataSource.snapshot()
         // Only reconfigure identifiers the snapshot still holds — a refresh can
         // land after the rail has been re-configured for a different show.
@@ -725,23 +713,6 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         guard !targets.isEmpty else { return }
         snapshot.reconfigureItems(targets)
         dataSource.apply(snapshot, animatingDifferences: false)
-    }
-
-    /// Group episodes into per-season played/total counts, keyed by season ref
-    /// itemID. Mirrors Plex's leafCount / viewedLeafCount, which is where
-    /// `MediaItem.childProgress` comes from on the seasons fetch, so a refreshed
-    /// count and a fetched one mean the same thing. `isPlayed` is the played
-    /// flag, not a resume fraction — this is a count, not a progress rule.
-    private static func seasonProgress(from episodes: [MediaItem]) -> [String: ChildProgress] {
-        var counts: [String: (played: Int, total: Int)] = [:]
-        for episode in episodes {
-            guard let seasonID = episode.parentRef?.itemID else { continue }
-            var count = counts[seasonID] ?? (played: 0, total: 0)
-            count.total += 1
-            if episode.userState.isPlayed { count.played += 1 }
-            counts[seasonID] = count
-        }
-        return counts.mapValues { ChildProgress(played: $0.played, total: $0.total) }
     }
 
     private func ingestEpisodesOnly(_ episodes: [MediaItem]) {
@@ -988,39 +959,19 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     }
 
     func resetScroll() {
-        collectionView.setContentOffset(CGPoint(x: 0, y: -detailsTopY), animated: false)
+        collectionView.setContentOffset(CGPoint(x: 0, y: -Self.detailsTopY), animated: false)
     }
 
     /// Screen-y where the first episode lands in details (under the logo + the
     /// season-pills row, per the ATV+ reference). Also the collection's
     /// contentInset.top, so the focus engine aligns the focused episode here.
-    /// Per content kind since the season info strip: show-family pages land the
-    /// rail lower to reserve the strip's room between the pills and the rail;
-    /// movies keep the original landing. The REST (peek) position is invariant
-    /// either way — the episodes section's top inset is derived from this, and
-    /// the two cancel at rest (first cards at bounds.height − episodePeek).
-    static let movieDetailsTopY: CGFloat = 230
-    static let showDetailsTopY: CGFloat = 396
-    private(set) var detailsTopY: CGFloat = BelowFoldCollectionView.movieDetailsTopY
-
-    /// Set the details landing for the item kind being configured. On a change
-    /// the layout re-derives the peek inset and `layoutSubviews` re-applies the
-    /// content inset (kind changes only happen at carousel-stable rest).
-    private func setDetailsTopY(forKind kind: MediaKind) {
-        let y: CGFloat = (kind == .show || kind == .season || kind == .episode)
-            ? Self.showDetailsTopY : Self.movieDetailsTopY
-        guard detailsTopY != y else { return }
-        detailsTopY = y
-        collectionView.topBand = y
-        collectionView.collectionViewLayout.invalidateLayout()
-        setNeedsLayout()
-    }
+    static let detailsTopY: CGFloat = 230
 
     /// The `onScroll` value when the episodes sit at their details-rest (topBand)
     /// position — i.e. where the season-pills row is at its resting Y. Above this
     /// the pills scroll UP with the rail; below it (entry/collapse) they follow it
     /// down. Equals the episodes section's top inset (the carousel peek).
-    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - detailsTopY) }
+    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - Self.detailsTopY) }
 
     /// Whether focus is on the episodes (top) row vs a lower section. Drives the
     /// Up handler: episodes → pills; lower section → let the engine move up.
@@ -1080,7 +1031,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Scroll so the first episode lands at detailsTopY — which is the focus
         // engine's preferred position (contentInset.top == detailsTopY), so
         // handing focus in afterward causes no re-scroll bounce.
-        let targetY = max(0, bounds.height - Self.episodePeek - 2 * detailsTopY)
+        let targetY = max(0, bounds.height - Self.episodePeek - 2 * Self.detailsTopY)
         guard animated else { setOffsetY(targetY); completion?(); return }
         animateOffsetY(to: targetY, duration: 0.6, completion: completion)
     }
@@ -1088,7 +1039,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Reverse of slideToDetailsTop: slide the episodes back down to the hero
     /// peek rest (drives the reverse choreography). Completion fires at the end.
     func slideToHeroRest(animated: Bool, completion: (() -> Void)? = nil) {
-        let targetY = -detailsTopY
+        let targetY = -Self.detailsTopY
         guard animated else { setOffsetY(targetY); completion?(); return }
         animateOffsetY(to: targetY, duration: 0.6, completion: completion)
     }

@@ -234,7 +234,13 @@ final class InsightsCastListView: UIView {
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
+        // A SELF-move is not a move (same trap as `InfoScrollView`): Up on the
+        // first row has no candidate, so `preferredFocusEnvironments` re-affirms
+        // that row and the engine reports an update from it TO ITSELF. Stamping
+        // the clock for it re-armed `SamePressFocusGate`, so `canEscapeUpward`
+        // was false on every Up press and the tab bar was unreachable.
         guard let next = context.nextFocusedView,
+              next !== context.previouslyFocusedView,
               let row = focusableRows.first(where: { next.isDescendant(of: $0) || next === $0 })
         else { return }
         // Once focus enters any of our rows, stop pinning the first row and

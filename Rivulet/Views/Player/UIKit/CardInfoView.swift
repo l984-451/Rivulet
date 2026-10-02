@@ -67,7 +67,8 @@ final class CardInfoView: UIView, InfoTabSheet {
         // The scroll view grows with content up to the panel's own height
         // cap, so a short info sheet hugs its rows instead of collapsing
         // to zero height — same idiom as CardTrackListView.
-        let scrollHeight = scrollView.heightAnchor.constraint(equalTo: stack.heightAnchor)
+        let scrollHeight = scrollView.heightAnchor.constraint(
+            equalTo: stack.heightAnchor, constant: 2 * InfoFocusRowView.Focus.outsetY)
         // ONE BELOW `.defaultHigh`, not AT it. At `.defaultHigh` this ties with
         // the content's own vertical compression resistance, and the solver
         // resolves the tie by SQUASHING the content to the viewport instead of
@@ -86,13 +87,8 @@ final class CardInfoView: UIView, InfoTabSheet {
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             scrollHeight,
-
-            stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            stack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
         ])
+        scrollView.pinContent(stack)
     }
 
     // MARK: - Content

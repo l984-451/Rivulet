@@ -99,10 +99,14 @@ final class InfoFocusRowView: UIView {
     /// sheet's content height is unchanged.
     private let highlight = UIView()
 
-    private enum Focus {
+    enum Focus {
+        /// The sheet's scroll view clips, so `InfoScrollView.pinContent` insets
+        /// the content by these outsets; otherwise the clip shears the
+        /// highlight's rounded sides off and leaves a flat gray rectangle.
         static let outsetX: CGFloat = 10
         static let outsetY: CGFloat = 4
-        static let cornerRadius: CGFloat = 8
+        /// Matches the other rows in the player chrome (track, trivia rows).
+        static let cornerRadius: CGFloat = 14
         /// The house focused fill (see the Glass UI style in CLAUDE.md).
         static let fill = UIColor.white.withAlphaComponent(0.18)
     }
@@ -254,6 +258,21 @@ final class InfoScrollView: UIScrollView {
     }
 
     private var escapeSwipe: DirectionalInputBinding?
+
+    /// Pins a sheet's content into the scrollable area, inset by the row
+    /// highlight's outset so a focused row's highlight is never clipped.
+    /// Hosts widen the sheet by the same `outsetX` (see `PlayerInfoTabsView`)
+    /// so the text itself stays where it was.
+    func pinContent(_ content: UIView) {
+        let outset = InfoFocusRowView.Focus.self
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: contentLayoutGuide.topAnchor, constant: outset.outsetY),
+            content.leadingAnchor.constraint(equalTo: contentLayoutGuide.leadingAnchor, constant: outset.outsetX),
+            content.trailingAnchor.constraint(equalTo: contentLayoutGuide.trailingAnchor, constant: -outset.outsetX),
+            content.bottomAnchor.constraint(equalTo: contentLayoutGuide.bottomAnchor, constant: -outset.outsetY),
+            content.widthAnchor.constraint(equalTo: frameLayoutGuide.widthAnchor, constant: -2 * outset.outsetX),
+        ])
+    }
 
     /// Read-only mirror of `step(by: -pressStep)`'s would-it-move math.
     private var canStepUp: Bool {

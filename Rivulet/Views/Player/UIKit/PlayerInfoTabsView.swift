@@ -177,6 +177,10 @@ final class PlayerInfoTabsView: UIView {
             contentTopConstant = 0
             contentSideInset = 0
         }
+        // Each sheet insets its own content by the row highlight's outset
+        // (`InfoScrollView.pinContent`); widen the sheet by the same amount so
+        // the text edge stays put and only the highlight gains room.
+        contentSideInset -= InfoFocusRowView.Focus.outsetX
 
         // FIXED height, not self-sized. Each sheet still carries a breakable
         // self-sizing constraint for the surfaces that want a panel that hugs

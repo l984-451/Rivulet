@@ -81,7 +81,8 @@ final class CardDescriptionView: UIView, InfoTabSheet {
 
         // Beat the panel's own height cap so a short sheet hugs its content
         // instead of collapsing to zero height — same idiom as CardInfoView.
-        let scrollHeight = scrollView.heightAnchor.constraint(equalTo: content.heightAnchor)
+        let scrollHeight = scrollView.heightAnchor.constraint(
+            equalTo: content.heightAnchor, constant: 2 * InfoFocusRowView.Focus.outsetY)
         // ONE BELOW `.defaultHigh`, not AT it. At `.defaultHigh` this ties with
         // the content's own vertical compression resistance, and the solver
         // resolves the tie by SQUASHING the content to the viewport instead of
@@ -101,14 +102,11 @@ final class CardDescriptionView: UIView, InfoTabSheet {
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             scrollHeight,
 
-            content.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            content.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            content.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            content.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-            // At least a viewport tall, so a short sheet doesn't collapse and
-            // leave the panel shorter than its siblings.
-            content.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.heightAnchor),
+            // At least a viewport tall (less the highlight insets `pinContent`
+            // adds), so a short sheet doesn't collapse and leave the panel
+            // shorter than its siblings.
+            content.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.frameLayoutGuide.heightAnchor,
+                                            constant: -2 * InfoFocusRowView.Focus.outsetY),
 
             headerRow.topAnchor.constraint(equalTo: content.topAnchor),
             headerRow.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -122,6 +120,7 @@ final class CardDescriptionView: UIView, InfoTabSheet {
             // content instead of overflowing it unscrollably.
             summaryStack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor),
         ])
+        scrollView.pinContent(content)
     }
 
     private func populate(metadata: PlexMetadata) {

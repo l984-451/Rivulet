@@ -89,9 +89,12 @@ final class CardTrackListView: UIView {
         }
 
         // The scroll view grows with content up to a cap, so short lists
-        // hug their rows and long ones scroll.
+        // hug their rows and long ones scroll. One BELOW `.defaultHigh`: at it,
+        // this ties the header label's compression resistance and, once the
+        // list overflows the panel cap (Subtitles: Off + 3 tracks + both
+        // steppers), the solver squashed the header instead of scrolling.
         let scrollHeight = scrollView.heightAnchor.constraint(equalTo: stack.heightAnchor)
-        scrollHeight.priority = .defaultHigh
+        scrollHeight.priority = .defaultHigh - 1
 
         NSLayoutConstraint.activate([
             headerLabel.topAnchor.constraint(equalTo: topAnchor),

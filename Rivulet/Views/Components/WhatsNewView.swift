@@ -161,6 +161,9 @@ struct WhatsNewView: View {
             "Gzipped XMLTV guides now load, and IPTV channel names keep their commas",
             "Leaving a Plex Live TV channel frees the tuner and transcoder right away",
             "A Live TV channel that keeps dropping no longer retunes over and over",
+            "Scheduling a Plex DVR recording no longer fails with HTTP error 400",
+            "Live TV keeps its loading spinner up until the picture appears",
+            "Back in the guide now jumps to the top and selects the corner player",
         ]),
         ("1.0.6 (91)", [
             "Initial support for Jellyfin. WIP. Please report bugs and issues on GitHub.",

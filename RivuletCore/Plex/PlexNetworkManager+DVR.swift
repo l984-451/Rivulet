@@ -15,7 +15,7 @@
 //       a ready-made `parameters` query (hints, airing channels and times,
 //       library type) plus the preference `Setting`s with their defaults.
 //    2. POST /media/subscriptions?{parameters}&targetLibrarySectionID=…
-//       &targetSectionLocationID=…&prefs[id]=value…
+//       &targetSectionLocationID=…&type=…&prefs[id]=value…
 //       Creates the rule; one-shot rules cover a single airing.
 //
 //  Upcoming recordings are grab operations (/media/subscriptions/scheduled);
@@ -133,10 +133,18 @@ extension PlexNetworkManager {
         guard var components = URLComponents(string: "\(serverURL)/media/subscriptions") else {
             throw PlexAPIError.invalidURL
         }
+        components.queryItems = Self.subscriptionQueryItems(for: option)
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
+
+        _ = try await requestData(url, method: "POST", headers: dvrHeaders(authToken: authToken))
+    }
+
+    /// The create-rule query for a template option.
+    static func subscriptionQueryItems(for option: PlexSubscriptionTemplateOption) -> [URLQueryItem] {
         // The template's query is rebuilt item by item rather than spliced in
         // as a string: its `hints[…]` names carry brackets, which a raw
         // percent-encoded query is not allowed to contain.
-        var items = Self.queryItems(fromEncodedQuery: option.parameters)
+        var items = queryItems(fromEncodedQuery: option.parameters)
         let named = Set(items.map(\.name))
         if let section = option.targetLibrarySectionID, !named.contains("targetLibrarySectionID") {
             items.append(URLQueryItem(name: "targetLibrarySectionID", value: String(section)))
@@ -144,16 +152,17 @@ extension PlexNetworkManager {
         if let location = option.targetSectionLocationID, !named.contains("targetSectionLocationID") {
             items.append(URLQueryItem(name: "targetSectionLocationID", value: String(location)))
         }
+        // The template carries only hints[type]; PMS answers 400 without this one.
+        if let type = option.type, !named.contains("type") {
+            items.append(URLQueryItem(name: "type", value: String(type)))
+        }
         if !named.contains("includeGrabs") {
             items.append(URLQueryItem(name: "includeGrabs", value: "1"))
         }
         for (id, value) in option.prefs.sorted(by: { $0.key < $1.key }) where !named.contains("prefs[\(id)]") {
             items.append(URLQueryItem(name: "prefs[\(id)]", value: value))
         }
-        components.queryItems = items
-        guard let url = components.url else { throw PlexAPIError.invalidURL }
-
-        _ = try await requestData(url, method: "POST", headers: dvrHeaders(authToken: authToken))
+        return items
     }
 
     /// Every upcoming or in-progress recording on the server.

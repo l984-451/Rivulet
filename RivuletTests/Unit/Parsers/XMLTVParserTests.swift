@@ -675,4 +675,73 @@ final class XMLTVParserTests: XCTestCase {
         XCTAssertEqual(programs?.count, 1)
         XCTAssertEqual(programs?.first?.title, "Valid Program")
     }
+
+    // MARK: - Entities and CDATA
+
+    func testEntitiesAndCDATAKeepTheirText() async throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+          <channel id="ch1">
+            <display-name>AT&amp;T  Sports</display-name>
+            <display-name>ATT</display-name>
+          </channel>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title lang="en">Tom &amp; Jerry</title>
+            <title lang="fr">Tom et Jerry</title>
+            <sub-title><![CDATA[Part <One>]]></sub-title>
+            <desc>
+              Cat &amp; mouse,
+              again.
+            </desc>
+            <category>Sports &amp; Fitness</category>
+            <category>Kids</category>
+            <episode-num system="xmltv_ns">0.4.</episode-num>
+            <episode-num system="onscreen">S01E05</episode-num>
+          </programme>
+        </tv>
+        """
+
+        let result = try await parser.parse(data: Data(xml.utf8))
+        let program = try XCTUnwrap(result.programs["ch1"]?.first)
+
+        XCTAssertEqual(result.channels["ch1"]?.displayName, "AT&T Sports")
+        XCTAssertEqual(program.title, "Tom & Jerry")
+        XCTAssertEqual(program.subtitle, "Part <One>")
+        XCTAssertEqual(program.description, "Cat & mouse, again.")
+        XCTAssertEqual(program.category, "Sports & Fitness, Kids")
+        XCTAssertEqual(program.episodeNum, "S01E05")
+    }
+
+    // MARK: - Gzip
+
+    /// `gzip -9 -c guide.xml` (sets FNAME): one channel, one "Gzipped Show".
+    private let gzippedGuide = Data(base64Encoded: "H4sICM/4v2oCA2d1aWRlLnhtbABVj00OwiAQhfc9xYStqUDVxAXQhYkeQD0AKaQlKT+hpP6cXmobU2cxi3kz33vD6qftYdRxMN5xRLcEgXaNV8a1HN1v5/KIalGwNIoCgDWddE73YBRHTUeRYMoMoZev0kmrxeVtApzmHYb/JIaX2y8nRN9Gaa2GIcmYOKpItSeUHmhFcsFm6iiLPqy03VpbcEuODM3YZFI/pwhawbXzD4bn2WSKf675ITx99AGhJKqY/gAAAA==")!
+
+    func testParsesGzippedGuide() async throws {
+        let result = try await parser.parse(data: gzippedGuide)
+        XCTAssertEqual(result.programs["ch1"]?.first?.title, "Gzipped Show")
+
+        // Splice in the optional header fields the CLI never writes: FEXTRA
+        // (before FNAME), FCOMMENT and FHCRC (after it).
+        let nameEnd = try XCTUnwrap(gzippedGuide[10...].firstIndex(of: 0)) + 1
+        var crafted = Data(gzippedGuide[..<10])
+        crafted[3] |= 0x04 | 0x10 | 0x02
+        crafted += [3, 0, 0xAA, 0xBB, 0xCC]
+        crafted += gzippedGuide[10..<nameEnd]
+        crafted += Data("note".utf8) + [0, 0x12, 0x34]
+        crafted += gzippedGuide[nameEnd...]
+
+        let craftedResult = try await parser.parse(data: crafted)
+        XCTAssertEqual(craftedResult.programs["ch1"]?.first?.title, "Gzipped Show")
+    }
+
+    func testGzipInflationIsCapped() {
+        XCTAssertThrowsError(try XMLTVParser.gunzip(gzippedGuide, limit: 100)) { error in
+            guard case XMLTVParseError.tooLarge = error else {
+                return XCTFail("Expected tooLarge, got \(error)")
+            }
+        }
+        XCTAssertGreaterThanOrEqual(XMLTVParser.maxInflatedBytes, 100 * 1024 * 1024)
+    }
 }

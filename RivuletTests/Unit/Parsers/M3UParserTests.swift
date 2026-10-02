@@ -396,4 +396,34 @@ final class M3UParserTests: XCTestCase {
         XCTAssertEqual(channels[0].httpHeaders["User-Agent"], "Custom Player 2.0")
         XCTAssertEqual(channels[0].httpHeaders["Referer"], "http://foo.bar")
     }
+
+    // MARK: - Commas
+
+    func testChannelNameKeepsItsCommas() async throws {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1 tvg-id="news.us",News, Weather, and Sports
+        http://example.com/1.m3u8
+        """
+
+        let channels = try await parser.parse(content: content)
+
+        XCTAssertEqual(channels.first?.name, "News, Weather, and Sports")
+        XCTAssertEqual(channels.first?.tvgId, "news.us")
+    }
+
+    func testCommaInsideQuotedAttributeDoesNotSplitTheName() async throws {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1 group-title="News, Sports" tvg-name='Bob, Live' tvg-chno=7,Channel, One
+        http://example.com/1.m3u8
+        """
+
+        let channels = try await parser.parse(content: content)
+
+        XCTAssertEqual(channels.first?.name, "Channel, One")
+        XCTAssertEqual(channels.first?.groupTitle, "News, Sports")
+        XCTAssertEqual(channels.first?.tvgName, "Bob, Live")
+        XCTAssertEqual(channels.first?.channelNumber, 7)
+    }
 }

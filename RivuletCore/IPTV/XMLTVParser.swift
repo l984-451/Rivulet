@@ -8,6 +8,7 @@
 //  Parses XMLTV format EPG (Electronic Program Guide) data
 //
 
+import Compression
 import Foundation
 
 /// Actor for parsing XMLTV EPG data
@@ -79,7 +80,44 @@ actor XMLTVParser {
     func parse(data: Data) throws -> ParseResult {
         // XMLParser does NOT require main thread - actor isolation handles thread safety
         let parser = XMLTVInternalParser()
-        return try parser.parse(data: data)
+        return try parser.parse(data: data.starts(with: [0x1f, 0x8b]) ? Self.gunzip(data) : data)
+    }
+
+    /// Largest guide we will inflate. A week of a few hundred channels is tens
+    /// of megabytes; the cap stops a gzip bomb (deflate expands ~1000x) from
+    /// exhausting Apple TV memory.
+    static let maxInflatedBytes = 256 * 1024 * 1024
+
+    /// Inflates a gzip file (RFC 1952). `.xml.gz` guides are usually served as
+    /// raw gzip with no `Content-Encoding`, so URLSession passes them through
+    /// compressed. Only the first member is read; concatenated members are rare.
+    static func gunzip(_ data: Data, limit: Int = maxInflatedBytes) throws -> Data {
+        let start = data.startIndex
+        let end = data.endIndex - 8  // CRC32 + ISIZE trailer
+        guard data.count > 18, data[start + 2] == 8 else { throw XMLTVParseError.parseFailed }  // CM 8 = deflate
+        let flags = data[start + 3]
+        var index = start + 10
+        if flags & 0x04 != 0 {  // FEXTRA: 2-byte little-endian length, then the field
+            guard index + 2 <= end else { throw XMLTVParseError.parseFailed }
+            index += 2 + (Int(data[index]) | Int(data[index + 1]) << 8)
+        }
+        for flag: UInt8 in [0x08, 0x10] where flags & flag != 0 {  // FNAME, FCOMMENT: zero-terminated
+            guard index < end, let nul = data[index..<end].firstIndex(of: 0) else { throw XMLTVParseError.parseFailed }
+            index = nul + 1
+        }
+        if flags & 0x02 != 0 { index += 2 }  // FHCRC
+        guard index < end else { throw XMLTVParseError.parseFailed }
+
+        // Apple's `.zlib` is raw deflate, which is exactly a gzip member's body.
+        var inflated = Data()
+        let filter = try OutputFilter(.decompress, using: .zlib) { chunk in
+            guard let chunk else { return }
+            guard inflated.count + chunk.count <= limit else { throw XMLTVParseError.tooLarge }
+            inflated.append(chunk)
+        }
+        try filter.write(data[index..<end])
+        try filter.finalize()
+        return inflated
     }
 
     /// Get programs for a specific channel within a time range
@@ -107,7 +145,10 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
     private var programs: [String: [XMLTVParser.ParsedProgram]] = [:]
 
     // Current parsing state
-    private var currentElement: String = ""
+    /// Raw character data of the element being read. XMLParser delivers text in
+    /// pieces split at every entity (`Tom &amp; Jerry` arrives as `Tom `, `&`,
+    /// ` Jerry`), so the pieces are joined untouched and cleaned once at the end tag.
+    private var text = ""
     private var currentChannelId: String?
     private var currentDisplayName: String = ""
     private var currentIconURL: String?
@@ -125,6 +166,7 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
     /// supplied, so we can pick a 2:3 poster and a 16:9 background.
     private var currentProgramIcons: [(url: String, w: Int?, h: Int?)] = []
     private var currentEpisodeNum: String = ""
+    private var currentEpisodeNumIsOnscreen = false
     private var currentIsNew: Bool = false
 
     private var parseError: Error?
@@ -146,7 +188,7 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
     // MARK: - XMLParserDelegate
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-        currentElement = elementName
+        text = ""
 
         switch elementName {
         case "channel":
@@ -181,38 +223,49 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
         case "new":
             currentIsNew = true
 
+        case "episode-num":
+            currentEpisodeNumIsOnscreen = attributeDict["system"] == "onscreen"
+
         default:
             break
         }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        text += string
+    }
 
-        switch currentElement {
-        case "display-name":
-            currentDisplayName += trimmed
-        case "title":
-            currentTitle += trimmed
-        case "sub-title":
-            currentSubtitle += trimmed
-        case "desc":
-            currentDescription += trimmed
-        case "category":
-            if !currentCategory.isEmpty {
-                currentCategory += ", "
-            }
-            currentCategory += trimmed
-        case "episode-num":
-            currentEpisodeNum += trimmed
-        default:
-            break
-        }
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        text += String(decoding: CDATABlock, as: UTF8.self)
     }
 
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        // Collapse whitespace runs (pretty-printing, line breaks) and trim.
+        let value = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        text = ""
+
+        // Repeated elements (one per language or numbering system) keep the
+        // first value rather than gluing them together.
         switch elementName {
+        case "display-name":
+            if currentDisplayName.isEmpty { currentDisplayName = value }
+        case "title":
+            if currentTitle.isEmpty { currentTitle = value }
+        case "sub-title":
+            if currentSubtitle.isEmpty { currentSubtitle = value }
+        case "desc":
+            if currentDescription.isEmpty { currentDescription = value }
+        case "category":
+            // Each element is one category, even when its text holds an entity.
+            if !value.isEmpty {
+                currentCategory += currentCategory.isEmpty ? value : ", " + value
+            }
+        case "episode-num":
+            // Prefer the human-readable "S01E05" over xmltv_ns / dd_progid codes.
+            if !value.isEmpty, currentEpisodeNum.isEmpty || currentEpisodeNumIsOnscreen {
+                currentEpisodeNum = value
+            }
+
         case "channel":
             if let id = currentChannelId, !currentDisplayName.isEmpty {
                 channels[id] = XMLTVParser.ParsedXMLTVChannel(
@@ -253,8 +306,6 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
         default:
             break
         }
-
-        currentElement = ""
     }
 
     func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
@@ -362,6 +413,7 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
 enum XMLTVParseError: LocalizedError {
     case httpError(Int)
     case parseFailed
+    case tooLarge
 
     var errorDescription: String? {
         switch self {
@@ -369,6 +421,8 @@ enum XMLTVParseError: LocalizedError {
             return "HTTP error \(code)"
         case .parseFailed:
             return "Failed to parse XMLTV data"
+        case .tooLarge:
+            return "The guide is too large"
         }
     }
 }

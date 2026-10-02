@@ -812,6 +812,8 @@ class LiveTVDataStore: ObservableObject {
                 return "EPG server returned HTTP \(code)"
             case .parseFailed:
                 return "EPG data could not be parsed"
+            case .tooLarge:
+                return "EPG data is too large"
             }
         }
 

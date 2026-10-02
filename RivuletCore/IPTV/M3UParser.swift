@@ -146,9 +146,10 @@ actor M3UParser {
     ) -> ParsedChannel? {
         // Parse the EXTINF line
         // Format: #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="..." tvg-chno="123",Channel Name
-        // The comma separates attributes from the display name
+        // The first comma outside a quoted attribute value separates attributes
+        // from the display name; both sides may contain commas of their own.
 
-        guard let commaIndex = extInf.lastIndex(of: ",") else {
+        guard let commaIndex = Self.nameSeparatorIndex(in: extInf) ?? extInf.lastIndex(of: ",") else {
             return nil
         }
 
@@ -178,6 +179,26 @@ actor M3UParser {
             streamURL: streamURL,
             httpHeaders: httpHeaders
         )
+    }
+
+    /// Index of the first comma not inside a quoted attribute value. A quote
+    /// opens a value only right after `=`, so an apostrophe in an unquoted
+    /// value cannot swallow the line. Nil when a quote is never closed.
+    private static func nameSeparatorIndex(in extInf: String) -> String.Index? {
+        var quote: Character?
+        var previous: Character?
+        for index in extInf.indices {
+            let character = extInf[index]
+            if let open = quote {
+                if character == open { quote = nil }
+            } else if character == "," {
+                return index
+            } else if character == "\"" || character == "'", previous == "=" {
+                quote = character
+            }
+            previous = character
+        }
+        return nil
     }
 
     /// Extract an attribute value from the EXTINF attributes string

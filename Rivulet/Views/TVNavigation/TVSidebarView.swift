@@ -126,11 +126,11 @@ struct TVSidebarView: View {
         )
     }
 
-    var body: some View {
-        // The UIKit shell replaces the TabView(.sidebarAdaptable). Menu-to-Home
-        // (issue #192), the sidebar focus guard, and the focus watchdog were
-        // all workarounds for the system sidebar and live on inside the shell
-        // (or died with the TabView).
+    /// The UIKit shell replaces the TabView(.sidebarAdaptable). Menu-to-Home
+    /// (issue #192), the sidebar focus guard, and the focus watchdog were
+    /// all workarounds for the system sidebar and live on inside the shell
+    /// (or died with the TabView). Its modifiers keep the selected tab valid.
+    private var shell: some View {
         RootShellHost(
             selection: tabSelection,
             interactionBlocked: nestedNavState.isNested || nestedNavState.isSettingsSubPage,
@@ -174,6 +174,12 @@ struct TVSidebarView: View {
                 selectedTab = .home
             }
         }
+    }
+
+    var body: some View {
+        // Split from `shell`: the whole chain as one expression outran the
+        // type checker on CI ("unable to type-check this expression").
+        shell
         .task(id: authManager.hasCredentials) {
             StartupTimer.mark("TVSidebar .task entry")
             guard authManager.selectedServerToken != nil else { return }

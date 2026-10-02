@@ -1042,6 +1042,30 @@ final class PreviewCarouselViewController: UIViewController {
         top.present(detail, animated: true)
     }
 
+    /// "Go to Show" from an episode: the SHOW's own detail, so its Watched
+    /// button acts on the whole show. `show` skips the fetch when the caller
+    /// already has it. From a page this show's detail presented, goes back to
+    /// that detail instead of stacking a second one.
+    static func openShowDetail(_ showRef: MediaItemRef, show: MediaItem? = nil, from presenter: UIViewController) {
+        if let below = presenter.presentingViewController as? PreviewCarouselViewController,
+           below.items.indices.contains(below.selectedIndex),
+           below.items[below.selectedIndex].ref == showRef {
+            presenter.dismiss(animated: true)
+            return
+        }
+        Task { @MainActor [weak presenter] in
+            var resolved = show
+            if resolved == nil, let provider = MediaProviderRegistry.shared.provider(for: showRef.providerID) {
+                resolved = try? await provider.fullDetail(for: showRef).item
+            }
+            guard var top = presenter, let resolved else { return }
+            while let presented = top.presentedViewController { top = presented }
+            top.present(PreviewCarouselViewController(
+                items: [resolved], selectedIndex: 0, sourceFrame: .zero, sourceTarget: nil,
+                standaloneDetail: true, onDismiss: { _ in }), animated: true)
+        }
+    }
+
     /// Put focus back where it was in the below-fold after returning from a
     /// standalone detail (Related / cast filmography).
     ///

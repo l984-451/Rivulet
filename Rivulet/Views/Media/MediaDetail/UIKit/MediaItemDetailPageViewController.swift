@@ -14,7 +14,7 @@
 //  Stage 3a: the hero. Hero order matches the reference:
 //    show title (small) · episode title (large) · genre · rating ·
 //    "S2, E1: synopsis" · date · runtime + capability badges ·
-//    Play + Watched + Watchlist.
+//    Play + Watched + Watchlist (+ Go to Show on an episode).
 //  Below-fold info columns (3b) and the custom blur-fade (3c) land next.
 //
 
@@ -78,6 +78,9 @@ final class MediaItemDetailPageViewController: UIViewController {
     private weak var watchedButton: FocusableActionButton?
     private weak var watchlistButton: FocusableActionButton?
     private var onWatchlist = false
+    /// The show above this episode, kept from `loadDetail` so Go to Show opens
+    /// without a second fetch.
+    private var show: MediaItem?
 
     private var isWatched: Bool
     private let blurFade = BlurFadeTransitioningDelegate()
@@ -397,6 +400,16 @@ final class MediaItemDetailPageViewController: UIViewController {
         }
 
         let row = UIStackView(arrangedSubviews: [pill, watched, watchlist])
+        // An episode's Watched acts on the episode alone; the whole show is
+        // marked from the show's own page, which this opens.
+        if item.kind == .episode, let showRef, !showRef.itemID.isEmpty {
+            let goToShow = circleButton(systemImage: "tv")
+            goToShow.onPrimaryAction = { [weak self] in
+                guard let self else { return }
+                PreviewCarouselViewController.openShowDetail(showRef, show: self.show, from: self)
+            }
+            row.addArrangedSubview(goToShow)
+        }
         row.axis = .horizontal
         row.spacing = 18
         row.alignment = .center
@@ -533,6 +546,7 @@ final class MediaItemDetailPageViewController: UIViewController {
                let showDetail = try? await provider.fullDetail(for: showRef) {
                 showGenres = showDetail.genres
                 await MainActor.run {
+                    self.show = showDetail.item
                     if (self.showTitleLabel.text ?? "").isEmpty { self.setShowTitle(showDetail.item.title) }
                 }
             }

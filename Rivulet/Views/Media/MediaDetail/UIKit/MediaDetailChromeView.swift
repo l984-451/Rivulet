@@ -106,7 +106,6 @@ final class MediaDetailChromeView: UIView {
     /// (action row is interaction-disabled). Wired in `.expandedDetail`
     /// during Iter B/D.
     var onPlay: (() -> Void)?
-    var onToggleWatched: (() -> Void)?
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
 
@@ -847,9 +846,32 @@ final class MediaDetailChromeView: UIView {
     private var heroOnWatchlist = false
 
     private func toggleWatched(_ item: MediaItem) {
-        heroWatched.toggle()
+        // The stored item, not the one captured at build: a refresh since then
+        // carries the show's current episode counts.
+        let current = self.item ?? item
+        if current.kind == .show { confirmShowWatchChange(current); return }
+        setWatched(!heroWatched, current)
+    }
+
+    /// A show's Watched changes every episode at once, so it asks first and
+    /// says how many episodes each choice touches.
+    private func confirmShowWatchChange(_ show: MediaItem) {
+        guard let host = sequence(first: self as UIResponder, next: \.next)
+            .first(where: { $0 is UIViewController }) as? UIViewController else { return }
+        let prompt = ShowWatchPrompt(progress: show.childProgress)
+        let alert = UIAlertController(title: show.title, message: prompt.message, preferredStyle: .alert)
+        for choice in prompt.choices {
+            alert.addAction(UIAlertAction(title: choice.title, style: .default) { [weak self] _ in
+                self?.setWatched(choice.markWatched, show)
+            })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        host.present(alert, animated: true)
+    }
+
+    private func setWatched(_ target: Bool, _ item: MediaItem) {
+        heroWatched = target
         updateWatchedIcon()
-        let target = heroWatched
         Task {
             guard let p = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else { return }
             if target { try? await p.markPlayed(item.ref) } else { try? await p.markUnplayed(item.ref) }
@@ -1196,5 +1218,34 @@ final class MediaDetailChromeView: UIView {
             label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -2)
         ])
         return container
+    }
+}
+
+/// What the show page's Watched prompt says: the watched count, and only the
+/// choices that would change an episode. Without counts it offers both.
+struct ShowWatchPrompt: Equatable {
+    struct Choice: Equatable {
+        let title: String
+        let markWatched: Bool
+    }
+
+    let message: String?
+    let choices: [Choice]
+
+    init(progress: ChildProgress?) {
+        guard let progress, progress.total > 0 else {
+            message = nil
+            choices = [Choice(title: "Mark All Episodes as Watched", markWatched: true),
+                       Choice(title: "Mark All Episodes as Unwatched", markWatched: false)]
+            return
+        }
+        let total = progress.total
+        let played = min(max(progress.played, 0), total)
+        func episodes(_ n: Int) -> String { n == 1 ? "1 Episode" : "\(n) Episodes" }
+        message = "\(played) of \(total) episodes watched."
+        var choices: [Choice] = []
+        if total - played > 0 { choices.append(Choice(title: "Mark \(episodes(total - played)) as Watched", markWatched: true)) }
+        if played > 0 { choices.append(Choice(title: "Mark \(episodes(played)) as Unwatched", markWatched: false)) }
+        self.choices = choices
     }
 }

@@ -12,7 +12,7 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     private func menu(_ item: MediaItem, continueWatching: Bool = false) -> [[TileMenuAction]] {
         PlexHomeViewController.providerTileMenuSections(
             for: item, provider: provider, isContinueWatching: continueWatching,
-            onWatchFromBeginning: {}, onMoreInfo: {}, onGoToShow: {})
+            onWatchFromBeginning: {}, onMoreInfo: {}, onGoToEpisode: {}, onGoToShow: {})
     }
 
     func test_posterCell_sourceBadge_clearsOnReuse() {
@@ -39,7 +39,8 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     func test_providerTileMenu_matchesThePlexMenu() {
         let episode = JellyfinFixtures.mediaItem("ep1", kind: .episode, played: true, grandparent: "show1")
         XCTAssertEqual(menu(episode).map { $0.map(\.title) },
-                       [["Watch from Beginning", "More Info", "Go to Show"], ["Mark as Unwatched"], ["Refresh Metadata"]])
+                       [["Watch from Beginning", "More Info", "Go to Episode", "Go to Show"],
+                        ["Mark as Unwatched"], ["Refresh Metadata"]])
         XCTAssertEqual(menu(JellyfinFixtures.mediaItem("m1")).map { $0.map(\.title) },
                        [["Watch from Beginning", "More Info"], ["Mark as Watched"], ["Refresh Metadata"]])
     }

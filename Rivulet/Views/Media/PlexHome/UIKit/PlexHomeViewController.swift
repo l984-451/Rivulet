@@ -6312,6 +6312,27 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         return actions.isEmpty ? [] : [actions]
     }
 
+    /// Episode-only, in the menu's first group. Go to Episode opens the show's
+    /// page keyed to the EPISODE: episode chrome up top, its season pill
+    /// selected, the rail positioned at it. Go to Show opens the show's own
+    /// page, whose Watched button marks the whole show.
+    private func goToEntries(for item: MediaItem) -> [TileMenuAction] {
+        guard item.kind == .episode, item.grandparentRef?.itemID.isEmpty == false else { return [] }
+        return [
+            TileMenuAction(title: "Go to Episode", systemImage: "list.and.film") { [weak self] in
+                self?.presentStandaloneExpandedDetail(item)
+            },
+            TileMenuAction(title: "Go to Show", systemImage: "tv") { [weak self] in
+                self?.openShowDetail(of: item)
+            },
+        ]
+    }
+
+    private func openShowDetail(of episode: MediaItem) {
+        guard let showRef = episode.grandparentRef else { return }
+        PreviewCarouselViewController.openShowDetail(showRef, from: self)
+    }
+
     /// Build the tile menu action groups for a cell — one sub-array per
     /// divider-separated group. This is the CANONICAL long-press menu for
     /// home rows + library grid — the only long-press menu in the app now
@@ -6329,7 +6350,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 for: item, provider: provider, isContinueWatching: isContinueWatching,
                 onWatchFromBeginning: { [weak self] in self?.playItem(item, fromBeginning: true) },
                 onMoreInfo: { [weak self] in self?.selectMediaItem(item) },
-                onGoToShow: { [weak self] in self?.presentStandaloneExpandedDetail(item) })
+                onGoToEpisode: { [weak self] in self?.presentStandaloneExpandedDetail(item) },
+                onGoToShow: { [weak self] in self?.openShowDetail(of: item) })
         }
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
@@ -6341,7 +6363,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
 
         if isContinueWatching {
             // Same segmentation as the generic menu below: [Watch from
-            // Beginning, More Info, Go to Show] | [watched state] |
+            // Beginning, More Info, Go to Episode,
+            // Go to Show] | [watched state] |
             // [Refresh Metadata]. CW adds Remove from Continue Watching to
             // the middle group.
             var cwFirst = [
@@ -6354,16 +6377,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                     self?.selectMediaItem(item)
                 },
             ]
-            if item.kind == .episode, item.grandparentRef?.itemID.isEmpty == false {
-                cwFirst.append(TileMenuAction(title: "Go to Show",
-                                              systemImage: "tv") { [weak self] in
-                    // Pass the EPISODE, not the show: the expanded detail
-                    // keys everything off it — episode chrome up top, the
-                    // episode's season pill selected, rail positioned at
-                    // this episode, About describing the show.
-                    self?.presentStandaloneExpandedDetail(item)
-                })
-            }
+            cwFirst += goToEntries(for: item)
 
             let cwMiddle = [
                 TileMenuAction(title: "Mark as Watched",
@@ -6392,7 +6406,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         }
 
         // Generic media-item menu (Recently Added, Recommendations):
-        // [Watch from Beginning, More Info, Go to Show] | [watched state] |
+        // [Watch from Beginning, More Info, Go to Episode, Go to Show] | [watched state] |
         // [Refresh Metadata].
 
         // Watch from Beginning: actually starts playback at 0:00. (The old
@@ -6409,17 +6423,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             },
         ]
 
-        // Episode-only: jump to the show's detail (season pills + episode
-        // rail live there — a separate "Go to Season" entry would open the
-        // same page, so the old SwiftUI menu's two entries fold into one).
-        // Pass the EPISODE, not the show: the expanded detail keys off it
-        // (season pill selected, rail positioned at this episode).
-        if item.kind == .episode, item.grandparentRef?.itemID.isEmpty == false {
-            first.append(TileMenuAction(title: "Go to Show",
-                                        systemImage: "tv") { [weak self] in
-                self?.presentStandaloneExpandedDetail(item)
-            })
-        }
+        first += goToEntries(for: item)
 
         // Mark as Watched / Unwatched — conditional on view state.
         // isWatched mirrors the old `viewCount > 0`; watchProgress != nil
@@ -6457,7 +6461,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
 
     /// The Plex tile menu for an item on another server: same entries and
     /// groups, every server call through the item's provider.
-    /// [Watch from Beginning, More Info, Go to Show] | [watched state,
+    /// [Watch from Beginning, More Info, Go to Episode, Go to Show] | [watched state,
     /// Remove from Continue Watching] | [Refresh Metadata].
     /// Remove is offered only where the server can do it: clearing an
     /// episode's position moves it to Next Up, still in Continue Watching.
@@ -6467,6 +6471,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         isContinueWatching: Bool,
         onWatchFromBeginning: @escaping () -> Void,
         onMoreInfo: @escaping () -> Void,
+        onGoToEpisode: @escaping () -> Void,
         onGoToShow: @escaping () -> Void
     ) -> [[TileMenuAction]] {
         var first = [
@@ -6475,6 +6480,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             TileMenuAction(title: "More Info", systemImage: "info.circle", handler: onMoreInfo)
         ]
         if item.kind == .episode, item.grandparentRef?.itemID.isEmpty == false {
+            first.append(TileMenuAction(title: "Go to Episode", systemImage: "list.and.film", handler: onGoToEpisode))
             first.append(TileMenuAction(title: "Go to Show", systemImage: "tv", handler: onGoToShow))
         }
         let ref = item.ref

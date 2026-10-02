@@ -352,7 +352,13 @@ final class AetherPlayer: PlayerProtocol {
         engine.$audioTracks
             .receive(on: DispatchQueue.main)
             .sink { [weak self] tracks in
-                self?.audioTracks = tracks.map(Self.translateTrack)
+                guard let self else { return }
+                // Since 7.22.0 the remote-HLS bypass lists AVPlayer's audio
+                // tracks for information only, and the engine ignores
+                // selectAudioTrack there. Publish none, so the Live TV audio
+                // menu keeps switching through AVPlayer's media selection.
+                self.audioTracks = self.engine.videoRoute == .remoteBypass
+                    ? [] : tracks.map(Self.translateTrack)
             }
             .store(in: &cancellables)
 
@@ -1157,7 +1163,7 @@ final class AetherPlayer: PlayerProtocol {
     /// track id or header changes: two tracks from one release can share a
     /// header, and each needs its own libass track.
     ///
-    /// Relies on AetherEngine 7.7.0 clearing `subtitleCues` BEFORE it publishes
+    /// Relies on AetherEngine (re-checked at 7.25.3) clearing `subtitleCues` BEFORE it publishes
     /// a new `activeSubtitleTrackIndex` (embedded select, sidecar select and
     /// stop all do), so the overlay's new libass track never receives the old
     /// track's lines. Re-check that ordering on every engine bump.

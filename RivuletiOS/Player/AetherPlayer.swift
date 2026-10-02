@@ -157,7 +157,7 @@ final class AetherPlayer: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] tracks in
                 guard let self else { return }
-                if tracks.isEmpty {
+                if tracks.isEmpty || !self.engineAudioTracksAreSelectable {
                     if self.nativeAudioOptions.isEmpty { self.audioTracks = [] }
                 } else {
                     self.nativeAudioGroup = nil
@@ -454,7 +454,7 @@ final class AetherPlayer: ObservableObject {
             guard self.nativeMediaItem === item else { return }
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
                   !group.options.isEmpty,
-                  self.engine.audioTracks.isEmpty else { return }
+                  self.engine.audioTracks.isEmpty || !self.engineAudioTracksAreSelectable else { return }
 
             self.nativeAudioGroup = group
             self.nativeAudioOptions = group.options
@@ -476,6 +476,10 @@ final class AetherPlayer: ObservableObject {
             }
         }
     }
+
+    /// Since 7.22.0 the remote-HLS bypass publishes AVPlayer's audio tracks for
+    /// information only and ignores `selectAudioTrack`; AVMediaSelection owns them.
+    private var engineAudioTracksAreSelectable: Bool { engine.videoRoute != .remoteBypass }
 
     private static func isRemoteItem(_ item: AVPlayerItem) -> Bool {
         guard let asset = item.asset as? AVURLAsset else { return false }

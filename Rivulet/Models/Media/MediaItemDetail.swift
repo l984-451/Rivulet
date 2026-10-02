@@ -42,6 +42,9 @@ struct MediaItemDetail: Sendable {
     /// Defaulted so existing constructors compile unchanged.
     var contentAdvisory: ContentAdvisory? = nil
 
+    /// External ids keyed lowercase: "tmdb", "imdb", "tvdb".
+    var externalIDs: [String: String] = [:]
+
     struct Extra: Sendable, Identifiable, Hashable {
         let id: String
         let title: String

@@ -290,6 +290,9 @@ final class PlexMusicProvider: MusicProvider, @unchecked Sendable {
         case .titleDesc: return "titleSort:desc"
         case .releaseDateDesc: return "originallyAvailableAt:desc"
         case .addedAtDesc: return "addedAt:desc"
+        case .addedAtAsc: return "addedAt:asc"
+        case .releaseDateAsc: return "originallyAvailableAt:asc"
+        case .lastContentAddedDesc: return "addedAt:desc"
         // Music uses userRating (per-user star rating) not rating (community rating);
         // Plex's music libraries don't populate the community `rating` field.
         case .ratingDesc: return "userRating:desc"

@@ -35,11 +35,19 @@ enum PlayerPresenter {
         return vc
     }
 
+    /// Only the Plex path needs the Plex server. A provider item has already
+    /// resolved its stream from its own server, so Plex being offline is no
+    /// reason to refuse it.
+    static func requiresPlexConnection(for source: PlaybackSource) -> Bool {
+        if case .plex = source { return true }
+        return false
+    }
+
     /// Present a playback session, walking to whatever is actually on screen
     /// above `presenter`. Every VOD play path goes through here, which makes
     /// it the one place the offline gate has to live: returns false when the
-    /// server is unreachable, having shown the popup instead. A Retry that
-    /// reconnects re-runs the presentation.
+    /// Plex server is unreachable on a Plex item, having shown the popup
+    /// instead. A Retry that reconnects re-runs the presentation.
     @discardableResult
     static func present(
         viewModel: UniversalPlayerViewModel,
@@ -47,11 +55,13 @@ enum PlayerPresenter {
         animated: Bool = true,
         onDismiss: (() -> Void)? = nil
     ) -> Bool {
-        let allowed = ConnectionAlert.allowPlayback(from: presenter) {
-            present(viewModel: viewModel, from: presenter,
-                    animated: animated, onDismiss: onDismiss)
+        if requiresPlexConnection(for: viewModel.source) {
+            let allowed = ConnectionAlert.allowPlayback(from: presenter) {
+                present(viewModel: viewModel, from: presenter,
+                        animated: animated, onDismiss: onDismiss)
+            }
+            guard allowed else { return false }
         }
-        guard allowed else { return false }
         let vc = makeViewController(viewModel: viewModel, onDismiss: onDismiss)
         presenter.topmostPresented.present(vc, animated: animated)
         return true

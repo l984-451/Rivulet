@@ -219,6 +219,30 @@ enum SettingsDescriptorStore {
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of your Plex server and remove all saved credentials. You'll need to sign in again to access your media."
         ),
+        "jellyfinServer": SettingDescriptor(
+            icon: "server.rack",
+            description: "Sign in to your Jellyfin server."
+        ),
+        "jellyfinURL": SettingDescriptor(
+            icon: "globe",
+            description: "Your Jellyfin server's address, including the port. You can paste the address from your browser."
+        ),
+        "jellyfinUsername": SettingDescriptor(
+            icon: "person",
+            description: "Your Jellyfin username."
+        ),
+        "jellyfinPassword": SettingDescriptor(
+            icon: "key",
+            description: "Used once, to sign in. Rivulet keeps the access token Jellyfin returns, not the password."
+        ),
+        "jellyfinSignIn": SettingDescriptor(
+            icon: "link",
+            description: "Check the server and sign in."
+        ),
+        "jellyfinSignOut": SettingDescriptor(
+            icon: "rectangle.portrait.and.arrow.right",
+            description: "Sign out of this Jellyfin server and remove its saved credentials."
+        ),
         "connectPlex": SettingDescriptor(
             icon: "link",
             description: "Connect to your Plex server to browse and stream your media library."
@@ -259,10 +283,6 @@ enum SettingsDescriptorStore {
             icon: "play.rectangle.fill",
             description: "Add the tuners already set up on your Plex server. One press adds them and loads the channel list."
         ),
-        "addPlexLiveTVError": SettingDescriptor(
-            icon: "exclamationmark.triangle.fill",
-            description: "Plex Live TV could not be added. Set up a DVR and tuners in your Plex server settings, then try again."
-        ),
         "addOwnServer": SettingDescriptor(
             icon: "server.rack",
             description: "A server you run yourself that serves a playlist and a guide, such as Dispatcharr, Threadfin, xTeVe, ErsatzTV, or Cabernet. You give Rivulet the address and it finds the rest."
@@ -301,11 +321,7 @@ enum SettingsDescriptorStore {
         ),
         "addSourceConfirm": SettingDescriptor(
             icon: "plus.circle.fill",
-            description: "Checks the connection and adds the source if it works. If it does not, the reason appears below."
-        ),
-        "addSourceError": SettingDescriptor(
-            icon: "exclamationmark.triangle.fill",
-            description: "The source was not added. Fix the field above and press Add Source again."
+            description: "Checks the connection and adds the source if it works. If it does not, Rivulet tells you why."
         ),
 
         // MARK: About
@@ -397,6 +413,7 @@ enum SettingsDescriptorStore {
         case .servers: return ("server.rack", .systemOrange)
         case .about: return ("info.circle.fill", .systemGray)
         case .plex: return ("server.rack", .systemOrange)
+        case .jellyfin: return ("server.rack", .systemPurple)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)

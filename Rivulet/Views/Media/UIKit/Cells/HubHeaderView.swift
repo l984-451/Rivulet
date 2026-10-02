@@ -32,6 +32,7 @@ final class HubHeaderView: UICollectionReusableView {
 
     private let titleLabel = UILabel()
     private let countLabel = UILabel()
+    private let badge = SourceBadgeView(style: .inline)
     private let stack = UIStackView()
 
     override init(frame: CGRect) {
@@ -53,6 +54,10 @@ final class HubHeaderView: UICollectionReusableView {
         stack.alignment = .lastBaseline
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(titleLabel)
+        stack.addArrangedSubview(badge)
+        // A long row title must squeeze the title, never the badge.
+        badge.setContentCompressionResistancePriority(.required, for: .horizontal)
+        badge.setContentHuggingPriority(.required, for: .horizontal)
         stack.addArrangedSubview(countLabel)
         addSubview(stack)
 
@@ -69,11 +74,14 @@ final class HubHeaderView: UICollectionReusableView {
 
     /// Configure with `title`. Count parameters are accepted for call-site
     /// compatibility but row headers intentionally do not display amounts.
+    /// `sourceBadge` names the row's server; nil (always set, so a reused
+    /// header drops the last row's) hides it.
     func configure(title: String,
                    style: Style,
                    loadedCount: Int? = nil,
                    totalCount: Int? = nil,
-                   pageSize: Int = 24) {
+                   pageSize: Int = 24,
+                   sourceBadge: String? = nil) {
         switch style {
         case .swiftUIInfiniteRow:
             titleLabel.font = .systemFont(ofSize: 34, weight: .semibold)
@@ -83,8 +91,12 @@ final class HubHeaderView: UICollectionReusableView {
             titleLabel.textColor = .white
         }
         titleLabel.text = title
+        badge.text = sourceBadge
 
         countLabel.text = nil
         countLabel.isHidden = true
     }
+
+    /// The badge's text while it shows (tests).
+    var sourceBadgeText: String? { badge.isHidden ? nil : badge.text }
 }

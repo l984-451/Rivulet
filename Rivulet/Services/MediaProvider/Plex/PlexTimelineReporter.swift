@@ -12,7 +12,7 @@
 //  Note: distinct from `PlexProgressReporter` (the throttled actor in
 //  Services/Plex/Playback/) which is the existing playback-side reporter
 //  used by player view models. This is the protocol-conforming value type
-//  exposed via MediaProvider.progressReporter(for:playSessionID:).
+//  exposed via MediaProvider.progressReporter(for:sourceID:playSessionID:).
 //
 
 import Foundation
@@ -23,7 +23,7 @@ struct PlexTimelineReporter: ProgressReporter {
     let ratingKey: String
     let networkManager: PlexNetworkManager
 
-    func start() async {
+    func start(position: TimeInterval) async {
         // Plex doesn't have a separate "start" call — first progress doubles as start.
     }
 

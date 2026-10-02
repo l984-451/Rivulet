@@ -554,4 +554,18 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertNil(PlexNetworkManager.hubItemsURL(
             serverURL: testServerURL, hubKey: "/hubs/items", hubIdentifier: "", start: 0, count: 24))
     }
+
+    /// PMS serves a stale cached Continue Watching for a repeated URL (with
+    /// tvOS's Accept-Language), so each request must be a different URL.
+    func testContinueWatchingURLIsUniquePerCall() throws {
+        let first = try XCTUnwrap(PlexNetworkManager.continueWatchingURL(
+            serverURL: testServerURL, count: 50, now: Date(timeIntervalSince1970: 1_000)))
+        let second = try XCTUnwrap(PlexNetworkManager.continueWatchingURL(
+            serverURL: testServerURL, count: 50, now: Date(timeIntervalSince1970: 1_000.5)))
+        XCTAssertEqual(first.path, "/hubs/continueWatching")
+        XCTAssertNotEqual(first, second)
+        let items = URLComponents(url: first, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertTrue(items.contains(URLQueryItem(name: "X-Plex-Container-Start", value: "0")))
+        XCTAssertTrue(items.contains(URLQueryItem(name: "X-Plex-Container-Size", value: "50")))
+    }
 }

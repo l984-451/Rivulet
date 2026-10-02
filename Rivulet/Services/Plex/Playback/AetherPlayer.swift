@@ -62,6 +62,11 @@ final class AetherPlayer: PlayerProtocol {
     /// `engine.load` returns.
     private var assFonts: [LibassRenderer.Font] = []
 
+    /// Scrub stills for the loaded item, made on the first scrub. It opens its
+    /// own demuxer, so it is shut down on every load and on stop and never
+    /// outlives its item.
+    private var frameExtractor: FrameExtractor?
+
     /// Mirrors engine.$isSubtitleActive. True when any subtitle track
     /// (embedded or sidecar) is selected and the engine has cue data.
     @Published private(set) var isSubtitleActive: Bool = false
@@ -809,6 +814,7 @@ final class AetherPlayer: PlayerProtocol {
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
                   role: LiveLoadRole = .fullscreen) async throws {
         finishAVCapture()
+        dropFrameExtractor()
         if role == .fullscreen { startAVCapture(url: url) }
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
         isOnNativeLiveRoute = isHLS
@@ -1117,6 +1123,7 @@ final class AetherPlayer: PlayerProtocol {
         // even when the next episode repeats the same header and track id.
         assFonts = []
         assTrack = nil
+        dropFrameExtractor()
         userIntendsToPlay = true
         pendingReloadSince = nil
         do {
@@ -1216,7 +1223,28 @@ final class AetherPlayer: PlayerProtocol {
         pendingReloadSince = nil
         userIntendsToPlay = false
         finishAVCapture()
+        dropFrameExtractor()
         engine.stop()
+    }
+
+    deinit {
+        if let extractor = frameExtractor { Task { await extractor.shutdown() } }
+    }
+
+    /// A low-res still of the loaded item at `seconds`, for the scrub bar.
+    /// Keyframe-snapped and cached by the engine, and it yields while playback
+    /// is starved. nil with no engine session (the hls route) or when the
+    /// source cannot open a second reader.
+    func scrubFrame(atSeconds seconds: TimeInterval, maxWidth: Int = 320) async -> CGImage? {
+        if frameExtractor == nil { frameExtractor = engine.makeFrameExtractor() }
+        guard let extractor = frameExtractor else { return nil }
+        return await extractor.thumbnail(at: seconds, maxWidth: maxWidth)
+    }
+
+    private func dropFrameExtractor() {
+        guard let extractor = frameExtractor else { return }
+        frameExtractor = nil
+        Task { await extractor.shutdown() }
     }
 
     // MARK: - Render surface

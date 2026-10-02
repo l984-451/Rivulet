@@ -112,7 +112,13 @@ final class SettingsContainerViewController: UIViewController {
     private func makePage(_ page: SettingsPage) -> SettingsPageViewController {
         let vc = SettingsPageViewController(page: page)
         vc.onPush = { [weak self] target in self?.push(target) }
-        vc.onPop = { [weak self] in self?.pop() }
+        // A page closes itself after async work (a sign-in, an add-source
+        // check) too, by which time the user may have left it. Only the page
+        // on screen may pop; Menu goes through `pop()` directly.
+        vc.onPop = { [weak self, weak vc] in
+            guard let self, let vc, self.topPage === vc else { return }
+            self.pop()
+        }
         vc.onFocusRow = { [weak self] id in self?.leftPanel.show(id: id) }
         return vc
     }

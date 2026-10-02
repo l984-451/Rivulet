@@ -163,7 +163,10 @@ final class PostVideoOverlayView: UIView {
 
     // MARK: - Content
 
-    func configure(nextEpisode: PlexMetadata?, serverURL: String, authToken: String, backdrop: UIImage?) {
+    /// `thumbnailURL` is the next episode's own image URL when it has one;
+    /// nil builds the Plex thumbnail URL.
+    func configure(nextEpisode: PlexMetadata?, serverURL: String, authToken: String, backdrop: UIImage?,
+                   thumbnailURL: URL? = nil, errorMessage: String? = nil) {
         hasNextEpisode = nextEpisode != nil
         backdropImageView.image = backdrop
         // No art: the container's own translucent black stands in, and the
@@ -172,10 +175,12 @@ final class PostVideoOverlayView: UIView {
         dimView.isHidden = backdrop == nil
 
         headerLabel.text = hasNextEpisode ? "Up Next" : "End of Series"
-        headerSubtitleLabel.isHidden = hasNextEpisode
+        headerSubtitleLabel.text = errorMessage ?? "You've watched all available episodes"
+        headerSubtitleLabel.isHidden = hasNextEpisode && errorMessage == nil
         card.isHidden = !hasNextEpisode
         if let nextEpisode {
-            card.configure(episode: nextEpisode, serverURL: serverURL, authToken: authToken)
+            card.configure(episode: nextEpisode, serverURL: serverURL, authToken: authToken,
+                           thumbnailURL: thumbnailURL)
         }
         applyButtonState()
     }
@@ -354,7 +359,7 @@ final class NextEpisodeCardView: UIView {
         ])
     }
 
-    func configure(episode: PlexMetadata, serverURL: String, authToken: String) {
+    func configure(episode: PlexMetadata, serverURL: String, authToken: String, thumbnailURL: URL? = nil) {
         guard configuredRatingKey != episode.ratingKey else { return }
         configuredRatingKey = episode.ratingKey
         showLabel.text = episode.grandparentTitle
@@ -369,16 +374,16 @@ final class NextEpisodeCardView: UIView {
         } else {
             durationLabel.isHidden = true
         }
-        loadThumbnail(episode: episode, serverURL: serverURL, authToken: authToken)
+        loadThumbnail(episode: episode, serverURL: serverURL, authToken: authToken, url: thumbnailURL)
     }
 
-    private func loadThumbnail(episode: PlexMetadata, serverURL: String, authToken: String) {
+    private func loadThumbnail(episode: PlexMetadata, serverURL: String, authToken: String, url: URL?) {
         imageLoadTask?.cancel()
         thumbView.image = nil
-        guard let thumbPath = episode.thumb,
-              let url = PlexNetworkManager.shared.buildThumbnailURL(
-                serverURL: serverURL, authToken: authToken, thumbPath: thumbPath,
-                width: 560, height: 316) else { return }
+        guard let url = url ?? episode.thumb.flatMap({
+            PlexNetworkManager.shared.buildThumbnailURL(
+                serverURL: serverURL, authToken: authToken, thumbPath: $0, width: 560, height: 316)
+        }) else { return }
         imageLoadTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url)
             guard let self, !Task.isCancelled else { return }

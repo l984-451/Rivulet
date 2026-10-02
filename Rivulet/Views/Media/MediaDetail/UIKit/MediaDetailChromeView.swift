@@ -736,7 +736,11 @@ final class MediaDetailChromeView: UIView {
 
         actionButtonsStack.addArrangedSubview(play)
         actionButtonsStack.addArrangedSubview(watched)
-        actionButtonsStack.addArrangedSubview(watchlist)
+        // Jellyfin has no watchlist: its add throws, so the button would flip
+        // and snap back. Nil provider keeps today's behaviour.
+        if MediaProviderRegistry.shared.provider(for: item.ref.providerID)?.supportsWatchlist ?? true {
+            actionButtonsStack.addArrangedSubview(watchlist)
+        }
         actionButtonsStack.addArrangedSubview(info)
         playButton = play
     }

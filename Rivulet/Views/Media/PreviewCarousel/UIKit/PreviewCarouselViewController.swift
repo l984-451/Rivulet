@@ -1091,6 +1091,12 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     private func playMediaItem(_ item: MediaItem) {
+        // presentPlayer resolves a Plex ratingKey; any other item plays through
+        // its own provider.
+        if !item.ref.isPlex {
+            ProviderPlayer.play(item, fromBeginning: false, from: self, onDismiss: nil)
+            return
+        }
         let offsetSec = item.userState.viewOffset
         presentPlayer(ratingKey: item.ref.itemID, resumeOffset: offsetSec > 0 ? offsetSec : nil)
     }

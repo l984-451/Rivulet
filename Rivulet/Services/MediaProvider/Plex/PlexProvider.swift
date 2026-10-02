@@ -303,7 +303,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         return StreamInfo(source: chosen, playSessionID: nil, trackInfoAvailable: true)
     }
 
-    func progressReporter(for itemRef: MediaItemRef, playSessionID: String?) -> any ProgressReporter {
+    func progressReporter(for itemRef: MediaItemRef, sourceID: String?, playSessionID: String?) -> any ProgressReporter {
         PlexTimelineReporter(
             serverURL: serverURL,
             authToken: authToken,
@@ -494,6 +494,9 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         case .titleDesc: return "titleSort:desc"
         case .releaseDateDesc: return "originallyAvailableAt:desc"
         case .addedAtDesc: return "addedAt:desc"
+        case .addedAtAsc: return "addedAt:asc"
+        case .releaseDateAsc: return "originallyAvailableAt:asc"
+        case .lastContentAddedDesc: return "episode.addedAt:desc"
         case .ratingDesc: return "rating:desc"
         }
     }

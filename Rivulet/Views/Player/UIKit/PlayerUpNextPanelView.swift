@@ -39,13 +39,16 @@ final class UpNextListView: UIView {
     private var hasPinnedInitialFocus = false
     private weak var lastFocusedRow: UpNextRowButton?
 
+    /// `thumbnailURL` answers a row's image URL when the item carries its
+    /// own; nil (or a nil answer) builds the Plex thumbnail URL.
     init(episodes: [PlexMetadata], currentRatingKey: String?, seasonNumber: Int?,
-         serverURL: String, authToken: String, onSelect: @escaping (PlexMetadata) -> Void) {
+         serverURL: String, authToken: String, thumbnailURL: ((PlexMetadata) -> URL?)? = nil,
+         onSelect: @escaping (PlexMetadata) -> Void) {
         self.onSelect = onSelect
         super.init(frame: .zero)
         setupContent()
         buildRows(episodes: episodes, currentRatingKey: currentRatingKey, seasonNumber: seasonNumber,
-                   serverURL: serverURL, authToken: authToken)
+                   serverURL: serverURL, authToken: authToken, thumbnailURL: thumbnailURL)
     }
 
     required init?(coder: NSCoder) {
@@ -93,7 +96,7 @@ final class UpNextListView: UIView {
     }
 
     private func buildRows(episodes: [PlexMetadata], currentRatingKey: String?, seasonNumber: Int?,
-                            serverURL: String, authToken: String) {
+                            serverURL: String, authToken: String, thumbnailURL: ((PlexMetadata) -> URL?)?) {
         let headerText = seasonNumber.map { "UP NEXT · SEASON \($0)" } ?? "UP NEXT"
         headerLabel.attributedText = NSAttributedString(
             string: headerText,
@@ -106,7 +109,8 @@ final class UpNextListView: UIView {
 
         for episode in episodes {
             let state = UpNextRowState.state(for: episode, in: episodes, currentRatingKey: currentRatingKey)
-            let row = UpNextRowButton(episode: episode, state: state, serverURL: serverURL, authToken: authToken)
+            let row = UpNextRowButton(episode: episode, state: state, serverURL: serverURL, authToken: authToken,
+                                      thumbnailURL: thumbnailURL?(episode))
             row.onTap = { [weak self] in self?.onSelect(episode) }
             stack.addArrangedSubview(row)
             rows.append(row)
@@ -202,11 +206,12 @@ final class UpNextRowButton: UIControl {
     private static let focusedBorder = UIColor.white.withAlphaComponent(0.25).cgColor
     private static let accentColor = UIColor(red: 143/255, green: 233/255, blue: 212/255, alpha: 1)
 
-    init(episode: PlexMetadata, state: UpNextRowState, serverURL: String, authToken: String) {
+    init(episode: PlexMetadata, state: UpNextRowState, serverURL: String, authToken: String,
+         thumbnailURL: URL? = nil) {
         self.rowState = state
         super.init(frame: .zero)
         setupViews(episode: episode)
-        loadThumbnail(episode: episode, serverURL: serverURL, authToken: authToken)
+        loadThumbnail(episode: episode, serverURL: serverURL, authToken: authToken, url: thumbnailURL)
         applyRestAppearance()
     }
 
@@ -286,11 +291,11 @@ final class UpNextRowButton: UIControl {
         }
     }
 
-    private func loadThumbnail(episode: PlexMetadata, serverURL: String, authToken: String) {
-        guard let thumbPath = episode.thumb else { return }
-        guard let url = PlexNetworkManager.shared.buildThumbnailURL(
-            serverURL: serverURL, authToken: authToken, thumbPath: thumbPath, width: 300, height: 169
-        ) else { return }
+    private func loadThumbnail(episode: PlexMetadata, serverURL: String, authToken: String, url: URL?) {
+        guard let url = url ?? episode.thumb.flatMap({
+            PlexNetworkManager.shared.buildThumbnailURL(
+                serverURL: serverURL, authToken: authToken, thumbPath: $0, width: 300, height: 169)
+        }) else { return }
 
         imageLoadTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url)

@@ -55,6 +55,18 @@ class LibrarySettingsManager: ObservableObject {
     /// Current user ID for per-user settings (nil = default/no profile)
     private var currentUserId: Int?
 
+    /// The signed-in non-Plex servers whose libraries' settings are loaded.
+    /// Their keys are saved under the server and its own signed-in user, never
+    /// the Plex profile: a Jellyfin-only user has no profile, and switching
+    /// Plex profile must not change which Jellyfin libraries show.
+    private var providerScopes: [ProviderScope] = []
+
+    struct ProviderScope: Equatable {
+        let providerID: String
+        /// The provider's signed-in user, nil when it has none.
+        let accountID: String?
+    }
+
     /// UserDefaults key under which `PlexUserProfileManager` persists the
     /// last-selected Plex Home profile id (`selectedUserIdKey` there).
     /// Read-only mirror — keep in sync with that owner of the key.
@@ -101,21 +113,48 @@ class LibrarySettingsManager: ObservableObject {
         return baseKey
     }
 
+    /// Where one non-Plex server's own hidden or order list is saved.
+    private func providerKey(_ baseKey: String, _ scope: ProviderScope) -> String {
+        "\(baseKey)_provider_\(scope.providerID)" + (scope.accountID.map { "_\($0)" } ?? "")
+    }
+
+    /// The server a provider key belongs to (`MediaLibrary.settingsKey` is
+    /// "<providerID>/<library id>").
+    private static func providerID(ofKey key: String) -> String {
+        String(key.prefix { $0 != "/" })
+    }
+
+    /// The Plex profile's keys plus each loaded server's own.
+    private func storedKeys(_ baseKey: String) -> [String] {
+        let plex = (userDefaults.array(forKey: currentKey(baseKey)) as? [String] ?? [])
+            .filter { !Self.isProviderKey($0) }
+        let providers = providerScopes.flatMap {
+            userDefaults.array(forKey: providerKey(baseKey, $0)) as? [String] ?? []
+        }
+        return plex + providers
+    }
+
+    /// Splits `keys` back into the Plex profile's list and each server's.
+    private func save(_ keys: [String], baseKey: String) {
+        userDefaults.set(keys.filter { !Self.isProviderKey($0) }, forKey: currentKey(baseKey))
+        for scope in providerScopes {
+            userDefaults.set(keys.filter { Self.isProviderKey($0) && Self.providerID(ofKey: $0) == scope.providerID },
+                             forKey: providerKey(baseKey, scope))
+        }
+    }
+
+    /// Called by `MediaProviderRegistry` whenever sign-ins change: loads the
+    /// signed-in non-Plex servers' library settings in place of the last set.
+    func setProviderScopes(_ scopes: [ProviderScope]) {
+        guard scopes != providerScopes else { return }
+        providerScopes = scopes
+        loadSettingsForCurrentUser()
+    }
+
     /// Load settings for the current user from UserDefaults
     private func loadSettingsForCurrentUser() {
-        // Load hidden libraries
-        if let hidden = userDefaults.array(forKey: currentKey(hiddenLibrariesBaseKey)) as? [String] {
-            self.hiddenLibraryKeys = Set(hidden)
-        } else {
-            self.hiddenLibraryKeys = []
-        }
-
-        // Load library order
-        if let order = userDefaults.array(forKey: currentKey(libraryOrderBaseKey)) as? [String] {
-            self.libraryOrder = order
-        } else {
-            self.libraryOrder = []
-        }
+        self.hiddenLibraryKeys = Set(storedKeys(hiddenLibrariesBaseKey))
+        self.libraryOrder = storedKeys(libraryOrderBaseKey)
 
         pruneRetiredHomeVisibilityKeys()
 
@@ -277,10 +316,43 @@ class LibrarySettingsManager: ObservableObject {
         }
 
         // Remove any libraries from order that no longer exist
-        libraryOrder = libraryOrder.filter { currentKeys.contains($0) }
+        // Jellyfin keys are not this server's to prune: a Plex refresh would
+        // otherwise delete every Jellyfin library's place and visibility.
+        libraryOrder = libraryOrder.filter { currentKeys.contains($0) || Self.isProviderKey($0) }
 
         // Also clean up hidden keys for libraries that no longer exist
-        hiddenLibraryKeys = hiddenLibraryKeys.filter { currentKeys.contains($0) }
+        hiddenLibraryKeys = hiddenLibraryKeys.filter { currentKeys.contains($0) || Self.isProviderKey($0) }
+    }
+
+    /// A non-Plex library's key (`MediaLibrary.settingsKey`). Plex section
+    /// keys are bare numbers and never contain ":".
+    static func isProviderKey(_ key: String) -> Bool { key.contains(":") }
+
+    /// `filterAndSortLibraries` for a non-Plex server's libraries: hidden ones
+    /// dropped, ordered ones first in their saved order, the rest in server order.
+    func filterAndSort(_ libraries: [MediaLibrary]) -> [MediaLibrary] {
+        sort(libraries).filter { isLibraryVisible($0.settingsKey) }
+    }
+
+    /// Saved order first, the rest in server order; hidden ones keep their place.
+    func sort(_ libraries: [MediaLibrary]) -> [MediaLibrary] {
+        let rank = Dictionary(libraryOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return libraries.enumerated()
+            .sorted { (rank[$0.element.settingsKey] ?? .max, $0.offset) < (rank[$1.element.settingsKey] ?? .max, $1.offset) }
+            .map(\.element)
+    }
+
+    /// One step up or down within `keys` (one server's libraries in displayed
+    /// order). Rewrites `libraryOrder` as that run followed by every other
+    /// key, so nothing is dropped. A step off either end of the run does
+    /// nothing: the sidebar shows each server in its own section.
+    func moveLibrary(key: String, up: Bool, among keys: [String]) {
+        var run = keys
+        guard let i = run.firstIndex(of: key) else { return }
+        let j = up ? i - 1 : i + 1
+        guard run.indices.contains(j) else { return }
+        run.swapAt(i, j)
+        libraryOrder = run + libraryOrder.filter { !run.contains($0) }
     }
 
     /// Show every library in the sidebar, and so on Home too.
@@ -328,6 +400,9 @@ class LibrarySettingsManager: ObservableObject {
         case .titleDesc:       return "titleDesc"
         case .releaseDateDesc: return "releaseDateDesc"
         case .addedAtDesc:     return "addedAtDesc"
+        case .addedAtAsc:      return "addedAtAsc"
+        case .releaseDateAsc:  return "releaseDateAsc"
+        case .lastContentAddedDesc: return "lastContentAddedDesc"
         case .ratingDesc:      return "ratingDesc"
         }
     }
@@ -338,6 +413,9 @@ class LibrarySettingsManager: ObservableObject {
         case "titleDesc":       return .titleDesc
         case "releaseDateDesc": return .releaseDateDesc
         case "addedAtDesc":     return .addedAtDesc
+        case "addedAtAsc":      return .addedAtAsc
+        case "releaseDateAsc":  return .releaseDateAsc
+        case "lastContentAddedDesc": return .lastContentAddedDesc
         case "ratingDesc":      return .ratingDesc
         default:                return nil
         }
@@ -357,11 +435,11 @@ class LibrarySettingsManager: ObservableObject {
     // MARK: - Private Methods
 
     private func saveHiddenLibraries() {
-        userDefaults.set(Array(hiddenLibraryKeys), forKey: currentKey(hiddenLibrariesBaseKey))
+        save(Array(hiddenLibraryKeys), baseKey: hiddenLibrariesBaseKey)
     }
 
     private func saveLibraryOrder() {
-        userDefaults.set(libraryOrder, forKey: currentKey(libraryOrderBaseKey))
+        save(libraryOrder, baseKey: libraryOrderBaseKey)
     }
 
     /// Drop what pre-#295 builds wrote for the retired shown-on-Home set, so a
@@ -379,4 +457,11 @@ class LibrarySettingsManager: ObservableObject {
             userDefaults.set(data, forKey: currentKey(sortOptionsBaseKey))
         }
     }
+}
+
+extension MediaLibrary {
+    /// Key in `LibrarySettingsManager`'s hidden and order lists and its
+    /// per-library sort. Carries the provider, so it never equals a Plex
+    /// section key and survives a Plex refresh (`isProviderKey`).
+    var settingsKey: String { "\(providerID)/\(id)" }
 }

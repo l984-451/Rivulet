@@ -1606,7 +1606,7 @@ class PlexDataStore: ObservableObject {
     ) -> CachedHomeHub {
         let serverURL = authManager.selectedServerURL ?? ""
         let token = authManager.selectedServerToken ?? ""
-        let providerID = MediaProviderRegistry.shared.primaryProvider?.id ?? "plex:\(serverURL)"
+        let providerID = MediaProviderRegistry.shared.plexProvider?.id ?? "plex:\(serverURL)"
         var seen = Set<String>()
         let items: [MediaItem] = metas.compactMap { meta in
             let item = PlexMediaMapper.item(meta, providerID: providerID, serverURL: serverURL, authToken: token)

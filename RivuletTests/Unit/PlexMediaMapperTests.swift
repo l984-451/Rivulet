@@ -134,6 +134,38 @@ final class PlexMediaMapperTests: XCTestCase {
         XCTAssertEqual(item.seasonNumber, 1)
     }
 
+    func test_item_seriesTitle_episodeFromGrandparent_seasonFromParent() {
+        var ep = PlexMetadata()
+        ep.ratingKey = "9001"
+        ep.type = "episode"
+        ep.grandparentTitle = "Abbott Elementary"
+        ep.parentTitle = "Season 1"
+        var season = PlexMetadata()
+        season.ratingKey = "500"
+        season.type = "season"
+        season.parentTitle = "Abbott Elementary"
+        var movie = PlexMetadata()
+        movie.ratingKey = "1"
+        movie.type = "movie"
+        movie.parentTitle = "ignored"
+        func map(_ m: PlexMetadata) -> MediaItem {
+            PlexMediaMapper.item(m, providerID: "plex:abc", serverURL: "https://x", authToken: "T")
+        }
+        XCTAssertEqual(map(ep).seriesTitle, "Abbott Elementary")
+        XCTAssertEqual(map(season).seriesTitle, "Abbott Elementary")
+        XCTAssertNil(map(movie).seriesTitle)
+    }
+
+    func test_detail_guids_becomeExternalIDs() {
+        var meta = PlexMetadata()
+        meta.ratingKey = "1"
+        meta.type = "movie"
+        meta.Guid = [PlexGuid(id: "tmdb://603"), PlexGuid(id: "imdb://tt0133093"),
+                     PlexGuid(id: "tvdb://169"), PlexGuid(id: "plex://movie/abc")]
+        let detail = PlexMediaMapper.detail(meta, providerID: "plex:abc", serverURL: "https://x", authToken: "T")
+        XCTAssertEqual(detail.externalIDs, ["tmdb": "603", "imdb": "tt0133093", "tvdb": "169"])
+    }
+
     func test_item_season_pullsSeasonNumberFromIndex() {
         // Regression: seasonNumber was read from parentIndex for every kind,
         // which made every season pill render "Season 1" because Plex stores

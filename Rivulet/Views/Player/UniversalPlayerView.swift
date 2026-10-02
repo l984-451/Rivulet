@@ -639,7 +639,6 @@ struct UniversalPlayerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var hasStartedPlayback = false
-    @State private var lastReportedTime: TimeInterval = 0
 
     /// Caption appearance for the Aether subtitle overlay. Refreshed on
     /// CaptionAppearance.changedNotification so restyles apply live.
@@ -785,7 +784,7 @@ struct UniversalPlayerView: View {
             // (audio session must remain active until player stops)
             viewModel.stopPlayback()
             NowPlayingService.shared.detach()
-            reportFinalProgressAndRefresh()
+            Task { await viewModel.reportFinalProgress() }
             remoteInput.stopMonitoring()
             remoteInput.reset()
             inputCoordinator.invalidate()
@@ -793,11 +792,11 @@ struct UniversalPlayerView: View {
         }
         .onChange(of: viewModel.currentTime) { _, newTime in
             // Report progress periodically
-            reportProgress(time: newTime)
+            viewModel.reportPlaybackProgress(time: newTime, force: false)
         }
-        .onChange(of: viewModel.playbackState) { oldState, newState in
-            // Immediately report state changes to Plex
-            reportStateChange(from: oldState, to: newState)
+        .onChange(of: viewModel.playbackState) { _, newState in
+            // Immediately report state changes to the item's server
+            viewModel.reportPlaybackState(newState)
         }
         // System appearance
     }
@@ -1092,80 +1091,6 @@ struct UniversalPlayerView: View {
             case .unsupportedCodec: return "Format Not Supported"
             default: return "Playback Error"
             }
-        }
-    }
-
-    // MARK: - Progress Reporting
-
-    private let reportingInterval: TimeInterval = 10
-
-    private func reportProgress(time: TimeInterval) {
-        // Report every 10 seconds
-        guard abs(time - lastReportedTime) >= reportingInterval else { return }
-        lastReportedTime = time
-
-        Task {
-            await PlexProgressReporter.shared.reportProgress(
-                ratingKey: viewModel.metadata.ratingKey ?? "",
-                time: time,
-                duration: viewModel.duration,
-                state: viewModel.isPlaying ? "playing" : "paused"
-            )
-        }
-    }
-
-    private func reportFinalProgressAndRefresh() {
-        Task {
-            // 1. Report stopped state to Plex
-            await PlexProgressReporter.shared.reportProgress(
-                ratingKey: viewModel.metadata.ratingKey ?? "",
-                time: viewModel.currentTime,
-                duration: viewModel.duration,
-                state: "stopped",
-                forceReport: true
-            )
-
-            // 2. Mark as watched if > 90% complete
-            if viewModel.duration > 0 && viewModel.currentTime / viewModel.duration > 0.9 {
-                await PlexProgressReporter.shared.markAsWatched(
-                    ratingKey: viewModel.metadata.ratingKey ?? ""
-                )
-            }
-
-            // 3. Wait for Plex server to process (2 seconds)
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-            // 4. Trigger refresh after progress is confirmed
-            await MainActor.run {
-                NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
-            }
-        }
-    }
-
-    private func reportStateChange(from oldState: UniversalPlaybackState, to newState: UniversalPlaybackState) {
-        // Only report significant state changes
-        let plexState: String?
-        switch newState {
-        case .playing:
-            plexState = "playing"
-        case .paused:
-            plexState = "paused"
-        case .ended:
-            plexState = "stopped"
-        default:
-            plexState = nil
-        }
-
-        guard let state = plexState else { return }
-
-        Task {
-            await PlexProgressReporter.shared.reportProgress(
-                ratingKey: viewModel.metadata.ratingKey ?? "",
-                time: viewModel.currentTime,
-                duration: viewModel.duration,
-                state: state,
-                forceReport: true
-            )
         }
     }
 }

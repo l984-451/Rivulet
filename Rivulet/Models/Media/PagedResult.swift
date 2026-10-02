@@ -25,6 +25,10 @@ enum SortOption: Sendable, Hashable, Codable {
     case titleAsc
     case titleDesc
     case releaseDateDesc
+    case releaseDateAsc
     case addedAtDesc
+    case addedAtAsc
     case ratingDesc
+    /// TV libraries: shows by their newest episode.
+    case lastContentAddedDesc
 }

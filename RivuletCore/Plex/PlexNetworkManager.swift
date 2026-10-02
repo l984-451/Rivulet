@@ -815,16 +815,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         userId: Int? = nil,
         count: Int = 50
     ) async throws -> PlexHub? {
-        guard var components = URLComponents(string: "\(serverURL)/hubs/continueWatching") else {
-            throw PlexAPIError.invalidURL
-        }
-
-        components.queryItems = [
-            URLQueryItem(name: "X-Plex-Container-Start", value: "0"),
-            URLQueryItem(name: "X-Plex-Container-Size", value: "\(count)")
-        ]
-
-        guard let url = components.url else {
+        guard let url = Self.continueWatchingURL(serverURL: serverURL, count: count) else {
             throw PlexAPIError.invalidURL
         }
 
@@ -834,6 +825,23 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         )
 
         return container.MediaContainer.Hub?.first
+    }
+
+    /// The Continue Watching URL, unique per call. PMS 1.43.4 caches this
+    /// response per URL and `Accept-Language`, and a removal does not clear
+    /// it: with tvOS's `en-US,en;q=0.9` the server kept answering with an item
+    /// removed two hours earlier, while the same request without the header,
+    /// or with any extra query item, came back current. The 30s poll may be
+    /// what keeps the entry alive. The `_` item makes every request miss that
+    /// cache; PMS ignores it.
+    static func continueWatchingURL(serverURL: String, count: Int, now: Date = Date()) -> URL? {
+        guard var components = URLComponents(string: "\(serverURL)/hubs/continueWatching") else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "X-Plex-Container-Start", value: "0"),
+            URLQueryItem(name: "X-Plex-Container-Size", value: "\(count)"),
+            URLQueryItem(name: "_", value: String(Int(now.timeIntervalSince1970 * 1000)))
+        ]
+        return components.url
     }
 
     /// Get recently added items

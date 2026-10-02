@@ -90,6 +90,7 @@ struct ContentView: View {
             MediaProviderRegistry.shared.populateFromCurrentAuth()
             MusicProviderRegistry.shared.populateFromCurrentAuth()
             MusicQueue.shared.configure(registry: MusicProviderRegistry.shared)
+            JellyfinDataStore.shared.reload()
             StartupTimer.mark("registries bootstrapped")
 
             splashLog.info("Splash task started — hasCredentials=\(self.authManager.hasCredentials)")
@@ -125,6 +126,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await dataStore.refreshLibraries() }
+                JellyfinDataStore.shared.reload()
             }
         }
     }

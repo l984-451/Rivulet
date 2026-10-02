@@ -70,6 +70,7 @@ struct RivuletApp: App {
         // sign-out leaves the previous server's hubs on screen.
         PlexAuthManager.onAuthenticated = { await PlexDataStore.shared.loadLibrariesIfNeeded() }
         PlexAuthManager.onSignedOut = { PlexDataStore.shared.reset() }
+        JellyfinSession.onChanged = { JellyfinDataStore.shared.reload() }
         PlexUserProfileManager.onProfileChanged = { await PlexDataStore.shared.onProfileSwitched() }
         PlexUserProfileManager.onInitialProfileSelected = { LibrarySettingsManager.shared.onProfileSwitched() }
 

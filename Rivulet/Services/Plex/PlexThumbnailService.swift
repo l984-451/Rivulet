@@ -116,6 +116,13 @@ final class PlexThumbnailService {
         }
     }
 
+    /// True once loading this part's BIF has failed: a 404, but also any other
+    /// error response or a network failure. Survives `clearCache`, like the
+    /// set it reads, so the part decodes stills from the file from then on.
+    func isUnavailable(partId: Int) -> Bool {
+        unavailableParts.contains(partId)
+    }
+
     /// Preload BIF data for a part
     func preloadBIF(partId: Int, serverURL: String, authToken: String) {
         guard bifCache[partId] == nil,

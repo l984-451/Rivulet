@@ -21,6 +21,9 @@ enum SidebarTab: Hashable {
     case discover
     case watchlist
     case library(key: String)
+    /// A library on a non-Plex server. Ids, not the library value, so a
+    /// renamed library keeps its tab (and its cached page) across reloads.
+    case providerLibrary(providerID: String, libraryID: String)
     case liveTV(sourceId: String?)
     case settings
 }

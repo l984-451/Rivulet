@@ -135,9 +135,16 @@ final class HeroOverlayView: UIView {
         // Clamp index against new items.
         self.currentIndex = max(0, min(initialIndex, max(0, items.count - 1)))
         self.displayedIndex = currentIndex
+        // Back from the MediaItem path (Home after Jellyfin signs out): this
+        // same cell was showing the MediaItem overlay over hidden Plex views.
+        let switchingRows = buttonRow.isHidden
+        slideView.isHidden = false
+        buttonRow.isHidden = false
+        mediaItemOverlay?.isHidden = true
         renderSlide(animated: false)
         updateButtonStateForCurrentItem()
         renderPagingDots()
+        if switchingRows { moveFocusToVisibleRow() }
     }
 
     // MARK: - Scroll parallax
@@ -164,10 +171,20 @@ final class HeroOverlayView: UIView {
 
     override var canBecomeFocused: Bool { false }
 
-    /// Forward focus into the button row so the focus engine can find
-    /// `play` as the default landing target.
+    /// Forward focus into the visible button row so the focus engine can
+    /// find `play` as the default landing target.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let mediaItemOverlay, !mediaItemOverlay.isHidden { return [mediaItemOverlay] }
         return [buttonRow]
+    }
+
+    /// The cell flips between the Plex and MediaItem overlays when Home's hero
+    /// source changes (a second server's rows arrive). Hiding a row does not
+    /// move focus off its Play, which then takes no presses and draws as
+    /// unfocused, so re-ask while focus is still inside. No forced update:
+    /// this runs inside a cell configure, mid snapshot apply.
+    private func moveFocusToVisibleRow() {
+        setNeedsFocusUpdate()
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext,
@@ -401,7 +418,8 @@ final class HeroOverlayView: UIView {
         onIndexChanged: @escaping (Int, MediaItem) -> Void,
         onPlay: @escaping (MediaItem) -> Void,
         onInfo: @escaping (MediaItem) -> Void,
-        onToggleWatchlist: ((MediaItem) -> Void)? = nil
+        onToggleWatchlist: ((MediaItem) -> Void)? = nil,
+        badge: ((MediaItem) -> String?)? = nil
     ) {
         if mediaItemOverlay == nil {
             let v = MediaItemHeroOverlayView()
@@ -417,11 +435,14 @@ final class HeroOverlayView: UIView {
         }
 
         // Hide the PlexMetadata subviews so they don't overlap.
+        let switchingRows = !buttonRow.isHidden
         slideView.isHidden = true
         buttonRow.isHidden = true
         pagingDotsBackground.isHidden = true
 
+        mediaItemOverlay?.isHidden = false
         mediaItemOverlay?.onToggleWatchlist = onToggleWatchlist
+        mediaItemOverlay?.badge = badge
         mediaItemOverlay?.configure(
             items: mediaItems,
             initialIndex: initialIndex,
@@ -429,12 +450,14 @@ final class HeroOverlayView: UIView {
             onPlay: onPlay,
             onInfo: onInfo
         )
+        if switchingRows { moveFocusToVisibleRow() }
     }
 
     /// Forward per-item primary-action state to the MediaItem overlay
     /// (no-op in PlexMetadata mode).
-    func setMediaItemPrimaryAction(matchedInLibrary: Bool, isOnWatchlist: Bool) {
-        mediaItemOverlay?.setPrimaryAction(matchedInLibrary: matchedInLibrary, isOnWatchlist: isOnWatchlist)
+    func setMediaItemPrimaryAction(matchedInLibrary: Bool, isOnWatchlist: Bool, canWatchlist: Bool = true) {
+        mediaItemOverlay?.setPrimaryAction(matchedInLibrary: matchedInLibrary, isOnWatchlist: isOnWatchlist,
+                                           canWatchlist: canWatchlist)
     }
 
     private var mediaItemOverlay: MediaItemHeroOverlayView?
@@ -473,7 +496,12 @@ final class MediaItemHeroOverlayView: UIView {
     var onIndexChanged: ((Int, MediaItem) -> Void)?
     var onPlay: ((MediaItem) -> Void)?
     var onInfo: ((MediaItem) -> Void)?
-    var onToggleWatchlist: ((MediaItem) -> Void)?
+    /// nil hides the watchlist circle: only Discover has a watchlist to
+    /// toggle from the hero.
+    var onToggleWatchlist: ((MediaItem) -> Void)? {
+        didSet { syncWatchlistCircle() }
+    }
+    var badge: ((MediaItem) -> String?)?
 
     // MARK: - Subviews (layout mirrors HeroOverlayView)
 
@@ -591,10 +619,23 @@ final class MediaItemHeroOverlayView: UIView {
     /// Per-item primary action (Discover): library-matched items get the
     /// Play pill; metadata-only items get the Watchlist pill (which also
     /// hides the redundant watchlist circle). `isOnWatchlist` drives both
-    /// the pill's title/icon and the circle's icon.
-    func setPrimaryAction(matchedInLibrary: Bool, isOnWatchlist: Bool) {
+    /// the pill's title/icon and the circle's icon. `canWatchlist` is false
+    /// for a slide whose server keeps no watchlist (Jellyfin on a mixed Home).
+    func setPrimaryAction(matchedInLibrary: Bool, isOnWatchlist: Bool, canWatchlist: Bool = true) {
         buttonRow.primaryAction = matchedInLibrary ? .play : .watchlist
         buttonRow.isOnWatchlist = isOnWatchlist
+        self.canWatchlist = canWatchlist
+        syncWatchlistCircle()
+    }
+
+    private var canWatchlist = true
+
+    /// Nothing to toggle hides the circle; otherwise it follows the pill as
+    /// `HeroButtonRowView.renderPrimaryAction` does (the `.watchlist` pill
+    /// makes it redundant), so Discover is unchanged.
+    private func syncWatchlistCircle() {
+        buttonRow.watchlistButton.isHidden = onToggleWatchlist == nil || !canWatchlist
+            || buttonRow.primaryAction == .watchlist
     }
 
     // MARK: - Rendering
@@ -615,7 +656,7 @@ final class MediaItemHeroOverlayView: UIView {
             onReady?()
             return
         }
-        slideView.configure(item: item, onReady: onReady)
+        slideView.configure(item: item, badge: badge?(item), onReady: onReady)
     }
 
     private func renderPagingDots() {
@@ -692,6 +733,7 @@ private final class MediaItemSlideView: UIView {
     private let fallbackTitleLabel = UILabel()
     private let metadataLabel = UILabel()
     private let ratingBadge = HeroRatingBadgeView()
+    private let sourceBadge = SourceBadgeView(style: .inline)
     private let metadataRow = UIStackView()
     private let taglineLabel = UILabel()
     private let stack = UIStackView()
@@ -732,6 +774,7 @@ private final class MediaItemSlideView: UIView {
         metadataRow.axis = .horizontal
         metadataRow.spacing = 12
         metadataRow.alignment = .center
+        metadataRow.addArrangedSubview(sourceBadge)
         metadataRow.addArrangedSubview(metadataLabel)
         metadataRow.addArrangedSubview(ratingBadge)
         ratingBadge.isHidden = true
@@ -764,7 +807,8 @@ private final class MediaItemSlideView: UIView {
         ])
     }
 
-    func configure(item: MediaItem?, onReady: (() -> Void)? = nil) {
+    func configure(item: MediaItem?, badge: String? = nil, onReady: (() -> Void)? = nil) {
+        sourceBadge.text = badge
         guard let item else {
             logoImageView.image = nil
             logoImageView.isHidden = true
@@ -871,19 +915,19 @@ private final class MediaItemSlideView: UIView {
 
     // MARK: - Helpers
 
+    /// Same labels as the Plex hero (`HeroSlideView`): a season or episode
+    /// slide is the show's, so it reads "TV Show", without the episode's year.
     private func metaLine(for item: MediaItem) -> String? {
         var parts: [String] = []
         if let kindLabel = typeLabel(for: item.kind) { parts.append(kindLabel) }
-        if let year = item.year { parts.append(String(year)) }
+        if item.kind != .season, item.kind != .episode, let year = item.year { parts.append(String(year)) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func typeLabel(for kind: MediaKind) -> String? {
         switch kind {
         case .movie: return "Movie"
-        case .show: return "TV Show"
-        case .season: return "Season"
-        case .episode: return "Episode"
+        case .show, .season, .episode: return "TV Show"
         default: return nil
         }
     }

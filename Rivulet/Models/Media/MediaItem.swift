@@ -35,6 +35,9 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     // Hierarchy
     let parentRef: MediaItemRef?         // season → show, episode → season
     let grandparentRef: MediaItemRef?    // episode → show
+    /// Show title for episodes and seasons. Optional so stored items
+    /// (Recently Searched) encoded before it existed still decode.
+    let seriesTitle: String?
     let episodeNumber: Int?              // episodes only — Plex `index`
     let seasonNumber: Int?               // episodes/seasons only — Plex `parentIndex`
     let childProgress: ChildProgress?    // shows/seasons only — for "12/24 watched"
@@ -59,6 +62,7 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         isMusic: Bool? = false,
         parentRef: MediaItemRef?,
         grandparentRef: MediaItemRef?,
+        seriesTitle: String? = nil,
         episodeNumber: Int?,
         seasonNumber: Int?,
         childProgress: ChildProgress?,
@@ -79,6 +83,7 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.isMusic = isMusic
         self.parentRef = parentRef
         self.grandparentRef = grandparentRef
+        self.seriesTitle = seriesTitle
         self.episodeNumber = episodeNumber
         self.seasonNumber = seasonNumber
         self.childProgress = childProgress
@@ -135,6 +140,7 @@ extension MediaItem {
             isMusic: isMusic,
             parentRef: parentRef,
             grandparentRef: grandparentRef,
+            seriesTitle: seriesTitle,
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
             childProgress: childProgress,

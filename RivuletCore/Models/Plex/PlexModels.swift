@@ -320,7 +320,7 @@ nonisolated struct PlexMedia: Codable, Sendable {
 
 nonisolated struct PlexPart: Codable, Sendable {
     let id: Int
-    let key: String
+    let key: String?            // nil only on provider display shims, never from Plex
     let duration: Int?
     let file: String?
     let size: Int?

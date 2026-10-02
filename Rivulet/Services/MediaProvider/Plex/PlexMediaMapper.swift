@@ -288,6 +288,8 @@ enum PlexMediaMapper {
             isMusic: isMusic,
             parentRef: parentRef,
             grandparentRef: grandparentRef,
+            seriesTitle: mediaKind == .episode ? meta.grandparentTitle
+                : (mediaKind == .season ? meta.parentTitle : nil),
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
             childProgress: childProgress,
@@ -452,8 +454,21 @@ enum PlexMediaMapper {
             nextEpisode: nextEpisode,
             collections: collections,
             extras: extras,
-            contentAdvisory: meta.CommonSenseMedia?.first.map(Self.contentAdvisory(from:))
+            contentAdvisory: meta.CommonSenseMedia?.first.map(Self.contentAdvisory(from:)),
+            externalIDs: externalIDs(meta.Guid)
         )
+    }
+
+    /// `Guid` ids ("tmdb://603", "imdb://tt0133093", "tvdb://169") keyed
+    /// lowercase, parsed by PlexMetadata's guid helpers. First match wins.
+    static func externalIDs(_ guids: [PlexGuid]?) -> [String: String] {
+        var out: [String: String] = [:]
+        for raw in (guids ?? []).compactMap(\.id) {
+            if out["tmdb"] == nil, let id = PlexMetadata.extractTmdbId(from: raw) { out["tmdb"] = String(id) }
+            if out["tvdb"] == nil, let id = PlexMetadata.extractTvdbId(from: raw) { out["tvdb"] = String(id) }
+            if out["imdb"] == nil, let id = PlexMetadata.extractImdbId(from: raw) { out["imdb"] = id }
+        }
+        return out
     }
 
     // MARK: - Hub

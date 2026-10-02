@@ -148,8 +148,7 @@ final class NowPlayingService: ObservableObject {
         // tvOS only registers apps as "Now Playing" if info is set before play() is called
         setPreliminaryNowPlayingInfo(
             metadata: viewModel.metadata,
-            serverURL: viewModel.serverURL,
-            authToken: viewModel.authToken
+            artworkURL: viewModel.nowPlayingArtworkURL
         )
 
         // Track whether we've updated with actual duration from player
@@ -182,8 +181,7 @@ final class NowPlayingService: ObservableObject {
                             currentTime: viewModel.currentTime,
                             duration: viewModel.duration,
                             isPlaying: true,
-                            serverURL: viewModel.serverURL,
-                            authToken: viewModel.authToken
+                            artworkURL: viewModel.nowPlayingArtworkURL
                         )
                         self.hasValidNowPlayingInfo = true
                     }
@@ -228,8 +226,7 @@ final class NowPlayingService: ObservableObject {
                         currentTime: viewModel.currentTime,
                         duration: duration,
                         isPlaying: true,
-                        serverURL: viewModel.serverURL,
-                        authToken: viewModel.authToken
+                        artworkURL: viewModel.nowPlayingArtworkURL
                     )
                     self.hasValidNowPlayingInfo = true
                 } else {
@@ -470,8 +467,7 @@ final class NowPlayingService: ObservableObject {
         currentTime: TimeInterval,
         duration: TimeInterval,
         isPlaying: Bool,
-        serverURL: String,
-        authToken: String
+        artworkURL: URL?
     ) {
         var nowPlayingInfo = [String: Any]()
 
@@ -505,7 +501,7 @@ final class NowPlayingService: ObservableObject {
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
         // Load artwork asynchronously
-        loadArtwork(for: metadata, serverURL: serverURL, authToken: authToken)
+        loadArtwork(from: artworkURL)
 
     }
 
@@ -532,8 +528,7 @@ final class NowPlayingService: ObservableObject {
     /// Uses estimated duration from Plex metadata; will be updated when actual duration is available.
     private func setPreliminaryNowPlayingInfo(
         metadata: PlexMetadata,
-        serverURL: String,
-        authToken: String
+        artworkURL: URL?
     ) {
         var nowPlayingInfo = [String: Any]()
 
@@ -569,7 +564,7 @@ final class NowPlayingService: ObservableObject {
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
         // Load artwork asynchronously
-        loadArtwork(for: metadata, serverURL: serverURL, authToken: authToken)
+        loadArtwork(from: artworkURL)
     }
 
     /// Update playback rate in Now Playing info AND set explicit playback state.
@@ -598,20 +593,13 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: - Artwork Loading
 
-    private func loadArtwork(for metadata: PlexMetadata, serverURL: String, authToken: String) {
-        // Determine artwork URL based on content type
-        // For episodes: prefer season poster (parentThumb), fall back to show poster (grandparentThumb)
-        // For movies/other: use the item's own thumb or art
-        let artworkPath: String?
-        if metadata.type == "episode" {
-            artworkPath = metadata.parentThumb ?? metadata.grandparentThumb ?? metadata.thumb
-        } else {
-            artworkPath = metadata.thumb ?? metadata.art
-        }
-        guard let artworkPath else { return }
+    /// The URL is the view model's `nowPlayingArtworkURL`: an episode's season
+    /// or show poster, else the item's own art.
+    private func loadArtwork(from url: URL?) {
+        guard let url else { return }
 
         // Check if we already have this artwork cached
-        let fullURL = "\(serverURL)\(artworkPath)?X-Plex-Token=\(authToken)"
+        let fullURL = url.absoluteString
         if fullURL == cachedArtworkURL, let cachedArtwork {
             withNowPlayingInfoOnAllCenters { nowPlayingInfo in
                 nowPlayingInfo[MPMediaItemPropertyArtwork] = cachedArtwork
@@ -623,8 +611,6 @@ final class NowPlayingService: ObservableObject {
         artworkTask?.cancel()
 
         artworkTask = Task {
-            guard let url = URL(string: fullURL) else { return }
-
             do {
                 let (data, _) = try await URLSession.shared.data(from: url)
 

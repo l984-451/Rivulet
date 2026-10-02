@@ -1397,7 +1397,7 @@ class PlayerContainerViewController: UIViewController {
         // The page's live parts: the countdown ring and the Play Next / Play
         // Now title both key off the countdown.
         vm.$countdownSeconds
-            .combineLatest(vm.$isCountdownPaused, vm.$nextEpisode)
+            .combineLatest(vm.$isCountdownPaused, vm.$nextEpisode, vm.$nextEpisodeError)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshPostVideoContent() }
             .store(in: &cancellables)
@@ -1537,6 +1537,7 @@ class PlayerContainerViewController: UIViewController {
                 content: UpNextListView(
                     episodes: self.upNextEpisodesCache, currentRatingKey: vm.metadata.ratingKey,
                     seasonNumber: vm.metadata.parentIndex, serverURL: vm.serverURL, authToken: vm.authToken,
+                    thumbnailURL: { [weak vm] in vm?.providerThumbnailURL(for: $0) },
                     onSelect: { [weak self, weak vm] episode in
                         vm?.exitControlsFocus()
                         Task { await vm?.playEpisode(episode) }
@@ -1768,7 +1769,9 @@ class PlayerContainerViewController: UIViewController {
             nextEpisode: vm.nextEpisode,
             serverURL: vm.serverURL,
             authToken: vm.authToken,
-            backdrop: vm.loadingArtImage ?? vm.loadingThumbImage
+            backdrop: vm.loadingArtImage ?? vm.loadingThumbImage,
+            thumbnailURL: vm.nextEpisode.flatMap(vm.providerThumbnailURL(for:)),
+            errorMessage: vm.nextEpisodeError
         )
         overlay.setCountdown(
             remaining: vm.countdownSeconds,

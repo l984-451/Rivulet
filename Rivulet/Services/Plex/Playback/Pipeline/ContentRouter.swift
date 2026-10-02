@@ -252,7 +252,8 @@ struct ContentRouter {
     /// Build the direct Plex URL for raw file access.
     private static func buildDirectPlayURL(context: ContentRoutingContext) -> (url: URL, headers: [String: String])? {
         guard let media = context.metadata.Media?.first,
-              let part = media.Part?.first else {
+              let part = media.Part?.first,
+              let partKey = part.key else {
             return nil
         }
 
@@ -267,7 +268,7 @@ struct ContentRouter {
         // it 404s, the demuxer probes the error page, and startup fails with
         // AVERROR_INVALIDDATA. Split the key and merge its parameters with the
         // token instead. Keys with no query string are unaffected.
-        let (path, inheritedItems) = Self.splitPartKey(part.key)
+        let (path, inheritedItems) = Self.splitPartKey(partKey)
         components.path = path
 
         var queryItems = inheritedItems

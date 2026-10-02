@@ -12,7 +12,7 @@ import Foundation
 
 enum MediaProviderKind: String, Sendable, Hashable, Codable {
     case plex
-    // .jellyfin added in Wave 2
+    case jellyfin
 }
 
 enum ConnectionState: Sendable, Hashable {
@@ -28,4 +28,14 @@ enum MediaProviderError: Error, Sendable {
     case transcodeRequired
     case notPlayable
     case backendSpecific(underlying: String)
+}
+
+extension MediaProviderKind {
+    /// The server type as a source badge shows it.
+    var displayName: String {
+        switch self {
+        case .plex: "Plex"
+        case .jellyfin: "Jellyfin"
+        }
+    }
 }

@@ -39,7 +39,9 @@ enum ShellSidebarModel {
         showWatchlist: Bool,
         liveTVAbove: Bool,
         serverName: String?,
-        profileName: String
+        profileName: String,
+        jellyfinServerName: String? = nil,
+        jellyfinLibraries: [MediaLibrary] = []
     ) -> [ShellSidebarSection] {
         var sections: [ShellSidebarSection] = []
 
@@ -70,8 +72,17 @@ enum ShellSidebarModel {
             title: "Live TV",
             items: liveTVItems(sources: liveTVSources, combined: combineLiveTV))
 
-        let middle = liveTVAbove ? [liveTVSection, librarySection]
-                                 : [librarySection, liveTVSection]
+        // Each server's libraries in their own section under that server's
+        // name, never merged. Plex first.
+        let jellyfinSection = ShellSidebarSection(
+            title: jellyfinServerName ?? "Jellyfin",
+            items: jellyfinLibraries.map {
+                ShellSidebarItem(tab: .providerLibrary(providerID: $0.providerID, libraryID: $0.id),
+                                 title: $0.title,
+                                 icon: icon(forLibraryKind: $0.kind))
+            })
+        let middle = liveTVAbove ? [liveTVSection, librarySection, jellyfinSection]
+                                 : [librarySection, jellyfinSection, liveTVSection]
         sections.append(contentsOf: middle.filter { !$0.items.isEmpty })
 
         if showDiscover && !discoverAbove {
@@ -90,6 +101,16 @@ enum ShellSidebarModel {
         case "artist": return "music.note"
         case "photo": return "photo.fill"
         default: return "folder.fill"
+        }
+    }
+
+    static func icon(forLibraryKind kind: MediaLibrary.LibraryKind) -> String {
+        switch kind {
+        case .movies: return "film.fill"
+        case .shows: return "tv.fill"
+        case .music: return "music.note"
+        case .photos: return "photo.fill"
+        case .mixed, .liveTV: return "folder.fill"
         }
     }
 

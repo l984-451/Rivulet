@@ -8,7 +8,8 @@
 //  The canonical Yes/No confirmation popup. Shares the exact card chrome of
 //  `InfoPopupViewController` (centered frosted Liquid-Glass card, corner 38,
 //  dim 0.4 backdrop) with two focusable pill buttons at the bottom. Use this
-//  for every confirm/cancel prompt so popups stay consistent app-wide.
+//  for every confirm/cancel prompt so popups stay consistent app-wide. With
+//  `cancelTitle: nil` it is a notice: one button (an error, say).
 //
 //  tvOS focus: each button is the focus target and owns Select via a press-typed
 //  tap recognizer (a bare control's primaryAction doesn't fire on Select). Menu
@@ -23,7 +24,7 @@ final class ConfirmationPopupViewController: UIViewController {
     private let titleText: String
     private let message: String
     private let confirmTitle: String
-    private let cancelTitle: String
+    private let cancelTitle: String?
     private let destructive: Bool
     private let cardWidth: CGFloat
     private let onConfirm: () -> Void
@@ -31,12 +32,12 @@ final class ConfirmationPopupViewController: UIViewController {
 
     private let card = UIView()
     private var confirmButton: PillButton!
-    private var cancelButton: PillButton!
+    private var cancelButton: PillButton?
 
     init(title: String,
          message: String,
          confirmTitle: String,
-         cancelTitle: String = "Cancel",
+         cancelTitle: String? = "Cancel",
          destructive: Bool = false,
          width: CGFloat = 840,
          onConfirm: @escaping () -> Void,
@@ -84,11 +85,11 @@ final class ConfirmationPopupViewController: UIViewController {
         confirmButton = PillButton(title: confirmTitle, destructive: destructive) { [weak self] in
             self?.dismiss(animated: true) { self?.onConfirm() }
         }
-        cancelButton = PillButton(title: cancelTitle, destructive: false) { [weak self] in
-            self?.cancel()
+        cancelButton = cancelTitle.map { title in
+            PillButton(title: title, destructive: false) { [weak self] in self?.cancel() }
         }
 
-        let buttonRow = UIStackView(arrangedSubviews: [cancelButton, confirmButton])
+        let buttonRow = UIStackView(arrangedSubviews: [cancelButton, confirmButton].compactMap { $0 })
         buttonRow.axis = .horizontal
         buttonRow.alignment = .center
         buttonRow.distribution = .fillEqually
@@ -135,7 +136,7 @@ final class ConfirmationPopupViewController: UIViewController {
 
     // Destructive prompts default focus to Cancel; otherwise to Confirm.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        [destructive ? cancelButton : confirmButton].compactMap { $0 }
+        [(destructive ? cancelButton : nil) ?? confirmButton].compactMap { $0 }
     }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)

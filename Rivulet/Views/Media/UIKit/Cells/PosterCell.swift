@@ -54,6 +54,7 @@ final class PosterCell: UICollectionViewCell {
     private let overlayContainer = UIView()
 
     private let watchedBadge = PosterWatchedBadge()
+    private let sourceBadge = SourceBadgeView(style: .onArtwork)
     private let failureIcon = UIImageView()
     private let progressInfoBar = MediaProgressInfoBar()
 
@@ -162,6 +163,10 @@ final class PosterCell: UICollectionViewCell {
         watchedBadge.isHidden = true
         overlayContainer.addSubview(watchedBadge)
 
+        // Server badge: top-leading, 10pt inset. Set by the caller after configure.
+        sourceBadge.translatesAutoresizingMaskIntoConstraints = false
+        overlayContainer.addSubview(sourceBadge)
+
         // Failure icon: centred. Hidden by default; visible only when the
         // image load fails or the source URL is missing.
         failureIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -201,6 +206,8 @@ final class PosterCell: UICollectionViewCell {
 
             watchedBadge.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
             watchedBadge.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor, constant: -10),
+            sourceBadge.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
+            sourceBadge.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor, constant: 10),
 
             failureIcon.centerXAnchor.constraint(equalTo: overlayContainer.centerXAnchor),
             failureIcon.centerYAnchor.constraint(equalTo: overlayContainer.centerYAnchor),
@@ -274,6 +281,7 @@ final class PosterCell: UICollectionViewCell {
     // MARK: - Configure
 
     func configure(item: PlexMetadata) {
+        sourceBadge.text = nil
         setSquare(["artist", "album", "track"].contains(item.type ?? ""))
         let url = posterURL(for: item)
         loadImage(from: url, item: item)
@@ -283,6 +291,7 @@ final class PosterCell: UICollectionViewCell {
 
     /// MediaItem path. All artwork URLs are already resolved — no serverURL/token needed.
     func configure(item: MediaItem) {
+        sourceBadge.text = nil
         setSquare(item.isMusic == true)
         // Episodes prefer the grandparent (show) poster so hub rows render
         // show art instead of letterboxed episode stills, matching the Plex path.
@@ -291,6 +300,12 @@ final class PosterCell: UICollectionViewCell {
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
     }
+
+    /// Names the item's server; call after `configure` (which never adds one).
+    func setSourceBadge(_ text: String?) { sourceBadge.text = text }
+
+    /// The badge's text while it shows (tests).
+    var sourceBadgeText: String? { sourceBadge.isHidden ? nil : sourceBadge.text }
 
     /// Music tiles are 1:1 square; everything else keeps the 2:3 poster ratio.
     private func setSquare(_ square: Bool) {
@@ -325,6 +340,7 @@ final class PosterCell: UICollectionViewCell {
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
         progressInfoBar.reset()
         watchedBadge.isHidden = true
+        sourceBadge.text = nil
         watchedGlyph.isHidden = true
         failureIcon.isHidden = true
         failureIcon.image = nil

@@ -69,6 +69,8 @@ final class HeroOverlayCell: UICollectionViewCell {
         let onPlay: (MediaItem) -> Void
         let onInfo: (MediaItem) -> Void
         var onToggleWatchlist: ((MediaItem) -> Void)? = nil
+        /// The server badge for a slide, nil for none.
+        var badge: ((MediaItem) -> String?)? = nil
     }
 
     func configure(with config: Configuration) {
@@ -91,7 +93,8 @@ final class HeroOverlayCell: UICollectionViewCell {
             onIndexChanged: config.onIndexChanged,
             onPlay: config.onPlay,
             onInfo: config.onInfo,
-            onToggleWatchlist: config.onToggleWatchlist
+            onToggleWatchlist: config.onToggleWatchlist,
+            badge: config.badge
         )
     }
 }

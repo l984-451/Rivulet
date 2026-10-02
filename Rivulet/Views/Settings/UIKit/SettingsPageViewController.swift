@@ -150,7 +150,8 @@ final class SettingsPageViewController: UIViewController {
         guard let from = movingIndexPath else { return }
         let toItem = from.item + (up ? -1 : 1)
         // Only slide within the reorderable run (don't pass Add All / Remove All).
-        guard toItem >= 0, toItem < rows.count, rows[toItem].isReorderable else { return }
+        guard toItem >= 0, toItem < rows.count, rows[toItem].isReorderable,
+              rows[toItem].reorderGroup == rows[from.item].reorderGroup else { return }
         let to = IndexPath(item: toItem, section: 0)
         rows[from.item].onReorder?(up)        // persist the single-step move
         let moved = rows.remove(at: from.item)

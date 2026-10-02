@@ -18,3 +18,15 @@ struct MediaItemRef: Hashable, Codable, Sendable {
     /// Provider-native item identifier (Plex ratingKey / TMDB id / Jellyfin Guid).
     let itemID: String
 }
+
+extension MediaItemRef {
+    /// An item from a Jellyfin server (`JellyfinProvider.id` is
+    /// "jellyfin:<serverID>"). Paths that treat `itemID` as a Plex ratingKey
+    /// check this first.
+    var isJellyfin: Bool { providerID.hasPrefix("jellyfin:") }
+
+    /// An item from a Plex server (`PlexProvider.id` is "plex:<machineId>").
+    /// The legacy Plex play path is the only one that resolves `itemID` as a
+    /// ratingKey; every other item plays through its own provider.
+    var isPlex: Bool { providerID.hasPrefix("plex:") }
+}

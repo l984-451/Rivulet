@@ -35,6 +35,9 @@ extension SortOption {
         case .titleDesc:       "Title Z-A"
         case .releaseDateDesc: "Release Date"
         case .addedAtDesc:     "Date Added"
+        case .addedAtAsc:      "Date Added (Oldest)"
+        case .releaseDateAsc:  "Release Date (Oldest)"
+        case .lastContentAddedDesc: "Recently Updated"
         case .ratingDesc:      "Rating"
         }
     }

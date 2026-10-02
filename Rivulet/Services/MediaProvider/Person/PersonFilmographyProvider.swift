@@ -61,7 +61,7 @@ private let _defaultServerFilmography: @Sendable (_ person: MediaPerson) async -
     let (serverURL, token, providerID): (String?, String?, String) = await MainActor.run {
         let url = PlexAuthManager.shared.selectedServerURL
         let tok = PlexAuthManager.shared.selectedServerToken
-        let pid = MediaProviderRegistry.shared.primaryProvider?.id ?? url.map { "plex:\($0)" } ?? "plex:unknown"
+        let pid = MediaProviderRegistry.shared.plexProvider?.id ?? url.map { "plex:\($0)" } ?? "plex:unknown"
         return (url, tok, pid)
     }
     guard let serverURL, let token else { return [] }

@@ -37,10 +37,11 @@ final class AddSourceDraft {
     var epgURL = ""
     var status: Status = .idle
 
+    /// A failed check is not a state: it goes back to `.idle` and the cause
+    /// shows in a popup (`SettingsContent.fail`).
     enum Status: Equatable {
         case idle
         case checking
-        case failed(String)
     }
 }
 
@@ -108,10 +109,6 @@ extension SettingsContent {
                 id: "addPlexLiveTV",
                 title: plexRowTitle,
                 kind: .action(destructive: false, handler: { vc in addPlexLiveTV(on: vc) })))
-            if case .failed(let message) = plexStatus {
-                rows.append(SettingsRowItem(id: "addPlexLiveTVError", title: message,
-                                            kind: .info(value: { "" })))
-            }
         }
 
         rows.append(SettingsRowItem(
@@ -159,8 +156,9 @@ extension SettingsContent {
         guard let serverURL = auth.selectedServerURL,
               let token = auth.selectedServerToken,
               let serverName = auth.savedServerName else {
-            plexStatus = .failed("Plex server is not connected.")
-            (vc as? SettingsPageViewController)?.reloadRows()
+            plexStatus = .idle
+            fail(nil, page: vc as? SettingsPageViewController, title: "Couldn't Add Plex Live TV",
+                 message: "Plex server is not connected.")
             return
         }
 
@@ -172,8 +170,8 @@ extension SettingsContent {
             let isAvailable = await PlexLiveTVProvider.checkAvailability(
                 serverURL: serverURL, authToken: token)
             guard isAvailable else {
-                plexStatus = .failed("No DVR or tuners are set up on this Plex server.")
-                page?.reloadRows()
+                plexStatus = .idle
+                fail(nil, page: page, title: "Couldn't Add Plex Live TV", message: "No DVR or tuners are set up on this Plex server.")
                 return
             }
 
@@ -194,7 +192,7 @@ extension SettingsContent {
 
     static var addOwnServer: [SettingsRowItem] {
         guard let draft = addSourceDraft else { return [] }
-        var rows: [SettingsRowItem] = [
+        let rows: [SettingsRowItem] = [
             SettingsRowItem(id: "serverURL", title: "Server URL",
                             kind: .textEntry(value: { draft.serverURL },
                                              placeholder: "http://\(baseHost):9191",
@@ -224,7 +222,6 @@ extension SettingsContent {
                                 saveOwnServer(draft, on: vc)
                             }))
         ]
-        rows += errorRows(draft)
         return rows
     }
 
@@ -264,15 +261,13 @@ extension SettingsContent {
         guard draft.status != .checking else { return }
         let page = vc as? SettingsPageViewController
         guard !draft.serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            draft.status = .failed("Enter your server's address first.")
-            page?.reloadRows()
+            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter your server's address first.")
             return
         }
         let cleaned = sanitizeURL(draft.serverURL)
         let username = draft.username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard username.isEmpty == draft.password.isEmpty else {
-            draft.status = .failed("Enter both your username and password, or neither.")
-            page?.reloadRows()
+            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter both your username and password, or neither.")
             return
         }
 
@@ -285,8 +280,7 @@ extension SettingsContent {
 
         guard let url = URL(string: split.baseURL),
               let service = DispatcharrService.create(from: cleaned, channelProfile: profile) else {
-            draft.status = .failed("Couldn't reach that server. Check the address and port.")
-            page?.reloadRows()
+            fail(draft, page: page, title: "Couldn't Add Source", message: "Couldn't reach that server. Check the address and port.")
             return
         }
 
@@ -300,10 +294,10 @@ extension SettingsContent {
                     // An empty playlist with a profile set is nearly always a
                     // profile name that does not match one on the server, so
                     // point at the field rather than at the connection.
-                    draft.status = .failed(profile == nil
-                                           ? "Connected, but found no channels."
-                                           : "Connected, but that channel profile has no channels. Check the name.")
-                    page?.reloadRows()
+                    fail(draft, page: page, title: "Couldn't Add Source",
+                         message: profile == nil
+                            ? "Connected, but found no channels."
+                            : "Connected, but that channel profile has no channels. Check the name.")
                     return
                 }
                 // Watching needs no sign-in; recording does. The sign-in is
@@ -313,8 +307,7 @@ extension SettingsContent {
                     do {
                         token = try await service.fetchAPIKey(username: username, password: draft.password)
                     } catch {
-                        draft.status = .failed(signInFailureCopy(for: error))
-                        page?.reloadRows()
+                        fail(draft, page: page, title: "Couldn't Add Source", message: signInFailureCopy(for: error))
                         return
                     }
                 }
@@ -326,10 +319,9 @@ extension SettingsContent {
                     channelProfile: profile)
                 await store.loadChannels()
                 await store.loadEPG(startDate: Date(), hours: 6)
-                finish(page)
+                finish(page, draft: draft)
             } catch {
-                draft.status = .failed(failureCopy(for: error))
-                page?.reloadRows()
+                fail(draft, page: page, title: "Couldn't Add Source", message: failureCopy(for: error))
             }
         }
     }
@@ -338,7 +330,7 @@ extension SettingsContent {
 
     static var addPlaylistURL: [SettingsRowItem] {
         guard let draft = addSourceDraft else { return [] }
-        var rows: [SettingsRowItem] = [
+        let rows: [SettingsRowItem] = [
             SettingsRowItem(id: "m3uURLField", title: "M3U Playlist URL",
                             kind: .textEntry(value: { draft.m3uURL },
                                              placeholder: "http://example.com/playlist.m3u",
@@ -360,7 +352,6 @@ extension SettingsContent {
                                 savePlaylist(draft, on: vc)
                             }))
         ]
-        rows += errorRows(draft)
         return rows
     }
 
@@ -368,13 +359,11 @@ extension SettingsContent {
         guard draft.status != .checking else { return }
         let page = vc as? SettingsPageViewController
         guard !draft.m3uURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            draft.status = .failed("Enter your playlist URL first.")
-            page?.reloadRows()
+            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter your playlist URL first.")
             return
         }
         guard let m3u = URL(string: sanitizeURL(draft.m3uURL)) else {
-            draft.status = .failed("That playlist URL doesn't look right. Check it and try again.")
-            page?.reloadRows()
+            fail(draft, page: page, title: "Couldn't Add Source", message: "That playlist URL doesn't look right. Check it and try again.")
             return
         }
         let epg = draft.epgURL.isEmpty ? nil : URL(string: sanitizeURL(draft.epgURL))
@@ -396,8 +385,7 @@ extension SettingsContent {
                 }
                 let channels = try await M3UParser().parse(data: data)
                 guard !channels.isEmpty else {
-                    draft.status = .failed("Connected, but found no channels.")
-                    page?.reloadRows()
+                    fail(draft, page: page, title: "Couldn't Add Source", message: "Connected, but found no channels.")
                     return
                 }
                 let store = LiveTVDataStore.shared
@@ -405,10 +393,9 @@ extension SettingsContent {
                                          name: draft.displayName.isEmpty ? "IPTV" : draft.displayName)
                 await store.loadChannels()
                 await store.loadEPG(startDate: Date(), hours: 6)
-                finish(page)
+                finish(page, draft: draft)
             } catch {
-                draft.status = .failed(failureCopy(for: error))
-                page?.reloadRows()
+                fail(draft, page: page, title: "Couldn't Add Source", message: failureCopy(for: error))
             }
         }
     }
@@ -419,17 +406,24 @@ extension SettingsContent {
         draft.status == .checking ? "Checking…" : "Add Source"
     }
 
-    /// Failure text as a non-focusable row below the action, so the cause is on
-    /// screen instead of stuffed into a button title.
-    private static func errorRows(_ draft: AddSourceDraft) -> [SettingsRowItem] {
-        guard case .failed(let message) = draft.status else { return [] }
-        return [SettingsRowItem(id: "addSourceError", title: message, kind: .info(value: { "" }))]
+    /// A form check failed: put the button back to idle and say why in the
+    /// app's popup card, one OK button. What the user typed stays put.
+    static func fail(_ draft: AddSourceDraft?, page: SettingsPageViewController?, title: String, message: String) {
+        draft?.status = .idle
+        page?.reloadRows()
+        guard let page else { return }
+        page.present(ConfirmationPopupViewController(title: title, message: message, confirmTitle: "OK",
+                                                     cancelTitle: nil, onConfirm: {}),
+                     animated: true)
     }
 
     /// Drop the draft and pop back to the source list. The container's `pop()`
     /// rebuilds the incoming page's rows, so `.iptv` picks up the new source.
-    private static func finish(_ page: SettingsPageViewController?) {
-        addSourceDraft = nil
+    /// Runs after a network call, when the user may have left the form and
+    /// started another: only this form's own draft is dropped, and the
+    /// container ignores the pop unless the form is still on screen.
+    static func finish(_ page: SettingsPageViewController?, draft: AddSourceDraft) {
+        if addSourceDraft === draft { addSourceDraft = nil }
         page?.onPop?()
     }
 

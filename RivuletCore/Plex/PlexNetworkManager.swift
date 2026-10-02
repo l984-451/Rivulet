@@ -2173,7 +2173,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         let containers: [GridContainer?] = await fetchConcurrently(
             requests.map(\.url),
             headers: plexHeaders(authToken: authToken)
-        )
+        ).map { try? $0.get() }
 
         // Extract unique channels from all programs' Media arrays, across every
         // DVR. Dedupe is by channel identifier and FIRST WINS: a channel two
@@ -2259,27 +2259,29 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return channels
     }
 
-    /// Fetches several pages at once and returns them in input order, nil for a
-    /// page that failed. Order is the point: callers dedupe first-wins across
-    /// the pages, so the answer must not depend on which request landed first.
+    /// Fetches several pages at once and returns them in input order. Order is
+    /// the point: callers dedupe first-wins across the pages, so the answer must
+    /// not depend on which request landed first. Failures keep their error so a
+    /// caller that gives up can throw the real one: a superseded load must still
+    /// read as a cancellation, which the guide and Sentry both drop.
     private func fetchConcurrently<T: Decodable & Sendable>(
         _ urls: [URL],
         headers: [String: String]
-    ) async -> [T?] {
-        await withTaskGroup(of: (Int, T?).self) { group in
+    ) async -> [Result<T, Error>] {
+        await withTaskGroup(of: (Int, Result<T, Error>).self) { group in
             for (index, url) in urls.enumerated() {
                 group.addTask {
                     do {
                         let value: T = try await self.request(url, headers: headers)
-                        return (index, Optional(value))
+                        return (index, .success(value))
                     } catch {
-                        return (index, nil)
+                        return (index, .failure(error))
                     }
                 }
             }
-            var results = [T?](repeating: nil, count: urls.count)
-            for await (index, value) in group {
-                results[index] = value
+            var results = [Result<T, Error>](repeating: .failure(CancellationError()), count: urls.count)
+            for await (index, result) in group {
+                results[index] = result
             }
             return results
         }
@@ -2714,16 +2716,17 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let endsAt: Int?
         }
 
-        let containers: [GridEPGContainer?] = await fetchConcurrently(
+        let results: [Result<GridEPGContainer, Error>] = await fetchConcurrently(
             gridURLs,
             headers: plexHeaders(authToken: authToken)
         )
+        let containers = results.compactMap { try? $0.get() }
         // Every DVR failing is a failure; some failing is a partial guide.
-        guard containers.contains(where: { $0 != nil }) else {
-            throw PlexAPIError.invalidResponse
+        if containers.isEmpty, case .failure(let error)? = results.first {
+            throw error
         }
 
-        let programs = containers.compactMap { $0 }.flatMap { $0.MediaContainer.Metadata ?? [] }
+        let programs = containers.flatMap { $0.MediaContainer.Metadata ?? [] }
 
         // Group programs by channel and convert to PlexLiveTVGuideChannel format
         // Each program can have multiple Media entries representing different time slots

@@ -78,6 +78,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var fallbackStage = 0
     private var isFallbackInFlight = false
 
+    /// Automatic retunes after the engine gives up on a source. One budget per
+    /// channel viewing: only a channel change starts a fresh one.
+    private var retuneBudget = LiveRetuneBudget()
+    /// The scheduled or running automatic retune, until its join finishes.
+    private var retuneTask: Task<Void, Never>?
+    /// A source reset that arrived while that retune was joining.
+    private var retunePending = false
+
     /// Plex releases a tuned /livetv/sessions grab unless the client reports
     /// a timeline periodically (300s rolling stop-grab timer server-side).
     /// A `var` because a handed-off session brings its own (see
@@ -484,6 +492,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         guard isBeingDismissed || isMovingFromParent else { return }
+        cancelRetune()
         teardownPlaybackSession()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
@@ -535,10 +544,40 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// A whole new join on the same channel, after the engine gave up on the
     /// source. Not counted against the fallback ladder: the source died, the
     /// route did not fail.
+    ///
+    /// Every Plex retune grabs a tuner again, so they are bounded: one at a
+    /// time, spaced, and capped per viewing. A source that keeps dying ends in
+    /// the failure notice instead of a tune loop.
     private func rejoinAfterSourceReset() {
         guard !isFallbackInFlight, !isBeingDismissed else { return }
+        guard retuneTask == nil else { retunePending = true; return }
+        // Let the dead session go now: its tuner is free while this waits,
+        // and its player can't start the fallback ladder alongside.
         teardownPlaybackSession()
-        startPlayback()
+        guard let delay = retuneBudget.reserve(now: ProcessInfo.processInfo.systemUptime) else {
+            streamLoadTask = Task { @MainActor in await self.endJoin(notice: Self.sourceLostNotice) }
+            return
+        }
+        loadingSpinner.startAnimating()
+        retuneTask = Task { @MainActor [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let self, !Task.isCancelled else { return }
+            self.retunePending = false
+            self.startPlayback()
+            await self.streamLoadTask?.value
+            guard !Task.isCancelled else { return }
+            self.retuneTask = nil
+            if self.retunePending {
+                self.retunePending = false
+                self.rejoinAfterSourceReset()
+            }
+        }
+    }
+
+    private func cancelRetune() {
+        retuneTask?.cancel()
+        retuneTask = nil
+        retunePending = false
     }
 
     /// Hands the running session to another surface without stopping it: no
@@ -1512,6 +1551,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// full modal transition per channel change.
     private func switchChannel(to newChannel: UnifiedChannel) {
         guard newChannel.id != channel.id else { return }
+        cancelRetune()
+        retuneBudget = LiveRetuneBudget()
         teardownPlaybackSession()
         channel = newChannel
         // Rail must not keep showing the old channel's programme while the
@@ -1901,6 +1942,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     private static let tunersBusyNotice = "All tuners are busy. Stop another stream and try again."
+    private static let sourceLostNotice = "Lost this channel's signal."
 
     /// A direct source with no free connection refuses in about 3 s, but the
     /// engine retries for about 50 s before it gives up. So a load that has
@@ -2164,5 +2206,26 @@ extension LiveTVAetherPlayerViewController: PlaybackInputTarget {
             // stream's wall-clock bar, and scrub commits never start here.
             break
         }
+    }
+}
+
+/// How many automatic retunes one channel viewing may make, and how far
+/// apart. Each Plex retune grabs a tuner again, so a source that keeps dying
+/// has to end in the failure notice, not a tune loop.
+struct LiveRetuneBudget {
+    static let maxRetunes = 3
+    static let spacing: TimeInterval = 20
+
+    private var used = 0
+    private var lastStart: TimeInterval?
+
+    /// Books the next retune: seconds to wait before starting it, or nil once
+    /// the budget is spent. Waiting never refills it.
+    mutating func reserve(now: TimeInterval) -> TimeInterval? {
+        guard used < Self.maxRetunes else { return nil }
+        let start = lastStart.map { max(now, $0 + Self.spacing) } ?? now
+        used += 1
+        lastStart = start
+        return start - now
     }
 }

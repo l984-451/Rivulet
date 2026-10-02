@@ -19,9 +19,17 @@ import Foundation
 ///  - `time=0&duration=0&playbackTime=<elapsed ms>` — sidesteps the server's
 ///    "time may not exceed duration" rejection entirely.
 ///  - `state=stopped` on stop() releases the tuner without waiting for the
-///    timeout.
+///    timeout, and a start.m3u8 session's transcode job is stopped after it.
+///
+/// Every teardown path (full-screen player, multiview slot, channel zap,
+/// fallback re-tune, abandoned tune) ends here, so the release lives here once.
 @MainActor
 final class PlexLiveTimelineKeepalive {
+
+    /// Sends one request and returns once the server has answered.
+    typealias Transport = @MainActor (URLRequest) async -> Void
+
+    static let transcodeStopPath = "/video/:/transcode/universal/stop"
 
     private struct Context {
         let serverURL: String
@@ -29,11 +37,26 @@ final class PlexLiveTimelineKeepalive {
         let sessionPath: String
         let sessionIdentifier: String?
         let ratingKey: String?
+        /// `session` of a universal-transcoder URL. nil on the raw session
+        /// playlist a direct-play grant returns: no transcoder serves that.
+        let transcodeSession: String?
         let startedAt: Date
     }
 
+    private let transport: Transport
     private var context: Context?
     private var heartbeatTask: Task<Void, Never>?
+    /// The last request handed to the transport. Each request waits for the
+    /// one before it to be answered, so PMS sees them in order: a slow
+    /// "playing" can never land after "stopped" and renew the grab.
+    private var lastSend: Task<Void, Never>?
+    /// Bumped by stop(). A ping still queued behind a slow request is
+    /// dropped rather than sent after the stop.
+    private var generation = 0
+
+    init(transport: @escaping Transport = PlexLiveTimelineKeepalive.send) {
+        self.transport = transport
+    }
 
     /// Begin reporting for the session carried by `url`. No-op (and stops any
     /// previous reporting) when the URL doesn't reference a tuned session.
@@ -53,6 +76,7 @@ final class PlexLiveTimelineKeepalive {
         }
 
         let port = components.port.map { ":\($0)" } ?? ""
+        let isTranscode = url.path.hasPrefix("/video/:/transcode/universal/")
         context = Context(
             serverURL: "\(scheme)://\(host)\(port)",
             authToken: token,
@@ -61,14 +85,18 @@ final class PlexLiveTimelineKeepalive {
                 .first(where: { $0.name == "X-Plex-Session-Identifier" })?.value,
             ratingKey: components.queryItems?
                 .first(where: { $0.name == "rivuletLiveRatingKey" })?.value,
+            transcodeSession: isTranscode
+                ? components.queryItems?.first(where: { $0.name == "session" })?.value
+                : nil,
             startedAt: Date()
         )
 
         heartbeatTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
             while !Task.isCancelled {
-                guard let self, self.context != nil else { return }
-                self.report(state: "playing")
+                // One ping in flight at a time: the next waits out a slow answer.
+                guard let ping = self?.ping() else { return }
+                await ping.value
                 try? await Task.sleep(for: .seconds(10))
             }
         }
@@ -83,21 +111,44 @@ final class PlexLiveTimelineKeepalive {
     }
 
     /// Final "stopped" report + heartbeat teardown. Releases the tuner
-    /// server-side without waiting for the 300s timeout.
+    /// server-side without waiting for the 300s timeout, then stops the
+    /// transcode job a start.m3u8 session runs.
     func stop() {
         heartbeatTask?.cancel()
         heartbeatTask = nil
-        if context != nil {
-            report(state: "stopped")
+        generation += 1
+        guard let context else { return }
+        self.context = nil
+        enqueue(timelineRequest(context, state: "stopped"))
+        if let session = context.transcodeSession {
+            enqueue(request(context, path: Self.transcodeStopPath,
+                            items: [URLQueryItem(name: "session", value: session)]))
         }
-        context = nil
     }
 
-    private func report(state: String) {
-        guard let context else { return }
+    /// One "playing" report. The heartbeat is its only caller in the app;
+    /// internal so tests can drive it without waiting on the clock.
+    @discardableResult
+    func ping() -> Task<Void, Never>? {
+        guard let context else { return nil }
+        return enqueue(timelineRequest(context, state: "playing"), unlessStoppedSince: generation)
+    }
 
+    @discardableResult
+    private func enqueue(_ request: URLRequest?, unlessStoppedSince generation: Int? = nil) -> Task<Void, Never>? {
+        guard let request else { return nil }
+        let previous = lastSend
+        let task = Task { [weak self, transport] in
+            await previous?.value
+            if let generation, self?.generation != generation { return }
+            await transport(request)
+        }
+        lastSend = task
+        return task
+    }
+
+    private func timelineRequest(_ context: Context, state: String) -> URLRequest? {
         let elapsedMs = max(0, Int(Date().timeIntervalSince(context.startedAt) * 1000))
-        guard var components = URLComponents(string: "\(context.serverURL)/:/timeline") else { return }
         var items = [
             URLQueryItem(name: "key", value: context.sessionPath),
             URLQueryItem(name: "state", value: state),
@@ -112,24 +163,32 @@ final class PlexLiveTimelineKeepalive {
         if let sessionIdentifier = context.sessionIdentifier {
             items.append(URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier))
         }
+        return request(context, path: "/:/timeline", items: items)
+    }
+
+    private func request(_ context: Context, path: String, items: [URLQueryItem]) -> URLRequest? {
+        guard var components = URLComponents(string: "\(context.serverURL)\(path)") else { return nil }
         components.queryItems = items
-        guard let url = components.url else { return }
+        guard let url = components.url else { return nil }
 
         var request = URLRequest(url: url)
         request.setValue(context.authToken, forHTTPHeaderField: "X-Plex-Token")
         request.setValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.setValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         request.setValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        return request
+    }
 
-        Task.detached(priority: .utility) {
-            do {
-                let (_, response) = try await URLSession.shared.data(for: request)
-                if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                    playerDebugLog("📺 Live timeline (\(state)) returned HTTP \(http.statusCode)")
-                }
-            } catch {
-                playerDebugLog("📺 Live timeline (\(state)) failed: \(error.localizedDescription)")
-            }
+    static func send(_ request: URLRequest) async {
+        let path = request.url?.path ?? ""
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let status = (response as? HTTPURLResponse)?.statusCode, status != 200 else { return }
+            // A 404 on the stop means the job had already ended: done either way.
+            if status == 404, path == transcodeStopPath { return }
+            playerDebugLog("📺 Live \(path) returned HTTP \(status)")
+        } catch {
+            playerDebugLog("📺 Live \(path) failed: \(error.localizedDescription)")
         }
     }
 

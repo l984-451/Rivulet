@@ -10,8 +10,9 @@
 //  player; nothing here tunes or loads. Selecting the same channel in the
 //  guide hands the session back full screen.
 //
-//  Not focusable and not interactive: it sits over the guide's artwork area,
-//  never over a focus target.
+//  Not focusable unless `isFocusable`: the guide makes it a focus stop, so
+//  Menu from the grid has somewhere to come back to. It never sits over a
+//  focus target.
 //
 
 import UIKit
@@ -74,6 +75,21 @@ final class LiveMiniPlayerView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    var isFocusable = false {
+        didSet { isUserInteractionEnabled = isFocusable }
+    }
+
+    override var canBecomeFocused: Bool { isFocusable }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        layer.borderColor = UIColor.white.withAlphaComponent(focused ? 0.7 : 0.18).cgColor
+        coordinator.addCoordinatedAnimations {
+            self.transform = focused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
+        }
+    }
 
     /// Show `session`'s picture here. Binding a new surface detaches the old
     /// one, so the engine simply moves its layer over.

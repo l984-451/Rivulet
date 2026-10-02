@@ -125,6 +125,9 @@ struct EPGGuide: UIViewRepresentable {
     /// rather than filtering (Recordings).
     var categoryActionTitle: String? = nil
     var onCategoryAction: (() -> Void)? = nil
+    /// The channel still playing in the corner, and what Select on it does.
+    var miniSession: LiveTVSessionHandoff? = nil
+    var onMiniPlayerSelect: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -201,6 +204,7 @@ struct EPGGuide: UIViewRepresentable {
             onSelect: onCategorySelect,
             actionTitle: categoryActionTitle,
             onAction: onCategoryAction)
+        uiView.setMiniSession(miniSession, onSelect: onMiniPlayerSelect)
         context.coordinator.updateRecordingMarks(recordingProgramIds)
         let timelineMoved = context.coordinator.lastTimelineStart.map { $0 != timelineStart } ?? false
         let dataChanged = context.coordinator.apply(self, to: layout)
@@ -707,6 +711,9 @@ final class EPGContainerView: UIView {
     private weak var pendingGridFocusTarget: UIView?
     private weak var pendingCategoryFocusTarget: UIView?
     private var gridUpSwipeBinding: DirectionalInputBinding?
+    /// The channel still playing after Back, in the corner (issue #318).
+    private let miniPlayer = LiveMiniPlayerView()
+    private var onMiniPlayerSelect: (() -> Void)?
     private let timeFade = CAGradientLayer()
     private let bottomFade = CAGradientLayer()
     private let rightFade = CAGradientLayer()
@@ -751,6 +758,13 @@ final class EPGContainerView: UIView {
                 self?.moveFocusToCategories()
             })
 
+        miniPlayer.isFocusable = true
+        miniPlayer.isHidden = true
+        let select = UITapGestureRecognizer(target: self, action: #selector(selectMiniPlayer))
+        select.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+        miniPlayer.addGestureRecognizer(select)
+        addSubview(miniPlayer)
+
         let bg = UIColor(EPGTheme.background)
 
         timeFade.colors = [bg.cgColor, bg.withAlphaComponent(0).cgColor]
@@ -785,8 +799,29 @@ final class EPGContainerView: UIView {
         if clockLabel.text != text { clockLabel.text = text }
     }
 
+    /// Shows `session` in the corner, or hides the corner player when nil.
+    func setMiniSession(_ session: LiveTVSessionHandoff?, onSelect: (() -> Void)?) {
+        onMiniPlayerSelect = onSelect
+        if let session {
+            miniPlayer.show(session)
+            miniPlayer.isHidden = false
+        } else if !miniPlayer.isHidden {
+            miniPlayer.release()
+            miniPlayer.isHidden = true
+        }
+    }
+
+    @objc private func selectMiniPlayer() {
+        onMiniPlayerSelect?()
+    }
+
     override func willMove(toWindow newWindow: UIWindow?) {
         super.willMove(toWindow: newWindow)
+        if newWindow == nil {
+            MenuPressInterceptor.resign(self)
+        } else {
+            MenuPressInterceptor.register(self)
+        }
         if newWindow == nil {
             clockTimer?.invalidate()
             clockTimer = nil
@@ -905,10 +940,40 @@ final class EPGContainerView: UIView {
         collectionView?.frame = CGRect(x: 0, y: contentTopInset,
                                        width: bounds.width,
                                        height: max(bounds.height - contentTopInset, 0))
+        // `bounds`/`center`, not `frame`: the focused corner player is scaled.
+        miniPlayer.bounds = CGRect(origin: .zero, size: EPGTheme.miniPlayerSize)
+        miniPlayer.center = CGPoint(x: bounds.width - EPGTheme.pageMargin - EPGTheme.miniPlayerSize.width / 2,
+                                    y: EPGTheme.pageMargin + EPGTheme.miniPlayerSize.height / 2)
         let top = EPGTheme.rulerTop + EPGTheme.timelineHeight
         timeFade.frame = CGRect(x: 0, y: top, width: bounds.width, height: 16)
         bottomFade.frame = CGRect(x: 0, y: bounds.height - 70, width: bounds.width, height: 70)
         rightFade.frame = CGRect(x: bounds.width - 48, y: top, width: 48, height: bounds.height - top)
+    }
+}
+
+extension EPGContainerView: MenuBackHandling {
+    /// With a channel in the corner, Menu from the grid or the pills returns the
+    /// grid to its top and focuses the corner player, as Menu below a library's
+    /// top row returns to its top. From the corner player it declines, so the
+    /// sidebar opens.
+    func handleMenuBack() -> Bool {
+        // Focus must be in this guide: a player or menu presented over it holds
+        // focus in its own views, and Menu keeps its meaning there.
+        guard !miniPlayer.isHidden,
+              let system = UIFocusSystem.focusSystem(for: self),
+              let focused = system.focusedItem as? UIView,
+              focused.isDescendant(of: self), !focused.isDescendant(of: miniPlayer)
+        else { return false }
+        // A jump, as in the library.
+        if let cv = collectionView {
+            cv.contentOffset.y = -cv.contentInset.top
+            cv.layoutIfNeeded()
+        }
+        system.requestFocusUpdate(to: miniPlayer)
+        system.updateFocusIfNeeded()
+        // Something drawn over the corner (the guide-error banner) can make it
+        // unfocusable; then Menu keeps its usual meaning.
+        return system.focusedItem === miniPlayer
     }
 }
 

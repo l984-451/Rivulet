@@ -190,16 +190,6 @@ struct GuideLayoutView: View {
                         .frame(maxWidth: .infinity, alignment: .top)
                         .allowsHitTesting(false)
                 }
-
-                if let miniSession {
-                    LiveMiniPlayerRepresentable(session: miniSession)
-                        .frame(width: EPGTheme.miniPlayerSize.width, height: EPGTheme.miniPlayerSize.height)
-                        .padding(.top, EPGTheme.pageMargin)
-                        .padding(.trailing, EPGTheme.pageMargin)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .allowsHitTesting(false)
-                        .zIndex(20)
-                }
             }
         }
         // Margins come from `EPGTheme.pageMargin`, like the rest of the app,
@@ -232,6 +222,14 @@ struct GuideLayoutView: View {
 
     private var guideContent: some View {
         ZStack(alignment: .topLeading) {
+            // Under the grid's container, which draws nothing in this band
+            // except the corner player: above it, the bar would make that
+            // player unfocusable.
+            GuideInfoBar(channel: focusedChannel, program: focusedProgram)
+                .frame(height: EPGTheme.infoBarHeight)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .allowsHitTesting(false)
+
             EPGGuide(
                 channels: channels,
                 programsByChannel: programsByChannel,
@@ -263,13 +261,10 @@ struct GuideLayoutView: View {
                 },
                 recordingProgramIds: dataStore.recordingProgramIds(in: dataStore.epg),
                 categoryActionTitle: dataStore.hasRecordingSources ? "Recordings" : nil,
-                onCategoryAction: { presentRecordings() }
+                onCategoryAction: { presentRecordings() },
+                miniSession: miniSession,
+                onMiniPlayerSelect: { miniSession.map { selectChannel($0.channel) } }
             )
-
-            GuideInfoBar(channel: focusedChannel, program: focusedProgram)
-                .frame(height: EPGTheme.infoBarHeight)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .allowsHitTesting(false)
         }
     }
 
@@ -628,26 +623,5 @@ private struct EPGIssueBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
         )
-    }
-}
-
-// MARK: - Corner player
-
-/// Hosts the UIKit corner player that keeps a channel going after Back.
-private struct LiveMiniPlayerRepresentable: UIViewRepresentable {
-    let session: LiveTVSessionHandoff
-
-    func makeUIView(context: Context) -> LiveMiniPlayerView {
-        let view = LiveMiniPlayerView()
-        view.show(session)
-        return view
-    }
-
-    func updateUIView(_ uiView: LiveMiniPlayerView, context: Context) {
-        uiView.show(session)
-    }
-
-    static func dismantleUIView(_ uiView: LiveMiniPlayerView, coordinator: ()) {
-        uiView.release()
     }
 }

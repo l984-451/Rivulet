@@ -287,6 +287,12 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   next press took the collapse branch and worked: **every other Menu press
   did nothing at all.** `PlexHomeViewController.handleMenuBack` had the check
   from the start, which is why only the shell absorbed the press.
+- **A press a presented VC declines reaches its PRESENTER's `pressesBegan`.**
+  The presented VC's next responder is the presenter, so a VC that overrides
+  `pressesBegan` and presents anything must open with
+  `guard presentedViewController == nil else { super.pressesBegan(...); return }`
+  and gate its swipe recognizers the same way. Without it, Down on the show
+  page's Watched alert also scrolled `PreviewCarouselViewController` behind it.
 - **The VOD player's content state has ONE press owner.**
   `PlayerContainerViewController`'s `pressesBegan`/`Ended` ("Content-state
   presses") handle Left/Right/Up/Down/Select whenever no control holds focus,

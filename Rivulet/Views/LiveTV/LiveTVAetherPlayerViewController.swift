@@ -374,11 +374,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 guard let self else { return }
                 switch state {
                 case .playing:
-                    self.loadingSpinner.stopAnimating()
-                    // Same signal the spinner uses, so the measurement ends
-                    // exactly where the user stops waiting. Finishing is
-                    // idempotent, so later resumes don't reopen the join.
-                    self.finishJoinTelemetry { $0.joined(codec: self.aetherPlayer?.sourceVideoCodecName) }
                     self.updateRailContent()
                 case .failed(let error):
                     self.finishJoinTelemetry { $0.failed(reason: "state_failed") }
@@ -387,6 +382,19 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 default:
                     break
                 }
+            }
+            .store(in: &cancellables)
+
+        // The join ends when the picture is up, not at `.playing`, which the
+        // software path reports before any frame exists (#323). Telemetry ends
+        // on the same edge, so it measures what the viewer waits for.
+        aether.hasPresented
+            .receive(on: DispatchQueue.main)
+            .filter { $0 }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.loadingSpinner.stopAnimating()
+                self.finishJoinTelemetry { $0.joined(codec: self.aetherPlayer?.sourceVideoCodecName) }
             }
             .store(in: &cancellables)
 

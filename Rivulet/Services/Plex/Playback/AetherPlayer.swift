@@ -1366,6 +1366,13 @@ final class AetherPlayer: PlayerProtocol {
         await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
     }
 
+    /// True once the current load has its first frame on screen (an audio-only
+    /// load: once ready). `.playing` is not that: the software path reports it
+    /// before a single frame is decoded (#323).
+    var hasPresented: AnyPublisher<Bool, Never> {
+        engine.$startupProgress.map { $0?.isComplete == true }.removeDuplicates().eraseToAnyPublisher()
+    }
+
     /// Fires when the engine has given up on a live source (a transcode that
     /// respawned from byte 0, a frozen playlist, the reopen budget spent). The
     /// session is parked; only a fresh URL and a new load revive it, which for

@@ -102,8 +102,8 @@ final class LiveJoinTelemetry {
         return scan.lowercased() == "progressive" ? "progressive" : "interlaced"
     }
 
-    /// `loadLive` returned. What remains until `.playing` is the engine's
-    /// startup gate: on the loopback that is the live-edge holdback fill.
+    /// `loadLive` returned. What remains is the wait for the first frame on
+    /// screen: on the software path, the first decodable picture (#323).
     /// `videoRoute` is the decode path the engine chose, so a join can be
     /// matched to it (issue #319).
     func loadFinished(videoRoute: String) {
@@ -116,7 +116,7 @@ final class LiveJoinTelemetry {
         firstFrameSpan = transaction?.startChild(operation: "first_frame")
     }
 
-    /// First `.playing` after the load. The join is complete. The codec is
+    /// First frame on screen after the load. The join is complete. The codec is
     /// read here, not at load: on the remote-HLS bypass the engine learns it
     /// only once AVPlayer has the stream.
     func joined(codec: String?) {

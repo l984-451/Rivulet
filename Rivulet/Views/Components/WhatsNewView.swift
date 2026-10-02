@@ -153,6 +153,10 @@ struct WhatsNewView: View {
         ("1.0.6 (92)", [
             "Updated AetherEngine to 7.25.3",
             "Detail pages now show TMDB, IMDb and Rotten Tomatoes scores",
+            "Episode pages now have a Go to Show button",
+            "Episode long-press menus now offer both Go to Episode and Go to Show",
+            "A show's Watched button now asks first and can reset a partly watched show",
+            "Removed the season summary above a show's episode row",
             "Live TV guide text with & and other special characters now shows correctly",
             "Gzipped XMLTV guides now load, and IPTV channel names keep their commas",
             "Leaving a Plex Live TV channel frees the tuner and transcoder right away",

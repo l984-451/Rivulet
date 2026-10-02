@@ -83,7 +83,10 @@ final class PlexLiveSessionLifecycleTests: XCTestCase {
         var budget = LiveRetuneBudget()
         XCTAssertEqual(budget.reserve(now: 100), 0, "the first retune starts at once")
         XCTAssertEqual(budget.reserve(now: 105), 15, "the next waits out the spacing")
-        XCTAssertEqual(budget.reserve(now: 500), 0)
-        XCTAssertNil(budget.reserve(now: 10_000), "spent for this viewing; time does not refill it")
+        XCTAssertEqual(budget.reserve(now: 121), 19)
+        XCTAssertNil(budget.reserve(now: 141), "three inside the window is a tune loop")
+        XCTAssertEqual(budget.reserve(now: 401), 0, "the oldest retune left the window")
+        XCTAssertNil(budget.reserve(now: 402), "still three inside the window")
+        XCTAssertEqual(budget.reserve(now: 4_000), 0, "a drop hours later still recovers")
     }
 }

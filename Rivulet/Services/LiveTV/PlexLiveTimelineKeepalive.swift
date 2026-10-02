@@ -172,6 +172,9 @@ final class PlexLiveTimelineKeepalive {
         guard let url = components.url else { return nil }
 
         var request = URLRequest(url: url)
+        // Requests run one at a time, so a hung ping must not hold the
+        // "stopped" behind it for URLSession's default 60 s.
+        request.timeoutInterval = 10
         request.setValue(context.authToken, forHTTPHeaderField: "X-Plex-Token")
         request.setValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.setValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")

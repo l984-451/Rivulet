@@ -78,8 +78,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var fallbackStage = 0
     private var isFallbackInFlight = false
 
-    /// Automatic retunes after the engine gives up on a source. One budget per
-    /// channel viewing: only a channel change starts a fresh one.
+    /// Automatic retunes after the engine gives up on a source, capped within a
+    /// recent window. A channel change starts a fresh budget.
     private var retuneBudget = LiveRetuneBudget()
     /// The scheduled or running automatic retune, until its join finishes.
     private var retuneTask: Task<Void, Never>?
@@ -546,8 +546,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// route did not fail.
     ///
     /// Every Plex retune grabs a tuner again, so they are bounded: one at a
-    /// time, spaced, and capped per viewing. A source that keeps dying ends in
-    /// the failure notice instead of a tune loop.
+    /// time, spaced, and capped within a few minutes. A source that keeps dying
+    /// ends in the failure notice instead of a tune loop.
     private func rejoinAfterSourceReset() {
         guard !isFallbackInFlight, !isBeingDismissed else { return }
         guard retuneTask == nil else { retunePending = true; return }
@@ -2209,23 +2209,25 @@ extension LiveTVAetherPlayerViewController: PlaybackInputTarget {
     }
 }
 
-/// How many automatic retunes one channel viewing may make, and how far
-/// apart. Each Plex retune grabs a tuner again, so a source that keeps dying
-/// has to end in the failure notice, not a tune loop.
+/// How many automatic retunes a channel may make, and how far apart. Each
+/// Plex retune grabs a tuner again, so a source that keeps dying has to end
+/// in the failure notice, not a tune loop. The cap counts a recent window,
+/// not the whole viewing: a game watched for hours over a stream that drops
+/// once an hour keeps recovering.
 struct LiveRetuneBudget {
     static let maxRetunes = 3
     static let spacing: TimeInterval = 20
+    static let window: TimeInterval = 300
 
-    private var used = 0
-    private var lastStart: TimeInterval?
+    private var starts: [TimeInterval] = []
 
-    /// Books the next retune: seconds to wait before starting it, or nil once
-    /// the budget is spent. Waiting never refills it.
+    /// Books the next retune: seconds to wait before starting it, or nil when
+    /// `maxRetunes` already started within the last `window`.
     mutating func reserve(now: TimeInterval) -> TimeInterval? {
-        guard used < Self.maxRetunes else { return nil }
-        let start = lastStart.map { max(now, $0 + Self.spacing) } ?? now
-        used += 1
-        lastStart = start
+        starts.removeAll { $0 <= now - Self.window }
+        guard starts.count < Self.maxRetunes else { return nil }
+        let start = starts.last.map { max(now, $0 + Self.spacing) } ?? now
+        starts.append(start)
         return start - now
     }
 }

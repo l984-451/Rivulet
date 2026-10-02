@@ -149,6 +149,15 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        // confirm build number at release
+        ("1.0.6 (92)", [
+            "Updated AetherEngine to 7.25.3",
+            "Detail pages now show TMDB, IMDb and Rotten Tomatoes scores",
+            "Live TV guide text with & and other special characters now shows correctly",
+            "Gzipped XMLTV guides now load, and IPTV channel names keep their commas",
+            "Leaving a Plex Live TV channel frees the tuner and transcoder right away",
+            "A Live TV channel that keeps dropping no longer retunes over and over",
+        ]),
         ("1.0.6 (91)", [
             "Initial support for Jellyfin. WIP. Please report bugs and issues on GitHub.",
             "Scrubbing shows previews even with thumbnail generation off.",

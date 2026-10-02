@@ -360,7 +360,10 @@ enum JellyfinMediaMapper {
             trailerURL: nil,
             contentRating: dto.officialRating,
             regionOfOrigin: dto.productionLocations?.first,
-            rating: dto.communityRating,
+            rating: MediaRating.preferred(
+                critic: MediaRating(dto.criticRating.map { $0 / 10 }, source: .rottenTomatoes),
+                audience: MediaRating(dto.communityRating, source: .unknown)
+            ),
             nextEpisode: nextEpisode.map { self.item($0, providerID: providerID, baseURL: baseURL) },
             collections: [],
             externalIDs: externalIDs(dto.providerIds)

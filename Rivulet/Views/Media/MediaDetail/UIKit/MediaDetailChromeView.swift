@@ -938,16 +938,19 @@ final class MediaDetailChromeView: UIView {
         }
 
         if let rating = detail?.rating {
-            let star = UIImageView(image: UIImage(systemName: "star.fill"))
-            star.tintColor = .systemYellow
-            star.contentMode = .scaleAspectFit
-            star.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                star.widthAnchor.constraint(equalToConstant: 20),
-                star.heightAnchor.constraint(equalToConstant: 20)
-            ])
-            let ratingLabel = Self.makeCaptionLabel(String(format: "%.1f", rating), alpha: 1, bold: true)
-            let starStack = UIStackView(arrangedSubviews: [star, ratingLabel])
+            let ratingLabel = Self.makeCaptionLabel(rating.badgeText, alpha: 1, bold: true)
+            let starStack = UIStackView(arrangedSubviews: [ratingLabel])
+            if rating.showsStar {
+                let star = UIImageView(image: UIImage(systemName: "star.fill"))
+                star.tintColor = .systemYellow
+                star.contentMode = .scaleAspectFit
+                star.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    star.widthAnchor.constraint(equalToConstant: 20),
+                    star.heightAnchor.constraint(equalToConstant: 20)
+                ])
+                starStack.insertArrangedSubview(star, at: 0)
+            }
             starStack.axis = .horizontal
             starStack.spacing = 4
             starStack.alignment = .center

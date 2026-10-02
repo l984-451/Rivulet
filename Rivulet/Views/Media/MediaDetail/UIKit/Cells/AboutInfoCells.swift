@@ -198,8 +198,8 @@ final class AboutCollectionCell: UICollectionViewCell {
             ageLabel.text = detail.contentRating ?? "NR"
             sealRow.isHidden = true
             oneLinerLabel.isHidden = true
-            if let score = detail.rating, score > 0 {
-                fallbackCaption.text = "Rated · " + String(format: "%.1f / 10 average rating", score)
+            if let rating = detail.rating {
+                fallbackCaption.text = "Rated · " + rating.summary
             } else {
                 fallbackCaption.text = "Rated"
             }

@@ -450,12 +450,31 @@ enum PlexMediaMapper {
             trailerURL: trailerURL,
             contentRating: meta.contentRating,
             regionOfOrigin: meta.Country?.first?.tag,
-            rating: meta.rating,
+            rating: Self.rating(meta),
             nextEpisode: nextEpisode,
             collections: collections,
             extras: extras,
             contentAdvisory: meta.CommonSenseMedia?.first.map(Self.contentAdvisory(from:)),
             externalIDs: externalIDs(meta.Guid)
+        )
+    }
+
+    /// `rating` is the critic score and `audienceRating` the audience score,
+    /// each tagged by an image URI naming its source
+    /// ("rottentomatoes://image.rating.ripe", "imdb://image.rating",
+    /// "themoviedb://image.rating"). Legacy agents send `rating` with no image.
+    static func rating(_ meta: PlexMetadata) -> MediaRating? {
+        func source(_ image: String?) -> MediaRating.Source {
+            switch image?.split(separator: ":").first {
+            case "rottentomatoes": .rottenTomatoes
+            case "imdb": .imdb
+            case "themoviedb": .tmdb
+            default: .unknown
+            }
+        }
+        return MediaRating.preferred(
+            critic: MediaRating(meta.rating, source: source(meta.ratingImage)),
+            audience: MediaRating(meta.audienceRating, source: source(meta.audienceRatingImage))
         )
     }
 

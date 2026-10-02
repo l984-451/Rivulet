@@ -57,7 +57,8 @@ nonisolated struct JFItem: Decodable, Sendable {
     let productionYear: Int?
     let premiereDate: String?
     let officialRating: String?
-    let communityRating: Double?
+    let communityRating: Double?    // 0-10, source not named (TMDB or IMDb)
+    let criticRating: Double?       // 0-100, Rotten Tomatoes
     let runTimeTicks: Int64?
     let dateCreated: String?
     let dateLastContentAdded: String?   // series/seasons: when the newest episode arrived

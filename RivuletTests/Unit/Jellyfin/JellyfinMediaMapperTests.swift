@@ -200,7 +200,7 @@ final class JellyfinMediaMapperTests: XCTestCase {
         XCTAssertEqual(d.tagline, "Remember my name")
         XCTAssertEqual(d.genres, ["Drama"])
         XCTAssertEqual(d.studios, ["AMC"])
-        XCTAssertEqual(d.rating, 8.9)
+        XCTAssertEqual(d.rating, MediaRating(8.9, source: .unknown))
         XCTAssertEqual(d.regionOfOrigin, "United States of America")
         XCTAssertEqual(d.nextEpisode?.ref.itemID, "ep1")
     }

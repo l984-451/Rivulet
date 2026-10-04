@@ -54,7 +54,7 @@ final class PlaybackInputTelemetry {
 
         InputProbe.action(actionName, source: sourceName)
 
-        let breadcrumb = Breadcrumb(level: .info, category: "playback_input_received")
+        let breadcrumb = Breadcrumb(level: .debug, category: "playback_input_received")
         breadcrumb.message = actionName
         breadcrumb.data = [
             "action": actionName,
@@ -76,7 +76,7 @@ final class PlaybackInputTelemetry {
         dedupedCount += 1
         increment(&dedupedBySource, key: sourceName)
 
-        let breadcrumb = Breadcrumb(level: .info, category: "playback_input_deduped")
+        let breadcrumb = Breadcrumb(level: .debug, category: "playback_input_deduped")
         breadcrumb.message = actionName
         breadcrumb.data = [
             "action": actionName,
@@ -91,7 +91,7 @@ final class PlaybackInputTelemetry {
         coalescedSeekCount += 1
         coalescedSeekSecondsTotal += totalSeconds
 
-        let breadcrumb = Breadcrumb(level: .info, category: "playback_input_coalesced_seek")
+        let breadcrumb = Breadcrumb(level: .debug, category: "playback_input_coalesced_seek")
         breadcrumb.message = "Coalesced seek"
         breadcrumb.data = [
             "source": source.rawValue,
@@ -130,7 +130,7 @@ final class PlaybackInputTelemetry {
             data["speed_after"] = speedAfter
         }
 
-        let breadcrumb = Breadcrumb(level: .info, category: "playback_scrub_transition")
+        let breadcrumb = Breadcrumb(level: .debug, category: "playback_scrub_transition")
         breadcrumb.message = "\(surface.rawValue):\(transition.rawValue)"
         breadcrumb.data = data
         SentryBridge.addBreadcrumb(breadcrumb)

@@ -28,10 +28,36 @@ nonisolated enum SentryBridge {
     /// before any meaningful traffic, so the unsynchronized access is benign.
     nonisolated(unsafe) static var isActive = false
 
+    /// Breadcrumbs only leave the device attached to an event, so info-and-up
+    /// crumbs are mirrored as logs: a session with no error is still searchable.
+    /// High-frequency crumbs (per remote press) stay `.debug` to skip the mirror.
     static func addBreadcrumb(_ crumb: Breadcrumb) {
         #if !DEBUG
         guard isActive else { return }
         SentrySDK.addBreadcrumb(crumb)
+        guard crumb.level.rawValue >= SentryLevel.info.rawValue else { return }
+        var attributes = crumb.data ?? [:]
+        attributes["category"] = crumb.category
+        let level: SentryLog.Level = switch crumb.level {
+        case .error, .fatal: .error
+        case .warning: .warn
+        default: .info
+        }
+        log(level, crumb.message ?? crumb.category, attributes: attributes)
+        #endif
+    }
+
+    /// Structured log for failures that are not Rivulet bugs (server down,
+    /// timeouts, third-party 5xx). Logs bill against their own quota and are
+    /// searchable by attribute; errors are for things we can fix.
+    static func log(_ level: SentryLog.Level, _ body: String, attributes: [String: Any] = [:]) {
+        #if !DEBUG
+        guard isActive else { return }
+        switch level {
+        case .error, .fatal: SentrySDK.logger.error(body, attributes: attributes)
+        case .warn: SentrySDK.logger.warn(body, attributes: attributes)
+        default: SentrySDK.logger.info(body, attributes: attributes)
+        }
         #endif
     }
 

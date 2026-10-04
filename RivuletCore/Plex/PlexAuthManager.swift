@@ -367,25 +367,20 @@ class PlexAuthManager: ObservableObject {
             return winner
         }
 
-        // Every candidate failed. Capture with a privacy-trimmed candidate
-        // summary — the per-probe breadcrumbs above carry the failure detail.
+        // Every candidate failed: the server is off or unreachable, so a log.
+        // The per-probe breadcrumbs above are mirrored as logs too.
         // Address CLASS only (never the address itself).
         let candidateSummary = sortedConnections.map { conn -> String in
             let kind = conn.relay ? "relay" : (conn.local ? "local" : "remote")
             let net = conn.uri.contains(".plex.direct") ? "plex.direct" : "raw"
             return "\(conn.protocolType)/\(kind)/\(net):\(conn.port)"
         }.joined(separator: ",")
-        let serverName = server.name
-        SentryBridge.capture(error: NSError(
-            domain: "PlexAuthConnection",
-            code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "All server connection candidates failed"]
-        )) { scope in
-            scope.setTag(value: "plex_auth", key: "component")
-            scope.setTag(value: "server_connect_failed", key: "operation")
-            scope.setExtra(value: serverName, key: "server_name")
-            scope.setExtra(value: candidateSummary, key: "candidates")
-        }
+        SentryBridge.log(.warn, "All server connection candidates failed", attributes: [
+            "component": "plex_auth",
+            "operation": "server_connect_failed",
+            "server_name": server.name,
+            "candidates": candidateSummary,
+        ])
         return nil
     }
 
@@ -609,9 +604,8 @@ class PlexAuthManager: ObservableObject {
         }
     }
 
-    /// One breadcrumb per failed connection probe, so a later "all candidates
-    /// failed" capture carries the exact per-candidate failure trail
-    /// (GitHub #224 — these failures used to be print-only and invisible).
+    /// One breadcrumb per failed connection probe (mirrored as a log), so the
+    /// per-candidate failure trail is visible (GitHub #224).
     private static func addConnectionTestBreadcrumb(urlString: String, outcome: String) {
         let breadcrumb = Breadcrumb(level: .warning, category: "plex_auth")
         breadcrumb.message = "Connection probe failed"
@@ -783,11 +777,11 @@ class PlexAuthManager: ObservableObject {
                 isConnected = false
                 connectionError = "Unable to reach Plex. Check your network connection."
 
-                // Capture server fetch failure to Sentry
-                SentryBridge.capture(error: error) { scope in
-                    scope.setTag(value: "plex_auth", key: "component")
-                    scope.setTag(value: "server_discovery", key: "auth_step")
-                }
+                SentryBridge.log(.warn, "Plex server discovery failed", attributes: [
+                    "component": "plex_auth",
+                    "auth_step": "server_discovery",
+                    "error": String(describing: error),
+                ])
             }
             return
         }
@@ -851,12 +845,12 @@ class PlexAuthManager: ObservableObject {
                 // Keep existing credentials - just mark as not connected
                 // User can still see cached content
 
-                // Capture connection verification failure to Sentry
-                SentryBridge.capture(error: error) { scope in
-                    scope.setTag(value: "plex_auth", key: "component")
-                    scope.setTag(value: "connection_verify", key: "auth_step")
-                    scope.setExtra(value: currentURL, key: "failed_url")
-                }
+                SentryBridge.log(.warn, "Plex connection verify failed", attributes: [
+                    "component": "plex_auth",
+                    "auth_step": "connection_verify",
+                    "host": URL(string: currentURL)?.host ?? "unknown",
+                    "error": String(describing: error),
+                ])
             }
         }
     }

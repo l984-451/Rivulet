@@ -13,8 +13,8 @@
 //  unreachable from app code:
 //
 //    • `event.request.url` / `.queryString` — attached by
-//      `enableCaptureFailedRequests`, which captures the failing request URL
-//      verbatim, token and all.
+//      `enableCaptureFailedRequests` (off since logs replaced it), which
+//      captures the failing request URL verbatim, token and all.
 //    • `event.exceptions[].value` — the NSError description. Foundation embeds
 //      the failing URL in `NSURLErrorFailingURLStringErrorKey`, and any custom
 //      error whose message interpolates a URL lands here too.
@@ -82,6 +82,16 @@ nonisolated enum SentryEventRedaction {
         }
 
         return event
+    }
+
+    /// The same scrub for structured logs, which `beforeSend` never sees.
+    static func redact(_ log: SentryLog) -> SentryLog {
+        log.body = SensitiveDataRedactor.redact(log.body)
+        log.attributes = log.attributes.mapValues { attribute in
+            guard let string = attribute.value as? String else { return attribute }
+            return SentryLog.Attribute(string: SensitiveDataRedactor.redact(string))
+        }
+        return log
     }
 
     /// Extras and breadcrumb data are `[String: Any]`, so recurse through the

@@ -150,11 +150,10 @@ actor IPTVProvider: LiveTVProvider {
                 parsedChannels = try await parser.parse(from: url)
             }
         } catch {
-            // Only capture unexpected errors to Sentry — skip HTTP errors (404, etc.)
-            // which indicate user-configured M3U URLs that are no longer valid
+            // Only capture unexpected errors to Sentry. HTTP errors mean a dead
+            // user-configured URL; transport errors are the provider being down.
             let isHTTPError = error is M3UParseError && "\(error)".contains("httpError")
-            let isCancelled = (error as NSError).code == NSURLErrorCancelled
-            if !isHTTPError && !isCancelled {
+            if !isHTTPError && shouldCaptureEPGError(error) {
                 let capturedSourceType = self.sourceType
                 let capturedDisplayName = self.displayName
                 SentryBridge.capture(error: error) { scope in

@@ -186,7 +186,7 @@ final class PlaybackDiagnostics {
     // MARK: - Failure body probe (RIVULET-19)
 
     /// Record what the stream URL returned when the aether route failed to open
-    /// it, and report it as its own Sentry event.
+    /// it, and report it as a Sentry log.
     ///
     /// RIVULET-19 is AVERROR_INVALIDDATA at engine open: the demuxer read a byte
     /// stream and could not parse it as media. The open question is which
@@ -195,11 +195,10 @@ final class PlaybackDiagnostics {
     /// `StreamBodyClassifier`, which draws every value it emits from a fixed
     /// vocabulary and copies nothing out of the response body.
     ///
-    /// This is a SEPARATE event rather than an attachment to the one
-    /// `recordPrimaryFailure` sends, because that method captures synchronously
-    /// and its event is already in flight by the time a network probe could
-    /// return. Tagged `aether_failure_body_probe` so the results are countable
-    /// by classification in one Sentry query.
+    /// A log, not an attachment to the event `recordPrimaryFailure` sends: that
+    /// event is already in flight by the time a network probe could return, and
+    /// a second error per failure only duplicated it. Count by `probe_body_class`
+    /// in Explore > Logs.
     ///
     /// SECURITY: no URL and no body text is passed in or attached here. See
     /// `StreamBodyClassifier.describe` for why the body prefix is dropped
@@ -213,18 +212,18 @@ final class PlaybackDiagnostics {
     ) {
         step("aether_failure_body_probe", detail: summary)
 
-        SentryBridge.capture(error: error) { scope in
-            scope.setLevel(.warning)
-            scope.setTag(value: "playback", key: "component")
-            scope.setTag(value: "aether_failure_body_probe", key: "playback_event")
-            scope.setTag(value: "aether", key: "failed_route")
-            scope.setTag(value: kind.rawValue, key: "failure_kind")
-            // Low-cardinality tags so the dominant body shape is a one-query
-            // answer rather than something to be read out of contexts by hand.
-            scope.setTag(value: classification, key: "probe_body_class")
-            scope.setTag(value: String(status), key: "probe_http_status")
-            self.apply(to: scope)
-        }
+        SentryBridge.log(.warn, "Aether failure body probe", attributes: [
+            "component": "playback",
+            "playback_event": "aether_failure_body_probe",
+            "failed_route": "aether",
+            "failure_kind": kind.rawValue,
+            "probe_body_class": classification,
+            "probe_http_status": status,
+            "probe_summary": summary,
+            "is_relay": isRelay,
+            "error": String(describing: error),
+            "rating_key": media["rating_key"] as? String ?? "unknown",
+        ])
     }
 
     // MARK: - HLS preflight

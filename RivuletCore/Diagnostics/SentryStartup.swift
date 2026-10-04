@@ -74,8 +74,14 @@ public enum SentryStartup {
             options.tracesSampleRate = 0.05
             options.attachStacktrace = true
             options.enableAutoSessionTracking = true
-            options.enableCaptureFailedRequests = true
+            // Off: it filed every 5xx from any host (IPTV proxies, picons, Plex
+            // part fetches) as an error, ~1/4 of the error quota. Our own
+            // request paths log what they need.
+            options.enableCaptureFailedRequests = false
             options.enableSwizzling = true
+            // Logs skip beforeSend, so they get their own scrub.
+            options.enableLogs = true
+            options.beforeSendLog = { SentryEventRedaction.redact($0) }
             // App Hang tracking. On tvOS the SDK uses ANR Tracker V2
             // unconditionally (no `enableAppHangTrackingV2` toggle exists
             // in 9.x — it was made GA and removed), which snapshots ALL
@@ -118,8 +124,7 @@ public enum SentryStartup {
                 // URL that reaches an event carries a live credential. Call
                 // sites use SensitiveDataRedactor directly, but this hook is
                 // the actual guarantee: it also covers events the SDK builds
-                // itself (enableCaptureFailedRequests attaches the failing
-                // request URL) and NSError descriptions with an embedded URL,
+                // itself and NSError descriptions with an embedded URL,
                 // neither of which any call site can reach.
                 return SentryEventRedaction.redact(event)
             }

@@ -137,20 +137,20 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // walls of NSURLErrorDomain text. Attach the request identity.
             let nsError = error as NSError
             let elapsedMs = Int((ProcessInfo.processInfo.systemUptime - netStart) * 1000)
-            // -999 is a user-cancelled request (navigating away); it's already
-            // dropped in beforeSend, so don't pay to capture it.
+            // -999 is a user-cancelled request (navigating away). The rest is
+            // almost always the user's server being down or unreachable, so it
+            // is a log, not an error: it was ~60% of the error quota.
             if nsError.code != NSURLErrorCancelled {
-                SentryBridge.capture(error: error) { scope in
-                    scope.setTag(value: "plex_network", key: "component")
-                    scope.setTag(value: "transport", key: "error_type")
-                    scope.setTag(value: endpoint, key: "endpoint")
-                    scope.setTag(value: method, key: "method")
-                    scope.setTag(value: String(nsError.code), key: "urlerror_code")
-                    scope.setExtra(value: url.path, key: "path")
-                    scope.setExtra(value: url.host ?? "unknown", key: "host")
-                    scope.setExtra(value: elapsedMs, key: "elapsed_ms")
-                    scope.setExtra(value: self.defaultTimeout, key: "timeout_interval")
-                }
+                SentryBridge.log(.warn, "Plex request failed", attributes: [
+                    "component": "plex_network",
+                    "error_type": "transport",
+                    "endpoint": endpoint,
+                    "method": method,
+                    "urlerror_code": nsError.code,
+                    "path": url.path,
+                    "host": url.host ?? "unknown",
+                    "elapsed_ms": elapsedMs,
+                ])
             }
             throw error
         }

@@ -292,12 +292,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
 
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
         let detail = try await fullDetail(for: itemRef)
-        let chosen: MediaSource
-        if let sourceID, let match = detail.mediaSources.first(where: { $0.id == sourceID }) {
-            chosen = match
-        } else if let first = detail.mediaSources.first {
-            chosen = first
-        } else {
+        guard let chosen = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best,
+                                                 from: detail.mediaSources) else {
             throw MediaProviderError.notFound
         }
         return StreamInfo(source: chosen, playSessionID: nil, trackInfoAvailable: true)

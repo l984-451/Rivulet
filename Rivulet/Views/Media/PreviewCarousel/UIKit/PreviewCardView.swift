@@ -330,6 +330,8 @@ final class PreviewCardView: UICollectionViewCell {
     /// Hero Play → play this item (resolved to its on-deck episode for shows by
     /// the carousel VC). Set by the VC in cellForItemAt.
     var onPlay: ((MediaItem) -> Void)?
+    /// Versions → play `item` from the picked file. Set by the VC in cellForItemAt.
+    var onPlayVersion: ((MediaItem, String) -> Void)?
     /// Info button → show the structured info popup (carries the loaded detail).
     var onShowInfo: ((MediaItemDetail) -> Void)?
 
@@ -357,6 +359,10 @@ final class PreviewCardView: UICollectionViewCell {
         chromeView.onPlay = { [weak self] in
             guard let self, let item = self.chromeView.item else { return }
             self.onPlay?(item)
+        }
+        chromeView.onPlayVersion = { [weak self] sourceID in
+            guard let self, let item = self.chromeView.item else { return }
+            self.onPlayVersion?(item, sourceID)
         }
         chromeView.onShowFullDescription = { [weak self] detail in
             self?.onShowInfo?(detail)

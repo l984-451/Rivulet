@@ -1649,6 +1649,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         serverURL: String,
         authToken: String,
         ratingKey: String,
+        mediaIndex: Int = 0,
         offsetMs: Int = 0,
         hasHDR: Bool = false,
         useDolbyVision: Bool = true,
@@ -1725,7 +1726,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         var items: [URLQueryItem] = [
             URLQueryItem(name: "X-Plex-Client-Profile-Name", value: clientProfileName),
             URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
-            URLQueryItem(name: "mediaIndex", value: "0"),
+            URLQueryItem(name: "mediaIndex", value: "\(mediaIndex)"),
             URLQueryItem(name: "partIndex", value: "0"),
             URLQueryItem(name: "offset", value: "\(offsetMs / 1000)"),
             URLQueryItem(name: "protocol", value: "hls"),

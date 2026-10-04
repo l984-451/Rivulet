@@ -4035,9 +4035,9 @@ final class PlexHomeViewController: UIViewController {
     /// Same composition as the preview carousel's Play pill (`playHeroItem`),
     /// so the two surfaces can never disagree about which episode a Play
     /// press starts.
-    private func playResolvingEpisode(_ item: MediaItem) {
+    private func playResolvingEpisode(_ item: MediaItem, sourceID: String? = nil) {
         guard item.kind == .show || item.kind == .season else {
-            playItem(item)
+            playItem(item, sourceID: sourceID)
             return
         }
         Task { [weak self] in
@@ -5056,16 +5056,16 @@ final class PlexHomeViewController: UIViewController {
     /// play — then forward to the existing PlexMetadata flow. The resume-or-
     /// restart decision is driven off the MediaItem so the prompt appears
     /// instantly without waiting on the metadata fetch.
-    private func playItem(_ item: MediaItem, fromBeginning: Bool = false) {
+    private func playItem(_ item: MediaItem, fromBeginning: Bool = false, sourceID: String? = nil) {
         // Every Home, library and search play routes here. Only the Plex path
         // resolves a ratingKey; any other item plays through its own provider,
         // behind the same resume prompt.
         if !item.ref.isPlex {
             let offsetSec = item.userState.viewOffset
             if promptResumeOrRestart, !fromBeginning, item.isInProgress, offsetSec > 0 {
-                presentResumeChoice(forMediaItem: item, offsetSec: offsetSec)
+                presentResumeChoice(forMediaItem: item, offsetSec: offsetSec, sourceID: sourceID)
             } else {
-                resolveAndPlay(item, fromBeginning: fromBeginning)
+                resolveAndPlay(item, fromBeginning: fromBeginning, sourceID: sourceID)
             }
             return
         }
@@ -5078,7 +5078,7 @@ final class PlexHomeViewController: UIViewController {
         // the metadata for the chosen branch.
         let offsetSec = item.userState.viewOffset
         if promptResumeOrRestart, !fromBeginning, item.isInProgress, offsetSec > 0 {
-            presentResumeChoice(forMediaItem: item, offsetSec: offsetSec)
+            presentResumeChoice(forMediaItem: item, offsetSec: offsetSec, sourceID: sourceID)
             return
         }
 
@@ -5086,14 +5086,14 @@ final class PlexHomeViewController: UIViewController {
             guard let meta = try? await PlexNetworkManager.shared.getFullMetadata(
                 serverURL: serverURL, authToken: token, ratingKey: ratingKey
             ) else { return }
-            playItemDirectly(meta, fromBeginning: fromBeginning)
+            playItemDirectly(meta, fromBeginning: fromBeginning, mediaID: sourceID)
         }
     }
 
     /// Resume-or-restart prompt driven by a MediaItem (CW play path). Resolves
     /// PlexMetadata lazily inside the chosen action so the prompt itself never
     /// blocks on the network.
-    private func presentResumeChoice(forMediaItem item: MediaItem, offsetSec: TimeInterval) {
+    private func presentResumeChoice(forMediaItem item: MediaItem, offsetSec: TimeInterval, sourceID: String? = nil) {
         let offsetMs = Int(offsetSec * 1000)
         let alert = UIAlertController(
             title: "Resume Playback?",
@@ -5101,10 +5101,10 @@ final class PlexHomeViewController: UIViewController {
             preferredStyle: .actionSheet
         )
         alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { [weak self] _ in
-            self?.resolveAndPlay(item, fromBeginning: false)
+            self?.resolveAndPlay(item, fromBeginning: false, sourceID: sourceID)
         })
         alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { [weak self] _ in
-            self?.resolveAndPlay(item, fromBeginning: true)
+            self?.resolveAndPlay(item, fromBeginning: true, sourceID: sourceID)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
@@ -5112,9 +5112,9 @@ final class PlexHomeViewController: UIViewController {
 
     /// Resolve a MediaItem to PlexMetadata by ratingKey and play it, bypassing
     /// the resume prompt (the caller already made the resume/restart choice).
-    private func resolveAndPlay(_ item: MediaItem, fromBeginning: Bool) {
+    private func resolveAndPlay(_ item: MediaItem, fromBeginning: Bool, sourceID: String? = nil) {
         if !item.ref.isPlex {
-            ProviderPlayer.play(item, fromBeginning: fromBeginning, from: self, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: fromBeginning, sourceID: sourceID, from: self, onDismiss: nil)
             return
         }
         let ratingKey = item.ref.itemID
@@ -5125,40 +5125,40 @@ final class PlexHomeViewController: UIViewController {
             guard let meta = try? await PlexNetworkManager.shared.getFullMetadata(
                 serverURL: serverURL, authToken: token, ratingKey: ratingKey
             ) else { return }
-            presentPlayer(for: meta, fromBeginning: fromBeginning)
+            presentPlayer(for: meta, fromBeginning: fromBeginning, mediaID: sourceID)
         }
     }
 
     /// Mirrors the SwiftUI `playItemDirectly` flow including the
     /// resume-or-restart prompt (when `promptResumeOrRestart` is on).
-    private func playItemDirectly(_ item: PlexMetadata, fromBeginning: Bool = false) {
+    private func playItemDirectly(_ item: PlexMetadata, fromBeginning: Bool = false, mediaID: String? = nil) {
         if promptResumeOrRestart,
            !fromBeginning,
            item.isInProgress,
            let offsetMs = item.viewOffset, offsetMs > 0 {
-            presentResumeChoice(for: item, offsetMs: offsetMs)
+            presentResumeChoice(for: item, offsetMs: offsetMs, mediaID: mediaID)
         } else {
-            presentPlayer(for: item, fromBeginning: fromBeginning)
+            presentPlayer(for: item, fromBeginning: fromBeginning, mediaID: mediaID)
         }
     }
 
-    private func presentResumeChoice(for item: PlexMetadata, offsetMs: Int) {
+    private func presentResumeChoice(for item: PlexMetadata, offsetMs: Int, mediaID: String? = nil) {
         let alert = UIAlertController(
             title: "Resume Playback?",
             message: nil,
             preferredStyle: .actionSheet
         )
         alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { [weak self] _ in
-            self?.presentPlayer(for: item, fromBeginning: false)
+            self?.presentPlayer(for: item, fromBeginning: false, mediaID: mediaID)
         })
         alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { [weak self] _ in
-            self?.presentPlayer(for: item, fromBeginning: true)
+            self?.presentPlayer(for: item, fromBeginning: true, mediaID: mediaID)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
 
-    private func presentPlayer(for item: PlexMetadata, fromBeginning: Bool) {
+    private func presentPlayer(for item: PlexMetadata, fromBeginning: Bool, mediaID: String? = nil) {
         Task { @MainActor in
             guard let serverURL = authManager.selectedServerURL,
                   let token = authManager.selectedServerToken else { return }
@@ -5173,7 +5173,8 @@ final class PlexHomeViewController: UIViewController {
                 authToken: token,
                 startOffset: (resumeOffset ?? 0) > 0 ? resumeOffset : nil,
                 loadingArtImage: artImage,
-                loadingThumbImage: thumbImage
+                loadingThumbImage: thumbImage,
+                preferredMediaID: mediaID
             )
             PlayerPresenter.present(viewModel: viewModel, from: self, onDismiss: { [weak self] in
                 Task { await self?.dataStore.refreshHubs() }
@@ -5227,7 +5228,7 @@ final class PlexHomeViewController: UIViewController {
                 // A season has no media of its own: resolve it to an episode
                 // first, as the carousel's season page does. An episode plays
                 // itself.
-                onPlay: { [weak self] target in self?.playResolvingEpisode(target) })
+                onPlay: { [weak self] target, sourceID in self?.playResolvingEpisode(target, sourceID: sourceID) })
             present(page, animated: true)
         } else {
             presentStandaloneExpandedDetail(item)
@@ -5526,7 +5527,8 @@ final class PlexHomeViewController: UIViewController {
                         logo: base.artwork.logo
                     ),
                     parentArtwork: base.parentArtwork,
-                    grandparentArtwork: base.grandparentArtwork
+                    grandparentArtwork: base.grandparentArtwork,
+                    versionCount: base.versionCount
                 )
             } else {
                 stub = base
@@ -6344,6 +6346,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         // A collection opens its page on Select and has nothing to play or
         // mark. In a library its menu is Pin to Home or Unpin from Home.
         if item.kind == .collection { return collectionTileMenuSections(for: item) }
+        // Read now: the frame is gone once the menu covers the tile.
+        let tileFrame = focusedTileFrame()
         if !item.ref.isPlex {
             guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else { return [] }
             return Self.providerTileMenuSections(
@@ -6351,7 +6355,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 onWatchFromBeginning: { [weak self] in self?.playItem(item, fromBeginning: true) },
                 onMoreInfo: { [weak self] in self?.selectMediaItem(item) },
                 onGoToEpisode: { [weak self] in self?.presentStandaloneExpandedDetail(item) },
-                onGoToShow: { [weak self] in self?.openShowDetail(of: item) })
+                onGoToShow: { [weak self] in self?.openShowDetail(of: item) },
+                onPlayVersion: { [weak self] in self?.presentVersionPicker(for: item, from: tileFrame) })
         }
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken,
@@ -6378,6 +6383,11 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 },
             ]
             cwFirst += goToEntries(for: item)
+            if let version = Self.playVersionAction(for: item, handler: { [weak self] in
+                self?.presentVersionPicker(for: item, from: tileFrame)
+            }) {
+                cwFirst.insert(version, at: 1)
+            }
 
             let cwMiddle = [
                 TileMenuAction(title: "Mark as Watched",
@@ -6424,6 +6434,11 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         ]
 
         first += goToEntries(for: item)
+        if let version = Self.playVersionAction(for: item, handler: { [weak self] in
+            self?.presentVersionPicker(for: item, from: tileFrame)
+        }) {
+            first.insert(version, at: 1)
+        }
 
         // Mark as Watched / Unwatched — conditional on view state.
         // isWatched mirrors the old `viewCount > 0`; watchProgress != nil
@@ -6459,6 +6474,25 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         return [first, middle, last]
     }
 
+    /// "Play Version…" for a movie or episode with more than one file.
+    static func playVersionAction(for item: MediaItem, handler: (() -> Void)?) -> TileMenuAction? {
+        guard let handler, (item.versionCount ?? 0) >= 2, item.kind == .movie || item.kind == .episode else {
+            return nil
+        }
+        return TileMenuAction(title: "Play Version…", systemImage: "square.stack", handler: handler)
+    }
+
+    /// Tile menu "Play Version…": fetch the versions, then play the pick.
+    private func presentVersionPicker(for item: MediaItem, from tileFrame: CGRect?) {
+        guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let detail = try? await provider.fullDetail(for: item.ref) else { return }
+            VersionPicker.present(VersionPicker.versions(in: detail), from: self, sourceFrame: tileFrame) {
+                [weak self] sourceID in self?.playItem(item, sourceID: sourceID)
+            }
+        }
+    }
+
     /// The Plex tile menu for an item on another server: same entries and
     /// groups, every server call through the item's provider.
     /// [Watch from Beginning, More Info, Go to Episode, Go to Show] | [watched state,
@@ -6472,13 +6506,15 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         onWatchFromBeginning: @escaping () -> Void,
         onMoreInfo: @escaping () -> Void,
         onGoToEpisode: @escaping () -> Void,
-        onGoToShow: @escaping () -> Void
+        onGoToShow: @escaping () -> Void,
+        onPlayVersion: (() -> Void)? = nil
     ) -> [[TileMenuAction]] {
         var first = [
             TileMenuAction(title: "Watch from Beginning", systemImage: "arrow.counterclockwise",
                            handler: onWatchFromBeginning),
             TileMenuAction(title: "More Info", systemImage: "info.circle", handler: onMoreInfo)
         ]
+        if let version = playVersionAction(for: item, handler: onPlayVersion) { first.insert(version, at: 1) }
         if item.kind == .episode, item.grandparentRef?.itemID.isEmpty == false {
             first.append(TileMenuAction(title: "Go to Episode", systemImage: "list.and.film", handler: onGoToEpisode))
             first.append(TileMenuAction(title: "Go to Show", systemImage: "tv", handler: onGoToShow))

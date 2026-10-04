@@ -74,6 +74,7 @@ protocol MediaProvider: Sendable, Identifiable {
     func refreshMetadata(_ itemRef: MediaItemRef) async throws
 
     // MARK: - Playback
+    /// A nil `sourceID` plays the best version by `VersionRanking`.
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo
 
     /// A server-side transcode starting at `startTime`, played with AVPlayer.

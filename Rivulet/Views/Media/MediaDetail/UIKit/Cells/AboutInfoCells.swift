@@ -291,7 +291,7 @@ final class InfoColumnsView: UIView {
         information.configure(title: "Information", rows: info)
 
         // Languages — from the first media source's tracks.
-        let source = detail.mediaSources.first
+        let source = detail.primarySource
         var langs: [(String, String)] = []
         if let audio = source?.audioTracks, !audio.isEmpty {
             let names = uniqueOrdered(audio.compactMap { Self.languageName($0.language) })

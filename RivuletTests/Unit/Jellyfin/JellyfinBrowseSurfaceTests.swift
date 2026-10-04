@@ -12,7 +12,7 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     private func menu(_ item: MediaItem, continueWatching: Bool = false) -> [[TileMenuAction]] {
         PlexHomeViewController.providerTileMenuSections(
             for: item, provider: provider, isContinueWatching: continueWatching,
-            onWatchFromBeginning: {}, onMoreInfo: {}, onGoToEpisode: {}, onGoToShow: {})
+            onWatchFromBeginning: {}, onMoreInfo: {}, onGoToEpisode: {}, onGoToShow: {}, onPlayVersion: {})
     }
 
     func test_posterCell_sourceBadge_clearsOnReuse() {
@@ -150,6 +150,18 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     func test_homeRail_jellyfinOnly() {
         let rail = PlexHomeViewController.homeRail(plex: [], jellyfin: [row("jf-cw", cw: true), row("jf-movies")])
         XCTAssertEqual(rail.map(\.row.id), ["jf-cw", "jf-movies"])
+    }
+
+    func test_providerTileMenu_playVersion_onlyWithTwoVersions() {
+        func titles(_ json: String) -> [String] {
+            let item = JellyfinMediaMapper.item(JellyfinFixtures.decode(json), providerID: "jellyfin:srv",
+                                                baseURL: JellyfinFixtures.baseURL)
+            return menu(item).flatMap { $0 }.map(\.title)
+        }
+        XCTAssertTrue(titles(#"{"Id":"m1","Name":"Heat","Type":"Movie","MediaSourceCount":2}"#)
+            .contains("Play Version…"))
+        XCTAssertFalse(titles(#"{"Id":"m1","Name":"Heat","Type":"Movie","MediaSourceCount":1}"#)
+            .contains("Play Version…"))
     }
 
     func test_sourceBadge_onlyWhileBothServersAreSignedIn() {

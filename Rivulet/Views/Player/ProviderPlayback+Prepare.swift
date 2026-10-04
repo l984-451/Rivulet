@@ -14,11 +14,22 @@ import UIKit
 
 extension ProviderPlayback {
     /// Everything the player needs for `item`, fetched from its provider. The
-    /// detail and the stream run concurrently; the extras wait for the stream
-    /// so they ask about the source that will actually play.
-    static func prepare(item: MediaItem, provider: any MediaProvider) async throws -> ProviderPlayback {
+    /// detail and the stream run concurrently unless a tier match needs the
+    /// version list first; the extras wait for the stream so they ask about
+    /// the source that will actually play.
+    static func prepare(item: MediaItem, provider: any MediaProvider,
+                        version: VersionChoice = .best) async throws -> ProviderPlayback {
+        if case .matchingTier = version {
+            let detail = try await provider.fullDetail(for: item.ref)
+            let sourceID = VersionRanking.choose(version, from: detail.mediaSources)?.id
+            let stream = try await provider.resolveStream(for: item.ref, sourceID: sourceID)
+            let extras = await provider.playbackExtras(for: item.ref, sourceID: stream.source.id)
+            return ProviderPlayback(provider: provider, item: item, detail: detail, stream: stream, extras: extras)
+        }
+        let sourceID: String?
+        if case .source(let id) = version { sourceID = id } else { sourceID = nil }
         async let detail = provider.fullDetail(for: item.ref)
-        let stream = try await provider.resolveStream(for: item.ref, sourceID: nil)
+        let stream = try await provider.resolveStream(for: item.ref, sourceID: sourceID)
         async let extras = provider.playbackExtras(for: item.ref, sourceID: stream.source.id)
         return try await ProviderPlayback(provider: provider, item: item, detail: detail,
                                           stream: stream, extras: extras)
@@ -48,7 +59,7 @@ enum ProviderPlayer {
     /// Play `item` from its own provider. A show or a season resolves to the
     /// episode Play means first, the same way the Plex path does.
     @MainActor
-    static func play(_ item: MediaItem, fromBeginning: Bool,
+    static func play(_ item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                      from presenter: UIViewController, onDismiss: (() -> Void)?) {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
             presentError(MediaProviderError.notFound, from: presenter)
@@ -65,14 +76,16 @@ enum ProviderPlayer {
             async let loadingImages = HeroBackdropResolver.shared.playerLoadingImages(
                 for: target.heroBackdropRequest())
             do {
-                let playback = try await ProviderPlayback.prepare(item: target, provider: provider)
+                let playback = try await ProviderPlayback.prepare(
+                    item: target, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best)
                 let (art, thumb) = await loadingImages
                 let viewModel = UniversalPlayerViewModel(
                     providerPlayback: playback,
                     startOffset: startOffset(detailOffset: playback.detail.item.userState.viewOffset,
                                              fromBeginning: fromBeginning),
                     loadingArtImage: art,
-                    loadingThumbImage: thumb)
+                    loadingThumbImage: thumb,
+                    preferredMediaID: sourceID)
                 PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
             } catch {
                 presentError(error, from: presenter)

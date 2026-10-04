@@ -42,7 +42,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     /// "12/24 watched", and the parent image ids that list responses omit
     /// otherwise. Detail calls (GET /Items/{id}) return every field.
     private static let listFields = URLQueryItem(
-        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId"
+        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount"
     )
 
     private func map(_ dtos: [JFItem]?) -> [MediaItem] {
@@ -196,7 +196,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         try await client.get("Items/Latest", [
             URLQueryItem(name: "parentId", value: parentID),
             URLQueryItem(name: "limit", value: "\(limit)"),
-            URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,DateCreated,DateLastContentAdded")
+            URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,DateCreated,DateLastContentAdded,MediaSourceCount")
         ])
     }
 
@@ -340,7 +340,12 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             )
         )
         let sources = response.mediaSources ?? []
-        guard let chosen = sources.first(where: { $0.id == sourceID }) ?? sources.first else {
+        let ranked = sources.map {
+            JellyfinMediaMapper.mediaSource($0, itemID: itemRef.itemID, playSessionID: response.playSessionId,
+                                            baseURL: baseURL, token: token)
+        }
+        let pickedID = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best, from: ranked)?.id
+        guard let chosen = sources.first(where: { ($0.id ?? itemRef.itemID) == pickedID }) else {
             throw MediaProviderError.notFound
         }
         var transcodeURL: URL?

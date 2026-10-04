@@ -20,6 +20,10 @@ final class JellyfinMediaMapperTests: XCTestCase {
 
     // MARK: - Items
 
+    func test_item_versionCount_fromMediaSourceCount() {
+        XCTAssertEqual(item(#"{"Id":"m1","Name":"Heat","Type":"Movie","MediaSourceCount":2}"#).versionCount, 2)
+    }
+
     func test_episode_hierarchyAndNumbers() {
         let ep = item(JellyfinFixtures.episode)
         XCTAssertEqual(ep.ref, MediaItemRef(providerID: pid, itemID: "ep1"))

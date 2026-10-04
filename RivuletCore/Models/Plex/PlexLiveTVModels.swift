@@ -628,7 +628,8 @@ extension PlexLiveTVProgram {
             sourceGuid: guid,
             year: isEpisode ? nil : year,
             contentRating: contentRating,
-            isMovie: type?.lowercased() == "movie"
+            isMovie: type?.lowercased() == "movie",
+            isLive: live ?? false
         )
     }
 

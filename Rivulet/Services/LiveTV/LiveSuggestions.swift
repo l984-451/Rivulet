@@ -74,9 +74,9 @@ enum LiveSuggestions {
     /// A title as the same show across airings: some guides prefix the live
     /// airing ("Live: First Take") and not the replay.
     private static func showKey(_ title: String?) -> String? {
-        guard var key = title?.lowercased().trimmingCharacters(in: .whitespaces), !key.isEmpty else { return nil }
-        if key.hasPrefix("live:") { key = String(key.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
-        return key
+        guard let title else { return nil }
+        let key = UnifiedProgram.displayTitle(title).lowercased().trimmingCharacters(in: .whitespaces)
+        return key.isEmpty ? nil : key
     }
 
     private static func hourOfDay(_ date: Date, _ calendar: Calendar) -> Double {

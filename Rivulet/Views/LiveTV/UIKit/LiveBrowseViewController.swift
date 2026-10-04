@@ -257,9 +257,10 @@ final class LiveBrowseViewController: UIViewController {
         var detail: [String] = []
         switch item.kind {
         case .channel:
-            eyebrowLabel.text = "LIVE"
-            eyebrowLabel.textColor = .systemRed
-            titleLabel.text = program?.title ?? channel?.name
+            let isLive = program?.isLiveAiring == true
+            eyebrowLabel.text = isLive ? "LIVE" : "ON NOW"
+            eyebrowLabel.textColor = isLive ? .systemRed : UIColor.white.withAlphaComponent(0.8)
+            titleLabel.text = program?.displayTitle ?? channel?.name
             if let program, !program.id.contains(":placeholder:") {
                 detail.append("\(program.startTime.formatted(Self.timeFormat)) – \(program.endTime.formatted(Self.timeFormat))")
             }
@@ -267,13 +268,13 @@ final class LiveBrowseViewController: UIViewController {
         case .upcoming:
             eyebrowLabel.text = program.map { "STARTS \($0.startTime.formatted(Self.timeFormat))" }
             eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.8)
-            titleLabel.text = program?.title
+            titleLabel.text = program?.displayTitle
             if !channelLine.isEmpty { detail.append(channelLine) }
         case .recording:
             let recording = item.recording
             eyebrowLabel.text = recording?.status == .recording ? "RECORDING" : "SCHEDULED"
             eyebrowLabel.textColor = recording?.status == .recording ? .systemRed : UIColor.white.withAlphaComponent(0.8)
-            titleLabel.text = recording?.title
+            titleLabel.text = recording.map { UnifiedProgram.displayTitle($0.title) }
             if let recording {
                 detail.append("\(recording.startTime.formatted(.dateTime.weekday().hour().minute())) – \(recording.endTime.formatted(Self.timeFormat))")
             }

@@ -152,6 +152,8 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
     let year: Int?
     let contentRating: String?
     let isMovie: Bool
+    /// The source flagged this airing live (Plex's `live`).
+    let isLive: Bool
 
     init(
         id: String,
@@ -170,7 +172,8 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         sourceGuid: String? = nil,
         year: Int? = nil,
         contentRating: String? = nil,
-        isMovie: Bool = false
+        isMovie: Bool = false,
+        isLive: Bool = false
     ) {
         self.id = id
         self.channelId = channelId
@@ -189,6 +192,24 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         self.year = year
         self.contentRating = contentRating
         self.isMovie = isMovie
+        self.isLive = isLive
+    }
+
+    /// `title` without the guide's live marker. Display only: Dispatcharr
+    /// series rules match the raw title.
+    var displayTitle: String { Self.displayTitle(title) }
+
+    /// A live airing, as opposed to a replay: the source flagged it, or the
+    /// guide marked the title ("Live: SportsCenter").
+    var isLiveAiring: Bool { isLive || displayTitle != title }
+
+    private static let liveMarker = /^\s*(?:\[live\]|\(live\)|live\s*[:|]|live\s+[-–]\s)\s*/.ignoresCase()
+
+    /// "Live: X", "LIVE | X", "Live - X", "[LIVE] X" → "X". Show names that
+    /// start with the word ("Live PD", "LiveNOW from FOX") are left alone.
+    static func displayTitle(_ title: String) -> String {
+        let stripped = title.replacing(liveMarker, with: "", maxReplacements: 1)
+        return stripped.isEmpty ? title : stripped
     }
 
     /// Check if this program is currently airing

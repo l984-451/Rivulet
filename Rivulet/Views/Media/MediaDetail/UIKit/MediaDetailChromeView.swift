@@ -985,6 +985,7 @@ final class MediaDetailChromeView: UIView {
             parts.append(String(year))
         }
         if let runtime = item.runtime, runtime > 0 { parts.append(Self.formatRuntime(runtime)) }
+        if let edition = detail?.item.editionTitle ?? item.editionTitle, !edition.isEmpty { parts.append(edition) }
 
         for (i, part) in parts.enumerated() {
             if i > 0 {

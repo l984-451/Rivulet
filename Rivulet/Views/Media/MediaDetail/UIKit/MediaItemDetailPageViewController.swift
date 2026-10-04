@@ -538,6 +538,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         if let date = Self.displayDate(item.releaseDate) { parts.append(date) }
         else if let year = item.year { parts.append(String(year)) }
         if let runtime = item.runtime, runtime > 0 { parts.append(Self.formatRuntime(runtime)) }
+        if let edition = item.editionTitle, !edition.isEmpty { parts.append(edition) }
         return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
     }
 

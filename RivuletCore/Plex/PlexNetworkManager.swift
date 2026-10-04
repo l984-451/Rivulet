@@ -96,8 +96,20 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// the decode on the global executor; Data is Sendable, T must be.
     nonisolated private static func decodeDetached<T: Decodable & Sendable>(_ data: Data) async throws -> T {
         try await Task.detached(priority: .userInitiated) {
-            try JSONDecoder().decode(T.self, from: data)
+            try decodeRepairingUTF8(T.self, from: data)
         }.value
+    }
+
+    /// PMS can echo a file path holding a non-UTF-8 byte (a Latin-1 "é"), and
+    /// JSONDecoder then rejects the whole response, so a Home row goes blank
+    /// (RIVULET-18). On that failure only, swap bad bytes for U+FFFD and retry.
+    nonisolated static func decodeRepairingUTF8<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            guard String(data: data, encoding: .utf8) == nil else { throw error }
+            return try JSONDecoder().decode(type, from: Data(String(decoding: data, as: UTF8.self).utf8))
+        }
     }
 
     func request<T: Decodable & Sendable>(
@@ -170,8 +182,19 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             print("🌐 PlexNetwork: ❌ HTTP Error \(httpResponse.statusCode)")
             let error = PlexAPIError.httpError(statusCode: httpResponse.statusCode, data: data)
 
-            // Capture HTTP errors to Sentry (skip 401/403 auth errors and 5xx server errors)
-            if httpResponse.statusCode != 401 && httpResponse.statusCode != 403 && !(500...599).contains(httpResponse.statusCode) {
+            // 404 is an item the server deleted or rematched, 421 a connection
+            // address now answered by another server (RIVULET-2): server state,
+            // so a log. Other 4xx can mean we sent a bad request, so capture.
+            let status = httpResponse.statusCode
+            if status == 404 || status == 421 {
+                SentryBridge.log(.warn, "Plex request returned \(status)", attributes: [
+                    "component": "plex_network",
+                    "error_type": "http",
+                    "endpoint": endpoint,
+                    "method": method,
+                    "status_code": status,
+                ])
+            } else if status != 401 && status != 403 && !(500...599).contains(status) {
                 SentryBridge.capture(error: error) { scope in
                     scope.setTag(value: "plex_network", key: "component")
                     scope.setTag(value: "http", key: "error_type")

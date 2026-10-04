@@ -441,11 +441,17 @@ actor PlexLiveTVProvider: LiveTVProvider {
                 )
             }.value
         } catch {
-            SentryBridge.capture(error: error) { scope in
-                scope.setTag(value: "plex_livetv", key: "component")
-                scope.setExtra(value: channel.name, key: "channel_name")
-                scope.setExtra(value: dvrKey, key: "dvr_key")
-                scope.setExtra(value: "tune_failed", key: "operation")
+            // A tune the server answered with its own message is a tuner or
+            // antenna fault (RIVULET-6N), not ours.
+            if error is PlexLiveTuneError {
+                logFailure(error, operation: "tune", ["channel_name": channel.name, "dvr_key": dvrKey])
+            } else if !isCancellationError(error) {
+                SentryBridge.capture(error: error) { scope in
+                    scope.setTag(value: "plex_livetv", key: "component")
+                    scope.setExtra(value: channel.name, key: "channel_name")
+                    scope.setExtra(value: dvrKey, key: "dvr_key")
+                    scope.setExtra(value: "tune_failed", key: "operation")
+                }
             }
             throw error
         }
@@ -552,6 +558,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
 
     /// Lineup/guide fetch failures are the user's server, not Rivulet: a log, not an error.
     private func logFailure(_ error: Error, operation: String, _ extra: [String: Any] = [:]) {
+        guard !isCancellationError(error) else { return }
         var attributes = extra
         attributes["component"] = "plex_livetv"
         attributes["operation"] = operation

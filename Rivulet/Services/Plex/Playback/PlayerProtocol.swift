@@ -215,7 +215,7 @@ enum EngineFailureKind {
 /// HLS fallback (RIVULET-19). Both spellings are needed: structured
 /// concurrency throws `CancellationError`, URLSession throws NSURLError -999,
 /// and a cancelled load can surface as either depending on how far it got.
-func isCancellationError(_ error: Error) -> Bool {
+nonisolated func isCancellationError(_ error: Error) -> Bool {
     if error is CancellationError { return true }
     let nsError = error as NSError
     if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return true }

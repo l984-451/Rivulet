@@ -60,6 +60,7 @@ final class LiveBrowseViewController: UIViewController {
     private var cancellables = Set<AnyCancellable>()
     private var minuteTimer: Timer?
     private var backdropTask: Task<Void, Never>?
+    private var measureTask: Task<Void, Never>?
     private var backdropURL: URL?
     /// Something full screen is over the page (the player, multiview, the
     /// recordings list). Leaving for one of those is not leaving Live TV, so
@@ -287,8 +288,19 @@ final class LiveBrowseViewController: UIViewController {
         }
         summaryLabel.text = summary
 
-        let wideIcon = program?.iconURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil }
-        setBackdrop(program?.landscapeURL ?? wideIcon ?? item.recording?.posterURL)
+        let art = EPGImageClassifier.shared.wideArt(for: program) ?? item.recording?.posterURL
+        setBackdrop(art)
+        measureTask?.cancel()
+        // An icon with no declared size shows once it measures wide.
+        guard art == nil, let icon = program?.iconURL,
+              EPGImageClassifier.shared.kind(for: icon) == nil else { return }
+        measureTask = Task { [weak self] in
+            let kind = await EPGImageClassifier.shared.classify(icon) {
+                await ImageCacheManager.shared.image(for: icon)?.size
+            }
+            guard let self, !Task.isCancelled, kind == .landscape else { return }
+            self.setBackdrop(icon)
+        }
     }
 
     /// Crossfade to `url`, after focus has settled so a fast sweep along a

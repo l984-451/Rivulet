@@ -46,6 +46,12 @@ nonisolated final class EPGImageClassifier: @unchecked Sendable {
         kind(for: url) == .landscape
     }
 
+    /// The programme's wide art: its declared landscape icon, else its icon
+    /// once measured wide. Nil while that icon is unmeasured.
+    func wideArt(for program: UnifiedProgram?) -> URL? {
+        program?.landscapeURL ?? program?.iconURL.flatMap { isLandscape($0) ? $0 : nil }
+    }
+
     /// The remembered kind, or the kind measured from `loadSize`, which should
     /// read through the platform's image cache so measuring costs no extra
     /// fetch. Nil when the image cannot be loaded.

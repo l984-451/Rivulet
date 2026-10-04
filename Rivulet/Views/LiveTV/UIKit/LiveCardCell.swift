@@ -91,6 +91,7 @@ final class LiveCardCell: UICollectionViewCell {
     private var artTask: Task<Void, Never>?
     private var logoTask: Task<Void, Never>?
     private var fieldTask: Task<Void, Never>?
+    private var measureTask: Task<Void, Never>?
     private var artURL: URL?
     private var logoURL: URL?
     private var fieldURL: URL?
@@ -224,9 +225,11 @@ final class LiveCardCell: UICollectionViewCell {
         artTask?.cancel()
         logoTask?.cancel()
         fieldTask?.cancel()
+        measureTask?.cancel()
         artTask = nil
         logoTask = nil
         fieldTask = nil
+        measureTask = nil
         artURL = nil
         logoURL = nil
         fieldURL = nil
@@ -278,15 +281,29 @@ final class LiveCardCell: UICollectionViewCell {
         progressFraction = CGFloat(min(max(progress ?? 0, 0), 1))
         setNeedsLayout()
 
-        // Art: the programme's own 16:9 image (its icon counts once the
-        // classifier has seen it is wide), else the channel's logo over a
-        // blurred field of the programme's other art, or of the logo itself.
-        let wideIcon = program?.iconURL.flatMap { EPGImageClassifier.shared.isLandscape($0) ? $0 : nil }
-        let art = program?.landscapeURL ?? wideIcon ?? item.recording?.posterURL
+        // Art: the programme's own 16:9 image (its icon counts once measured
+        // wide), else the channel's logo over a blurred field of the
+        // programme's other art, or of the logo itself.
+        let art = EPGImageClassifier.shared.wideArt(for: program) ?? item.recording?.posterURL
         let logo = channel?.logoURL
         load(art: art)
         load(logo: logo, asFallback: art == nil)
         load(field: art == nil ? (program?.posterURL ?? program?.iconURL ?? logo) : nil)
+        measure(art == nil ? program?.iconURL : nil, then: item)
+    }
+
+    /// Measures an icon the EPG gave no size for, and redraws the card once it
+    /// proves wide (Dispatcharr's feed declares no icon sizes).
+    private func measure(_ icon: URL?, then item: LiveCardItem) {
+        measureTask?.cancel()
+        guard let icon, EPGImageClassifier.shared.kind(for: icon) == nil else { return }
+        measureTask = Task { [weak self] in
+            let kind = await EPGImageClassifier.shared.classify(icon) {
+                await ImageCacheManager.shared.image(for: icon, quality: .thumb)?.size
+            }
+            guard let self, !Task.isCancelled, kind == .landscape else { return }
+            self.configure(item)
+        }
     }
 
     /// `recordDot` puts the guide's red record dot before `text`: scheduled

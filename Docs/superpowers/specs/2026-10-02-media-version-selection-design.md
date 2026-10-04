@@ -8,7 +8,8 @@ A movie or episode can carry more than one file: Plex returns several entries in
 
 Out of scope:
 
-- Plex Editions (`editionTitle`). Each edition is its own library item with its own rating key and watch state, so it already shows as a separate tile.
+- Plex Editions (`editionTitle`). Each edition is its own library item with its own rating key and watch state, so it already shows as a separate tile. Rivulet leaves editions as Plex presents them.
+- Jellyfin editions get no separate handling. Jellyfin stores them inside one item as labelled versions (`Movie (2019) - Directors Cut.mp4`), so they go through the same ranking and picker as quality versions, and the picker row shows the label (see Version labels).
 - Libraries where Plex merged different content into one item (an extended cut grouped with the broadcast cut, Part 1 grouped with Part 2). These still work: they appear in the picker like any other versions and Play takes the higher ranked one.
 - Stacked multi-part files. Playback keeps using `Part[0]` as it does today.
 - Remembering a choice, and switching versions from inside the player. See Later.
@@ -20,7 +21,7 @@ Out of scope:
 3. The tile long-press menu shows "Play Version…" on movie and episode tiles that have two or more versions. It opens the same list.
 4. A pick applies to that play only. Nothing is stored. The next Play ranks again.
 5. Up Next and auto-advance keep the resolution of the version that was playing. If the user picked the 1080p file, the next episode plays its 1080p file when it has one.
-6. A picked version resumes from the item's resume point, the same way Play does on that surface. Plex and Jellyfin both store the resume point per item, and the versions hold the same content, so the offset is valid on any of them.
+6. A picked version resumes from the item's resume point, the same way Play does on that surface. Plex and Jellyfin both store the resume point per item, and the versions hold the same content, so the offset is valid on any of them. The one exception is a Jellyfin item holding different cuts as versions: the cuts share one resume point, which will not line up across them.
 
 ## Ranking
 
@@ -48,7 +49,7 @@ Plex leaves `Media.title` empty on every multi-version item measured, so labels 
 
 resolution, dynamic range badge (DV / HDR / HLG, omitted for SDR), video codec, audio, file size
 
-Resolution, range and audio come from `qualityBadges()`. The codec name comes from a short map (hevc → HEVC, h264 → H.264, av1 → AV1, vp9 → VP9, mpeg2video → MPEG-2, mpeg4 → MPEG-4, vc1 → VC-1, anything else uppercased). File size uses `PlayerInfoSheetStyle.fileSize`. When two rows produce the same label, both get the file name (last path component, extension dropped) appended.
+Resolution, range and audio come from `qualityBadges()`. The codec name comes from a short map (hevc → HEVC, h264 → H.264, av1 → AV1, vp9 → VP9, mpeg2video → MPEG-2, mpeg4 → MPEG-4, vc1 → VC-1, anything else uppercased). File size uses `PlayerInfoSheetStyle.fileSize`. When two rows produce the same label, both get the file name (last path component, extension dropped) appended. When the provider names a version and the name is something other than a resolution (Jellyfin takes it from the file name, as in `Directors Cut`; a name ending in p or i counts as a resolution), the row starts with that name. Plex sends no version names.
 
 Illustrative, for the two Sweeney Todd files measured: `1080p · HEVC · AAC 5.1 · 5.7 GB` and `480p · MPEG-4 · MP3 2.0 · 730 MB`. The exact audio text depends on `AudioTrack.qualityLabel`.
 
@@ -141,7 +142,7 @@ On device (the Simulator does not reproduce focus behavior faithfully):
 4. An Office episode: pick the 720p version, let Up Next advance; the next episode plays its 720p file.
 5. Long-press a multi-version movie tile: "Play Version…" appears and works. A single-version tile has no such row.
 6. Menu from the picker returns focus to the Versions button, and arrow presses inside the picker do not move the page behind it.
-7. Jellyfin: the test server has no multi-version items. Add a second file to one movie's folder, named after the folder with a suffix such as ` - 1080p`, which Jellyfin groups as a version and repeat steps 1, 2 and 5.
+7. Jellyfin: the test server has no multi-version items. Add a second file to one movie's folder, named after the folder with a suffix such as ` - 1080p`, which Jellyfin groups as a version and repeat steps 1, 2 and 5. Name a third file as an edition (` - Directors Cut`) and check its row starts with that name.
 
 Estimate: about 1.5 days, most of it in the Plex player path and device testing.
 

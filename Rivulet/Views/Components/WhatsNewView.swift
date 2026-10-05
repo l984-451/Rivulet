@@ -153,6 +153,9 @@ struct WhatsNewView: View {
         ("1.0.6 (92)", [
             "Updated AetherEngine to 7.25.3",
             "Detail pages now show TMDB, IMDb and Rotten Tomatoes scores",
+            "Movies and episodes with more than one file now play the best version",
+            "New Versions button and Play Version menu item let you pick another file",
+            "Detail pages now show a Plex movie's edition name, such as Director's Cut",
             "Episode pages now have a Go to Show button",
             "Episode long-press menus now offer both Go to Episode and Go to Show",
             "A show's Watched button now asks first and can reset a partly watched show",

@@ -13,6 +13,20 @@ final class PlexMediaMapperTests: XCTestCase {
 
     // MARK: - Library
 
+    func test_item_countsDistinctVersions() throws {
+        let json = #"{"ratingKey":"7","type":"movie","title":"Heat","Media":[{"id":1},{"id":2}]}"#
+        let meta = try JSONDecoder().decode(PlexMetadata.self, from: Data(json.utf8))
+        let item = PlexMediaMapper.item(meta, providerID: "plex:abc", serverURL: "http://s", authToken: "t")
+        XCTAssertEqual(item.versionCount, 2)
+    }
+
+    func test_item_mapsEditionTitle() throws {
+        let json = #"{"ratingKey":"7","type":"movie","title":"Blade Runner","editionTitle":"Final Cut"}"#
+        let meta = try JSONDecoder().decode(PlexMetadata.self, from: Data(json.utf8))
+        let item = PlexMediaMapper.item(meta, providerID: "plex:abc", serverURL: "http://s", authToken: "t")
+        XCTAssertEqual(item.editionTitle, "Final Cut")
+    }
+
     func test_library_maps_movies() {
         let plex = PlexLibrary(
             key: "1", type: "movie", title: "Movies", agent: "x",

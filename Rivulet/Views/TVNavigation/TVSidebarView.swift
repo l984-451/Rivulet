@@ -652,11 +652,11 @@ struct TVSidebarView: View {
             let page = MediaItemDetailPageViewController(
                 item: item,
                 seriesTitle: nil,
-                onPlay: { episode in
+                onPlay: { episode, sourceID in
                     // Close the page first so the player isn't presented
                     // underneath it, then resolve full metadata to play.
                     top.dismiss(animated: true) {
-                        playDeepLinkItem(episode)
+                        playDeepLinkItem(episode, sourceID: sourceID)
                     }
                 })
             top.present(page, animated: true)
@@ -674,10 +674,10 @@ struct TVSidebarView: View {
 
     /// Play a MediaItem surfaced by the detail page: resolve full metadata by
     /// ratingKey (MediaItem carries no PlexMetadata), then hand to the player.
-    private func playDeepLinkItem(_ item: MediaItem) {
+    private func playDeepLinkItem(_ item: MediaItem, sourceID: String? = nil) {
         if !item.ref.isPlex {
             guard let top = Self.topPresentedViewController() else { return }
-            ProviderPlayer.play(item, fromBeginning: false, from: top, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID, from: top, onDismiss: nil)
             return
         }
         let ratingKey = item.ref.itemID
@@ -688,14 +688,14 @@ struct TVSidebarView: View {
             guard let meta = try? await PlexNetworkManager.shared.getFullMetadata(
                 serverURL: serverURL, authToken: token, ratingKey: ratingKey
             ) else { return }
-            presentPlayerForDeepLink(meta)
+            presentPlayerForDeepLink(meta, mediaID: sourceID)
         }
     }
 
     // MARK: - Deep Link Player
 
     /// Present player for a deep link from Top Shelf
-    private func presentPlayerForDeepLink(_ metadata: PlexMetadata) {
+    private func presentPlayerForDeepLink(_ metadata: PlexMetadata, mediaID: String? = nil) {
         Task {
             let (artImage, thumbImage) = await getPlayerImages(for: metadata)
 
@@ -706,7 +706,8 @@ struct TVSidebarView: View {
                     authToken: authManager.selectedServerToken ?? "",
                     startOffset: metadata.viewOffset.map { Double($0) / 1000.0 },
                     loadingArtImage: artImage,
-                    loadingThumbImage: thumbImage
+                    loadingThumbImage: thumbImage,
+                    preferredMediaID: mediaID
                 )
                 if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                    let rootVC = scene.windows.first?.rootViewController {

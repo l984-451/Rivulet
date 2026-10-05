@@ -383,6 +383,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     // MARK: - Metadata
 
     private(set) var metadata: PlexMetadata
+    /// Plex `Media.id` of the version playing, kept so a metadata refresh keeps it.
+    private(set) var playingMediaID: String?
+    /// That version's position in server order; Plex's transcoder picks by `mediaIndex`.
+    private(set) var playingMediaServerIndex = 0
+    /// True when the user picked a version; only then does Up Next hold a tier.
+    private let pickedVersion: Bool
+    /// The picked file's tier, read once so Up Next can't step down episode by episode.
+    private var upNextTier: Int?
     /// Bumped whenever `metadata` is swapped to a different playable item
     /// on this same view-model instance (e.g. `playNextEpisode()`), as
     /// opposed to in-place field fills like `fetchFullMetadataIfNeeded()`
@@ -603,8 +611,17 @@ final class UniversalPlayerViewModel: ObservableObject {
         loadingArtImage: UIImage? = nil,
         loadingThumbImage: UIImage? = nil,
         initialAudioTrackId: Int? = nil,
-        initialSubtitleSelection: InitialSubtitleSelection = .auto
+        initialSubtitleSelection: InitialSubtitleSelection = .auto,
+        preferredMediaID: String? = nil
     ) {
+        // The chosen version goes first, so every `Media.first` read plays it.
+        var metadata = metadata
+        let selection = VersionRanking.select(preferredMediaID.map(VersionChoice.source) ?? .best,
+                                              in: metadata.Media ?? [])
+        if !selection.media.isEmpty { metadata.Media = selection.media }
+        self.playingMediaID = selection.media.first.map { "\($0.id)" } ?? preferredMediaID
+        self.playingMediaServerIndex = selection.serverIndex
+        self.pickedVersion = preferredMediaID != nil
         self.metadata = metadata
         self.serverURL = serverURL
         self.authToken = authToken
@@ -642,7 +659,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         providerPlayback: ProviderPlayback,
         startOffset: TimeInterval?,
         loadingArtImage: UIImage? = nil,
-        loadingThumbImage: UIImage? = nil
+        loadingThumbImage: UIImage? = nil,
+        preferredMediaID: String? = nil
     ) {
         self.init(
             metadata: ProviderPlaybackMetadata.make(
@@ -654,7 +672,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             authToken: "",
             startOffset: startOffset,
             loadingArtImage: loadingArtImage,
-            loadingThumbImage: loadingThumbImage
+            loadingThumbImage: loadingThumbImage,
+            preferredMediaID: preferredMediaID
         )
         setProviderStream(providerPlayback.stream, of: providerPlayback)
     }
@@ -1625,6 +1644,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             serverURL: serverURL,
             authToken: authToken,
             ratingKey: ratingKey,
+            mediaIndex: playingMediaServerIndex,
             offsetMs: Int((offset ?? 0) * 1000),
             hasHDR: metadata.hasHDR,
             useDolbyVision: metadata.hasDolbyVision,
@@ -4551,6 +4571,32 @@ final class UniversalPlayerViewModel: ObservableObject {
             && pausePresentation == .frame
     }
 
+    /// Puts the chosen version of a server-ordered `Media` array first and records it.
+    private func applyVersion(_ choice: VersionChoice, to media: [PlexMedia]?) {
+        guard let media, !media.isEmpty else { return }
+        let selection = VersionRanking.select(choice, in: media)
+        metadata.Media = selection.media
+        playingMediaID = selection.media.first.map { "\($0.id)" }
+        playingMediaServerIndex = selection.serverIndex
+    }
+
+    private var currentVersionChoice: VersionChoice {
+        playingMediaID.map(VersionChoice.source) ?? upNextTier.map(VersionChoice.matchingTier) ?? .best
+    }
+
+    /// Up Next plays each episode's best file unless the user picked one; then it keeps that tier.
+    func upNextVersionChoice() -> VersionChoice {
+        guard pickedVersion else { return .best }
+        if upNextTier == nil { upNextTier = playingTier }
+        return upNextTier.map(VersionChoice.matchingTier) ?? .best
+    }
+
+    /// Resolution tier of the version playing, for Up Next.
+    private var playingTier: Int {
+        if case .provider(let playback) = source { return VersionRanking.key(playback.stream.source).tier }
+        return metadata.Media?.first.map { VersionRanking.key($0).tier } ?? 0
+    }
+
     /// Fetch detailed metadata with markers if not already present
     private func fetchMarkersIfNeeded() async {
         // A provider item's shim already carries markers, chapters and streams.
@@ -4580,7 +4626,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Update Media (includes Part with stream details)
             // Hub items often lack Part/Stream data
             if let media = detailedMetadata.Media, !media.isEmpty {
-                metadata.Media = media
+                applyVersion(currentVersionChoice, to: media)
             }
 
             // Fill in missing display info (summary, genres, etc.)
@@ -4808,7 +4854,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
             // Update Media array if missing (needed for info overlay display)
             if metadata.Media == nil || metadata.Media?.isEmpty == true {
-                metadata.Media = fullMetadata.Media
+                applyVersion(currentVersionChoice, to: fullMetadata.Media)
             }
 
             // Carry over external-id guids (fetched via includeGuids=1) so
@@ -5366,9 +5412,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             preloadedNextMetadata = next
         }
 
-        // Build stream URL for next episode
+        // Build stream URL for next episode, from the same choice the swap makes,
+        // so the warmed URL is the file that plays.
         let metadata = preloadedNextMetadata ?? next
-        if let partKey = metadata.Media?.first?.Part?.first?.key {
+        let nextMedia = VersionRanking.select(upNextVersionChoice(), in: metadata.Media ?? []).media.first
+        if let partKey = nextMedia?.Part?.first?.key {
             preloadedNextStreamURL = networkManager.buildPlaybackDirectPlayURL(
                 serverURL: serverURL,
                 authToken: authToken,
@@ -5419,9 +5467,10 @@ final class UniversalPlayerViewModel: ObservableObject {
             task = pending.task
         } else if let item = providerEpisodeItems[key] {
             let provider = playback.provider
+            let version = upNextVersionChoice()
             task = Task {
                 do {
-                    return try await ProviderPlayback.prepare(item: item, provider: provider)
+                    return try await ProviderPlayback.prepare(item: item, provider: provider, version: version)
                 } catch {
                     print("🎬 [PostVideo] Next provider episode failed to prepare: \(error)")
                     return nil
@@ -5527,8 +5576,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             )
             setProviderStream(nextProviderPlayback.stream, of: nextProviderPlayback)
         } else {
-            // Use preloaded metadata if available (has markers), otherwise use fetched next episode
+            // Preloaded metadata has markers. Choose before the swap: the choice may read the outgoing file.
+            let version = upNextVersionChoice()
             metadata = preloadedNextMetadata ?? next
+            playingMediaID = nil
+            playingMediaServerIndex = 0
+            applyVersion(version, to: metadata.Media)
         }
         duration = Self.metadataDuration(metadata)
         // metadata isn't @Published (its ratingKey is the only identity

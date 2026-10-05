@@ -30,6 +30,19 @@ final class JellyfinProviderTests: XCTestCase {
 
     // MARK: - Playback
 
+    func test_resolveStream_noSourceID_picksTheBestVersion() async throws {
+        server.respond("/Items/m1/PlaybackInfo", body: """
+            {"PlaySessionId":"ps","MediaSources":[
+              {"Id":"hd","Name":"1080p","SupportsDirectPlay":true,
+               "MediaStreams":[{"Index":0,"Type":"Video","Codec":"h264","Width":1920,"Height":1080}]},
+              {"Id":"uhd","Name":"2160p","SupportsDirectPlay":true,
+               "MediaStreams":[{"Index":0,"Type":"Video","Codec":"hevc","Width":3840,"Height":2160}]}]}
+            """)
+        let stream = try await provider().resolveStream(
+            for: MediaItemRef(providerID: "jellyfin:srv", itemID: "m1"), sourceID: nil)
+        XCTAssertEqual(stream.source.id, "uhd")
+    }
+
     func test_resolveStream_firstSource_withSessionID() async throws {
         server.respond("/Items/ep1/PlaybackInfo", body: JellyfinFixtures.playbackInfo)
         let stream = try await provider().resolveStream(for: ref, sourceID: nil)
@@ -175,7 +188,7 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertTrue(query.contains(URLQueryItem(name: "parentId", value: "lib-tv")))
         XCTAssertTrue(query.contains(URLQueryItem(name: "includeItemTypes", value: "Series")))
         XCTAssertTrue(query.contains(URLQueryItem(name: "sortBy", value: "SortName")))
-        XCTAssertTrue(query.contains(URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId")))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount")))
     }
 
     func test_items_lastPage_hasNoNextPage() async throws {

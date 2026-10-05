@@ -347,7 +347,7 @@ enum InfoPopupContent {
         }
         stack.addArrangedSubview(metaRow(detail))
 
-        let source = detail.mediaSources.first
+        let source = detail.primarySource
         let isContainer = detail.item.kind == .season || detail.item.kind == .show
 
         // Information
@@ -414,7 +414,7 @@ enum InfoPopupContent {
         if !parts.isEmpty {
             row.addArrangedSubview(label(parts.joined(separator: "  ·  "), size: 20, weight: .semibold, color: .white.withAlphaComponent(0.7), lines: 1))
         }
-        let source = detail.mediaSources.first
+        let source = detail.primarySource
         var badges = source?.qualityBadges() ?? []
         if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
         if source?.audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) ?? false { badges.append("AD") }

@@ -296,7 +296,9 @@ enum PlexMediaMapper {
             userState: userState(meta),
             artwork: artwork(meta, serverURL: serverURL, authToken: authToken),
             parentArtwork: parentArtwork,
-            grandparentArtwork: grandparentArtwork
+            grandparentArtwork: grandparentArtwork,
+            versionCount: meta.Media.map { Set($0.map(\.id)).count },
+            editionTitle: meta.editionTitle
         )
     }
 

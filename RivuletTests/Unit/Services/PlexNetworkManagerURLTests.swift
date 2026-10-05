@@ -222,6 +222,13 @@ final class PlexNetworkManagerURLTests: XCTestCase {
 
     // MARK: - HLS Direct Play URL (Dolby Vision) Tests
 
+    func test_buildHLSDirectPlayURL_sendsTheVersionIndex() throws {
+        let result = try XCTUnwrap(networkManager.buildHLSDirectPlayURL(
+            serverURL: testServerURL, authToken: testAuthToken, ratingKey: testRatingKey, mediaIndex: 1))
+        let items = URLComponents(url: result.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "mediaIndex" }?.value, "1")
+    }
+
     func testBuildHLSDirectPlayURLReturnsURLAndHeaders() {
         let result = networkManager.buildHLSDirectPlayURL(
             serverURL: testServerURL,

@@ -149,7 +149,8 @@ enum JellyfinMediaMapper {
             userState: userState(dto),
             artwork: artwork(dto, baseURL: baseURL),
             parentArtwork: parentArtwork,
-            grandparentArtwork: grandparentArtwork
+            grandparentArtwork: grandparentArtwork,
+            versionCount: dto.mediaSourceCount
         )
     }
 
@@ -293,6 +294,7 @@ enum JellyfinMediaMapper {
             bitrate: src.bitrate,
             fileSize: src.size,
             fileName: src.name,
+            versionName: src.name,
             videoResolution: nil,
             videoTracks: streams.compactMap { videoTrack($0) },
             audioTracks: streams.compactMap {

@@ -49,6 +49,11 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let parentArtwork: MediaArtwork?     // episode → season art; season → show art
     let grandparentArtwork: MediaArtwork? // episode → show art
 
+    /// Distinct files behind a movie or episode; nil when the list didn't say.
+    let versionCount: Int?
+    /// Plex edition name ("Director's Cut"); each edition is its own item.
+    let editionTitle: String?
+
     init(
         ref: MediaItemRef,
         kind: MediaKind,
@@ -69,7 +74,9 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         userState: MediaUserState,
         artwork: MediaArtwork,
         parentArtwork: MediaArtwork?,
-        grandparentArtwork: MediaArtwork?
+        grandparentArtwork: MediaArtwork?,
+        versionCount: Int? = nil,
+        editionTitle: String? = nil
     ) {
         self.ref = ref
         self.kind = kind
@@ -91,6 +98,8 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.artwork = artwork
         self.parentArtwork = parentArtwork
         self.grandparentArtwork = grandparentArtwork
+        self.versionCount = versionCount
+        self.editionTitle = editionTitle
     }
 }
 
@@ -152,7 +161,9 @@ extension MediaItem {
                 logo: logo
             ),
             parentArtwork: parentArtwork,
-            grandparentArtwork: grandparentArtwork
+            grandparentArtwork: grandparentArtwork,
+            versionCount: versionCount,
+            editionTitle: editionTitle
         )
     }
 }

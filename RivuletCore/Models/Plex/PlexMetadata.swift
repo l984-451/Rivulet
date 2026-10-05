@@ -287,6 +287,7 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     // MARK: - Display Info
     var title: String?
     var originalTitle: String?
+    var editionTitle: String?     // Plex movie edition, e.g. "Director's Cut"
     var studio: String?
     var contentRating: String?    // "PG-13", "TV-MA", etc.
     var summary: String?

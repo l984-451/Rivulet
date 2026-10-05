@@ -18,7 +18,8 @@ struct MediaSource: Hashable, Sendable, Identifiable {
     let duration: TimeInterval     // seconds
     let bitrate: Int?              // bits/second
     let fileSize: Int64?           // bytes; nil for transcoded streams
-    let fileName: String?          // display name for source picker ("4K HDR", etc.)
+    let fileName: String?          // Plex: file path. Jellyfin: the source's Name
+    var versionName: String? = nil // the provider's name for this version (Jellyfin "Directors Cut"); nil on Plex
     let videoResolution: String?   // provider-computed label: "4k", "1080", "720", "480", "sd"
 
     let videoTracks: [VideoTrack]  // usually 1, rarely more
@@ -36,54 +37,43 @@ struct MediaSource: Hashable, Sendable, Identifiable {
 }
 
 extension MediaSource {
-    /// Display badges for the source picker / hero quality row.
-    /// Returns labels like ["4K", "DV", "E-AC3 5.1"] derived from track metadata.
+    /// Display badges for the hero quality row, e.g. ["4K", "DV", "E-AC3 5.1"].
     /// Order is stable: resolution first, then HDR/range, then audio.
     func qualityBadges() -> [String] {
-        var badges: [String] = []
-
-        if let video = videoTracks.first {
-            if let res = resolutionLabel(video) { badges.append(res) }
-
-            switch video.videoRange {
-            case .dolbyVision: badges.append("DV")
-            case .hdr10, .hdr10Plus: badges.append("HDR")
-            case .hlg: badges.append("HLG")
-            case .sdr: break
-            }
-        }
-
-        if let audio = audioTracks.first(where: { $0.isDefault }) ?? audioTracks.first {
-            badges.append(audio.qualityLabel)
-        }
-
-        return badges
+        [resolutionBadge, rangeBadge, audioBadge].compactMap { $0 }
     }
 
-    /// Prefers provider-computed `videoResolution` ("4k"/"1080"/…) over pixel
-    /// height, since Plex's label is correct for cropped widescreen where the
-    /// pixel height can fall below the nominal value. Appends "i" for interlaced.
+    var resolutionBadge: String? { videoTracks.first.flatMap(resolutionLabel) }
+
+    var rangeBadge: String? {
+        switch videoTracks.first?.videoRange {
+        case .dolbyVision: "DV"
+        case .hdr10, .hdr10Plus: "HDR"
+        case .hlg: "HLG"
+        case .sdr, nil: nil
+        }
+    }
+
+    var audioBadge: String? {
+        (audioTracks.first(where: { $0.isDefault }) ?? audioTracks.first)?.qualityLabel
+    }
+
+    /// Provider label first, pixel height as the fallback (see `VersionRanking.tier`).
+    /// Appends "i" for interlaced.
     private func resolutionLabel(_ video: VideoTrack) -> String? {
         func scan(_ base: String) -> String {
             video.isInterlaced ? "\(base)i" : "\(base)p"
         }
-        switch videoResolution?.lowercased() {
-        case "4k", "2160":  return "4K"
-        case "1080":        return scan("1080")
-        case "720":         return "720p"   // 720 has no interlaced broadcast form
-        case "576":         return scan("576")
-        case "480", "sd":   return scan("480")
-        case .some(let r) where !r.isEmpty: return r.uppercased()
-        default: break
+        if let raw = videoResolution, !raw.isEmpty, VersionRanking.tier(label: raw, height: nil) == 0 {
+            return raw.uppercased()
         }
-        guard let height = video.height else { return nil }
-        switch height {
-        case 1600...:    return "4K"
-        case 800..<1600: return scan("1080")
-        case 620..<800:  return "720p"
-        case 500..<620:  return scan("576")
-        case 1..<500:    return scan("480")
-        default:         return nil
+        switch VersionRanking.tier(label: videoResolution, height: video.height) {
+        case 2160: return "4K"
+        case 1080: return scan("1080")
+        case 720:  return "720p"   // 720 has no interlaced broadcast form
+        case 576:  return scan("576")
+        case 480:  return scan("480")
+        default:   return nil
         }
     }
 }

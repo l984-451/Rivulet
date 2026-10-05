@@ -46,7 +46,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     /// Mutable so a post-playback refresh can swap in the re-fetched copy
     /// (issue #228). The ref never changes — only the user state does.
     private var item: MediaItem
-    private let onPlay: (MediaItem) -> Void
+    private let onPlay: (MediaItem, String?) -> Void
 
     private let backdrop = UIImageView()
     private let scrim = ScrimGradientView()
@@ -77,6 +77,8 @@ final class MediaItemDetailPageViewController: UIViewController {
     private weak var playTitleLabel: UILabel?
     private weak var watchedButton: FocusableActionButton?
     private weak var watchlistButton: FocusableActionButton?
+    private weak var actionRow: UIStackView?
+    private weak var versionsButton: FocusableActionButton?
     private var onWatchlist = false
     /// The show above this episode, kept from `loadDetail` so Go to Show opens
     /// without a second fetch.
@@ -86,7 +88,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let blurFade = BlurFadeTransitioningDelegate()
     private var provider: MediaProvider? { MediaProviderRegistry.shared.provider(for: item.ref.providerID) }
 
-    init(item: MediaItem, seriesTitle: String?, onPlay: @escaping (MediaItem) -> Void) {
+    init(item: MediaItem, seriesTitle: String?, onPlay: @escaping (MediaItem, String?) -> Void) {
         self.item = item
         self.onPlay = onPlay
         self.isWatched = item.isWatched
@@ -183,6 +185,8 @@ final class MediaItemDetailPageViewController: UIViewController {
     // MARK: - Down/Up page scroll
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // A press the version picker declines bubbles here; it must not scroll the page.
+        guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
             switch press.type {
             case .downArrow where !scrolledDown:
@@ -380,7 +384,7 @@ final class MediaItemDetailPageViewController: UIViewController {
             title.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
         ])
         pill.invertOnFocus = [icon, title]
-        pill.onPrimaryAction = { [weak self] in guard let self else { return }; self.onPlay(self.item) }
+        pill.onPrimaryAction = { [weak self] in guard let self else { return }; self.onPlay(self.item, nil) }
         playButton = pill
         playTitleLabel = title
 
@@ -400,6 +404,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         }
 
         let row = UIStackView(arrangedSubviews: [pill, watched, watchlist])
+        actionRow = row
         // An episode's Watched acts on the episode alone; the whole show is
         // marked from the show's own page, which this opens.
         if item.kind == .episode, let showRef, !showRef.itemID.isEmpty {
@@ -533,6 +538,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         if let date = Self.displayDate(item.releaseDate) { parts.append(date) }
         else if let year = item.year { parts.append(String(year)) }
         if let runtime = item.runtime, runtime > 0 { parts.append(Self.formatRuntime(runtime)) }
+        if let edition = item.editionTitle, !edition.isEmpty { parts.append(edition) }
         return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
     }
 
@@ -574,7 +580,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoColumns.configure(detail: detail)
         // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
         // parenthetical channel-layout noise ("5.1(side)" → "5.1").
-        let source = detail.mediaSources.first
+        let source = detail.primarySource
         var badges = source?.qualityBadges() ?? []
         if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
         if source?.audioTracks.contains(where: {
@@ -586,6 +592,25 @@ final class MediaItemDetailPageViewController: UIViewController {
                 .trimmingCharacters(in: .whitespaces)
             if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
         }
+        addVersionsButton(detail)
+    }
+
+    /// Versions button after Watchlist, once the detail shows two or more files.
+    private func addVersionsButton(_ detail: MediaItemDetail) {
+        let versions = VersionPicker.versions(in: detail)
+        guard !versions.isEmpty, versionsButton == nil, let row = actionRow, let watchlist = watchlistButton,
+              let index = row.arrangedSubviews.firstIndex(of: watchlist) else { return }
+        let button = circleButton(systemImage: "square.stack")
+        button.onPrimaryAction = { [weak self, weak button] in
+            guard let self, let button else { return }
+            VersionPicker.present(versions, from: self, sourceFrame: button.convert(button.bounds, to: nil)) {
+                [weak self] id in
+                guard let self else { return }
+                self.onPlay(self.item, id)
+            }
+        }
+        row.insertArrangedSubview(button, at: index + 1)
+        versionsButton = button
     }
 
     // MARK: - Watch-state refresh (issue #228)

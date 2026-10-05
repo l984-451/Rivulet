@@ -351,7 +351,7 @@ final class PreviewCarouselViewController: UIViewController {
             let page = MediaItemDetailPageViewController(
                 item: episode,
                 seriesTitle: nil,
-                onPlay: { [weak self] ep in self?.playMediaItem(ep) })
+                onPlay: { [weak self] ep, sourceID in self?.playMediaItem(ep, sourceID: sourceID) })
             self.present(page, animated: true)
         }
 
@@ -376,7 +376,7 @@ final class PreviewCarouselViewController: UIViewController {
                 seriesTitle: show?.kind == .show ? show?.title : nil,
                 // playHeroItem, not playMediaItem: a season key has no media, so
                 // Play must resolve to its first unplayed episode.
-                onPlay: { [weak self] season in self?.playHeroItem(season) })
+                onPlay: { [weak self] season, _ in self?.playHeroItem(season) })
             self.present(page, animated: true)
         }
         // Cast / crew cell Select → person detail page (full-screen).
@@ -1121,15 +1121,15 @@ final class PreviewCarouselViewController: UIViewController {
         }
     }
 
-    private func playMediaItem(_ item: MediaItem) {
+    private func playMediaItem(_ item: MediaItem, sourceID: String? = nil) {
         // presentPlayer resolves a Plex ratingKey; any other item plays through
         // its own provider.
         if !item.ref.isPlex {
-            ProviderPlayer.play(item, fromBeginning: false, from: self, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID, from: self, onDismiss: nil)
             return
         }
         let offsetSec = item.userState.viewOffset
-        presentPlayer(ratingKey: item.ref.itemID, resumeOffset: offsetSec > 0 ? offsetSec : nil)
+        presentPlayer(ratingKey: item.ref.itemID, resumeOffset: offsetSec > 0 ? offsetSec : nil, mediaID: sourceID)
     }
 
     /// Resolve a Plex ratingKey → metadata → present the player. Used for the
@@ -1139,7 +1139,7 @@ final class PreviewCarouselViewController: UIViewController {
     /// metadata we fetch here is the only place a library-addressable extra's
     /// resume point appears (issue #303 — extras always restarted), and it is
     /// also fresher than a MediaItem's cached userState.
-    private func presentPlayer(ratingKey: String, resumeOffset: Double?) {
+    private func presentPlayer(ratingKey: String, resumeOffset: Double?, mediaID: String? = nil) {
         Task { [weak self] in
             guard let serverURL = PlexAuthManager.shared.selectedServerURL,
                   let token = PlexAuthManager.shared.selectedServerToken else {
@@ -1169,7 +1169,7 @@ final class PreviewCarouselViewController: UIViewController {
                 : nil
             await MainActor.run {
                 self?.present(playItem: playItem, serverURL: serverURL, token: token,
-                              resumeOffset: resumeOffset ?? serverResume)
+                              resumeOffset: resumeOffset ?? serverResume, mediaID: mediaID)
             }
         }
     }
@@ -1250,12 +1250,14 @@ final class PreviewCarouselViewController: UIViewController {
         )
     }
 
-    private func present(playItem: PlexMetadata, serverURL: String, token: String, resumeOffset: Double?) {
+    private func present(playItem: PlexMetadata, serverURL: String, token: String, resumeOffset: Double?,
+                         mediaID: String? = nil) {
         let viewModel = UniversalPlayerViewModel(
             metadata: playItem,
             serverURL: serverURL,
             authToken: token,
-            startOffset: resumeOffset
+            startOffset: resumeOffset,
+            preferredMediaID: mediaID
         )
         // Presents from the topmost VC so Play works both directly on the
         // carousel AND from the episode detail page presented over it.
@@ -1830,6 +1832,7 @@ extension PreviewCarouselViewController: UICollectionViewDataSource, UICollectio
             cell.item = items[indexPath.item]
         }
         cell.onPlay = { [weak self] item in self?.playHeroItem(item) }
+        cell.onPlayVersion = { [weak self] item, sourceID in self?.playMediaItem(item, sourceID: sourceID) }
         cell.onShowInfo = { [weak self] detail in self?.presentInfoPopup(detail) }
         // Default to non-current; if this dequeued cell happens to be
         // at selectedIndex (e.g. on first viewport population), the

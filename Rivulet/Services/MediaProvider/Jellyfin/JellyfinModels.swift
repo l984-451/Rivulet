@@ -51,6 +51,7 @@ nonisolated struct JFItem: Decodable, Sendable {
     let id: String?
     let name: String?
     let sortName: String?
+    let mediaSourceCount: Int?    // needs Fields=MediaSourceCount on list calls
     let type: String?               // BaseItemKind: Movie, Series, Season, Episode, ...
     let collectionType: String?     // on library views: movies, tvshows, music, ...
     let overview: String?

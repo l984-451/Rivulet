@@ -106,6 +106,7 @@ final class MediaDetailChromeView: UIView {
     /// (action row is interaction-disabled). Wired in `.expandedDetail`
     /// during Iter B/D.
     var onPlay: (() -> Void)?
+    var onPlayVersion: ((String) -> Void)?
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
 
@@ -682,6 +683,23 @@ final class MediaDetailChromeView: UIView {
         } else {
             castLabel.text = nil
         }
+        addVersionsButton(detail)
+    }
+
+    /// Versions button after Info, once the detail shows two or more files.
+    private func addVersionsButton(_ detail: MediaItemDetail) {
+        let versions = VersionPicker.versions(in: detail)
+        guard !versions.isEmpty, versionsButton == nil, let info = infoButton,
+              let index = actionButtonsStack.arrangedSubviews.firstIndex(of: info) else { return }
+        let button = makeCircleButton(systemImage: "square.stack")
+        button.onPrimaryAction = { [weak self, weak button] in
+            guard let self, let button, let host = self.hostViewController else { return }
+            VersionPicker.present(versions, from: host, sourceFrame: button.convert(button.bounds, to: nil)) {
+                [weak self] id in self?.onPlayVersion?(id)
+            }
+        }
+        actionButtonsStack.insertArrangedSubview(button, at: index + 1)
+        versionsButton = button
     }
 
     // MARK: - Row builders
@@ -728,6 +746,7 @@ final class MediaDetailChromeView: UIView {
         watchlist.onPrimaryAction = { [weak self] in self?.toggleWatchlist(item) }
 
         let info = makeCircleButton(systemImage: "text.page")     // open details popup
+        infoButton = info
         info.onPrimaryAction = { [weak self] in
             guard let self, let detail = self.detail else { return }
             self.onShowFullDescription?(detail)
@@ -856,6 +875,8 @@ final class MediaDetailChromeView: UIView {
 
     private weak var watchedButton: FocusableActionButton?
     private weak var watchlistButton: FocusableActionButton?
+    private weak var infoButton: FocusableActionButton?
+    private weak var versionsButton: FocusableActionButton?
     private var heroWatched = false
     private var heroOnWatchlist = false
 
@@ -964,6 +985,7 @@ final class MediaDetailChromeView: UIView {
             parts.append(String(year))
         }
         if let runtime = item.runtime, runtime > 0 { parts.append(Self.formatRuntime(runtime)) }
+        if let edition = detail?.item.editionTitle ?? item.editionTitle, !edition.isEmpty { parts.append(edition) }
 
         for (i, part) in parts.enumerated() {
             if i > 0 {
@@ -992,7 +1014,7 @@ final class MediaDetailChromeView: UIView {
             qualityRow.addArrangedSubview(starStack)
         }
 
-        if let badges = detail?.mediaSources.first?.qualityBadges(), !badges.isEmpty {
+        if let badges = detail?.primarySource?.qualityBadges(), !badges.isEmpty {
             for badge in badges {
                 qualityRow.addArrangedSubview(Self.makeQualityBadge(badge))
             }

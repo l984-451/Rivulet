@@ -848,14 +848,7 @@ enum SettingsContent {
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
         let version = "\(short) (\(build))"
         return [
-            SettingsRowItem(id: "about_app", title: "App", kind: .info(value: { "Rivulet" })),
             SettingsRowItem(id: "about_version", title: "Version", kind: .info(value: { version })),
-            // The engine states its own version. SPM pins a revision, not a
-            // tag, so this is the only runtime-readable name for the release
-            // actually linked, and a handed-over diagnostic that quotes it
-            // cannot be guessed at from an older thread.
-            SettingsRowItem(id: "about_engine", title: "Playback Engine",
-                            kind: .info(value: { "AetherEngine \(AetherPlayer.engineVersion)" })),
             SettingsRowItem(id: "changelog", title: "Changelog", kind: .action(destructive: false, handler: { vc in
                 presentChangelog(on: vc)
             })),

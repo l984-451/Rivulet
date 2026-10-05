@@ -325,10 +325,6 @@ enum SettingsDescriptorStore {
         ),
 
         // MARK: About
-        "about_engine": SettingDescriptor(
-            icon: "film.stack",
-            description: "The version of AetherEngine this build plays video with. Worth quoting when reporting a playback problem."
-        ),
         "changelog": SettingDescriptor(
             icon: "list.bullet.rectangle",
             description: "Release notes for every version of Rivulet."

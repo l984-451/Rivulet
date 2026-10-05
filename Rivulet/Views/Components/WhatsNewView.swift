@@ -149,24 +149,14 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
-        // confirm build number at release
         ("1.0.6 (92)", [
-            "Updated AetherEngine to 7.25.3",
-            "Detail pages now show TMDB, IMDb and Rotten Tomatoes scores",
-            "Movies and episodes with more than one file now play the best version",
-            "New Versions button and Play Version menu item let you pick another file",
-            "Detail pages now show a Plex movie's edition name, such as Director's Cut",
-            "Episode pages now have a Go to Show button",
-            "Episode long-press menus now offer both Go to Episode and Go to Show",
-            "A show's Watched button now asks first and can reset a partly watched show",
-            "Removed the season summary above a show's episode row",
-            "Live TV guide text with & and other special characters now shows correctly",
-            "Gzipped XMLTV guides now load, and IPTV channel names keep their commas",
-            "Leaving a Plex Live TV channel frees the tuner and transcoder right away",
-            "A Live TV channel that keeps dropping no longer retunes over and over",
-            "Scheduling a Plex DVR recording no longer fails with HTTP error 400",
-            "Live TV keeps its loading spinner up until the picture appears",
-            "Back in the guide now jumps to the top and selects the corner player",
+            "Painstakingly recreated Apple's player chrome.",
+            "Added multi-file support for Plex.",
+            "Added long press Go to Show option.",
+            "Added ability to mark a show as watched/unwatched.",
+            "Live TV program art shows more often (vs the channel logo).",
+            "Updated AetherEngine to 7.25.3.",
+            "Bug fixes.",
         ]),
         ("1.0.6 (91)", [
             "Initial support for Jellyfin. WIP. Please report bugs and issues on GitHub.",

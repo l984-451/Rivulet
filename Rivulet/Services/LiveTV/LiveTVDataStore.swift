@@ -1108,12 +1108,13 @@ class LiveTVDataStore: ObservableObject {
     /// (Plex account favorites) in the source's order.
     static func favorites(in channels: [UnifiedChannel], order: [String]) -> [UnifiedChannel] {
         let position = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        // Typed key: the inline tuple comparison times out Xcode 26.3's type checker.
+        let key = { (channel: UnifiedChannel) -> (Int, Int, Int) in
+            (position[channel.id] ?? .max, channel.favouriteRank ?? .max, channel.channelNumber ?? .max)
+        }
         return channels
             .filter { position[$0.id] != nil || $0.isFavourite }
-            .sorted { lhs, rhs in
-                (position[lhs.id] ?? .max, lhs.favouriteRank ?? .max, lhs.channelNumber ?? .max)
-                    < (position[rhs.id] ?? .max, rhs.favouriteRank ?? .max, rhs.channelNumber ?? .max)
-            }
+            .sorted { key($0) < key($1) }
     }
 
     private func loadFavorites() {

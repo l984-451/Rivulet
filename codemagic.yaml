@@ -15,7 +15,9 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
-      xcode: latest
+      # Keep this the Xcode you build with locally; the GitHub build checks
+      # read it. Older compilers time out type-checking code newer ones accept.
+      xcode: 27.0
 
     triggering:
       events:
@@ -182,7 +184,7 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
-      xcode: latest
+      xcode: 27.0
 
     # Separate tag prefix from tvOS. The two platforms share one App Store
     # Connect record but ship independently, and a single `v*` tag firing both

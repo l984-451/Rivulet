@@ -15,6 +15,7 @@ on:
       - 'RivuletCore/**'
       - 'RivuletiOS/**'
       - 'Rivulet.xcodeproj/**'
+      - 'codemagic.yaml'
       - '.github/workflows/build-ios.yml'
   push:
     branches: [main]
@@ -22,6 +23,7 @@ on:
       - 'RivuletCore/**'
       - 'RivuletiOS/**'
       - 'Rivulet.xcodeproj/**'
+      - 'codemagic.yaml'
       - '.github/workflows/build-ios.yml'
 
 concurrency:
@@ -30,24 +32,18 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Deployment target is 26.0, so this needs an Xcode 26 SDK. If the
-      # image stops shipping one, the listing below says what IS there —
-      # the fix is usually bumping runs-on to the newer macos image.
-      - name: Select newest Xcode 26
+      # Same Xcode as the TestFlight archive: codemagic.yaml's `xcode:` pin.
+      # runs-on must name the image that carries it (xcode-27 for 27.x).
+      - name: Select Codemagic's Xcode
         run: |
-          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
-          if [ -z "$XCODE" ]; then
-            echo "::warning::No Xcode 26 on this image. Available:"
-            ls -d /Applications/Xcode*.app
-            XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
-          fi
-          sudo xcode-select -s "$XCODE/Contents/Developer"
+          VERSION="$(awk '/^ *xcode:/ {print $2; exit}' codemagic.yaml)"
+          sudo xcode-select -s "/Applications/Xcode_$VERSION.app/Contents/Developer"
           xcodebuild -version
 
       # Both app targets read Secrets.swift; placeholders compile fine.

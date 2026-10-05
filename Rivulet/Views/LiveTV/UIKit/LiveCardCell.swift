@@ -37,8 +37,16 @@ struct LiveCardItem: Hashable {
                      program: program, recording: nil)
     }
 
-    static func upcoming(_ program: UnifiedProgram, on channel: UnifiedChannel) -> LiveCardItem {
-        LiveCardItem(id: "soon|\(program.id)", kind: .upcoming, channel: channel,
+    /// An upcoming card's start: the time alone today, with the weekday after.
+    static func startLabel(_ program: UnifiedProgram, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let start = program.eventStart
+        return calendar.isDate(start, inSameDayAs: now)
+            ? start.formatted(.dateTime.hour().minute())
+            : start.formatted(.dateTime.weekday().hour().minute())
+    }
+
+    static func upcoming(_ program: UnifiedProgram, on channel: UnifiedChannel, section: String = "soon") -> LiveCardItem {
+        LiveCardItem(id: "\(section)|\(program.id)", kind: .upcoming, channel: channel,
                      program: program, recording: nil)
     }
 
@@ -256,7 +264,7 @@ final class LiveCardCell: UICollectionViewCell {
         case .upcoming:
             titleLabel.text = program?.displayTitle ?? "Upcoming"
             detailLabel.text = channel?.name
-            setPill(program.map { $0.startTime.formatted(Self.timeFormat) }, color: UIColor.white.withAlphaComponent(0.25),
+            setPill(program.map { LiveCardItem.startLabel($0, now: now) }, color: UIColor.white.withAlphaComponent(0.25),
                     recordDot: item.setToRecord)
         case .recording:
             let recording = item.recording

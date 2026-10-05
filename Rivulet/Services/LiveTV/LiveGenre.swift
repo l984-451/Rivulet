@@ -71,15 +71,24 @@ enum LiveGenre: String, CaseIterable {
         return genre
     }
 
+    private static func isFiller(_ category: String?) -> Bool {
+        guard let category else { return false }
+        let filler = ["religio", "consumer", "shopping", "paid", "infomercial"]
+        return category.lowercased().split(whereSeparator: { !$0.isLetter })
+            .contains { word in filler.contains { word.hasPrefix($0) } }
+    }
+
     private struct Memo { let genre: LiveGenre? }
     private static var memo: [String: Memo] = [:]
 
     /// A channel's genre: what is on (`airing`, when given), else what it
     /// usually airs, else its name. Pass nil for a genre that holds still
-    /// across programme boundaries.
+    /// across programme boundaries. Worship and infomercials fill airtime and
+    /// are no genre, so a sports-heavy local station airing one is not sports.
     static func of(_ channel: UnifiedChannel, airing program: UnifiedProgram?,
                    guide: [UnifiedProgram]) -> LiveGenre? {
         if let genre = from(program?.category) { return genre }
+        if isFiller(program?.category) { return nil }
         var counts: [LiveGenre: Int] = [:]
         for genre in guide.compactMap({ from($0.category) }) { counts[genre, default: 0] += 1 }
         if let best = counts.values.max() {

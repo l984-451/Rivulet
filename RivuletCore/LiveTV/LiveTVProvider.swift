@@ -195,20 +195,36 @@ struct UnifiedProgram: Identifiable, Hashable, Sendable {
         self.isLive = isLive
     }
 
-    /// `title` without the guide's live marker. Display only: Dispatcharr
-    /// series rules match the raw title.
+    /// `title` without the guide's live or upcoming marker. Display only:
+    /// Dispatcharr series rules match the raw title.
     var displayTitle: String { Self.displayTitle(title) }
 
     /// A live airing, as opposed to a replay: the source flagged it, or the
     /// guide marked the title ("Live: SportsCenter").
-    var isLiveAiring: Bool { isLive || displayTitle != title }
+    var isLiveAiring: Bool { isLive || title.contains(Self.liveMarker) }
+
+    /// A stand-in that fills a channel until its event starts at `endTime`
+    /// ("UPCOMING: Jets @ Bears", EPG & Sports Editor's pregame block).
+    var isPregameBlock: Bool { title.contains(Self.upcomingMarker) }
+
+    /// When the thing this programme is about starts: a pregame block's event
+    /// starts as the block ends.
+    var eventStart: Date { isPregameBlock ? endTime : startTime }
+
+    /// An event slot with nothing in it ("No game scheduled" on an empty NFL
+    /// slot), as opposed to a programme.
+    var isEmptySlot: Bool { title.contains(Self.emptySlot) }
 
     private static let liveMarker = /^\s*(?:\[live\]|\(live\)|live\s*[:|]|live\s+[-–]\s)\s*/.ignoresCase()
+    private static let upcomingMarker = /^\s*upcoming\s*[:|]\s*/.ignoresCase()
+    private static let emptySlot = /^\s*(?:no (?:game|event|match)e?s?(?: scheduled)?|off[- ]?air)\s*$/.ignoresCase()
 
-    /// "Live: X", "LIVE | X", "Live - X", "[LIVE] X" → "X". Show names that
-    /// start with the word ("Live PD", "LiveNOW from FOX") are left alone.
+    /// "Live: X", "LIVE | X", "Live - X", "[LIVE] X", "UPCOMING: X" → "X". Show
+    /// names that start with the word ("Live PD", "LiveNOW from FOX") are left alone.
     static func displayTitle(_ title: String) -> String {
-        let stripped = title.replacing(liveMarker, with: "", maxReplacements: 1)
+        let stripped = title
+            .replacing(liveMarker, with: "", maxReplacements: 1)
+            .replacing(upcomingMarker, with: "", maxReplacements: 1)
         return stripped.isEmpty ? title : stripped
     }
 

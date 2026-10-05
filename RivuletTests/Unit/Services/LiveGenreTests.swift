@@ -53,6 +53,17 @@ final class LiveGenreTests: XCTestCase {
         XCTAssertNil(LiveGenre.of(channel("Payvand TV"), airing: nil, guide: []))
     }
 
+    /// ABC 33/40 airing church on a morning with a WNBA game later: no genre,
+    /// never the station's usual sports.
+    func test_of_worshipAndInfomercialsAreNoGenre() {
+        let guide = [program("Sports, Basketball"), program("Basketball"), program("News")]
+        let station = channel("ABC 33/40 WBMA")
+        XCTAssertNil(LiveGenre.of(station, airing: program("Religious"), guide: guide))
+        XCTAssertNil(LiveGenre.of(station, airing: program("Consumer, Shopping, Variety"), guide: guide))
+        // A label that names no genre but is real programming keeps the usual.
+        XCTAssertEqual(LiveGenre.of(station, airing: program("Series, Crime"), guide: guide), .sports)
+    }
+
     func test_specificLabels_dropGenreAndFormatWords() {
         XCTAssertEqual(LiveGenre.specificLabels(of: program("Sports event, Football")), ["football"])
         XCTAssertEqual(LiveGenre.specificLabels(of: program("178, News, Politics")), ["politics"])

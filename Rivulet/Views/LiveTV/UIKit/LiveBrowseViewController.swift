@@ -266,7 +266,7 @@ final class LiveBrowseViewController: UIViewController {
             }
             if !channelLine.isEmpty { detail.append(channelLine) }
         case .upcoming:
-            eyebrowLabel.text = program.map { "STARTS \($0.startTime.formatted(Self.timeFormat))" }
+            eyebrowLabel.text = program.map { "STARTS \(LiveCardItem.startLabel($0).uppercased())" }
             eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.8)
             titleLabel.text = program?.displayTitle
             if !channelLine.isEmpty { detail.append(channelLine) }
@@ -432,13 +432,25 @@ final class LiveBrowseViewController: UIViewController {
     /// multiview's Add More offers the same rows.
     static func buildShelves(sourceIdFilter: String?, now: Date = Date()) -> [Shelf] {
         let store = LiveTVDataStore.shared
-        let channels = sourceIdFilter.map { id in store.channels.filter { $0.sourceId == id } } ?? store.channels
-        let channelsById = Dictionary(channels.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let all = sourceIdFilter.map { id in store.channels.filter { $0.sourceId == id } } ?? store.channels
+        // An empty event slot has nothing to show; Favorites and Recently
+        // Watched still list it, since the viewer chose it.
+        let channels = all.filter { store.getCurrentProgram(for: $0)?.isEmptySlot != true }
+        let channelsById = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var shelves: [Shelf] = []
 
         func onNow(_ list: [UnifiedChannel], section: String) -> [LiveCardItem] {
-            list.map { .channel($0, program: store.getCurrentProgram(for: $0), section: section) }
+            list.map { channel in
+                let program = store.getCurrentProgram(for: channel)
+                // A pregame block stands in for the game after it: the card is the game.
+                guard let block = program, block.isPregameBlock else {
+                    return .channel(channel, program: program, section: section)
+                }
+                return .upcoming(store.getNextProgram(for: channel) ?? block, on: channel, section: section)
+            }
         }
+        // Channels showing something now, not holding a slot for a later game.
+        let airing = channels.filter { store.getCurrentProgram(for: $0)?.isPregameBlock != true }
 
         // Channels played lately, newest first, to go straight back to one.
         let recent = store.recentChannelIds.compactMap { channelsById[$0] }
@@ -450,7 +462,7 @@ final class LiveBrowseViewController: UIViewController {
         // Recently Watched already covers going back, so its channels are left out.
         if store.suggestionsEnabled {
             let recentIds = Set(store.recentChannelIds)
-            let candidates = channels.filter { !recentIds.contains($0.id) }.map { channel in
+            let candidates = airing.filter { !recentIds.contains($0.id) }.map { channel in
                 let program = store.getCurrentProgram(for: channel)
                 return (channel: channel, program: program,
                         genre: LiveGenre.of(channel, airing: program, guide: store.epg[channel.id] ?? []))
@@ -474,37 +486,44 @@ final class LiveBrowseViewController: UIViewController {
             shelves.append(Shelf(id: "recordings", title: "Recordings", items: recordings))
         }
 
-        let favourites = store.favorites(in: channels)
+        let favourites = store.favorites(in: all)
         if !favourites.isEmpty {
             shelves.append(Shelf(id: "favorites", title: "Favorites", items: onNow(favourites, section: "favorites")))
         }
 
-        if !channels.isEmpty {
-            shelves.append(Shelf(id: "now", title: "On Now", items: onNow(Array(channels.prefix(150)), section: "now")))
+        if !airing.isEmpty {
+            shelves.append(Shelf(id: "now", title: "On Now", items: onNow(Array(airing.prefix(150)), section: "now")))
         }
 
         // The next programme on each channel that starts within the next
-        // ninety minutes.
+        // ninety minutes: what this viewer watches when each one starts
+        // first, then soonest first.
         let horizon = now.addingTimeInterval(90 * 60)
-        let soon = channels
-            .compactMap { channel -> LiveCardItem? in
-                guard let next = store.getNextProgram(for: channel),
-                      !next.id.contains(":placeholder:"),
-                      next.startTime > now, next.startTime <= horizon else { return nil }
-                return .upcoming(next, on: channel)
-            }
-            .sorted { ($0.program?.startTime ?? now) < ($1.program?.startTime ?? now) }
+        let upcoming = channels.compactMap { channel -> LiveSuggestions.Candidate? in
+            guard let next = store.getNextProgram(for: channel),
+                  !next.id.contains(":placeholder:"), !next.isEmptySlot,
+                  next.startTime > now, next.startTime <= horizon else { return nil }
+            return (channel, next, LiveGenre.of(channel, airing: next, guide: store.epg[channel.id] ?? []))
+        }
+        let likeness = store.suggestionsEnabled
+            ? LiveSuggestions.scores(upcoming.map { ($0, $0.program?.startTime ?? now) },
+                                     history: store.viewings, now: now)
+            : upcoming.map { _ in 0 }
+        let soon = zip(upcoming, likeness.map { $0 >= LiveSuggestions.threshold ? $0 : 0 })
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1
+                : ($0.0.program?.startTime ?? now) < ($1.0.program?.startTime ?? now) }
             .prefix(40)
+            .compactMap { candidate, _ in candidate.program.map { LiveCardItem.upcoming($0, on: candidate.channel) } }
         if !soon.isEmpty {
-            shelves.append(Shelf(id: "soon", title: "Starting Soon", items: Array(soon)))
+            shelves.append(Shelf(id: "soon", title: "Starting Soon", items: soon))
         }
 
-        // A shelf per genre, when the lineup spans more than one. A channel's
-        // usual genre, not what is on this minute: rows that regrouped at
-        // every programme boundary moved under focus. A genre with only a
-        // channel or two gets no row of its own.
-        let byGenre = Dictionary(grouping: channels) { channel in
-            LiveGenre.of(channel, airing: nil, guide: store.epg[channel.id] ?? [])
+        // A shelf per genre, when the lineup spans more than one, by what each
+        // channel is showing now. Cards move rows at programme boundaries; a
+        // local station that usually airs sports is not sports during church.
+        // A genre with only a channel or two gets no row of its own.
+        let byGenre = Dictionary(grouping: airing) { channel in
+            LiveGenre.of(channel, airing: store.getCurrentProgram(for: channel), guide: store.epg[channel.id] ?? [])
         }
         let genres = LiveGenre.allCases.filter { (byGenre[$0] ?? []).count >= 3 }
         if genres.count > 1 {

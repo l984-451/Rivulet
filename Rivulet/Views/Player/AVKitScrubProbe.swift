@@ -29,6 +29,35 @@ final class AVKitScrubProbe: NSObject {
     private weak var transportBar: UIView?
     private weak var needle: UIView?
 
+    /// RIVULET_AUTOPLAY_LIVE=<name part, or 1>: plays a channel from the
+    /// server's Plex DVR (a transient source) and runs RIVULET_AUTOPLAY_MOVES.
+    static func runLive(env: [String: String]) async {
+        let auth = PlexAuthManager.shared
+        for _ in 0..<60 where auth.selectedServerURL == nil || auth.selectedServerToken == nil {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        guard let serverURL = auth.selectedServerURL, let token = auth.selectedServerToken else { return }
+        let store = LiveTVDataStore.shared
+        store.debugAddTransientSource(PlexLiveTVProvider(serverURL: serverURL, authToken: token, serverName: "Debug"))
+        await store.loadChannels()
+        for _ in 0..<60 where store.channels.isEmpty { try? await Task.sleep(for: .milliseconds(500)) }
+        await store.loadEPG(startDate: Date(), hours: 6)
+        let want = env["RIVULET_AUTOPLAY_LIVE"] ?? "1"
+        guard let channel = store.channels.first(where: { want != "1" && $0.name.localizedCaseInsensitiveContains(want) })
+                ?? store.channels.first,
+              let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              var top = scene.windows.first?.rootViewController else { return }
+        print("[Live] \(store.channels.count) channels, playing \(channel.name)")
+        while let next = top.presentedViewController { top = next }
+        let player = LiveTVAetherPlayerViewController(channel: channel)
+        player.modalPresentationStyle = .fullScreen
+        top.present(player, animated: false)
+        try? await Task.sleep(for: .seconds(8))
+        if let moves = env["RIVULET_AUTOPLAY_MOVES"], let window = player.view.window {
+            await DebugFocusDriver.run(moves, in: window)
+        }
+    }
+
     static func run(env: [String: String]) async {
         switch env["RIVULET_SCRUBPROBE"] {
         case "states":
@@ -1563,6 +1592,20 @@ enum DebugFocusDriver {
         state("move-0")
         try? await Task.sleep(for: .seconds(2))
         for (index, word) in spec.split(separator: ",").enumerated() {
+            if word.hasPrefix("l"), ["lup", "ldown", "lhide", "linfo", "lchan", "lmenu"].contains(word),
+               let live = LiveTVAetherPlayerViewController.debugCurrent {
+                switch word {
+                case "lup", "ldown": live.debugHiddenDirection(up: word == "lup")
+                case "lhide": live.debugHideRail()
+                case "linfo", "lchan": live.debugPresent(word == "linfo" ? "info" : "channels")
+                default: live.debugMenu()
+                }
+                try? await Task.sleep(for: .milliseconds(Int(ProcessInfo.processInfo.environment["RIVULET_MOVE_SETTLE_MS"] ?? "1500") ?? 1500))
+                print("[Moves] \(index + 1) \(word) focus=\(describeFocus(in: window))")
+                state("move-\(index + 1)")
+                try? await Task.sleep(for: .seconds(1.2))
+                continue
+            }
             if ["hide", "cup", "cdown"].contains(word) {
                 let player = PlayerContainerViewController.debugCurrent
                 if word == "hide" { player?.debugHideChrome() } else { player?.debugContentVertical(up: word == "cup") }

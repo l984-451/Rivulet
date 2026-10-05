@@ -198,6 +198,11 @@ private struct AutoPlayLauncherModifier: ViewModifier {
                 guard !hasLaunched else { return }
                 let env = ProcessInfo.processInfo.environment
                 #if DEBUG
+                if env["RIVULET_AUTOPLAY_LIVE"] != nil {
+                    hasLaunched = true
+                    Task { await AVKitScrubProbe.runLive(env: env) }
+                    return
+                }
                 if env["RIVULET_SCRUBPROBE"] != nil {
                     hasLaunched = true
                     // Unstructured: presenting the player cancels this view's .task.

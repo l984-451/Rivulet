@@ -93,7 +93,7 @@ Rivulet/                # The tvOS app — everything below.
 │   │                   #   MusicPlaylistView, MusicLyricsView, MusicVisualizerView
 │   │   └── Components/ # MusicProgressBar, MusicPosterCard, MusicShelfRow
 │   ├── Discover/       # DiscoverViewModel (SwiftUI Discover* views removed; UIKit home renders Discover)
-│   ├── LiveTV/         # EPGGuideView + GuideLayoutView + LiveGuideInfoCardView (56-style guide),
+│   ├── LiveTV/         # EPGGuideView + GuideLayoutView (56-style guide), LiveChannelsPaneView,
 │   │                   #   LiveTVAetherPlayerViewController (UIKit live rail), LiveTVContainerView,
 │   │                   #   MultiStreamViewModel; UIKit/: LiveBrowseViewController ("What's On"),
 │   │                   #   LiveMultiviewViewController, LiveCardCell, LiveMiniPlayerView

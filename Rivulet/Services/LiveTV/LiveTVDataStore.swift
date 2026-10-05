@@ -305,6 +305,13 @@ class LiveTVDataStore: ObservableObject {
         await updateSourceInfo()
     }
 
+    #if DEBUG
+    /// DEBUG launch hooks: a source for this run only, never saved.
+    func debugAddTransientSource(_ provider: any LiveTVProvider) {
+        providers[provider.sourceId] = provider
+    }
+    #endif
+
     /// Add a Plex Live TV source
     func addPlexSource(provider: any LiveTVProvider) async {
         providers[provider.sourceId] = provider

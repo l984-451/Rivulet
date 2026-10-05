@@ -192,11 +192,6 @@ final class PlayerRailPanelView: UIView {
         ])
         container.layoutIfNeeded()
 
-        // Content that needs to position itself against real geometry
-        // before the first visible frame (e.g. Up Next's scroll-to-current
-        // row) must do so here, after layout and before the grow-in.
-        (content as? ChannelListPanelView)?.prepareForPresentation()
-
         panel.transform = panel.collapsedTransform
         content.alpha = 0
         panel.animate(toTransform: .identity, contentAlpha: 1, completion: nil)
@@ -250,7 +245,6 @@ final class PlayerRailPanelView: UIView {
         panel.returnGuide = guide
         NSLayoutConstraint.activate(constraints)
         container.layoutIfNeeded()
-        (content as? ChannelListPanelView)?.prepareForPresentation()
 
         // The pills end 30pt above the pane. AVKit raises the whole control
         // block and the pane together from below, on one 0.5s curve.

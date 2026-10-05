@@ -42,6 +42,11 @@ final class PlayerInfoCardView: UIView {
         var genre: String?
         var runtimeMinutes: Int?
         var badges: [String]
+        /// Replaces "Genre • runtime" (Live TV's channel and air time).
+        var metaLine: [String]? = nil
+        /// Channel logos are fitted, not cropped to the poster frame.
+        var posterFits = false
+        var showsFromBeginning = true
     }
 
     private enum Metrics {
@@ -70,7 +75,7 @@ final class PlayerInfoCardView: UIView {
         super.init(frame: .zero)
 
         let glass = makePaneGlass(cornerRadius: Metrics.radius)
-        posterView.contentMode = .scaleAspectFill
+        posterView.contentMode = content.posterFits ? .scaleAspectFit : .scaleAspectFill
         posterView.clipsToBounds = true
         posterView.layer.cornerRadius = Metrics.posterRadius
         posterView.layer.cornerCurve = .continuous
@@ -92,7 +97,7 @@ final class PlayerInfoCardView: UIView {
         meta.axis = .horizontal
         meta.spacing = 6
         meta.alignment = .center
-        let words = [content.genre, content.runtimeMinutes.map { "\($0) min" }].compactMap { $0 }
+        let words = content.metaLine ?? [content.genre, content.runtimeMinutes.map { "\($0) min" }].compactMap { $0 }
         if !words.isEmpty {
             let label = UILabel()
             label.text = words.joined(separator: " • ")
@@ -106,6 +111,7 @@ final class PlayerInfoCardView: UIView {
         }
 
         let action = PlayerPaneActionButton(title: "From Beginning", symbol: "play.fill")
+        action.isHidden = !content.showsFromBeginning
         action.onPress = { [weak self] in self?.onFromBeginning?() }
 
         [glass, posterView, title, summary, meta, action].forEach {

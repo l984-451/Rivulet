@@ -16,15 +16,15 @@
 //  Chrome: the same UIKit glass rail as Aether VOD (PlayerRailView +
 //  PlayerRailPanelView), driven by GUIDE data instead of Plex metadata —
 //  programme title/times from LiveTVDataStore's EPG, subtitle and audio
-//  pickers from the engine's track lists (CardTrackListView), and a
-//  guide-fed info card (LiveGuideInfoCardView). Select shows the rail,
-//  Menu hides it (or dismisses the player when it's already hidden).
+//  pickers from the engine's track lists (CardTrackListView), and VOD's
+//  Info card and pane box fed from the guide (Info, LiveChannelsPaneView).
+//  Select shows the rail, Menu hides it (or dismisses the player when it's
+//  already hidden).
 //
 //  Transport (issue #316): the engine keeps a rewind window on every live
 //  load, so the stream can be paused and skipped like a recording. With the
-//  rail hidden, Left/Right skip within that window and Play/Pause pauses; a
-//  timeline (programme bar, a LIVE / "−2:15" badge) comes up on its own for
-//  both without taking focus, so the remote keeps skipping. "Go to Live" on
+//  rail hidden, Left/Right skip within that window and Play/Pause pauses; the
+//  whole chrome comes up for both with focus on the bar, which keeps skipping. "Go to Live" on
 //  the rail returns to the edge. Play/Pause is taken through the same
 //  deduping coordinator VOD uses, because it can arrive as a press AND as a
 //  system remote command for one click.
@@ -227,6 +227,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// (start/end wall-clock at the edges, current time on the playhead) with
     /// no scrub interaction. Fades with the rail.
     private let progressBar = PlayerProgressBarView()
+    /// The bar's focus stop, as on VOD: it carries Up and Down between the
+    /// pills and the tool buttons, and Left/Right skip.
+    private let scrubberProxy = ScrubberFocusProxyView()
+    private var descriptionOverlay: PlayerDescriptionOverlayView?
     private var railVisible = false
     private var activePanel: PlayerRailPanelView?
     private weak var lastPanelSource: UIView?
@@ -306,8 +310,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     // MARK: - Lifecycle
 
+    #if DEBUG
+    /// The live player on screen, for DEBUG launch hooks.
+    static weak var debugCurrent: LiveTVAetherPlayerViewController?
+    func debugHiddenDirection(up: Bool) { handleHiddenChromeDirection(up ? .up : .down) }
+    func debugHideRail() { hideRail() }
+    func debugPresent(_ name: String) { name == "info" ? presentInfoPanel() : presentChannelListPanel() }
+    func debugMenu() { dismiss(animated: true) }
+    #endif
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        #if DEBUG
+        Self.debugCurrent = self
+        #endif
         view.backgroundColor = .black
 
         engineSurfaceView.frame = view.bounds
@@ -712,11 +728,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         ])
 
         railView.alpha = 0
-        railView.transform = CGAffineTransform(translationX: 0, y: 24)
         view.addSubview(railView)
         railView.translatesAutoresizingMaskIntoConstraints = false
         progressBar.alpha = 0
-        progressBar.transform = CGAffineTransform(translationX: 0, y: 24)
         view.addSubview(progressBar)
         progressBar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -739,6 +753,21 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             progressBar.topAnchor.constraint(equalTo: railView.topAnchor, constant: PlayerRailView.barTop),
         ])
         railView.installPillEntryGuide(on: progressBar)
+
+        view.addSubview(scrubberProxy)
+        scrubberProxy.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrubberProxy.leadingAnchor.constraint(equalTo: progressBar.leadingAnchor),
+            scrubberProxy.trailingAnchor.constraint(equalTo: progressBar.trailingAnchor),
+            scrubberProxy.topAnchor.constraint(equalTo: progressBar.topAnchor, constant: -8),
+            scrubberProxy.bottomAnchor.constraint(equalTo: progressBar.topAnchor, constant: 56),
+        ])
+        railView.scrubberFocusProxy = scrubberProxy
+        scrubberProxy.onSkip = { [weak self] forward in
+            self?.skip(by: forward ? InputConfig.tapSeekSeconds : -InputConfig.tapSeekSeconds)
+        }
+        scrubberProxy.onShuttle = scrubberProxy.onSkip
+        scrubberProxy.onSelect = { [weak self] in self?.togglePlayPause() }
 
         // Where the picture sits relative to live. Right-aligned just above the
         // track, which keeps it below the rail's button row.
@@ -834,6 +863,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         } else {
             progressBar.isHidden = true
         }
+        updateScrubberFocus()
 
         timeshiftBadge.update(behindLiveSeconds: behind, isLive: !isBehindLive, isPaused: isUserPaused)
         railView.setGoLiveAvailable(isBehindLive)
@@ -853,13 +883,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func showRail() {
         guard !railVisible else { return }
         railVisible = true
+        updateScrubberFocus()
         timelineHideTimer?.invalidate()
         timelineHideTimer = nil
         updateRailContent()
         setTimelineElementsVisible(true)
         UIView.animate(withDuration: 0.25) {
             self.railView.alpha = 1
-            self.railView.transform = .identity
         }
         syncSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
@@ -870,12 +900,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func hideRail() {
         guard railVisible else { return }
         railVisible = false
+        updateScrubberFocus()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
         railView.resetFocusMemory()
         UIView.animate(withDuration: 0.2) {
             self.railView.alpha = 0
-            self.railView.transform = CGAffineTransform(translationX: 0, y: 24)
         }
         // A paused picture keeps its timeline: it is the only sign the stream
         // is paused rather than frozen.
@@ -890,14 +920,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         updateFocusIfNeeded()
     }
 
+    /// The bar takes focus only while the rail is up with nothing over it.
+    private func updateScrubberFocus() {
+        scrubberProxy.isFocusEnabled = railVisible && activePanel == nil
+            && descriptionOverlay == nil && !progressBar.isHidden
+    }
+
     /// Chrome auto-hides after a few idle seconds, same spirit as the VOD
     /// container. Any focus movement inside the rail restarts the clock; an
     /// open panel suspends it.
     private func restartAutoHide() {
         autoHideTimer?.invalidate()
-        autoHideTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.activePanel == nil else { return }
+                guard let self, self.activePanel == nil, self.descriptionOverlay == nil, !self.isUserPaused else { return }
                 self.hideRail()
             }
         }
@@ -916,7 +952,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         UIView.animate(withDuration: visible ? 0.25 : 0.2, animations: {
             self.progressBar.alpha = visible ? 1 : 0
-            self.progressBar.transform = visible ? .identity : CGAffineTransform(translationX: 0, y: 24)
             self.timeshiftBadge.alpha = visible ? 1 : 0
             self.timelineScrim.alpha = visible ? 1 : 0
         }, completion: { _ in
@@ -934,6 +969,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// the rail already up this only refreshes it.
     private func flashTimeline() {
         updateRailContent()
+        // The chrome comes up whole, as VOD's does, never the bar alone.
+        if descriptionOverlay == nil {
+            showRail()
+        }
         if railVisible {
             restartAutoHide()
             return
@@ -972,6 +1011,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let descriptionOverlay { return [descriptionOverlay] }
         // A pane leaves focus on its pill, as AVKit's tabs do.
         if let activePanel { return activePanel.isPane ? [railView] : [activePanel] }
         return railVisible ? [railView] : [focusCatcher]
@@ -979,6 +1019,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
+        if let next = context.nextFocusedView {
+            progressBar.setFocusDimmed(next !== scrubberProxy && next.isDescendant(of: railView), coordinator: coordinator)
+        }
         if railVisible, activePanel == nil,
            let next = context.nextFocusedView, next.isDescendant(of: railView) {
             restartAutoHide()
@@ -1001,6 +1044,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         panel.onDismiss = { [weak self] in
             guard let self else { return }
             self.activePanel = nil
+            self.updateScrubberFocus()
             self.setNeedsFocusUpdate()
             self.updateFocusIfNeeded()
             self.restartAutoHide()
@@ -1013,19 +1057,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.armDismissEchoBlock()
         }
         activePanel = panel
+        updateScrubberFocus()
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
     }
 
     /// Opens AVKit's info pane from a pill below the bar, or switches an open
     /// one to it. The programme bar gives way while it is up.
-    private func presentPane(content: UIView, cardWidth: CGFloat, pill: PlayerInfoPillButton) {
+    private func presentPane(content: UIView, pill: PlayerInfoPillButton) {
         let openPane = activePanel?.isPane == true ? activePanel : nil
         guard openPane != nil || activePanel == nil else { return }
         autoHideTimer?.invalidate()
         autoHideTimer = nil
         let panel = PlayerRailPanelView.presentPane(
-            content: content, cardWidth: cardWidth, in: view, rail: railView, pill: pill,
+            content: content, cardWidth: nil, in: view, rail: railView, pill: pill,
             riders: [progressBar, timeshiftBadge], replacing: openPane)
         railView.setSelectedPill(pill)
         openPanePill = pill
@@ -1034,6 +1079,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.activePanel = nil
             self.openPanePill = nil
             self.railView.setSelectedPill(nil)
+            // AVKit returns focus to the bar when a pane closes.
+            self.railView.resetFocusMemory()
+            self.updateScrubberFocus()
             let barVisible = self.railVisible || self.timelineVisible
             UIView.animate(withDuration: 0.25) {
                 self.progressBar.alpha = barVisible ? 1 : 0
@@ -1045,6 +1093,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         panel.onMenuHandled = { [weak self] in self?.armDismissEchoBlock() }
         activePanel = panel
+        updateScrubberFocus()
         UIView.animate(withDuration: 0.167) {
             self.progressBar.alpha = 0
             self.timeshiftBadge.alpha = 0
@@ -1572,7 +1621,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let channels = store.channels
         guard !channels.isEmpty else { return }
 
-        let list = ChannelListPanelView(
+        let list = LiveChannelsPaneView(
             channels: channels,
             currentChannelId: channel.id,
             programProvider: { store.getCurrentProgram(for: $0) }
@@ -1580,7 +1629,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.activePanel?.dismissPanel()
             self?.switchChannel(to: selected)
         }
-        presentPane(content: list, cardWidth: 520, pill: railView.upNextButton)
+        presentPane(content: list, pill: railView.upNextButton)
     }
 
     /// Switches channels IN PLACE: tear the current session down, adopt the
@@ -1696,15 +1745,71 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         presentPanel(content: list, width: 560)
     }
 
+    /// VOD's Info card, fed from the guide: the programme on now, its
+    /// summary, the channel and air time, and what's on next.
     private func presentInfoPanel() {
-        let card = LiveGuideInfoCardView(
-            channel: channel,
-            current: LiveTVDataStore.shared.getCurrentProgram(for: channel),
-            next: LiveTVDataStore.shared.getNextProgram(for: channel)
-        )
-        presentPane(content: card, cardWidth: 560, pill: railView.infoButton)
-        card.onFocusChange = { [weak self] focused in
-            self?.activePanel?.setFocusHighlight(focused)
+        let store = LiveTVDataStore.shared
+        let current = store.getCurrentProgram(for: channel)
+        let next = store.getNextProgram(for: channel)
+        let channelLine = [channel.channelNumber.map(String.init), channel.name]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        var meta = [channelLine]
+        if let current {
+            meta.append(Self.airTime(current.startTime, current.endTime))
+        }
+        if let next {
+            meta.append("Next: \(next.title) at \(Self.timeFormatter.string(from: next.startTime))")
+        }
+        let card = PlayerInfoCardView(content: .init(
+            posterURL: current?.posterURL ?? channel.logoURL,
+            title: current?.title ?? channel.name,
+            summary: current?.description,
+            badges: [current?.contentRating].compactMap { $0 },
+            metaLine: meta.filter { !$0.isEmpty },
+            posterFits: current?.posterURL == nil,
+            showsFromBeginning: false))
+        card.onExpandSummary = { [weak self] _ in
+            self?.presentDescription(current?.description ?? "")
+        }
+        presentPane(content: card, pill: railView.infoButton)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static func airTime(_ start: Date, _ end: Date) -> String {
+        "\(timeFormatter.string(from: start)) – \(timeFormatter.string(from: end))"
+    }
+
+    // MARK: - Full description
+
+    /// AVKit puts the controls away and shows the whole summary over a dim.
+    private func presentDescription(_ text: String) {
+        guard descriptionOverlay == nil else { return }
+        activePanel?.dismissPanel()
+        hideRail()
+        let overlay = PlayerDescriptionOverlayView(text: text)
+        overlay.frame = view.bounds
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(overlay)
+        descriptionOverlay = overlay
+        updateScrubberFocus()
+        overlay.fadeIn()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    private func dismissDescription() {
+        guard let overlay = descriptionOverlay else { return }
+        descriptionOverlay = nil
+        overlay.fadeOut { [weak self] in
+            overlay.removeFromSuperview()
+            self?.updateScrubberFocus()
+            self?.setNeedsFocusUpdate()
+            self?.updateFocusIfNeeded()
         }
     }
 
@@ -1726,6 +1831,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     resumePlayback()
                     return
                 }
+                if descriptionOverlay != nil { return }
                 if !railVisible {
                     showRail()
                     return
@@ -1788,6 +1894,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             completion?()
             return
         }
+        if descriptionOverlay != nil {
+            dismissDescription()
+            armDismissEchoBlock()
+            completion?()
+            return
+        }
         if scrubTarget != nil {
             // Back out of the scrub, still paused where the picture is.
             endScrub()
@@ -1843,8 +1955,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             skip(by: -InputConfig.tapSeekSeconds)
         case .right:
             skip(by: InputConfig.tapSeekSeconds)
-        case .up, .down:
+        case .up:
+            // AVKit lands Up from the picture on the first tool button.
+            if let tool = railView.firstToolButton { railView.setFocusLanding(tool) }
             showRail()
+        case .down:
+            // And Down opens the Info pane.
+            railView.setFocusLanding(railView.infoButton)
+            showRail()
+            presentInfoPanel()
         }
     }
 

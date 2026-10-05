@@ -223,8 +223,7 @@ final class SearchContainerViewController: UIViewController {
     /// letter navigation and the results' own row-to-row moves never reach this
     /// method, because the engine consumes them.
     ///
-    /// This is the same declined-press escape the player chrome uses
-    /// (`InsightsPanelContainerView`, `InfoScrollView`), and it is deliberately
+    /// This is a declined-press escape, and it is deliberately
     /// not a `UIFocusGuide`: a guide has to be POSITIONED where the engine will
     /// find it, and the whole problem is that the search controller lays out
     /// the keyboard and the results in a hierarchy we do not control, so there

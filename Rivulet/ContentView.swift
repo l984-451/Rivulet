@@ -197,8 +197,16 @@ private struct AutoPlayLauncherModifier: ViewModifier {
             .task {
                 guard !hasLaunched else { return }
                 let env = ProcessInfo.processInfo.environment
+                #if DEBUG
+                if env["RIVULET_SCRUBPROBE"] != nil {
+                    hasLaunched = true
+                    // Unstructured: presenting the player cancels this view's .task.
+                    Task { await AVKitScrubProbe.run(env: env) }
+                    return
+                }
+                #endif
                 guard env["RIVULET_AUTOPLAY"] == "1",
-                      let ratingKey = env["RIVULET_AUTOPLAY_KEY"] else { return }
+                      var ratingKey = env["RIVULET_AUTOPLAY_KEY"] else { return }
 
                 let testDuration = TimeInterval(env["RIVULET_AUTOPLAY_DURATION"] ?? "45") ?? 45
                 let skipLifecycle = env["RIVULET_AUTOPLAY_SKIP_LIFECYCLE"] == "1"
@@ -223,6 +231,10 @@ private struct AutoPlayLauncherModifier: ViewModifier {
                     print("[AutoPlay] ERROR: No server credentials")
                     return
                 }
+
+                #if DEBUG
+                ratingKey = await AVKitScrubProbe.resolveRatingKey(ratingKey, serverURL: serverURL, token: authToken)
+                #endif
 
                 // Fetch full metadata
                 let networkManager = PlexNetworkManager.shared
@@ -264,6 +276,32 @@ private struct AutoPlayLauncherModifier: ViewModifier {
                        let rootVC = windowScene.windows.first?.rootViewController {
                         PlayerPresenter.present(viewModel: viewModel, from: rootVC, animated: false)
                     }
+
+                    #if DEBUG
+                    // RIVULET_AUTOPLAY_CHROME=1: pause and bring the controls up
+                    // with focus on them, for layout checks without a remote.
+                    if env["RIVULET_AUTOPLAY_CHROME"] == "1" {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(12))
+                            viewModel.pause()
+                            viewModel.showControlsTemporarily()
+                            viewModel.enterControlsFocus()
+                            if env["RIVULET_AUTOPLAY_TRIVIA"] == "1" {
+                                viewModel.debugSetInsightsTrivia(ScrubStatesProbe.fixtureTrivia)
+                            }
+                            // RIVULET_AUTOPLAY_PANE=info|chapters|upNext|insights|details
+                            if let pane = env["RIVULET_AUTOPLAY_PANE"] {
+                                try? await Task.sleep(for: .seconds(1))
+                                PlayerContainerViewController.debugCurrent?.debugPresentPane(pane)
+                            }
+                            // RIVULET_AUTOPLAY_MOVES=down,up,...: drive focus without a remote.
+                            if let moves = env["RIVULET_AUTOPLAY_MOVES"],
+                               let window = PlayerContainerViewController.debugCurrent?.view.window {
+                                await DebugFocusDriver.run(moves, in: window)
+                            }
+                        }
+                    }
+                    #endif
 
                     // Schedule auto-stop after test duration
                     Task {

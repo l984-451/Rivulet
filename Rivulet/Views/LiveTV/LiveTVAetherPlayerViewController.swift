@@ -229,6 +229,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private let progressBar = PlayerProgressBarView()
     private var railVisible = false
     private var activePanel: PlayerRailPanelView?
+    private weak var lastPanelSource: UIView?
+    /// The pill whose tab the open pane shows.
+    private weak var openPanePill: PlayerInfoPillButton?
     private var autoHideTimer: Timer?
     private var programInfoTimer: Timer?
 
@@ -272,7 +275,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var timelineTicker: Timer?
     private let timeshiftBadge = LiveTimeshiftBadgeView()
     private let noticeView = LiveNoticeView()
-    private let timelineScrim = LiveBottomScrimView()
+    private let timelineScrim = ChromeScrimView()
 
     /// Called once when the player is dismissed, with the channel on screen at
     /// that moment (the viewer may have changed channels in the player), so
@@ -693,17 +696,19 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) }
         )
 
-        // Behind the timeline when the rail's glass is not there to carry it.
-        // Added before the rail so it can never sit above a rail button.
+        // AVKit's control dimming, behind the rail and the timeline. Below the
+        // 1pt focus catcher too: a full-screen view above a focus target makes
+        // it unfocusable.
         timelineScrim.isHidden = true
         timelineScrim.alpha = 0
-        view.addSubview(timelineScrim)
+        timelineScrim.isUserInteractionEnabled = false
+        view.insertSubview(timelineScrim, belowSubview: focusCatcher)
         timelineScrim.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             timelineScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             timelineScrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             timelineScrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            timelineScrim.heightAnchor.constraint(equalToConstant: 320),
+            timelineScrim.topAnchor.constraint(equalTo: view.topAnchor),
         ])
 
         railView.alpha = 0
@@ -723,17 +728,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railView.onMultiview = { [weak self] in self?.openMultiview() }
         railView.setMultiviewAvailable(onOpenMultiview != nil)
         NSLayoutConstraint.activate([
-            railView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
-            railView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -90),
-            railView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -84),
+            railView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            railView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            railView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             railView.heightAnchor.constraint(equalToConstant: PlayerRailView.railHeight),
-            // Programme progress bar — placed exactly where VOD puts its
-            // scrubber (132pt side insets, 34pt up from the rail bottom) so
-            // it looks identical; fades with the rail.
-            progressBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 132),
-            progressBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -132),
-            progressBar.bottomAnchor.constraint(equalTo: railView.bottomAnchor, constant: -34),
+
+            // Programme bar where VOD (and AVKit) put the scrubber.
+            progressBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PlayerRailView.sideInset),
+            progressBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PlayerRailView.sideInset),
+            progressBar.topAnchor.constraint(equalTo: railView.topAnchor, constant: PlayerRailView.barTop),
         ])
+        railView.installPillEntryGuide(on: progressBar)
 
         // Where the picture sits relative to live. Right-aligned just above the
         // track, which keeps it below the rail's button row.
@@ -758,6 +763,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railView.onAudio = { [weak self] in self?.presentAudioPanel() }
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
         railView.onUpNext = { [weak self] in self?.presentChannelListPanel() }
+        // Moving across the pills while a pane is open switches its tab.
+        railView.onPillFocused = { [weak self] pill in
+            guard let self, self.activePanel?.isPane == true, pill !== self.openPanePill else { return }
+            if pill === self.railView.infoButton { self.presentInfoPanel() }
+            if pill === self.railView.upNextButton { self.presentChannelListPanel() }
+        }
         railView.onGoLive = { [weak self] in self?.goLive() }
         railView.onRecord = { [weak self] in self?.presentRecordPanel() }
 
@@ -801,14 +812,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             .joined(separator: " · ")
         railView.setTitle(current?.title ?? channel.name, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
 
-        var runtime: String?
-        if let current {
-            let formatter = DateFormatter()
-            formatter.timeStyle = .short
-            formatter.dateStyle = .none
-            runtime = "\(formatter.string(from: current.startTime)) – \(formatter.string(from: current.endTime))"
-        }
-
         // Not the engine's `isAtLiveEdge` (one segment): streams drift that
         // far on their own, and Go Live bounced in and out, shifting the rail.
         let isBehindLive = hasRewindWindow
@@ -839,18 +842,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             isRecording: current.map { store.activeRecording(for: $0) != nil } ?? false
         )
 
-        var audioDescription: String?
-        if let aether = aetherPlayer,
-           let activeId = aether.currentAudioTrackId,
-           let track = aether.audioTracks.first(where: { $0.id == activeId }) {
-            audioDescription = [track.language, track.codec?.uppercased()]
-                .compactMap { $0 }
-                .joined(separator: " ")
-        }
-
-        // The badge says LIVE / how far behind; the chip only repeats it at the
-        // edge, where it is the programme's defining fact.
-        railView.setMeta(rating: isBehindLive ? nil : "LIVE", runtime: runtime, audio: audioDescription)
 
         NowPlayingService.shared.updateLive(
             title: current?.title ?? channel.name,
@@ -927,7 +918,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.progressBar.alpha = visible ? 1 : 0
             self.progressBar.transform = visible ? .identity : CGAffineTransform(translationX: 0, y: 24)
             self.timeshiftBadge.alpha = visible ? 1 : 0
-            // The rail's own glass carries the bar when it is up.
             self.timelineScrim.alpha = visible ? 1 : 0
         }, completion: { _ in
             // Hidden, not just transparent: nothing may sit over a focus
@@ -982,7 +972,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        if let activePanel { return [activePanel] }
+        // A pane leaves focus on its pill, as AVKit's tabs do.
+        if let activePanel { return activePanel.isPane ? [railView] : [activePanel] }
         return railVisible ? [railView] : [focusCatcher]
     }
 
@@ -1005,7 +996,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             width: width,
             in: view,
             aboveRail: railView,
-            towards: railView
+            towards: panelSourceButton()
         )
         panel.onDismiss = { [weak self] in
             guard let self else { return }
@@ -1024,6 +1015,53 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         activePanel = panel
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    /// Opens AVKit's info pane from a pill below the bar, or switches an open
+    /// one to it. The programme bar gives way while it is up.
+    private func presentPane(content: UIView, cardWidth: CGFloat, pill: PlayerInfoPillButton) {
+        let openPane = activePanel?.isPane == true ? activePanel : nil
+        guard openPane != nil || activePanel == nil else { return }
+        autoHideTimer?.invalidate()
+        autoHideTimer = nil
+        let panel = PlayerRailPanelView.presentPane(
+            content: content, cardWidth: cardWidth, in: view, rail: railView, pill: pill,
+            riders: [progressBar, timeshiftBadge], replacing: openPane)
+        railView.setSelectedPill(pill)
+        openPanePill = pill
+        panel.onDismiss = { [weak self, weak panel] in
+            guard let self, self.activePanel === panel else { return }
+            self.activePanel = nil
+            self.openPanePill = nil
+            self.railView.setSelectedPill(nil)
+            let barVisible = self.railVisible || self.timelineVisible
+            UIView.animate(withDuration: 0.25) {
+                self.progressBar.alpha = barVisible ? 1 : 0
+                self.timeshiftBadge.alpha = barVisible ? 1 : 0
+            }
+            self.setNeedsFocusUpdate()
+            self.updateFocusIfNeeded()
+            self.restartAutoHide()
+        }
+        panel.onMenuHandled = { [weak self] in self?.armDismissEchoBlock() }
+        activePanel = panel
+        UIView.animate(withDuration: 0.167) {
+            self.progressBar.alpha = 0
+            self.timeshiftBadge.alpha = 0
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    /// The rail button a popup grows from: the one just pressed, which holds
+    /// focus. A follow-up popup (a recording error) reuses the last one.
+    private func panelSourceButton() -> UIView {
+        if let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView,
+           focused !== railView, focused.isDescendant(of: railView) {
+            lastPanelSource = focused
+            return focused
+        }
+        return lastPanelSource ?? railView
     }
 
     private func presentSubtitlePanel() {
@@ -1542,7 +1580,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.activePanel?.dismissPanel()
             self?.switchChannel(to: selected)
         }
-        presentPanel(content: list, width: 520)
+        presentPane(content: list, cardWidth: 520, pill: railView.upNextButton)
     }
 
     /// Switches channels IN PLACE: tear the current session down, adopt the
@@ -1664,7 +1702,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             current: LiveTVDataStore.shared.getCurrentProgram(for: channel),
             next: LiveTVDataStore.shared.getNextProgram(for: channel)
         )
-        presentPanel(content: card, width: 560)
+        presentPane(content: card, cardWidth: 560, pill: railView.infoButton)
         card.onFocusChange = { [weak self] focused in
             self?.activePanel?.setFocusHighlight(focused)
         }

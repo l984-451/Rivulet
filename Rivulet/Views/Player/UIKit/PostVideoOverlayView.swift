@@ -583,7 +583,7 @@ final class PostVideoButtonView: UIControl {
     }
 
     // Select does not fire .primaryActionTriggered on a plain UIControl on
-    // tvOS; handle the press directly (same trap as UpNextRowButton).
+    // tvOS; handle the press directly.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses where press.type == .select {
             onTap?()

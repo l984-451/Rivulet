@@ -8,8 +8,7 @@
 //  Which tabs the Insights panel offers, and what they are called
 //  (Docs/superpowers/specs/2026-07-08-insights-toptrivia-tabs-design.md):
 //  Top 10, Cast, then one pill per category that has visible facts. Pure
-//  domain logic — the bar that renders these is the shared `PillTabBarView`,
-//  which this file used to own a panel-specific copy of.
+//  domain logic — the rail's pill row renders these as Insights' sub-tabs.
 //
 
 import Foundation

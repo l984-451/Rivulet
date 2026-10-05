@@ -76,8 +76,10 @@ final class SkipPillButton: UIButton {
         ])
 
         setTitleColor(.white, for: .normal)
-        titleLabel?.font = .systemFont(ofSize: 26, weight: .semibold)
-        contentEdgeInsets = UIEdgeInsets(top: 16, left: 34, bottom: 16, right: 34)
+        // AVKit's contextual action: bold 29, focused at 225x67 for "Skip Intro"
+        // (these insets plus the 1.05 focus scale).
+        titleLabel?.font = .systemFont(ofSize: 29, weight: .bold)
+        contentEdgeInsets = UIEdgeInsets(top: 14, left: 40, bottom: 14, right: 40)
     }
 
     /// Starts the left-to-right sweep, reaching the full pill width after
@@ -174,7 +176,8 @@ final class SkipPillButton: UIButton {
         let isFocused = context.nextFocusedView === self
         coordinator.addCoordinatedAnimations({
             self.transform = isFocused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
-            self.effectView.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.1)
+            self.effectView.backgroundColor = isFocused
+                ? UIColor.white.withAlphaComponent(0.9) : UIColor.white.withAlphaComponent(0.1)
             self.setTitleColor(isFocused ? .black : .white, for: .normal)
             // Keep the sweep visible on either background: a light overlay on
             // the resting glass, a dark one on the white focused fill.

@@ -5,8 +5,8 @@
 //  PlayerInfoSheetStyleTests.swift
 //  RivuletTests
 //
-//  Pure formatter tests for the shared info-sheet style used by both the
-//  Info tab (CardInfoView) and the Advanced tab (CardStatsView).
+//  Pure formatter tests for the shared info-sheet style used by the Details
+//  pane (media facts and live stats).
 //
 
 import XCTest
@@ -31,7 +31,7 @@ final class PlayerInfoSheetStyleTests: XCTestCase {
         XCTAssertEqual(PlayerInfoSheetStyle.milliseconds(3.6), "+4 ms")
     }
 
-    // Moved-from-CardInfoView formatters: guard the move didn't change output.
+    // Formatters: guard the output.
     func testBitrateFormatsMbps() {
         XCTAssertEqual(PlayerInfoSheetStyle.bitrate(1_500_000), "1.5 Mbps")
     }
@@ -41,7 +41,7 @@ final class PlayerInfoSheetStyleTests: XCTestCase {
     }
 
     // `bitrate(_:)` takes BITS per second, but Plex reports kbps in both
-    // `Media.bitrate` and `Stream.bitrate`, so `CardInfoView` multiplies by
+    // `Media.bitrate` and `Stream.bitrate`, so `PlayerDetailsPaneView` multiplies by
     // 1000 at the call site (the same conversion `PlexMediaMapper` applies).
     // Without it a 25 Mbps remux printed "25 kbps" and a 640 kbps track
     // printed "640 bps" — issues #242 / #243.

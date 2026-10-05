@@ -6,10 +6,8 @@
 //  Rivulet
 //
 //  Shared row/section builders and value formatters for the player's info
-//  sheets. Both the Info tab (`CardInfoView`, static metadata) and the
-//  Advanced tab (`CardStatsView`, live telemetry) build their rows through
-//  this one namespace so the two sheets are visually identical by
-//  construction rather than by coincidence (cohesive-styling requirement).
+//  surfaces: the Details pane (`PlayerDetailsPaneView`, media facts and live
+//  stats).
 //
 //  Builders touch UIKit and are `@MainActor`; formatters are pure and
 //  `nonisolated` so they are unit-testable off the main actor.
@@ -59,19 +57,6 @@ enum PlayerInfoSheetStyle {
         return heading
     }
 
-    /// Item title, used by the Description tab. Bigger than a body row because
-    /// it is that sheet's heading, not one of its values.
-    @MainActor
-    static func titleLabel(_ text: String) -> UILabel {
-        let label = UILabel()
-        label.text = text
-        label.font = .systemFont(ofSize: 28, weight: .semibold)
-        label.textColor = .white
-        label.numberOfLines = 0
-        resistVerticalSqueeze(label)
-        return label
-    }
-
     @MainActor
     static func bodyLabel(_ text: String, secondary: Bool) -> UILabel {
         let label = UILabel()
@@ -111,44 +96,6 @@ enum PlayerInfoSheetStyle {
             attributes: [.font: UIFont.monospacedDigitSystemFont(ofSize: 20, weight: .regular), .foregroundColor: UIColor.white]
         ))
         return text
-    }
-
-    // MARK: - Layout
-
-    /// An empty vertical grid container, ready for `InfoFocusRowView`s. Shared
-    /// so both sheets space their rows identically.
-    @MainActor
-    static func gridContainer() -> UIStackView {
-        let grid = UIStackView()
-        grid.axis = .vertical
-        grid.spacing = 8
-        grid.alignment = .fill
-        return grid
-    }
-
-    /// Lays a flat row list into a two-column grid: a vertical stack of
-    /// `InfoFocusRowView`s, each holding two half-width columns. An odd final
-    /// row pairs with an empty spacer so it stays a half-width left column.
-    ///
-    /// Each pair row is a FOCUS TARGET (see `InfoFocusRowView`) — that
-    /// granularity is what lets swipes walk the sheet. Static sheets use this;
-    /// the live Advanced sheet builds its own persistent pool of the same rows
-    /// so focus survives a tick (see `CardStatsView`).
-    @MainActor
-    static func twoColumnGrid(_ rows: [UIView]) -> UIView {
-        let grid = gridContainer()
-        var index = 0
-        while index < rows.count {
-            let row = InfoFocusRowView()
-            // Plain two-up line. The SECTION carries focus (see addSection);
-            // a focusable line inside a focusable section would nest two
-            // targets and the inner one would be unreachable.
-            row.isFocusEnabled = false
-            row.setPair(rows[index], index + 1 < rows.count ? rows[index + 1] : nil)
-            grid.addArrangedSubview(row)
-            index += 2
-        }
-        return grid
     }
 
     // MARK: - Formatting

@@ -5,21 +5,11 @@
 //  ChannelListPanelView.swift
 //  Rivulet
 //
-//  Channel list content for the Live TV rail panel — the live counterpart of
-//  UpNextListView (Views/Player/UIKit/PlayerUpNextPanelView.swift), which
-//  lists a season's episodes on the VOD OSD.
-//
-//  Deliberately the same shape as that panel: same panel width, row height,
-//  16:9 thumbnail, corner radii, focus scale, accent bar on the current row,
-//  and the same open-scrolled-to-the-current-row behavior. Only the CONTENT
-//  differs — channel number + name and the current programme, rather than
-//  episode number + title and a watched state. Two files rather than one
-//  generic list because the row data, artwork source, and image lifetimes
-//  have nothing in common; the visual contract is held by matching the
-//  metrics below to UpNextRowButton's.
+//  Channel list content for the Live TV Channels pane: channel number + name
+//  and the current programme per row, opening scrolled to the current channel.
 //
 //  Pure list content: no glass chrome, no width. The presenter
-//  (PlayerRailPanelView via LiveTVAetherPlayerViewController.presentPanel)
+//  (PlayerRailPanelView via LiveTVAetherPlayerViewController.presentPane)
 //  owns those. A fresh instance is built per presentation.
 //
 
@@ -28,7 +18,6 @@ import UIKit
 final class ChannelListPanelView: UIView {
 
     private enum Metrics {
-        /// Matches UpNextListView.
         static let maxHeight: CGFloat = 520
         static let rowInset: CGFloat = 8
     }
@@ -39,7 +28,7 @@ final class ChannelListPanelView: UIView {
     private let stack = UIStackView()
     private var rows: [ChannelRowButton] = []
     /// Pin focus to the current channel for the FIRST landing only; see the
-    /// matching flag and rationale in UpNextListView / CardTrackListView.
+    /// matching flag and rationale in CardTrackListView.
     private var hasPinnedInitialFocus = false
     private weak var lastFocusedRow: ChannelRowButton?
 
@@ -79,7 +68,7 @@ final class ChannelListPanelView: UIView {
         addSubview(scrollView)
 
         // Grows with content up to a cap: a short line-up hugs its rows, a
-        // long one scrolls. Same construction as UpNextListView.
+        // long one scrolls.
         let scrollHeight = scrollView.heightAnchor.constraint(equalTo: stack.heightAnchor)
         scrollHeight.priority = .defaultHigh
 
@@ -145,9 +134,9 @@ final class ChannelListPanelView: UIView {
     /// Positions the scroll view on the current channel instantly and
     /// invisibly, before the panel's rise-in animation renders a frame. MUST
     /// be called by the presenter after the panel has real constraints and
-    /// `layoutIfNeeded()` has resolved a frame — see the full explanation on
-    /// UpNextListView.prepareForPresentation, whose trap (a visible
-    /// self-correcting scroll) applies identically here. Idempotent.
+    /// `layoutIfNeeded()` has resolved a frame. Called any earlier (e.g. from
+    /// `didMoveToWindow`), it scrolls against unlaid-out geometry and then
+    /// visibly corrects itself once real layout lands. Idempotent.
     func prepareForPresentation() {
         guard !didScrollToCurrent else { return }
         didScrollToCurrent = true
@@ -169,7 +158,8 @@ final class ChannelListPanelView: UIView {
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         // After the first landing, hold the row focus already sits on, so a
         // denied edge move doesn't loop focus back to the top of a long
-        // channel list. See UpNextListView for the full rationale.
+        // channel list. Directional moves never consult this, so it only
+        // decides where a re-resolution lands.
         if hasPinnedInitialFocus {
             return lastFocusedRow.map { [$0] } ?? []
         }
@@ -204,7 +194,6 @@ final class ChannelRowButton: UIControl {
     private let progressTrack = UIView()
     private let progressFill = UIView()
 
-    // Matched to UpNextRowButton so both panels read as one component.
     private static let restBackground = UIColor.white.withAlphaComponent(0.06)
     private static let restBackgroundClear = UIColor.clear
     private static let focusedBackground = UIColor.white.withAlphaComponent(0.16)
@@ -401,7 +390,7 @@ final class ChannelRowButton: UIControl {
     }
 
     // Select does not fire .primaryActionTriggered on a plain UIControl on
-    // tvOS; handle the press directly (same trap as UpNextRowButton).
+    // tvOS; handle the press directly.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses where press.type == .select {
             onTap?()

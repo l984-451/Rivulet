@@ -3,14 +3,43 @@
 
 import UIKit
 
-// MARK: - CardTrackListView (Task 6 — ported from PlayerTrackPopupView)
+// MARK: - CardTrackListView
 
-/// In-card track list panel for Subtitles/Audio. Ported from
-/// PlayerTrackPopupView: same row model, scroll+stack layout, and
-/// system-picker row focus treatment, minus the glass background and
-/// AnchoredPopupPresenting conformance/Menu handling — the card owns
-/// Menu and framing now.
+/// A choice menu in the rail's glass popup, cloned from AVKit's tvOS 26 tool
+/// menus (`AVUnifiedPlayerContextMenuViewController`). Metrics were read from
+/// AVKit's live view tree (DEBUG `AVKitScrubProbe`, RIVULET_SCRUBPROBE=menus):
+/// a 70pt section header, 66pt rows (86 with a second line), a checkmark column,
+/// and a focused row that turns into a white pill. Fills the popup edge to edge;
+/// its own insets match AVKit's.
 final class CardTrackListView: UIView {
+
+    /// AVKit's menus are a fixed 450pt wide.
+    static let menuWidth: CGFloat = 450
+
+    fileprivate enum Metrics {
+        static let headerHeight: CGFloat = 70
+        static let headerLabelCenterY: CGFloat = 39.5
+        static let headerLabelLeading: CGFloat = 35
+        static let rowInset: CGFloat = 21
+        static let bottomInset: CGFloat = 18
+        static let separatorInset: CGFloat = 15
+        static let separatorGap: CGFloat = 18
+        static let rowHeight: CGFloat = 66
+        static let twoLineRowHeight: CGFloat = 86
+        static let checkColumnX: CGFloat = 21
+        static let checkColumnWidth: CGFloat = 32
+        static let titleX: CGFloat = 69
+        static let rowRadius: CGFloat = 33
+        /// Focused rows grow 4pt each side, and their content scales to match.
+        static let focusGrowth: CGFloat = 4
+        static let focusScale: CGFloat = 416 / 408
+        static let titleFont = UIFont.systemFont(ofSize: 25, weight: .medium)
+        static let secondaryFont = UIFont.systemFont(ofSize: 23, weight: .medium)
+        /// AVKit draws secondary text white 0.5 and rules white 0.3 plus-lighter over
+        /// its glass; these normal-blend alphas land on the same pixels over it.
+        static let secondaryColor = UIColor.white.withAlphaComponent(0.8)
+        static let separatorColor = UIColor.white.withAlphaComponent(0.46)
+    }
 
     struct Row {
         let title: String
@@ -27,16 +56,10 @@ final class CardTrackListView: UIView {
     private var rowButtons: [CardTrackRowButton] = []
     private var stepperRows: [CardStepperRowView] = []
     /// Pin focus to the selected row only for the FIRST landing. After focus
-    /// has entered the list once, `preferredFocusEnvironments` yields no
-    /// preference so the focus engine leaves focus on whatever row the user
-    /// navigated to — otherwise reaching the bottom and pressing Down would
-    /// re-resolve focus back up to the selected row (the "bounce").
+    /// has entered the list once, `preferredFocusEnvironments` holds the row
+    /// focus is on, so an edge press stops instead of bouncing to the selection.
     private var hasPinnedInitialFocus = false
-    /// The control focus is currently on — a track row OR a stepper's +/-
-    /// button — tracked so `preferredFocusEnvironments` can hold it (see
-    /// there). It must cover steppers too: holding a track row while focus
-    /// sits on a stepper would yank focus back up whenever an edge press
-    /// re-resolves through the panel's focus fence.
+    /// The control focus is on: a track row or a stepper's -/+ button.
     private weak var lastFocusedControl: UIView?
 
     convenience init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool,
@@ -56,8 +79,7 @@ final class CardTrackListView: UIView {
         self.init(header: header, rows: rows, steppers: steppers, onSelect: onSelect)
     }
 
-    /// A plain list of choices in the same card: each row's `trackId` is what
-    /// `onSelect` receives. Live TV uses it for recording options.
+    /// A plain list of choices: each row's `trackId` is what `onSelect` receives.
     init(header: String, rows: [Row], steppers: [CardStepperConfig] = [],
          onSelect: @escaping (Int?) -> Void) {
         self.rows = rows
@@ -74,12 +96,11 @@ final class CardTrackListView: UIView {
     private func setupViews(header: String) {
         let headerLabel = UILabel()
         headerLabel.text = header
-        headerLabel.font = .systemFont(ofSize: 26, weight: .bold)
-        headerLabel.textColor = .white
+        headerLabel.font = Metrics.secondaryFont
+        headerLabel.textColor = Metrics.secondaryColor
         addSubview(headerLabel)
 
         stack.axis = .vertical
-        stack.spacing = 2
         scrollView.addSubview(stack)
         scrollView.clipsToBounds = true
         addSubview(scrollView)
@@ -88,30 +109,29 @@ final class CardTrackListView: UIView {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
-        // The scroll view grows with content up to a cap, so short lists
-        // hug their rows and long ones scroll. One BELOW `.defaultHigh`: at it,
-        // this ties the header label's compression resistance and, once the
-        // list overflows the panel cap (Subtitles: Off + 3 tracks + both
-        // steppers), the solver squashed the header instead of scrolling.
-        let scrollHeight = scrollView.heightAnchor.constraint(equalTo: stack.heightAnchor)
+        // The scroll view grows with content up to the popup's cap, so short
+        // lists hug their rows and long ones scroll. Kept below the header's
+        // compression resistance so an overflow scrolls instead of squashing it.
+        let scrollHeight = scrollView.heightAnchor.constraint(
+            equalTo: stack.heightAnchor, constant: Metrics.bottomInset)
         scrollHeight.priority = .defaultHigh - 1
 
         NSLayoutConstraint.activate([
-            headerLabel.topAnchor.constraint(equalTo: topAnchor),
-            headerLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
-            headerLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            headerLabel.centerYAnchor.constraint(equalTo: topAnchor, constant: Metrics.headerLabelCenterY),
+            headerLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.headerLabelLeading),
+            headerLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Metrics.headerLabelLeading),
 
-            scrollView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor, constant: 16),
+            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.headerHeight),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             scrollHeight,
 
             stack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            stack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: Metrics.rowInset),
+            stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -Metrics.rowInset),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -Metrics.bottomInset),
+            stack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -2 * Metrics.rowInset),
         ])
 
         for row in rows {
@@ -123,22 +143,13 @@ final class CardTrackListView: UIView {
             rowButtons.append(button)
         }
 
-        // Adjustment steppers (delay / height) under the track rows, each with
-        // its own section label. Pressing one adjusts in place and leaves the
-        // panel up, so the user can watch the subtitles move as they step.
+        // Adjustment steppers (delay / height) sit in their own section below a
+        // separator. A press adjusts in place and leaves the popup up, so the
+        // user can watch the subtitles move as they step.
+        if !steppers.isEmpty, !rowButtons.isEmpty {
+            stack.addArrangedSubview(MenuSeparatorView())
+        }
         for config in steppers {
-            let sectionLabel = UILabel()
-            sectionLabel.text = config.title
-            sectionLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-            sectionLabel.textColor = UIColor.white.withAlphaComponent(0.55)
-            // Gap ABOVE the label: after the last thing already in the stack.
-            let previous: UIView? = stepperRows.last ?? rowButtons.last
-            stack.addArrangedSubview(sectionLabel)
-            if let previous {
-                stack.setCustomSpacing(14, after: previous)
-            }
-            stack.setCustomSpacing(6, after: sectionLabel)
-
             let row = CardStepperRowView(config: config)
             stack.addArrangedSubview(row)
             stepperRows.append(row)
@@ -146,15 +157,10 @@ final class CardTrackListView: UIView {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        // After the first landing, hold the CURRENT row (not `[]`, not the
-        // selected row). When Down at the last row / Up at the first finds
-        // no in-panel candidate, the panel's focus fence denies the exit and
-        // the engine re-resolves focus via this preference — returning `[]`
-        // let it fall back to the first focusable, so the list "looped" from
-        // bottom to top. Returning the row focus already sits on makes that
-        // re-resolution a no-op: focus simply STOPS at the edge. It doesn't
-        // interfere with row-to-row moves (directional focus never consults
-        // preferredFocusEnvironments).
+        // After the first landing, hold the CURRENT row: when an edge press
+        // finds no in-popup candidate the popup's fence re-resolves through
+        // here, and returning the focused row makes focus stop at the edge
+        // instead of looping to the top.
         if hasPinnedInitialFocus {
             return lastFocusedControl.map { [$0] } ?? []
         }
@@ -167,28 +173,45 @@ final class CardTrackListView: UIView {
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        // Once focus enters any of our controls, stop pinning the selected row
-        // and remember which one holds focus (see preferredFocusEnvironments).
-        // Ignore moves that land outside the list entirely, so the remembered
-        // control stays put while focus is away.
         guard let next = context.nextFocusedView, next.isDescendant(of: self) else { return }
         if let row = rowButtons.first(where: { next.isDescendant(of: $0) || next === $0 }) {
             hasPinnedInitialFocus = true
             lastFocusedControl = row
         } else if stepperRows.contains(where: { next.isDescendant(of: $0) }) {
-            // The stepper ROW isn't focusable — its +/- buttons are, so hold
-            // the button itself.
+            // The stepper row isn't focusable; its -/+ buttons are.
             hasPinnedInitialFocus = true
             lastFocusedControl = next
         }
     }
 }
 
+// MARK: - MenuSeparatorView
+
+/// AVKit's section break: an 18pt gap, then a 1pt line inset 15pt from the rows.
+private final class MenuSeparatorView: UIView {
+    init() {
+        super.init(frame: .zero)
+        let line = UIView()
+        line.backgroundColor = CardTrackListView.Metrics.separatorColor
+        addSubview(line)
+        line.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: CardTrackListView.Metrics.separatorGap + 1),
+            line.heightAnchor.constraint(equalToConstant: 1),
+            line.bottomAnchor.constraint(equalTo: bottomAnchor),
+            line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: CardTrackListView.Metrics.separatorInset),
+            line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -CardTrackListView.Metrics.separatorInset),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
 // MARK: - CardStepperConfig
 
-/// One adjustment stepper in the panel: a section title, a formatted value
-/// provider, and a step handler (`-1` / `+1`). The row re-reads `value()`
-/// after every press, so the handler owns clamping and persistence.
+/// One adjustment stepper in the menu: a title, a formatted value provider,
+/// and a step handler (`-1` / `+1`). The row re-reads `value()` after every
+/// press, so the handler owns clamping and persistence.
 struct CardStepperConfig {
     let title: String
     let value: () -> String
@@ -197,8 +220,8 @@ struct CardStepperConfig {
 
 // MARK: - CardStepperRowView
 
-/// `[-]   value   [+]` — the minus/plus ends are focusable; the centre label
-/// shows the current value ("0.0s", "+3", …) and updates on every press.
+/// `Title        (-)  value  (+)` in a menu row. The -/+ buttons are focusable;
+/// the value updates on every press.
 final class CardStepperRowView: UIView {
 
     private let config: CardStepperConfig
@@ -208,6 +231,11 @@ final class CardStepperRowView: UIView {
         self.config = config
         super.init(frame: .zero)
 
+        let titleLabel = UILabel()
+        titleLabel.text = config.title
+        titleLabel.font = CardTrackListView.Metrics.titleFont
+        titleLabel.textColor = .white
+
         let minus = CardStepperButton(symbolName: "minus")
         let plus = CardStepperButton(symbolName: "plus")
         minus.onTap = { [weak self] in self?.step(-1) }
@@ -215,31 +243,35 @@ final class CardStepperRowView: UIView {
 
         valueLabel.text = config.value()
         valueLabel.font = .monospacedDigitSystemFont(ofSize: 23, weight: .medium)
-        valueLabel.textColor = .white
+        valueLabel.textColor = CardTrackListView.Metrics.secondaryColor
         valueLabel.textAlignment = .center
 
-        [minus, valueLabel, plus].forEach {
+        [titleLabel, minus, valueLabel, plus].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
+        let button: CGFloat = 52
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
+            heightAnchor.constraint(equalToConstant: CardTrackListView.Metrics.rowHeight),
 
-            minus.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            minus.centerYAnchor.constraint(equalTo: centerYAnchor),
-            minus.widthAnchor.constraint(equalToConstant: 64),
-            minus.heightAnchor.constraint(equalToConstant: 52),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: CardTrackListView.Metrics.titleX),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            plus.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            plus.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
             plus.centerYAnchor.constraint(equalTo: centerYAnchor),
-            plus.widthAnchor.constraint(equalToConstant: 64),
-            plus.heightAnchor.constraint(equalToConstant: 52),
+            plus.widthAnchor.constraint(equalToConstant: button),
+            plus.heightAnchor.constraint(equalToConstant: button),
 
-            valueLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            valueLabel.trailingAnchor.constraint(equalTo: plus.leadingAnchor, constant: -8),
             valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            valueLabel.leadingAnchor.constraint(greaterThanOrEqualTo: minus.trailingAnchor, constant: 8),
-            valueLabel.trailingAnchor.constraint(lessThanOrEqualTo: plus.leadingAnchor, constant: -8),
+            valueLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 70),
+
+            minus.trailingAnchor.constraint(equalTo: valueLabel.leadingAnchor, constant: -8),
+            minus.centerYAnchor.constraint(equalTo: centerYAnchor),
+            minus.widthAnchor.constraint(equalToConstant: button),
+            minus.heightAnchor.constraint(equalToConstant: button),
+            minus.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 12),
         ])
     }
 
@@ -253,8 +285,7 @@ final class CardStepperRowView: UIView {
 
 // MARK: - CardStepperButton
 
-/// Round-rect +/- control matching the track rows' focus treatment (white
-/// fill, black glyph when focused).
+/// Round -/+ control: faint fill at rest, white with a black glyph when focused.
 final class CardStepperButton: UIControl {
 
     var onTap: (() -> Void)?
@@ -276,17 +307,15 @@ final class CardStepperButton: UIControl {
             symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
 
-        backgroundColor = UIColor.white.withAlphaComponent(0.08)
-        layer.cornerRadius = 14
-        layer.cornerCurve = .continuous
+        backgroundColor = UIColor.white.withAlphaComponent(0.1)
+        layer.cornerRadius = 26
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var canBecomeFocused: Bool { true }
 
-    // Select does not fire .primaryActionTriggered on a plain UIControl
-    // (same trap as CardTrackRowButton) — handle the press directly.
+    // Select does not fire .primaryActionTriggered on a plain UIControl on tvOS.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         for press in presses where press.type == .select {
             onTap?()
@@ -299,74 +328,103 @@ final class CardStepperButton: UIControl {
         super.didUpdateFocus(in: context, with: coordinator)
         let isFocused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: isFocused) {
-            self.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.08)
+            self.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.1)
             self.symbolView.tintColor = isFocused ? .black : .white
+            self.transform = isFocused ? CGAffineTransform(scaleX: 1.1, y: 1.1) : .identity
         }
     }
 }
 
-// MARK: - CardTrackRowButton (verbatim port of PopupRowButton)
+// MARK: - CardTrackRowButton
 
+/// One menu row: checkmark column, title, optional second line. Focused, a
+/// white pill grows 4pt past the row with AVKit's shadow and the content scales
+/// with it.
 final class CardTrackRowButton: UIControl {
 
     let row: CardTrackListView.Row
     var onTap: (() -> Void)?
+    private let pill = UIView()
+    private let content = UIView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let checkmarkView = UIImageView(image: UIImage(
         systemName: "checkmark",
-        withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .bold)
+        // Matches AVKit's glyph by rendered ink, not by its reported 19x17 size.
+        withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .bold)
     ))
-    private let vStack = UIStackView()
 
     init(row: CardTrackListView.Row) {
         self.row = row
         super.init(frame: .zero)
+        typealias M = CardTrackListView.Metrics
+
+        let hasSubtitle = !(row.subtitle?.isEmpty ?? true)
+
+        pill.layer.cornerRadius = M.rowRadius
+        pill.layer.cornerCurve = .continuous
+        pill.layer.shadowColor = UIColor.black.cgColor
+        pill.layer.shadowOffset = CGSize(width: 0, height: 20)
+        pill.layer.shadowRadius = 15
+        pill.isUserInteractionEnabled = false
+        content.isUserInteractionEnabled = false
 
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 23, weight: .medium)
+        titleLabel.font = M.titleFont
         titleLabel.textColor = .white
 
         subtitleLabel.text = row.subtitle
-        subtitleLabel.font = .systemFont(ofSize: 17, weight: .regular)
-        subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.6)
-        subtitleLabel.isHidden = row.subtitle == nil || row.subtitle?.isEmpty == true
+        subtitleLabel.font = M.secondaryFont
+        subtitleLabel.textColor = M.secondaryColor
+        subtitleLabel.isHidden = !hasSubtitle
 
-        vStack.axis = .vertical
-        vStack.spacing = 2
-        vStack.isUserInteractionEnabled = false
-        vStack.addArrangedSubview(titleLabel)
-        vStack.addArrangedSubview(subtitleLabel)
-
-        // Leading checkmark column, reserved for every row so titles
-        // align whether or not a row is selected (system-picker layout).
         checkmarkView.tintColor = .white
         checkmarkView.isHidden = !row.isSelected
         checkmarkView.contentMode = .center
 
-        addSubview(checkmarkView)
-        addSubview(vStack)
+        addSubview(pill)
+        addSubview(content)
+        [checkmarkView, titleLabel, subtitleLabel].forEach { content.addSubview($0) }
 
-        [vStack, checkmarkView].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
-        NSLayoutConstraint.activate([
-            checkmarkView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            checkmarkView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            checkmarkView.widthAnchor.constraint(equalToConstant: 26),
+        [content, checkmarkView, titleLabel, subtitleLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        var constraints = [
+            heightAnchor.constraint(equalToConstant: hasSubtitle ? M.twoLineRowHeight : M.rowHeight),
+            content.topAnchor.constraint(equalTo: topAnchor),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            vStack.leadingAnchor.constraint(equalTo: checkmarkView.trailingAnchor, constant: 14),
-            vStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -18),
-            vStack.topAnchor.constraint(equalTo: topAnchor, constant: 13),
-            vStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -13),
+            checkmarkView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: M.checkColumnX),
+            checkmarkView.widthAnchor.constraint(equalToConstant: M.checkColumnWidth),
+            checkmarkView.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
 
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 60),
-        ])
-
-        layer.cornerRadius = 14
-        layer.cornerCurve = .continuous
+            titleLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: M.titleX),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -M.checkColumnX),
+            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -M.checkColumnX),
+        ]
+        if hasSubtitle {
+            constraints += [
+                titleLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 13),
+                subtitleLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 45),
+            ]
+        } else {
+            constraints.append(titleLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor))
+        }
+        NSLayoutConstraint.activate(constraints)
+        applyFocus(false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let isFocused = self.isFocused
+        pill.frame = isFocused ? bounds.insetBy(dx: -CardTrackListView.Metrics.focusGrowth,
+                                                dy: -CardTrackListView.Metrics.focusGrowth) : bounds
+        pill.layer.shadowPath = UIBezierPath(roundedRect: pill.bounds, cornerRadius: pill.layer.cornerRadius).cgPath
     }
 
     override var canBecomeFocused: Bool { true }
@@ -385,13 +443,21 @@ final class CardTrackRowButton: UIControl {
         super.didUpdateFocus(in: context, with: coordinator)
         let isFocused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: isFocused) {
-            // System-picker focus treatment: white fill, black content.
-            self.backgroundColor = isFocused ? .white : .clear
-            self.titleLabel.textColor = isFocused ? .black : .white
-            self.subtitleLabel.textColor = isFocused
-                ? UIColor.black.withAlphaComponent(0.6)
-                : UIColor.white.withAlphaComponent(0.6)
-            self.checkmarkView.tintColor = isFocused ? .black : .white
+            self.applyFocus(isFocused)
         }
+    }
+
+    private func applyFocus(_ focused: Bool) {
+        typealias M = CardTrackListView.Metrics
+        let growth = focused ? M.focusGrowth : 0
+        pill.frame = bounds.insetBy(dx: -growth, dy: -growth)
+        pill.layer.cornerRadius = M.rowRadius + growth
+        pill.layer.shadowPath = UIBezierPath(roundedRect: pill.bounds, cornerRadius: pill.layer.cornerRadius).cgPath
+        pill.backgroundColor = focused ? .white : .clear
+        pill.layer.shadowOpacity = focused ? 0.3 : 0
+        content.transform = focused ? CGAffineTransform(scaleX: M.focusScale, y: M.focusScale) : .identity
+        titleLabel.textColor = focused ? .black : .white
+        subtitleLabel.textColor = focused ? UIColor.black.withAlphaComponent(0.6) : M.secondaryColor
+        checkmarkView.tintColor = focused ? .black : .white
     }
 }

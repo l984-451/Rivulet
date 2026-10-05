@@ -5,19 +5,11 @@
 //  InsightsPanelContainerView.swift
 //  Rivulet
 //
-//  Two-state content for the Insights rail panel (Docs/superpowers/specs/
-//  2026-07-08-insights-toptrivia-tabs-design.md). Replaces the old
-//  person-page deep link: selecting a cast member CROSSFADES IN PLACE from
-//  the cast list to an actor view (portrait + bio + filmography) while video
-//  keeps playing — no pause/resume, no VC presentation anywhere in this flow.
-//  Above the list/actor content sits a pill tab bar (Top 10 | Cast |
-//  category pills) that switches which tab-scoped row set the list shows.
-//
-//  Menu handling: `PlayerRailPanelView.pressesBegan` owns Menu for the whole
-//  panel and gives this content first refusal via `RailPanelMenuHandling` —
-//  in `.actor` state `handleMenuPress()` reverse-crossfades back to `.list`
-//  and the panel stays open; in `.list` state it declines and the panel
-//  dismisses.
+//  The Insights tab of the player's info pane, in the same glass box as Info
+//  and Details. Its sub-tabs (Top 10, Cast, one per trivia category) sit on the
+//  rail's pill row; this view shows the selected one as a row of cards.
+//  Selecting a cast member crossfades the box to their bio and filmography
+//  while the video keeps playing; Menu crossfades back.
 //
 
 import UIKit
@@ -25,12 +17,9 @@ import UIKit
 final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
 
     private enum Metrics {
-        /// Height cap for the `.actor` state — matches PlayerRailPanelView's
-        /// own `maxHeight` (560) minus its content padding (20 top + 20
-        /// bottom), so the panel never exceeds its own ceiling.
-        static let actorHeightCap: CGFloat = 520
+        static let height: CGFloat = 250
+        static let radius: CGFloat = 48
         static let crossfadeDuration: TimeInterval = 0.2
-        static let tabBarSpacing: CGFloat = 16
     }
 
     private enum State {
@@ -38,46 +27,14 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         case actor
     }
 
-    private let cast: [MediaPerson]
-    private let trivia: TitleTrivia?
-    private let suppressedTriviaIDs: Set<String>
+    let availableTabs: [InsightsTab]
+    private(set) var currentTab: InsightsTab
+    private let listView: InsightsCastListView
     private let provider: PersonFilmographyProviding
-
-    private let availableTabs: [InsightsTab]
-    private var currentTab: InsightsTab
-
-    private lazy var tabBar: PillTabBarView? = {
-        guard !availableTabs.isEmpty else { return nil }
-        let bar = PillTabBarView(
-            titles: availableTabs.map(\.title),
-            selectedIndex: availableTabs.firstIndex(of: currentTab) ?? 0)
-        bar.onSelect = { [weak self] index in
-            guard let self, self.availableTabs.indices.contains(index) else { return }
-            self.handleTabSelected(self.availableTabs[index])
-        }
-        return bar
-    }()
-
-    // `lazy` so the init closure can capture `self` directly — evaluated on
-    // first access (from `init`, after `super.init()` has returned), so
-    // `self` is fully formed by the time `InsightsCastListView`'s own init
-    // runs. Simpler than routing through an intermediate box.
-    private lazy var listView = InsightsCastListView(
-        cast: cast,
-        trivia: trivia,
-        suppressedTriviaIDs: suppressedTriviaIDs,
-        initialTab: currentTab,
-        onSelectCast: { [weak self] person in
-            self?.crossfadeToActor(person)
-        })
-    /// Internal (not private) visibility so `@testable import Rivulet` tests
-    /// can observe the currently-hosted actor view (e.g. to confirm a stale
-    /// load never reached it after the user backed out / switched actors).
+    /// Internal for tests: the actor view a selection built, until Menu tears it down.
     private(set) var actorView: InsightsActorView?
     private let coordinator = InsightsActorLoadCoordinator()
     private var state: State = .list
-
-    private var heightConstraint: NSLayoutConstraint!
 
     init(
         cast: [MediaPerson],
@@ -85,87 +42,49 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         suppressedTriviaIDs: Set<String> = [],
         provider: PersonFilmographyProviding = PersonFilmographyProvider()
     ) {
-        self.cast = cast
-        self.trivia = trivia
-        self.suppressedTriviaIDs = suppressedTriviaIDs
+        let tabs = InsightsTab.availableTabs(cast: cast, trivia: trivia, suppressedTriviaIDs: suppressedTriviaIDs)
+        availableTabs = tabs
+        // Top 10 leads when it exists: it is the curated highlight reel.
+        currentTab = tabs.first(where: { $0 == .topTen }) ?? tabs.first ?? .cast
+        listView = InsightsCastListView(
+            cast: cast, trivia: trivia, suppressedTriviaIDs: suppressedTriviaIDs,
+            initialTab: currentTab, onSelectCast: { _ in })
         self.provider = provider
-        let tabs = InsightsTab.availableTabs(
-            cast: cast, trivia: trivia, suppressedTriviaIDs: suppressedTriviaIDs)
-        self.availableTabs = tabs
-        // Prefer Top 10 as the landing tab when available (it's the curated
-        // highlight reel); otherwise Cast; otherwise the first category.
-        self.currentTab = tabs.first(where: { $0 == .topTen }) ?? tabs.first ?? .cast
         super.init(frame: .zero)
 
-        listView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(listView)
-
-        if let tabBar {
-            tabBar.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(tabBar)
-            NSLayoutConstraint.activate([
-                tabBar.topAnchor.constraint(equalTo: topAnchor),
-                tabBar.leadingAnchor.constraint(equalTo: leadingAnchor),
-                tabBar.trailingAnchor.constraint(equalTo: trailingAnchor),
-
-                listView.topAnchor.constraint(equalTo: tabBar.bottomAnchor, constant: Metrics.tabBarSpacing),
-                listView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                listView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                listView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            ])
-        } else {
-            NSLayoutConstraint.activate([
-                listView.topAnchor.constraint(equalTo: topAnchor),
-                listView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                listView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                listView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            ])
+        let glass = makePaneGlass(cornerRadius: Metrics.radius)
+        [glass, listView].forEach {
+            addSubview($0)
+            $0.translatesAutoresizingMaskIntoConstraints = false
         }
-
-        heightConstraint = heightAnchor.constraint(equalToConstant: 0)
-        heightConstraint.priority = .defaultHigh
-        heightConstraint.isActive = false
-
-        // Swipe twins of the pressesBegan crossings below, gated on the
-        // same predicates. The iPhone Remote emits no arrow presses, so
-        // without these the tab bar is unreachable from the list by swipe
-        // (and the list from the pills).
-        swipeCrossings = DirectionalInputBinding(
-            gatedSwipesOn: self,
-            directions: [.up, .down],
-            shouldHandle: { [weak self] direction in
-                guard let self, self.state == .list, let tabBar = self.tabBar else { return false }
-                return direction == .up ? self.listView.canEscapeUpward : tabBar.containsFocus
-            },
-            onSwipe: { [weak self] direction in
-                guard let self else { return }
-                if direction == .up, let tabBar = self.tabBar {
-                    self.moveFocus(to: tabBar)
-                } else {
-                    self.moveFocus(to: self.listView)
-                }
-            }
-        )
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: Metrics.height),
+            glass.topAnchor.constraint(equalTo: topAnchor),
+            glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+            glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            listView.topAnchor.constraint(equalTo: topAnchor),
+            listView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            listView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            listView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        listView.onSelectCast = { [weak self] person in self?.crossfadeToActor(person) }
     }
-
-    private var swipeCrossings: DirectionalInputBinding?
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    // MARK: - Tab switching
-
-    private func handleTabSelected(_ tab: InsightsTab) {
-        guard tab != currentTab, state == .list else { return }
+    /// A sub-tab gained focus on the pill row.
+    func select(_ tab: InsightsTab) {
+        guard tab != currentTab else { return }
         currentTab = tab
+        if state == .actor { reverseCrossfadeToList() }
         listView.setTab(tab)
     }
 
     // MARK: - Crossfade
 
-    /// Internal (not private) visibility so `@testable import Rivulet`
-    /// integration tests can drive selection directly (in production this
-    /// only ever fires from `InsightsCastListView`'s row `onSelect`).
+    /// Internal for tests; in production only a cast card's Select calls it.
     func crossfadeToActor(_ person: MediaPerson) {
         guard state == .list else { return }
         let token = coordinator.begin()
@@ -182,27 +101,14 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         ])
         actorView = actor
         state = .actor
-
-        // The outgoing list/tab bar are only alpha-faded, not removed (the
-        // reverse crossfade needs them intact to fade back in) — without
-        // this, they stay focusable and hit-testable while invisible, so a
-        // directional focus search from inside the actor view could land on
-        // a hidden row: the user would see the actor view but actually be
-        // focused underneath it. Matches this codebase's fullScreenCover-
-        // style focus isolation principle for any overlay state.
+        // The faded list must not stay focusable underneath the actor.
         listView.isUserInteractionEnabled = false
-        tabBar?.isUserInteractionEnabled = false
-
-        heightConstraint.constant = Metrics.actorHeightCap
-        heightConstraint.isActive = true
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
 
         UIView.animate(withDuration: Metrics.crossfadeDuration, animations: {
             self.listView.alpha = 0
-            self.tabBar?.alpha = 0
             actor.alpha = 1
-            self.superview?.layoutIfNeeded()
         }, completion: { [weak self] _ in
             self?.setNeedsFocusUpdate()
             self?.updateFocusIfNeeded()
@@ -211,12 +117,8 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         Task { [weak self] in
             guard let self else { return }
             let result = try? await self.provider.load(person: person)
+            // A newer selection or a return to the list drops this load.
             guard self.coordinator.isCurrent(token) else { return }
-            // The actor view for THIS token is still `self.actorView` as
-            // long as no newer selection/cancel has happened (guaranteed by
-            // the token check above — cancel()/begin() are the only ways
-            // the token goes stale, and both accompany a state change that
-            // replaces or tears down `actorView`).
             if let result {
                 actor.populate(result)
             } else {
@@ -225,93 +127,39 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         }
     }
 
-    /// Internal (not private) visibility — see `crossfadeToActor`.
+    /// Internal for tests; see `crossfadeToActor`.
     func reverseCrossfadeToList() {
         guard state == .actor, let actor = actorView else { return }
         coordinator.cancel()
         state = .list
         listView.isUserInteractionEnabled = true
-        tabBar?.isUserInteractionEnabled = true
-
-        heightConstraint.isActive = false
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
 
         UIView.animate(withDuration: Metrics.crossfadeDuration, animations: {
             actor.alpha = 0
             self.listView.alpha = 1
-            self.tabBar?.alpha = 1
-            self.superview?.layoutIfNeeded()
         }, completion: { [weak self] _ in
             actor.removeFromSuperview()
-            if self?.actorView === actor {
-                self?.actorView = nil
-            }
+            if self?.actorView === actor { self?.actorView = nil }
             self?.setNeedsFocusUpdate()
             self?.updateFocusIfNeeded()
         })
     }
 
-    // MARK: - Focus
-
-    /// Transient directional-escape target. The tvOS focus engine ignores a
-    /// `setNeedsFocusUpdate()` from an environment that does not CONTAIN the
-    /// currently-focused item, so the tab bar can never pull focus to itself
-    /// — the request must come from this container (the common ancestor of
-    /// the focused row and the tab bar), with `preferredFocusEnvironments`
-    /// pointing at the escape target for the duration of that one update.
-    private var focusEscapeTarget: UIView?
+    // MARK: - Focus and Menu
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        if let focusEscapeTarget { return [focusEscapeTarget] }
         switch state {
         case .list: return [listView]
         case .actor: return actorView.map { [$0] } ?? [listView]
         }
     }
 
-    private func moveFocus(to target: UIView) {
-        focusEscapeTarget = target
-        setNeedsFocusUpdate()
-        updateFocusIfNeeded()
-        focusEscapeTarget = nil
-    }
-
-    /// Directional escapes across the list/tab-bar boundary. Presses are
-    /// delivered to the focused view and bubble UP the responder chain, so
-    /// this override runs for any press while focus is on a row or pill
-    /// (both are descendants). The focus engine's own directional search
-    /// does not reliably cross the scroll-view boundaries between the two,
-    /// so both crossings are driven explicitly:
-    /// - Up on the list's first row → the tab bar (its own
-    ///   `preferredFocusEnvironments` picks the selected pill).
-    /// - Down from a pill → the list (lands per the list's own preference).
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if state == .list, let tabBar {
-            for press in presses {
-                if press.type == .upArrow, listView.canEscapeUpward {
-                    moveFocus(to: tabBar)
-                    return
-                }
-                if press.type == .downArrow, tabBar.containsFocus {
-                    moveFocus(to: listView)
-                    return
-                }
-            }
-        }
-        super.pressesBegan(presses, with: event)
-    }
-
-    // MARK: - Menu handling
-
-    /// Content-first-refusal on Menu, called from
-    /// `PlayerRailPanelView.pressesBegan` (see `RailPanelMenuHandling`).
-    /// Not a `pressesBegan` override here: in `.actor` state nothing inside
-    /// this view may be focusable (bio header, filmography still loading),
-    /// so focus falls to the panel view itself — and a press delivered to
-    /// the panel bubbles UP from it, never down into its children.
+    /// Menu first closes a reading bio, then the actor, then (declined) the pane.
     func handleMenuPress() -> Bool {
         guard state == .actor else { return false }
+        if actorView?.handleMenuPress() == true { return true }
         reverseCrossfadeToList()
         return true
     }

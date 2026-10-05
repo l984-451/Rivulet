@@ -6,28 +6,20 @@
 //  Rivulet
 //
 //  Pure FF/RW shuttle grammar: click-and-hold enters shuttle at level 1,
-//  clicks in the same direction bump up to the level 3 cap, clicks in the
+//  clicks in the same direction bump up to the level 8 cap, clicks in the
 //  opposite direction step down THROUGH zero into the opposite direction.
-//  Badges show the human ladder (2x/4x/6x); actual cruise rates are
-//  15x/60x/240x realtime.
+//  Levels 1-4 are AVKit's (`AVScrubbingController.defaultScrubbingRates`,
+//  8x/24x/48x/96x); 5-8 keep doubling past AVKit's cap. The bar numbers
+//  levels from 2 as AVKit does.
 //
 
 import Foundation
 
 nonisolated enum ShuttleGrammar {
-    static let maxLevel = 3
+    static let maxLevel = 8
 
-    /// Badge numbers shown to the user per level (index 0 unused).
-    /// Deliberately NOT the literal rates below — the badge speaks the
-    /// familiar DVR shuttle ladder (2x/4x/6x = level, not multiple);
-    /// a literal "240x" reads as a bug, not a speed.
-    static let multipliers: [Int] = [0, 2, 4, 6]
-
-    /// Content-seconds per real-second at each level. DVR-style ladder
-    /// (each level 4x the previous): near-realtime multiples read as a
-    /// stationary playhead on a long timeline, so the gentlest useful
-    /// cruise is ~15x. Single tuning point for device feel.
-    static let ratesPerLevel: [TimeInterval] = [0, 15, 60, 240]
+    /// Content-seconds per real-second at each level.
+    static let ratesPerLevel: [TimeInterval] = [0, 8, 24, 48, 96, 192, 384, 768, 1536]
 
     static func step(current: Int, clickForward: Bool) -> Int {
         let clickSign = clickForward ? 1 : -1
@@ -38,7 +30,7 @@ nonisolated enum ShuttleGrammar {
         // Opposite direction: step toward zero, then CROSS into the opposite
         // direction rather than stopping on it. Landing on zero routed to
         // `cancelScrub()`, which restores the pre-shuttle position — so
-        // stepping 6x -> 4x -> 2x and clicking once more threw away everything
+        // stepping down to level 1 and clicking once more threw away everything
         // the user had just shuttled past and resumed where they started.
         // Select still commits and Down still cancels; those are the exits.
         let stepped = (abs(current) - 1) * (current > 0 ? 1 : -1)
@@ -48,11 +40,5 @@ nonisolated enum ShuttleGrammar {
     static func rate(forLevel level: Int) -> TimeInterval {
         let idx = min(abs(level), maxLevel)
         return ratesPerLevel[idx]
-    }
-
-    static func badge(forSpeed speed: Int) -> String? {
-        guard speed != 0 else { return nil }
-        let glyph = speed > 0 ? "▶" : "◀"
-        return "\(glyph) \(multipliers[min(abs(speed), maxLevel)])x"
     }
 }

@@ -24,9 +24,11 @@ final class RemoteInputHandler: ObservableObject {
     private var lastTouch: (x: Float, y: Float)?
     private var isButtonDown = false
 
-    // Click wheel rotation tracking (iPod-style)
-    private var lastAngle: Float?
-    private var accumulatedRotation: Float = 0
+    /// Clickpad-ring jog, classified the way UIKit's rotary recognizer does it.
+    private var ringJog = ClickpadRingJog()
+    /// Jog not yet emitted, in revolutions and seconds; batched to spare the scrub path.
+    private var pendingJogTurn = 0.0
+    private var pendingJogSeconds = 0.0
 
     // Check if post-video overlay is showing (don't drive rotation - let buttons work)
     var isPostVideoCheck: (() -> Bool)?
@@ -36,6 +38,10 @@ final class RemoteInputHandler: ObservableObject {
     /// True while the transport bar's buttons own focus. Directional and
     /// seek input then belongs to the focus engine, not this handler.
     var isControlsFocusCheck: (() -> Bool)?
+    /// True while the scrub bar itself holds focus: the ring jog scrubs there, as in AVKit.
+    var isScrubberFocusCheck: (() -> Bool)?
+    /// The title's length, which sets how far a ring turn scrubs.
+    var durationCheck: (() -> TimeInterval)?
 
     /// True while the Skip pill owns focus (chrome hidden). The pill handles
     /// Select itself as a UIPress, so this handler must swallow the keyboard's
@@ -176,13 +182,10 @@ final class RemoteInputHandler: ObservableObject {
     private func setupMicroGamepad(_ micro: GCMicroGamepad) {
         micro.reportsAbsoluteDpadValues = true
 
-        // Track dpad position and detect circular rotation (iPod-style click wheel)
+        // Track the touch position, and run the ring jog on it.
         micro.dpad.valueChangedHandler = { [weak self] (dpad, xValue, yValue) in
             guard let self else { return }
-
-            // Calculate radius and angle for click wheel rotation
-            let radius = sqrt(xValue * xValue + yValue * yValue)
-            let angle = atan2(yValue, xValue)
+            let time = CACurrentMediaTime()
 
             Task { @MainActor in
                 // Ignore dpad changes while button is pressed (click disrupts touch sensing)
@@ -199,40 +202,31 @@ final class RemoteInputHandler: ObservableObject {
                 }
                 self.currentDpadDirection = dir
 
-                // Don't drive rotation while post-video is showing - its
-                // buttons own the remote.
-                if self.isPostVideoCheck?() == true {
-                    self.lastAngle = nil
-                    self.accumulatedRotation = 0
+                // Post-video's buttons own the remote; the jog only runs paused,
+                // and not while a button or panel holds focus.
+                let focusAllows = self.isControlsFocusCheck?() != true || self.isScrubberFocusCheck?() == true
+                guard self.isPostVideoCheck?() != true, self.isPausedCheck?() == true, focusAllows else {
+                    self.ringJog.reset()
+                    self.pendingJogTurn = 0
+                    self.pendingJogSeconds = 0
                     return
                 }
-
-                // Click wheel rotation: only track when finger is on outer edge
-                if radius > InputConfig.wheelRadiusThreshold {
-                    if let lastAngle = self.lastAngle {
-                        var delta = angle - lastAngle
-
-                        // Handle wrap-around at ±π
-                        if delta > .pi { delta -= 2 * .pi }
-                        if delta < -.pi { delta += 2 * .pi }
-
-                        self.accumulatedRotation += delta
-
-                        // Trigger rotation callback when threshold exceeded
-                        if abs(self.accumulatedRotation) > InputConfig.wheelRotationThreshold {
-                            let rotation = self.accumulatedRotation
-                            self.accumulatedRotation = 0
-                            if self.isPausedCheck?() == true {
-                                let seekSeconds = TimeInterval(rotation) * InputConfig.wheelSecondsPerRadian
-                                self.emit(.scrubRelative(seconds: seekSeconds), source: .siriMicroGamepad)
-                            }
-                        }
-                    }
-                    self.lastAngle = angle
-                } else {
-                    // Finger moved to center - reset rotation tracking
-                    self.lastAngle = nil
-                    self.accumulatedRotation = 0
+                guard let turn = self.ringJog.feed(x: xValue, y: yValue, time: time) else {
+                    self.pendingJogTurn = 0
+                    self.pendingJogSeconds = 0
+                    return
+                }
+                // Clockwise is forward.
+                self.pendingJogTurn += turn
+                self.pendingJogSeconds += ClickpadRingJog.seconds(
+                    forTurn: turn, velocity: self.ringJog.velocity, duration: self.durationCheck?() ?? 0)
+                if abs(self.pendingJogTurn) >= InputConfig.wheelEmitRevolutions {
+                    let seconds = self.pendingJogSeconds
+                    self.pendingJogTurn = 0
+                    self.pendingJogSeconds = 0
+                    // Past `emit`: its controls-focus gate is for buttons, and the
+                    // bar holding focus is where the jog belongs.
+                    self.onAction?(.scrubRelative(seconds: seconds), .siriMicroGamepad)
                 }
             }
         }
@@ -255,6 +249,7 @@ final class RemoteInputHandler: ObservableObject {
                 // release ungated, and that click then skipped in whatever
                 // direction was frozen, not the one the user clicked.
                 self.isButtonDown = pressed
+                if pressed { Self.lastClickpadDownAt = CACurrentMediaTime() }
                 // The click itself is the host's: it arrives as an arrow or
                 // select UIPress too.
             }
@@ -334,8 +329,23 @@ final class RemoteInputHandler: ObservableObject {
     /// Whether the Siri Remote clickpad is physically depressed right now.
     /// Read synchronously (not from `isButtonDown`, which trails by an async
     /// hop) so a gesture recognizer can decide in `gestureRecognizerShouldBegin`.
+    /// When the clickpad last clicked down. A click is a touch too, so the
+    /// container's bare-tap recognizer checks this to ignore clicks.
+    static var lastClickpadDownAt: CFTimeInterval = 0
+
     static var isClickpadDown: Bool {
         GCController.controllers().contains { $0.microGamepad?.buttonA.isPressed == true }
+    }
+
+    /// The current clickpad touch has been classified as a ring jog, which then
+    /// owns it; the swipe-to-scrub pan stands down.
+    static var isRingJogging: Bool {
+        active?.ringJog.isJogging == true
+    }
+
+    /// The jogging finger's wheel position, for the ring's finger dot.
+    static var ringFingerPosition: Double? {
+        active?.ringJog.fingerPosition
     }
 
     private func emit(_ action: PlaybackInputAction, source: PlaybackInputSource) {
@@ -374,9 +384,9 @@ final class RemoteInputHandler: ObservableObject {
         currentDpadDirection = nil
         lastTouch = nil
         isButtonDown = false
-        // Reset rotation tracking
-        lastAngle = nil
-        accumulatedRotation = 0
+        ringJog.reset()
+        pendingJogTurn = 0
+        pendingJogSeconds = 0
     }
 }
 
@@ -553,7 +563,13 @@ private final class UniversalPlaybackInputTarget: PlaybackInputTarget {
             // Swipe-to-scrub works during playback as well as while paused.
             // `updateSwipeScrubPosition` enters scrub state on its own (via
             // `startSwipeScrubbing`) without pausing, matching the shuttle path.
-            vm.updateSwipeScrubPosition(by: seconds)
+            // The gamepad only emits this for clickpad-ring rotation, which
+            // also shows the ring indicator.
+            if source == .siriMicroGamepad {
+                vm.handleWheelScrub(by: seconds)
+            } else {
+                vm.updateSwipeScrubPosition(by: seconds)
+            }
             vm.showControlsTemporarily()
 
         case .scrubCommit:
@@ -757,6 +773,12 @@ struct UniversalPlayerView: View {
                 // panel (`contentOwnsPresses`), and this is its twin.
                 return viewModel.controlsFocusActive || viewModel.isRailPanelOpen
             }
+            remoteInput.isScrubberFocusCheck = { [weak viewModel] in
+                viewModel?.scrubberOwnsFocus ?? false
+            }
+            remoteInput.durationCheck = { [weak viewModel] in
+                viewModel?.duration ?? 0
+            }
             remoteInput.isSkipPillFocusCheck = { [weak viewModel] in
                 viewModel?.skipPillOwnsFocus ?? false
             }
@@ -837,8 +859,9 @@ struct UniversalPlayerView: View {
             // top-left "Loading" cue in PlayerContainerViewController covers
             // it in the same slot the Paused indicator uses.
 
-            // Seek Indicator (10s skip)
-            if let indicator = viewModel.seekIndicator {
+            // Seek Indicator (10s skip) with the chrome hidden; with it up,
+            // the progress bar shows AVKit's glyph beside the time instead.
+            if let indicator = viewModel.seekIndicator, !viewModel.showControls {
                 seekIndicatorView(indicator)
                     .transition(.scale.combined(with: .opacity))
             }

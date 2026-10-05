@@ -5,8 +5,8 @@
 //  ShuttleGrammarTests.swift
 //  RivuletTests
 //
-//  Unit tests for the FF/RW shuttle grammar: hold enters at 2x, same-direction
-//  clicks bump 2x -> 4x -> 6x cap, opposite-direction clicks step down through
+//  Unit tests for the FF/RW shuttle grammar: hold enters at level 1, same-direction
+//  clicks bump to the level 8 cap, opposite-direction clicks step down through
 //  zero into the opposite direction.
 //
 
@@ -21,15 +21,16 @@ final class ShuttleGrammarTests: XCTestCase {
     }
 
     func testSameDirectionClicksBumpToCap() {
-        // Forward: 1 -> 2 -> 3, capped at maxLevel (3).
+        // Forward: 1 -> 2 -> ... -> 8, capped at maxLevel (8).
         XCTAssertEqual(ShuttleGrammar.step(current: 1, clickForward: true), 2)
-        XCTAssertEqual(ShuttleGrammar.step(current: 2, clickForward: true), 3)
-        XCTAssertEqual(ShuttleGrammar.step(current: 3, clickForward: true), 3)
+        XCTAssertEqual(ShuttleGrammar.step(current: 4, clickForward: true), 5)
+        XCTAssertEqual(ShuttleGrammar.step(current: 7, clickForward: true), 8)
+        XCTAssertEqual(ShuttleGrammar.step(current: 8, clickForward: true), 8)
 
-        // Backward: -1 -> -2 -> -3, capped at -maxLevel (-3).
+        // Backward mirrors it, capped at -maxLevel (-8).
         XCTAssertEqual(ShuttleGrammar.step(current: -1, clickForward: false), -2)
-        XCTAssertEqual(ShuttleGrammar.step(current: -2, clickForward: false), -3)
-        XCTAssertEqual(ShuttleGrammar.step(current: -3, clickForward: false), -3)
+        XCTAssertEqual(ShuttleGrammar.step(current: -7, clickForward: false), -8)
+        XCTAssertEqual(ShuttleGrammar.step(current: -8, clickForward: false), -8)
     }
 
     func testOppositeDirectionClicksStepDownThroughZero() {
@@ -61,22 +62,15 @@ final class ShuttleGrammarTests: XCTestCase {
         }
     }
 
-    func testRateAndBadge() {
+    func testRate() {
         XCTAssertEqual(ShuttleGrammar.rate(forLevel: 0), 0)
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 1), 15)
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 2), 60)
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 3), 240)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 1), 8)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 2), 24)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 3), 48)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 4), 96)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: 8), 1536)
         // rate(forLevel:) takes the magnitude — direction is irrelevant.
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: -1), 15)
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: -2), 60)
-        XCTAssertEqual(ShuttleGrammar.rate(forLevel: -3), 240)
-
-        XCTAssertNil(ShuttleGrammar.badge(forSpeed: 0))
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: 1), "▶ 2x")
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: 2), "▶ 4x")
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: 3), "▶ 6x")
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: -1), "◀ 2x")
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: -2), "◀ 4x")
-        XCTAssertEqual(ShuttleGrammar.badge(forSpeed: -3), "◀ 6x")
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: -1), 8)
+        XCTAssertEqual(ShuttleGrammar.rate(forLevel: -8), 1536)
     }
 }

@@ -43,8 +43,7 @@ enum InputConfig {
     /// How far out a touch must rest for a clickpad `.select` to count as a
     /// Left/Right EDGE click (1st-generation Siri Remote, whose clicks all
     /// arrive as `.select`). Stricter than `dpadThreshold` because a wrong yes
-    /// skips the video instead of showing the controls. Kept inside the ring
-    /// that `wheelRadiusThreshold` treats as the outer edge.
+    /// skips the video instead of showing the controls.
     static let edgeClickThreshold: Float = 0.6
     static let joystickDeadzone: Float = 0.2
 
@@ -60,7 +59,6 @@ enum InputConfig {
         return x > 0
     }
 
-    static let wheelRotationThreshold: Float = 0.3
-    static let wheelRadiusThreshold: Float = 0.7
-    static let wheelSecondsPerRadian: TimeInterval = 10
+    /// Jog turn batched before one scrub step (about 1.8°).
+    static let wheelEmitRevolutions = 0.005
 }

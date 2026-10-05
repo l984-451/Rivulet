@@ -7,21 +7,22 @@ import UIKit
 
 @Suite("PlayerProgressBarView marker coloring")
 struct PlayerProgressBarViewTests {
-    @Test("intro marker is blue")
-    func introMarkerColor() {
-        let marker = PlexMarker(type: "intro", startTimeOffset: 0, endTimeOffset: 30000)
-        #expect(PlayerProgressBarView.color(for: marker) == UIColor.systemBlue)
+    private func color(_ type: String) -> UIColor {
+        PlayerProgressBarView.color(for: PlexMarker(type: type, startTimeOffset: 0, endTimeOffset: 30000))
     }
 
-    @Test("credits marker is purple")
-    func creditsMarkerColor() {
-        let marker = PlexMarker(type: "credits", startTimeOffset: 0, endTimeOffset: 30000)
-        #expect(PlayerProgressBarView.color(for: marker) == UIColor.systemPurple)
+    @Test("intro, credits and ads each get their own tint")
+    func markerKindsAreDistinct() {
+        let colors = ["intro", "credits", "commercial"].map(color)
+        #expect(Set(colors).count == 3)
     }
 
-    @Test("commercial marker is yellow")
-    func commercialMarkerColor() {
-        let marker = PlexMarker(type: "commercial", startTimeOffset: 0, endTimeOffset: 30000)
-        #expect(PlayerProgressBarView.color(for: marker) == UIColor.systemYellow)
+    @Test("marker tints are translucent, not solid system colors")
+    func markerTintsAreSoft() {
+        for type in ["intro", "credits", "commercial"] {
+            var alpha: CGFloat = 0
+            color(type).getRed(nil, green: nil, blue: nil, alpha: &alpha)
+            #expect(alpha < 1)
+        }
     }
 }

@@ -94,9 +94,9 @@ enum SubtitleAdjustments {
 
     // MARK: - Rail clearance
 
-    /// The rail's TOP edge measured from the bottom of the SCREEN:
-    /// `PlayerRailView.railHeight` (260) + its bottom inset (84).
-    static let railTopFromScreenBottom: CGFloat = 344
+    /// The rail's TOP edge measured from the bottom of the SCREEN: the rail
+    /// spans the screen's bottom `PlayerRailView.railHeight` (340) points.
+    static let railTopFromScreenBottom: CGFloat = 340
 
     /// The margin a caption keeps off whatever it rests above, as a fraction
     /// of the PICTURE height — the bottom of the picture with the rail hidden,

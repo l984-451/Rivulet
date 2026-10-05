@@ -5,10 +5,9 @@
 //  PlayerInfoPopupLayoutTests.swift
 //  RivuletTests
 //
-//  Measurements for the Info popup, not assertions about intent: the pill row's
-//  horizontal focus rule, the Description tab's vertical centering (an Auto
-//  Layout claim — spacers that must collapse when the summary grows), and the
-//  monospaced digits the Advanced tab's 1 Hz values depend on.
+//  Measurements for the player's info panes, not assertions about intent: the
+//  Details pane's sections and columns, section headings, and the monospaced
+//  digits its 1 Hz stats depend on.
 //
 
 import XCTest
@@ -17,121 +16,9 @@ import XCTest
 @MainActor
 final class PlayerInfoPopupLayoutTests: XCTestCase {
 
-    // MARK: - Pill row: horizontal focus stops at the ends
+    // MARK: - Details pane
 
-    func testHorizontalMoveAllowedOnlyToAdjacentPill() {
-        // Description(0) | Info(1) | Advanced(2)
-        XCTAssertTrue(PillTabBarView.allowsHorizontalMove(from: 0, to: 1, movingLeft: false, pillCount: 3))
-        XCTAssertTrue(PillTabBarView.allowsHorizontalMove(from: 2, to: 1, movingLeft: true, pillCount: 3))
-    }
-
-    func testLeftOnFirstPillIsRefused() {
-        // The reported bug: Left on Description jumped to Advanced.
-        XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 0, to: 2, movingLeft: true, pillCount: 3))
-        // And with no candidate at all it still must not move.
-        XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 0, to: nil, movingLeft: true, pillCount: 3))
-    }
-
-    func testRightOnLastPillIsRefused() {
-        XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 2, to: nil, movingLeft: false, pillCount: 3))
-        XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 2, to: 0, movingLeft: false, pillCount: 3))
-    }
-
-    func testMoveOffTheBarIsRefused() {
-        // nil landing = the engine offered a view outside the bar.
-        XCTAssertFalse(PillTabBarView.allowsHorizontalMove(from: 1, to: nil, movingLeft: false, pillCount: 3))
-    }
-
-    // MARK: - Description tab: title on top, summary directly under it
-
-    private func descriptionView(summary: String) -> CardDescriptionView {
-        var episode = PlexMetadata()
-        episode.type = "episode"
-        episode.title = "The Pilot"
-        episode.grandparentTitle = "Some Show"
-        episode.parentIndex = 1
-        episode.index = 1
-        episode.summary = summary
-        let view = CardDescriptionView(metadata: episode)
-        // The Info popup's real content area: 560 panel - 2*20 padding
-        // - 2*8 pill inset wide, 520 - (56 bar + 16 spacing) tall.
-        view.frame = CGRect(x: 0, y: 0, width: 504, height: 448)
-        view.layoutIfNeeded()
-        return view
-    }
-
-    private func label(withText text: String, in view: UIView) -> UILabel? {
-        for subview in view.subviews {
-            if let label = subview as? UILabel, label.text == text { return label }
-            if let found = self.label(withText: text, in: subview) { return found }
-        }
-        return nil
-    }
-
-    /// Issue #278: a short summary used to be centered in the leftover height,
-    /// which read as a spacing bug. It starts under the title now, and it must
-    /// start there at BOTH lengths — the gap can't change with the summary.
-    func testShortSummaryStartsDirectlyUnderTheTitle() throws {
-        let summary = "A short summary."
-        let view = descriptionView(summary: summary)
-        let title = try XCTUnwrap(label(withText: "The Pilot", in: view))
-        let body = try XCTUnwrap(label(withText: summary, in: view))
-
-        let titleFrame = title.convert(title.bounds, to: view)
-        let bodyFrame = body.convert(body.bounds, to: view)
-
-        XCTAssertEqual(bodyFrame.minY - titleFrame.maxY, 20, accuracy: 2,
-                       "short summary must sit one fixed gap under the title, not float mid-sheet")
-    }
-
-    func testLongSummaryStartsAtTheSameGapBelowTheTitle() throws {
-        // Enough paragraphs to overflow 448pt: the sheet scrolls from the top
-        // and the header gap is unchanged.
-        let paragraphs = (1...12).map { "Paragraph number \($0) of a very long summary that wraps onto more than one line on its own." }
-        let view = descriptionView(summary: paragraphs.joined(separator: "\n"))
-        let title = try XCTUnwrap(label(withText: "The Pilot", in: view))
-        let first = try XCTUnwrap(label(withText: paragraphs[0], in: view))
-
-        let titleFrame = title.convert(title.bounds, to: view)
-        let firstFrame = first.convert(first.bounds, to: view)
-
-        XCTAssertEqual(firstFrame.minY - titleFrame.maxY, 20, accuracy: 2,
-                       "the header gap is fixed; it must not depend on how long the summary is")
-    }
-
-    // MARK: - Focus only where there is something to scroll
-
-    private func firstRow(in view: UIView) -> InfoFocusRowView? {
-        for subview in view.subviews where !subview.isHidden {
-            if let row = subview as? InfoFocusRowView { return row }
-            if let found = firstRow(in: subview) { return found }
-        }
-        return nil
-    }
-
-    func testSheetThatFitsOnScreenTakesNoFocus() throws {
-        let view = descriptionView(summary: "A short summary.")
-        XCTAssertFalse(view.infoScrollView.needsFocusableRows)
-        let row = try XCTUnwrap(firstRow(in: view))
-        XCTAssertFalse(row.canBecomeFocused,
-                       "nothing to scroll, so focus must stay on the pills")
-    }
-
-    func testOverflowingSheetTakesFocus() throws {
-        let paragraphs = (1...12).map { "Paragraph number \($0) of a very long summary that wraps onto more than one line on its own." }
-        let view = descriptionView(summary: paragraphs.joined(separator: "\n"))
-        // The content must OVERFLOW, not squeeze: a sheet reporting
-        // contentSize == bounds has clipped its text with nothing to scroll.
-        XCTAssertGreaterThan(view.infoScrollView.contentSize.height, view.infoScrollView.bounds.height,
-                             "a long summary must grow the scroll content, not compress its labels")
-        XCTAssertTrue(view.infoScrollView.needsFocusableRows)
-        let row = try XCTUnwrap(firstRow(in: view))
-        XCTAssertTrue(row.canBecomeFocused, "an overflowing sheet needs focus to scroll it")
-    }
-
-    func testInfoSheetWithManySectionsOverflowsRatherThanClipping() {
-        // The Info tab is the sheet that actually overflows in practice, and it
-        // routes every row through the same builders.
+    func testDetailsMediaSectionsCarryEveryVideoFact() {
         var movie = PlexMetadata()
         movie.type = "movie"
         movie.title = "Some Movie"
@@ -139,33 +26,40 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
             id: 1, duration: 7_200_000, bitrate: 20_000, width: 3840, height: 2160,
             aspectRatio: 1.78, audioChannels: 6, audioCodec: "eac3", videoCodec: "hevc",
             videoResolution: "4k", container: "mkv", videoFrameRate: "24p", Part: nil)]
-        let view = CardInfoView(
+        let sections = PlayerDetailsPaneView.mediaSections(
             metadata: movie,
             modes: StreamingModeInfo(video: .directPlay, audio: .directPlay, subtitles: .directPlay))
-        // Deliberately shorter than one VIDEO section, which is all this
-        // fixture has (no Part/Stream, so no AUDIO/SUBTITLES/FILE).
-        view.frame = CGRect(x: 0, y: 0, width: 504, height: 100)
-        view.layoutIfNeeded()
-
-        XCTAssertGreaterThan(view.infoScrollView.contentSize.height, view.infoScrollView.bounds.height,
-                             "sections taller than the sheet must scroll, not compress")
+        XCTAssertEqual(sections.map(\.title), ["VIDEO"], "no Part, so no AUDIO, SUBTITLES or FILE")
+        XCTAssertEqual(sections[0].rows.map(\.label), ["Mode", "Codec", "Resolution", "Dimensions", "Frame Rate", "Bitrate"])
+        XCTAssertEqual(sections[0].rows.first { $0.label == "Bitrate" }?.value, PlayerInfoSheetStyle.bitrate(20_000_000))
     }
 
-    // MARK: - Same-press gate
-
-    func testPressArrivingWithTheFocusMoveIsGated() {
-        // tvOS delivers the press a few ms AFTER the focus move it caused, so a
-        // just-moved timestamp must read as "this press is that move".
-        XCTAssertTrue(SamePressFocusGate.justMovedFocus(at: CACurrentMediaTime()))
+    func testDetailsStatsDropSectionsTheEngineDoesNotReport() {
+        XCTAssertTrue(PlayerDetailsPaneView.statsSections(AetherAdvancedStats()).isEmpty)
     }
 
-    func testLaterPressIsNotGated() {
-        let wellBefore = CACurrentMediaTime() - (SamePressFocusGate.window + 0.1)
-        XCTAssertFalse(SamePressFocusGate.justMovedFocus(at: wellBefore))
-    }
+    func testDetailsLiveStatsFollowAudioAndDecodeStreamFitsOneColumn() {
+        let full = AetherAdvancedStats(
+            backend: "VideoToolbox HEVC (HW)", audioBridge: "Stream-copy (AAC)", audioDelivery: "Stream copy",
+            instantBitrateMbps: 31.4, averageBitrateMbps: 29.9, audioBridgeBitrateMbps: 0.6,
+            observedFps: 24, droppedFrameCount: 12, forwardBufferSeconds: 30, cachedBytes: 1_000_000,
+            networkThroughputMbps: 80, networkTransferredBytes: 2_000_000, avSyncGapMs: 4,
+            producerRestartCount: 0, rssMb: 300)
+        let row = { (title: String) in PlayerDetailsPaneView.Section(title: title, rows: [.init(label: "A", value: "B")]) }
+        let pane = PlayerDetailsPaneView(media: [row("VIDEO"), row("AUDIO"), row("FILE")], statsProvider: { full })
 
-    func testNeverMovedFocusIsNotGated() {
-        XCTAssertFalse(SamePressFocusGate.justMovedFocus(at: -.greatestFiniteMagnitude))
+        func labels(in view: UIView) -> [UILabel] {
+            (view as? UILabel).map { [$0] } ?? view.subviews.flatMap(labels)
+        }
+        let all = labels(in: pane)
+        func x(_ view: UIView) -> CGFloat { view.convert(view.bounds, to: pane).minX }
+        let titles = ["VIDEO", "AUDIO", "DECODE / STREAM", "BUFFER / NETWORK", "FILE", "ENGINE"]
+        let headers = titles.compactMap { title in all.first { $0.text == title }?.superview }
+        XCTAssertEqual(headers.count, titles.count)
+        XCTAssertEqual(headers.map(x), headers.map(x).sorted(), "sections run in \(titles) order")
+
+        let last = try? XCTUnwrap(all.first { $0.attributedText?.string.hasPrefix("Audio Bitrate:") == true })
+        XCTAssertEqual(last.map(x), x(headers[2]), "DECODE / STREAM's last row stays in its header's column")
     }
 
     // MARK: - Section headings

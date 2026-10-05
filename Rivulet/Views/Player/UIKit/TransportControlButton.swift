@@ -16,6 +16,12 @@ import UIKit
 final class TransportControlButton: UIControl {
 
     static let diameter: CGFloat = 64
+    /// AVKit's tool glyph, fitted by rendered size and stroke.
+    private static let glyphConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
+    /// AVKit's control glass (tool buttons, info pills, info pane boxes): clear
+    /// glass under this wash reads as 0.77 x backdrop + 25 levels, as AVKit's
+    /// does over a black-to-white stripe pattern (within 3 levels).
+    static let restingWash = UIColor(white: 0.16, alpha: 0.26)
 
     private let diameter: CGFloat
     private let iconView = UIImageView()
@@ -40,24 +46,20 @@ final class TransportControlButton: UIControl {
 
     init(icon: UIImage?, accessibilityLabel: String, diameter: CGFloat = TransportControlButton.diameter) {
         self.diameter = diameter
-        if #available(tvOS 26.0, *) {
-            backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
-        } else {
-            backgroundEffectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        }
+        // Same fitted material as the popups: clear glass plus a gray wash.
+        backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
         super.init(frame: .zero)
 
         self.accessibilityLabel = accessibilityLabel
         isAccessibilityElement = true
 
-        let config = UIImage.SymbolConfiguration(pointSize: 25, weight: .semibold)
-        iconView.image = icon?.applyingSymbolConfiguration(config)
+        iconView.image = icon?.applyingSymbolConfiguration(Self.glyphConfiguration)
         iconView.tintColor = .white
         iconView.contentMode = .center
 
         backgroundEffectView.layer.cornerRadius = self.diameter / 2
         backgroundEffectView.clipsToBounds = true
-        backgroundEffectView.backgroundColor = UIColor.white.withAlphaComponent(0.1)
+        backgroundEffectView.backgroundColor = Self.restingWash
         backgroundEffectView.isUserInteractionEnabled = false
 
         addSubview(backgroundEffectView)
@@ -89,8 +91,7 @@ final class TransportControlButton: UIControl {
     /// Swap the glyph (e.g. the content-filter toggle reflecting on/off).
     /// Keeps the current tint so focus styling is preserved.
     func setIcon(_ image: UIImage?) {
-        let config = UIImage.SymbolConfiguration(pointSize: 25, weight: .semibold)
-        iconView.image = image?.applyingSymbolConfiguration(config)
+        iconView.image = image?.applyingSymbolConfiguration(Self.glyphConfiguration)
     }
 
     override var canBecomeFocused: Bool { true }
@@ -144,7 +145,7 @@ final class TransportControlButton: UIControl {
         let isFocused = context.nextFocusedView === self
         coordinator.addCoordinatedAnimations({
             self.transform = isFocused ? CGAffineTransform(scaleX: 1.15, y: 1.15) : .identity
-            self.backgroundEffectView.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.1)
+            self.backgroundEffectView.backgroundColor = isFocused ? .white : Self.restingWash
             self.iconView.tintColor = self.glyphColor ?? (isFocused ? .black : .white)
         }, completion: nil)
     }

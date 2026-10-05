@@ -5,154 +5,153 @@
 //  PlayerProgressBarView.swift
 //  Rivulet
 //
-//  Transport scrubber styled after AVPlayerViewController (tvOS 15+):
-//  a thin rounded white bar with a 26pt circular knob — the fill edge is
-//  the playhead. While scrubbing, the bar keeps its REST geometry (no
-//  ribbon/strip morph) — only the existing scrub/focus emphasis treatment
-//  (thicker track, larger knob, brighter ring) marks the state. An
-//  oversized readout (chapter eyebrow + large timecode) tracks the seek x
-//  ~12pt above the bar, and a single trickplay thumbnail card (288×162)
-//  floats 12pt above the readout — both clamped to the bar's own
-//  horizontal bounds, visible only while scrubbing. Time remaining sits
-//  below the right end, with an "Ends at" clock-time label beside it.
-//  Plex markers (intro/credits) tint their range on the bar.
+//  Transport bar cloned from AVPlayerViewController's tvOS 26 scrubber. Every
+//  metric was read from AVKit's live view tree on a 1080p simulator (DEBUG
+//  `AVKitScrubProbe`, RIVULET_SCRUBPROBE=states). The track's center line is
+//  fixed and the track grows around it (14 rest, 18 scrubbing, 20 ring jog);
+//  labels, needle, ring and thumbnail are laid out from that line.
 //
-//  The view's own height covers only the track + label band; the
-//  thumb/readout overhangs above it (clipsToBounds = false) so the
-//  transport bar doesn't reserve blank space when they're hidden.
-//
-//  One-clock rule: any show/hide animation for the readout/thumb rides
-//  the SAME `UIView.animate` block in `update(...)` that already animates
-//  `trackHeightConstraint` + `layoutIfNeeded`. Their position is frame
-//  assignment in `layoutScrubOverlay(...)`, not a new animator. No second
-//  animator, no CABasicAnimation, no separate CADisplayLink.
+//  Frame-driven. A state change (scrub, ring) animates on AVKit's measured
+//  spring; time ticks use a short linear move. One animator per call.
 //
 
 import UIKit
 
-/// Horizontal accent gradient used for the progress fill. A
-/// `CAGradientLayer`-backed view resizes its layer automatically via
-/// `layerClass`, so it stays a drop-in frame-driven replacement for the
-/// plain white `progressFill` view laid out by `update(...)`'s animate block.
-final class AccentGradientView: UIView {
-    override class var layerClass: AnyClass { CAGradientLayer.self }
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        let g = layer as! CAGradientLayer
-        g.colors = [
-            UIColor(red: 0x7f/255, green: 0xb8/255, blue: 0xff/255, alpha: 1).cgColor,
-            UIColor(red: 0xb9/255, green: 0xa3/255, blue: 0xff/255, alpha: 1).cgColor,
-            UIColor(red: 0xff/255, green: 0xce/255, blue: 0x93/255, alpha: 1).cgColor,
-            UIColor(red: 0x8f/255, green: 0xe9/255, blue: 0xd4/255, alpha: 1).cgColor,
-        ]
-        g.locations = [0, 0.45, 0.8, 1]
-        g.startPoint = CGPoint(x: 0, y: 0.5)
-        g.endPoint = CGPoint(x: 1, y: 0.5)
-        layer.cornerRadius = 5
-        clipsToBounds = true
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
-
 final class PlayerProgressBarView: UIView {
 
-    // MARK: - Metrics (AVPlayerViewController-matched)
+    // MARK: - Metrics (AVKit tvOS 26, 1080p)
 
     private enum Metrics {
-        static let trackHeight: CGFloat = 10
-        static let scrubTrackHeight: CGFloat = 14
-        static let labelBandSpacing: CGFloat = 14
-        static let thumbnailWidth: CGFloat = 288
-        static let thumbnailHeight: CGFloat = 162
-        static let thumbnailGap: CGFloat = 20
-        static let thumbnailReadoutGap: CGFloat = 12
-        static let endsAtGap: CGFloat = 24
-        static let wheelRingDiameter: CGFloat = 44
-        static let wheelRingBorderWidth: CGFloat = 3
-        static let wheelDotDiameter: CGFloat = 6
-        static let wheelRingGap: CGFloat = 16
+        static let restHeight: CGFloat = 14
+        static let scrubHeight: CGFloat = 18
+        static let ringHeight: CGFloat = 20
+        /// Track center below the view's top; the tallest track starts at 0.
+        static let centerY: CGFloat = 10
+        static let viewHeight: CGFloat = 72
+        /// Labels sit this far below the track; in ring mode, this far below its center.
+        static let labelGap: CGFloat = 8
+        static let ringLabelOffset: CGFloat = 33
+        static let remainingInset: CGFloat = 3
+        static let glyphGap: CGFloat = 10
+        /// Scan level number beside its glyph.
+        static let scanNumberGap: CGFloat = 8
+        /// AVKit's scan and skip glyph frames (symbol pointSize 29 semibold).
+        static let circleGlyph = CGSize(width: 36, height: 36)
+        static let skipGlyph = CGSize(width: 36, height: 39)
+        static let marker = CGSize(width: 2, height: 17)
+        static let thumbnail = CGSize(width: 400, height: 225)
+        static let thumbnailRadius: CGFloat = 16
+        /// Thumbnail bottom above the track center while scrubbing / ring jogging.
+        static let thumbnailLift: CGFloat = 31
+        static let ringThumbnailLift: CGFloat = 44
+        /// Scrub needle bottom below the track center.
+        static let needleDrop: CGFloat = 11
+        static let ring: CGFloat = 52
+        static let ringBand: CGFloat = 10
+        static let ringPointer: CGFloat = 18
+        static let ringDot: CGFloat = 7
+        static let ringDotOrbit: CGFloat = 21
+        static let ringHole: CGFloat = 32
+        static let elapsedRing: CGFloat = 20
+        static let eyebrowGap: CGFloat = 8
     }
 
-    // MARK: - Marker coloring
+    /// AVKit's transport bar spring (mass 1, stiffness 380, damping 29).
+    private static func stateSpring() -> UIViewPropertyAnimator {
+        let spring = UISpringTimingParameters(mass: 1, stiffness: 380, damping: 29, initialVelocity: .zero)
+        return UIViewPropertyAnimator(duration: 0.528, timingParameters: spring)
+    }
 
+    // Track composite fitted to AVKit's pixels: its material reads as this gray
+    // over any video, and the elapsed fill is white 0.45 on top of it.
+    private static let trackColor = UIColor(white: 0.352, alpha: 0.398)
+    /// AVKit's bar with focus elsewhere: fill hidden, track and time labels dimmed.
+    private static let dimmedTrackColor = UIColor(white: 0.331, alpha: 0.213)
+    private static let dimmedLabelColor = UIColor.white.withAlphaComponent(0.5)
+    private static let skeletonTrackColor = UIColor.white.withAlphaComponent(0.08)
+    private static let fillColor = UIColor.white.withAlphaComponent(0.45)
+    private static let ghostColor = UIColor.white.withAlphaComponent(0.2)
+    private static let labelColor = UIColor.white
+    private static let skeletonColor = UIColor.white.withAlphaComponent(0.22)
+
+    /// AVKit's time label font (`.SFUI-Bold` 23pt, tabular digits).
+    private static let timeFont = UIFont.monospacedDigitSystemFont(ofSize: 23, weight: .bold)
+
+    /// Soft tints that sit with the white fill and glass track.
     static func color(for marker: PlexMarker) -> UIColor {
         if marker.isIntro {
-            return .systemBlue
+            return UIColor(red: 0.58, green: 0.72, blue: 1.0, alpha: 0.5)
         } else if marker.isCredits {
-            return .systemPurple
+            return UIColor(red: 0.78, green: 0.66, blue: 1.0, alpha: 0.5)
         } else {
-            return .systemYellow
+            return UIColor(red: 1.0, green: 0.86, blue: 0.52, alpha: 0.5)
         }
     }
 
     // MARK: - Subviews
 
-    private let trackBackground = UIView()
-    private let currentPositionGhost = UIView()
-    private let progressFill = AccentGradientView()
-    private let handleView = UIView()          // white core
-    private let handleRing = UIView()          // ring behind it
+    private let track = UIView()
+    private let ghost = UIView()
+    private let fill = UIView()
     private let markersContainer = UIView()
-    private let currentTimeLabel = UILabel()
-    private let remainingTimeLabel = UILabel()
-    private let endsAtLabel = UILabel()
-    private let scrubStepLabel = UILabel()
-    private let thumbnailImageView = UIImageView()
-    /// Live scrubbing reads out a clock time, not a position in a file.
-    private var liveScrubReadout: String?
+    private let edgeHighlight = TrackEdgeHighlightView()
+    private let trackMask = CAShapeLayer()
+    private let playheadMarker = UIView()
+    private let scrubNeedle = UIView()
+    /// Follows the playhead: elapsed time (VOD) or clock time (live).
+    private let elapsedLabel = UILabel()
+    /// Live only: programme start at the left end.
+    private let leadingLabel = UILabel()
+    private let remainingLabel = UILabel()
+    private let pauseGlyph = UIImageView()
+    /// Scan (forward.circle / backward.circle) or skip (goforward.10) glyph.
+    private let indicatorGlyph = UIImageView()
+    /// Scan level from 2 up, beside the scan glyph.
+    private let scanLevelLabel = UILabel()
     private let thumbnailContainer = UIView()
+    private let thumbnailImageView = UIImageView()
+    private let eyebrowLabel = UILabel()
+    private let ringView = UIView()
+    private let ringBand = UIView()
+    private let ringPointer = UIView()
+    private let ringDot = UIView()
+    /// Ring mode marks where playback is with a hollow circle.
+    private let elapsedRing = UIView()
 
-    /// Oversized scrub readout: replaces the old `PaddedChipLabel` chip.
-    /// `readoutContainer` is a small frame-driven container (a sibling of
-    /// `trackBackground` on `self`, positioned/clamped above the bar's own
-    /// rest geometry) holding a small-caps chapter eyebrow above a large
-    /// timecode. The eyebrow hides when the playhead isn't inside a named
-    /// chapter, leaving just the timecode.
-    private let readoutContainer = UIView()
-    private let readoutEyebrowLabel = UILabel()
-    private let readoutTimecodeLabel = UILabel()
+    // MARK: - State
 
-    // Jog wheel indicator: shown beside the readout only while a circular
-    // clickpad rotation is actively driving the scrub (`isWheelScrubbing`).
-    // Frame-driven like readoutContainer, positioned in
-    // `layoutScrubOverlay(...)`.
-    private let wheelRing = UIView()
-    private let wheelDot = UIView()
-    private var isWheelScrubbing = false
+    private struct Labels: Equatable {
+        var elapsed: String
+        var remaining: String
+        var leading: String?
+    }
 
-    private var lastChapters: [PlexChapter] = []
-
+    private var currentTime: TimeInterval = 0
     private var duration: TimeInterval = 0
-    /// Cached from the last `update(...)` call so `resetFilmstrip()` can
-    /// redraw the marker band without losing state.
+    private var scrubTime: TimeInterval = 0
+    private var isScrubbing = false
+    private var isWheelScrubbing = false
+    private var ghostProgress: Double?
+    private var labels = Labels(elapsed: "", remaining: "")
+    private var lastChapters: [PlexChapter] = []
     private var lastMarkers: [PlexMarker] = []
-
-    private var trackHeightConstraint: NSLayoutConstraint!
-    private var endsAtTrailingConstraint: NSLayoutConstraint!
-    private var endsAtPlayheadConstraint: NSLayoutConstraint!
-
-    /// Loading placeholder mode; see `setSkeleton(_:)`.
+    /// Where the jogging finger sits on the wheel, in clockwise turns from 12
+    /// o'clock. The ring's dot follows the finger, as AVKit's does.
+    private var ringFingerTurns = 0.0
+    private var isFocusDimmed = false
+    /// Signed shuttle level while scanning; 0 when not.
+    private var scanLevel = 0
+    private var skipIndicator: SeekIndicator?
+    /// Side the indicator glyph was last placed on.
+    private var indicatorForward: Bool?
+    private var skipClear: DispatchWorkItem?
     private var isSkeleton = false
-    /// Set when the skeleton clears so the next `update(...)` applies
-    /// without animation — the first real fill position after loading
-    /// must jump into place, not sweep out from zero.
+    /// The first fill position after loading jumps into place instead of sweeping.
     private var snapNextUpdate = false
+    private var isPaused = false
+    private var isLive = false
 
-    /// Paused presentation: the accent fill dims while paused (2a spec).
-    /// Stored and folded into update()'s alpha computation; applied
-    /// immediately here because time ticks stop while the player is paused.
-    private var isPausedDim = false
-
-    /// True while the scrubber focus proxy (`ScrubberFocusProxyView`, in
-    /// PlayerContainerViewController) holds focus. Folded into the same
-    /// grow-and-brighten emphasis computation as `isScrubbing` — see
-    /// `scrubEmphasis` in `update(...)` — so a down-press from any rail
-    /// button reads as "the scrubber has focus" the same way entering seek
-    /// mode does. Stored (not applied via `update(...)` alone) because
-    /// focus can change while time ticks are paused.
-    private var focusEmphasis = false
-
-    private static let endsAtFormatter: DateFormatter = {
+    private static let clockFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter
@@ -167,156 +166,120 @@ final class PlayerProgressBarView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: Metrics.viewHeight)
+    }
+
     private func setupViews() {
         clipsToBounds = false
 
-        trackBackground.backgroundColor = UIColor.white.withAlphaComponent(0.16)
-        trackBackground.layer.cornerCurve = .continuous
-        trackBackground.clipsToBounds = true
+        track.clipsToBounds = true
+        ghost.backgroundColor = Self.ghostColor
+        ghost.isHidden = true
+        fill.backgroundColor = Self.fillColor
+        edgeHighlight.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        markersContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        [ghost, fill, markersContainer, edgeHighlight].forEach { track.addSubview($0) }
+        trackMask.fillRule = .evenOdd
 
-        // Actual playback position while previewing elsewhere.
-        currentPositionGhost.backgroundColor = UIColor.white.withAlphaComponent(0.45)
-        currentPositionGhost.isHidden = true
+        styleNeedle(playheadMarker)
+        styleNeedle(scrubNeedle)
 
-        handleRing.backgroundColor = UIColor.white.withAlphaComponent(0.14)
-        handleView.backgroundColor = .white
-        handleView.layer.shadowColor = UIColor.black.cgColor
-        handleView.layer.shadowOpacity = 0.5
-        handleView.layer.shadowRadius = 16
-        handleView.layer.shadowOffset = CGSize(width: 0, height: 4)
+        for label in [elapsedLabel, leadingLabel, remainingLabel, scanLevelLabel] {
+            label.font = Self.timeFont
+            Self.applyLabelShadow(label.layer)
+        }
+        leadingLabel.isHidden = true
+        scanLevelLabel.alpha = 0
 
-        currentTimeLabel.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
-        currentTimeLabel.textColor = UIColor.white.withAlphaComponent(0.82)
+        pauseGlyph.image = UIImage(systemName: "pause.circle",
+                                   withConfiguration: UIImage.SymbolConfiguration(font: Self.timeFont, scale: .large))
+        pauseGlyph.alpha = 0
+        Self.applyLabelShadow(pauseGlyph.layer)
+        indicatorGlyph.contentMode = .center
+        indicatorGlyph.alpha = 0
+        Self.applyLabelShadow(indicatorGlyph.layer)
+        applyAppearanceColors()
 
-        remainingTimeLabel.font = .monospacedDigitSystemFont(ofSize: 22, weight: .medium)
-        remainingTimeLabel.textColor = UIColor.white.withAlphaComponent(0.55)
-        remainingTimeLabel.textAlignment = .right
-
-        endsAtLabel.font = .systemFont(ofSize: 17, weight: .medium)
-        endsAtLabel.textColor = UIColor.white.withAlphaComponent(0.5)
-        endsAtLabel.textAlignment = .right
-
-        scrubStepLabel.font = .systemFont(ofSize: 20, weight: .medium)
-        scrubStepLabel.textColor = UIColor.white.withAlphaComponent(0.8)
-        scrubStepLabel.isHidden = true
-
-        // Single trickplay thumb card: floats above the readout while
-        // scrubbing, centered on the seek x. Plain dim fill (no
-        // spinner/skeleton) shows until the first `scrubThumbnail` lands;
-        // `thumbnailImageView` keeps whatever frame it last had while the
-        // next one loads (see `update(...)`'s image assignment).
+        thumbnailContainer.bounds.size = Metrics.thumbnail
+        thumbnailContainer.alpha = 0
+        thumbnailContainer.layer.cornerRadius = Metrics.thumbnailRadius
+        thumbnailContainer.layer.cornerCurve = .continuous
+        thumbnailContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.1).cgColor
+        thumbnailContainer.layer.borderWidth = 1
+        thumbnailContainer.layer.shadowColor = UIColor.black.cgColor
+        thumbnailContainer.layer.shadowOpacity = 0.3
+        thumbnailContainer.layer.shadowRadius = 40
+        thumbnailContainer.layer.shadowOffset = CGSize(width: 0, height: 12)
+        thumbnailContainer.layer.shadowPath = UIBezierPath(
+            roundedRect: CGRect(origin: .zero, size: Metrics.thumbnail), cornerRadius: Metrics.thumbnailRadius).cgPath
+        thumbnailImageView.frame = CGRect(origin: .zero, size: Metrics.thumbnail)
         thumbnailImageView.contentMode = .scaleAspectFill
         thumbnailImageView.clipsToBounds = true
         thumbnailImageView.backgroundColor = UIColor.white.withAlphaComponent(0.06)
-
-        thumbnailContainer.isHidden = true
-        thumbnailContainer.layer.cornerRadius = 14
-        thumbnailContainer.layer.cornerCurve = .continuous
-        thumbnailContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.15).cgColor
-        thumbnailContainer.layer.borderWidth = 1
-        thumbnailContainer.layer.shadowColor = UIColor.black.cgColor
-        thumbnailContainer.layer.shadowOpacity = 0.5
-        thumbnailContainer.layer.shadowRadius = 24
-        thumbnailContainer.layer.shadowOffset = CGSize(width: 0, height: 10)
-        thumbnailContainer.clipsToBounds = false
-        thumbnailImageView.layer.cornerRadius = 14
+        thumbnailImageView.layer.cornerRadius = Metrics.thumbnailRadius
         thumbnailImageView.layer.cornerCurve = .continuous
         thumbnailContainer.addSubview(thumbnailImageView)
 
-        // Oversized readout: replaces the old pill chip. A small-caps
-        // chapter eyebrow above a large monospaced timecode, laid out
-        // frame-wise (no constraints — 2a lesson: cross-view constraints
-        // must not be introduced inside these frame-driven overlays).
-        readoutEyebrowLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        readoutEyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.5)
-        readoutEyebrowLabel.textAlignment = .center
-        readoutEyebrowLabel.isHidden = true
+        eyebrowLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.6)
+        eyebrowLabel.textAlignment = .center
+        eyebrowLabel.alpha = 0
+        Self.applyLabelShadow(eyebrowLabel.layer)
 
-        readoutTimecodeLabel.font = .monospacedDigitSystemFont(ofSize: 50, weight: .bold)
-        readoutTimecodeLabel.textColor = .white
-        readoutTimecodeLabel.textAlignment = .center
+        // Ring jog: AVWheelScrubberView's three views, measured.
+        ringView.bounds.size = CGSize(width: Metrics.ring, height: Metrics.ring)
+        ringView.alpha = 0
+        ringBand.frame = ringView.bounds
+        ringBand.layer.cornerRadius = Metrics.ring / 2
+        ringBand.layer.borderWidth = Metrics.ringBand
+        ringBand.layer.borderColor = UIColor.white.cgColor
+        ringBand.layer.shadowColor = UIColor.black.cgColor
+        ringBand.layer.shadowOpacity = 0.2
+        ringBand.layer.shadowRadius = 2
+        ringBand.layer.shadowOffset = .zero
+        ringPointer.bounds.size = CGSize(width: Metrics.ringPointer, height: Metrics.ringPointer)
+        ringPointer.center = CGPoint(x: Metrics.ring / 2, y: Metrics.ring / 2)
+        ringPointer.backgroundColor = .white
+        ringPointer.layer.cornerRadius = Metrics.ringPointer / 2
+        ringDot.bounds.size = CGSize(width: Metrics.ringDot, height: Metrics.ringDot)
+        ringDot.backgroundColor = .black
+        ringDot.layer.cornerRadius = Metrics.ringDot / 2
+        [ringBand, ringPointer, ringDot].forEach { ringView.addSubview($0) }
 
-        readoutContainer.addSubview(readoutEyebrowLabel)
-        readoutContainer.addSubview(readoutTimecodeLabel)
-        readoutContainer.isHidden = true
+        elapsedRing.bounds.size = CGSize(width: Metrics.elapsedRing, height: Metrics.elapsedRing)
+        elapsedRing.layer.cornerRadius = Metrics.elapsedRing / 2
+        elapsedRing.layer.borderWidth = 2
+        elapsedRing.layer.borderColor = UIColor.white.cgColor
+        elapsedRing.alpha = 0
 
-        wheelRing.backgroundColor = .clear
-        wheelRing.layer.borderWidth = Metrics.wheelRingBorderWidth
-        wheelRing.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
-        wheelRing.layer.cornerRadius = Metrics.wheelRingDiameter / 2
-        wheelRing.isHidden = true
+        [track, elapsedRing, playheadMarker, scrubNeedle, ringView, thumbnailContainer, eyebrowLabel,
+         elapsedLabel, leadingLabel, remainingLabel, pauseGlyph, indicatorGlyph, scanLevelLabel].forEach { addSubview($0) }
+    }
 
-        wheelDot.backgroundColor = .white
-        wheelDot.layer.cornerRadius = Metrics.wheelDotDiameter / 2
-        wheelDot.isHidden = true
+    private func styleNeedle(_ view: UIView) {
+        view.backgroundColor = .white
+        view.layer.cornerRadius = 1
+        view.layer.shadowColor = UIColor.black.cgColor
+        view.layer.shadowOpacity = 0.2
+        view.layer.shadowRadius = 2
+        view.layer.shadowOffset = .zero
+    }
 
-        [trackBackground, currentTimeLabel, remainingTimeLabel,
-         endsAtLabel, scrubStepLabel, readoutContainer, thumbnailContainer, wheelRing, wheelDot].forEach {
-            addSubview($0)
-        }
-        [currentPositionGhost, progressFill, markersContainer].forEach {
-            trackBackground.addSubview($0)
-        }
-        // Handle views are frame-driven siblings of trackBackground (not
-        // children of it — the track clips its contents, which would clip
-        // the handle's shadow).
-        addSubview(handleRing)
-        addSubview(handleView)
-
-        // Thumbnail card is frame-driven, like readoutContainer — it only
-        // ever appears while scrubbing, positioned and clamped in
-        // `layoutScrubOverlay(...)`.
-        thumbnailImageView.frame = thumbnailContainer.bounds
-        thumbnailImageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-
-        [trackBackground, currentTimeLabel, remainingTimeLabel, endsAtLabel, scrubStepLabel].forEach {
-            $0.translatesAutoresizingMaskIntoConstraints = false
-        }
-
-        trackHeightConstraint = trackBackground.heightAnchor.constraint(equalToConstant: Metrics.trackHeight)
-
-        endsAtTrailingConstraint = endsAtLabel.trailingAnchor.constraint(
-            equalTo: remainingTimeLabel.leadingAnchor,
-            constant: -Metrics.endsAtGap
-        )
-        endsAtPlayheadConstraint = endsAtLabel.centerXAnchor.constraint(equalTo: leadingAnchor)
-
-        NSLayoutConstraint.activate([
-            trackBackground.topAnchor.constraint(equalTo: topAnchor),
-            trackBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
-            trackBackground.trailingAnchor.constraint(equalTo: trailingAnchor),
-            trackHeightConstraint,
-
-            // Label band below the track. The elapsed time is pinned to
-            // the left (always visible); remaining time is pinned below
-            // the right end, with "Ends at" to its left.
-            currentTimeLabel.topAnchor.constraint(equalTo: trackBackground.bottomAnchor, constant: Metrics.labelBandSpacing),
-            currentTimeLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
-
-            scrubStepLabel.centerYAnchor.constraint(equalTo: currentTimeLabel.centerYAnchor),
-            scrubStepLabel.leadingAnchor.constraint(equalTo: currentTimeLabel.trailingAnchor, constant: 16),
-
-            remainingTimeLabel.topAnchor.constraint(equalTo: trackBackground.bottomAnchor, constant: Metrics.labelBandSpacing),
-            remainingTimeLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
-
-            endsAtLabel.centerYAnchor.constraint(equalTo: remainingTimeLabel.centerYAnchor),
-            endsAtTrailingConstraint,
-
-            bottomAnchor.constraint(equalTo: currentTimeLabel.bottomAnchor),
-        ])
+    private static func applyLabelShadow(_ layer: CALayer) {
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.32
+        layer.shadowRadius = 6
+        layer.shadowOffset = .zero
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        trackBackground.layer.cornerRadius = trackHeightConstraint.constant / 2
-        // Keep the shimmer's gradient layer sized to the track (skeleton
-        // mode never coexists with scrubbing, so the track stays at its
-        // resting height, but width can still change on layout). Disable
-        // implicit actions so this frame sync doesn't animate.
+        layoutBar()
         if let shimmerLayer {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            shimmerLayer.frame = trackBackground.bounds
+            shimmerLayer.frame = track.bounds
             CATransaction.commit()
         }
     }
@@ -328,269 +291,275 @@ final class PlayerProgressBarView: UIView {
         duration: TimeInterval,
         isScrubbing: Bool,
         scrubTime: TimeInterval,
-        scrubStepLabelText: String?,
+        scanLevel: Int = 0,
         scrubThumbnail: UIImage?,
         markers: [PlexMarker],
         chapters: [PlexChapter],
         isWheelScrubbing: Bool = false
     ) {
-        guard !isSkeleton else { return }
-
-        self.isScrubbing = isScrubbing
-        self.isWheelScrubbing = isWheelScrubbing
-        self.duration = duration
-        self.lastMarkers = markers
-        self.lastChapters = chapters
-
+        isLive = false
         let displayTime = isScrubbing ? scrubTime : currentTime
-        let progress: Double = duration > 0 ? min(1, max(0, displayTime / duration)) : 0
-
-        let width = trackBackground.bounds.width
-        let currentProgress: Double = duration > 0 ? min(1, max(0, currentTime / duration)) : 0
-
-        // Seek-focus emphasis: true while the scrubber focus proxy holds
-        // focus (`focusEmphasis`) even when not actively scrubbing — a
-        // down-press from any rail button lands on the proxy, and it must
-        // read as "the scrubber has focus" the same grow-and-brighten way
-        // entering seek mode does.
-        let scrubEmphasis = isScrubbing || focusEmphasis
-        let trackHeight: CGFloat = scrubEmphasis ? Metrics.scrubTrackHeight : Metrics.trackHeight
-
-        currentPositionGhost.isHidden = !isScrubbing
-        trackHeightConstraint.constant = trackHeight
-
-        // Paused dim only applies at rest — never while actively scrubbing
-        // (setPausedDim's own guard already prevents that combination from
-        // being set in the first place, but the emphasis state below is
-        // re-derived from the current isScrubbing local on every call, so
-        // this stays consistent even if that ever changes). Focus emphasis
-        // also rules it out: a down-press that lands the proxy in focus
-        // must win over the paused-at-rest knob shrink, so the "scrubber
-        // has focus" grow-and-brighten is never undercut by the smaller
-        // paused knob.
-        let pausedAtRest = self.isPausedDim && !isScrubbing && !focusEmphasis
-
-        // First paint after loading snaps into place: animating the fill
-        // from zero out to a resume position reads as a sweep, not a jump.
-        let animationDuration: TimeInterval = snapNextUpdate ? 0 : 0.15
-        snapNextUpdate = false
-
-        UIView.animate(withDuration: animationDuration) {
-            self.progressFill.alpha = pausedAtRest ? 0.78 : 1
-            self.progressFill.frame = CGRect(x: 0, y: 0, width: width * progress, height: trackHeight)
-            if isScrubbing {
-                self.currentPositionGhost.frame = CGRect(
-                    x: 0, y: 0,
-                    width: width * currentProgress,
-                    height: trackHeight
-                )
-            }
-
-            // Handle: a plain circle at rest. Grows 26 → 32 and its ring
-            // brightens 0.14 → 0.35 while scrubbing OR while the scrubber
-            // focus proxy holds focus (both fold into `scrubEmphasis`), so
-            // seek focus and down-press focus both read instantly (tvOS's
-            // own grow-and-brighten grammar). While paused at rest (not
-            // scrubbing, NOT focus-emphasized) it instead shrinks 26 → 22
-            // and its ring alpha drops to 0 (no glow) per the 3a
-            // paused-dim spec. `scrubEmphasis` takes priority over the
-            // paused shrink in both ternaries below — checked first — and
-            // `pausedAtRest`'s own `!focusEmphasis` term rules out the
-            // combination existing in the first place; focused always wins
-            // over paused-at-rest. Frame-driven, positioned at the fill
-            // edge and vertically centered on the track — a sibling of
-            // trackBackground so it isn't clipped by the track's own
-            // clipsToBounds.
-            let handleDiameter: CGFloat = scrubEmphasis ? 32 : (pausedAtRest ? 22 : 26)
-            let handleSize = CGSize(width: handleDiameter, height: handleDiameter)
-            let ringInset: CGFloat = 6
-            let handleX = width * CGFloat(progress)
-            let trackMidY = self.trackBackground.frame.minY + trackHeight / 2
-            self.handleView.frame = CGRect(x: handleX - handleSize.width / 2, y: trackMidY - handleSize.height / 2,
-                                           width: handleSize.width, height: handleSize.height)
-            self.handleView.layer.cornerRadius = handleSize.width / 2
-            self.handleRing.frame = self.handleView.frame.insetBy(dx: -ringInset, dy: -ringInset)
-            self.handleRing.layer.cornerRadius = self.handleRing.frame.width / 2
-            self.handleRing.backgroundColor = UIColor.white.withAlphaComponent(
-                scrubEmphasis ? 0.35 : (pausedAtRest ? 0 : 0.14)
-            )
-
-            // Readout + thumb: fade with the same clock as the rest of
-            // this block (one-clock rule) — no strip morph left to gate
-            // them on, just the scrubbing state itself.
-            self.readoutContainer.alpha = isScrubbing ? 1 : 0
-            self.thumbnailContainer.alpha = isScrubbing ? 1 : 0
-
-            self.layoutIfNeeded()
-        }
-
-        renderMarkers(markers, duration: duration, trackWidth: width, trackHeight: trackHeight)
-
-        if isScrubbing {
-            layoutScrubOverlay(progress: progress, width: width)
-        }
-
-        // The elapsed time label is static and left-pinned — always
-        // visible, showing the live/scrub position (no playhead-following
-        // or clamping needed; the oversized readout above the bar covers
-        // the scrub-position readout while scrubbing).
-        currentTimeLabel.text = Self.formatTime(displayTime)
-
-        remainingTimeLabel.text = "-\(Self.formatTime(max(0, duration - displayTime)))"
-
-        let endsAt = Date().addingTimeInterval(max(0, duration - displayTime))
-        endsAtLabel.text = "Ends at \(Self.endsAtFormatter.string(from: endsAt))"
-        endsAtLabel.isHidden = duration <= 0 || isScrubbing
-
-        scrubStepLabel.isHidden = !isScrubbing || scrubStepLabelText == nil
-        scrubStepLabel.text = scrubStepLabelText
-
-        // Trickplay thumb card: only ever shown while scrubbing
-        // (position/frame assigned in `layoutScrubOverlay`). The image is
-        // set whenever a new one lands — never waited on — so the last
-        // frame stays visible while the next scrub tick's fetch is still
-        // in flight; before the first frame arrives the plain dim fill set
-        // on `thumbnailImageView`'s background shows through.
-        thumbnailContainer.isHidden = !isScrubbing
-        if let scrubThumbnail {
-            thumbnailImageView.image = scrubThumbnail
-        }
-
-        readoutContainer.isHidden = !isScrubbing
-
-        let showWheelIndicator = isScrubbing && isWheelScrubbing
-        wheelRing.isHidden = !showWheelIndicator
-        wheelDot.isHidden = !showWheelIndicator
+        render(
+            currentTime: currentTime, duration: duration, isScrubbing: isScrubbing, scrubTime: scrubTime,
+            isWheelScrubbing: isWheelScrubbing,
+            labels: vodLabels(displayTime: displayTime, duration: duration),
+            ghostProgress: isScrubbing && duration > 0 ? currentTime / duration : nil,
+            scanLevel: scanLevel, scrubThumbnail: scrubThumbnail,
+            markers: markers, chapters: chapters
+        )
     }
 
-    /// Live TV keeps the progress bar's existing geometry and fill treatment,
-    /// but labels the programme window with wall-clock times: air start at the
-    /// left edge, air end at the right, and the clock time of the picture on
-    /// screen following the playhead.
+    /// Live TV: the programme's air window, labelled with clock times. Start at
+    /// the left, end at the right, and the clock time of the picture on screen
+    /// (or the scrub target) following the playhead.
     ///
-    /// `liveEdgeTime` is "now" when the viewer is timeshifted behind it: the
-    /// stretch from the playhead to the edge is already buffered and is drawn
-    /// in the dimmer ghost, so the distance back to live is visible. nil at the
-    /// edge.
-    ///
-    /// `scrubTime` puts the bar in scrub mode on a paused, timeshifted stream:
-    /// the fill and handle go to where playback would resume, the ghost stays
-    /// at the picture on screen, and the readout and `scrubThumbnail` show the
-    /// clock time and frame there.
+    /// `liveEdgeTime` is "now" when timeshifted behind it; the buffered stretch
+    /// up to it shows in the ghost. `scrubTime` puts a paused, timeshifted
+    /// stream in scrub mode.
     func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date, liveEdgeTime: Date? = nil,
                             scrubTime: Date? = nil, scrubThumbnail: UIImage? = nil) {
         let duration = endTime.timeIntervalSince(startTime)
         guard duration > 0 else { return }
-        defer {
-            // Scrubbing, the ghost marks the picture on screen instead.
-            if scrubTime == nil {
-                applyLiveEdgeGhost(startTime: startTime, duration: duration, playhead: currentTime, edge: liveEdgeTime)
+        isLive = true
+        func offset(_ date: Date) -> TimeInterval { min(max(0, date.timeIntervalSince(startTime)), duration) }
+        var ghost: Double?
+        if scrubTime == nil, let liveEdgeTime, liveEdgeTime.timeIntervalSince(currentTime) > 1 {
+            ghost = offset(liveEdgeTime) / duration
+        }
+        render(
+            currentTime: offset(currentTime), duration: duration, isScrubbing: scrubTime != nil,
+            scrubTime: scrubTime.map(offset) ?? 0, isWheelScrubbing: false,
+            labels: Labels(
+                elapsed: Self.clockFormatter.string(from: scrubTime ?? currentTime),
+                remaining: Self.clockFormatter.string(from: endTime),
+                leading: Self.clockFormatter.string(from: startTime)
+            ),
+            ghostProgress: ghost, scanLevel: 0, scrubThumbnail: scrubThumbnail,
+            markers: [], chapters: []
+        )
+    }
+
+    private func render(
+        currentTime: TimeInterval, duration: TimeInterval, isScrubbing: Bool, scrubTime: TimeInterval,
+        isWheelScrubbing: Bool, labels: Labels, ghostProgress: Double?,
+        scanLevel: Int, scrubThumbnail: UIImage?,
+        markers: [PlexMarker], chapters: [PlexChapter]
+    ) {
+        guard !isSkeleton else { return }
+        let ring = isWheelScrubbing && isScrubbing
+        let stateChanged = isScrubbing != self.isScrubbing || ring != self.isWheelScrubbing
+
+        self.currentTime = currentTime
+        self.duration = duration
+        self.scrubTime = scrubTime
+        self.isScrubbing = isScrubbing
+        self.isWheelScrubbing = ring
+        self.ghostProgress = ghostProgress
+        self.labels = labels
+        self.lastMarkers = markers
+        self.lastChapters = chapters
+        if let scrubThumbnail { thumbnailImageView.image = scrubThumbnail }
+        self.scanLevel = isScrubbing ? scanLevel : 0
+        if isScrubbing { clearSkipIndicator() }
+
+        // Startup reports time and duration separately, zeros first: keep
+        // snapping until both are real, so the fill never sweeps up from 0.
+        let snap = snapNextUpdate
+        if duration > 0, currentTime > 0 { snapNextUpdate = false }
+        if snap || window == nil {
+            UIView.performWithoutAnimation { layoutBar() }
+        } else if stateChanged {
+            let animator = Self.stateSpring()
+            animator.addAnimations { self.layoutBar() }
+            animator.startAnimation()
+        } else {
+            UIView.animate(withDuration: 0.15, delay: 0, options: [.curveLinear, .beginFromCurrentState]) {
+                self.layoutBar()
             }
         }
-
-        let elapsed = min(max(0, currentTime.timeIntervalSince(startTime)), duration)
-        liveScrubReadout = scrubTime.map { Self.endsAtFormatter.string(from: $0) }
-        update(
-            currentTime: elapsed,
-            duration: duration,
-            isScrubbing: scrubTime != nil,
-            scrubTime: scrubTime.map { min(max(0, $0.timeIntervalSince(startTime)), duration) } ?? 0,
-            scrubStepLabelText: nil,
-            scrubThumbnail: scrubThumbnail,
-            markers: [],
-            chapters: []
-        )
-
-        currentTimeLabel.text = Self.endsAtFormatter.string(from: startTime)
-        remainingTimeLabel.text = Self.endsAtFormatter.string(from: endTime)
-        endsAtLabel.text = Self.endsAtFormatter.string(from: currentTime)
-        endsAtLabel.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
-        endsAtLabel.textColor = UIColor.white.withAlphaComponent(0.82)
-        endsAtLabel.textAlignment = .center
-        // The scrub readout carries the time while scrubbing.
-        endsAtLabel.isHidden = scrubTime != nil
-
-        // Follow the playhead, but keep the clock label fully on the track and
-        // fade out whichever edge label it would otherwise collide with.
-        let width = trackBackground.bounds.width
-        guard width > 0 else { return }
-        let half = endsAtLabel.intrinsicContentSize.width / 2
-        let x = min(max(width * CGFloat(elapsed / duration), half), width - half)
-        endsAtTrailingConstraint.isActive = false
-        endsAtPlayheadConstraint.constant = x
-        endsAtPlayheadConstraint.isActive = true
-
-        let clearance: CGFloat = 12
-        let startLabelWidth = currentTimeLabel.intrinsicContentSize.width
-        let endLabelWidth = remainingTimeLabel.intrinsicContentSize.width
-        currentTimeLabel.alpha = (x - half) < (startLabelWidth + clearance) ? 0 : 1
-        remainingTimeLabel.alpha = (x + half) > (width - endLabelWidth - clearance) ? 0 : 1
+        renderMarkers()
     }
 
-    /// The buffered-ahead stretch of a timeshifted live session, in the ghost
-    /// the scrub state otherwise uses (it sits under the fill, so only the part
-    /// past the playhead shows). Assigned after `update(...)`, which hides the
-    /// ghost whenever it is not scrubbing.
-    private func applyLiveEdgeGhost(startTime: Date, duration: TimeInterval, playhead: Date, edge: Date?) {
-        guard let edge, edge.timeIntervalSince(playhead) > 1 else {
-            currentPositionGhost.isHidden = true
+    /// Every frame in the bar, from the stored state. Runs inside the caller's animation.
+    private func layoutBar() {
+        let width = bounds.width
+        guard width > 0 else { return }
+        let ring = isWheelScrubbing
+        let height = ring ? Metrics.ringHeight
+            : (isScrubbing ? Metrics.scrubHeight : Metrics.restHeight)
+        let centerY = Metrics.centerY
+        let displayTime = isScrubbing ? scrubTime : currentTime
+        let progress = duration > 0 ? min(1, max(0, displayTime / duration)) : 0
+        let playheadX = width * CGFloat(progress)
+        let currentX = width * CGFloat(duration > 0 ? min(1, max(0, currentTime / duration)) : 0)
+
+        track.frame = CGRect(x: 0, y: centerY - height / 2, width: width, height: height)
+        track.layer.cornerRadius = height / 2
+        fill.frame = CGRect(x: 0, y: 0, width: playheadX, height: height)
+        fill.alpha = isFocusDimmed ? 0 : 1
+        ghost.alpha = isFocusDimmed ? 0 : 1
+        ghost.isHidden = ghostProgress == nil
+        ghost.frame = CGRect(x: 0, y: 0, width: width * CGFloat(ghostProgress ?? 0), height: height)
+        updateTrackHoles(ring: ring, playheadX: playheadX, currentX: currentX)
+
+        // Dimmed, AVKit's marker shrinks to a 1pt line inside the track.
+        playheadMarker.frame = isFocusDimmed
+            ? CGRect(x: playheadX - 1, y: centerY - Metrics.restHeight / 2, width: 1, height: Metrics.restHeight)
+            : CGRect(x: playheadX - Metrics.marker.width / 2, y: centerY + 0.5 - Metrics.marker.height / 2,
+                     width: Metrics.marker.width, height: Metrics.marker.height)
+        playheadMarker.layer.cornerRadius = isFocusDimmed ? 0 : 1
+        playheadMarker.alpha = isScrubbing ? 0 : 1
+
+        let needleTop = centerY - (ring ? Metrics.ringThumbnailLift : Metrics.thumbnailLift)
+        let needleBottom = ring ? centerY - Metrics.ring / 2 : centerY + Metrics.needleDrop
+        scrubNeedle.frame = CGRect(x: playheadX - 1, y: needleTop, width: 2, height: needleBottom - needleTop)
+        scrubNeedle.alpha = isScrubbing ? 1 : 0
+
+        ringView.center = CGPoint(x: playheadX, y: centerY)
+        ringView.alpha = ring ? 1 : 0
+        let angle = CGFloat(ringFingerTurns * 2 * .pi)
+        ringDot.center = CGPoint(x: Metrics.ring / 2 + sin(angle) * Metrics.ringDotOrbit,
+                                 y: Metrics.ring / 2 - cos(angle) * Metrics.ringDotOrbit)
+        elapsedRing.center = CGPoint(x: currentX, y: centerY)
+        elapsedRing.alpha = ring ? 1 : 0
+
+        let halfThumb = Metrics.thumbnail.width / 2
+        let thumbX = min(max(playheadX, halfThumb), max(halfThumb, width - halfThumb))
+        thumbnailContainer.center = CGPoint(x: thumbX, y: needleTop - Metrics.thumbnail.height / 2)
+        thumbnailContainer.alpha = isScrubbing ? 1 : 0
+        let eyebrow = isScrubbing ? chapterEyebrowText(at: displayTime) : nil
+        if let eyebrow {
+            eyebrowLabel.attributedText = NSAttributedString(string: eyebrow, attributes: [.kern: 16 * 0.12])
+            eyebrowLabel.sizeToFit()
+        }
+        eyebrowLabel.center = CGPoint(
+            x: thumbX, y: thumbnailContainer.frame.minY - Metrics.eyebrowGap - eyebrowLabel.bounds.height / 2)
+        eyebrowLabel.alpha = eyebrow == nil ? 0 : 1
+
+        layoutLabels(rowTop: ring ? centerY + Metrics.ringLabelOffset : centerY + height / 2 + Metrics.labelGap,
+                     playheadX: playheadX, width: width, ring: ring)
+    }
+
+    private func layoutLabels(rowTop: CGFloat, playheadX: CGFloat, width: CGFloat, ring: Bool) {
+        elapsedLabel.text = labels.elapsed
+        remainingLabel.text = labels.remaining
+        leadingLabel.text = labels.leading
+        [elapsedLabel, remainingLabel, leadingLabel].forEach { $0.sizeToFit() }
+
+        let half = elapsedLabel.bounds.width / 2 + Metrics.remainingInset
+        let elapsedX = min(max(playheadX, half), max(half, width - half))
+        elapsedLabel.center = CGPoint(x: elapsedX, y: rowTop + elapsedLabel.bounds.height / 2)
+        let rowMidY = elapsedLabel.center.y
+
+        remainingLabel.frame.origin = CGPoint(x: width - Metrics.remainingInset - remainingLabel.bounds.width, y: rowTop)
+        leadingLabel.frame.origin = CGPoint(x: 0, y: rowTop)
+
+        var trailingEdge = elapsedLabel.frame.maxX
+        var leadingEdge = elapsedLabel.frame.minX
+        // AVKit's indicator slot: a scan or skip glyph on the side it moves
+        // toward, the scan level beyond it. It replaces the pause glyph.
+        let indicator = ring ? nil : currentIndicator()
+        let showGlyph = isPaused && !ring && !isLive && indicator == nil
+        pauseGlyph.bounds.size = pauseGlyph.image?.size ?? .zero
+        pauseGlyph.center = CGPoint(x: trailingEdge + Metrics.glyphGap + pauseGlyph.bounds.width / 2, y: rowMidY + 1)
+        pauseGlyph.alpha = showGlyph ? 1 : 0
+        if showGlyph { trailingEdge = pauseGlyph.frame.maxX }
+
+        if let indicator {
+            // A glyph coming in, or switching sides, is placed outright; the
+            // caller's animation would otherwise slide it from its old spot.
+            let flipped = indicatorForward != indicator.forward
+            indicatorForward = indicator.forward
+            let glyphAppearing = indicatorGlyph.alpha == 0 || flipped
+            let levelAppearing = scanLevelLabel.alpha == 0 || flipped
+            let glyphHalf = indicator.size.width / 2
+            // Circle glyphs sit 1pt below the time's midline, numbered skip glyphs 0.5pt above.
+            let midY = rowMidY + (indicator.size == Metrics.circleGlyph ? 1 : -0.5)
+            if let level = indicator.level { scanLevelLabel.text = level; scanLevelLabel.sizeToFit() }
+            let glyphCenter: CGPoint
+            let levelOrigin: CGPoint
+            if indicator.forward {
+                glyphCenter = CGPoint(x: trailingEdge + Metrics.glyphGap + glyphHalf, y: midY)
+                levelOrigin = CGPoint(x: glyphCenter.x + glyphHalf + Metrics.scanNumberGap, y: rowTop)
+                trailingEdge = indicator.level == nil ? glyphCenter.x + glyphHalf : levelOrigin.x + scanLevelLabel.bounds.width
+            } else {
+                glyphCenter = CGPoint(x: leadingEdge - Metrics.glyphGap - glyphHalf, y: midY)
+                leadingEdge = glyphCenter.x - glyphHalf
+                levelOrigin = CGPoint(x: leadingEdge - Metrics.scanNumberGap - scanLevelLabel.bounds.width, y: rowTop)
+            }
+            let placeGlyph = {
+                self.indicatorGlyph.image = UIImage(systemName: indicator.symbol, withConfiguration: Self.indicatorConfig)
+                self.indicatorGlyph.bounds.size = indicator.size
+                self.indicatorGlyph.center = glyphCenter
+            }
+            let placeLevel = { self.scanLevelLabel.frame.origin = levelOrigin }
+            if glyphAppearing { UIView.performWithoutAnimation(placeGlyph) } else { placeGlyph() }
+            if levelAppearing { UIView.performWithoutAnimation(placeLevel) } else { placeLevel() }
+        }
+        indicatorGlyph.alpha = indicator == nil ? 0 : 1
+        scanLevelLabel.alpha = indicator?.level == nil ? 0 : 1
+
+        // The playhead label wins; an end label it would overlap fades.
+        let clearance: CGFloat = 12
+        leadingLabel.isHidden = labels.leading == nil
+        leadingLabel.alpha = leadingEdge < leadingLabel.frame.maxX + clearance ? 0 : 1
+        remainingLabel.alpha = trailingEdge + clearance > remainingLabel.frame.minX ? 0 : 1
+    }
+
+    /// Ring mode punches the track out under the ring and the hollow playback marker.
+    private func updateTrackHoles(ring: Bool, playheadX: CGFloat, currentX: CGFloat) {
+        guard ring else {
+            track.layer.mask = nil
             return
         }
-        let edgeProgress = min(max(0, edge.timeIntervalSince(startTime)), duration) / duration
-        currentPositionGhost.isHidden = false
-        currentPositionGhost.frame = CGRect(
-            x: 0, y: 0,
-            width: trackBackground.bounds.width * CGFloat(edgeProgress),
-            height: trackHeightConstraint.constant
-        )
+        let path = UIBezierPath(rect: track.bounds.insetBy(dx: -Metrics.ring, dy: -Metrics.ring))
+        let midY = track.bounds.midY
+        for (x, diameter) in [(playheadX, Metrics.ringHole), (currentX, Metrics.elapsedRing)] {
+            path.append(UIBezierPath(ovalIn: CGRect(x: x - diameter / 2, y: midY - diameter / 2,
+                                                    width: diameter, height: diameter)))
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        trackMask.frame = track.bounds
+        trackMask.path = path.cgPath
+        CATransaction.commit()
+        track.layer.mask = trackMask
     }
 
-    /// Loading placeholder: keeps the locked geometry and vertical rhythm
-    /// while playback starts. update(...) is a no-op while on.
+    /// Loading placeholder: keeps the bar's geometry while playback starts. `update(...)` is a no-op while on.
     func setSkeleton(_ on: Bool) {
         guard on != isSkeleton else { return }
         isSkeleton = on
         if !on { snapNextUpdate = true }
-        trackBackground.backgroundColor = UIColor.white.withAlphaComponent(on ? 0.08 : 0.16)
-        progressFill.isHidden = on
-        handleView.isHidden = on
-        handleRing.isHidden = on
-        endsAtLabel.isHidden = on || duration <= 0
-        markersContainer.isHidden = on
-        let skeletonColor = UIColor.white.withAlphaComponent(0.22)
+        applyAppearanceColors()
+        [fill, playheadMarker, markersContainer].forEach { $0.isHidden = on }
         if on {
-            currentTimeLabel.text = "--:--"
-            remainingTimeLabel.text = "--:--"
-            currentTimeLabel.textColor = skeletonColor
-            remainingTimeLabel.textColor = skeletonColor
+            currentTime = 0
+            ghostProgress = nil
+            isScrubbing = false
+            isWheelScrubbing = false
+            labels = Labels(elapsed: "--:--", remaining: "--:--")
+            layoutBar()
             addSkeletonShimmer()
         } else {
-            currentTimeLabel.textColor = UIColor.white.withAlphaComponent(0.82)
-            remainingTimeLabel.textColor = UIColor.white.withAlphaComponent(0.55)
             removeSkeletonShimmer()
         }
     }
 
-    /// Dedicated-layer shimmer sanctioned outside the one-clock rule: the
-    /// skeleton never coexists with scrubbing (`update(...)` guards on
-    /// `isSkeleton` as its very first line), so this `CAGradientLayer` +
-    /// `CABasicAnimation` never competes with the UIView-animation clock
-    /// that drives `update(...)`. Masked to `trackBackground`'s rounded
-    /// bounds so the shimmer stays inside the track.
+    /// Skeleton shimmer: its own layer animation, outside the one-clock rule
+    /// because the skeleton never coexists with scrubbing.
     private static let shimmerAnimationKey = "skeletonShimmer"
     private var shimmerLayer: CAGradientLayer?
 
     private func addSkeletonShimmer() {
         removeSkeletonShimmer()
         let layer = CAGradientLayer()
-        layer.colors = [UIColor.clear.cgColor,
-                        UIColor.white.withAlphaComponent(0.22).cgColor,
-                        UIColor.clear.cgColor]
+        layer.colors = [UIColor.clear.cgColor, UIColor.white.withAlphaComponent(0.22).cgColor, UIColor.clear.cgColor]
         layer.startPoint = CGPoint(x: 0, y: 0.5)
         layer.endPoint = CGPoint(x: 1, y: 0.5)
         layer.locations = [-0.4, -0.2, 0]
-        layer.frame = trackBackground.bounds
-        trackBackground.layer.addSublayer(layer)
+        layer.frame = track.bounds
+        track.layer.addSublayer(layer)
         shimmerLayer = layer
 
         let animation = CABasicAnimation(keyPath: "locations")
@@ -608,250 +577,187 @@ final class PlayerProgressBarView: UIView {
         shimmerLayer = nil
     }
 
-    /// Paused presentation: the accent fill dims while paused (2a spec).
-    /// Applied immediately here (not via `update(...)`) because time ticks
-    /// stop while the player is paused, so no later `update(...)` would
-    /// pick up the change. The immediate setter only runs while not
-    /// scrubbing and no skeleton, so it never races `update(...)`'s own
-    /// animate block or the skeleton's own fill handling (one-clock rule).
-    /// Skips the knob shrink while `focusEmphasis` is active — focused wins
-    /// over paused-at-rest, same priority rule as `update(...)`'s
-    /// `scrubEmphasis`/`pausedAtRest`.
+    /// Paused shows AVKit's pause glyph beside the elapsed time.
     func setPausedDim(_ dimmed: Bool) {
-        guard dimmed != isPausedDim else { return }
-        isPausedDim = dimmed
-        guard !isSkeleton, !isScrubbing else { return }
-        let dimmedAndUnfocused = dimmed && !focusEmphasis
-        UIView.animate(withDuration: 0.25) {
-            self.progressFill.alpha = dimmedAndUnfocused ? 0.78 : 1
-            let handleDiameter: CGFloat = dimmedAndUnfocused ? 22 : 26
-            let handleSize = CGSize(width: handleDiameter, height: handleDiameter)
-            let center = CGPoint(x: self.handleView.frame.midX, y: self.handleView.frame.midY)
-            self.handleView.frame = CGRect(x: center.x - handleSize.width / 2, y: center.y - handleSize.height / 2,
-                                           width: handleSize.width, height: handleSize.height)
-            self.handleView.layer.cornerRadius = handleSize.width / 2
-            let ringInset: CGFloat = 6
-            self.handleRing.frame = self.handleView.frame.insetBy(dx: -ringInset, dy: -ringInset)
-            self.handleRing.layer.cornerRadius = self.handleRing.frame.width / 2
-            self.handleRing.backgroundColor = UIColor.white.withAlphaComponent(dimmedAndUnfocused ? 0 : 0.14)
+        guard dimmed != isPaused else { return }
+        isPaused = dimmed
+        guard !isSkeleton else { return }
+        UIView.animate(withDuration: 0.15) { self.layoutBar() }
+    }
+
+    /// The jogging finger's wheel position; nil (finger off the ring) keeps the last.
+    func setRingFinger(_ position: Double?) {
+        if let position { ringFingerTurns = position }
+    }
+
+    /// AVKit's look with focus off the bar (on a tool button or pill): fill
+    /// hidden, a thin marker, track and time dimmed.
+    func setFocusDimmed(_ dimmed: Bool, coordinator: UIFocusAnimationCoordinator? = nil) {
+        guard dimmed != isFocusDimmed else { return }
+        isFocusDimmed = dimmed
+        let apply = {
+            self.applyAppearanceColors()
+            if !self.isSkeleton { self.layoutBar() }
+        }
+        if let coordinator { coordinator.addCoordinatedAnimations(apply) } else { apply() }
+    }
+
+    /// AVKit's skip glyph beside the time: fades in over 0.17s and clears 2s
+    /// after the press while paused, about 3.3s while playing (both measured).
+    func showSkipIndicator(_ indicator: SeekIndicator) {
+        skipClear?.cancel()
+        let wasShowing = skipIndicator != nil
+        skipIndicator = indicator
+        guard !isSkeleton else { return }
+        if wasShowing {
+            UIView.performWithoutAnimation { layoutBar() }
+        } else {
+            indicatorGlyph.alpha = 0
+            UIView.animate(withDuration: 0.17) { self.layoutBar() }
+        }
+        let clear = DispatchWorkItem { [weak self] in self?.clearSkipIndicator(animated: true) }
+        skipClear = clear
+        DispatchQueue.main.asyncAfter(deadline: .now() + (isPaused ? 2 : 3.3), execute: clear)
+    }
+
+    func clearSkipIndicator(animated: Bool = false) {
+        skipClear?.cancel()
+        skipClear = nil
+        guard skipIndicator != nil else { return }
+        skipIndicator = nil
+        guard !isSkeleton else { return }
+        if animated {
+            UIView.animate(withDuration: 0.17) { self.layoutBar() }
+        } else {
+            UIView.performWithoutAnimation { layoutBar() }
         }
     }
 
-    /// Focus emphasis: the scrubber focus proxy (`ScrubberFocusProxyView`
-    /// in PlayerContainerViewController) reports focus gain/loss here.
-    /// Applied immediately (not via `update(...)`) because focus can
-    /// change while time ticks are stopped (paused, or between ticks) —
-    /// same immediate-apply idiom as `setPausedDim`, same 0.15s duration as
-    /// `update(...)`'s own animate block (this is the sanctioned same-clock
-    /// idiom, not a new animation system: both this method and `update(...)`
-    /// only ever touch the fill/handle/ring properties that the OTHER one
-    /// also owns, on the same `UIView.animate` mechanism, never overlapping
-    /// in time since each is a discrete, guarded, one-shot call).
-    /// Skipped while scrubbing or skeleton — `update(...)`'s own emphasis
-    /// computation (`scrubEmphasis`, which folds in `focusEmphasis`) already
-    /// owns the knob/track in those states, and the proxy cannot hold focus
-    /// while scrubbing (mutually exclusive gating), so this guard is belt
-    /// and suspenders, not a real race.
-    func setFocusEmphasis(_ focused: Bool) {
-        guard focused != focusEmphasis else { return }
-        focusEmphasis = focused
-        guard !isScrubbing, !isSkeleton else { return }
+    private static let indicatorConfig = UIImage.SymbolConfiguration(pointSize: 29, weight: .semibold)
 
-        // scrubEmphasis reduces to plain focusEmphasis here (guarded above:
-        // !isScrubbing) — kept as the same-named local as update(...) for
-        // parallel reading.
-        let scrubEmphasis = focusEmphasis
-        let pausedAtRest = isPausedDim && !focusEmphasis
-        trackHeightConstraint.constant = scrubEmphasis ? Metrics.scrubTrackHeight : Metrics.trackHeight
-
-        UIView.animate(withDuration: 0.15) {
-            let handleDiameter: CGFloat = scrubEmphasis ? 32 : (pausedAtRest ? 22 : 26)
-            let handleSize = CGSize(width: handleDiameter, height: handleDiameter)
-            let center = CGPoint(x: self.handleView.frame.midX, y: self.handleView.frame.midY)
-            self.handleView.frame = CGRect(x: center.x - handleSize.width / 2, y: center.y - handleSize.height / 2,
-                                           width: handleSize.width, height: handleSize.height)
-            self.handleView.layer.cornerRadius = handleSize.width / 2
-            let ringInset: CGFloat = 6
-            self.handleRing.frame = self.handleView.frame.insetBy(dx: -ringInset, dy: -ringInset)
-            self.handleRing.layer.cornerRadius = self.handleRing.frame.width / 2
-            self.handleRing.backgroundColor = UIColor.white.withAlphaComponent(
-                scrubEmphasis ? 0.35 : (pausedAtRest ? 0 : 0.14)
-            )
-            self.progressFill.alpha = pausedAtRest ? 0.78 : 1
-            self.layoutIfNeeded()
-        }
+    private struct Indicator {
+        let symbol: String
+        let size: CGSize
+        let forward: Bool
+        let level: String?
     }
 
-    /// Tracked purely so `update(...)` can detect the scrub-start/scrub-
-    /// end edge without adding a parameter to every call site.
-    private var isScrubbing = false
+    /// Scanning wins over a skip; AVKit numbers scan levels from 2.
+    private func currentIndicator() -> Indicator? {
+        if scanLevel != 0 {
+            let forward = scanLevel > 0
+            return Indicator(symbol: forward ? "forward.circle" : "backward.circle", size: Metrics.circleGlyph,
+                             forward: forward, level: abs(scanLevel) >= 2 ? "\(abs(scanLevel))" : nil)
+        }
+        guard let skipIndicator else { return nil }
+        let forward = if case .forward = skipIndicator { true } else { false }
+        return Indicator(symbol: skipIndicator.systemImage, size: Metrics.skipGlyph, forward: forward, level: nil)
+    }
 
-    // MARK: - Filmstrip reset
+    private func applyAppearanceColors() {
+        let text = isSkeleton ? Self.skeletonColor : (isFocusDimmed ? Self.dimmedLabelColor : Self.labelColor)
+        [elapsedLabel, leadingLabel, remainingLabel, scanLevelLabel].forEach { $0.textColor = text }
+        pauseGlyph.tintColor = text
+        indicatorGlyph.tintColor = text
+        track.backgroundColor = isSkeleton ? Self.skeletonTrackColor
+            : (isFocusDimmed ? Self.dimmedTrackColor : Self.trackColor)
+    }
 
-    /// Clears cached per-item state (chapters, thumb image) so the next
-    /// scrub rebuilds from scratch. Must be called whenever the view model
-    /// swaps to a different playable item (e.g. auto-advancing to the next
-    /// episode) on this same, reused `PlayerProgressBarView` instance —
-    /// otherwise the previous title's last thumbnail frame or chapter
-    /// eyebrow would show briefly on the next scrub. Safe to call
-    /// mid-scrub: the readout/thumb/wheel indicator are hidden back to the
-    /// rest state so nothing is left showing stale content.
+    /// Clears per-item state so the next title's first scrub can't flash the
+    /// previous title's thumbnail or chapter.
     func resetFilmstrip() {
         lastChapters = []
-
-        // Drop the last title's thumbnail frame so a stale image can't
-        // flash before the next scrub's first `scrubThumbnail` lands.
         thumbnailImageView.image = nil
-
-        readoutContainer.isHidden = true
-        readoutContainer.alpha = 0
-        thumbnailContainer.isHidden = true
-        thumbnailContainer.alpha = 0
-        wheelRing.isHidden = true
-        wheelDot.isHidden = true
-        currentPositionGhost.isHidden = !isScrubbing
-        renderMarkers(lastMarkers, duration: duration, trackWidth: trackBackground.bounds.width,
-                      trackHeight: trackHeightConstraint.constant)
+        isScrubbing = false
+        isWheelScrubbing = false
+        UIView.performWithoutAnimation { layoutBar() }
+        renderMarkers()
     }
 
-    private func layoutScrubOverlay(progress: Double, width: CGFloat) {
-        let displayTime = duration > 0 ? Double(progress) * duration : 0
-        let playheadX = width * CGFloat(progress)
-
-        // Oversized readout: eyebrow (chapter name, hidden when the
-        // playhead isn't inside a named chapter) + large timecode, clamped
-        // fully on-screen.
-        let eyebrowText = chapterEyebrowText(at: displayTime)
-        readoutEyebrowLabel.isHidden = eyebrowText == nil
-        if let eyebrowText {
-            readoutEyebrowLabel.attributedText = NSAttributedString(
-                string: eyebrowText,
-                attributes: [.kern: 16 * 0.12]
-            )
-        }
-        readoutTimecodeLabel.text = liveScrubReadout ?? Self.formatTime(displayTime)
-
-        readoutEyebrowLabel.sizeToFit()
-        readoutTimecodeLabel.sizeToFit()
-        let readoutWidth = max(readoutEyebrowLabel.bounds.width, readoutTimecodeLabel.bounds.width)
-        let readoutSpacing: CGFloat = readoutEyebrowLabel.isHidden ? 0 : 4
-        let readoutHeight = (readoutEyebrowLabel.isHidden ? 0 : readoutEyebrowLabel.bounds.height + readoutSpacing)
-            + readoutTimecodeLabel.bounds.height
-        readoutContainer.bounds = CGRect(x: 0, y: 0, width: readoutWidth, height: readoutHeight)
-
-        readoutEyebrowLabel.center = CGPoint(x: readoutWidth / 2, y: readoutEyebrowLabel.bounds.height / 2)
-        readoutTimecodeLabel.center = CGPoint(
-            x: readoutWidth / 2,
-            y: readoutHeight - readoutTimecodeLabel.bounds.height / 2
-        )
-
-        // Readout sits ~12pt above the bar's own rest geometry (never
-        // moves — the bar itself no longer changes position while
-        // scrubbing), clamped fully inside the bar's horizontal bounds.
-        let halfReadout = readoutWidth / 2
-        let clampedCenter = min(max(playheadX, halfReadout), max(halfReadout, width - halfReadout))
-        readoutContainer.center = CGPoint(x: clampedCenter, y: trackBackground.frame.minY - Metrics.thumbnailGap - readoutHeight / 2)
-
-        // Trickplay thumb card: stacked above the readout with a 12pt gap
-        // (the two must never overlap), centered on the seek x and
-        // clamped so it never crosses the bar's own horizontal bounds (a
-        // separate, wider clamp than the readout's — the card is narrower
-        // than most readout widths but shouldn't inherit the readout's
-        // clamp, which is sized to the readout's own text).
-        let halfThumb = Metrics.thumbnailWidth / 2
-        let thumbCenterX = min(max(playheadX, halfThumb), max(halfThumb, width - halfThumb))
-        let thumbCenterY = readoutContainer.frame.minY - Metrics.thumbnailReadoutGap - Metrics.thumbnailHeight / 2
-        thumbnailContainer.bounds = CGRect(x: 0, y: 0, width: Metrics.thumbnailWidth, height: Metrics.thumbnailHeight)
-        thumbnailContainer.center = CGPoint(x: thumbCenterX, y: thumbCenterY)
-        // Explicit shadowPath: without one, CA rasterizes the shadow
-        // offscreen on every frame the card moves while scrubbing.
-        thumbnailContainer.layer.shadowPath = UIBezierPath(
-            roundedRect: thumbnailContainer.bounds, cornerRadius: 14).cgPath
-
-        layoutWheelIndicator(progress: progress, calloutCenter: readoutContainer.center, calloutHalfWidth: halfReadout, width: width)
-    }
-
-    /// "CHAPTER n · NAME" for the chapter containing `time` (n = 1-based
-    /// ordinal, NAME uppercased), or `nil` when there's no chapter at that
-    /// time or the chapter has no name — the readout's eyebrow hides in
-    /// that case, matching the old chip's suffix-less fallback.
+    /// "CHAPTER n · NAME" for the chapter containing `time`, or nil.
     private func chapterEyebrowText(at time: TimeInterval) -> String? {
         for (index, chapter) in lastChapters.enumerated() {
             guard let startMs = chapter.startTimeOffset else { continue }
             let start = TimeInterval(startMs) / 1000.0
             let end = chapter.endTimeOffset.map { TimeInterval($0) / 1000.0 } ?? duration
             guard time >= start && time < end else { continue }
-            guard let tag = chapter.tag?.trimmingCharacters(in: .whitespacesAndNewlines), !tag.isEmpty else {
-                return nil
-            }
+            guard let tag = chapter.tag?.trimmingCharacters(in: .whitespacesAndNewlines), !tag.isEmpty else { return nil }
             return "CHAPTER \(index + 1) · \(tag.uppercased())"
         }
         return nil
     }
 
-    /// Positions the 44pt ring + orbiting 6pt dot beside the readout while
-    /// a circular clickpad rotation is driving the scrub. The ring sits to
-    /// the right of the readout (or the left, clamped inside the track
-    /// bounds, if the readout is pinned to the right edge). The dot orbits
-    /// the ring center at `angle = progress * 4 * .pi` — two full laps
-    /// across the track — so it visibly advances with scrub progress
-    /// rather than just sitting at a fixed rest position.
-    private func layoutWheelIndicator(progress: Double, calloutCenter: CGPoint, calloutHalfWidth: CGFloat, width: CGFloat) {
-        guard isWheelScrubbing else { return }
-
-        let ringRadius = Metrics.wheelRingDiameter / 2
-        let preferredCenterX = calloutCenter.x + calloutHalfWidth + Metrics.wheelRingGap + ringRadius
-        let ringCenterX: CGFloat
-        if preferredCenterX + ringRadius > width {
-            // Callout is pinned near the right edge; place the ring on
-            // its left side instead so it stays on-screen.
-            ringCenterX = calloutCenter.x - calloutHalfWidth - Metrics.wheelRingGap - ringRadius
-        } else {
-            ringCenterX = preferredCenterX
-        }
-        let ringCenter = CGPoint(x: ringCenterX, y: calloutCenter.y)
-
-        wheelRing.frame = CGRect(
-            x: ringCenter.x - ringRadius,
-            y: ringCenter.y - ringRadius,
-            width: Metrics.wheelRingDiameter,
-            height: Metrics.wheelRingDiameter
-        )
-
-        let angle = CGFloat(progress) * 4 * .pi
-        let dotRadius = Metrics.wheelDotDiameter / 2
-        let dotCenter = CGPoint(
-            x: ringCenter.x + sin(angle) * ringRadius,
-            y: ringCenter.y - cos(angle) * ringRadius
-        )
-        wheelDot.frame = CGRect(
-            x: dotCenter.x - dotRadius,
-            y: dotCenter.y - dotRadius,
-            width: Metrics.wheelDotDiameter,
-            height: Metrics.wheelDotDiameter
-        )
-    }
-
-    private func renderMarkers(_ markers: [PlexMarker], duration: TimeInterval, trackWidth: CGFloat, trackHeight: CGFloat) {
+    private func renderMarkers() {
         markersContainer.subviews.forEach { $0.removeFromSuperview() }
-        guard duration > 0 else { return }
-
-        for marker in markers {
+        let trackWidth = track.bounds.width
+        guard duration > 0, trackWidth > 0 else { return }
+        for marker in lastMarkers {
             let startProgress = max(0, marker.startTimeSeconds / duration)
             let endProgress = min(1, marker.endTimeSeconds / duration)
             guard endProgress > startProgress else { continue }
-
             let markerView = UIView()
-            markerView.backgroundColor = Self.color(for: marker).withAlphaComponent(0.85)
+            markerView.backgroundColor = Self.color(for: marker)
+            markerView.autoresizingMask = [.flexibleHeight]
             let x = trackWidth * CGFloat(startProgress)
             let markerWidth = max(4, trackWidth * CGFloat(endProgress - startProgress))
-            markerView.frame = CGRect(x: x, y: 0, width: markerWidth, height: trackHeight)
+            markerView.frame = CGRect(x: x, y: 0, width: markerWidth, height: markersContainer.bounds.height)
             markersContainer.addSubview(markerView)
         }
     }
 
+    // MARK: - Clock times
+
+    /// VOD labels read the time of day instead: now, and when the title ends
+    /// from the playhead. The toggle is the touch-surface tap.
+    private(set) var showsClockTimes = false
+    private var clockTick: Timer?
+
+    func setShowsClockTimes(_ on: Bool) {
+        guard on != showsClockTimes else { return }
+        showsClockTimes = on
+        updateClockTick()
+        refreshClockLabels()
+    }
+
+    private func vodLabels(displayTime: TimeInterval, duration: TimeInterval) -> Labels {
+        let remaining = max(0, duration - displayTime)
+        guard showsClockTimes else {
+            return Labels(elapsed: Self.formatTime(displayTime), remaining: "-\(Self.formatTime(remaining))")
+        }
+        let now = Date()
+        return Labels(elapsed: Self.clockFormatter.string(from: now),
+                      remaining: Self.clockFormatter.string(from: now.addingTimeInterval(remaining)))
+    }
+
+    /// Paused, no time ticks arrive, so the clock and the end time go stale
+    /// without this.
+    private func updateClockTick() {
+        clockTick?.invalidate()
+        clockTick = nil
+        guard showsClockTimes, window != nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshClockLabels() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        clockTick = timer
+    }
+
+    private func refreshClockLabels() {
+        guard !isLive, !isSkeleton else { return }
+        let next = vodLabels(displayTime: isScrubbing ? scrubTime : currentTime, duration: duration)
+        guard next != labels else { return }
+        labels = next
+        UIView.performWithoutAnimation { layoutBar() }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateClockTick()
+    }
+
+    /// AVKit's format: "09:46" under an hour, "1:02:03" over.
     private static func formatTime(_ seconds: TimeInterval) -> String {
-        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        guard seconds.isFinite && seconds >= 0 else { return "00:00" }
         let totalSeconds = Int(seconds)
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
@@ -859,6 +765,33 @@ final class PlayerProgressBarView: UIView {
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, secs)
         }
-        return String(format: "%d:%02d", minutes, secs)
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+}
+
+/// AVKit's track has a faint bright rim, strongest at the top edge (fitted to its
+/// pixels). Stops are in points so the rim keeps its thickness as the track grows.
+private final class TrackEdgeHighlightView: UIView {
+    override class var layerClass: AnyClass { CAGradientLayer.self }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        let white = UIColor.white
+        (layer as? CAGradientLayer)?.colors = [
+            white.withAlphaComponent(0.33).cgColor, white.withAlphaComponent(0).cgColor,
+            white.withAlphaComponent(0).cgColor, white.withAlphaComponent(0.13).cgColor,
+        ]
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let h = Double(max(bounds.height, 6))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        (layer as? CAGradientLayer)?.locations = [0, NSNumber(value: 2.5 / h), NSNumber(value: 1 - 1.8 / h), 1]
+        CATransaction.commit()
     }
 }

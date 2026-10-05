@@ -95,27 +95,6 @@ final class LiveTimeshiftBadgeView: UIView {
     }
 }
 
-/// Bottom-up dark gradient behind the timeline while the rail's glass is not
-/// there to carry it. Never interactive; hidden whenever it is invisible.
-final class LiveBottomScrimView: UIView {
-
-    override class var layerClass: AnyClass { CAGradientLayer.self }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        let gradient = layer as! CAGradientLayer
-        gradient.colors = [
-            UIColor.black.withAlphaComponent(0).cgColor,
-            UIColor.black.withAlphaComponent(0.55).cgColor,
-        ]
-        gradient.startPoint = CGPoint(x: 0.5, y: 0)
-        gradient.endPoint = CGPoint(x: 0.5, y: 1)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
-
 /// A one-line note that fades in at the top of the picture and goes again,
 /// for something the viewer did not ask for but should know happened (the
 /// engine jumping a long pause forward). Never interactive, and hidden while

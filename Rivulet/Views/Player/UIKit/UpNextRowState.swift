@@ -5,7 +5,7 @@
 //  UpNextRowState.swift
 //  Rivulet
 //
-//  Row status for the Up Next panel: position relative to the playing
+//  Card status for the Up Next pane: position relative to the playing
 //  episode wins over watch history (so a rewatch shows queue order, not
 //  the stale "watched" badge from the prior viewing).
 //

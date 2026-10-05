@@ -5,19 +5,19 @@
 //  PlayerRailPanelView.swift
 //  Rivulet
 //
-//  The one floating glass panel shared by the rail's CC, audio, and
-//  info buttons (Task 5) and the Up Next button (Task 6). Presents
-//  a caller-supplied content view above the rail, anchored near the
-//  source button; Menu dismisses; content owns its own internal
-//  focus (row list landing / selected-row scroll for the track
-//  list, whole-view scroll focus for the info sheet).
+//  The one floating glass popup shared by every rail button. Cloned from
+//  AVKit's tvOS 26 tool menus (`AVUnifiedPlayerContextMenuView`, measured
+//  with DEBUG `AVKitScrubProbe`, RIVULET_SCRUBPROBE=menus): a 54pt-radius
+//  glass platter whose bottom-right corner sits 20.5pt above its button's
+//  top-right, growing out of that corner on a spring while its content
+//  fades in. Menu dismisses; content owns its own internal focus.
 //
 
 import UIKit
 
 /// Conformed to by rail-panel content that has its own internal Menu
-/// handling (e.g. `InsightsPanelContainerView`'s actor-crossfade
-/// reverse-navigation) rather than always wanting Menu to close the whole
+/// handling (e.g. `InsightsPanelContainerView`'s return from an actor to
+/// the cast) rather than always wanting Menu to close the whole
 /// panel outright.
 ///
 /// tvOS delivers presses to the FOCUSED view and bubbles them UP the
@@ -48,13 +48,26 @@ final class PlayerRailPanelView: UIView {
     static var fullContentHeight: CGFloat { Metrics.maxHeight - Metrics.padding * 2 }
 
     fileprivate enum Metrics {
-        static let cornerRadius: CGFloat = 20
-        static let railGap: CGFloat = 12
+        static let cornerRadius: CGFloat = 54
+        static let buttonGap: CGFloat = 20.5
+        /// Inset for free-form content. Menus (`CardTrackListView`) fill the platter.
         static let padding: CGFloat = 20
         static let maxHeight: CGFloat = 560
-        static let presentTranslationY: CGFloat = 12
-        static let presentDuration: TimeInterval = 0.2
-        static let dismissDuration: TimeInterval = 0.15
+        static let screenMargin: CGFloat = 80
+        /// AVKit grows the platter from 10% scale on this spring, both ways.
+        static let collapsedScale: CGFloat = 0.1
+        static let spring = UISpringTimingParameters(mass: 1, stiffness: 200, damping: 23, initialVelocity: .zero)
+        static let springDuration: TimeInterval = 0.677
+        static let contentFade: TimeInterval = 0.17
+        static let contentFadeCurve = UICubicTimingParameters(
+            controlPoint1: CGPoint(x: 0.33, y: 0), controlPoint2: CGPoint(x: 0.67, y: 1))
+        // AVKit's info pane: a 1760-wide area whose bottom sits 50pt above the
+        // screen's, 30pt below the risen pills; content starts 14pt down.
+        static let paneBottomInset: CGFloat = 50
+        static let paneHeight: CGFloat = 300
+        static let paneContentTop: CGFloat = 14
+        static let panePillGap: CGFloat = 30
+        static let paneCardRadius: CGFloat = 48
     }
 
     var onDismiss: (() -> Void)?
@@ -80,50 +93,49 @@ final class PlayerRailPanelView: UIView {
     }
 
     private let backgroundEffectView: UIVisualEffectView
-    private let tintView = UIView()
+    private let wash = UIView()
     private let content: UIView
     private var didDismiss = false
+    private var springAnimator: UIViewPropertyAnimator?
 
-    private init(content: UIView) {
+    /// An info pane (opened from a pill below the bar) rather than a popup.
+    private(set) var isPane = false
+    private weak var paneRail: PlayerRailView?
+
+    private init(content: UIView, style: Style = .popup) {
         self.content = content
-        if #available(tvOS 26.0, *) {
-            backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
-        } else {
-            backgroundEffectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        }
+        // `.clear` glass plus a light gray wash lands on AVKit's private
+        // `.avplayer` glass over black, mid gray and white (within 1-7 levels).
+        // `.regular` darkens where AVKit lifts.
+        backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
         super.init(frame: .zero)
-
-        // Shadow lives on the unclipped self layer (two-layer split,
-        // same pattern as PlayerRailView): the drop shadow needs an
-        // unclipped layer to paint outside the bounds, while the
-        // glass/tint below clip themselves individually so the blur
-        // doesn't smear past the rounded corners.
-        //
-        // The panel floats detached just above the rail with all four
-        // corners rounded. A flush weld can't work: each glass surface
-        // draws its own edge highlight and border, so two abutting
-        // pieces always show a double seam. Border/shadow deliberately
-        // match the rail so the two read as one material family.
-        layer.cornerRadius = Metrics.cornerRadius
-        layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.white.withAlphaComponent(0.1).cgColor
-
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.5
-        layer.shadowRadius = 24
-        layer.shadowOffset = CGSize(width: 0, height: 10)
 
         backgroundEffectView.clipsToBounds = true
         backgroundEffectView.layer.cornerRadius = Metrics.cornerRadius
         backgroundEffectView.layer.cornerCurve = .continuous
 
-        tintView.backgroundColor = UIColor(red: 16/255, green: 18/255, blue: 24/255, alpha: 0.5)
-        tintView.clipsToBounds = true
-        tintView.layer.cornerRadius = Metrics.cornerRadius
-        tintView.layer.cornerCurve = .continuous
+        wash.backgroundColor = UIColor(white: 0.35, alpha: 0.18)
+        wash.layer.cornerRadius = Metrics.cornerRadius
+        wash.layer.cornerCurve = .continuous
+        wash.isUserInteractionEnabled = false
 
-        [backgroundEffectView, tintView, content].forEach {
+        let padding: CGFloat
+        switch style {
+        case .popup: padding = content is CardTrackListView ? 0 : Metrics.padding
+        case .paneCard: padding = Metrics.padding
+        case .paneContent: padding = 0
+        }
+        if style != .popup {
+            [backgroundEffectView, wash].forEach { $0.layer.cornerRadius = Metrics.paneCardRadius }
+            wash.backgroundColor = TransportControlButton.restingWash
+        }
+        if style == .paneContent {
+            [backgroundEffectView, wash].forEach { $0.isHidden = true }
+        }
+        let topInset = style == .paneContent ? Metrics.paneContentTop : padding
+        let bottom = content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding)
+        if style == .paneContent { bottom.priority = .defaultLow }
+        [backgroundEffectView, wash, content].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -135,77 +147,59 @@ final class PlayerRailPanelView: UIView {
             backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
             backgroundEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
             backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            wash.topAnchor.constraint(equalTo: topAnchor),
+            wash.leadingAnchor.constraint(equalTo: leadingAnchor),
+            wash.trailingAnchor.constraint(equalTo: trailingAnchor),
+            wash.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            tintView.topAnchor.constraint(equalTo: topAnchor),
-            tintView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            tintView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            tintView.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            content.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.padding),
-            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.padding),
-            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.padding),
-            content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Metrics.padding),
+            content.topAnchor.constraint(equalTo: topAnchor, constant: topInset),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
+            bottom,
         ])
+    }
+
+    private enum Style {
+        case popup
+        /// Pane content that draws its own surfaces (AVKit's Info card, card rows).
+        case paneContent
+        /// Free-form pane content on a glass card.
+        case paneCard
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // Panel's own layer has no drawn contents, so the animated
-        // shadow needs an explicit path or Core Animation rasterizes
-        // offscreen every frame of the rise-in.
-        layer.shadowPath = UIBezierPath(
-            roundedRect: bounds,
-            cornerRadius: Metrics.cornerRadius
-        ).cgPath
-    }
-
     // MARK: - Presentation
 
-    /// Builds, adds to `container`, and animates the panel in floating
-    /// just above `rail`, right-aligned with the rail's trailing edge
-    /// (button projection intentionally simplified to the rail's own
-    /// trailing edge rather than the individual button — see brief note).
+    /// Builds the popup in `container` above `button` (right edges aligned) and
+    /// grows it in. Passing the rail as `button` anchors to its top-right.
     @discardableResult
     static func present(content: UIView, width: CGFloat, in container: UIView, aboveRail rail: UIView, towards button: UIView) -> PlayerRailPanelView {
         let panel = PlayerRailPanelView(content: content)
         container.addSubview(panel)
         panel.translatesAutoresizingMaskIntoConstraints = false
 
-        // The info sheet is one big scrollable focus target with nothing
-        // inside it to highlight, so the panel ring itself carries the
-        // focus treatment — brightened while the sheet holds focus.
-        (content as? PlayerInfoTabsView)?.onFocusChange = { [weak panel] focused in
-            panel?.setFocusHighlight(focused)
-        }
-
+        // Below every label's compression resistance: when the screen margin
+        // wins, the popup gives way, never the rail's own layout.
+        let trailing = panel.trailingAnchor.constraint(equalTo: button.trailingAnchor)
+        trailing.priority = .defaultLow + 250
         NSLayoutConstraint.activate([
-            panel.widthAnchor.constraint(equalToConstant: width),
-            panel.bottomAnchor.constraint(equalTo: rail.topAnchor, constant: -Metrics.railGap),
-            panel.trailingAnchor.constraint(equalTo: rail.trailingAnchor),
+            panel.widthAnchor.constraint(equalToConstant: content is CardTrackListView ? CardTrackListView.menuWidth : width),
+            panel.bottomAnchor.constraint(equalTo: button.topAnchor, constant: -Metrics.buttonGap),
+            trailing,
+            panel.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor, constant: Metrics.screenMargin),
+            panel.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -Metrics.screenMargin),
         ])
-
-        panel.alpha = 0
-        panel.transform = CGAffineTransform(translationX: 0, y: Metrics.presentTranslationY)
         container.layoutIfNeeded()
 
         // Content that needs to position itself against real geometry
         // before the first visible frame (e.g. Up Next's scroll-to-current
-        // row) must do so here — after the panel has its real
-        // width/position constraints and `layoutIfNeeded()` above has
-        // resolved them, but before the rise-in animation below renders
-        // anything. Doing it any later (e.g. from the content's own
-        // `didMoveToWindow()`, which fires earlier during `addSubview`
-        // above, against not-yet-laid-out geometry) makes the correction
-        // visibly animate in as the real layout lands.
-        (content as? UpNextListView)?.prepareForPresentation()
+        // row) must do so here, after layout and before the grow-in.
         (content as? ChannelListPanelView)?.prepareForPresentation()
 
-        UIView.animate(withDuration: Metrics.presentDuration) {
-            panel.alpha = 1
-            panel.transform = .identity
-        }
+        panel.transform = panel.collapsedTransform
+        content.alpha = 0
+        panel.animate(toTransform: .identity, contentAlpha: 1, completion: nil)
 
         container.setNeedsFocusUpdate()
         container.updateFocusIfNeeded()
@@ -213,26 +207,184 @@ final class PlayerRailPanelView: UIView {
         return panel
     }
 
+    /// AVKit's info pane: the area under the risen pills. `cardWidth` puts
+    /// free-form content on a glass card that wide; nil gives the content the
+    /// full 1760 x 300 area to draw its own surfaces in. `replacing` swaps an
+    /// open pane's tab in place, as moving across AVKit's pills does.
+    @discardableResult
+    static func presentPane(content: UIView, cardWidth: CGFloat?, in container: UIView,
+                            rail: PlayerRailView, pill: UIView, riders: [UIView] = [],
+                            replacing old: PlayerRailPanelView?) -> PlayerRailPanelView {
+        old?.removeWithoutDismissing()
+        let panel = PlayerRailPanelView(content: content, style: cardWidth == nil ? .paneContent : .paneCard)
+        panel.isPane = true
+        panel.paneRail = rail
+        panel.riders = riders
+        container.addSubview(panel)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        var constraints = [
+            panel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: PlayerRailView.sideInset),
+            panel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -Metrics.paneBottomInset),
+        ]
+        if let cardWidth {
+            constraints.append(panel.widthAnchor.constraint(equalToConstant: cardWidth))
+        } else {
+            constraints += [
+                panel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -PlayerRailView.sideInset),
+                panel.heightAnchor.constraint(equalToConstant: Metrics.paneHeight),
+            ]
+        }
+        // The gap between the pills and the pane: Down from any pill enters the
+        // content, and Up from the content returns to this tab's pill rather
+        // than whichever pill sits above (which would switch the tab).
+        let guide = UIFocusGuide()
+        container.addLayoutGuide(guide)
+        guide.preferredFocusEnvironments = [content]
+        panel.tabPill = pill
+        constraints += [
+            guide.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            guide.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            guide.bottomAnchor.constraint(equalTo: panel.topAnchor),
+            guide.heightAnchor.constraint(equalToConstant: Metrics.panePillGap),
+        ]
+        panel.returnGuide = guide
+        NSLayoutConstraint.activate(constraints)
+        container.layoutIfNeeded()
+        (content as? ChannelListPanelView)?.prepareForPresentation()
+
+        // The pills end 30pt above the pane. AVKit raises the whole control
+        // block and the pane together from below, on one 0.5s curve.
+        let paneTop = panel.frame.minY
+        // From the rail's center, which its lift transform leaves alone.
+        let restingTop = rail.center.y - rail.bounds.height / 2 + rail.pillRowRestingTop
+        let pillHeight = rail.pillRowView.bounds.height
+        let lift = restingTop - (paneTop - Metrics.panePillGap - pillHeight)
+        panel.paneLift = lift
+        if let old, old.paneLift == lift {
+            content.alpha = 0
+            UIView.animate(withDuration: 0.25) { content.alpha = 1 }
+            return panel
+        }
+        let motion = paneMotion()
+        rail.setPaneLift(lift, motion: motion)
+        if old == nil { panel.transform = CGAffineTransform(translationX: 0, y: lift) }
+        // AVKit fades only its Info card in; custom tabs just ride up.
+        if content is PlayerInfoCardView { content.alpha = 0 }
+        motion.addAnimations {
+            panel.transform = .identity
+            content.alpha = 1
+            riders.forEach { $0.transform = CGAffineTransform(translationX: 0, y: -lift) }
+        }
+        motion.startAnimation()
+        return panel
+    }
+
+    /// AVKit's info pane move: 0.5s on Core Animation's default curve.
+    private static func paneMotion() -> UIViewPropertyAnimator {
+        UIViewPropertyAnimator(duration: 0.5, timingParameters: UICubicTimingParameters(
+            controlPoint1: CGPoint(x: 0.25, y: 0.1), controlPoint2: CGPoint(x: 0.25, y: 1)))
+    }
+
+    private var returnGuide: UIFocusGuide?
+    private weak var tabPill: UIView?
+
+    /// Where Up from the content goes: the tab's pill, or the sub-tab showing.
+    func setReturnTarget(_ view: UIView) { tabPill = view }
+    /// How far the control block rose for this pane.
+    private var paneLift: CGFloat = 0
+    /// Host views outside the rail (the scrub bar) that rise with it.
+    private var riders: [UIView] = []
+
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        if superview == nil, let returnGuide {
+            returnGuide.owningView?.removeLayoutGuide(returnGuide)
+        }
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        guard let next = context.nextFocusedView else { return }
+        if next.isDescendant(of: self) {
+            returnGuide?.preferredFocusEnvironments = tabPill.map { [$0] } ?? []
+        } else {
+            returnGuide?.preferredFocusEnvironments = [content]
+        }
+    }
+
+    /// A tab switch: the new pane takes over, so this one leaves with no
+    /// dismissal side effects.
+    private func removeWithoutDismissing() {
+        didDismiss = true
+        removeFromSuperview()
+    }
+
+    /// Scale about the bottom-right corner, the one nearest the button.
+    private var collapsedTransform: CGAffineTransform {
+        let corner = CGPoint(x: bounds.width / 2, y: bounds.height / 2)
+        return CGAffineTransform(translationX: corner.x, y: corner.y)
+            .scaledBy(x: Metrics.collapsedScale, y: Metrics.collapsedScale)
+            .translatedBy(x: -corner.x, y: -corner.y)
+    }
+
+    /// AVKit's two clocks: the platter springs, the content fades on a short curve.
+    private func animate(toTransform transform: CGAffineTransform, contentAlpha: CGFloat,
+                         clearsGlass: Bool = false, completion: (() -> Void)?) {
+        springAnimator?.stopAnimation(true)
+        let spring = UIViewPropertyAnimator(duration: Metrics.springDuration, timingParameters: Metrics.spring)
+        spring.addAnimations { self.transform = transform }
+        springAnimator = spring
+        spring.startAnimation()
+
+        // Completion rides the content fade, and closing clears the glass with
+        // it: the shrunken platter otherwise sat on screen for the rest of the spring.
+        let fade = UIViewPropertyAnimator(duration: Metrics.contentFade, timingParameters: Metrics.contentFadeCurve)
+        fade.addAnimations {
+            self.content.alpha = contentAlpha
+            if clearsGlass {
+                self.backgroundEffectView.effect = nil
+                self.wash.alpha = 0
+            }
+        }
+        fade.addCompletion { _ in completion?() }
+        fade.startAnimation()
+    }
+
+    /// The info sheet has no row to highlight, so the platter rim brightens instead.
     func setFocusHighlight(_ focused: Bool) {
-        layer.borderColor = UIColor.white.withAlphaComponent(focused ? 0.3 : 0.1).cgColor
+        layer.cornerRadius = Metrics.cornerRadius
+        layer.cornerCurve = .continuous
+        layer.borderWidth = focused ? 1 : 0
+        layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
     }
 
     func dismissPanel() {
         guard !didDismiss else { return }
         didDismiss = true
-        UIView.animate(withDuration: Metrics.dismissDuration, animations: {
-            self.alpha = 0
-            self.transform = CGAffineTransform(translationX: 0, y: Metrics.presentTranslationY)
-        }, completion: { [weak self] _ in
-            guard let self else { return }
-            self.removeFromSuperview()
-            self.onDismiss?()
-        })
+        isUserInteractionEnabled = false
+        if isPane {
+            let motion = Self.paneMotion()
+            paneRail?.setPaneLift(nil, motion: motion)
+            motion.addAnimations {
+                self.transform = CGAffineTransform(translationX: 0, y: self.paneLift)
+                self.alpha = 0
+                self.riders.forEach { $0.transform = .identity }
+            }
+            motion.addCompletion { [weak self] _ in self?.removeFromSuperview() }
+            motion.startAnimation()
+        } else {
+            animate(toTransform: collapsedTransform, contentAlpha: 0, clearsGlass: true) { [weak self] in
+                self?.removeFromSuperview()
+            }
+        }
+        // The host moves focus and restores state now, not when the spring settles.
+        onDismiss?()
     }
 
     // MARK: - Focus
 
-    override var canBecomeFocused: Bool { true }
+    /// A pane is never a focus stop itself: its content and the pills are.
+    override var canBecomeFocused: Bool { !didDismiss && !isPane }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { [content] }
 
@@ -242,8 +394,14 @@ final class PlayerRailPanelView: UIView {
     /// chrome relies on, scoped here since the panel isn't presented
     /// via a system modal.
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        // While collapsing it is still on screen; keep focus from re-entering it.
+        if didDismiss { return !(context.nextFocusedView?.isDescendant(of: self) ?? false) }
         guard window != nil else { return true }
         if let next = context.nextFocusedView, next.isDescendant(of: self) {
+            return true
+        }
+        // A pane shares focus with the pills (and sub-tabs) that switch it.
+        if isPane, let rail = paneRail, let next = context.nextFocusedView, next.isDescendant(of: rail) {
             return true
         }
         return false

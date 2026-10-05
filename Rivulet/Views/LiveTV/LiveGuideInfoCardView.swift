@@ -5,22 +5,20 @@
 //  LiveGuideInfoCardView.swift
 //  Rivulet
 //
-//  Rail-panel info card for Live TV. The VOD player's CardInfoView is built
-//  around PlexMetadata; live channels have no Plex metadata, so this card is
-//  fed from the guide (UnifiedProgram) instead: channel line, the programme
-//  airing now (title, time range, summary), and what's on next.
+//  Rail-panel info card for Live TV. Live channels have no Plex metadata, so
+//  this card is fed from the guide (UnifiedProgram): channel line, the
+//  programme airing now (title, time range, summary), and what's on next.
 //
 //  Presented inside PlayerRailPanelView, which supplies the glass, the focus
-//  fence, and Menu handling. The card itself is one focusable block (same
-//  model as CardInfoView) so the panel ring carries the focus treatment.
+//  fence, and Menu handling. The card itself is one focusable block, so the
+//  panel ring carries the focus treatment.
 //
 
 import UIKit
 
 final class LiveGuideInfoCardView: UIView {
 
-    /// Mirrors CardInfoView's hook: the panel brightens its border while the
-    /// card holds focus.
+    /// The panel brightens its border while the card holds focus.
     var onFocusChange: ((Bool) -> Void)?
 
     init(channel: UnifiedChannel, current: UnifiedProgram?, next: UnifiedProgram?) {

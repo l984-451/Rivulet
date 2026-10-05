@@ -104,10 +104,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// content layer is not focusable, directional input is left to the
     /// focus engine, and controls do not auto-hide.
     @Published var controlsFocusActive = false
+    /// The scrub bar itself holds focus (a subset of `controlsFocusActive`).
+    var scrubberOwnsFocus = false
     @Published var isScrubbing = false
 
     /// True while iPod-style circular clickpad rotation is actively
-    /// driving the scrub (see `handleWheelRotation(_:)`). Distinct from
+    /// driving the scrub (see `handleWheelScrub(by:)`). Distinct from
     /// `isScrubbing`, which also covers swipe/click-step scrubbing — this
     /// flag is only for the wheel-specific ring indicator in
     /// `PlayerProgressBarView`. Cleared 0.8s after the last rotation tick,
@@ -261,6 +263,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// rule as `insightsCast`. Loaded in the same per-item flow as cast by
     /// `loadInsightsTrivia()`; reset on item swap.
     @Published private(set) var insightsTrivia: TitleTrivia?
+    #if DEBUG
+    /// Stands in for the Worker's trivia, which the simulator can't fetch.
+    func debugSetInsightsTrivia(_ trivia: TitleTrivia?) { insightsTrivia = trivia }
+    #endif
     /// Fact ids the Worker has auto-hidden after enough user reports.
     /// Fetched alongside trivia; empty on any failure (fail-open — showing
     /// a fact is acceptable, failing closed is not required for this list).
@@ -277,7 +283,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published var isCountdownPaused: Bool = false
     private var countdownTimer: Timer?
     @Published var scrubThumbnail: UIImage?
-    @Published private(set) var scrubSpeed: Int = 0  // -3...3 shuttle level (0 = not shuttling); see ShuttleGrammar
+    @Published private(set) var scrubSpeed: Int = 0  // -8...8 shuttle level (0 = not shuttling); see ShuttleGrammar
     private var scrubStartTime: Date?  // When scrubbing started (for YouTube-style acceleration)
     @Published private(set) var audioTracks: [MediaTrack] = []
     @Published private(set) var subtitleTracks: [MediaTrack] = []
@@ -435,7 +441,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// depends on when the engine happens to publish that state.
     private var currentItemHasStarted = false
     private var controlsTimer: Timer?
-    private let controlsHideDelay: TimeInterval = 5
+    /// AVKit hides its controls 8s after the last press or focus move.
+    private let controlsHideDelay: TimeInterval = 8
     private var scrubTimer: Timer?
     /// Holds the rail at a seek's target until the picture lands there. Fed by
     /// Aether's `seekEvents`; inert on the hls route, whose AVPlayer seek
@@ -607,6 +614,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         self.loadingThumbImage = loadingThumbImage
         self.initialAudioTrackId = initialAudioTrackId
         self.initialSubtitleSelection = initialSubtitleSelection
+        // The server's duration until the engine reports its own, so the bar's
+        // fill shows with the first times instead of a second after them.
+        self.duration = Self.metadataDuration(metadata)
 
         let isAirPlayRoute = Self.isAirPlayOutput()
         let hasDolbyVision = metadata.hasDolbyVision
@@ -679,6 +689,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         case .directPlay, .progressiveTranscode:
             return (.aether(url: url, headers: nil), true)
         }
+    }
+
+    private static func metadataDuration(_ metadata: PlexMetadata) -> TimeInterval {
+        metadata.duration.map { TimeInterval($0) / 1000 } ?? 0
     }
 
     private func setupPlayer() {
@@ -2634,7 +2648,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// A Plex chapter's own thumb path; a provider chapter's image from its
     /// detail (the shim numbers chapters from 1 in detail order).
-    private func chapterThumbnailURL(_ chapter: PlexChapter) -> URL? {
+    func chapterThumbnailURL(_ chapter: PlexChapter) -> URL? {
         artworkURL(
             plex: { plexImageURL(chapter.thumb) },
             provider: { playback in
@@ -3235,6 +3249,9 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func seekRelative(by seconds: TimeInterval) async {
         hidePausedPoster()
+        // The skip glyph shows on the press, not after the seek lands.
+        let intSeconds = Int(abs(seconds))
+        showSeekIndicator(seconds >= 0 ? .forward(intSeconds) : .backward(intSeconds))
         let base = inFlightRelativeSeekTarget ?? currentTime
         let targetTime = max(0, min(base + seconds, duration))
         inFlightRelativeSeekTarget = targetTime
@@ -3250,7 +3267,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         if seekGeneration == generation { inFlightRelativeSeekTarget = nil }
         // REFRESH the auto-hide timer when the chrome is already up; never
         // SUMMON it. A skip is a skip, not a request for chrome. The seek
-        // indicator below is the feedback for a hidden-chrome skip.
+        // indicator above is the feedback for a hidden-chrome skip.
         //
         // This is the SECOND caller on this path — `UniversalPlayerView`'s
         // `.seekRelative` case has the same call — and gating only that one left
@@ -3258,10 +3275,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         // `seek(to:revealsControls:)` above already takes the decision as a
         // parameter for the same reason.
         if showControls { showControlsTemporarily() }
-
-        // Show seek indicator for tap-to-skip
-        let intSeconds = Int(abs(seconds))
-        showSeekIndicator(seconds >= 0 ? .forward(intSeconds) : .backward(intSeconds))
     }
 
     /// "What did they say?" — jump back 15s with subtitles temporarily on,
@@ -3339,15 +3352,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Scrubbing
 
-    /// Human-readable label for current scrub speed
-    var scrubStepLabel: String? {
-        ShuttleGrammar.badge(forSpeed: scrubSpeed)
-    }
-
     /// Start or advance scrub speed in given direction via ShuttleGrammar:
     /// click-and-hold enters at level 1, same-direction clicks bump up to the
-    /// level 3 cap, opposite-direction clicks step down then cancel. Badges
-    /// show the human ladder (2x/4x/6x); real rates are 15x/60x/240x.
+    /// level 8 cap, opposite-direction clicks step down then cancel. The bar
+    /// shows the level as AVKit's scan glyph; rates run 8x to 1536x.
     /// - Parameter forward: true for forward, false for backward
     func scrubInDirection(forward: Bool) {
         hidePausedPoster()
@@ -3412,14 +3420,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         loadThumbnail(for: scrubTime)
     }
 
-    /// Handle click wheel rotation (iPod-style circular scrubbing)
-    /// - Parameter radians: Rotation amount in radians (clockwise/positive = forward)
-    func handleWheelRotation(_ radians: Float) {
-        // Convert rotation to seek time
-        // ~10 seconds per full rotation (2π radians), so ~1.6 seconds per radian
-        let secondsPerRadian: TimeInterval = 10.0
-        let seekDelta = TimeInterval(radians) * secondsPerRadian
-
+    /// Clickpad-ring rotation scrub; `seekDelta` is already converted from the rotation.
+    func handleWheelScrub(by seekDelta: TimeInterval) {
         if !isScrubbing {
             hidePausedPoster()
             isScrubbing = true
@@ -3450,6 +3452,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         wheelScrubbingTimer?.invalidate()
         wheelScrubbingTimer = Timer.scheduledTimer(withTimeInterval: wheelScrubbingIdleDelay, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
+                // A finger resting on the ring keeps it up, as AVKit's does.
+                if RemoteInputHandler.isRingJogging { self?.startWheelScrubbingIdleTimer(); return }
                 self?.wheelScrubbing = false
             }
         }
@@ -5526,6 +5530,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Use preloaded metadata if available (has markers), otherwise use fetched next episode
             metadata = preloadedNextMetadata ?? next
         }
+        duration = Self.metadataDuration(metadata)
         // metadata isn't @Published (its ratingKey is the only identity
         // signal), so bump this explicitly for anything that caches
         // per-item state and needs to reset across the swap.

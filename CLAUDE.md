@@ -79,8 +79,9 @@ Rivulet/                # The tvOS app — everything below.
 │   │   ├── Subtitles/  # SubtitleModel (cue store; publishes the active set)
 │   │   ├── UIKit/      # CaptionOverlayView (the only caption renderer),
 │   │   │               #   PlayerRailView, PlayerRailPanelView, PlayerProgressBarView,
-│   │   │               #   PlayerUpNextPanelView, UpNextRowState, pills (canonical player chrome),
-│   │   │               #   Insights* panels (in-player cast/trivia; backed by Services/Insights + TMDB)
+│   │   │               #   PlayerInfoPaneViews (AVKit info pane: Info card, card rows), UpNextRowState,
+│   │   │               #   pills (canonical player chrome, cloned from AVKit; DEBUG AVKitScrubProbe measures it),
+│   │   │               #   Insights* views (in-player cast/trivia pane; backed by Services/Insights + TMDB)
 │   │   └── PostVideo/  # Post-playback summary overlays
 │   ├── Media/          # PreviewContext, HeroBackdropSupport, SharedMediaComponents,
 │   │                   #   FocusScrollMotion
@@ -264,9 +265,10 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   is correct there (engine acts first, declined presses bubble); the gated
   swipes are its touch-remote twin. The gate must claim exactly the moves
   the engine cannot perform — reuse the press override's own predicates
-  (`canEscapeUpward`, `containsFocus`, would-a-step-move). Adopters:
-  `InsightsPanelContainerView`, `PlayerInfoTabsView`, `InfoScrollView`
-  (escape to pills), `InsightsActorView` (bio steps).
+  (`canEscapeUpward`, `containsFocus`, would-a-step-move). Adopters: the
+  Live TV guide (`EPGGuideView`) and the player's content anchor. The
+  player's info panes don't need it: a `UIFocusGuide` between the pills and
+  the pane carries Up and Down.
 - **Do not migrate an already dual-transport surface onto the binding.** It
   changes nothing at runtime and splits a tuned interaction across two
   mechanisms. Settings reorder (grab-gated press taps + swipes) stays
@@ -679,7 +681,7 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 | Player container (UIKit chrome) | `Views/Player/PlayerContainerViewController.swift` |
 | Player rail UI (UIKit) | `Views/Player/UIKit/PlayerRailView.swift` |
 | Rail panel (UIKit) | `Views/Player/UIKit/PlayerRailPanelView.swift` |
-| Up Next panel (UIKit) | `Views/Player/UIKit/PlayerUpNextPanelView.swift` |
+| Info pane content (UIKit) | `Views/Player/UIKit/PlayerInfoPaneViews.swift` |
 | Player (AetherEngine adapter) | `Services/Plex/Playback/AetherPlayer.swift` |
 | Live TV multiview (tiles bind the engine surface) | `Views/LiveTV/UIKit/LiveMultiviewViewController.swift` |
 | Routing decisions | `Services/Plex/Playback/Pipeline/ContentRouter.swift` |

@@ -41,6 +41,8 @@ actor IPTVProvider: LiveTVProvider {
 
     // Cached data
     private(set) var cachedChannels: [UnifiedChannel] = []
+    /// Each channel's tvg-id, tvg-name and name, for guide matching.
+    private var guideCandidates: [String: [String]] = [:]
     private var cachedEPG: [String: [UnifiedProgram]] = [:]
 
     /// Channel logos parsed from XMLTV `<channel><icon>`, keyed by unified
@@ -168,13 +170,19 @@ actor IPTVProvider: LiveTVProvider {
             throw error
         }
 
-        // Convert to UnifiedChannel
+        var occurrences: [String: Int] = [:]
+        var candidates: [String: [String]] = [:]
         let channels = parsedChannels.map { parsed in
-            parsed.toUnifiedChannel(sourceType: sourceType, sourceId: sourceId)
+            let occurrence = occurrences[parsed.channelKey, default: 0]
+            occurrences[parsed.channelKey] = occurrence + 1
+            let channel = parsed.toUnifiedChannel(sourceType: sourceType, sourceId: sourceId, occurrence: occurrence)
+            candidates[channel.id] = [parsed.tvgId, parsed.tvgName, parsed.name].compactMap { $0 }
+            return channel
         }
 
         // Update cache
         cachedChannels = channels
+        guideCandidates = candidates
         lastChannelFetch = Date()
 
         return channels
@@ -222,40 +230,19 @@ actor IPTVProvider: LiveTVProvider {
             throw error
         }
 
-        // Build unified channel ID -> tvgId mapping
-        // Use uniquingKeysWith to handle duplicate tvgIds (keep first occurrence)
-        let tvgIdToUnifiedId = Dictionary(
-            channels.compactMap { channel in
-                channel.tvgId.map { ($0, channel.id) }
-            },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        // Convert to UnifiedProgram, mapping by tvgId
+        let candidates = Dictionary(channels.map { channel in
+            (channel.id, guideCandidates[channel.id] ?? [channel.tvgId, channel.name].compactMap { $0 })
+        }, uniquingKeysWith: { first, _ in first })
         var unifiedEPG: [String: [UnifiedProgram]] = [:]
-
-        for (xmltvChannelId, programs) in parseResult.programs {
-            // Find the unified channel ID for this XMLTV channel
-            guard let unifiedChannelId = tvgIdToUnifiedId[xmltvChannelId] else {
-                continue  // No matching channel
-            }
-
-            let unifiedPrograms = programs.map { parsed in
-                parsed.toUnifiedProgram(unifiedChannelId: unifiedChannelId)
-            }
-
-            unifiedEPG[unifiedChannelId] = unifiedPrograms
-        }
-
-        // Capture channel logos from the XMLTV `<channel><icon>` elements,
-        // mapped onto our unified channel ids. These let the guide show channel
-        // artwork even when the M3U playlist had no `tvg-logo`.
+        // XMLTV `<channel><icon>` logos, for channels whose playlist had no `tvg-logo`.
         var channelLogos: [String: URL] = [:]
-        for (xmltvChannelId, parsedChannel) in parseResult.channels {
-            guard let unifiedChannelId = tvgIdToUnifiedId[xmltvChannelId],
-                  let iconString = parsedChannel.iconURL,
-                  let iconURL = URL(string: iconString) else { continue }
-            channelLogos[unifiedChannelId] = iconURL
+        for (unifiedChannelId, xmltvChannelId) in parseResult.guideIds(for: candidates) {
+            if let programs = parseResult.programs[xmltvChannelId] {
+                unifiedEPG[unifiedChannelId] = programs.map { $0.toUnifiedProgram(unifiedChannelId: unifiedChannelId) }
+            }
+            if let icon = parseResult.channels[xmltvChannelId]?.iconURL.flatMap({ URL(string: $0) }) {
+                channelLogos[unifiedChannelId] = icon
+            }
         }
 
         // Update cache
@@ -361,5 +348,32 @@ actor IPTVProvider: LiveTVProvider {
         }
 
         return true
+    }
+}
+
+extension XMLTVParser.ParseResult {
+    /// The XMLTV channel id each playlist channel's guide comes from, keyed by unified
+    /// channel id. Each channel's candidates (tvg-id, tvg-name, name) are tried as an
+    /// exact id, then an id ignoring case, then a display name ignoring case,
+    /// accents and punctuation.
+    nonisolated func guideIds(for candidates: [String: [String]]) -> [String: String] {
+        let ids = Set(channels.keys).union(programs.keys)
+        let idsIgnoringCase = Dictionary(ids.map { ($0.lowercased(), $0) }, uniquingKeysWith: min)
+        let idsByName = Dictionary(channels.values.map { (Self.normalize($0.displayName), $0.id) }
+                                       .filter { !$0.0.isEmpty },
+                                   uniquingKeysWith: min)
+        return candidates.compactMapValues { names in
+            let names = names.filter { !$0.isEmpty }
+            return names.first(where: ids.contains)
+                ?? names.lazy.compactMap { idsIgnoringCase[$0.lowercased()] }.first
+                ?? names.lazy.compactMap { idsByName[Self.normalize($0)] }.first
+        }
+    }
+
+    nonisolated static func normalize(_ value: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .unicodeScalars.filter(CharacterSet.alphanumerics.contains))
+        return String(scalars)
     }
 }

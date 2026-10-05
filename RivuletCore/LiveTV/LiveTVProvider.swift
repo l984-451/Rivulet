@@ -357,10 +357,14 @@ enum LiveTVProviderError: LocalizedError {
 // drop their `#if os(tvOS)` (see CLAUDE.md, Platform Boundary).
 
 extension M3UParser.ParsedChannel {
-    /// Convert to UnifiedChannel
-    func toUnifiedChannel(sourceType: LiveTVSourceType, sourceId: String) -> UnifiedChannel {
-        // Create a unique ID for this channel
-        let channelId = tvgId ?? tvgName ?? name
+    /// What a channel's id is built from. Playlists repeat it (SD and HD feeds share a tvg-id).
+    nonisolated var channelKey: String { tvgId ?? tvgName ?? name }
+
+    /// Convert to UnifiedChannel. `occurrence` counts earlier entries with the same
+    /// `channelKey` in the source; the 2nd and later get "#n" so ids stay unique and
+    /// the first keeps the id saved favorites point at.
+    nonisolated func toUnifiedChannel(sourceType: LiveTVSourceType, sourceId: String, occurrence: Int = 0) -> UnifiedChannel {
+        let channelId = occurrence == 0 ? channelKey : "\(channelKey)#\(occurrence)"
         let id = UnifiedChannel.makeId(sourceType: sourceType, sourceId: sourceId, channelId: channelId)
 
         return UnifiedChannel(

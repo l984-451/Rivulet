@@ -10,7 +10,6 @@
 
 import Foundation
 import Combine
-import Sentry
 import UIKit
 
 @MainActor
@@ -79,9 +78,6 @@ class LiveTVDataStore: ObservableObject {
     private var epgLoadTask: Task<Void, Never>?
     private var backgroundPreloadTask: Task<Void, Never>?
 
-    /// Whether EPG has been preloaded in background
-    @Published private(set) var isEPGPreloaded = false
-
     // MARK: - Freshness tracking
 
     /// When the channel list and the EPG grid were last successfully loaded.
@@ -121,7 +117,7 @@ class LiveTVDataStore: ObservableObject {
         let baseURL: String?
         let m3uURL: String?
         let epgURL: String?
-        let apiToken: String?
+        var apiToken: String?
 
         /// Dispatcharr channel profile, nil for every channel. Optional so that
         /// source configurations written before this field existed still decode:
@@ -171,24 +167,6 @@ class LiveTVDataStore: ObservableObject {
     }
 
     // MARK: - Computed Properties
-
-    /// Channels grouped by category/group
-    var channelsByGroup: [String: [UnifiedChannel]] {
-        var groups: [String: [UnifiedChannel]] = [:]
-        for channel in channels {
-            let group = channel.groupTitle ?? "Other"
-            if groups[group] == nil {
-                groups[group] = []
-            }
-            groups[group]?.append(channel)
-        }
-        return groups
-    }
-
-    /// Available group names, sorted
-    var availableGroups: [String] {
-        channelsByGroup.keys.sorted()
-    }
 
     /// Check if any Live TV source is configured
     var hasConfiguredSources: Bool {
@@ -253,7 +231,6 @@ class LiveTVDataStore: ObservableObject {
             await self.loadChannels()
             guard !self.channels.isEmpty else { return }
             await self.loadEPG(startDate: Date(), hours: Self.refreshWindowHours)
-            self.isEPGPreloaded = true
         }
         staleRefreshTask = task
         await task.value
@@ -322,18 +299,16 @@ class LiveTVDataStore: ObservableObject {
     /// Remove a source by ID
     func removeSource(id: String) async {
         providers.removeValue(forKey: id)
+        KeychainHelper.delete(Self.apiTokenKey(sourceId: id))
         saveSources()
         await updateSourceInfo()
 
-        // Remove channels from this source
+        // Collected before the channels go, or there is nothing left to purge.
+        let removed = Set(channels.lazy.filter { $0.sourceId == id }.map(\.id))
         channels.removeAll { $0.sourceId == id }
-
-        // Remove EPG for these channels
-        let channelIds = Set(channels.filter { $0.sourceId == id }.map { $0.id })
-        for channelId in channelIds {
+        for channelId in removed {
             epg.removeValue(forKey: channelId)
         }
-
     }
 
     // MARK: - Source Persistence
@@ -341,9 +316,12 @@ class LiveTVDataStore: ObservableObject {
     /// Load saved source configurations and recreate providers
     private func loadSavedSources() {
         guard let data = userDefaults.data(forKey: sourcesKey),
-              let configs = try? JSONDecoder().decode([SourceConfiguration].self, from: data) else {
+              var configs = try? JSONDecoder().decode([SourceConfiguration].self, from: data) else {
             print("📺 LiveTVDataStore: No saved sources found")
             return
+        }
+        if Self.moveAPITokensToKeychain(&configs), let data = try? JSONEncoder().encode(configs) {
+            userDefaults.set(data, forKey: sourcesKey)
         }
 
         for config in configs {
@@ -354,7 +332,7 @@ class LiveTVDataStore: ObservableObject {
                         dispatcharrURL: url,
                         sourceId: config.id,
                         displayName: config.name,
-                        apiToken: config.apiToken,
+                        apiToken: KeychainHelper.get(Self.apiTokenKey(sourceId: config.id)) ?? config.apiToken,
                         channelProfile: config.channelProfile
                     )
                     providers[config.id] = provider
@@ -414,7 +392,7 @@ class LiveTVDataStore: ObservableObject {
                         baseURL: iptvProvider.baseURL?.absoluteString,
                         m3uURL: nil,
                         epgURL: nil,
-                        apiToken: iptvProvider.apiToken,
+                        apiToken: Self.storeAPIToken(iptvProvider.apiToken, sourceId: id),
                         channelProfile: iptvProvider.channelProfile
                     ))
                 }
@@ -449,6 +427,86 @@ class LiveTVDataStore: ObservableObject {
 
         if let data = try? JSONEncoder().encode(configs) {
             userDefaults.set(data, forKey: sourcesKey)
+        }
+    }
+
+    /// Keychain account holding a source's Dispatcharr API key.
+    static func apiTokenKey(sourceId: String) -> String { "liveTVSourceToken_\(sourceId)" }
+
+    /// Puts `token` in the Keychain. Returns what the saved config must still
+    /// hold: nil, unless the Keychain refused it and the key would be lost.
+    private static func storeAPIToken(_ token: String?, sourceId: String) -> String? {
+        let key = apiTokenKey(sourceId: sourceId)
+        guard let token, !token.isEmpty else {
+            KeychainHelper.delete(key)
+            return nil
+        }
+        return KeychainHelper.set(token, forKey: key) ? nil : token
+    }
+
+    /// Moves API keys saved in plain text by older builds into the Keychain.
+    /// True when `configs` changed and must be written back.
+    static func moveAPITokensToKeychain(_ configs: inout [SourceConfiguration]) -> Bool {
+        var changed = false
+        for index in configs.indices where configs[index].apiToken != nil {
+            configs[index].apiToken = storeAPIToken(configs[index].apiToken, sourceId: configs[index].id)
+            changed = changed || configs[index].apiToken == nil
+        }
+        return changed
+    }
+
+    // MARK: - Legacy iOS source
+
+    /// The single source the old iOS Live TV store kept in its own keys.
+    enum LegacyIOSSource: Equatable {
+        case dispatcharr(baseURL: URL, channelProfile: String?, apiToken: String?)
+        case m3u(m3uURL: URL, epgURL: URL?)
+    }
+
+    private static let legacyIOSKeys = ["m3uURL", "xmltvURL", "authorizationHeader", "userAgent", "referer"]
+        .map { "ios.liveTV.\($0)" }
+
+    /// What the old iOS store left in `defaults`. A Dispatcharr playlist URL
+    /// becomes a Dispatcharr source; its fetch headers have nowhere to go.
+    static func legacyIOSSource(in defaults: UserDefaults) -> LegacyIOSSource? {
+        func value(_ key: String) -> String? {
+            defaults.string(forKey: "ios.liveTV.\(key)")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let m3uString = value("m3uURL"), let m3uURL = URL(string: m3uString), m3uURL.host != nil else {
+            return nil
+        }
+        if m3uURL.path.range(of: "/output/m3u", options: .caseInsensitive) != nil {
+            let split = DispatcharrService.splitEndpointPath(from: m3uString)
+            guard let base = URL(string: split.baseURL) else { return nil }
+            return .dispatcharr(baseURL: base, channelProfile: split.channelProfile,
+                                apiToken: apiKey(fromAuthorization: value("authorizationHeader")))
+        }
+        let epg = value("xmltvURL").flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        return .m3u(m3uURL: m3uURL, epgURL: epg)
+    }
+
+    /// The key in an Authorization value, without its "ApiKey", "Bearer" or "Token" scheme.
+    static func apiKey(fromAuthorization header: String?) -> String? {
+        guard var value = header, !value.isEmpty else { return nil }
+        for scheme in ["ApiKey ", "Bearer ", "Token "] where value.lowercased().hasPrefix(scheme.lowercased()) {
+            value = value.dropFirst(scheme.count).trimmingCharacters(in: .whitespaces)
+            break
+        }
+        return value.isEmpty ? nil : value
+    }
+
+    /// Adds the source the old iOS store kept, then deletes its keys, so this
+    /// runs once. The iOS app calls it at launch.
+    func migrateLegacyIOSSource(defaults: UserDefaults = .standard) async {
+        let source = Self.legacyIOSSource(in: defaults)
+        Self.legacyIOSKeys.forEach(defaults.removeObject(forKey:))
+        switch source {
+        case .dispatcharr(let baseURL, let profile, let token):
+            await addDispatcharrSource(baseURL: baseURL, name: "Live TV", apiToken: token, channelProfile: profile)
+        case .m3u(let m3uURL, let epgURL):
+            await addM3USource(m3uURL: m3uURL, epgURL: epgURL, name: "IPTV")
+        case nil:
+            break
         }
     }
 
@@ -890,9 +948,6 @@ class LiveTVDataStore: ObservableObject {
             // Then load EPG (if not already loaded)
             if epg.isEmpty && !isLoadingEPG && !channels.isEmpty {
                 await loadEPG(startDate: Date(), hours: 6)
-                await MainActor.run {
-                    self.isEPGPreloaded = true
-                }
             }
         }
     }
@@ -917,7 +972,6 @@ class LiveTVDataStore: ObservableObject {
 
         if epg.isEmpty && !isLoadingEPG && !channels.isEmpty {
             await loadEPG(startDate: Date(), hours: 6)
-            isEPGPreloaded = true
         }
     }
 
@@ -1001,9 +1055,12 @@ class LiveTVDataStore: ObservableObject {
 
     /// The live recording (scheduled or in progress) that covers `program`.
     func activeRecording(for program: UnifiedProgram) -> LiveTVScheduledRecording? {
-        scheduledRecordings.first {
-            ($0.status == .scheduled || $0.status == .recording) && $0.covers(program)
-        }
+        Self.activeRecording(for: program, in: scheduledRecordings)
+    }
+
+    static func activeRecording(for program: UnifiedProgram,
+                                in recordings: [LiveTVScheduledRecording]) -> LiveTVScheduledRecording? {
+        recordings.first { ($0.status == .scheduled || $0.status == .recording) && $0.covers(program) }
     }
 
     /// Ids of the guide programmes set to record, for the guide's marks. Only
@@ -1099,6 +1156,27 @@ class LiveTVDataStore: ObservableObject {
         favoriteIds.swapAt(index, target)
     }
 
+    /// List-style reorder. Offsets index the favorites whose channel is loaded,
+    /// which is what a reorder list shows (`favoriteIds` mapped through `channels`).
+    func moveFavorites(fromOffsets source: IndexSet, toOffset destination: Int) {
+        favoriteIds = Self.moving(favoriteIds, shown: Set(channels.map(\.id)),
+                                  fromOffsets: source, toOffset: destination)
+    }
+
+    /// `ids` with the shown ones reordered; ids not shown keep their slots.
+    static func moving(_ ids: [String], shown: Set<String>,
+                       fromOffsets source: IndexSet, toOffset destination: Int) -> [String] {
+        let slots = ids.indices.filter { shown.contains(ids[$0]) }
+        let visible = slots.map { ids[$0] }
+        guard source.allSatisfy(visible.indices.contains), (0...visible.count).contains(destination) else { return ids }
+        var reordered = visible.enumerated().filter { !source.contains($0.offset) }.map(\.element)
+        reordered.insert(contentsOf: source.map { visible[$0] },
+                         at: destination - source.count(in: 0..<destination))
+        var result = ids
+        for (slot, id) in zip(slots, reordered) { result[slot] = id }
+        return result
+    }
+
     /// The favorites among `channels`, in order.
     func favorites(in channels: [UnifiedChannel]) -> [UnifiedChannel] {
         Self.favorites(in: channels, order: favoriteIds)
@@ -1171,78 +1249,13 @@ class LiveTVDataStore: ObservableObject {
 
     // MARK: - Stream URL
 
-    /// Build the stream URL for a channel
     /// Resolve a PLAYABLE stream URL, performing any provider-side session
     /// setup first (Plex cloud-EPG/DVB channels need a tune before the
-    /// transcoder will serve them). Prefer this over `buildStreamURL(for:)`
-    /// at playback time; the sync variant remains for availability checks.
+    /// transcoder will serve them).
     func resolveStreamURL(for channel: UnifiedChannel) async throws -> URL? {
         guard let provider = providers[channel.sourceId] else {
             return channel.streamURL
         }
         return try await provider.resolveStreamURL(for: channel)
-    }
-
-    func buildStreamURL(for channel: UnifiedChannel) -> URL? {
-        guard let provider = providers[channel.sourceId] else {
-            // No provider found - fallback to channel's embedded stream URL
-            let breadcrumb = Breadcrumb(level: .info, category: "livetv_stream")
-            breadcrumb.message = "Using channel's embedded stream URL (no provider)"
-            breadcrumb.data = [
-                "channel_name": channel.name,
-                "channel_id": channel.id,
-                "source_id": channel.sourceId,
-                "source_type": String(describing: channel.sourceType),
-                "has_stream_url": channel.streamURL != nil
-            ]
-            SentryBridge.addBreadcrumb(breadcrumb)
-            return channel.streamURL
-        }
-
-        let url = provider.buildStreamURL(for: channel)
-
-        // Log stream URL build result (GitHub #64 - DVB diagnostics)
-        if let url = url {
-            let successBreadcrumb = Breadcrumb(level: .info, category: "livetv_stream")
-            successBreadcrumb.message = "Stream URL built successfully"
-            successBreadcrumb.data = [
-                "channel_name": channel.name,
-                "channel_id": channel.id,
-                "source_id": channel.sourceId,
-                "source_type": String(describing: channel.sourceType),
-                "stream_type": url.path.contains("/transcode/") ? "plex_transcode" : (url.path.contains("/live/") ? "iptv" : "direct"),
-                "url_host": url.host ?? "unknown",
-                "url_path": url.path
-            ]
-            SentryBridge.addBreadcrumb(successBreadcrumb)
-        } else {
-            let breadcrumb = Breadcrumb(level: .warning, category: "livetv_stream")
-            breadcrumb.message = "Provider returned nil stream URL"
-            breadcrumb.data = [
-                "channel_name": channel.name,
-                "channel_id": channel.id,
-                "source_id": channel.sourceId,
-                "source_type": String(describing: channel.sourceType),
-                "embedded_stream_url": channel.streamURL?.absoluteString ?? "none"
-            ]
-            SentryBridge.addBreadcrumb(breadcrumb)
-        }
-
-        return url
-    }
-
-    // MARK: - Reset
-
-    func reset() {
-        channelLoadTask?.cancel()
-        epgLoadTask?.cancel()
-        providers.removeAll()
-        channels = []
-        epg = [:]
-        sources = []
-        channelsError = nil
-        epgIssues = []
-        isLoadingChannels = false
-        isLoadingEPG = false
     }
 }

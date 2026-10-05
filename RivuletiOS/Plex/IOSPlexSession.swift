@@ -8,10 +8,11 @@
 //  The iOS content store and view-facing facade over the SHARED Plex stack:
 //  PlexAuthManager owns identity (PIN flow, server selection, tokens) and
 //  PlexNetworkManager owns every request. This file holds no endpoint
-//  knowledge — it shapes shared results for the iOS views and caches what is
+//  knowledge; it shapes shared results for the iOS views and caches what is
 //  expensive to re-resolve (clear logos). The one exception is the direct
 //  playback URL and its headers, which iOS composes here because tvOS routes
-//  playback through ContentRouter, a surface iOS does not have yet.
+//  playback through ContentRouter, a surface iOS does not have yet. Content
+//  fetches live in IOSPlexSession+Content.swift.
 //
 //  It exists for the same reason PlexDataStore does on tvOS: the auth manager
 //  hands off to "whatever holds content" through PlexAuthManager.onAuthenticated
@@ -38,14 +39,26 @@ final class IOSPlexSession: ObservableObject {
     @Published private(set) var authenticationURL: URL?
     @Published private(set) var availableServers: [PlexDevice] = []
     @Published private(set) var libraries: [PlexLibrary] = []
+    /// Home rows after Continue Watching: promoted hubs of the pinned libraries.
     @Published private(set) var shelves: [PlexHub] = []
+    @Published private(set) var continueWatching: PlexHub?
     @Published private(set) var isLoadingContent = false
+    @Published private(set) var contentError: String?
+    /// Bumped after a watched-state change so open grids and detail pages reload.
+    @Published private(set) var watchStateRevision = 0
+    /// Bumped on a server or profile switch; the tab stacks rebuild on it.
+    @Published private(set) var sessionGeneration = 0
     @Published private(set) var selectedServerName: String?
     @Published private(set) var profileImageURL: URL?
     @Published private(set) var profileDisplayName: String?
 
-    private let auth = PlexAuthManager.shared
-    private let network = PlexNetworkManager.shared
+    let auth = PlexAuthManager.shared
+    let network = PlexNetworkManager.shared
+    private var lastContentRefresh: Date?
+    private var refreshGeneration = 0
+    /// Last good hubs per pinned library, kept when a later fetch of one fails.
+    private var libraryHubs: [String: [PlexHub]] = [:]
+    private var libraryHubsSession: (serverURL: String, token: String)?
     private var cancellables = Set<AnyCancellable>()
     private var logoURLCache: [String: URL] = [:]
     private var missingLogoKeys = Set<String>()
@@ -53,7 +66,7 @@ final class IOSPlexSession: ObservableObject {
 
     init() {
         // The auth manager owns identity and hands content off to the host's
-        // store — on iOS, this object. Mirrors RivuletApp.init on tvOS.
+        // store: on iOS, this object. Mirrors RivuletApp.init on tvOS.
         PlexAuthManager.onAuthenticated = { [weak self] in await self?.refresh() }
         PlexAuthManager.onSignedOut = { [weak self] in self?.clearContent() }
 
@@ -80,11 +93,7 @@ final class IOSPlexSession: ObservableObject {
         auth.selectedServerURL != nil && auth.selectedServerToken != nil
     }
 
-    var isSignedIn: Bool { auth.authToken != nil }
-
     // MARK: - Auth (delegated)
-
-    func beginSignIn() async { await auth.startPINAuthentication() }
 
     func cancelSignIn() { auth.cancelAuthentication() }
 
@@ -98,7 +107,7 @@ final class IOSPlexSession: ObservableObject {
     /// Maps the shared auth state machine onto the iOS view states.
     ///
     /// `@Published` emits on willSet, so `auth.state` still holds the OLD
-    /// value inside this sink — everything needed must come from the emitted
+    /// value inside this sink. Everything needed must come from the emitted
     /// value or from properties the manager assigns BEFORE flipping state
     /// (selectedServerURL/token are, by the atomic-flip rule in selectServer).
     private func apply(authState: PlexAuthState) {
@@ -140,74 +149,58 @@ final class IOSPlexSession: ObservableObject {
     // MARK: - Content
 
     func refresh() async {
-        guard let (serverURL, token) = try? configuration() else { return }
+        guard let session = try? configuration() else { return }
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        // A newer refresh, a sign-out or a server/profile switch owns the UI once this one returns.
+        func isCurrent() -> Bool {
+            generation == refreshGeneration && (try? configuration()).map { $0 == session } == true
+        }
         isLoadingContent = true
+        defer { if generation == refreshGeneration { isLoadingContent = false } }
         do {
-            async let libraries = network.getLibraries(serverURL: serverURL, authToken: token)
-            async let hubs = network.getHubs(serverURL: serverURL, authToken: token, count: 24)
-            self.libraries = try await libraries.filter { ["movie", "show", "artist"].contains($0.type) }
-            self.shelves = Self.shaped(try await hubs)
+            let home = try await fetchHome()
+            guard isCurrent() else { return }
+            if libraryHubsSession.map({ $0 != session }) ?? true {
+                libraryHubs = [:]
+                continueWatching = nil
+                libraryHubsSession = session
+            }
+            libraries = home.libraries
+            if let cw = home.continueWatching { continueWatching = cw }
+            let pinned = home.libraries.filter(\.isPinnedToHome)
+            libraryHubs = Dictionary(uniqueKeysWithValues: pinned.compactMap { library in
+                (home.hubsByLibrary[library.key] ?? libraryHubs[library.key]).map { (library.key, $0) }
+            })
+            shelves = pinned.flatMap { libraryHubs[$0.key] ?? [] }.filter {
+                $0.promoted == true && !$0.isContinueWatching && !$0.items.isEmpty
+            }
             selectedServerName = auth.selectedServer?.name ?? auth.savedServerName
+            contentError = nil
+            lastContentRefresh = .now
             state = .connected
+        } catch let error where isCancellationError(error) {
+            return
         } catch {
-            state = .failed(error.localizedDescription)
+            guard isCurrent() else { return }
+            contentError = error.localizedDescription
         }
-        isLoadingContent = false
+        await PlexWatchlistService.shared.fetchWatchlist()
     }
 
-    /// Drop hubs that would render as an empty or unlabeled rail. The per-rail
-    /// item cap lives in `PlexHub.items` (IOSPlexAdapters).
-    private static func shaped(_ hubs: [PlexHub]) -> [PlexHub] {
-        hubs.filter {
-            !$0.items.isEmpty
-                && !$0.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+    /// Foreground return: refetch only when Home is more than five minutes old.
+    func refreshIfStale() async {
+        guard let lastContentRefresh, Date.now.timeIntervalSince(lastContentRefresh) > 300 else { return }
+        await refresh()
     }
 
-    func items(in library: PlexLibrary) async throws -> [PlexMetadata] {
-        let (serverURL, token) = try configuration()
-        return try await network.getLibraryItemsWithTotal(
-            serverURL: serverURL,
-            authToken: token,
-            sectionId: library.key,
-            size: 200,
-            sort: "titleSort",
-            includeGuids: true
-        ).items
-    }
+    /// A server or profile switch: open pages belong to the old one, so the tab stacks reset.
+    func contentSessionChanged() { sessionGeneration += 1 }
 
-    func hubs(in library: PlexLibrary) async throws -> [PlexHub] {
-        let (serverURL, token) = try configuration()
-        return Self.shaped(try await network.getLibraryHubs(
-            serverURL: serverURL,
-            authToken: token,
-            sectionId: library.key
-        ))
-    }
-
-    /// Full metadata: markers, chapters, extras, external guids.
-    func metadata(for item: PlexMetadata) async throws -> PlexMetadata {
-        guard let key = item.ratingKey else { return item }
-        let (serverURL, token) = try configuration()
-        return try await network.getFullMetadata(serverURL: serverURL, authToken: token, ratingKey: key)
-    }
-
-    func children(of item: PlexMetadata) async throws -> [PlexMetadata] {
-        guard let key = item.ratingKey else { return [] }
-        let (serverURL, token) = try configuration()
-        return try await network.getChildren(serverURL: serverURL, authToken: token, ratingKey: key)
-    }
-
-    func search(_ query: String) async throws -> [PlexMetadata] {
-        let (serverURL, token) = try configuration()
-        let results = try await network.search(serverURL: serverURL, authToken: token, query: query, size: 80)
-        // Video results only, one row per item — /search returns every
-        // matching type and can repeat an item across result groups.
-        var seen = Set<String>()
-        return results.filter {
-            ["movie", "show", "season", "episode"].contains($0.type ?? "")
-                && seen.insert($0.id).inserted
-        }
+    /// Called after playback or a watched toggle: repaint open pages, then Home.
+    func watchStateDidChange() async {
+        watchStateRevision += 1
+        await refresh()
     }
 
     // MARK: - Artwork
@@ -226,7 +219,6 @@ final class IOSPlexSession: ObservableObject {
     }
 
     func artworkURL(for item: PlexMetadata, kind: ArtworkKind = .thumb, width: Int = 900, height: Int = 1350) -> URL? {
-        guard let (serverURL, token) = try? configuration() else { return nil }
         let path: String? = switch kind {
         case .poster:
             item.posterPath
@@ -237,7 +229,13 @@ final class IOSPlexSession: ObservableObject {
                 ? (item.grandparentArt ?? item.art ?? item.thumb)
                 : (item.art ?? item.thumb)
         }
-        guard let path else { return nil }
+        return imageURL(path: path, width: width, height: height)
+    }
+
+    /// Photo-transcoder URL at the given pixel size. Also takes absolute
+    /// URLs (cast photos live on metadata-static.plex.tv).
+    func imageURL(path: String?, width: Int, height: Int) -> URL? {
+        guard let path, !path.isEmpty, let (serverURL, token) = try? configuration() else { return nil }
         return network.buildThumbnailURL(
             serverURL: serverURL,
             authToken: token,
@@ -262,17 +260,19 @@ final class IOSPlexSession: ObservableObject {
             sourceKey = item.ratingKey
         }
         guard let sourceKey else { return nil }
+        // Rating keys repeat across servers, so the cache is per server.
+        let cacheKey = "\(serverURL)|\(sourceKey)"
 
-        if let cached = logoURLCache[sourceKey] { return cached }
-        if missingLogoKeys.contains(sourceKey) { return nil }
+        if let cached = logoURLCache[cacheKey] { return cached }
+        if missingLogoKeys.contains(cacheKey) { return nil }
 
         if item.type != "episode", item.type != "season",
            let direct = Self.directResourceURL(serverURL: serverURL, token: token, path: item.clearLogoPath) {
-            logoURLCache[sourceKey] = direct
+            logoURLCache[cacheKey] = direct
             return direct
         }
 
-        if let existing = logoResolutionTasks[sourceKey] {
+        if let existing = logoResolutionTasks[cacheKey] {
             return await existing.value
         }
 
@@ -284,15 +284,40 @@ final class IOSPlexSession: ObservableObject {
             ) else { return nil }
             return Self.directResourceURL(serverURL: serverURL, token: token, path: metadata.clearLogoPath)
         }
-        logoResolutionTasks[sourceKey] = task
+        logoResolutionTasks[cacheKey] = task
         let resolved = await task.value
-        logoResolutionTasks[sourceKey] = nil
+        logoResolutionTasks[cacheKey] = nil
         if let resolved {
-            logoURLCache[sourceKey] = resolved
+            logoURLCache[cacheKey] = resolved
         } else {
-            missingLogoKeys.insert(sourceKey)
+            missingLogoKeys.insert(cacheKey)
         }
         return resolved
+    }
+
+    /// The logo URL if `logoURL(for:)` already resolved it, so a view can draw it on its first frame.
+    func cachedLogoURL(for item: PlexMetadata) -> URL? {
+        guard let serverURL = auth.selectedServerURL,
+              let sourceKey = item.type == "episode" ? item.grandparentRatingKey
+                : item.type == "season" ? (item.parentRatingKey ?? item.ratingKey) : item.ratingKey
+        else { return nil }
+        return logoURLCache["\(serverURL)|\(sourceKey)"]
+    }
+
+    /// Resolves logos and downloads them with the art, in row order, four at a
+    /// time, so cards scrolled into view are already complete. Each `art` must
+    /// be the URL the card itself requests.
+    func prefetchArtwork(_ jobs: [(item: PlexMetadata, art: URL?)]) async {
+        await withTaskGroup(of: Void.self) { group in
+            for (index, job) in jobs.enumerated() {
+                if Task.isCancelled { break }
+                if index >= 4 { await group.next() }
+                group.addTask {
+                    if let logo = await self.logoURL(for: job.item) { _ = await IOSArtworkCache.shared.image(for: logo) }
+                    if let art = job.art { _ = await IOSArtworkCache.shared.image(for: art) }
+                }
+            }
+        }
     }
 
     /// Direct, authenticated URL for transparent assets such as clear logos.
@@ -399,15 +424,21 @@ final class IOSPlexSession: ObservableObject {
     private func clearContent() {
         libraries = []
         shelves = []
+        continueWatching = nil
+        contentError = nil
+        lastContentRefresh = nil
+        PlexWatchlistService.shared.reset()
         availableServers = []
         selectedServerName = nil
+        libraryHubs = [:]
+        libraryHubsSession = nil
         logoURLCache = [:]
         missingLogoKeys = []
         logoResolutionTasks.values.forEach { $0.cancel() }
         logoResolutionTasks = [:]
     }
 
-    private func configuration() throws -> (serverURL: String, token: String) {
+    func configuration() throws -> (serverURL: String, token: String) {
         guard let serverURL = auth.selectedServerURL, let token = auth.selectedServerToken else {
             throw IOSPlexSessionError.notConfigured
         }
@@ -428,11 +459,13 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
 nonisolated enum IOSPlexSessionError: LocalizedError {
     case notConfigured
     case noPlayableURL
+    case watchlistUnavailable
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: "No Plex server is connected."
         case .noPlayableURL: "This item has no playable file."
+        case .watchlistUnavailable: "Couldn't update your Watchlist."
         }
     }
 }

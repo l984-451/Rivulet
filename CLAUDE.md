@@ -51,10 +51,16 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   PlexAuthManager, PlexUserProfileManager), Models/Plex,
 │                       #   TMDB, IntroDBClient, WatchProgressPolicy, IPTV parsers,
 │                       #   Security (attest, keychain), Sentry startup, Secrets,
-│                       #   OpenSourceLicenses. NO #if os(...) — lint-enforced.
-RivuletiOS/             # iOS/iPadOS app (SwiftUI). Plex/ holds ONLY IOSPlexSession
-│                       #   (content store, counterpart of PlexDataStore) and
-│                       #   IOSPlexAdapters (display accessors) — no endpoint code.
+│                       #   OpenSourceLicenses, Plex watchlist, LiveTV/ (the ONE
+│                       #   Live TV stack: LiveTVDataStore, Plex + IPTV providers,
+│                       #   LiveTVSourceConnector, LiveShelves), IPTV/ (parsers,
+│                       #   DispatcharrService). NO #if os(...), lint-enforced.
+RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
+│                       #   navigation contract), Plex/ (IOSPlexSession + its
+│                       #   extensions, IOSPlexAdapters, Home/Library/Detail views;
+│                       #   no endpoint code), Search/, Settings/, LiveTV/ (views
+│                       #   over the shared LiveTVDataStore), Player/ (iOS
+│                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing).
 Rivulet/                # The tvOS app — everything below.
 ├── Models/
 │   ├── Plex/           # (moved to RivuletCore/Models/Plex)
@@ -67,8 +73,7 @@ Rivulet/                # The tvOS app — everything below.
 │   │       ├── ContentFilter/ # Local mute/skip filter (see "Content Filter (VOD)")
 │   │       └── Subtitles/    # CaptionAppearance (system caption settings), SubtitleCue,
 │   │                          #   VTT/SRT/ASS parsers (content-filter only; captions are not app-parsed)
-│   ├── LiveTV/         # PlexLiveTVProvider, IPTVProvider, LiveTVDataStore
-│   ├── IPTV/           # M3UParser, XMLTVParser, DispatcharrService
+│   ├── LiveTV/         # LiveTVSessionHandoff (store + providers live in RivuletCore/LiveTV)
 │   ├── Insights/       # InsightsTriviaClient, InsightsShowIDResolver (in-player cast/trivia panel)
 │   ├── Cache/          # CacheManager, ImageCacheManager
 │   └── Focus/          # FocusMemory (tvOS section focus restoration)
@@ -161,9 +166,13 @@ speculatively. The list above is the destination, not a migration order.
 The Plex stack is already across: `PlexNetworkManager`, `PlexAuthManager`,
 `PlexUserProfileManager`, `Models/Plex/`, the TMDB client, `IntroDBClient`,
 `WatchProgressPolicy`, the attested `URLSession`, and the Sentry startup.
-**There is exactly one Plex client.** `RivuletiOS/Plex/` holds only
-`IOSPlexSession` (the iOS content store, counterpart of `PlexDataStore`) and
-`IOSPlexAdapters` (display accessors). Never add a second decoder for a Plex
+So is the Live TV stack: `LiveTVDataStore`, `PlexLiveTVProvider` + the timeline
+keepalive, `IPTVProvider`, `DispatcharrService`, `LiveTVSourceConnector` (the
+verify-then-add behind both apps' add-source forms) and `LiveShelves` (What's On
+rows). **There is exactly one Plex client.** `RivuletiOS/Plex/` holds
+`IOSPlexSession` (the iOS content store, counterpart of `PlexDataStore`, with its
+`+Account`/`+Content`/`+Playback` extensions), `IOSPlexAdapters` (display
+accessors) and the SwiftUI views; no endpoint code. Never add a second decoder for a Plex
 endpoint to the iOS folder; a bug fixed in the shared client must be the fix
 for both apps.
 
@@ -195,8 +204,11 @@ retroactive conformance.
 `AetherPlayer` is three pieces in two homes. The engine mapping (state and track
 translation, cue conversion, background→foreground reload, mute persistence
 across Aether's internal player swaps) is platform-neutral and belongs in
-`RivuletCore`. The `PlayerProtocol` conformance stays tvOS. iOS gets its own thin
-`ObservableObject` on top. This is not bookkeeping: keeping both classes in one
+`RivuletCore`. The `PlayerProtocol` conformance stays tvOS. iOS has its own
+adapter, `RivuletiOS/Player/AetherPlayer.swift` (the only iOS file that imports
+AetherEngine), driven by `IOSPlaybackController` (PiP, background audio, Now
+Playing). The mapping has not moved to `RivuletCore` yet, so a mapping fix
+currently lands in both adapters. This is not bookkeeping: keeping both classes in one
 file also forced `@preconcurrency import AVFoundation` above the conditional,
 which silently loosened Swift 6 Sendable checking on the *shipping tvOS player*
 for the iOS half's benefit.
@@ -417,6 +429,7 @@ Key components:
 
 #### Live TV
 Two layouts: What's On (`LiveBrowseViewController`, the default) and the Guide (`GuideLayoutView`). Both play through `LiveTVAetherPlayerViewController` on the VOD glass rail. Multiview (`LiveMultiviewViewController`) runs **AetherPlayer** per slot (`MultiStreamViewModel` instantiates `AetherPlayer()`, each tile binds the engine surface), up to 4 concurrent slots. HDHomeRun delivers a direct stream; DVB tuners require a Plex transcode URL with full client-profile parameters (see Plex Live TV section below).
+iOS reads the same `LiveTVDataStore` and saved sources and adds sources through the same `LiveTVSourceConnector`. Dispatcharr API keys live in the Keychain (`liveTVSourceToken_<sourceId>`); the saved source JSON keeps one only if the Keychain write fails, and older plain-text keys are migrated on load.
 
 ### Content Filter (VOD)
 
@@ -568,7 +581,7 @@ engine-fix paragraph crowds out the app's own notes.
 
 ### Adding Settings
 
-Settings is **UIKit**. A page is a list of `SettingsRow` values built in
+Settings is **UIKit** on tvOS (the iOS app's settings are a SwiftUI Form in the Account sheet, `RivuletiOS/Settings/`). A page is a list of `SettingsRow` values built in
 `Views/Settings/UIKit/SettingsPageModels.swift`; `SettingsPageViewController`
 renders each one through `SettingsCell`. Add a row by adding a case to the
 relevant page's builder, picking a `SettingsRow.Kind`:

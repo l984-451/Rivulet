@@ -3,324 +3,246 @@
 
 import SwiftUI
 
+/// Live TV tab root: What's On or the Guide, over every configured source.
+/// The root supplies the NavigationStack.
 struct IOSLiveTVView: View {
-    @StateObject private var store = IOSLiveTVStore()
-    @State private var showingSourceEditor = false
-    @State private var selectedGroup: String?
-    @State private var snapToNowToken = 0
-    let showSettings: () -> Void
+    @ObservedObject private var store = LiveTVDataStore.shared
+    @EnvironmentObject private var playback: IOSPlaybackController
+    @StateObject private var recorder = IOSLiveRecorder()
+    @AppStorage(IOSLiveLayout.storageKey) private var layoutRaw = IOSLiveLayout.browse.rawValue
+    @AppStorage("iosLiveTVGuideFilter") private var guideFilter = ""
+    @State private var selection: IOSLiveProgrammeSelection?
+    @State private var pendingPlay: UnifiedChannel?
+    @State private var showingAddSource = false
+    @State private var jumpToken = 0
+    @State private var dismissedIssues = ""
 
-    init(showSettings: @escaping () -> Void = {}) {
-        self.showSettings = showSettings
-    }
+    private static let favoritesFilter = "Favorites"
 
-    private var visibleChannels: [IOSIPTVChannel] {
-        guard let selectedGroup else { return store.channels }
-        return store.channels.filter { $0.groupTitle == selectedGroup }
-    }
+    private var layout: IOSLiveLayout { IOSLiveLayout(rawValue: layoutRaw) ?? .browse }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                IOSGuideDefaultBackdrop()
-
-                VStack(spacing: 0) {
-                    liveTVHeader
-
-                    Group {
-                        if !store.channels.isEmpty {
-                            guideContent
-                        } else {
-                            emptyContent
-                        }
-                    }
-                }
+        content
+            .navigationTitle("Live TV")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar { toolbar }
+            .navigationDestination(for: IOSLiveRoute.self) { _ in IOSLiveRecordingsView() }
+            .sheet(item: $selection, onDismiss: playPending) { selection in
+                IOSLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingSourceEditor) {
-                IOSLiveTVSourceView(store: store)
+            .sheet(isPresented: $showingAddSource) { IOSLiveAddSourceSheet() }
+            .liveRecorder(recorder)
+            .environmentObject(recorder)
+            .task(id: store.hasConfiguredSources) {
+                guard store.hasConfiguredSources else { return }
+                await store.elevatePreloadPriority()
+                await store.refreshIfStale()
+                await store.refreshScheduledRecordings()
             }
-            .task {
-                await store.loadSavedSourceIfNeeded()
-            }
-        }
-        .preferredColorScheme(.dark)
     }
 
-    private var liveTVHeader: some View {
-        HStack(spacing: 10) {
-            if !store.channels.isEmpty {
-                groupMenu
-                    .frame(width: 42, height: 42)
-                    .background(.thinMaterial, in: Circle())
-            }
-
-            Text("Live TV")
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 4) {
-                if !store.channels.isEmpty {
-                    Button("Jump to now", systemImage: "clock.arrow.circlepath") {
-                        snapToNowToken += 1
-                    }
-                    .labelStyle(.iconOnly)
-                    .frame(width: 42, height: 42)
-
-                    Button("Refresh", systemImage: "arrow.clockwise") {
-                        Task { await store.load() }
-                    }
-                    .disabled(store.state == .loading)
-                    .labelStyle(.iconOnly)
-                    .frame(width: 42, height: 42)
-                }
-
-                Button("Source", systemImage: "link") {
-                    showingSourceEditor = true
-                }
-                .labelStyle(.iconOnly)
-                .frame(width: 42, height: 42)
-
-                IOSAccountMenu(showSettings: showSettings)
-                    .frame(width: 42, height: 42)
-            }
-            .background(.thinMaterial, in: Capsule())
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity)
-    }
-
-    private var groupMenu: some View {
-        Menu {
-            Button {
-                selectedGroup = nil
-            } label: {
-                if selectedGroup == nil {
-                    Label("All channels", systemImage: "checkmark")
-                } else {
-                    Text("All channels")
-                }
-            }
-
-            ForEach(store.groups, id: \.self) { group in
-                Button {
-                    selectedGroup = group
-                } label: {
-                    if selectedGroup == group {
-                        Label(group, systemImage: "checkmark")
-                    } else {
-                        Text(group)
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.title3)
-                .frame(width: 42, height: 42)
-        }
-        .accessibilityLabel(selectedGroup ?? "All channels")
-    }
-
-    private var guideContent: some View {
-        VStack(spacing: 0) {
-            if case .failed(let message) = store.state {
-                IOSGuideBanner(message: message)
-            }
-
-            IOSGuideView(
-                channels: visibleChannels,
-                programsByChannel: store.programsByChannel,
-                snapToken: snapToNowToken
-            )
-        }
-        .overlay {
-            if store.state == .loading {
-                ZStack {
-                    Color.black.opacity(0.24)
-                    ProgressView("Refreshing guide…")
-                        .padding(22)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                }
-                .ignoresSafeArea()
-            }
-        }
-    }
+    // MARK: States
 
     @ViewBuilder
-    private var emptyContent: some View {
-        switch store.state {
-        case .loading:
-            ProgressView("Loading playlist and guide…")
-        case .failed(let message):
+    private var content: some View {
+        if !store.hasConfiguredSources {
             ContentUnavailableView {
-                Label("Guide unavailable", systemImage: "exclamationmark.triangle")
+                Label("Add a Live TV Source", systemImage: "play.tv")
             } description: {
-                Text(message)
+                Text("Connect Plex Live TV, Dispatcharr, or a playlist from your provider.")
             } actions: {
-                Button("Edit source") { showingSourceEditor = true }
-                if store.hasSavedSource {
-                    Button("Try again") { Task { await store.load() } }
-                }
+                Button("Add Source") { showingAddSource = true }
+                    .buttonStyle(.glassProminent)
             }
-        case .idle, .loaded:
-            ContentUnavailableView {
-                Label("Add your Live TV source", systemImage: "list.bullet.rectangle")
-            } description: {
-                Text("Enter an M3U playlist URL and its XMLTV guide URL to load the iOS EPG.")
-            } actions: {
-                Button("Configure source") { showingSourceEditor = true }
-                    .buttonStyle(.borderedProminent)
+        } else if store.channels.isEmpty {
+            ScrollView {
+                Group {
+                    if store.isLoadingChannels {
+                        ProgressView()
+                    } else {
+                        ContentUnavailableView {
+                            Label("No Channels", systemImage: "antenna.radiowaves.left.and.right.slash")
+                        } description: {
+                            Text(store.channelsError ?? "Your Live TV sources returned no channels.")
+                        } actions: {
+                            Button("Try Again") { Task { await store.refreshChannels() } }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+                .containerRelativeFrame([.horizontal, .vertical])
+            }
+            .refreshable { await reloadEverything() }
+        } else {
+            switch layout {
+            case .browse:
+                IOSLiveWhatsOnView(onWatch: play, onDetails: { selection = $0 }) { banner }
+                    .refreshable { await reloadEverything() }
+                    .safeAreaBar(edge: .top) { layoutPicker }
+            case .guide:
+                VStack(spacing: 0) {
+                    banner
+                    guide
+                }
+                .safeAreaBar(edge: .top) { layoutPicker }
             }
         }
     }
 
-}
-
-private struct IOSGuideBanner: View {
-    let message: String
-
-    var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.white)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.orange)
-    }
-}
-
-private struct IOSLiveTVSourceView: View {
-    @ObservedObject var store: IOSLiveTVStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var m3uURL: String
-    @State private var xmltvURL: String
-    @State private var userAgent: String
-    @State private var authorizationHeader: String
-    @State private var referer: String
-
-    init(store: IOSLiveTVStore) {
-        self.store = store
-        _m3uURL = State(initialValue: store.m3uURLString)
-        _xmltvURL = State(initialValue: store.xmltvURLString)
-        _userAgent = State(initialValue: store.userAgentString)
-        _authorizationHeader = State(initialValue: store.authorizationHeaderString)
-        _referer = State(initialValue: store.refererString)
+    private var layoutPicker: some View {
+        Picker("Layout", selection: $layoutRaw) {
+            ForEach(IOSLiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 360)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
     }
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("https://example.com/playlist.m3u", text: $m3uURL, axis: .vertical)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .lineLimit(2...4)
-                } header: {
-                    Text("M3U playlist URL")
-                } footer: {
-                    Text("The playlist supplies channel names, groups, IDs, and stream URLs.")
+    // MARK: Guide
+
+    private var guide: some View {
+        IOSLiveGuideView(
+            channels: guideChannels,
+            epg: store.epg,
+            loadedThrough: store.epgLoadedThrough,
+            recordingIds: store.recordingProgramIds(in: store.epg),
+            jumpToken: jumpToken,
+            actions: IOSLiveGuideView.Actions(
+                play: play,
+                details: { selection = $0 },
+                menu: { channel, program in
+                    IOSLiveMenu.uiMenu(IOSLiveMenu.sections(
+                        channel: channel, program: program, recorder: recorder,
+                        watch: play, details: { selection = $0 }
+                    ))
+                },
+                needsMoreGuide: {
+                    guard !store.isExtendingEPG else { return }
+                    Task { await store.extendEPG(byHours: 6) }
                 }
+            )
+        )
+        .ignoresSafeArea(edges: .bottom)
+    }
 
-                Section {
-                    TextField("https://example.com/guide.xml", text: $xmltvURL, axis: .vertical)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .lineLimit(2...4)
-                } header: {
-                    Text("XMLTV guide URL")
-                } footer: {
-                    Text("Guide channels are matched by tvg-id first, then by channel name.")
+    private var groups: [String] {
+        Set(store.channels.compactMap { $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .filter { !$0.isEmpty }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// The filtered lineup. A filter whose channels vanished falls back to all.
+    private var guideChannels: [UnifiedChannel] {
+        if guideFilter == Self.favoritesFilter {
+            let favorites = store.favorites(in: store.channels)
+            return favorites.isEmpty ? store.channels : favorites
+        }
+        guard !guideFilter.isEmpty else { return store.channels }
+        let matching = store.channels.filter {
+            $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) == guideFilter
+        }
+        return matching.isEmpty ? store.channels : matching
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if store.hasConfiguredSources, !store.channels.isEmpty, layout == .guide {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { jumpToken += 1 } label: { Text("Now") }
+                    .accessibilityLabel("Jump to Now")
+            }
+            ToolbarItem(placement: .topBarTrailing) { filterMenu }
+        }
+        if store.hasRecordingSources {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink(value: IOSLiveRoute.recordings) {
+                    Label("Recordings", systemImage: "recordingtape")
                 }
+            }
+        }
+        IOSAccountToolbarItem()
+    }
 
-                Section {
-                    LabeledContent("User-Agent") {
-                        TextField(LiveTVClientIdentity.userAgent, text: $userAgent)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                    LabeledContent("Authorization") {
-                        SecureField("Optional", text: $authorizationHeader)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                    LabeledContent("Referer") {
-                        TextField("Optional", text: $referer)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.URL)
-                            .autocorrectionDisabled()
-                    }
-                } header: {
-                    Text("HTTP headers (optional)")
-                } footer: {
-                    Text("A bare Authorization value is treated as a Dispatcharr API token; otherwise enter the complete Bearer, Basic, or Token value. Blank User-Agent uses \(LiveTVClientIdentity.userAgent). Authorization is only forwarded to same-host streams; User-Agent and Referer apply to all requests.")
+    private var filterMenu: some View {
+        let hasFavorites = !store.favorites(in: store.channels).isEmpty
+        let active = guideChannels.count != store.channels.count || guideFilter == Self.favoritesFilter
+        return Menu {
+            Picker("Channels", selection: $guideFilter) {
+                Text("All Channels").tag("")
+                if hasFavorites {
+                    Label("Favorites", systemImage: "star").tag(Self.favoritesFilter)
                 }
+                ForEach(groups, id: \.self) { Text($0).tag($0) }
+            }
+        } label: {
+            // The toolbar glass is the circle; an active filter tints the glyph.
+            Label("Filter", systemImage: "line.3.horizontal.decrease")
+        }
+        .tint(active ? .accentColor : nil)
+    }
 
-                if case .failed(let message) = store.state {
-                    Section {
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                    }
-                }
+    // MARK: Banner
 
-                Section {
-                    Button {
-                        Task {
-                            let loaded = await store.configureAndLoad(
-                                m3uURL: m3uURL,
-                                xmltvURL: xmltvURL,
-                                userAgent: userAgent,
-                                authorizationHeader: authorizationHeader,
-                                referer: referer
-                            )
-                            if loaded { dismiss() }
-                        }
-                    } label: {
-                        HStack {
-                            Text("Load guide")
-                            Spacer()
-                            if store.state == .loading {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(store.state == .loading || m3uURL.isEmpty || xmltvURL.isEmpty)
-
-                    if store.hasSavedSource {
-                        Button("Remove source", role: .destructive) {
-                            store.clearSource()
-                            dismiss()
-                        }
+    /// "Guide data unavailable" with each source's reason, like tvOS. Dismissed per message.
+    @ViewBuilder
+    private var banner: some View {
+        let lines = issueLines
+        let key = lines.joined(separator: "\n")
+        if !lines.isEmpty, key != dismissedIssues {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(store.epgIssues.isEmpty ? "Some channels didn't load" : "Guide data unavailable")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(lines, id: \.self) { line in
+                        Text(line).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-
-                Section {
-                    Text("URLs and optional headers are saved on this device. They may contain credentials, so avoid sharing screenshots of this screen.")
-                        .font(.footnote)
+                Spacer(minLength: 0)
+                Button {
+                    withAnimation { dismissedIssues = key }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
                 }
+                .accessibilityLabel("Dismiss")
             }
-            .navigationTitle("Live TV source")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+            .padding(12)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
         }
     }
-}
 
-#Preview {
-    IOSLiveTVView()
+    private var issueLines: [String] {
+        let epg = store.epgIssues.map { "\($0.sourceName): \($0.reason)" }
+        let channels = store.channelsError.map { $0.components(separatedBy: "\n") } ?? []
+        return channels + epg
+    }
+
+    // MARK: Actions
+
+    private func play(_ channel: UnifiedChannel) {
+        playback.playLive(channel)
+    }
+
+    private func playPending() {
+        guard let channel = pendingPlay else { return }
+        pendingPlay = nil
+        play(channel)
+    }
+
+    private func reloadEverything() async {
+        await store.refreshChannels()
+        await store.loadEPG(startDate: Date(), hours: LiveTVDataStore.refreshWindowHours)
+        await store.refreshScheduledRecordings()
+    }
 }

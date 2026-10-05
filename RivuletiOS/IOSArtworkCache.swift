@@ -4,18 +4,25 @@
 import Foundation
 import UIKit
 
-/// Lightweight memory cache for iOS hero and guide artwork. Plex's transcode
-/// URLs already include their requested dimensions, so URL identity is also
-/// the decode-size identity and one cache can safely serve every surface.
+/// Memory cache for every piece of iOS artwork. Plex's transcode URLs carry
+/// their requested size, so URL identity is also decode-size identity.
 actor IOSArtworkCache {
     static let shared = IOSArtworkCache()
 
-    private let images = NSCache<NSURL, UIImage>()
+    /// NSCache is thread-safe; read synchronously so a recreated tile shows
+    /// its art on the first frame instead of flashing a placeholder.
+    nonisolated(unsafe) private let images = NSCache<NSURL, UIImage>()
     private var downloads: [URL: Task<UIImage?, Never>] = [:]
+    /// Trusts the self-signed certificates a raw-IP or plex.direct server presents, as the API client does.
+    private static let session = URLSession(configuration: .default, delegate: PlexCertificateDelegate(), delegateQueue: nil)
 
     private init() {
-        images.countLimit = 48
-        images.totalCostLimit = 96 * 1024 * 1024
+        images.countLimit = 400
+        images.totalCostLimit = 160 * 1024 * 1024
+    }
+
+    nonisolated func cachedImage(for url: URL) -> UIImage? {
+        images.object(forKey: url as NSURL)
     }
 
     func image(for url: URL) async -> UIImage? {
@@ -23,11 +30,13 @@ actor IOSArtworkCache {
         if let existing = downloads[url] { return await existing.value }
 
         let task = Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let (data, response) = try? await URLSession.shared.data(from: url),
+            guard let (data, response) = try? await Self.session.data(from: url),
                   ((response as? HTTPURLResponse)?.statusCode ?? 200) < 400 else {
                 return nil
             }
-            return UIImage(data: data)
+            // Decode here, off the main thread, instead of at first draw.
+            let image = UIImage(data: data)
+            return image?.preparingForDisplay() ?? image
         }
         downloads[url] = task
         let image = await task.value

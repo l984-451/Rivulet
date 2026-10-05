@@ -10,11 +10,11 @@
 //  conforms to PlayerProtocol and is driven by the UIKit focus chrome, this one
 //  is a plain ObservableObject read by SwiftUI. Two files rather than one
 //  because shared code carries no platform conditionals (see CLAUDE.md,
-//  Platform Boundary) -- and because keeping them together forced
-//  `@preconcurrency import AVFoundation` onto the shipping tvOS build.
+//  Platform Boundary). This is the only iOS file that names engine types.
 //
 
 @preconcurrency import AVFoundation
+import AVKit
 import Combine
 import CoreMedia
 import Foundation
@@ -22,9 +22,6 @@ import SwiftUI
 import UIKit
 import AetherEngine
 
-/// Lightweight iOS host for AetherEngine. The tvOS implementation below also
-/// conforms to Rivulet's full player protocol; iOS uses this touch-first host
-/// for both Live TV and Plex VOD.
 @MainActor
 final class AetherPlayer: ObservableObject {
     enum State: Equatable {
@@ -89,12 +86,36 @@ final class AetherPlayer: ObservableObject {
         let placement: TextPlacement?
     }
 
+    /// A sidecar subtitle file registered at load (Plex external streams).
+    struct SidecarSubtitle {
+        let url: URL
+        let name: String?
+        let language: String?
+        let isForced: Bool
+        let isHearingImpaired: Bool
+        let isDefault: Bool
+        /// "srt", "ass", "vtt": Plex stream keys carry no extension.
+        let formatHint: String?
+    }
+
+    /// The live rewind window on the session axis, the one `seekLive` takes.
+    /// Never `sourceTime`: on the software live path that axis is offset.
+    struct LiveWindow: Equatable {
+        var seekableRange: ClosedRange<Double>?
+        var edgeTime: Double
+        var playhead: Double
+        var isAtLiveEdge: Bool
+
+        static let idle = LiveWindow(seekableRange: nil, edgeTime: 0, playhead: 0, isAtLiveEdge: true)
+    }
+
     private static let nativeAudioTrackIDBase = 300_000
 
     private let engine: AetherEngine
     private var cancellables = Set<AnyCancellable>()
     private var nativeItemObservation: AnyCancellable?
     private var nativeVideoSizeObservation: AnyCancellable?
+    private var timeControlObservation: AnyCancellable?
     private weak var nativeMediaItem: AVPlayerItem?
     private var nativeAudioGroup: AVMediaSelectionGroup?
     private var nativeAudioOptions: [AVMediaSelectionOption] = []
@@ -102,6 +123,7 @@ final class AetherPlayer: ObservableObject {
     private var nativeLegibleBridge: NativeLegibleBridge?
     private var nativeLegibleClearWorkItem: DispatchWorkItem?
     private var lastNativeLegibleLines: [NativeStyledLine] = []
+    private let softwarePiPBridge = SoftwarePiPBridge()
 
     @Published private(set) var state: State = .idle
     @Published private(set) var isBuffering = false
@@ -111,8 +133,43 @@ final class AetherPlayer: ObservableObject {
     @Published private(set) var currentSubtitleTrackId: Int?
     @Published private(set) var subtitleCues: [SubtitleCue] = []
     @Published private(set) var nativeSubtitleCues: [SubtitleCue] = []
+    /// Media timeline position (VOD scrubber, markers, Plex reports).
+    @Published private(set) var currentTime: Double = 0
+    /// Cue axis: holds the on-screen frame through a seek; captions only.
     @Published private(set) var sourceTime: Double = 0
+    @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var videoSize: CGSize = .zero
+    @Published private(set) var isLive = false
+    @Published private(set) var liveWindow: LiveWindow = .idle
+    /// Where an in-flight seek is headed, so repeated skips stack and the
+    /// scrubber does not snap back while the engine lands.
+    @Published private(set) var pendingSeekTarget: Double?
+    /// A VOD load whose clock has not moved yet; the start position stands in as the pending target.
+    @Published private(set) var isStarting = false
+    @Published private(set) var rate: Float = 1
+    @Published private(set) var isMuted = false
+    @Published private(set) var canRetry = true
+    @Published var fillsScreen = false {
+        didSet { engine.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect }
+    }
+    /// What an AVPictureInPictureController presents for the current session.
+    @Published private(set) var pictureInPictureSource: AVPictureInPictureController.ContentSource?
+
+    /// Whether the USER wants playback running. Not derived from engine state,
+    /// which flips to paused on a background teardown (tvOS AetherPlayer).
+    private var userIntendsToPlay = false
+    private var isBackgrounded = false
+    /// When the engine's background teardown released the pipeline; non-nil
+    /// means the session needs a rebuild before it can play again.
+    private var tornDownAt: Date?
+    private var foregroundReloadTask: Task<Void, Never>?
+    private var lastLoad: LoadRequest?
+
+    private enum LoadRequest {
+        case vod(url: URL, headers: [String: String], subtitles: [SidecarSubtitle])
+        case live(url: URL, headers: [String: String], forceEngineDemux: Bool)
+    }
+
     /// AVPlayerLayer does not paint remote HLS WebVTT captions when the host
     /// supplies its own controls, so forward native legible output to SwiftUI.
     private final class NativeLegibleBridge: NSObject, AVPlayerItemLegibleOutputPushDelegate {
@@ -138,19 +195,45 @@ final class AetherPlayer: ObservableObject {
         } catch {
             fatalError("Unable to create AetherEngine: \(error)")
         }
+        // The app owns the session on iOS, so the engine releases it off-main
+        // on final teardown (no host-side setActive(false) racing the stop).
+        engine.deactivatesAudioSessionOnStop = true
+        softwarePiPBridge.player = self
+        wirePublishers()
+        observeAppLifecycle()
+    }
 
+    private func wirePublishers() {
         engine.$state
+            // errorInfo is assigned right before state, so read it on this turn.
+            .map { [engine] state in (state, engine.errorInfo) }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                self?.state = Self.translate(state)
+            .sink { [weak self] state, errorInfo in
+                guard let self else { return }
+                self.state = Self.translate(state, errorInfo: errorInfo)
+                if case .error = state { self.canRetry = errorInfo?.kind != .dolbyVisionRequiresHardware }
+                self.recomputeBuffering()
+                self.softwarePiPBridge.update(isPaused: state != .playing)
             }
             .store(in: &cancellables)
 
         engine.$isBuffering
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] buffering in
-                self?.isBuffering = buffering
+            .sink { [weak self] _ in self?.recomputeBuffering() }
+            .store(in: &cancellables)
+
+        engine.$duration
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                if let source = self.engine.softwarePiPSource { self.softwarePiPBridge.update(timeRange: source.timeRange()) }
+                self.duration = $0
             }
+            .store(in: &cancellables)
+
+        engine.$isLive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.isLive = $0 }
             .store(in: &cancellables)
 
         engine.$audioTracks
@@ -186,14 +269,32 @@ final class AetherPlayer: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: &$currentSubtitleTrackId)
 
-        engine.clock.$sourceTime
+        engine.clock.$currentTime
             .receive(on: DispatchQueue.main)
-            .assign(to: &$sourceTime)
+            .sink { [weak self] time in self?.clockTicked(time) }
+            .store(in: &cancellables)
+
+        engine.clock.$sourceTime
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.sourceTime = $0 }
+            .store(in: &cancellables)
+
+        engine.seekEvents
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                guard let self, event.isTerminal, let pending = self.pendingSeekTarget,
+                      abs(pending - event.target) < 0.5 else { return }
+                self.pendingSeekTarget = nil
+            }
+            .store(in: &cancellables)
 
         engine.$subtitleCues
             .receive(on: DispatchQueue.main)
             .sink { [weak self] cues in
-                self?.subtitleCues = cues.map { cue in
+                guard let self else { return }
+                // The engine's cue type cannot be named here (module and class share a name).
+                self.subtitleCues = cues.map { cue in
                     let body: SubtitleCue.Body
                     switch cue.body {
                     case .text(let text):
@@ -203,12 +304,8 @@ final class AetherPlayer: ObservableObject {
                             SubtitleCue.StyledRun(
                                 text: $0.text,
                                 color: $0.color.map {
-                                    UIColor(
-                                        red: CGFloat($0.r) / 255,
-                                        green: CGFloat($0.g) / 255,
-                                        blue: CGFloat($0.b) / 255,
-                                        alpha: 1
-                                    )
+                                    UIColor(red: CGFloat($0.r) / 255, green: CGFloat($0.g) / 255,
+                                            blue: CGFloat($0.b) / 255, alpha: 1)
                                 },
                                 isBold: $0.isBold,
                                 isItalic: $0.isItalic,
@@ -226,12 +323,7 @@ final class AetherPlayer: ObservableObject {
                         startTime: cue.startTime,
                         endTime: cue.endTime,
                         body: body,
-                        placement: cue.placement.map {
-                            SubtitleCue.TextPlacement(
-                                alignment: $0.alignment,
-                                position: $0.position
-                            )
-                        }
+                        placement: cue.placement.map { SubtitleCue.TextPlacement(alignment: $0.alignment, position: $0.position) }
                     )
                 }
             }
@@ -242,6 +334,8 @@ final class AetherPlayer: ObservableObject {
             .sink { [weak self] avPlayer in
                 guard let self else { return }
                 self.nativeItemObservation = nil
+                self.observeTimeControlStatus(of: avPlayer)
+                self.refreshPictureInPictureSource()
                 guard let avPlayer else {
                     self.observeVideoSize(of: nil)
                     self.clearNativeMediaSelection()
@@ -255,112 +349,307 @@ final class AetherPlayer: ObservableObject {
                     }
             }
             .store(in: &cancellables)
+
+        engine.$softwarePiPSource
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshPictureInPictureSource() }
+            .store(in: &cancellables)
+
+        // The software path's picture size under its pixel aspect ratio
+        // (anamorphic SD broadcast); nil on the native path.
+        engine.$softwareDisplaySize
+            .compactMap { $0 }
+            .filter { $0.width > 0 && $0.height > 0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.videoSize = $0 }
+            .store(in: &cancellables)
+
+        engine.$playbackBackend
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] backend in
+                // A teardown parks the session paused; a load passes through .loading.
+                guard let self, backend == .none, self.isBackgrounded, self.lastLoad != nil,
+                      self.engine.state == .paused else { return }
+                self.tornDownAt = Date()
+            }
+            .store(in: &cancellables)
     }
 
-    func loadLive(url: URL, headers: [String: String]? = nil) async throws {
-        state = .loading
-        let isHLS = url.pathExtension.lowercased() == "m3u8"
-            || url.absoluteString.lowercased().contains("format=hls")
-        let options = LoadOptions(
-            suppressDisplayCriteria: false,
-            httpHeaders: headers ?? [:],
-            matchContentEnabled: true,
-            panelIsInHDRMode: false,
-            audioBridgeMode: .lossless,
-            isLive: true,
-            dvrWindowSeconds: 1800,
-            nativeRemoteHLS: isHLS,
-            preserveASSMarkup: true,
-            probesize: 5 * 1024 * 1024,
-            maxAnalyzeDuration: 5_000_000,
-            preferredAudioLanguages: [],
-            preferredSubtitleLanguages: [],
-            teletextPage: Locale.current.region?.identifier == "AU" ? 801 : nil,
-            // Broadcast MPEG-TS frequently carries interlaced H.264 without
-            // reliable stream metadata. Match the tvOS live path so Aether's
-            // software route can deinterlace it before display. Per session:
-            // the engine's test switch this used to flip is process-wide.
-            preferredDecodePath: isHLS ? .automatic : .software
-        )
+    private func clockTicked(_ time: Double) {
+        currentTime = time
+        if isStarting, time > 0 {
+            isStarting = false
+            pendingSeekTarget = nil
+        }
+        if isLive {
+            let clock = engine.clock
+            let window = LiveWindow(
+                seekableRange: clock.seekableLiveRange,
+                edgeTime: clock.liveEdgeTime,
+                playhead: time,
+                isAtLiveEdge: clock.isAtLiveEdge
+            )
+            if window != liveWindow { liveWindow = window }
+        }
+        if let source = engine.softwarePiPSource {
+            softwarePiPBridge.update(timeRange: source.timeRange())
+        }
+    }
+
+    // MARK: - Loading
+
+    /// Live TV. HLS goes to AVPlayer natively; everything else (raw MPEG-TS)
+    /// through the engine's demux. `forceEngineDemux` is for Plex
+    /// `/livetv/sessions/` grants, whose broadcast mp2 and teletext AVPlayer
+    /// cannot decode (tvOS AetherPlayer.loadLive).
+    func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
+        lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
+        try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
+    }
+
+    private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool) async throws {
+        beginLoad()
+        let isNativeHLS = Self.isHLSURL(url) && !forceEngineDemux
+        // Forced onto the engine demuxer AND a playlist: the Plex direct-play grant.
+        let usesHLSIngest = !isNativeHLS && Self.isHLSURL(url)
+        // A wireless receiver buffers ~2 s before it sounds; mount paused and
+        // let the route catch up instead of playing silent picture (#319).
+        let joinsWirelessAudio = Self.isWirelessAudioRoute()
+
+        func makeOptions(nativeRemoteHLS: Bool) -> LoadOptions {
+            var options = LoadOptions(
+                suppressDisplayCriteria: false,
+                httpHeaders: headers,
+                matchContentEnabled: true,
+                panelIsInHDRMode: false,
+                audioBridgeMode: .lossless,
+                isLive: true,
+                dvrWindowSeconds: 1800,
+                nativeRemoteHLS: nativeRemoteHLS,
+                // No libass on iOS: ASS arrives as clean text instead of raw event lines.
+                preserveASSMarkup: false,
+                probesize: 5 * 1024 * 1024,
+                maxAnalyzeDuration: 5_000_000,
+                preferredAudioLanguages: [],
+                preferredSubtitleLanguages: [],
+                teletextPage: Self.regionTeletextPage(),
+                // Software only where the source says it is interlaced; the
+                // engine's own SPS check catches mis-signalled H.264 (#150).
+                preferredDecodePath: (!nativeRemoteHLS && Self.needsDeinterlacing(url)) ? .software : .automatic
+            )
+            if joinsWirelessAudio {
+                options.liveJoinStartsImmediately = false
+                options.autoplay = false
+            }
+            return options
+        }
 
         do {
-            try await engine.load(url: url, startPosition: nil, options: options)
-
-            // The software backend has no AVPlayerItem, so presentationSize
-            // can never populate `videoSize` for raw broadcast streams. Use
-            // Aether's probed dimensions to keep subtitle placement relative
-            // to the aspect-fitted picture rather than the full device bounds.
-            let sourceSize = CGSize(
-                width: Int(engine.sourceVideoWidth),
-                height: Int(engine.sourceVideoHeight)
-            )
-            if sourceSize.width > 0, sourceSize.height > 0 {
-                videoSize = sourceSize
+            if usesHLSIngest {
+                // LoadOptions.httpHeaders never reaches a custom reader (AE#119).
+                let reader = HLSLiveIngestReader(playlistURL: url, httpHeaders: headers)
+                do {
+                    try await engine.load(source: .custom(reader, formatHint: "mpegts"), options: makeOptions(nativeRemoteHLS: false))
+                } catch {
+                    // Encrypted or fMP4 playlist: retry natively on the same grant.
+                    guard reader.terminalError != nil, !Self.isCancellation(error) else { throw error }
+                    try await engine.load(url: url, startPosition: nil, options: makeOptions(nativeRemoteHLS: true))
+                }
+            } else {
+                try await engine.load(url: url, startPosition: nil, options: makeOptions(nativeRemoteHLS: isNativeHLS))
             }
+            if joinsWirelessAudio {
+                if engine.videoRoute == .software {
+                    try? await Task.sleep(for: .seconds(Self.wirelessAudioPrimeSeconds()))
+                }
+                if userIntendsToPlay { engine.play() }
+            }
+            seedVideoSize()
         } catch {
-            if !(error is CancellationError) {
-                state = .failed(error.localizedDescription)
-            }
+            failLoad(error)
             throw error
         }
     }
 
-    /// Load Plex video-on-demand through the same AetherEngine instance used
-    /// by Live TV. Aether chooses its native or software backend from the
-    /// container/codecs, preserving the tvOS player's playback architecture.
+    /// Plex video on demand. Sidecars are registered at load so they appear
+    /// as ordinary subtitle tracks.
     func load(
         url: URL,
         headers: [String: String]? = nil,
-        startTime: TimeInterval? = nil
+        startTime: TimeInterval? = nil,
+        externalSubtitles: [SidecarSubtitle] = []
     ) async throws {
-        state = .loading
-        let isHLS = url.pathExtension.lowercased() == "m3u8"
-            || url.absoluteString.lowercased().contains("start.m3u8")
+        lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles)
+        try await performVODLoad(url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles)
+    }
+
+    private func performVODLoad(
+        url: URL,
+        headers: [String: String],
+        startTime: TimeInterval?,
+        subtitles: [SidecarSubtitle]
+    ) async throws {
+        beginLoad()
+        pendingSeekTarget = startTime
+        isStarting = true
         let options = LoadOptions(
             suppressDisplayCriteria: false,
-            httpHeaders: headers ?? [:],
+            httpHeaders: headers,
             matchContentEnabled: true,
             panelIsInHDRMode: false,
             audioBridgeMode: .lossless,
             isLive: false,
             dvrWindowSeconds: 0,
-            nativeRemoteHLS: isHLS,
-            preserveASSMarkup: true,
+            nativeRemoteHLS: Self.isHLSURL(url),
+            preserveASSMarkup: false,
             probesize: 8 * 1024 * 1024,
             maxAnalyzeDuration: 8_000_000,
             preferredAudioLanguages: [],
             preferredSubtitleLanguages: [],
-            teletextPage: nil
+            externalSubtitles: subtitles.map {
+                ExternalSubtitleTrack(
+                    url: $0.url,
+                    name: $0.name,
+                    language: $0.language,
+                    isForced: $0.isForced,
+                    isHearingImpaired: $0.isHearingImpaired,
+                    isDefault: $0.isDefault,
+                    httpHeaders: nil,
+                    formatHint: $0.formatHint
+                )
+            },
+            teletextPage: Self.regionTeletextPage()
         )
 
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
-            let sourceSize = CGSize(
-                width: Int(engine.sourceVideoWidth),
-                height: Int(engine.sourceVideoHeight)
-            )
-            if sourceSize.width > 0, sourceSize.height > 0 {
-                videoSize = sourceSize
-            }
+            seedVideoSize()
         } catch {
-            if !(error is CancellationError) {
-                state = .failed(error.localizedDescription)
-            }
+            failLoad(error)
             throw error
         }
     }
 
+    /// Reloads the last source: VOD at the last position, live at the edge.
+    func retry() async {
+        guard let lastLoad else { return }
+        let position = currentTime
+        switch lastLoad {
+        case .vod(let url, let headers, let subtitles):
+            try? await performVODLoad(url: url, headers: headers, startTime: position > 1 ? position : nil, subtitles: subtitles)
+        case .live(let url, let headers, let forceEngineDemux):
+            try? await performLiveLoad(url: url, headers: headers, forceEngineDemux: forceEngineDemux)
+        }
+    }
+
+    private func beginLoad() {
+        state = .loading
+        canRetry = true
+        videoSize = .zero
+        pendingSeekTarget = nil
+        isStarting = false
+        liveWindow = .idle
+        // The engine forgets the speed when the source changes.
+        rate = 1
+        userIntendsToPlay = true
+        tornDownAt = nil
+        // Audio session activation is an XPC round trip; keep it off main.
+        Task.detached(priority: .userInitiated) {
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
+    }
+
+    private func failLoad(_ error: Error) {
+        guard !Self.isCancellation(error) else { return }
+        isStarting = false
+        canRetry = engine.errorInfo?.kind != .dolbyVisionRequiresHardware
+        state = .failed(Self.userFacingFailure(engine.errorInfo))
+    }
+
+    /// The engine's coded dimensions until the item reports its own size.
+    private func seedVideoSize() {
+        guard videoSize == .zero else { return }
+        let size = CGSize(width: Int(engine.sourceVideoWidth), height: Int(engine.sourceVideoHeight))
+        if size.width > 0, size.height > 0 { videoSize = size }
+    }
+
+    // MARK: - Transport
+
     func play() {
+        userIntendsToPlay = true
+        if tornDownAt != nil {
+            startForegroundReload()
+            return
+        }
         engine.play()
+        // A rate set while paused is applied on resume; setRate would start playback.
+        if rate != 1 { engine.setRate(rate) }
     }
 
     func pause() {
+        userIntendsToPlay = false
         engine.pause()
     }
-    func seek(to time: TimeInterval) async { await engine.seek(to: max(0, time)) }
 
-    var duration: TimeInterval {
-        return engine.duration
+    func togglePlayPause() {
+        state == .playing ? pause() : play()
+    }
+
+    func setRate(_ newRate: Float) {
+        rate = newRate
+        if state == .playing { engine.setRate(newRate) }
+    }
+
+    func setMuted(_ muted: Bool) {
+        isMuted = muted
+        engine.volume = muted ? 0 : 1
+    }
+
+    /// VOD seek on the media timeline.
+    func seek(to time: TimeInterval) async {
+        let upper = duration > 0 ? duration : .greatestFiniteMagnitude
+        let target = min(max(0, time), upper)
+        await performSeek(to: target)
+    }
+
+    /// Skip relative to where the last skip was headed, so rapid taps stack.
+    func skip(by seconds: Double) async {
+        if isLive {
+            await seekLive(to: (pendingSeekTarget ?? liveWindow.playhead) + seconds)
+        } else {
+            await seek(to: (pendingSeekTarget ?? currentTime) + seconds)
+        }
+    }
+
+    /// Live seek on the session axis, clamped to the rewind window. Landing
+    /// within a second of the edge snaps to live.
+    func seekLive(to sessionSeconds: Double) async {
+        let window = liveWindow
+        guard let range = window.seekableRange else { return }
+        let target = min(max(sessionSeconds, range.lowerBound), window.edgeTime)
+        if window.edgeTime - target < 1 {
+            await seekToLiveEdge()
+        } else {
+            await performSeek(to: target)
+        }
+    }
+
+    /// Seek events clear the pending target; the timeout covers a seek the
+    /// engine drops without one (no session yet).
+    private func performSeek(to target: Double) async {
+        // A user seek owns the pending target from here; its seek event clears it.
+        isStarting = false
+        pendingSeekTarget = target
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            if self?.pendingSeekTarget == target { self?.pendingSeekTarget = nil }
+        }
+        await engine.seek(to: target)
+    }
+
+    func seekToLiveEdge() async {
+        pendingSeekTarget = nil
+        await engine.seekToLiveEdge()
     }
 
     func selectAudioTrack(id: Int) {
@@ -378,7 +667,7 @@ final class AetherPlayer: ObservableObject {
 
     func selectSubtitleTrack(id: Int?) {
         if let id {
-            if id >= 200_000, let item = nativeMediaItem {
+            if let item = nativeMediaItem {
                 ensureNativeLegibleOutput(on: item)
             }
             engine.selectSubtitleTrack(index: id)
@@ -390,29 +679,167 @@ final class AetherPlayer: ObservableObject {
     }
 
     func stop() {
+        foregroundReloadTask?.cancel()
+        foregroundReloadTask = nil
+        tornDownAt = nil
+        userIntendsToPlay = false
+        lastLoad = nil
         clearNativeMediaSelection()
         nativeVideoSizeObservation = nil
         videoSize = .zero
+        pendingSeekTarget = nil
+        isStarting = false
+        liveWindow = .idle
+        rate = 1
+        engine.pictureInPictureActive = false
         engine.stop()
         state = .idle
     }
 
-    func bind(view: AetherPlayerView) {
+    // MARK: - Render surface and Picture in Picture
+
+    /// A render surface typed as a plain view, so hosts never name the engine's view.
+    static func makeRenderSurface() -> UIView {
+        let view = AetherPlayerView()
+        view.backgroundColor = .black
+        return view
+    }
+
+    func bind(surface: UIView) {
+        guard let view = surface as? AetherPlayerView else { return }
         engine.bind(view: view)
     }
 
-    func unbind(view: AetherPlayerView) {
+    func unbind(surface: UIView) {
+        guard let view = surface as? AetherPlayerView else { return }
         engine.unbind(view: view)
     }
 
-    private static func translate(_ state: PlaybackState) -> State {
+    /// Arms the engine's background keepalive and its in-place next-item
+    /// handover while the PiP window is up.
+    func setPictureInPictureActive(_ active: Bool) {
+        engine.pictureInPictureActive = active
+    }
+
+    /// The native session's AVPlayerLayer, or the software path's sample
+    /// buffer layer with a playback delegate backed by this player.
+    private func refreshPictureInPictureSource() {
+        if let software = engine.softwarePiPSource {
+            softwarePiPBridge.update(timeRange: software.timeRange())
+            guard pictureInPictureSource?.sampleBufferDisplayLayer !== software.layer else { return }
+            pictureInPictureSource = AVPictureInPictureController.ContentSource(
+                sampleBufferDisplayLayer: software.layer,
+                playbackDelegate: softwarePiPBridge
+            )
+        } else if let layer = engine.nativePlayerLayer {
+            guard pictureInPictureSource?.playerLayer !== layer else { return }
+            pictureInPictureSource = AVPictureInPictureController.ContentSource(playerLayer: layer)
+        } else if pictureInPictureSource != nil {
+            pictureInPictureSource = nil
+        }
+    }
+
+    // MARK: - Background / foreground
+
+    /// With background audio and PiP the engine keeps a playing session alive;
+    /// a session paused in the background is torn down after the grace window
+    /// and the host must rebuild it. Playing user: on foreground. Paused user:
+    /// on the next play(), because a reload zeroes the clock until playback
+    /// starts (tvOS AetherPlayer.observeAppLifecycle, issue #215).
+    private func observeAppLifecycle() {
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.isBackgrounded = true }
+            .store(in: &cancellables)
+
+        // didBecomeActive pairs with the engine's own teardown/restore observers.
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.isBackgrounded = false
+                if self.tornDownAt != nil, self.userIntendsToPlay { self.startForegroundReload() }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func startForegroundReload() {
+        guard foregroundReloadTask == nil, lastLoad != nil else { return }
+        let since = tornDownAt ?? .distantPast
+        foregroundReloadTask = Task { [weak self] in
+            // The teardown drains loopback sockets for ~3.5 s with no handle to await.
+            let drain = max(0, 4.0 - Date().timeIntervalSince(since))
+            if drain > 0 { try? await Task.sleep(for: .seconds(drain)) }
+            guard let self, !Task.isCancelled else { return }
+            defer { self.foregroundReloadTask = nil }
+            // A failed reload (a forward-only live source refuses) surfaces Retry, which loads afresh.
+            do {
+                try await self.engine.reloadAtCurrentPosition()
+                self.tornDownAt = nil
+            } catch {
+                guard !Task.isCancelled, !Self.isCancellation(error) else { return }
+                self.tornDownAt = nil
+                self.canRetry = true
+                self.state = .failed(Self.userFacingFailure(self.engine.errorInfo))
+            }
+        }
+    }
+
+    // MARK: - Buffering
+
+    /// The engine's flag goes stale after a far seek that lands while AVPlayer
+    /// is still waiting, so fold in timeControlStatus (tvOS AetherPlayer).
+    private var hostPlayerWaiting = false
+
+    private func observeTimeControlStatus(of player: AVPlayer?) {
+        timeControlObservation = player?
+            .publisher(for: \.timeControlStatus)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.hostPlayerWaiting = status == .waitingToPlayAtSpecifiedRate
+                self?.recomputeBuffering()
+            }
+        if player == nil {
+            hostPlayerWaiting = false
+            recomputeBuffering()
+        }
+    }
+
+    private func recomputeBuffering() {
+        let buffering = engine.isBuffering || (engine.state == .playing && hostPlayerWaiting)
+        if buffering != isBuffering { isBuffering = buffering }
+    }
+
+    // MARK: - Translation
+
+    private static func translate(_ state: PlaybackState, errorInfo: PlaybackErrorInfo?) -> State {
         switch state {
         case .idle: return .idle
         case .loading, .seeking: return .loading
         case .playing: return .playing
         case .paused: return .paused
         case .ended: return .ended
-        case .error(let message): return .failed(message)
+        case .error: return .failed(userFacingFailure(errorInfo))
+        }
+    }
+
+    /// Only kinds that change what the viewer should do get their own sentence.
+    private static func userFacingFailure(_ info: PlaybackErrorInfo?) -> String {
+        let generic = "This video couldn't be played. Check your connection and try again."
+        guard let kind = info?.kind else { return generic }
+        switch kind {
+        case .sourceRateLimited:
+            return "The server is refusing new streams right now. Wait a moment and try again."
+        case .sourceRefused:
+            return "The server refused this stream. It may have moved, or your access to it may have changed."
+        case .sourceCertificateRejected:
+            return "The server's security certificate was not accepted."
+        case .liveSourceUnavailable:
+            return "This channel is not responding right now."
+        case .dolbyVisionRequiresHardware:
+            return "This Dolby Vision file has no fallback layer this device can decode."
+        default:
+            return generic
         }
     }
 
@@ -436,6 +863,51 @@ final class AetherPlayer: ObservableObject {
         return track.codec.isEmpty ? "Track \(track.id)" : track.codec.uppercased()
     }
 
+    // MARK: - Source predicates (shared with tvOS AetherPlayer)
+
+    private static func isHLSURL(_ url: URL) -> Bool {
+        if url.pathExtension.lowercased() == "m3u8" { return true }
+        let text = url.absoluteString.lowercased()
+        return text.contains(".m3u8") || text.contains("format=hls")
+    }
+
+    /// Plex reports the scan type on the tune; absence means progressive,
+    /// because forcing software decode on every playlist channel dropped
+    /// frames and put AirPlay audio seconds late (tvOS AetherPlayer).
+    private static func needsDeinterlacing(_ url: URL) -> Bool {
+        guard let scan = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "rivuletLiveScanType" })?.value?
+            .lowercased() else { return false }
+        return scan != "progressive"
+    }
+
+    /// AU free-to-air carries captions on 801 without flagging it; a stored
+    /// `liveTeletextPage` overrides (0 means auto-detect).
+    private static func regionTeletextPage() -> Int? {
+        if let stored = UserDefaults.standard.object(forKey: "liveTeletextPage") as? Int {
+            return stored == 0 ? nil : stored
+        }
+        return Locale.current.region?.identifier == "AU" ? 801 : nil
+    }
+
+    private static func isWirelessAudioRoute() -> Bool {
+        AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .airPlay }
+    }
+
+    private static func wirelessAudioPrimeSeconds() -> Double {
+        let reported = AVAudioSession.sharedInstance().outputLatency
+        guard reported > 0.2 else { return 2.0 }
+        return min(max(reported, 1.0), 3.0)
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    // MARK: - Native remote-HLS media selection and captions
+
     private func prepareNativeMediaSelection(for item: AVPlayerItem?) {
         guard nativeMediaItem !== item else { return }
         clearNativeMediaSelection()
@@ -444,14 +916,14 @@ final class AetherPlayer: ObservableObject {
         ensureNativeLegibleOutput(on: item)
 
         Task { @MainActor [weak self, weak item] in
-            guard let self, let item else { return }
+            guard let item else { return }
             if item.status == .unknown {
                 for await status in item.publisher(for: \.status).values where status != .unknown {
                     guard status == .readyToPlay else { return }
                     break
                 }
             }
-            guard self.nativeMediaItem === item else { return }
+            guard let self, self.nativeMediaItem === item else { return }
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
                   !group.options.isEmpty,
                   self.engine.audioTracks.isEmpty || !self.engineAudioTracksAreSelectable else { return }
@@ -491,15 +963,7 @@ final class AetherPlayer: ObservableObject {
 
     private func observeVideoSize(of item: AVPlayerItem?) {
         nativeVideoSizeObservation = nil
-        guard let item else {
-            videoSize = .zero
-            return
-        }
-
-        let initialSize = item.presentationSize
-        if initialSize.width > 0, initialSize.height > 0 {
-            videoSize = initialSize
-        }
+        guard let item else { return }
         nativeVideoSizeObservation = item
             .publisher(for: \.presentationSize)
             .filter { $0.width > 0 && $0.height > 0 }
@@ -607,31 +1071,12 @@ final class AetherPlayer: ObservableObject {
             )
         }
 
-        if var first = runs.first {
-            first = SubtitleCue.StyledRun(
-                text: String(first.text.drop(while: \.isWhitespace)),
-                color: first.color,
-                isBold: first.isBold,
-                isItalic: first.isItalic,
-                isUnderlined: first.isUnderlined,
-                isStruckThrough: first.isStruckThrough,
-                fontName: first.fontName,
-                fontSize: first.fontSize
-            )
-            runs[0] = first
+        if let first = runs.first {
+            runs[0] = first.replacingText(String(first.text.drop(while: \.isWhitespace)))
         }
         if let lastIndex = runs.indices.last {
             let last = runs[lastIndex]
-            runs[lastIndex] = SubtitleCue.StyledRun(
-                text: String(last.text.reversed().drop(while: \.isWhitespace).reversed()),
-                color: last.color,
-                isBold: last.isBold,
-                isItalic: last.isItalic,
-                isUnderlined: last.isUnderlined,
-                isStruckThrough: last.isStruckThrough,
-                fontName: last.fontName,
-                fontSize: last.fontSize
-            )
+            runs[lastIndex] = last.replacingText(String(last.text.reversed().drop(while: \.isWhitespace).reversed()))
         }
         runs.removeAll { $0.text.isEmpty }
         guard !runs.isEmpty else { return nil }
@@ -703,54 +1148,63 @@ final class AetherPlayer: ObservableObject {
     }
 }
 
-/// The view-level bridge to AetherEngine's UIKit render surface.
-struct AetherPlayerSurface: UIViewRepresentable {
-    @ObservedObject var player: AetherPlayer
+private extension AetherPlayer.SubtitleCue.StyledRun {
+    func replacingText(_ text: String) -> Self {
+        Self(text: text, color: color, isBold: isBold, isItalic: isItalic, isUnderlined: isUnderlined,
+             isStruckThrough: isStruckThrough, fontName: fontName, fontSize: fontSize)
+    }
+}
 
-    final class HostingView: UIView {
-        let engineView = AetherPlayerView()
+/// Sample-buffer PiP transport for the software path. AVKit may call it off
+/// the main thread, so it answers from a snapshot the player refreshes on
+/// each clock tick, and hops to main for commands.
+nonisolated private final class SoftwarePiPBridge: NSObject, AVPictureInPictureSampleBufferPlaybackDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var timeRange = CMTimeRange(start: .negativeInfinity, duration: .positiveInfinity)
+    private var isPaused = true
+    @MainActor weak var player: AetherPlayer?
 
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            backgroundColor = .black
-            engineView.backgroundColor = .black
-            engineView.frame = bounds
-            engineView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(engineView)
-        }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-
-        override func layoutSubviews() {
-            super.layoutSubviews()
-        }
+    func update(timeRange: CMTimeRange? = nil, isPaused: Bool? = nil) {
+        lock.lock()
+        if let timeRange { self.timeRange = timeRange }
+        if let isPaused { self.isPaused = isPaused }
+        lock.unlock()
     }
 
-    final class Coordinator {
-        let player: AetherPlayer
-
-        init(player: AetherPlayer) {
-            self.player = player
+    func pictureInPictureController(_ controller: AVPictureInPictureController, setPlaying playing: Bool) {
+        update(isPaused: !playing)
+        Task { @MainActor [weak self] in
+            guard let player = self?.player else { return }
+            playing ? player.play() : player.pause()
         }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(player: player)
+    func pictureInPictureControllerTimeRangeForPlayback(_ controller: AVPictureInPictureController) -> CMTimeRange {
+        lock.lock()
+        defer { lock.unlock() }
+        return timeRange
     }
 
-    func makeUIView(context: Context) -> HostingView {
-        let view = HostingView()
-        player.bind(view: view.engineView)
-        return view
+    func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isPaused
     }
 
-    func updateUIView(_ uiView: HostingView, context: Context) {
-        player.bind(view: uiView.engineView)
-    }
+    func pictureInPictureController(
+        _ controller: AVPictureInPictureController,
+        didTransitionToRenderSize newRenderSize: CMVideoDimensions
+    ) {}
 
-    static func dismantleUIView(_ uiView: HostingView, coordinator: Coordinator) {
-        coordinator.player.unbind(view: uiView.engineView)
+    func pictureInPictureController(
+        _ controller: AVPictureInPictureController,
+        skipByInterval skipInterval: CMTime,
+        completion completionHandler: @escaping () -> Void
+    ) {
+        let seconds = skipInterval.seconds
+        Task { @MainActor [weak self] in
+            await self?.player?.skip(by: seconds)
+        }
+        completionHandler()
     }
 }

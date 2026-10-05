@@ -30,7 +30,11 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Rivulet connects to playlist and guide servers on your local network.</string>
+	<string>Rivulet connects to your Plex servers and Live TV sources on your local network to play your media.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

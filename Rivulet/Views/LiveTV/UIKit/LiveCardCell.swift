@@ -13,69 +13,6 @@
 
 import UIKit
 
-/// One card's content.
-struct LiveCardItem: Hashable {
-    enum Kind: Hashable {
-        /// A channel and what is on it now.
-        case channel
-        /// A programme starting soon on `channel`.
-        case upcoming
-        /// A recording Plex or Dispatcharr has lined up.
-        case recording
-    }
-
-    let id: String
-    let kind: Kind
-    let channel: UnifiedChannel?
-    let program: UnifiedProgram?
-    let recording: LiveTVScheduledRecording?
-    /// The programme is set to record (see `markingRecordings`).
-    var setToRecord = false
-
-    static func channel(_ channel: UnifiedChannel, program: UnifiedProgram?, section: String) -> LiveCardItem {
-        LiveCardItem(id: "\(section)|\(channel.id)", kind: .channel, channel: channel,
-                     program: program, recording: nil)
-    }
-
-    /// An upcoming card's start: the time alone today, with the weekday after.
-    static func startLabel(_ program: UnifiedProgram, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let start = program.eventStart
-        return calendar.isDate(start, inSameDayAs: now)
-            ? start.formatted(.dateTime.hour().minute())
-            : start.formatted(.dateTime.weekday().hour().minute())
-    }
-
-    static func upcoming(_ program: UnifiedProgram, on channel: UnifiedChannel, section: String = "soon") -> LiveCardItem {
-        LiveCardItem(id: "\(section)|\(program.id)", kind: .upcoming, channel: channel,
-                     program: program, recording: nil)
-    }
-
-    static func recording(_ recording: LiveTVScheduledRecording, channel: UnifiedChannel?) -> LiveCardItem {
-        LiveCardItem(id: "rec|\(recording.id)", kind: .recording, channel: channel,
-                     program: nil, recording: recording)
-    }
-}
-
-extension Array where Element == LiveCardItem {
-    /// Each card's `setToRecord`, from the store's schedule. Recording cards
-    /// already say so themselves.
-    func markingRecordings(_ store: LiveTVDataStore) -> [LiveCardItem] {
-        map { item in
-            guard item.kind != .recording, let program = item.program else { return item }
-            var marked = item
-            marked.setToRecord = store.activeRecording(for: program) != nil
-            return marked
-        }
-    }
-
-    /// First of each id. A diffable snapshot traps on a repeated identifier,
-    /// and a merged lineup can list a channel twice.
-    func uniquedById() -> [LiveCardItem] {
-        var seen = Set<String>()
-        return filter { seen.insert($0.id).inserted }
-    }
-}
-
 final class LiveCardCell: UICollectionViewCell {
     static let reuseID = "LiveCardCell"
     static let aspect: CGFloat = 9.0 / 16.0

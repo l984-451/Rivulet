@@ -45,46 +45,6 @@ final class AddSourceDraft {
     }
 }
 
-// MARK: - URL sanitization
-
-/// Fixes the URL typos a tvOS keyboard invites (doubled schemes, `htpp://`),
-/// forces a scheme, and drops a trailing slash. Applied to every URL field on
-/// entry. Behavior unchanged from the retired SwiftUI add-source sheet.
-func sanitizeURL(_ input: String) -> String {
-    var url = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    // Empty in, empty out. Without this, prepending the scheme and then
-    // dropping the trailing slash turns "" into the garbage string "http:/",
-    // which reads as a filled-in field and defeats every isEmpty check.
-    guard !url.isEmpty else { return "" }
-
-    let typoPatterns = [
-        "http://http://", "https://https://",
-        "http://https://", "https://http://",
-        "hhttp://", "htttp://", "hhtp://", "htpp://",
-        "httpss://", "htps://"
-    ]
-
-    for typo in typoPatterns {
-        if url.lowercased().hasPrefix(typo) {
-            let isSecure = typo.contains("https") || url.lowercased().hasPrefix("https")
-            let correctProtocol = isSecure ? "https://" : "http://"
-            url = correctProtocol + String(url.dropFirst(typo.count))
-            break
-        }
-    }
-
-    if !url.lowercased().hasPrefix("http://") && !url.lowercased().hasPrefix("https://") {
-        url = "http://" + url
-    }
-
-    if url.hasSuffix("/") {
-        url = String(url.dropLast())
-    }
-
-    return url
-}
-
 // MARK: - Add-source pages
 
 extension SettingsContent {
@@ -152,13 +112,12 @@ extension SettingsContent {
     /// old SwiftUI picker set `plexError` and never rendered it).
     private static func addPlexLiveTV(on vc: UIViewController) {
         guard plexStatus != .checking else { return }
-        let auth = PlexAuthManager.shared
-        guard let serverURL = auth.selectedServerURL,
-              let token = auth.selectedServerToken,
-              let serverName = auth.savedServerName else {
+        let request: LiveTVSourceConnector.PlexRequest
+        do {
+            request = try LiveTVSourceConnector.plexRequest()
+        } catch {
             plexStatus = .idle
-            fail(nil, page: vc as? SettingsPageViewController, title: "Couldn't Add Plex Live TV",
-                 message: "Plex server is not connected.")
+            fail(nil, page: vc as? SettingsPageViewController, error: error)
             return
         }
 
@@ -167,21 +126,13 @@ extension SettingsContent {
         page?.reloadRows()
 
         Task { @MainActor in
-            let isAvailable = await PlexLiveTVProvider.checkAvailability(
-                serverURL: serverURL, authToken: token)
-            guard isAvailable else {
+            do {
+                try await LiveTVSourceConnector().connect(request)
+            } catch {
                 plexStatus = .idle
-                fail(nil, page: page, title: "Couldn't Add Plex Live TV", message: "No DVR or tuners are set up on this Plex server.")
+                fail(nil, page: page, error: error)
                 return
             }
-
-            let provider = PlexLiveTVProvider(serverURL: serverURL, authToken: token,
-                                              serverName: serverName)
-            let store = LiveTVDataStore.shared
-            await store.addPlexSource(provider: provider)
-            await store.loadChannels()
-            await store.loadEPG(startDate: Date(), hours: 6)
-
             plexStatus = .idle
             addSourceDraft = nil
             page?.onPop?()
@@ -225,34 +176,10 @@ extension SettingsContent {
         return rows
     }
 
-    /// Presets are derived from the Plex server's host when it's on the local
-    /// network, so a user who runs both on one box gets a one-press fill.
-    private static var baseHost: String {
-        if let plexURLString = PlexAuthManager.shared.selectedServerURL,
-           let plexURL = URL(string: plexURLString),
-           let host = plexURL.host,
-           isLocalIP(host) {
-            return host
-        }
-        return "192.168.1.100"
-    }
-
-    private static func isLocalIP(_ host: String) -> Bool {
-        host.hasPrefix("192.168.") || host.hasPrefix("10.") ||
-        host.hasPrefix("172.16.") || host.hasPrefix("172.17.") ||
-        host.hasPrefix("172.18.") || host.hasPrefix("172.19.") ||
-        host.hasPrefix("172.2") || host.hasPrefix("172.30.") ||
-        host.hasPrefix("172.31.") || host == "localhost" || host == "127.0.0.1"
-    }
+    private static var baseHost: String { LiveTVSourceConnector.suggestedHost }
 
     private static var serverSuggestions: [(label: String, value: String)] {
-        [
-            ("Dispatcharr", "http://\(baseHost):9191"),
-            ("Threadfin", "http://\(baseHost):34400"),
-            ("xTeVe", "http://\(baseHost):34400"),
-            ("ErsatzTV", "http://\(baseHost):8409"),
-            ("Cabernet", "http://\(baseHost):6077")
-        ]
+        LiveTVSourceConnector.serverSuggestions(host: baseHost)
     }
 
     /// Verify-then-save as ONE operation: check the server, and only add it if
@@ -260,27 +187,13 @@ extension SettingsContent {
     private static func saveOwnServer(_ draft: AddSourceDraft, on vc: UIViewController) {
         guard draft.status != .checking else { return }
         let page = vc as? SettingsPageViewController
-        guard !draft.serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter your server's address first.")
-            return
-        }
-        let cleaned = sanitizeURL(draft.serverURL)
-        let username = draft.username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard username.isEmpty == draft.password.isEmpty else {
-            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter both your username and password, or neither.")
-            return
-        }
-
-        // A profile typed into the field wins, but if the user instead pasted a
-        // full endpoint such as .../output/m3u/Kids we adopt the profile from the
-        // URL. Dispatcharr scopes the playlist only by that path segment, so
-        // whichever way the user expressed it has to survive to the request.
-        let split = DispatcharrService.splitEndpointPath(from: cleaned)
-        let profile = DispatcharrService.normalizedProfile(draft.channelProfile) ?? split.channelProfile
-
-        guard let url = URL(string: split.baseURL),
-              let service = DispatcharrService.create(from: cleaned, channelProfile: profile) else {
-            fail(draft, page: page, title: "Couldn't Add Source", message: "Couldn't reach that server. Check the address and port.")
+        let connector = LiveTVSourceConnector()
+        let request: LiveTVSourceConnector.ServerRequest
+        do {
+            request = try connector.serverRequest(address: draft.serverURL, username: draft.username,
+                                                  password: draft.password, channelProfile: draft.channelProfile)
+        } catch {
+            fail(draft, page: page, error: error)
             return
         }
 
@@ -289,39 +202,10 @@ extension SettingsContent {
 
         Task { @MainActor in
             do {
-                let channels = try await service.fetchChannels()
-                guard !channels.isEmpty else {
-                    // An empty playlist with a profile set is nearly always a
-                    // profile name that does not match one on the server, so
-                    // point at the field rather than at the connection.
-                    fail(draft, page: page, title: "Couldn't Add Source",
-                         message: profile == nil
-                            ? "Connected, but found no channels."
-                            : "Connected, but that channel profile has no channels. Check the name.")
-                    return
-                }
-                // Watching needs no sign-in; recording does. The sign-in is
-                // traded for the user's API key here and the password dropped.
-                var token: String?
-                if !username.isEmpty {
-                    do {
-                        token = try await service.fetchAPIKey(username: username, password: draft.password)
-                    } catch {
-                        fail(draft, page: page, title: "Couldn't Add Source", message: signInFailureCopy(for: error))
-                        return
-                    }
-                }
-                let store = LiveTVDataStore.shared
-                await store.addDispatcharrSource(
-                    baseURL: url,
-                    name: draft.displayName.isEmpty ? "Live TV" : draft.displayName,
-                    apiToken: token,
-                    channelProfile: profile)
-                await store.loadChannels()
-                await store.loadEPG(startDate: Date(), hours: 6)
+                try await connector.connect(request, name: draft.displayName)
                 finish(page, draft: draft)
             } catch {
-                fail(draft, page: page, title: "Couldn't Add Source", message: failureCopy(for: error))
+                fail(draft, page: page, error: error)
             }
         }
     }
@@ -358,44 +242,23 @@ extension SettingsContent {
     private static func savePlaylist(_ draft: AddSourceDraft, on vc: UIViewController) {
         guard draft.status != .checking else { return }
         let page = vc as? SettingsPageViewController
-        guard !draft.m3uURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            fail(draft, page: page, title: "Couldn't Add Source", message: "Enter your playlist URL first.")
+        let request: LiveTVSourceConnector.PlaylistRequest
+        do {
+            request = try LiveTVSourceConnector.playlistRequest(m3uURL: draft.m3uURL, epgURL: draft.epgURL)
+        } catch {
+            fail(draft, page: page, error: error)
             return
         }
-        guard let m3u = URL(string: sanitizeURL(draft.m3uURL)) else {
-            fail(draft, page: page, title: "Couldn't Add Source", message: "That playlist URL doesn't look right. Check it and try again.")
-            return
-        }
-        let epg = draft.epgURL.isEmpty ? nil : URL(string: sanitizeURL(draft.epgURL))
 
         draft.status = .checking
         page?.reloadRows()
 
         Task { @MainActor in
             do {
-                // Same fetch + parse path the source itself uses, so a playlist
-                // that validates here is one that will load.
-                let (data, response) = try await URLSession.shared.data(from: m3u)
-                if let http = response as? HTTPURLResponse {
-                    switch http.statusCode {
-                    case 200...299: break
-                    case 401, 403: throw DispatcharrError.unauthorized
-                    default: throw DispatcharrError.httpError(http.statusCode)
-                    }
-                }
-                let channels = try await M3UParser().parse(data: data)
-                guard !channels.isEmpty else {
-                    fail(draft, page: page, title: "Couldn't Add Source", message: "Connected, but found no channels.")
-                    return
-                }
-                let store = LiveTVDataStore.shared
-                await store.addM3USource(m3uURL: m3u, epgURL: epg,
-                                         name: draft.displayName.isEmpty ? "IPTV" : draft.displayName)
-                await store.loadChannels()
-                await store.loadEPG(startDate: Date(), hours: 6)
+                try await LiveTVSourceConnector().connect(request, name: draft.displayName)
                 finish(page, draft: draft)
             } catch {
-                fail(draft, page: page, title: "Couldn't Add Source", message: failureCopy(for: error))
+                fail(draft, page: page, error: error)
             }
         }
     }
@@ -417,6 +280,12 @@ extension SettingsContent {
                      animated: true)
     }
 
+    /// `fail` with a connector error's own title and copy.
+    private static func fail(_ draft: AddSourceDraft?, page: SettingsPageViewController?, error: Error) {
+        let connect = error as? LiveTVConnectError ?? .source(LiveTVSourceConnector.failureCopy(for: error))
+        fail(draft, page: page, title: connect.title, message: connect.message)
+    }
+
     /// Drop the draft and pop back to the source list. The container's `pop()`
     /// rebuilds the incoming page's rows, so `.iptv` picks up the new source.
     /// Runs after a network call, when the user may have left the form and
@@ -425,40 +294,5 @@ extension SettingsContent {
     static func finish(_ page: SettingsPageViewController?, draft: AddSourceDraft) {
         if addSourceDraft === draft { addSourceDraft = nil }
         page?.onPop?()
-    }
-
-    /// Maps the underlying failure to one of the three real causes. The original
-    /// error is preserved for Sentry — only the user-facing copy is collapsed.
-    private static func failureCopy(for error: Error) -> String {
-        if let dispatcharr = error as? DispatcharrError {
-            switch dispatcharr {
-            case .unauthorized: return "That server refused Rivulet."
-            case .invalidResponse, .notFound, .serverError, .httpError:
-                return "Couldn't reach that server. Check the address and port."
-            }
-        }
-        if error is M3UParseError {
-            return "Connected, but found no channels."
-        }
-        let ns = error as NSError
-        if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorUserAuthenticationRequired {
-            return "That server refused Rivulet."
-        }
-        return "Couldn't reach that server. Check the address and port."
-    }
-
-    /// The channels already loaded, so the server is reachable: what failed is
-    /// the sign-in itself.
-    private static func signInFailureCopy(for error: Error) -> String {
-        switch error as? DispatcharrError {
-        case .unauthorized:
-            return "Dispatcharr didn't accept that username and password."
-        case .notFound:
-            return "That server has no Dispatcharr sign-in. Clear the username and password."
-        case .httpError(429):
-            return "Too many sign-in attempts. Wait a minute and try again."
-        default:
-            return "Couldn't sign in to Dispatcharr. Try again."
-        }
     }
 }

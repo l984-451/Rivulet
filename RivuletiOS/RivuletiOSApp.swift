@@ -6,6 +6,7 @@ import UIKit
 
 @main
 struct RivuletiOSApp: App {
+    @UIApplicationDelegateAdaptor(IOSAppDelegate.self) private var appDelegate
     @StateObject private var plex: IOSPlexSession
 
     init() {
@@ -21,6 +22,8 @@ struct RivuletiOSApp: App {
         _plex = StateObject(wrappedValue: session)
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
+        // Recreates the background session and resumes unfinished downloads.
+        IOSDownloadCenter.shared.start()
         // Folds the old single-source settings into the shared store, then
         // warms the guide so the Live TV tab opens with data.
         Task {
@@ -46,6 +49,7 @@ struct RivuletiOSApp: App {
         WindowGroup {
             IOSRootView()
                 .environmentObject(plex)
+                .environmentObject(IOSDownloadCenter.shared)
         }
     }
 

@@ -32,6 +32,11 @@ struct IOSAccountView: View {
                         Label("Playback", systemImage: "play.rectangle")
                     }
                     NavigationLink {
+                        IOSDownloadSettingsView()
+                    } label: {
+                        Label("Downloads", systemImage: "arrow.down.circle")
+                    }
+                    NavigationLink {
                         IOSLiveTVSettingsView()
                     } label: {
                         Label("Live TV", systemImage: "play.tv")

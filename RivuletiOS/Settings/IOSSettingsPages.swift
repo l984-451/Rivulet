@@ -81,3 +81,42 @@ struct IOSPlaybackSettingsView: View {
         ForEach(StreamingQuality.allChoices, id: \.self) { Text($0.label).tag($0) }
     }
 }
+
+/// Account > Downloads: quality, cellular, storage and Delete All.
+struct IOSDownloadSettingsView: View {
+    @AppStorage(IOSDownloadCenter.qualityKey) private var quality = StreamingQuality.original
+    @AppStorage(IOSDownloadTransfer.cellularKey) private var overCellular = false
+    @EnvironmentObject private var downloads: IOSDownloadCenter
+    @State private var confirmingDeleteAll = false
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Download Quality", selection: $quality) {
+                    ForEach(IOSDownloadCenter.qualityChoices, id: \.self) { Text($0.label).tag($0) }
+                }
+            } footer: {
+                Text("Original saves the file as it is on the server. Smaller sizes are converted by the server first, and a size at or above the file's own downloads the Original.")
+            }
+
+            Section {
+                Toggle("Download over Cellular", isOn: $overCellular)
+            } footer: {
+                Text("When off, downloads wait for Wi-Fi on cellular, a personal hotspot or Low Data Mode.")
+            }
+
+            Section {
+                LabeledContent("Storage Used",
+                               value: ByteCountFormatter.string(fromByteCount: downloads.storageUsed, countStyle: .file))
+                Button("Delete All Downloads", role: .destructive) { confirmingDeleteAll = true }
+                    .disabled(downloads.records.isEmpty)
+                    .confirmationDialog("Delete all downloads?", isPresented: $confirmingDeleteAll, titleVisibility: .visible) {
+                        Button("Delete All Downloads", role: .destructive) { downloads.deleteAll() }
+                    } message: {
+                        Text("Every download on this device is removed, for every profile.")
+                    }
+            }
+        }
+        .navigationTitle("Downloads")
+    }
+}

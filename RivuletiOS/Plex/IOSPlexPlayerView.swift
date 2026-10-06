@@ -47,7 +47,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         IOSNowPlaying.Item(
             title: request.item.displayTitle,
             subtitle: request.item.subtitle,
-            artworkURL: plex.artworkURL(for: request.item, kind: .poster, width: 600, height: 900),
+            artworkURL: request.localArtworkURL ?? plex.artworkURL(for: request.item, kind: .poster, width: 600, height: 900),
             isLive: false
         )
     }
@@ -181,7 +181,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     /// A direct-play file that never starts gets one retry as a transcode, as on tvOS.
     private func fallBackToTranscode() {
-        guard !hasPlayed, !didFallBack, request.plan == .original else { return }
+        guard !hasPlayed, !didFallBack, request.plan == .original, !request.isLocal else { return }
         didFallBack = true
         let kbps = request.quality == .auto
             ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000
@@ -499,7 +499,8 @@ private struct IOSPlexPlayerScreen: View {
                 duration: player.duration > 0 ? player.duration : item.durationSeconds
             ),
             rate: player.rate,
-            quality: IOSPlayerQuality(
+            // A downloaded file has one quality: the one on disk.
+            quality: session.request.isLocal ? nil : IOSPlayerQuality(
                 choices: StreamingQuality.allChoices,
                 selected: session.request.quality,
                 label: session.qualityLabel

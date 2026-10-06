@@ -13,9 +13,10 @@ nonisolated final class NetworkPathMonitor: Sendable {
         monitor.start(queue: DispatchQueue(label: "rivulet.network-path"))
     }
 
-    var isAwayPath: Bool {
-        let path = monitor.currentPath
-        return path.usesInterfaceType(.cellular) || path.isExpensive || path.isConstrained
+    var isAwayPath: Bool { Self.isAway(monitor.currentPath) }
+
+    static func isAway(_ path: NWPath) -> Bool {
+        path.usesInterfaceType(.cellular) || path.isExpensive || path.isConstrained
     }
 }
 

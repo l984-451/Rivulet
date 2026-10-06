@@ -8,15 +8,24 @@ import Foundation
 extension IOSPlexSession {
     func markWatched(_ request: IOSPlexPlaybackRequest) async {
         guard let key = request.item.ratingKey else { return }
-        try? await PlexNetworkManager.shared.markWatched(
-            serverURL: request.serverURL,
-            authToken: request.token,
-            ratingKey: key
-        )
+        let at = Date()
+        if request.isLocal { IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: 0, watched: true, persist: true) }
+        guard !request.serverURL.isEmpty else { return }
+        do {
+            try await PlexNetworkManager.shared.markWatched(
+                serverURL: request.serverURL,
+                authToken: request.token,
+                ratingKey: key
+            )
+            IOSOfflineProgress.reached(key, at: at)
+        } catch {
+            let duration = request.item.duration
+            IOSOfflineProgress.failed(key, offsetMs: duration ?? 0, durationMs: duration, watched: true, at: at)
+        }
     }
 
     /// The episode after `episode`: the next one in its season, else the
-    /// first episode of the next season.
+    /// first episode of the next season. Offline, the next downloaded one.
     func nextEpisode(after episode: PlexMetadata, in request: IOSPlexPlaybackRequest) async -> PlexMetadata? {
         guard episode.type == "episode", let index = episode.index else { return nil }
         let network = PlexNetworkManager.shared
@@ -29,9 +38,49 @@ extension IOSPlexSession {
             return next
         }
         let season = episode.parentIndex ?? 0
-        guard let nextSeason = await children(episode.grandparentRatingKey)
-            .first(where: { $0.type == "season" && ($0.index ?? 0) > season }) else { return nil }
-        return await children(nextSeason.ratingKey).first
+        if let nextSeason = await children(episode.grandparentRatingKey)
+            .first(where: { $0.type == "season" && ($0.index ?? 0) > season }),
+           let next = await children(nextSeason.ratingKey).first {
+            return next
+        }
+        let position = { (item: PlexMetadata) in (item.parentIndex ?? 0, item.index ?? 0) }
+        let center = IOSDownloadCenter.shared
+        let server = request.downloadServerID ?? center.currentServerID
+        return center.visibleRecords
+            .filter { $0.state == .completed && (server == nil || $0.serverID.isEmpty || $0.serverID == server) }
+            .map(\.metadata)
+            .filter { $0.type == "episode" && $0.grandparentRatingKey == episode.grandparentRatingKey }
+            .filter { position($0) > (season, index) }
+            .min { position($0) < position($1) }
+    }
+
+    /// Replays progress logged while the server was unreachable, unless the server saw a later view.
+    /// True when anything was sent.
+    func flushOfflineProgress() async -> Bool {
+        let center = IOSDownloadCenter.shared
+        guard !IOSOfflineProgress.isFlushing, let (serverURL, token) = try? configuration(),
+              let server = center.currentServerID else { return false }
+        let profile = center.currentProfileID
+        let due = IOSOfflineProgress.log.entries.filter { $0.serverID == server && $0.profileID == profile }
+        guard !due.isEmpty else { return false }
+        IOSOfflineProgress.isFlushing = true
+        defer { IOSOfflineProgress.isFlushing = false }
+        return await OfflineProgressLog.replay(
+            due,
+            serverLastViewedAt: { entry in
+                let current = try await network.getMetadata(serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey)
+                return current.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+            },
+            send: { entry in
+                try await network.reportProgress(
+                    serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey,
+                    timeMs: entry.offsetMs, state: "stopped", duration: entry.durationMs)
+                if entry.watched {
+                    try await network.markWatched(serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey)
+                }
+            },
+            remove: { IOSOfflineProgress.remove($0) }
+        )
     }
 
     /// Frees the server's transcoder; a reload or exit leaves it running otherwise.
@@ -61,11 +110,48 @@ extension IOSPlexSession {
     }
 }
 
+/// Progress that failed to reach the server, kept next to the downloads manifest.
+@MainActor
+enum IOSOfflineProgress {
+    private static let url = IOSDownloadTransfer.directory.appending(path: "offline-progress.json")
+    private(set) static var log = OfflineProgressLog.load(from: url)
+    private static var lastReached: [String: Date] = [:]
+    static var isFlushing = false
+
+    static func failed(_ ratingKey: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {
+        let center = IOSDownloadCenter.shared
+        // A report that failed after a newer one landed adds nothing.
+        guard let server = center.currentServerID, lastReached[ratingKey].map({ $0 < at }) ?? true else { return }
+        log.record(.init(serverID: server, profileID: center.currentProfileID, ratingKey: ratingKey,
+                         offsetMs: offsetMs, durationMs: durationMs, watched: watched, at: at))
+        try? log.save(to: url)
+    }
+
+    /// A report landed, so older offline entries for the item are stale.
+    static func reached(_ ratingKey: String, at: Date) {
+        lastReached[ratingKey] = max(at, lastReached[ratingKey] ?? at)
+        let before = log.entries.count
+        let server = IOSDownloadCenter.shared.currentServerID
+        log.entries.removeAll { $0.serverID == server && $0.ratingKey == ratingKey && $0.at <= at }
+        if log.entries.count != before { try? log.save(to: url) }
+    }
+
+    /// Drops a replayed entry; a newer one coalesced in meanwhile stays.
+    static func remove(_ entry: OfflineProgressLog.Entry) {
+        log.entries.removeAll { $0 == entry }
+        try? log.save(to: url)
+    }
+}
+
 extension IOSPlexPlaybackRequest {
+    /// A downloaded file rather than a server stream.
+    var isLocal: Bool { url.isFileURL }
+
     /// Plex external subtitle streams (the ones with a `key`), registered with
     /// the engine at load. Mirrors tvOS UniversalPlayerViewModel.aetherExternalSubtitles.
     /// None on a transcode, which carries the server's own subtitle rendition.
     var sidecarSubtitles: [AetherPlayer.SidecarSubtitle] {
+        if let localSidecars { return localSidecars }
         guard plan == .original, let streams = item.Media?.first?.Part?.first?.Stream else { return [] }
         return streams.filter { $0.isSubtitle && $0.key != nil }.compactMap { stream in
             guard let key = stream.key,

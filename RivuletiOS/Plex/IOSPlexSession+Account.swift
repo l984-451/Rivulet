@@ -24,8 +24,12 @@ extension IOSPlexSession {
         await auth.verifyAndFixConnection()
         let moved = auth.selectedServerURL != before
         // Failover installs the owner's token; put the selected profile's back.
-        if moved { await reapplySelectedProfile() }
-        if moved { await refresh() }
+        if moved {
+            await reapplySelectedProfile()
+            await refresh()
+        } else if auth.isConnected, await flushOfflineProgress() {
+            await watchStateDidChange()
+        }
     }
 
     /// Resumes sign-in where it stopped: server choice when a token exists, otherwise a new PIN.

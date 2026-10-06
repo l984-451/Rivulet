@@ -74,7 +74,7 @@ struct IOSPlexHomeView: View {
         if plex.isLoadingContent {
             ProgressView()
         } else if let error = plex.contentError {
-            IOSPlexErrorView(title: "Couldn't Load Home", message: error) { await plex.refresh() }
+            IOSPlexErrorView(title: "Couldn't Load Home", message: error, offersDownloads: true) { await plex.refresh() }
         } else {
             ContentUnavailableView(
                 "Nothing on Home Yet",

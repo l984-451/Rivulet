@@ -30,7 +30,11 @@ actor IOSArtworkCache {
         if let existing = downloads[url] { return await existing.value }
 
         let task = Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let (data, response) = try? await Self.session.data(from: url),
+            // A downloaded poster reads straight from disk.
+            let fetched = url.isFileURL
+                ? (try? Data(contentsOf: url)).map { ($0, URLResponse()) }
+                : try? await Self.session.data(from: url)
+            guard let (data, response) = fetched,
                   ((response as? HTTPURLResponse)?.statusCode ?? 200) < 400 else {
                 return nil
             }

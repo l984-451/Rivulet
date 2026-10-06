@@ -12,6 +12,8 @@ struct IOSRootView: View {
     @StateObject private var playback = IOSPlaybackController()
     @State private var showingAccount = false
     @State private var backgroundedAt: Date?
+    /// The Library stack's path, so "Go to Downloads" can push the list from any tab.
+    @State private var libraryPath = NavigationPath()
     @Namespace private var homeZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
@@ -23,12 +25,18 @@ struct IOSRootView: View {
                 tabStack(homeZoom) { IOSPlexHomeView() }
             }
             Tab("Library", systemImage: "rectangle.stack", value: "library") {
-                tabStack(libraryZoom) { IOSPlexLibrariesView() }
+                tabStack(libraryZoom, path: $libraryPath) { IOSPlexLibrariesView() }
             }
             // The sidebar lists each library itself, so the list tab would repeat it.
             .defaultVisibility(.hidden, for: .sidebar)
             // iPhone flattens sections into the tab bar, so libraries live only in the iPad sidebar.
             TabSection("Library") {
+                if showsSidebarLibraries {
+                    Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
+                        tabStack(sidebarZoom) { IOSDownloadsView(showsAccount: true) }
+                    }
+                    .defaultVisibility(.hidden, for: .tabBar)
+                }
                 ForEach(showsSidebarLibraries ? videoLibraries : []) { library in
                     Tab(library.title, systemImage: library.icon, value: "library:\(library.key)") {
                         tabStack(sidebarZoom) { IOSPlexLibraryView(library: library, showsAccount: true) }
@@ -47,6 +55,7 @@ struct IOSRootView: View {
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }
+        .environment(\.openDownloads, openDownloads)
         .sheet(isPresented: $showingAccount) { IOSAccountView() }
         .iosPlaybackHost(playback)
         .task { await plex.verifyConnection() }
@@ -67,6 +76,7 @@ struct IOSRootView: View {
             }
         }
         .onChange(of: sizeClass) { dropOrphanedLibraryTab() }
+        .onChange(of: plex.sessionGeneration) { libraryPath = NavigationPath() }
         .onChange(of: plex.libraries) { _, libraries in
             if !libraries.isEmpty { dropOrphanedLibraryTab() }
         }
@@ -74,8 +84,8 @@ struct IOSRootView: View {
 
     /// A sidebar library tab vanishes at compact width or on a server without that library.
     private func dropOrphanedLibraryTab() {
-        guard selectedTab.hasPrefix("library:") else { return }
-        let live = showsSidebarLibraries ? videoLibraries.map { "library:\($0.key)" } : []
+        guard selectedTab.hasPrefix("library:") || selectedTab == "downloads" else { return }
+        let live = showsSidebarLibraries ? videoLibraries.map { "library:\($0.key)" } + ["downloads"] : []
         if !live.contains(selectedTab) { selectedTab = "library" }
     }
 
@@ -96,15 +106,36 @@ struct IOSRootView: View {
             }
     }
 
-    private func tabStack<Content: View>(_ namespace: Namespace.ID, @ViewBuilder content: () -> Content) -> some View {
-        NavigationStack { content().iosPlexDestinations() }
-            // A server or profile switch pops every stack: open pages hold the old one's items.
-            .id(plex.sessionGeneration)
-            .environment(\.plexZoomNamespace, namespace)
+    /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
+    private func openDownloads() {
+        if showsSidebarLibraries {
+            selectedTab = "downloads"
+        } else {
+            libraryPath = NavigationPath([IOSDownloadsRoute()])
+            selectedTab = "library"
+        }
+    }
+
+    private func tabStack<Content: View>(
+        _ namespace: Namespace.ID,
+        path: Binding<NavigationPath>? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Group {
+            if let path {
+                NavigationStack(path: path) { content().iosPlexDestinations() }
+            } else {
+                NavigationStack { content().iosPlexDestinations() }
+            }
+        }
+        // A server or profile switch pops every stack: open pages hold the old one's items.
+        .id(plex.sessionGeneration)
+        .environment(\.plexZoomNamespace, namespace)
     }
 }
 
 #Preview {
     IOSRootView()
         .environmentObject(IOSPlexSession())
+        .environmentObject(IOSDownloadCenter.shared)
 }

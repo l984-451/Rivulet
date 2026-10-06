@@ -184,8 +184,11 @@ final class IOSPlexSession: ObservableObject {
         } catch {
             guard isCurrent() else { return }
             contentError = error.localizedDescription
+            return await PlexWatchlistService.shared.fetchWatchlist()
         }
         await PlexWatchlistService.shared.fetchWatchlist()
+        // The server answered: send progress made offline, then repaint with it.
+        if await flushOfflineProgress() { Task { await watchStateDidChange() } }
     }
 
     /// Foreground return: refetch only when Home is more than five minutes old.
@@ -345,6 +348,9 @@ final class IOSPlexSession: ObservableObject {
         quality: StreamingQuality? = nil,
         previous: IOSPlexPlaybackRequest? = nil
     ) async throws -> IOSPlexPlaybackRequest {
+        // A downloaded item plays its file everywhere, online or not.
+        // Up Next after a download stays on that download's server.
+        if let local = IOSDownloadCenter.shared.localPlayback(for: item, serverID: previous?.downloadServerID) { return local }
         let full = try await metadata(for: item)
         let (serverURL, token) = try configuration()
         guard full.streamKey != nil else { throw IOSPlexSessionError.noPlayableURL }
@@ -502,14 +508,25 @@ final class IOSPlexSession: ObservableObject {
 
     func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async {
         guard let key = request.item.ratingKey else { return }
-        try? await network.reportProgress(
-            serverURL: request.serverURL,
-            authToken: request.token,
-            ratingKey: key,
-            timeMs: Int(time * 1000),
-            state: state,
-            duration: request.item.duration
-        )
+        let at = Date()
+        let offsetMs = Int(time * 1000)
+        if request.isLocal {
+            IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: offsetMs, watched: false, persist: state != "playing")
+        }
+        guard !request.serverURL.isEmpty else { return }
+        do {
+            try await network.reportProgress(
+                serverURL: request.serverURL,
+                authToken: request.token,
+                ratingKey: key,
+                timeMs: offsetMs,
+                state: state,
+                duration: request.item.duration
+            )
+            IOSOfflineProgress.reached(key, at: at)
+        } catch {
+            IOSOfflineProgress.failed(key, offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
+        }
     }
 
     private static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
@@ -583,6 +600,11 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     var measuredKbps: Int?
     var measuredAt: Date?
     let startTime: TimeInterval?
+    /// Set for a downloaded file: its saved subtitles and poster.
+    var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
+    var localArtworkURL: URL? = nil
+    /// The server a downloaded file came from, which may not be the current one.
+    var downloadServerID: String? = nil
 
     /// A throughput reading young enough for Up Next and reloads to reuse.
     var freshMeasurement: (kbps: Int?, at: Date)? {

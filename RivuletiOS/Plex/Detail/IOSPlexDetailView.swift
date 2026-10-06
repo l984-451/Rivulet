@@ -139,13 +139,21 @@ struct IOSPlexDetailView: View {
         }
     }
 
+    /// The season menu: switch seasons, or download the one showing.
     @ViewBuilder
     private var seasonPicker: some View {
         let title = currentSeason.map(seasonLabel) ?? "Episodes"
-        if seasons.count > 1 {
+        if seasons.count > 1 || (currentSeason != nil && plex.isConfigured) {
             Menu {
-                Picker("Season", selection: $seasonKey) {
-                    ForEach(seasons) { Text(seasonLabel($0)).tag($0.ratingKey) }
+                if seasons.count > 1 {
+                    Picker("Season", selection: $seasonKey) {
+                        ForEach(seasons) { Text(seasonLabel($0)).tag($0.ratingKey) }
+                    }
+                }
+                if let season = currentSeason, plex.isConfigured {
+                    Section {
+                        Button("Download Season", systemImage: "arrow.down.circle") { actions.download(season) }
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -342,6 +350,9 @@ private struct IOSPlexDetailHeader: View {
                     circleButton(onList ? "checkmark" : "plus", label: onList ? "Remove from Watchlist" : "Add to Watchlist") {
                         actions.setWatchlisted(item, !onList)
                     }
+                }
+                if item.isPlayable {
+                    IOSDownloadButton(item: item)
                 }
                 Menu {
                     IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false)

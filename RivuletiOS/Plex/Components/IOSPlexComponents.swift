@@ -541,11 +541,15 @@ struct IOSPlexPosterGrid: View {
     }
 }
 
-/// Error state with Retry, used by every content surface.
+/// Error state with Retry, used by every content surface. Home and Library
+/// also offer the Downloads list when there is something in it.
 struct IOSPlexErrorView: View {
     let title: String
     let message: String
+    var offersDownloads = false
     let retry: () async -> Void
+    @EnvironmentObject private var downloads: IOSDownloadCenter
+    @Environment(\.openDownloads) private var openDownloads
 
     var body: some View {
         ContentUnavailableView {
@@ -555,6 +559,10 @@ struct IOSPlexErrorView: View {
         } actions: {
             Button("Retry") { Task { await retry() } }
                 .buttonStyle(.bordered)
+            if offersDownloads, !downloads.visibleRecords.isEmpty {
+                Button("Go to Downloads", action: openDownloads)
+                    .buttonStyle(.borderedProminent)
+            }
         }
     }
 }

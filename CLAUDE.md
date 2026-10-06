@@ -60,7 +60,9 @@ RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   extensions, IOSPlexAdapters, Home/Library/Detail views;
 │                       #   no endpoint code), Search/, Settings/, LiveTV/ (views
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
-│                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing).
+│                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
+│                       #   Downloads/ (background transfer, download center, list;
+│                       #   records + offline progress live in RivuletCore/Downloads).
 Rivulet/                # The tvOS app — everything below.
 ├── Models/
 │   ├── Plex/           # (moved to RivuletCore/Models/Plex)

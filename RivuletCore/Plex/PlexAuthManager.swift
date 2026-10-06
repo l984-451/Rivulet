@@ -1002,7 +1002,7 @@ extension PlexAuthManager {
 // MARK: - Certificate Delegate for Connection Testing
 
 /// URLSession delegate that trusts self-signed certificates for Plex servers
-class PlexCertificateDelegate: NSObject, URLSessionDelegate {
+nonisolated final class PlexCertificateDelegate: NSObject, URLSessionDelegate {
     func urlSession(
         _ session: URLSession,
         didReceive challenge: URLAuthenticationChallenge,

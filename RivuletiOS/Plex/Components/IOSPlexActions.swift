@@ -10,6 +10,8 @@ struct IOSPlexActions {
     var open: (PlexMetadata) -> Void = { _ in }
     var setWatched: (PlexMetadata, Bool) -> Void = { _, _ in }
     var setWatchlisted: (PlexMetadata, Bool) -> Void = { _, _ in }
+    /// A movie or episode, or every episode of a season.
+    var download: (PlexMetadata) -> Void = { _ in }
     /// Item whose playback is being prepared, for a spinner.
     var preparingID: String?
 }
@@ -29,6 +31,7 @@ extension View {
 private struct IOSPlexActionHost: ViewModifier {
     @EnvironmentObject private var plex: IOSPlexSession
     @EnvironmentObject private var playback: IOSPlaybackController
+    @EnvironmentObject private var downloads: IOSDownloadCenter
     @State private var preparingID: String?
     @State private var pushed: PlexMetadata?
     @State private var failure: (title: String, message: String)?
@@ -43,6 +46,13 @@ private struct IOSPlexActionHost: ViewModifier {
                 },
                 setWatchlisted: { item, on in
                     run("Couldn't Update Watchlist") { try await plex.setWatchlisted(on, item: item) }
+                },
+                download: { item in
+                    if item.type == "season" {
+                        run("Couldn't Download Season") { try await downloads.downloadSeason(item) }
+                    } else {
+                        downloads.download(item)
+                    }
                 },
                 preparingID: preparingID
             ))
@@ -111,6 +121,7 @@ struct IOSPlexItemMenu: View {
     var showsWatchlist = true
     @Environment(\.plexActions) private var actions
     @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var downloads: IOSDownloadCenter
     @ObservedObject private var watchlist = PlexWatchlistService.shared
 
     var body: some View {
@@ -134,6 +145,7 @@ struct IOSPlexItemMenu: View {
                 ) { actions.setWatchlisted(item, !onList) }
             }
         }
+        downloadItems
         if item.type == "episode" || item.type == "season" {
             Section {
                 if let show = item.showStub {
@@ -143,6 +155,27 @@ struct IOSPlexItemMenu: View {
                     Button("Go to Season", systemImage: "square.stack") { actions.open(season) }
                 }
             }
+        }
+    }
+}
+
+extension IOSPlexItemMenu {
+    @ViewBuilder
+    private var downloadItems: some View {
+        if item.isPlayable, let key = item.ratingKey {
+            if let record = downloads.record(for: key) {
+                if case .failed = record.state {
+                    Button("Retry Download", systemImage: "arrow.clockwise") { downloads.retry(recordID: record.id) }
+                }
+                Button(record.state.isSettled ? "Remove Download" : "Cancel Download",
+                       systemImage: "trash", role: .destructive) {
+                    downloads.delete(recordID: record.id)
+                }
+            } else if plex.isConfigured {
+                Button("Download", systemImage: "arrow.down.circle") { actions.download(item) }
+            }
+        } else if item.type == "season", plex.isConfigured {
+            Button("Download Season", systemImage: "arrow.down.circle") { actions.download(item) }
         }
     }
 }

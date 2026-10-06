@@ -3,32 +3,35 @@
 
 import SwiftUI
 
-/// Library tab root: the server's movie and TV libraries.
+/// Library tab root: Downloads, then the server's movie and TV libraries.
+/// Downloads stays reachable signed out or with the server unreachable.
 struct IOSPlexLibrariesView: View {
     @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var downloads: IOSDownloadCenter
 
     var body: some View {
         Group {
-            if !plex.isConfigured {
+            if !plex.isConfigured, downloads.visibleRecords.isEmpty {
                 IOSPlexConnectView()
-            } else if plex.libraries.isEmpty {
-                ScrollView {
-                    Group {
-                        if plex.isLoadingContent {
-                            ProgressView()
-                        } else if let error = plex.contentError {
-                            IOSPlexErrorView(title: "Couldn't Load Libraries", message: error) { await plex.refresh() }
-                        } else {
-                            ContentUnavailableView("No Libraries", systemImage: "film.stack")
+            } else {
+                List {
+                    Section {
+                        NavigationLink(value: IOSDownloadsRoute()) {
+                            Label("Downloads", systemImage: "arrow.down.circle")
                         }
                     }
-                    .containerRelativeFrame([.horizontal, .vertical])
-                }
-                .refreshable { await plex.refresh() }
-            } else {
-                List(plex.libraries) { library in
-                    NavigationLink(value: library) {
-                        Label(library.title, systemImage: library.icon)
+                    if !plex.isConfigured {
+                        IOSPlexConnectView().listRowBackground(Color.clear)
+                    } else if plex.libraries.isEmpty {
+                        status.frame(maxWidth: .infinity).listRowBackground(Color.clear)
+                    } else {
+                        Section {
+                            ForEach(plex.libraries) { library in
+                                NavigationLink(value: library) {
+                                    Label(library.title, systemImage: library.icon)
+                                }
+                            }
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -39,6 +42,17 @@ struct IOSPlexLibrariesView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             IOSAccountToolbarItem()
+        }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if plex.isLoadingContent {
+            ProgressView().padding()
+        } else if let error = plex.contentError {
+            IOSPlexErrorView(title: "Couldn't Load Libraries", message: error) { await plex.refresh() }
+        } else {
+            ContentUnavailableView("No Libraries", systemImage: "film.stack")
         }
     }
 }
@@ -79,7 +93,7 @@ struct IOSPlexLibraryView: View {
     var body: some View {
         Group {
             if items.isEmpty, let error {
-                IOSPlexErrorView(title: "Couldn't Load Library", message: error) { await reload() }
+                IOSPlexErrorView(title: "Couldn't Load Library", message: error, offersDownloads: true) { await reload() }
             } else if items.isEmpty, !isLoading, loadedKey != nil {
                 ScrollView {
                     ContentUnavailableView(

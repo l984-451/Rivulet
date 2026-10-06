@@ -6,6 +6,8 @@ import SwiftUI
 extension EnvironmentValues {
     /// Opens the account sheet. The root view sets it; every tab root's avatar calls it.
     @Entry var openAccount: () -> Void = {}
+    /// Shows the Downloads list. The root view sets it.
+    @Entry var openDownloads: () -> Void = {}
     /// Per-tab namespace for the poster-to-detail zoom. The root sets one per NavigationStack.
     @Entry var plexZoomNamespace: Namespace.ID? = nil
     /// Prefix for zoom source ids, so the same item in two rows (or the hero) has distinct sources.
@@ -70,6 +72,7 @@ private struct IOSPlexDestinations: ViewModifier {
             .navigationDestination(for: IOSPlexDetailRoute.self) { detail($0.item, sourceID: $0.sourceID) }
             .navigationDestination(for: PlexLibrary.self) { IOSPlexLibraryView(library: $0).iosPlexActionHost() }
             .navigationDestination(for: IOSPlexHubRoute.self) { IOSPlexHubGridView(route: $0).iosPlexActionHost() }
+            .navigationDestination(for: IOSDownloadsRoute.self) { _ in IOSDownloadsView().iosPlexActionHost() }
     }
 
     @ViewBuilder

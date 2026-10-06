@@ -290,7 +290,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
 
     // MARK: - Playback
 
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
+    /// Plex items play through the `.plex` player path, which applies quality there; the cap is unused.
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
         let detail = try await fullDetail(for: itemRef)
         guard let chosen = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best,
                                                  from: detail.mediaSources) else {

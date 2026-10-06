@@ -325,6 +325,59 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertTrue(urlString.contains("audioBitrate=1024"))
     }
 
+    // MARK: - Quality Step Cap Tests
+
+    private func query(_ result: (url: URL, headers: [String: String])?) -> [String: String] {
+        let items = URLComponents(url: result!.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+    }
+
+    func testBuildHLSDirectPlayURLStepCapsLANTranscode() {
+        let result = networkManager.buildHLSDirectPlayURL(
+            serverURL: testServerURL, authToken: testAuthToken, ratingKey: testRatingKey,
+            step: QualityStep.step(kbps: 8000))
+        let q = query(result)
+        XCTAssertEqual(q["maxVideoBitrate"], "8000")
+        XCTAssertEqual(q["videoResolution"], "1920x1080")
+        XCTAssertEqual(q["directPlay"], "0")
+        XCTAssertEqual(q["directStream"], "0")
+        XCTAssertEqual(q["videoCodec"], "h264")
+        XCTAssertEqual(q["directStreamAudio"], "1")
+        XCTAssertEqual(q["audioBitrate"], "1024")
+        XCTAssertEqual(q["X-Plex-Client-Profile-Name"], "Generic")
+        XCTAssertTrue(result!.headers["X-Plex-Client-Profile-Extra"]!.contains("name=video.bitrate&value=8000"))
+    }
+
+    func testBuildHLSDirectPlayURLLowStepTranscodesAudio() {
+        let q = query(networkManager.buildHLSDirectPlayURL(
+            serverURL: testServerURL, authToken: testAuthToken, ratingKey: testRatingKey,
+            step: QualityStep.step(kbps: 2000)))
+        XCTAssertEqual(q["maxVideoBitrate"], "2000")
+        XCTAssertEqual(q["videoResolution"], "1280x720")
+        XCTAssertEqual(q["directStreamAudio"], "0")
+        XCTAssertEqual(q["audioBitrate"], "320")
+    }
+
+    func testBuildHLSDirectPlayURLRelayClampsHighStepToRelay() {
+        let plain = query(networkManager.buildHLSDirectPlayURL(
+            serverURL: relayServerURL, authToken: testAuthToken, ratingKey: testRatingKey))
+        let stepped = query(networkManager.buildHLSDirectPlayURL(
+            serverURL: relayServerURL, authToken: testAuthToken, ratingKey: testRatingKey,
+            step: QualityStep.step(kbps: 8000)))
+        // Identical apart from the random session id.
+        XCTAssertEqual(plain.filter { $0.key != "session" }, stepped.filter { $0.key != "session" })
+        XCTAssertEqual(stepped["maxVideoBitrate"], "1500")
+        XCTAssertEqual(stepped["videoResolution"], "720x480")
+    }
+
+    func testBuildHLSDirectPlayURLRelayKeepsLowerStep() {
+        let q = query(networkManager.buildHLSDirectPlayURL(
+            serverURL: relayServerURL, authToken: testAuthToken, ratingKey: testRatingKey,
+            step: QualityStep.step(kbps: 720)))
+        XCTAssertEqual(q["maxVideoBitrate"], "720")
+        XCTAssertEqual(q["videoResolution"], "576x320")
+    }
+
     // MARK: - Direct Play URL Tests
 
     func testBuildPlaybackDirectPlayURLIncludesPartKey() {

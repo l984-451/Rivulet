@@ -22,7 +22,7 @@
 
 import Foundation
 
-enum PlexRelay {
+nonisolated enum PlexRelay {
     /// Plex relay endpoints are always `<ip-dashes>.<hash>.plex.direct:8443`;
     /// direct plex.direct connections embed the server's real port instead.
     static func isRelayURL(_ url: URL) -> Bool {

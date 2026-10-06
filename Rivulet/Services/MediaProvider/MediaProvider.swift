@@ -75,12 +75,14 @@ protocol MediaProvider: Sendable, Identifiable {
 
     // MARK: - Playback
     /// A nil `sourceID` plays the best version by `VersionRanking`.
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo
+    /// `maxBitrate` (bps, nil uncapped) is the most the stream may use; a provider without caps ignores it.
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo
 
     /// A server-side transcode starting at `startTime`, played with AVPlayer.
-    /// For when the client cannot play the direct-play stream.
-    /// Default: unsupported.
-    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval) async throws -> StreamInfo
+    /// For when the client cannot play the direct-play stream, or a quality cap.
+    /// The stream indices are the provider's own track ids; subtitle -1 is off. Default: unsupported.
+    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
+                         maxBitrate: Int?, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> StreamInfo
     /// `sourceID` is the `MediaSource.id` being played. Jellyfin needs it on
     /// every report; without it a multi-version item reports against the
     /// wrong version.
@@ -122,7 +124,19 @@ protocol MediaProvider: Sendable, Identifiable {
 }
 
 extension MediaProvider {
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
+        try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: nil)
+    }
     func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval) async throws -> StreamInfo {
+        try await transcodeStream(for: itemRef, sourceID: sourceID, startTime: startTime, maxBitrate: nil)
+    }
+    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
+                         maxBitrate: Int?) async throws -> StreamInfo {
+        try await transcodeStream(for: itemRef, sourceID: sourceID, startTime: startTime, maxBitrate: maxBitrate,
+                                  audioStreamIndex: nil, subtitleStreamIndex: nil)
+    }
+    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
+                         maxBitrate: Int?, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> StreamInfo {
         throw MediaProviderError.transcodeRequired
     }
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras { PlaybackExtras() }

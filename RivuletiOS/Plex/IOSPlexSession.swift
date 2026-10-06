@@ -9,9 +9,9 @@
 //  PlexAuthManager owns identity (PIN flow, server selection, tokens) and
 //  PlexNetworkManager owns every request. This file holds no endpoint
 //  knowledge; it shapes shared results for the iOS views and caches what is
-//  expensive to re-resolve (clear logos). The one exception is the direct
-//  playback URL and its headers, which iOS composes here because tvOS routes
-//  playback through ContentRouter, a surface iOS does not have yet. Content
+//  expensive to re-resolve (clear logos). The one exception is the playback
+//  URL (direct, or a capped transcode from the shared builder), which iOS
+//  composes here because iOS has no ContentRouter. Content
 //  fetches live in IOSPlexSession+Content.swift.
 //
 //  It exists for the same reason PlexDataStore does on tvOS: the auth manager
@@ -339,13 +339,15 @@ final class IOSPlexSession: ObservableObject {
 
     // MARK: - Playback
 
-    func playback(for item: PlexMetadata) async throws -> IOSPlexPlaybackRequest {
+    /// `quality` overrides the Home or Away setting; `previous` lends its fresh throughput reading.
+    func playback(
+        for item: PlexMetadata,
+        quality: StreamingQuality? = nil,
+        previous: IOSPlexPlaybackRequest? = nil
+    ) async throws -> IOSPlexPlaybackRequest {
         let full = try await metadata(for: item)
         let (serverURL, token) = try configuration()
-        guard let part = full.streamKey,
-              let url = Self.directPlayURL(serverURL: serverURL, token: token, partKey: part) else {
-            throw IOSPlexSessionError.noPlayableURL
-        }
+        guard full.streamKey != nil else { throw IOSPlexSessionError.noPlayableURL }
 
         var markers = full.Marker ?? []
         if UserDefaults.standard.bool(forKey: "useIntroDB"),
@@ -372,13 +374,129 @@ final class IOSPlexSession: ObservableObject {
             }
         }
 
-        return IOSPlexPlaybackRequest(
-            item: full,
-            url: url,
-            headers: Self.playbackHeaders(token: token),
+        let resume = full.resumeSeconds
+        let resumes = full.durationSeconds > 0
+            ? WatchProgressPolicy.hasResumePoint(offsetSeconds: resume, runtimeSeconds: full.durationSeconds)
+            : WatchProgressPolicy.hasResumePoint(offsetSeconds: resume)
+        return try await stream(
+            full,
             markers: markers.sorted { ($0.startTimeOffset ?? 0) < ($1.startTimeOffset ?? 0) },
             serverURL: serverURL,
-            token: token
+            token: token,
+            version: .best,
+            quality: quality,
+            plan: nil,
+            measurement: previous?.freshMeasurement,
+            startTime: resumes ? resume : nil
+        )
+    }
+
+    /// The playing title again at `time`, keeping its version. `plan` skips the
+    /// decision (a step-down, a fallback, or a track change that keeps its step).
+    func playback(
+        reloading request: IOSPlexPlaybackRequest,
+        quality: StreamingQuality,
+        plan: StreamPlan? = nil,
+        at time: TimeInterval
+    ) async throws -> IOSPlexPlaybackRequest {
+        // `item.Media` leads with the playing version; the transcoder wants its server index.
+        var item = request.item
+        if var media = item.Media, media.indices.contains(request.mediaIndex) {
+            media.insert(media.removeFirst(), at: request.mediaIndex)
+            item.Media = media
+        }
+        return try await stream(
+            item,
+            markers: request.markers,
+            serverURL: request.serverURL,
+            token: request.token,
+            version: request.item.Media?.first.map { .source("\($0.id)") } ?? .best,
+            quality: quality,
+            plan: plan,
+            measurement: request.freshMeasurement,
+            startTime: time > 1 ? time : nil
+        )
+    }
+
+    /// Picks the version and Original vs a capped transcode, then builds the URL.
+    private func stream(
+        _ full: PlexMetadata,
+        markers: [PlexMarker],
+        serverURL: String,
+        token: String,
+        version: VersionChoice,
+        quality: StreamingQuality?,
+        plan forced: StreamPlan?,
+        measurement: (kbps: Int?, at: Date)?,
+        startTime: TimeInterval?
+    ) async throws -> IOSPlexPlaybackRequest {
+        let isRelay = PlexRelay.isRelayURL(serverURL)
+        let quality = quality ?? StreamingQuality.setting(home: StreamingQuality.isHome(serverURL: serverURL))
+        let media = full.Media ?? []
+        var measurement = measurement
+        if forced == nil, measurement == nil, QualityDecision.needsProbe(setting: quality, isRelay: isRelay),
+           let key = VersionRanking.select(version, in: media).media.first?.Part?.first?.key,
+           let probeURL = Self.directPlayURL(serverURL: serverURL, token: token, partKey: key) {
+            // Detached: the probe's read loop must not run on the main actor.
+            let kbps = await ThroughputProbe.measure(url: probeURL)
+            measurement = (kbps, Date())
+        }
+        let cap = forced.map { $0.step?.kbps } ?? QualityDecision.capKbps(
+            setting: quality, measuredKbps: measurement?.kbps, isRelay: isRelay)
+        let selection = VersionRanking.select(version, in: media, capKbps: cap)
+        var item = full
+        if !selection.media.isEmpty { item.Media = selection.media }
+        let chosen = selection.media.first
+        let plan = forced ?? QualityDecision.decide(
+            setting: quality, sourceKbps: chosen?.sourceKbps, measuredKbps: measurement?.kbps, isRelay: isRelay
+        )
+
+        let url: URL
+        let headers: [String: String]
+        var sessionID: String?
+        switch plan {
+        case .original:
+            guard let key = chosen?.Part?.first?.key,
+                  let direct = Self.directPlayURL(serverURL: serverURL, token: token, partKey: key) else {
+                throw IOSPlexSessionError.noPlayableURL
+            }
+            url = direct
+            headers = Self.playbackHeaders(token: token)
+        case .transcode(let step):
+            guard let ratingKey = full.ratingKey,
+                  let built = network.buildHLSDirectPlayURL(
+                    serverURL: serverURL,
+                    authToken: token,
+                    ratingKey: ratingKey,
+                    mediaIndex: selection.serverIndex,
+                    offsetMs: Int((startTime ?? 0) * 1000),
+                    useDolbyVision: false,
+                    forceVideoTranscode: true,
+                    step: step
+                  ) else {
+                throw IOSPlexSessionError.noPlayableURL
+            }
+            url = built.url
+            headers = built.headers
+            sessionID = URLComponents(url: built.url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "session" }?.value
+        }
+
+        return IOSPlexPlaybackRequest(
+            item: item,
+            url: url,
+            headers: headers,
+            markers: markers,
+            serverURL: serverURL,
+            token: token,
+            quality: quality,
+            plan: plan,
+            sourceKbps: chosen?.sourceKbps,
+            mediaIndex: selection.serverIndex,
+            transcodeSessionID: sessionID,
+            measuredKbps: measurement?.kbps,
+            measuredAt: measurement?.at,
+            startTime: startTime
         )
     }
 
@@ -454,6 +572,23 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     let markers: [PlexMarker]
     let serverURL: String
     let token: String
+    /// The choice that produced this request; `plan` is what it plays as.
+    var quality: StreamingQuality
+    let plan: StreamPlan
+    let sourceKbps: Int?
+    /// The playing version's index in the server's Media order.
+    let mediaIndex: Int
+    /// The Plex transcode session to stop when this request is replaced.
+    let transcodeSessionID: String?
+    var measuredKbps: Int?
+    var measuredAt: Date?
+    let startTime: TimeInterval?
+
+    /// A throughput reading young enough for Up Next and reloads to reuse.
+    var freshMeasurement: (kbps: Int?, at: Date)? {
+        guard let measuredAt, Date().timeIntervalSince(measuredAt) < 600 else { return nil }
+        return (measuredKbps, measuredAt)
+    }
 }
 
 nonisolated enum IOSPlexSessionError: LocalizedError {

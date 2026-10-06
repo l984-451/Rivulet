@@ -114,6 +114,39 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertEqual((body["StartTimeTicks"] as? NSNumber)?.int64Value, 900_000_000)
     }
 
+    /// A quality cap goes in the body and the device profile; no cap stays at 400 Mbps.
+    func test_maxBitrate_capsBodyAndProfile() async throws {
+        server.respond("/Items/m1/PlaybackInfo", body: """
+            {"MediaSources":[{"Id":"m1","SupportsDirectPlay":false,"SupportsTranscoding":true,
+              "TranscodingUrl":"/videos/m1/master.m3u8?ApiKey=tok","MediaStreams":[]}],"PlaySessionId":"ps5"}
+            """)
+        let item = MediaItemRef(providerID: "jellyfin:srv", itemID: "m1")
+        _ = try await provider().transcodeStream(for: item, sourceID: "m1", startTime: 0, maxBitrate: 8_000_000)
+        _ = try await provider().resolveStream(for: item, sourceID: "m1")
+        for (index, expected) in [8_000_000, 400_000_000].enumerated() {
+            let body = server.jsonBody(index)
+            let profile = body["DeviceProfile"] as? [String: Any]
+            XCTAssertEqual((body["MaxStreamingBitrate"] as? NSNumber)?.intValue, expected)
+            XCTAssertEqual((profile?["MaxStreamingBitrate"] as? NSNumber)?.intValue, expected)
+        }
+    }
+
+    /// A transcode carries the picked tracks and burns the subtitle in.
+    func test_transcodeStream_sendsTrackIndices() async throws {
+        server.respond("/Items/m1/PlaybackInfo", body: """
+            {"MediaSources":[{"Id":"m1","SupportsDirectPlay":false,"SupportsTranscoding":true,
+              "TranscodingUrl":"/videos/m1/master.m3u8?ApiKey=tok","MediaStreams":[]}],"PlaySessionId":"ps6"}
+            """)
+        _ = try await provider().transcodeStream(for: MediaItemRef(providerID: "jellyfin:srv", itemID: "m1"),
+                                                 sourceID: "m1", startTime: 0, maxBitrate: nil,
+                                                 audioStreamIndex: 2, subtitleStreamIndex: -1)
+        let body = server.jsonBody(0)
+        XCTAssertEqual((body["AudioStreamIndex"] as? NSNumber)?.intValue, 2)
+        XCTAssertEqual((body["SubtitleStreamIndex"] as? NSNumber)?.intValue, -1)
+        let profile = body["DeviceProfile"] as? [String: Any]
+        XCTAssertEqual((profile?["SubtitleProfiles"] as? [Any])?.count, 0)
+    }
+
     func test_transcodeStream_withoutATranscodingUrl_throwsTranscodeRequired() async {
         server.respond("/Items/m1/PlaybackInfo", body: """
             {"MediaSources":[{"Id":"m1","SupportsDirectPlay":true,"MediaStreams":[]}],"PlaySessionId":"ps4"}

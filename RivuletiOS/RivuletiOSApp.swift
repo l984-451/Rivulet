@@ -19,6 +19,8 @@ struct RivuletiOSApp: App {
         let session = IOSPlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)
+        // Start the path monitor now; its first reading arrives after a delay.
+        _ = NetworkPathMonitor.shared
         // Folds the old single-source settings into the shared store, then
         // warms the guide so the Live TV tab opens with data.
         Task {

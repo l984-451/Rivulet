@@ -18,8 +18,21 @@ struct ProviderPlayback: Sendable {
     let provider: any MediaProvider
     let item: MediaItem
     let detail: MediaItemDetail
-    let stream: StreamInfo
+    var stream: StreamInfo
     let extras: PlaybackExtras
+    var quality = ProviderQuality()
+}
+
+/// The streaming quality `prepare` settled on for a provider stream.
+struct ProviderQuality: Sendable {
+    /// The session pick, else the Home or Away setting.
+    var choice: StreamingQuality = .original
+    var plan: StreamPlan = .original
+    var isHome = true
+    /// The probe behind an Auto decision, reused for 10 minutes.
+    var throughput: (kbps: Int, at: Date)?
+    /// The uncapped direct stream, which a later Auto pick probes.
+    var probeURL: URL?
 }
 
 enum PlaybackSource {

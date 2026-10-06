@@ -190,6 +190,8 @@ enum SettingsContent {
         case .displaySizePicker:      return displaySizePicker
         case .autoplayCountdownPicker: return autoplayCountdownPicker
         case .skipIntervalPicker:     return skipIntervalPicker
+        case .homeQualityPicker:      return qualityPicker(home: true)
+        case .awayQualityPicker:      return qualityPicker(home: false)
         case .contentFilter:          return contentFilter
         case .contentFilterStrength:  return contentFilterStrength
         }
@@ -218,6 +220,16 @@ enum SettingsContent {
             SettingsRowItem(id: "si_\(opt.rawValue)", title: opt.description, kind: .option(
                 isSelected: { SettingsStore.int(SkipInterval.storageKey, default: SkipInterval.defaultValue.rawValue) == opt.rawValue },
                 select: { SettingsStore.setInt(SkipInterval.storageKey, opt.rawValue) }))
+        }
+    }
+
+    /// Read at play time by the player (`StreamingQuality.setting`).
+    private static func qualityPicker(home: Bool) -> [SettingsRowItem] {
+        let key = home ? StreamingQuality.homeKey : StreamingQuality.awayKey
+        return StreamingQuality.allChoices.map { choice in
+            SettingsRowItem(id: "sq_\(choice.rawValue)", title: choice.label, kind: .option(
+                isSelected: { StreamingQuality.setting(home: home) == choice },
+                select: { SettingsStore.setString(key, choice.rawValue) }))
         }
     }
 
@@ -311,6 +323,14 @@ enum SettingsContent {
             // Watching tile plays on Select, so it dims with Instant Resume off.
             toggle("promptResumeOrRestart", "Resume or Restart Prompt", key: "promptResumeOrRestart", default: false,
                    enabledWhen: { SettingsStore.bool("continueWatchingInstantResume", default: true) }),
+            SettingsRowItem(id: "homeStreamingQuality", title: "Home Streaming Quality",
+                            kind: .navigationValue(.homeQualityPicker, value: {
+                                StreamingQuality.setting(home: true).label
+                            })),
+            SettingsRowItem(id: "awayStreamingQuality", title: "Away Streaming Quality",
+                            kind: .navigationValue(.awayQualityPicker, value: {
+                                StreamingQuality.setting(home: false).label
+                            })),
             SettingsRowItem(id: "autoplayCountdown", title: "Autoplay Countdown",
                             kind: .navigationValue(.autoplayCountdownPicker, value: {
                                 AutoplayCountdown(rawValue: SettingsStore.int("autoplayCountdown", default: AutoplayCountdown.fiveSeconds.rawValue))?.description ?? ""

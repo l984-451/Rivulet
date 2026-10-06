@@ -1654,7 +1654,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         hasHDR: Bool = false,
         useDolbyVision: Bool = true,
         forceVideoTranscode: Bool = false,
-        allowAudioDirectStream: Bool = true
+        allowAudioDirectStream: Bool = true,
+        step: QualityStep? = nil
     ) -> (url: URL, headers: [String: String])? {
         // Request an HLS remux that keeps the HEVC/Dolby Vision bitstream intact
         // tvOS requires fMP4/CMAF segments for Dolby Vision profiles 5/8
@@ -1672,12 +1673,19 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         // that already forces transcode composes with this; the cap only ever
         // tightens the request, never loosens one.
         let relayCapped = PlexRelay.isRelayURL(serverURL)
-        let effectiveForceTranscode = forceVideoTranscode || relayCapped
+        // A quality step caps the same way; relay clamps it to the relay rung.
+        let cap: QualityStep? = relayCapped
+            ? (step.map { $0.kbps < QualityStep.relay.kbps ? $0 : .relay } ?? .relay)
+            : step
+        let effectiveForceTranscode = forceVideoTranscode || cap != nil
+        // Audio is transcoded only on low steps, where a passed-through track would eat the budget.
+        let lowCap = cap.map { $0.kbps < 4000 } ?? false
+        let transcodeAudio = !allowAudioDirectStream || lowCap
 
          // Match official Plex tvOS behavior for DV by using the "Plex Apple TV" profile name.
          // Stick with "Generic" for non-DV to keep our custom extra profile.
          // forceVideoTranscode disables DV — transcoded output cannot preserve it,
-         // so the DV profile name would mislead the server. The relay cap
+         // so the DV profile name would mislead the server. A cap
          // transcodes for the same reason, so it disables DV the same way.
          let effectiveUseDolbyVision = effectiveForceTranscode ? false : useDolbyVision
          let clientProfileName = effectiveUseDolbyVision ? "Plex Apple TV" : "Generic"
@@ -1707,12 +1715,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.width&value=4096&replace=true)",
             "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.height&value=2160&replace=true)"
         ]
-        if relayCapped {
+        if let cap {
             // Belt and braces with the maxVideoBitrate query param: the MDE
-            // bitrate limitation keeps the decision inside the relay budget
+            // bitrate limitation keeps the decision inside the cap
             // even where a profile clause and a query param disagree.
             clientProfileClauses.append(
-                "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=1500&replace=true)")
+                "add-limitation(scope=videoCodec&scopeName=*&type=upperBound&name=video.bitrate&value=\(cap.kbps)&replace=true)")
         }
         let clientProfile = clientProfileClauses.joined(separator: "+")
 
@@ -1744,20 +1752,20 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // When allowAudioDirectStream=false (e.g., AirPlay/HomePod with multichannel AAC), force transcode
             // HomePod supports Dolby Digital surround (EAC3/AC3) but NOT multichannel AAC
             // Note: segmentContainer=mp4 ensures fMP4 segments regardless of this setting
-            // The relay cap also forces audio transcode: a passed-through
-            // lossless track can exceed the whole relay budget on its own.
-            URLQueryItem(name: "directStreamAudio", value: (allowAudioDirectStream && !relayCapped) ? "1" : "0"),
+            // A low cap also forces audio transcode: a passed-through
+            // lossless track can exceed the whole budget on its own.
+            URLQueryItem(name: "directStreamAudio", value: transcodeAudio ? "0" : "1"),
             URLQueryItem(name: "fastSeek", value: "1"),
             // forceVideoTranscode caps the target at h264 only — h264 is the most universally
             // compatible codec and is what we want when transcoding from a non-Apple-decodable
             // source. The default keeps both for direct-play / remux-only requests.
             URLQueryItem(name: "videoCodec", value: effectiveForceTranscode ? "h264" : "h264,hevc"),
-            URLQueryItem(name: "videoResolution", value: relayCapped ? "720x480" : "4096x2160"),
+            URLQueryItem(name: "videoResolution", value: cap?.videoResolution ?? "4096x2160"),
             URLQueryItem(name: "videoQuality", value: "100"),
             URLQueryItem(name: "segmentDuration", value: "6"),
             // EAC3 preferred for surround (HomePod compatible), AAC for stereo fallback
-            URLQueryItem(name: "audioCodec", value: (allowAudioDirectStream && !relayCapped) ? "aac,eac3,ac3" : "eac3,ac3,aac"),
-            URLQueryItem(name: "audioBitrate", value: relayCapped ? "320" : "1024"),
+            URLQueryItem(name: "audioCodec", value: transcodeAudio ? "eac3,ac3,aac" : "aac,eac3,ac3"),
+            URLQueryItem(name: "audioBitrate", value: lowCap ? "320" : "1024"),
             URLQueryItem(name: "audioChannels", value: "8"),
             URLQueryItem(name: "subtitles", value: "auto"),
             URLQueryItem(name: "subtitleSize", value: "100"),
@@ -1770,11 +1778,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "includeKeyframePlaylist", value: "1")
         ]
 
-        if relayCapped {
-            // The 480p rung stock Plex converts relay items to. Without the
-            // cap the tunnel serves a stream it cannot sustain, or refuses
-            // the request outright above the server's remote-bitrate policy.
-            items.append(URLQueryItem(name: "maxVideoBitrate", value: "1500"))
+        if let cap {
+            // On relay this is the 480p rung stock Plex converts relay items to. Without
+            // it the tunnel serves a stream it cannot sustain, or refuses the request.
+            items.append(URLQueryItem(name: "maxVideoBitrate", value: "\(cap.kbps)"))
         }
 
         items.append(URLQueryItem(name: "X-Plex-Client-Profile-Extra", value: clientProfile))
@@ -1788,7 +1795,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             components.queryItems?.append(URLQueryItem(name: "includeCodecs", value: "1"))
         }
 
-        print("[Plex HLS] Using \(clientProfileName) profile for \(effectiveUseDolbyVision ? "Dolby Vision" : "HDR/SDR")\(relayCapped ? " with relay cap 1.5 Mbps 480p" : "") (session: \(sessionId))")
+        print("[Plex HLS] Using \(clientProfileName) profile for \(effectiveUseDolbyVision ? "Dolby Vision" : "HDR/SDR")\(cap.map { " with cap \($0.label)" } ?? "") (session: \(sessionId))")
 
         guard let url = components.url else { return nil }
         return (url, headers)
@@ -1862,31 +1869,25 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Ping the `/decision` endpoint to tell Plex to actually start the transcode/remux session.
-    /// Without this, Plex may return a playlist with segment URLs but never begin muxing,
-    /// causing the init segment (`/base/header`) to hang indefinitely.
-    /// Takes the `start.m3u8` URL and swaps the path to `/decision`.
+    /// Opens a transcode session with a `/decision` request carrying the same parameters.
+    /// PMS can answer `start.m3u8` with 400 (measured on 1.43.4) or start a session that never
+    /// muxes until a decision has run, so call this before the first playlist fetch.
     func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async {
-        guard var components = URLComponents(url: hlsURL, resolvingAgainstBaseURL: false) else { return }
-
-        // Swap start.m3u8 → decision
-        let currentPath = components.path
-        components.path = currentPath.replacingOccurrences(
-            of: "/video/:/transcode/universal/start.m3u8",
-            with: "/video/:/transcode/universal/decision"
-        )
-
+        let startPath = "/video/:/transcode/universal/start.m3u8"
+        guard var components = URLComponents(url: hlsURL, resolvingAgainstBaseURL: false),
+              components.path.hasSuffix(startPath) else { return }
+        components.path = components.path.replacingOccurrences(of: startPath, with: "/video/:/transcode/universal/decision")
         guard let decisionURL = components.url else { return }
 
-        var request = URLRequest(url: decisionURL)
-        request.httpMethod = "GET"
+        var request = URLRequest(url: decisionURL, timeoutInterval: 15)
         for (key, value) in headers {
             request.addValue(value, forHTTPHeaderField: key)
         }
-
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
+                print("[Plex] Transcode decision returned HTTP \(status)")
+            }
         } catch {
             print("[Plex] Decision request failed: \(error.localizedDescription)")
         }
@@ -1913,23 +1914,6 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // Best-effort — don't block on failure
             print("[Plex] Failed to stop transcode session \(sessionId): \(error.localizedDescription)")
         }
-    }
-
-    /// Detect if a server URL is on the local network
-    private func isLocalServer(_ serverURL: String) -> Bool {
-        guard let url = URL(string: serverURL), let host = url.host else {
-            return false
-        }
-
-        // Check for private IP ranges
-        let localPrefixes = [
-            "192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
-            "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-            "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-            "127.", "localhost"
-        ]
-
-        return localPrefixes.contains(where: { host.hasPrefix($0) }) || host == "localhost"
     }
 
     /// Get decision info from Plex about what playback method to use

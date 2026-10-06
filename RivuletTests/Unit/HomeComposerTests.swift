@@ -86,10 +86,16 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     /// made, as "detail(m1)", "stream(m1,nil)", "extras(m1,src)".
     var detailResult: MediaItemDetail?
     var streamResult: StreamInfo?
+    /// What a capped `resolveStream` answers (nil: `streamResult`), or throws.
+    var cappedStreamResult: StreamInfo?
+    var cappedStreamError: Error?
     var extrasResult = PlaybackExtras()
     private let callLock = NSLock()
     private var recordedCalls: [String] = []
     var playbackCalls: [String] { callLock.withLock { recordedCalls } }
+    private var recordedBitrates: [Int?] = []
+    /// `maxBitrate` of each `resolveStream`, in order.
+    var resolveBitrates: [Int?] { callLock.withLock { recordedBitrates } }
     private func recordCall(_ call: String) { callLock.withLock { recordedCalls.append(call) } }
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         recordCall("detail(\(itemRef.itemID))")
@@ -112,16 +118,26 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         if let hubsError { throw hubsError }
         return hubsByLibrary[library.id] ?? []
     }
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
         recordCall("stream(\(itemRef.itemID),\(sourceID ?? "nil"))")
+        callLock.withLock { recordedBitrates.append(maxBitrate) }
+        if maxBitrate != nil {
+            if let cappedStreamError { throw cappedStreamError }
+            if let cappedStreamResult { return cappedStreamResult }
+        }
         guard let streamResult else { throw MediaProviderError.notFound }
         return streamResult
     }
     /// What `transcodeStream` answers, and what it was asked for.
     var transcodeResult: StreamInfo?
     private(set) var transcodeRequests: [(ref: MediaItemRef, sourceID: String?, startTime: TimeInterval)] = []
-    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval) async throws -> StreamInfo {
+    private(set) var transcodeBitrates: [Int?] = []
+    private(set) var transcodeTracks: [(audio: Int?, subtitle: Int?)] = []
+    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
+                         maxBitrate: Int?, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> StreamInfo {
         transcodeRequests.append((itemRef, sourceID, startTime))
+        transcodeBitrates.append(maxBitrate)
+        transcodeTracks.append((audioStreamIndex, subtitleStreamIndex))
         guard let transcodeResult else { throw MediaProviderError.transcodeRequired }
         return transcodeResult
     }

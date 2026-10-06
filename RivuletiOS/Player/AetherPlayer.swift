@@ -127,6 +127,8 @@ final class AetherPlayer: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var isBuffering = false
+    /// Playback starving for data; never a seek or the startup load.
+    @Published private(set) var isStalled = false
     @Published private(set) var audioTracks: [Track] = []
     @Published private(set) var subtitleTracks: [Track] = []
     @Published private(set) var currentAudioTrackId: Int?
@@ -220,6 +222,19 @@ final class AetherPlayer: ObservableObject {
         engine.$isBuffering
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.recomputeBuffering() }
+            .store(in: &cancellables)
+
+        engine.$playbackPhase
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] phase in
+                guard let self else { return }
+                let starving = switch phase {
+                case .rebuffering, .stalled: true
+                default: false
+                }
+                let stalled = starving && !self.isStarting && self.pendingSeekTarget == nil
+                if stalled != self.isStalled { self.isStalled = stalled }
+            }
             .store(in: &cancellables)
 
         engine.$duration
@@ -472,27 +487,33 @@ final class AetherPlayer: ObservableObject {
     }
 
     /// Plex video on demand. Sidecars are registered at load so they appear
-    /// as ordinary subtitle tracks.
+    /// as ordinary subtitle tracks. `keepingTransport` (a quality reload) keeps
+    /// the speed and a paused session paused.
     func load(
         url: URL,
         headers: [String: String]? = nil,
         startTime: TimeInterval? = nil,
-        externalSubtitles: [SidecarSubtitle] = []
+        externalSubtitles: [SidecarSubtitle] = [],
+        keepingTransport: Bool = false
     ) async throws {
         lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles)
-        try await performVODLoad(url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles)
+        try await performVODLoad(
+            url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles,
+            keepingTransport: keepingTransport
+        )
     }
 
     private func performVODLoad(
         url: URL,
         headers: [String: String],
         startTime: TimeInterval?,
-        subtitles: [SidecarSubtitle]
+        subtitles: [SidecarSubtitle],
+        keepingTransport: Bool = false
     ) async throws {
-        beginLoad()
+        beginLoad(keepingTransport: keepingTransport)
         pendingSeekTarget = startTime
         isStarting = true
-        let options = LoadOptions(
+        var options = LoadOptions(
             suppressDisplayCriteria: false,
             httpHeaders: headers,
             matchContentEnabled: true,
@@ -520,9 +541,11 @@ final class AetherPlayer: ObservableObject {
             },
             teletextPage: Self.regionTeletextPage()
         )
+        options.autoplay = userIntendsToPlay
 
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
+            if userIntendsToPlay, rate != 1 { engine.setRate(rate) }
             seedVideoSize()
         } catch {
             failLoad(error)
@@ -542,16 +565,19 @@ final class AetherPlayer: ObservableObject {
         }
     }
 
-    private func beginLoad() {
+    private func beginLoad(keepingTransport: Bool = false) {
         state = .loading
         canRetry = true
         videoSize = .zero
         pendingSeekTarget = nil
         isStarting = false
+        isStalled = false
         liveWindow = .idle
-        // The engine forgets the speed when the source changes.
-        rate = 1
-        userIntendsToPlay = true
+        // The engine forgets the speed when the source changes; a reload reapplies it.
+        if !keepingTransport {
+            rate = 1
+            userIntendsToPlay = true
+        }
         tornDownAt = nil
         // Audio session activation is an XPC round trip; keep it off main.
         Task.detached(priority: .userInitiated) {

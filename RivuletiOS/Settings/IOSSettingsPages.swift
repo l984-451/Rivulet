@@ -20,7 +20,7 @@ struct IOSHomeSettingsView: View {
     }
 }
 
-/// Account > Playback: skip buttons, automatic skips and the markers they use.
+/// Account > Playback: streaming quality, skip buttons, automatic skips and the markers they use.
 struct IOSPlaybackSettingsView: View {
     @AppStorage("playerSkipBackwardSeconds") private var skipBackwardSeconds = 10
     @AppStorage("playerSkipForwardSeconds") private var skipForwardSeconds = 30
@@ -29,9 +29,21 @@ struct IOSPlaybackSettingsView: View {
     @AppStorage("autoSkipCredits") private var autoSkipCredits = false
     @AppStorage("autoSkipAds") private var autoSkipAds = false
     @AppStorage("useIntroDB") private var useIntroDB = false
+    /// Same keys as the tvOS Home and Away Streaming Quality settings.
+    @AppStorage(StreamingQuality.homeKey) private var homeQuality = StreamingQuality.homeDefault
+    @AppStorage(StreamingQuality.awayKey) private var awayQuality = StreamingQuality.awayDefault
 
     var body: some View {
         Form {
+            Section {
+                Picker("Home", selection: $homeQuality) { qualityOptions }
+                Picker("Away", selection: $awayQuality) { qualityOptions }
+            } header: {
+                Text("Streaming Quality")
+            } footer: {
+                Text("Away covers cellular, a personal hotspot, Low Data Mode and connections outside your home network. Auto converts only when the file will not fit your connection.")
+            }
+
             Section {
                 Picker("Skip Back", selection: $skipBackwardSeconds) {
                     ForEach([5, 10, 15, 30], id: \.self) { Text("\($0) seconds").tag($0) }
@@ -63,5 +75,9 @@ struct IOSPlaybackSettingsView: View {
             }
         }
         .navigationTitle("Playback")
+    }
+
+    private var qualityOptions: some View {
+        ForEach(StreamingQuality.allChoices, id: \.self) { Text($0.label).tag($0) }
     }
 }

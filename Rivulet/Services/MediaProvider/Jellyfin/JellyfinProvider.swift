@@ -321,22 +321,28 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     /// Direct play when the server allows it, else the server's HLS transcode.
     /// A source with neither throws `.transcodeRequired`.
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
-        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: true, startTime: 0)
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
+        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: true, startTime: 0, maxBitrate: maxBitrate)
     }
 
-    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval) async throws -> StreamInfo {
-        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: false, startTime: startTime)
+    func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
+                         maxBitrate: Int?, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> StreamInfo {
+        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: false, startTime: startTime,
+                               maxBitrate: maxBitrate, audioStreamIndex: audioStreamIndex,
+                               subtitleStreamIndex: subtitleStreamIndex)
     }
 
     private func playbackInfo(
-        _ itemRef: MediaItemRef, sourceID: String?, allowDirectPlay: Bool, startTime: TimeInterval
+        _ itemRef: MediaItemRef, sourceID: String?, allowDirectPlay: Bool, startTime: TimeInterval, maxBitrate: Int?,
+        audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil
     ) async throws -> StreamInfo {
         let response: JFPlaybackInfoResponse = try await client.post(
             "Items/\(itemRef.itemID)/PlaybackInfo",
             body: JFPlaybackInfoRequest.playback(
                 userId: userID, mediaSourceId: sourceID, allowDirectPlay: allowDirectPlay,
-                startTimeTicks: startTime > 0 ? JellyfinTicks.ticks(startTime) : nil
+                startTimeTicks: startTime > 0 ? JellyfinTicks.ticks(startTime) : nil,
+                maxStreamingBitrate: maxBitrate,
+                audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex
             )
         )
         let sources = response.mediaSources ?? []
@@ -344,7 +350,9 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             JellyfinMediaMapper.mediaSource($0, itemID: itemRef.itemID, playSessionID: response.playSessionId,
                                             baseURL: baseURL, token: token)
         }
-        let pickedID = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best, from: ranked)?.id
+        // The cap picks a version that fits before the server decides how to play it.
+        let pickedID = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best, from: ranked,
+                                             capKbps: maxBitrate.map { $0 / 1000 })?.id
         guard let chosen = sources.first(where: { ($0.id ?? itemRef.itemID) == pickedID }) else {
             throw MediaProviderError.notFound
         }

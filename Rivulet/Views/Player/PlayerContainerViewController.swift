@@ -1502,6 +1502,26 @@ class PlayerContainerViewController: UIViewController {
                 }),
                 width: CardTrackListView.menuWidth, from: rail.filterButton)
         }
+        // Quality: every choice, the session's pick checked; Auto says what it is playing.
+        rail.setQualityAvailable(true)
+        rail.onQuality = { [weak self] in
+            guard let self, let vm = self.viewModel else { return }
+            let choices = StreamingQuality.allChoices
+            let playing = "Playing " + (vm.activeStreamPlan.step?.label ?? "Original")
+            let rows = choices.enumerated().map { index, choice in
+                CardTrackListView.Row(
+                    title: choice.label,
+                    subtitle: choice == .auto && vm.qualityChoice == .auto ? playing : nil,
+                    trackId: index,
+                    isSelected: choice == vm.qualityChoice)
+            }
+            self.presentRailPanel(
+                content: CardTrackListView(header: "Quality", rows: rows, onSelect: { [weak vm, weak self] index in
+                    if let index, choices.indices.contains(index) { vm?.selectQuality(choices[index]) }
+                    self?.activeRailPanel?.dismissPanel()
+                }),
+                width: CardTrackListView.menuWidth, from: rail.qualityButton)
+        }
         vm.contentFilter.$isEnabled
             .combineLatest(vm.contentFilter.$isPaused)
             .receive(on: DispatchQueue.main)

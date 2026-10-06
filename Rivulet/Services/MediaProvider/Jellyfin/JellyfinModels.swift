@@ -188,6 +188,8 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
     let mediaSourceId: String?
     let maxStreamingBitrate: Int
     let startTimeTicks: Int64?
+    let audioStreamIndex: Int?
+    let subtitleStreamIndex: Int?
     let enableDirectPlay: Bool
     let enableDirectStream: Bool
     let enableTranscoding: Bool
@@ -233,17 +235,23 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
     /// Direct play first; the server falls back to an HLS transcode (h264/hevc
     /// in ts with aac/ac3/eac3) when it cannot. `allowDirectPlay: false` forces
     /// the transcode, and `startTimeTicks` starts it at that offset.
+    /// `maxStreamingBitrate` (bps) caps the stream; a file above it transcodes.
+    /// A forced transcode declares no subtitle profiles, so the server burns the
+    /// chosen subtitle in: the HLS route draws no captions of its own.
     static func playback(
-        userId: String, mediaSourceId: String?, allowDirectPlay: Bool = true, startTimeTicks: Int64? = nil
+        userId: String, mediaSourceId: String?, allowDirectPlay: Bool = true, startTimeTicks: Int64? = nil,
+        maxStreamingBitrate: Int? = nil, audioStreamIndex: Int? = nil, subtitleStreamIndex: Int? = nil
     ) -> Self {
-        // 400 Mbps: above any UHD remux, so the server never declines direct
-        // play on bitrate alone.
-        let bitrate = 400_000_000
+        // Uncapped is 400 Mbps: above any UHD remux, so the server never
+        // declines direct play on bitrate alone.
+        let bitrate = maxStreamingBitrate ?? 400_000_000
         return Self(
             userId: userId,
             mediaSourceId: mediaSourceId,
             maxStreamingBitrate: bitrate,
             startTimeTicks: startTimeTicks,
+            audioStreamIndex: audioStreamIndex,
+            subtitleStreamIndex: subtitleStreamIndex,
             enableDirectPlay: allowDirectPlay,
             enableDirectStream: allowDirectPlay,
             enableTranscoding: true,
@@ -254,7 +262,7 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
                     container: "ts", type: "Video", videoCodec: "h264,hevc", audioCodec: "aac,ac3,eac3",
                     protocol: "hls", context: "Streaming", maxAudioChannels: "6", breakOnNonKeyFrames: true
                 )],
-                subtitleProfiles: subtitleProfiles
+                subtitleProfiles: allowDirectPlay ? subtitleProfiles : []
             )
         )
     }

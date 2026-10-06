@@ -115,6 +115,9 @@ struct ContentRoutingContext: Sendable {
 
     /// Preferred playback policy. Defaults to direct-play-first for VOD.
     var playbackPolicy: PlaybackPolicy = .default
+
+    /// A streaming quality step; set means play a capped transcode, never the file.
+    var transcodeStep: QualityStep?
 }
 
 /// Analyzes media metadata to choose the playback pipeline.
@@ -161,6 +164,18 @@ struct ContentRouter {
         if PlexRelay.isRelayURL(context.serverURL) {
             reasoning.append("relay_server_hls_transcode_only")
             playerDebugLog("[ContentRouter] \(container) → HLS (relay server, capped transcode)")
+            return PlaybackPlan(
+                policy: context.playbackPolicy,
+                primary: hls,
+                fallbacks: [],
+                reasoning: reasoning
+            )
+        }
+
+        // A quality step is a transcode by definition, so nothing falls back to it.
+        if let step = context.transcodeStep {
+            reasoning.append("quality_step_transcode")
+            playerDebugLog("[ContentRouter] \(container) → HLS (quality step \(step.kbps) kbps)")
             return PlaybackPlan(
                 policy: context.playbackPolicy,
                 primary: hls,
@@ -250,7 +265,7 @@ struct ContentRouter {
     }
 
     /// Build the direct Plex URL for raw file access.
-    private static func buildDirectPlayURL(context: ContentRoutingContext) -> (url: URL, headers: [String: String])? {
+    static func buildDirectPlayURL(context: ContentRoutingContext) -> (url: URL, headers: [String: String])? {
         guard let media = context.metadata.Media?.first,
               let part = media.Part?.first,
               let partKey = part.key else {

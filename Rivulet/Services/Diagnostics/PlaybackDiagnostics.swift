@@ -59,6 +59,9 @@ final class PlaybackDiagnostics {
     /// cardinality TAG (not just context, which isn't searchable) so the relay
     /// share of RIVULET-19 is filterable and that fix's impact is measurable.
     private var isRelay = false
+    /// Streaming quality in effect (`original`, `auto`, or a step's kbps) and home/away. Tags, never URLs.
+    private var streamQuality: String?
+    private var streamLocation: String?
 
     // MARK: - Media fingerprint
 
@@ -67,8 +70,11 @@ final class PlaybackDiagnostics {
     ///
     /// The codec/DV/audio fingerprint is the difference between "playback broke"
     /// and "playback breaks on DV P7 + TrueHD", which is an actionable bug.
-    func setMedia(_ metadata: PlexMetadata, route: String, startOffset: TimeInterval?, isRelay: Bool = false) {
+    func setMedia(_ metadata: PlexMetadata, route: String, startOffset: TimeInterval?, isRelay: Bool = false,
+                  quality: String? = nil, location: String? = nil) {
         self.isRelay = isRelay
+        streamQuality = quality
+        streamLocation = location
 
         let part = metadata.Media?.first?.Part?.first
         let streams = part?.Stream ?? []
@@ -78,6 +84,8 @@ final class PlaybackDiagnostics {
         media = [
             "route": route,
             "is_relay": isRelay,
+            "stream_quality": quality ?? "unknown",
+            "stream_location": location ?? "unknown",
             "title": metadata.title ?? "unknown",
             "type": metadata.type ?? "unknown",
             "rating_key": metadata.ratingKey ?? "unknown",
@@ -264,6 +272,8 @@ final class PlaybackDiagnostics {
         // filterable in Sentry — the relay slice of RIVULET-19 and this cap's
         // impact both hang off `is_relay:true`.
         scope.setTag(value: isRelay ? "true" : "false", key: "is_relay")
+        if let streamQuality { scope.setTag(value: streamQuality, key: "stream_quality") }
+        if let streamLocation { scope.setTag(value: streamLocation, key: "stream_location") }
 
         var context = media
         context["timeline"] = timeline

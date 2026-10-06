@@ -39,6 +39,7 @@ struct IOSPlayerChromeActions {
     var seek: (Double) -> Void
     var goLive: () -> Void = {}
     var setRate: (Float) -> Void = { _ in }
+    var selectQuality: (StreamingQuality) -> Void = { _ in }
     var selectAudio: (Int) -> Void = { _ in }
     var selectSubtitle: (Int?) -> Void = { _ in }
     var pictureInPicture: () -> Void = {}
@@ -47,6 +48,13 @@ struct IOSPlayerChromeActions {
     var retry: () -> Void = {}
     /// Swipe down: into PiP when that is possible, otherwise close.
     var swipeDown: (() -> Void)?
+}
+
+/// The quality menu: the choices, the session's pick, and what is playing.
+struct IOSPlayerQuality {
+    let choices: [StreamingQuality]
+    let selected: StreamingQuality
+    let label: String
 }
 
 /// Touch chrome modelled on the iOS 26 system player: close and PiP top
@@ -59,6 +67,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private let isBusy: Bool
     private let timeline: IOSPlayerTimeline
     private let rate: Float?
+    private let quality: IOSPlayerQuality?
     private let audioTracks: [AetherPlayer.Track]
     private let selectedAudioID: Int?
     private let subtitleTracks: [AetherPlayer.Track]
@@ -82,6 +91,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
 
     /// - Parameters:
     ///   - rate: nil hides the speed menu (live).
+    ///   - quality: nil hides the quality menu (live).
     ///   - video: the picture and captions; receives the bottom bar's top edge
     ///     while the chrome is up, so captions can lift above it.
     ///   - trailing: host buttons for the bottom row (Live TV: Channels).
@@ -92,6 +102,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         isBusy: Bool,
         timeline: IOSPlayerTimeline,
         rate: Float? = nil,
+        quality: IOSPlayerQuality? = nil,
         audioTracks: [AetherPlayer.Track] = [],
         selectedAudioID: Int? = nil,
         subtitleTracks: [AetherPlayer.Track] = [],
@@ -110,6 +121,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         self.isBusy = isBusy
         self.timeline = timeline
         self.rate = rate
+        self.quality = quality
         self.audioTracks = audioTracks
         self.selectedAudioID = selectedAudioID
         self.subtitleTracks = subtitleTracks
@@ -306,6 +318,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
 
             HStack(spacing: 10) {
                 if let rate { speedMenu(rate) }
+                if let quality { qualityMenu(quality) }
                 if !audioTracks.isEmpty || !subtitleTracks.isEmpty { tracksMenu }
                 trailing()
                 Spacer(minLength: 0)
@@ -397,6 +410,29 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         }
         .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel("Playback speed")
+    }
+
+    private func qualityMenu(_ quality: IOSPlayerQuality) -> some View {
+        Menu {
+            Picker("Quality", selection: Binding(
+                get: { quality.selected },
+                set: { value in interact { actions.selectQuality(value) } }
+            )) {
+                ForEach(quality.choices, id: \.self) { choice in
+                    Text(choice.label).tag(choice)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Text(quality.label)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .frame(minHeight: 44)
+                .padding(.horizontal, 12)
+        }
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel("Quality")
+        .accessibilityValue(quality.label)
     }
 
     private var tracksMenu: some View {
@@ -613,6 +649,7 @@ extension IOSPlayerChrome where Trailing == EmptyView {
         isBusy: Bool,
         timeline: IOSPlayerTimeline,
         rate: Float? = nil,
+        quality: IOSPlayerQuality? = nil,
         audioTracks: [AetherPlayer.Track] = [],
         selectedAudioID: Int? = nil,
         subtitleTracks: [AetherPlayer.Track] = [],
@@ -626,7 +663,7 @@ extension IOSPlayerChrome where Trailing == EmptyView {
     ) {
         self.init(
             title: title, subtitle: subtitle, isPlaying: isPlaying, isBusy: isBusy, timeline: timeline,
-            rate: rate, audioTracks: audioTracks, selectedAudioID: selectedAudioID,
+            rate: rate, quality: quality, audioTracks: audioTracks, selectedAudioID: selectedAudioID,
             subtitleTracks: subtitleTracks, selectedSubtitleID: selectedSubtitleID,
             contextualAction: contextualAction, failure: failure, isMuted: isMuted,
             canPictureInPicture: canPictureInPicture, actions: actions,

@@ -28,6 +28,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
         if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
+        if id.hasPrefix("sq_") { return descriptors["streamingQualityOption"] }
         return nil
     }
 
@@ -144,6 +145,18 @@ enum SettingsDescriptorStore {
         "instantResume": SettingDescriptor(
             icon: "play.rectangle.on.rectangle",
             description: "Selecting a Continue Watching tile resumes it immediately. Turn this off to open the preview instead, the same as every other Home row, which also disables the Resume or Restart Prompt below."
+        ),
+        "homeStreamingQuality": SettingDescriptor(
+            icon: "house.fill",
+            description: "Quality when the server is on your home network. Original plays the file untouched, with HDR, Dolby Vision and Atmos."
+        ),
+        "awayStreamingQuality": SettingDescriptor(
+            icon: "antenna.radiowaves.left.and.right",
+            description: "Quality on cellular, a hotspot, Low Data Mode or a remote connection. Auto measures your connection and converts only when the file will not fit."
+        ),
+        "streamingQualityOption": SettingDescriptor(
+            icon: "dial.medium",
+            description: "Original plays the file untouched. Auto measures your connection and converts only when the file will not fit. A fixed rate converts anything above it; converted video plays without HDR, Dolby Vision or Atmos."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -417,6 +430,8 @@ enum SettingsDescriptorStore {
         case .displaySizePicker: return ("textformat.size", .systemOrange)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
         case .skipIntervalPicker: return ("forward.fill", .systemBlue)
+        case .homeQualityPicker: return ("house.fill", .systemBlue)
+        case .awayQualityPicker: return ("antenna.radiowaves.left.and.right", .systemBlue)
         case .contentFilter: return ("hand.raised.fill", .systemOrange)
         case .contentFilterStrength: return ("dial.medium.fill", .systemOrange)
         case .liveTVSourceDetail: return ("tv.and.mediabox", .systemBlue)

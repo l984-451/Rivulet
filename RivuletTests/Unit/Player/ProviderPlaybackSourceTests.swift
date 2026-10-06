@@ -376,7 +376,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         provider.streamResult = expected.stream
         provider.extrasResult = PlaybackExtras(markers: [marker])
 
-        let prepared = try await ProviderPlayback.prepare(item: expected.item, provider: provider)
+        let prepared = try await ProviderPlayback.prepare(item: expected.item, provider: provider, quality: .original)
 
         XCTAssertEqual(Set(provider.playbackCalls), ["detail(m1)", "stream(m1,nil)", "extras(m1,src)"])
         XCTAssertEqual(provider.playbackCalls.count, 3)
@@ -393,7 +393,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         let item = playback(provider: provider, stream: stream())
         provider.detailResult = item.detail
         do {
-            _ = try await ProviderPlayback.prepare(item: item.item, provider: provider)
+            _ = try await ProviderPlayback.prepare(item: item.item, provider: provider, quality: .original)
             XCTFail("expected a throw")
         } catch {
             guard case MediaProviderError.notFound = error else { return XCTFail("got \(error)") }

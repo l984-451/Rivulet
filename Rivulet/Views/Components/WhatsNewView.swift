@@ -149,6 +149,10 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.0.6 (93)", [
+            "Added ability to choose stream quality.",
+            "Converted streams start more reliably.",
+        ]),
         ("1.0.6 (92)", [
             "Painstakingly recreated Apple's player chrome.",
             "Added multi-file support for Plex.",

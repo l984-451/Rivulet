@@ -11,6 +11,8 @@ struct IOSRootView: View {
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
     @StateObject private var playback = IOSPlaybackController()
     @State private var showingAccount = false
+    @State private var showingWhatsNew = false
+    @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     @State private var backgroundedAt: Date?
     /// The Library stack's path, so "Go to Downloads" can push the list from any tab.
     @State private var libraryPath = NavigationPath()
@@ -57,7 +59,9 @@ struct IOSRootView: View {
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
         .sheet(isPresented: $showingAccount) { IOSAccountView() }
+        .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(version: IOSChangelog.currentVersion) }
         .iosPlaybackHost(playback)
+        .task { showWhatsNewIfUpdated() }
         .task { await plex.verifyConnection() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -107,6 +111,14 @@ struct IOSRootView: View {
     }
 
     /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
+    /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
+    private func showWhatsNewIfUpdated() {
+        let current = IOSChangelog.currentVersion
+        guard plex.isConfigured, current != lastSeenBuild else { return }
+        lastSeenBuild = current
+        showingWhatsNew = IOSChangelog.lines(for: current) != nil
+    }
+
     private func openDownloads() {
         if showsSidebarLibraries {
             selectedTab = "downloads"

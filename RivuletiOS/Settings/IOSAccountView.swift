@@ -44,7 +44,8 @@ struct IOSAccountView: View {
                 }
 
                 Section("About") {
-                    LabeledContent("Version", value: Self.version)
+                    LabeledContent("Version", value: IOSChangelog.currentVersion)
+                    NavigationLink("Changelog") { IOSChangelogView() }
                     NavigationLink("Licenses") { IOSLicensesView() }
                 }
 
@@ -122,13 +123,6 @@ struct IOSAccountView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         }
-    }
-
-    private static var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(short) (\(build))"
     }
 }
 

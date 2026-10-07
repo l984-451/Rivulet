@@ -1432,7 +1432,6 @@ class PlayerContainerViewController: UIViewController {
             .store(in: &cancellables)
 
         // Rail actions. (No play/pause control, no skip-back — the remote owns seeking.)
-        rail.onReplayLongPress = { [weak vm] in vm?.replayWithCaptions() }
         rail.onSubtitles = { [weak self] in
             guard let self, let vm = self.viewModel else { return }
             self.presentRailPanel(
@@ -1465,6 +1464,7 @@ class PlayerContainerViewController: UIViewController {
                 content: CardTrackListView(
                     header: "Audio", tracks: vm.audioTracks,
                     selectedTrackId: vm.currentAudioTrackId, showsOffRow: false,
+                    toggles: SystemAudioAdjustment.menuToggles,
                     onSelect: { [weak vm, weak self] id in
                         if let id { vm?.selectAudioTrack(id: id) }
                         self?.activeRailPanel?.dismissPanel()

@@ -5,8 +5,8 @@
 //  ReplayWindowLogic.swift
 //  Rivulet
 //
-//  Pure logic for the "What did they say?" replay window: jump back 15s
-//  with subtitles temporarily on, then auto-revert once playback passes
+//  Pure logic for the skip-back subtitle window: after a skip back,
+//  subtitles are temporarily on, then auto-revert once playback passes
 //  the point where it was invoked (or last extended to, if the user
 //  invoked it again while still inside the window).
 //
@@ -25,7 +25,7 @@ struct ReplayWindowLogic {
 
     /// True once a time-observer tick has been observed *before*
     /// `invokedAt` — i.e. the backward seek that opens the window has
-    /// actually landed. `replayWithCaptions()` sets the window
+    /// actually landed. `openCaptionWindow(until:)` sets the window
     /// synchronously but performs its seek asynchronously in a Task; a
     /// stale time-observer tick can fire in that gap at/after `invokedAt`
     /// (playback hasn't moved yet). Without arming, that stale tick would

@@ -34,16 +34,6 @@ final class TransportControlButton: UIControl {
         didSet { iconView.tintColor = glyphColor ?? (isFocused ? .black : .white) }
     }
 
-    /// Fired instead of `onPress` when Select is held past `longPressThreshold`.
-    /// Buttons without a handler keep firing `onPress` in `pressesBegan`
-    /// (snappy, tvOS UIControl trap: `.primaryActionTriggered` never fires
-    /// on Select); buttons with a handler defer to `pressesEnded`/a timer so
-    /// they can distinguish a short press from a long one.
-    var onLongPress: (() -> Void)?
-    private var selectDownAt: Date?
-    private var longPressTimer: Timer?
-    private static let longPressThreshold: TimeInterval = 0.6
-
     init(icon: UIImage?, accessibilityLabel: String, diameter: CGFloat = TransportControlButton.diameter) {
         self.diameter = diameter
         // Same fitted material as the popups: clear glass plus a gray wash.
@@ -97,47 +87,18 @@ final class TransportControlButton: UIControl {
     override var canBecomeFocused: Bool { true }
 
     // Select does not fire .primaryActionTriggered on a plain UIControl
-    // on tvOS; handle the press directly. Buttons without a long-press
-    // handler fire onPress immediately here (unchanged, snappy behavior).
-    // Buttons with a long-press handler wait: a timer firing before
-    // release means "long press" (onLongPress); release before the
-    // timer fires means "short press" (onPress).
+    // on tvOS; handle the press directly.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses where press.type == .select {
-            guard onLongPress != nil else {
-                onPress?()
-                return
-            }
-            selectDownAt = Date()
-            longPressTimer?.invalidate()
-            longPressTimer = Timer.scheduledTimer(withTimeInterval: Self.longPressThreshold, repeats: false) { [weak self] _ in
-                guard let self, self.selectDownAt != nil else { return }
-                self.selectDownAt = nil
-                self.onLongPress?()
-            }
+        if presses.contains(where: { $0.type == .select }) {
+            onPress?()
             return
         }
         super.pressesBegan(presses, with: event)
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses where press.type == .select {
-            longPressTimer?.invalidate()
-            longPressTimer = nil
-            if selectDownAt != nil {
-                selectDownAt = nil
-                onPress?() // released before threshold: normal press
-            }
-            return
-        }
+        if presses.contains(where: { $0.type == .select }) { return }
         super.pressesEnded(presses, with: event)
-    }
-
-    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        longPressTimer?.invalidate()
-        longPressTimer = nil
-        selectDownAt = nil
-        super.pressesCancelled(presses, with: event)
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {

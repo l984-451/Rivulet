@@ -51,6 +51,7 @@ final class NowPlayingService: ObservableObject {
 
     /// Ensure audio session is active before setting Now Playing info.
     /// This is required for tvOS to register us as the Now Playing app.
+    /// `.moviePlayback` is also the only public opt-in to the system's Enhance Dialogue (#330).
     private func ensureAudioSessionActive() {
         PlaybackAudioSessionConfigurator.activatePlaybackSession(
             mode: .moviePlayback,

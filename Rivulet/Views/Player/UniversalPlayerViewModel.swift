@@ -289,7 +289,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var subtitleTracks: [MediaTrack] = []
     @Published private(set) var currentAudioTrackId: Int?
     @Published private(set) var currentSubtitleTrackId: Int?
-    /// Active "What did they say?" replay window, if the user is currently
+    /// Active skip-back subtitle window, if the user is currently
     /// inside one. Cleared (without reverting) by any user-initiated
     /// absolute seek, manual subtitle-track change, or stopPlayback.
     private var replayWindow: ReplayWindowLogic?
@@ -3806,6 +3806,11 @@ final class UniversalPlayerViewModel: ObservableObject {
         showSeekIndicator(seconds >= 0 ? .forward(intSeconds) : .backward(intSeconds))
         let base = inFlightRelativeSeekTarget ?? currentTime
         let targetTime = max(0, min(base + seconds, duration))
+        // tvOS Show on Skip Back covers skips back of up to 30s in total.
+        if seconds < 0, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
+           Self.systemShowsSubtitlesOnSkipBack() {
+            openCaptionWindow(until: base)
+        }
         inFlightRelativeSeekTarget = targetTime
         seekGeneration += 1
         let generation = seekGeneration
@@ -3831,32 +3836,39 @@ final class UniversalPlayerViewModel: ObservableObject {
         if showControls { showControlsTemporarily() }
     }
 
-    /// "What did they say?" — jump back 15s with subtitles temporarily on,
-    /// auto-reverting once playback passes the point this was invoked
-    /// from. A repeat invocation while already inside a window extends
-    /// the revert point rather than layering a second window on top.
-    /// If subtitles are already on, this only jumps back; the active
-    /// track is left alone (no revert-to-off later).
-    func replayWithCaptions() {
-        guard duration > 0 else { return }
-        guard !isScrubbing else { return }
-        let invokedAt = currentTime
+    /// tvOS Settings > Video and Audio > Automatic Subtitles > Show on Skip Back (default on).
+    /// No public API: AVKit reads it through this libAccessibility function. Off if absent.
+    private static let systemShowsSubtitlesOnSkipBack: () -> Bool = {
+        guard let lib = dlopen("/usr/lib/libAccessibility.dylib", RTLD_LAZY),
+              let sym = dlsym(lib, "_AXSAutomaticSubtitlesShowOnSkipBack") else { return { false } }
+        let read = unsafeBitCast(sym, to: (@convention(c) () -> Int32).self)
+        return { read() != 0 }
+    }()
+
+    /// Turns subtitles on until playback passes `point` (#329: also opened by
+    /// a skip back when the system's Show on Skip Back is on). Extends an open window.
+    private func openCaptionWindow(until point: TimeInterval) {
         if let window = replayWindow {
-            replayWindow = window.extended(to: invokedAt)
+            replayWindow = window.extended(to: point)
         } else {
-            replayWindow = ReplayWindowLogic(invokedAt: invokedAt, priorSubtitleTrackId: currentSubtitleTrackId)
+            replayWindow = ReplayWindowLogic(invokedAt: point, priorSubtitleTrackId: currentSubtitleTrackId)
             if currentSubtitleTrackId == nil, let track = preferredReplaySubtitleTrack() {
                 selectSubtitleTrackWithoutSaving(id: track.id, reloadsTranscode: false)
             }
         }
-        Task { await seek(to: max(0, invokedAt - 15)) }
     }
 
-    /// First non-forced subtitle track, or the first track if all are
-    /// forced (better to show something than nothing when the user asks
-    /// "what did they say?").
+    /// A full (non-forced) track in the spoken language, else any non-forced
+    /// track, else the first (better to show something than nothing).
     private func preferredReplaySubtitleTrack() -> MediaTrack? {
-        subtitleTracks.first { !$0.isForced } ?? subtitleTracks.first
+        let full = subtitleTracks.filter { !$0.isForced }
+        if let audio = audioTracks.first(where: { $0.id == currentAudioTrackId }) {
+            let spoken = Set(languageCandidates(for: audio).map { $0.lowercased() })
+            if let match = full.first(where: { track in
+                languageCandidates(for: track).contains { spoken.contains($0.lowercased()) }
+            }) { return match }
+        }
+        return full.first ?? subtitleTracks.first
     }
 
     /// Called from both the AVPlayer and Aether periodic time-observer

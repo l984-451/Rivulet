@@ -86,7 +86,6 @@ final class PlayerRailView: UIView {
     var onUpNext: (() -> Void)?
     var onFilter: (() -> Void)?
     var onQuality: (() -> Void)?
-    var onReplayLongPress: (() -> Void)?
     var onGoLive: (() -> Void)?
     var onRecord: (() -> Void)?
     var onMultiview: (() -> Void)?
@@ -162,7 +161,6 @@ final class PlayerRailView: UIView {
         ])
 
         subtitlesButton.onPress = { [weak self] in self?.onSubtitles?() }
-        subtitlesButton.onLongPress = { [weak self] in self?.onReplayLongPress?() }
         audioButton.onPress = { [weak self] in self?.onAudio?() }
         infoButton.onPress = { [weak self] in self?.onInfo?() }
         chaptersButton.onPress = { [weak self] in self?.onChapters?() }

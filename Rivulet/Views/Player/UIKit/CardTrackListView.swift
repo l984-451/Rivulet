@@ -49,6 +49,7 @@ final class CardTrackListView: UIView {
     }
 
     private let rows: [Row]
+    private let toggles: [CardToggleConfig]
     private let steppers: [CardStepperConfig]
     private let onSelect: (Int?) -> Void
     private let scrollView = UIScrollView()
@@ -63,7 +64,8 @@ final class CardTrackListView: UIView {
     private weak var lastFocusedControl: UIView?
 
     convenience init(header: String, tracks: [MediaTrack], selectedTrackId: Int?, showsOffRow: Bool,
-                     steppers: [CardStepperConfig] = [], onSelect: @escaping (Int?) -> Void) {
+                     toggles: [CardToggleConfig] = [], steppers: [CardStepperConfig] = [],
+                     onSelect: @escaping (Int?) -> Void) {
         var rows: [Row] = []
         if showsOffRow {
             rows.append(Row(title: "Off", subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil))
@@ -76,13 +78,14 @@ final class CardTrackListView: UIView {
                 isSelected: track.id == selectedTrackId
             )
         })
-        self.init(header: header, rows: rows, steppers: steppers, onSelect: onSelect)
+        self.init(header: header, rows: rows, toggles: toggles, steppers: steppers, onSelect: onSelect)
     }
 
     /// A plain list of choices: each row's `trackId` is what `onSelect` receives.
-    init(header: String, rows: [Row], steppers: [CardStepperConfig] = [],
+    init(header: String, rows: [Row], toggles: [CardToggleConfig] = [], steppers: [CardStepperConfig] = [],
          onSelect: @escaping (Int?) -> Void) {
         self.rows = rows
+        self.toggles = toggles
         self.steppers = steppers
         self.onSelect = onSelect
         super.init(frame: .zero)
@@ -138,6 +141,24 @@ final class CardTrackListView: UIView {
             let button = CardTrackRowButton(row: row)
             button.onTap = { [weak self] in
                 self?.onSelect(row.trackId)
+            }
+            stack.addArrangedSubview(button)
+            rowButtons.append(button)
+        }
+
+        // On/off toggles (Enhance Dialogue, Reduce Loud Sounds) get their own
+        // section; a press flips the checkmark in place and leaves the popup up.
+        if !toggles.isEmpty, !rowButtons.isEmpty {
+            stack.addArrangedSubview(MenuSeparatorView())
+        }
+        for config in toggles {
+            let button = CardTrackRowButton(row: Row(title: config.title, subtitle: nil, trackId: nil,
+                                                     isSelected: config.isOn()))
+            button.onTap = { [weak button] in
+                guard let button else { return }
+                let on = !button.isChecked
+                config.onToggle(on)
+                button.isChecked = on
             }
             stack.addArrangedSubview(button)
             rowButtons.append(button)
@@ -205,6 +226,14 @@ private final class MenuSeparatorView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+}
+
+// MARK: - CardToggleConfig
+
+struct CardToggleConfig {
+    let title: String
+    let isOn: () -> Bool
+    let onToggle: (Bool) -> Void
 }
 
 // MARK: - CardStepperConfig
@@ -344,6 +373,10 @@ final class CardTrackRowButton: UIControl {
 
     let row: CardTrackListView.Row
     var onTap: (() -> Void)?
+    var isChecked: Bool {
+        get { !checkmarkView.isHidden }
+        set { checkmarkView.isHidden = !newValue }
+    }
     private let pill = UIView()
     private let content = UIView()
     private let titleLabel = UILabel()

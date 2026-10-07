@@ -5,8 +5,8 @@
 //  ReplayWindowTests.swift
 //  RivuletTests
 //
-//  Pure-logic tests for ReplayWindowLogic, the "What did they say?"
-//  replay window: jump back 15s with subtitles temporarily on, then
+//  Pure-logic tests for ReplayWindowLogic, the skip-back subtitle
+//  window: subtitles temporarily on after a skip back, then
 //  auto-revert once playback passes the point where it was invoked.
 //
 
@@ -29,7 +29,7 @@ final class ReplayWindowTests: XCTestCase {
         XCTAssertTrue(window.shouldRevert(currentTime: 130.1))
     }
 
-    /// The seek in `replayWithCaptions()` lands asynchronously (in a Task),
+    /// The skip-back seek lands asynchronously (in a Task),
     /// but the window is armed synchronously before that. A stale
     /// time-observer tick at/after invokedAt can fire before the seek
     /// actually lands — that must NOT trigger a revert. Only once playback

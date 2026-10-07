@@ -1182,7 +1182,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 header: "Audio",
                 tracks: aether.audioTracks,
                 selectedTrackId: aether.currentAudioTrackId,
-                showsOffRow: false
+                showsOffRow: false,
+                toggles: SystemAudioAdjustment.menuToggles
             ) { [weak self] trackId in
                 if let trackId { self?.aetherPlayer?.selectAudioTrack(id: trackId) }
                 self?.activePanel?.dismissPanel()
@@ -1213,7 +1214,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 header: "Audio",
                 tracks: tracks,
                 selectedTrackId: selectedIndex,
-                showsOffRow: false
+                showsOffRow: false,
+                toggles: SystemAudioAdjustment.menuToggles
             ) { [weak self] trackId in
                 if let trackId, trackId < group.options.count {
                     item.select(group.options[trackId], in: group)

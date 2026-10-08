@@ -378,6 +378,14 @@ class LiveTVDataStore: ObservableObject {
             }
         }
 
+        // Listed now, so the sidebar's Live TV tab exists from launch; the
+        // connection probe below can take tens of seconds.
+        sources = providers.map { id, provider in
+            LiveTVSourceInfo(id: id, sourceType: provider.sourceType, displayName: provider.displayName,
+                             channelCount: 0, isConnected: false, lastSync: nil,
+                             channelProfile: (provider as? IPTVProvider)?.channelProfile)
+        }.sorted { $0.displayName < $1.displayName }
+
         // Update source info (async but we don't wait)
         Task {
             await updateSourceInfo()

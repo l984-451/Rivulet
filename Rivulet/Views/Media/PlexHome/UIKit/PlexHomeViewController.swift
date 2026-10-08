@@ -6995,15 +6995,46 @@ extension PlexHomeViewController: MenuBackHandling {
     /// engine re-resolves mid-flight, lands on whatever row is passing, and
     /// scrolls that back into view (the page ends up one row higher instead of
     /// at the top). Setting the offset and laying out first creates the cell,
-    /// so the focus request has somewhere to land.
+    /// so the focus request has somewhere to land. The scroll the viewer sees
+    /// is drawn over the jump afterwards (`playReturnToTopSlide`).
     private func returnToTopRow() {
+        let travel = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
+        let before = collectionView.snapshotView(afterScreenUpdates: false)
         aimFocusAtTopRow()
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+        playReturnToTopSlide(from: before, travel: travel)
         // The hero's buttons live in a SwiftUI subview that may not be
         // focusable until the next runloop turn; re-assert once it is.
         DispatchQueue.main.async { [weak self] in
             self?.nudgeInitialHeroFocusIfNeeded()
         }
+    }
+
+    /// Draws the trip back up as a quick scroll. The page has already jumped
+    /// and focus has landed; this only slides the old picture down and the top
+    /// in after it, on presentation layers, so neither layout nor focus moves.
+    private func playReturnToTopSlide(from snapshot: UIView?, travel: CGFloat) {
+        let distance = min(travel, collectionView.bounds.height)
+        guard let snapshot, distance > 1, !UIAccessibility.isReduceMotionEnabled else { return }
+        snapshot.frame = collectionView.frame
+        view.insertSubview(snapshot, aboveSubview: collectionView)
+        CATransaction.begin()
+        // The snapshot can sit over the hero's buttons, which blocks focus
+        // geometrically, so the hero nudge runs again once it is gone.
+        CATransaction.setCompletionBlock { [weak self] in
+            snapshot.removeFromSuperview()
+            self?.nudgeInitialHeroFocusIfNeeded()
+        }
+        for (layer, from, to) in [(collectionView.layer, -distance, 0), (snapshot.layer, 0, distance)] {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = from
+            slide.toValue = to
+            slide.duration = 0.35
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.33, 1, 0.68, 1)  // ease-out cubic
+            layer.add(slide, forKey: "returnToTop")
+        }
+        snapshot.layer.transform = CATransform3DMakeTranslation(0, distance, 0)
+        CATransaction.commit()
     }
 }

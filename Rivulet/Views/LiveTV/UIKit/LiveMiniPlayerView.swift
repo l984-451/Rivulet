@@ -10,7 +10,7 @@
 //  player; nothing here tunes or loads. Selecting the same channel in the
 //  guide hands the session back full screen.
 //
-//  Not focusable unless `isFocusable`: the guide makes it a focus stop, so
+//  Not focusable unless `isFocusable`: the guide and What's On make it a focus stop, so
 //  Menu from the grid has somewhere to come back to. It never sits over a
 //  focus target.
 //

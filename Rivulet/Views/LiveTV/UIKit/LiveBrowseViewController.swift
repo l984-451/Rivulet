@@ -35,6 +35,9 @@ final class LiveBrowseViewController: UIViewController {
     private let clockLabel = UILabel()
     private let miniPlayer = LiveMiniPlayerView()
     private var miniSession: LiveTVSessionHandoff?
+    /// Menu's focus targets, read once by `preferredFocusEnvironments`.
+    private var pendingMiniPlayerFocus = false
+    private var pendingTopRowFocus = false
 
     // Shelves
     /// Also multiview's Add More rows (`LiveMultiviewViewController`).
@@ -147,8 +150,15 @@ final class LiveBrowseViewController: UIViewController {
         minuteTimer = timer
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Again on each appear: handlers are asked newest first.
+        MenuPressInterceptor.register(self)
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        MenuPressInterceptor.resign(self)
         minuteTimer?.invalidate()
         minuteTimer = nil
         // Another tab or page: the corner channel ends here, as in the guide.
@@ -167,7 +177,20 @@ final class LiveBrowseViewController: UIViewController {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        [collectionView].compactMap { $0 }
+        if pendingMiniPlayerFocus { return [miniPlayer] }
+        if pendingTopRowFocus, let top = collectionView?.cellForItem(at: IndexPath(item: 0, section: 0)) {
+            return [top]
+        }
+        return [collectionView].compactMap { $0 }
+    }
+
+    /// The header follows focus onto the corner player.
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedView === miniPlayer, let channel = miniSession?.channel {
+            showInfo(for: .channel(channel, program: LiveTVDataStore.shared.getCurrentProgram(for: channel),
+                                   section: "corner"))
+        }
     }
 
     // MARK: - Header
@@ -201,6 +224,11 @@ final class LiveBrowseViewController: UIViewController {
         clockLabel.font = .monospacedDigitSystemFont(ofSize: 30, weight: .semibold)
         clockLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         miniPlayer.isHidden = true
+        // A focus stop, so Menu has somewhere to come back to, as in the guide.
+        miniPlayer.isFocusable = true
+        let select = UITapGestureRecognizer(target: self, action: #selector(selectMiniPlayer))
+        select.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+        miniPlayer.addGestureRecognizer(select)
 
         [eyebrowLabel, titleLabel, detailLabel, summaryLabel, clockLabel, miniPlayer].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -594,5 +622,53 @@ final class LiveBrowseViewController: UIViewController {
 
     private func stopMini() {
         takeMini()?.stop()
+    }
+
+    /// Back full screen: `play` adopts the corner session for its channel.
+    @objc private func selectMiniPlayer() {
+        if let channel = miniSession?.channel { play(channel) }
+    }
+}
+
+extension LiveBrowseViewController: MenuBackHandling {
+    /// As in the guide: Menu focuses the corner player, or the top row when
+    /// there is none, and returns the page to its top. From the corner player
+    /// or the top row it declines, so the sidebar opens.
+    func handleMenuBack() -> Bool {
+        // Focus must be in this page: a player or menu presented over it holds
+        // focus in its own views, and Menu keeps its meaning there.
+        guard isViewLoaded, let system = UIFocusSystem.focusSystem(for: view),
+              let focused = system.focusedItem as? UIView,
+              focused.isDescendant(of: view), !focused.isDescendant(of: miniPlayer)
+        else { return false }
+        // Requested from this controller, which holds focus (one aimed at the
+        // corner player is ignored), and before the scroll, which can take the
+        // focused cell away.
+        if !miniPlayer.isHidden {
+            pendingMiniPlayerFocus = true
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            pendingMiniPlayerFocus = false
+            if system.focusedItem === miniPlayer {
+                scrollShelvesToTop()
+                return true
+            }
+        }
+        let row = sequence(first: focused, next: \.superview).first { $0 is ShelfRowCell } as? UICollectionViewCell
+        guard let row, StagedMenuBack.shouldReturnToTop(
+            focusedSection: collectionView.indexPath(for: row)?.section, topSection: 0)
+        else { return false }
+        // Scroll first here: the top row's cell must exist to be preferred.
+        scrollShelvesToTop()
+        pendingTopRowFocus = true
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        pendingTopRowFocus = false
+        return true
+    }
+
+    private func scrollShelvesToTop() {
+        collectionView.setContentOffset(CGPoint(x: 0, y: -collectionView.adjustedContentInset.top), animated: false)
+        collectionView.layoutIfNeeded()
     }
 }

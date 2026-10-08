@@ -1613,8 +1613,8 @@ final class PlexHomeViewController: UIViewController {
     /// this when a member's watch state may have changed. The generation bump
     /// discards any page still in flight, which is in `gridPagesRequested` and
     /// so is re-requested below.
-    // ponytail: re-requests every loaded page (7 at most for the largest
-    // measured collection, 416 members); fetch only visible pages if it shows up.
+    // ponytail: re-requests every loaded page (a library scrolled deep can hold
+    // dozens); fetch only visible pages if it shows up.
     private func reloadLoadedGridPages() {
         gridGeneration += 1
         let pages = gridPagesRequested
@@ -3344,12 +3344,11 @@ final class PlexHomeViewController: UIViewController {
                             await self.refreshRecommendations(force: true)
                         }
                     case .library:
-                        if self.providerLibrary != nil {
-                            // The reload bumps the generation, which discards
-                            // an in-flight letter count; ask again.
-                            self.reloadLoadedGridPages()
-                            self.loadAlphabetIndex()
-                        }
+                        // Repaint badges (show unwatched counts, #333). The
+                        // reload bumps the generation, which discards an
+                        // in-flight letter count; ask again.
+                        self.reloadLoadedGridPages()
+                        self.loadAlphabetIndex()
                         await self.refreshThisLibraryHubs()
                     case .collection:
                         // Playback and detail-page watch changes: re-request
@@ -3735,6 +3734,9 @@ final class PlexHomeViewController: UIViewController {
                 // never updates its progress bars.
                 hasher.combine(item.userState.viewOffset)
                 hasher.combine(item.userState.lastViewedAt)
+                // A show's unwatched count and watched glyph (#333).
+                hasher.combine(item.childProgress)
+                hasher.combine(item.userState.isPlayed)
             }
         }
         return hasher.finalize()
@@ -6392,8 +6394,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
 
             let cwMiddle = [
                 TileMenuAction(title: "Mark as Watched",
-                               systemImage: "eye.fill") { [weak self] in
-                    self?.performMenuAction {
+                               systemImage: "eye.fill") {
+                    Self.changeOnServer {
                         try await network.markWatched(serverURL: serverURL, authToken: token, ratingKey: ratingKey)
                     }
                 },
@@ -6448,16 +6450,16 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let isWatched = item.isWatched
         if !isWatched || item.watchProgress != nil {
             middle.append(TileMenuAction(title: "Mark as Watched",
-                                         systemImage: "eye.fill") { [weak self] in
-                self?.performMenuAction {
+                                         systemImage: "eye.fill") {
+                Self.changeOnServer {
                     try await network.markWatched(serverURL: serverURL, authToken: token, ratingKey: ratingKey)
                 }
             })
         }
         if isWatched {
             middle.append(TileMenuAction(title: "Mark as Unwatched",
-                                         systemImage: "eye.slash.fill") { [weak self] in
-                self?.performMenuAction {
+                                         systemImage: "eye.slash.fill") {
+                Self.changeOnServer {
                     try await network.markUnwatched(serverURL: serverURL, authToken: token, ratingKey: ratingKey)
                 }
             })
@@ -6550,20 +6552,6 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         Task { @MainActor in
             try? await change()
             NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
-        }
-    }
-
-    /// Performs a context-menu action, then refreshes hubs from the server.
-    private func performMenuAction(_ action: @escaping () async throws -> Void) {
-        Task { @MainActor in
-            do {
-                try await action()
-            } catch {}
-            // Collection page: a member's watch state changed from its tile
-            // menu, which posts no .plexDataNeedsRefresh.
-            if case .collection = mode { reloadLoadedGridPages() }
-            await dataStore.refreshHubs()
-            await dataStore.refreshLibraryHubs()
         }
     }
 

@@ -55,6 +55,12 @@ class LiveTVDataStore: ObservableObject {
         }
     }
 
+    /// Source favorites (Plex account favorites) removed in Rivulet. Hidden
+    /// here only; the source's own list is left alone.
+    @Published private(set) var unfavoritedIds: Set<String> = [] {
+        didSet { userDefaults.set(Array(unfavoritedIds), forKey: unfavoritedKey) }
+    }
+
     /// Loading states
     @Published var isLoadingChannels = false
     @Published var isLoadingEPG = false
@@ -104,6 +110,7 @@ class LiveTVDataStore: ObservableObject {
 
     private let userDefaults = UserDefaults.standard
     private let favoritesKey = "liveTVFavoriteChannelIds"
+    private let unfavoritedKey = "liveTVUnfavoritedChannelIds"
     private let recentsKey = "liveTVRecentChannelIds"
     private let viewingsKey = "liveTVViewings"
     private let sourcesKey = "liveTVSourceConfigurations"
@@ -1137,15 +1144,17 @@ class LiveTVDataStore: ObservableObject {
     // MARK: - Favorites
 
     func toggleFavorite(_ channel: UnifiedChannel) {
-        if let index = favoriteIds.firstIndex(of: channel.id) {
-            favoriteIds.remove(at: index)
+        if isFavorite(channel) {
+            favoriteIds.removeAll { $0 == channel.id }
+            if channel.isFavourite { unfavoritedIds.insert(channel.id) }
         } else {
             favoriteIds.append(channel.id)
+            unfavoritedIds.remove(channel.id)
         }
     }
 
     func isFavorite(_ channel: UnifiedChannel) -> Bool {
-        favoriteIds.contains(channel.id)
+        favoriteIds.contains(channel.id) || (channel.isFavourite && !unfavoritedIds.contains(channel.id))
     }
 
     /// Moves a favorite one place earlier or later.
@@ -1179,19 +1188,20 @@ class LiveTVDataStore: ObservableObject {
 
     /// The favorites among `channels`, in order.
     func favorites(in channels: [UnifiedChannel]) -> [UnifiedChannel] {
-        Self.favorites(in: channels, order: favoriteIds)
+        Self.favorites(in: channels, order: favoriteIds, unfavorited: unfavoritedIds)
     }
 
     /// Rivulet's favorites in the viewer's order, then any the source marks
-    /// (Plex account favorites) in the source's order.
-    static func favorites(in channels: [UnifiedChannel], order: [String]) -> [UnifiedChannel] {
+    /// (Plex account favorites) in the source's order, less those removed here.
+    static func favorites(in channels: [UnifiedChannel], order: [String],
+                          unfavorited: Set<String> = []) -> [UnifiedChannel] {
         let position = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         // Typed key: the inline tuple comparison times out Xcode 26.3's type checker.
         let key = { (channel: UnifiedChannel) -> (Int, Int, Int) in
             (position[channel.id] ?? .max, channel.favouriteRank ?? .max, channel.channelNumber ?? .max)
         }
         return channels
-            .filter { position[$0.id] != nil || $0.isFavourite }
+            .filter { position[$0.id] != nil || ($0.isFavourite && !unfavorited.contains($0.id)) }
             .sorted { key($0) < key($1) }
     }
 
@@ -1199,6 +1209,7 @@ class LiveTVDataStore: ObservableObject {
         if let saved = userDefaults.array(forKey: favoritesKey) as? [String] {
             favoriteIds = saved
         }
+        unfavoritedIds = Set(userDefaults.stringArray(forKey: unfavoritedKey) ?? [])
     }
 
     private func saveFavorites() {

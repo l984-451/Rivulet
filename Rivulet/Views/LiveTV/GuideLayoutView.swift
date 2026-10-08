@@ -205,6 +205,15 @@ struct GuideLayoutView: View {
             await dataStore.refreshScheduledRecordings()
         }
         .onChange(of: channels.count) { _, _ in seedFocus() }
+        .onChange(of: groupTitles) { _, titles in
+            // The tab went away (its last favorite removed): All Channels,
+            // focus kept on the channel that was focused.
+            guard let group = selectedGroup, !titles.contains(group) else { return }
+            selectedGroup = nil
+            if let channel = focusedChannel {
+                gridFocusRequest = EPGFocusRequest(channelId: channel.id, token: UUID())
+            }
+        }
         .onReceive(tick) { t in now = t }
         .onDisappear {
             // Leaving the guide (another tab, a full-screen page) ends the
@@ -237,7 +246,8 @@ struct GuideLayoutView: View {
                 totalMinutes: totalMinutes,
                 now: now,
                 categoryTitles: groupTitles,
-                selectedCategory: selectedGroup,
+                // A tab that went away (the last favorite removed) shows All Channels.
+                selectedCategory: selectedGroup.flatMap { groupTitles.contains($0) ? $0 : nil },
                 onCategorySelect: { group in
                     guard selectedGroup != group else { return }
                     selectedGroup = group

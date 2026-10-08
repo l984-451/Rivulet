@@ -994,8 +994,8 @@ final class LiveMultiviewViewController: UIViewController {
             .map { (channel: $0, tier: tier($0)) }
             .sorted { a, b in
                 if a.tier != b.tier { return a.tier < b.tier }
-                let fa = a.channel.isFavourite || store.isFavorite(a.channel)
-                let fb = b.channel.isFavourite || store.isFavorite(b.channel)
+                let fa = store.isFavorite(a.channel)
+                let fb = store.isFavorite(b.channel)
                 if fa != fb { return fa }
                 return (a.channel.channelNumber ?? Int.max) < (b.channel.channelNumber ?? Int.max)
             }

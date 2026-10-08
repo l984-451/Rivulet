@@ -87,7 +87,7 @@ extension LiveTVDataStore {
     func whatsOnShelves(sourceIdFilter: String?, now: Date = Date()) -> [LiveShelf] {
         LiveShelves.build(LiveShelves.Input(
             channels: channels, epg: epg, recentChannelIds: recentChannelIds, favoriteIds: favoriteIds,
-            viewings: viewings, suggestionsEnabled: suggestionsEnabled,
+            unfavoritedIds: unfavoritedIds, viewings: viewings, suggestionsEnabled: suggestionsEnabled,
             scheduledRecordings: scheduledRecordings), sourceIdFilter: sourceIdFilter, now: now)
     }
 }
@@ -99,6 +99,7 @@ enum LiveShelves {
         var epg: [String: [UnifiedProgram]]
         var recentChannelIds: [String] = []
         var favoriteIds: [String] = []
+        var unfavoritedIds: Set<String> = []
         var viewings: [LiveViewing] = []
         var suggestionsEnabled = true
         var scheduledRecordings: [LiveTVScheduledRecording] = []
@@ -167,7 +168,8 @@ enum LiveShelves {
             shelves.append(LiveShelf(id: "recordings", title: "Recordings", items: recordings))
         }
 
-        let favourites = LiveTVDataStore.favorites(in: all, order: input.favoriteIds)
+        let favourites = LiveTVDataStore.favorites(in: all, order: input.favoriteIds,
+                                                  unfavorited: input.unfavoritedIds)
         if !favourites.isEmpty {
             shelves.append(LiveShelf(id: "favorites", title: "Favorites", items: onNow(favourites, section: "favorites")))
         }

@@ -214,14 +214,12 @@ private struct IOSLivePlayerScreen: View {
         let channel = session.channel
         glassButton("Channels", systemImage: "list.bullet") { showsChannels = true }
 
-        if store.isFavorite(channel) || !channel.isFavourite {
-            let isFavorite = store.isFavorite(channel)
-            glassButton(isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                        systemImage: isFavorite ? "star.fill" : "star") {
-                store.toggleFavorite(channel)
-            }
-            .sensoryFeedback(.selection, trigger: isFavorite)
+        let isFavorite = store.isFavorite(channel)
+        glassButton(isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                    systemImage: isFavorite ? "star.fill" : "star") {
+            store.toggleFavorite(channel)
         }
+        .sensoryFeedback(.selection, trigger: isFavorite)
 
         if let programme, store.canRecord(channel) {
             if let recording = store.activeRecording(for: programme) {

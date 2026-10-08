@@ -113,7 +113,8 @@ final class LiveBrowseViewController: UIViewController {
         ])
 
         let store = LiveTVDataStore.shared
-        Publishers.CombineLatest4(store.$channels, store.$epg, store.$scheduledRecordings, store.$favoriteIds)
+        Publishers.CombineLatest4(store.$channels, store.$epg, store.$scheduledRecordings,
+                                 store.$favoriteIds.combineLatest(store.$unfavoritedIds))
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _, _, _, _ in self?.rebuildShelves() }
             .store(in: &cancellables)

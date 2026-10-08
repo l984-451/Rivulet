@@ -143,19 +143,16 @@ struct IOSLiveProgrammeSheet: View {
         }
     }
 
-    @ViewBuilder
     private var favoriteButton: some View {
-        if store.isFavorite(channel) || !channel.isFavourite {
-            let isFavorite = store.isFavorite(channel)
-            Button {
-                store.toggleFavorite(channel)
-            } label: {
-                Label(isFavorite ? "Favorite" : "Add to Favorites", systemImage: isFavorite ? "star.fill" : "star")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-            .sensoryFeedback(.selection, trigger: isFavorite)
-            .accessibilityLabel(isFavorite ? "Remove from Favorites" : "Add to Favorites")
+        let isFavorite = store.isFavorite(channel)
+        return Button {
+            store.toggleFavorite(channel)
+        } label: {
+            Label(isFavorite ? "Favorite" : "Add to Favorites", systemImage: isFavorite ? "star.fill" : "star")
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.glass)
+        .sensoryFeedback(.selection, trigger: isFavorite)
+        .accessibilityLabel(isFavorite ? "Remove from Favorites" : "Add to Favorites")
     }
 }

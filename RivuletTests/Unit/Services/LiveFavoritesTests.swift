@@ -29,4 +29,19 @@ final class LiveFavoritesTests: XCTestCase {
 
         XCTAssertEqual(ordered.map(\.id), ["m3u", "iptv", "plexB", "plexA"])
     }
+
+    /// A Plex favourite removed in Rivulet leaves the list; one the viewer
+    /// favourited again in Rivulet stays.
+    func test_unfavoritedSourceFavoriteIsHidden() {
+        let channels = [
+            UnifiedChannel(id: "plexA", sourceType: .plex, sourceId: "p", channelNumber: 1, name: "A",
+                           isFavourite: true, favouriteRank: 0),
+            UnifiedChannel(id: "plexB", sourceType: .plex, sourceId: "p", channelNumber: 2, name: "B",
+                           isFavourite: true, favouriteRank: 1),
+        ]
+
+        let ordered = LiveTVDataStore.favorites(in: channels, order: ["plexB"], unfavorited: ["plexA", "plexB"])
+
+        XCTAssertEqual(ordered.map(\.id), ["plexB"])
+    }
 }

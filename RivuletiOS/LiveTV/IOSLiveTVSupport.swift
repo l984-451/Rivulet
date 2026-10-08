@@ -260,15 +260,12 @@ enum IOSLiveMenu {
         }
 
         var favoriteGroup: [IOSLiveMenuAction] = []
-        // A channel favourited only in Plex stays one; that list is Plex's.
-        if store.isFavorite(channel) || !channel.isFavourite {
-            let isFavorite = store.isFavorite(channel)
-            favoriteGroup.append(IOSLiveMenuAction(
-                id: "favorite",
-                title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                systemImage: isFavorite ? "star.slash" : "star"
-            ) { store.toggleFavorite(channel) })
-        }
+        let isFavorite = store.isFavorite(channel)
+        favoriteGroup.append(IOSLiveMenuAction(
+            id: "favorite",
+            title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+            systemImage: isFavorite ? "star.slash" : "star"
+        ) { store.toggleFavorite(channel) })
         return [watchGroup, recordGroup, favoriteGroup].filter { !$0.isEmpty }
     }
 

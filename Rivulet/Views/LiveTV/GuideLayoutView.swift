@@ -246,7 +246,8 @@ struct GuideLayoutView: View {
                 },
                 onFocus: { channel, program in
                     focusedChannel = channel
-                    focusedProgram = program
+                    // nil from the corner player: what that channel airs now.
+                    focusedProgram = program ?? channel.flatMap { dataStore.getCurrentProgram(for: $0) }
                 },
                 onSelect: { channel, _ in selectChannel(channel) },
                 onNeedMore: {

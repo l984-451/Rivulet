@@ -204,7 +204,9 @@ struct EPGGuide: UIViewRepresentable {
             onSelect: onCategorySelect,
             actionTitle: categoryActionTitle,
             onAction: onCategoryAction)
-        uiView.setMiniSession(miniSession, onSelect: onMiniPlayerSelect)
+        let onFocus = onFocus
+        uiView.setMiniSession(miniSession, onSelect: onMiniPlayerSelect,
+                              onFocus: { onFocus($0, nil) })
         context.coordinator.updateRecordingMarks(recordingProgramIds)
         let timelineMoved = context.coordinator.lastTimelineStart.map { $0 != timelineStart } ?? false
         let dataChanged = context.coordinator.apply(self, to: layout)
@@ -710,10 +712,13 @@ final class EPGContainerView: UIView {
     private var clockTimer: Timer?
     private weak var pendingGridFocusTarget: UIView?
     private weak var pendingCategoryFocusTarget: UIView?
+    private var pendingMiniPlayerFocus = false
     private var gridUpSwipeBinding: DirectionalInputBinding?
     /// The channel still playing after Back, in the corner (issue #318).
     private let miniPlayer = LiveMiniPlayerView()
     private var onMiniPlayerSelect: (() -> Void)?
+    private var onMiniPlayerFocus: ((UnifiedChannel) -> Void)?
+    private var miniChannel: UnifiedChannel?
     private let timeFade = CAGradientLayer()
     private let bottomFade = CAGradientLayer()
     private let rightFade = CAGradientLayer()
@@ -800,8 +805,11 @@ final class EPGContainerView: UIView {
     }
 
     /// Shows `session` in the corner, or hides the corner player when nil.
-    func setMiniSession(_ session: LiveTVSessionHandoff?, onSelect: (() -> Void)?) {
+    func setMiniSession(_ session: LiveTVSessionHandoff?, onSelect: (() -> Void)?,
+                        onFocus: ((UnifiedChannel) -> Void)? = nil) {
         onMiniPlayerSelect = onSelect
+        onMiniPlayerFocus = onFocus
+        miniChannel = session?.channel
         if let session {
             miniPlayer.show(session)
             miniPlayer.isHidden = false
@@ -813,6 +821,15 @@ final class EPGContainerView: UIView {
 
     @objc private func selectMiniPlayer() {
         onMiniPlayerSelect?()
+    }
+
+    /// The header follows focus onto the corner player: its channel, not the
+    /// programme focused before it.
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedView === miniPlayer, let miniChannel {
+            onMiniPlayerFocus?(miniChannel)
+        }
     }
 
     override func willMove(toWindow newWindow: UIWindow?) {
@@ -851,6 +868,7 @@ final class EPGContainerView: UIView {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if pendingMiniPlayerFocus { return [miniPlayer] }
         if let pendingGridFocusTarget {
             return [pendingGridFocusTarget]
         }
@@ -952,28 +970,43 @@ final class EPGContainerView: UIView {
 }
 
 extension EPGContainerView: MenuBackHandling {
-    /// With a channel in the corner, Menu from the grid or the pills returns the
-    /// grid to its top and focuses the corner player, as Menu below a library's
-    /// top row returns to its top. From the corner player it declines, so the
-    /// sidebar opens.
+    /// Menu returns the grid to its top, as below a library's top row, and
+    /// focuses the corner player, or the pills when there is none. From the
+    /// corner player or the pills it declines, so the sidebar opens.
     func handleMenuBack() -> Bool {
         // Focus must be in this guide: a player or menu presented over it holds
         // focus in its own views, and Menu keeps its meaning there.
-        guard !miniPlayer.isHidden,
-              let system = UIFocusSystem.focusSystem(for: self),
+        guard let system = UIFocusSystem.focusSystem(for: self),
               let focused = system.focusedItem as? UIView,
               focused.isDescendant(of: self), !focused.isDescendant(of: miniPlayer)
         else { return false }
-        // A jump, as in the library.
-        if let cv = collectionView {
-            cv.contentOffset.y = -cv.contentInset.top
-            cv.layoutIfNeeded()
+        // Requested from this view, which holds focus: a request aimed at the
+        // corner player is ignored, since it doesn't (#334). Before the scroll,
+        // which can take the focused cell away.
+        if !miniPlayer.isHidden {
+            pendingMiniPlayerFocus = true
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            pendingMiniPlayerFocus = false
+            // The guide-error banner over the corner can make it unfocusable.
+            if system.focusedItem === miniPlayer {
+                scrollGridToTop()
+                return true
+            }
         }
-        system.requestFocusUpdate(to: miniPlayer)
-        system.updateFocusIfNeeded()
-        // Something drawn over the corner (the guide-error banner) can make it
-        // unfocusable; then Menu keeps its usual meaning.
-        return system.focusedItem === miniPlayer
+        guard let cv = collectionView, focused.isDescendant(of: cv),
+              moveFocusToCategories() else { return false }
+        // Queued behind the pills' async focus move.
+        DispatchQueue.main.async { [weak self] in self?.scrollGridToTop() }
+        return true
+    }
+
+    /// Top row, timeline back at now.
+    private func scrollGridToTop() {
+        guard let cv = collectionView else { return }
+        (cv.delegate as? EPGGuide.Coordinator)?.resetHorizontalScroll()
+        cv.contentOffset.y = -cv.contentInset.top
+        cv.layoutIfNeeded()
     }
 }
 

@@ -537,11 +537,17 @@ enum SettingsContent {
             }
             rows.append(SettingsRowItem(id: "signOut", title: "Sign Out",
                                         kind: .action(destructive: true, handler: { vc in
-                PlexAuthManager.shared.signOut()
-                // Rebuild the page in place so it flips to "Connect to Plex"
-                // immediately (Sign Out is an in-place action — unlike the
-                // sign-in modal, nothing else triggers viewWillAppear here).
-                (vc as? SettingsPageViewController)?.reloadRows()
+                // Asks first: it is the page's only focus target, so one stray
+                // Select on arrival would otherwise sign out.
+                presentConfirm(on: vc, title: "Sign Out of Plex?",
+                               message: "You can sign in again from this page.",
+                               confirmTitle: "Sign Out", destructive: true) {
+                    PlexAuthManager.shared.signOut()
+                    // Rebuild the page in place so it flips to "Connect to Plex"
+                    // immediately (Sign Out is an in-place action — unlike the
+                    // sign-in modal, nothing else triggers viewWillAppear here).
+                    (vc as? SettingsPageViewController)?.reloadRows()
+                }
             })))
             return rows
         } else {

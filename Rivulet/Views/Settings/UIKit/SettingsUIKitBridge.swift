@@ -68,6 +68,9 @@ struct UIKitSettingsContainer: View {
         // Conditional: consume Menu (→ pop) only in a sub-page; at the root
         // Menu is NOT consumed so it bubbles to the system, like Home.
         .onExitCommand(perform: coordinator.isSubPage ? { coordinator.requestPop() } : nil)
+        // Re-sync on appear: a full-screen modal (Plex sign-in) fires
+        // onDisappear while the page stack stays deep (#327).
+        .onAppear { nestedNavState.isSettingsSubPage = coordinator.isSubPage }
         .onDisappear { nestedNavState.isSettingsSubPage = false }
     }
 }

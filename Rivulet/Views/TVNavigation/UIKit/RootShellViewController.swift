@@ -243,6 +243,9 @@ final class RootShellViewController: UIViewController {
         updateChromeVisibility()
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+        // The mount's retry bailed while the sidebar was open; run it now so a
+        // still-loading page arms the edge catcher.
+        if !contentHasHadFocus { driveFocusIntoContent() }
     }
 
     private func updateChromeVisibility() {
@@ -374,7 +377,12 @@ extension RootShellViewController: MenuBackHandling {
         // Via `backingView`, not a bare `as? UIView`: a SwiftUI tab's focused
         // item is not a UIView, so the plain cast failed there and Menu bubbled
         // to the system, quitting the app from Music and Live TV.
-        guard isInsideShell(UIFocusSystem.focusSystem(for: view)?.focusedItem) else { return false }
+        // Nothing focused with nothing presented is a page still loading (a
+        // spinner, no focus target): Menu opens the sidebar rather than
+        // reaching the system and quitting the app.
+        let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem
+        let loadingPage = focused == nil && view.window?.rootViewController?.presentedViewController == nil
+        guard isInsideShell(focused) || loadingPage else { return false }
         if sidebar.isExpanded {
             // Menu in the open sidebar returns to Home (issue #192 policy);
             // on Home it falls through so the system can exit the app.

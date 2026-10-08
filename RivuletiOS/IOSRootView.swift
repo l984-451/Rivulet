@@ -62,6 +62,9 @@ struct IOSRootView: View {
         .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(version: IOSChangelog.currentVersion) }
         .iosPlaybackHost(playback)
         .task { showWhatsNewIfUpdated() }
+        #if DEBUG
+        .task { await applyScreenshotState() }
+        #endif
         .task { await plex.verifyConnection() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -118,6 +121,23 @@ struct IOSRootView: View {
         lastSeenBuild = current
         showingWhatsNew = IOSChangelog.lines(for: current) != nil
     }
+
+    #if DEBUG
+    /// Screenshot mode: switch tab, or open a demo library or title on the Library tab.
+    private func applyScreenshotState() async {
+        if let tab = IOSScreenshotMode.tab { selectedTab = tab }
+        guard let title = IOSScreenshotMode.openTitle else { return }
+        while plex.libraries.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
+        if let library = plex.libraries.first(where: { $0.title == title }) {
+            selectedTab = "library"
+            libraryPath = NavigationPath([library])
+            return
+        }
+        guard let item = try? await plex.search(title).first(where: { $0.title == title }) else { return }
+        selectedTab = "library"
+        libraryPath = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
+    }
+    #endif
 
     private func openDownloads() {
         if showsSidebarLibraries {

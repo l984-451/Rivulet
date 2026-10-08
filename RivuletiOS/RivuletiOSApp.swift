@@ -15,6 +15,9 @@ struct RivuletiOSApp: App {
         // The manager reads Keychain and UserDefaults in its init, and PlexAPI
         // values are baked into every header.
         Self.migrateLegacyIOSSession()
+        #if DEBUG
+        IOSScreenshotMode.seedSession()
+        #endif
         PlexAPI.platform = "iOS"
         PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
         let session = IOSPlexSession()

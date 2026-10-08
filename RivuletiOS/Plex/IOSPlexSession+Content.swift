@@ -23,8 +23,11 @@ extension IOSPlexSession {
     func fetchHome() async throws -> IOSPlexHome {
         let (serverURL, token) = try configuration()
         let network = network
-        let libraries = try await network.getLibraries(serverURL: serverURL, authToken: token)
+        var libraries = try await network.getLibraries(serverURL: serverURL, authToken: token)
             .filter(\.isVideoLibrary)
+        #if DEBUG
+        libraries = IOSScreenshotMode.demoLibraries(libraries)
+        #endif
         async let continueWatching = network.getContinueWatching(serverURL: serverURL, authToken: token)
 
         let pinned = libraries.filter(\.isPinnedToHome)
@@ -48,6 +51,9 @@ extension IOSPlexSession {
         } catch {
             cw = nil
         }
+        #if DEBUG
+        if IOSScreenshotMode.isOn { return IOSPlexHome(libraries: libraries, continueWatching: .some(nil), hubsByLibrary: hubsByLibrary.mapValues(IOSScreenshotMode.demoHubs)) }
+        #endif
         return IOSPlexHome(libraries: libraries, continueWatching: cw, hubsByLibrary: hubsByLibrary)
     }
 
@@ -141,7 +147,10 @@ extension IOSPlexSession {
 
     func search(_ query: String) async throws -> [PlexMetadata] {
         let (serverURL, token) = try configuration()
-        let results = try await network.search(serverURL: serverURL, authToken: token, query: query, size: 80)
+        var results = try await network.search(serverURL: serverURL, authToken: token, query: query, size: 80)
+        #if DEBUG
+        results = IOSScreenshotMode.demoItems(results, libraries: libraries)
+        #endif
         // Video results only, one row per item: /search returns every
         // matching type and can repeat an item across result groups.
         var seen = Set<String>()

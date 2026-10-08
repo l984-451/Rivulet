@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/superuser404notfound/AetherEngine",
       "state" : {
-        "revision" : "de9fd838713f262838962c1be0fb1e853f31c498",
-        "version" : "7.25.3"
+        "revision" : "4f46e68918264ff83e5f19956ee78d280d7fc969",
+        "version" : "7.32.3"
       }
     },
     {

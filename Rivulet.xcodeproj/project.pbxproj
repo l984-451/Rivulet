@@ -923,7 +923,7 @@
 			repositoryURL = "https://github.com/superuser404notfound/AetherEngine";
 			requirement = {
 				kind = exactVersion;
-				version = 7.25.3;
+				version = 7.32.3;
 			};
 		};
 		B2000020AAAA000000000002 /* XCRemoteSwiftPackageReference "LibassBuild" */ = {

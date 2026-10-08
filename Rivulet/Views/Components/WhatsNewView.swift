@@ -149,6 +149,9 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.0.6 (94)", [  // confirm build number at release
+            "Updated AetherEngine to 7.32.3",
+        ]),
         ("1.0.6 (93)", [
             "Added ability to choose stream quality.",
             "Converted streams start more reliably.",

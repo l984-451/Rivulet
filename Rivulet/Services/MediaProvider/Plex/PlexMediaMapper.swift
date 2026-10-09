@@ -372,7 +372,6 @@ enum PlexMediaMapper {
                 imageURL: personURL(role.thumb),
                 tagKey: role.tagKey,
                 originActorId: role.originActorId,
-                originSectionKey: meta.librarySectionID.map(String.init),
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
                 backdropURL: titleBackdropURL

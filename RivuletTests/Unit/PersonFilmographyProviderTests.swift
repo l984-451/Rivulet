@@ -50,7 +50,7 @@ final class PersonFilmographyProviderTests: XCTestCase {
             biography: { _ in "A bio." })
         let plexThumb = URL(string: "https://plex/role.jpg")
         let person = MediaPerson(id: "p", name: "Keanu Reeves", role: nil, imageURL: plexThumb,
-                                 originActorId: "49", originSectionKey: "1",
+                                 originActorId: "49",
                                  titleTmdbId: 123, titleIsMovie: true)
         let detail = try await provider.load(person: person)
         XCTAssertEqual(detail.movies.map(\.item.title), ["OnServerMovie"])
@@ -79,7 +79,7 @@ final class PersonFilmographyProviderTests: XCTestCase {
             biography: { _ in nil })
         let thumb = URL(string: "https://plex/role.jpg")
         let person = MediaPerson(id: "p", name: "X", role: nil, imageURL: thumb,
-                                 originActorId: "1", originSectionKey: "1")
+                                 originActorId: "1")
         let detail = try await provider.load(person: person)
         XCTAssertNil(detail.biography)
         XCTAssertEqual(detail.portraitURL, thumb)

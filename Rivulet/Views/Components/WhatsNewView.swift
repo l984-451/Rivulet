@@ -149,6 +149,10 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.0.6 (95)", [ // confirm build number at release
+            "Cast pages load much faster, especially on large libraries.",
+            "Cast pages show a bio from Plex and a Known For row of other titles.",
+        ]),
         ("1.0.6 (94)", [
             "Subtitles turn on briefly when you skip back.",
             "New Enhance Dialogue and Reduce Loud Sounds audio options.",

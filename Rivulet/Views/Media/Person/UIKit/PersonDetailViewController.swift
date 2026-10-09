@@ -42,6 +42,7 @@ final class PersonDetailViewController: UIViewController {
         case header
         case movies
         case shows
+        case knownFor
     }
 
     /// Diffable item identity. Each shelf is a SINGLE item (the ShelfRowCell
@@ -57,6 +58,7 @@ final class PersonDetailViewController: UIViewController {
     private static let headerItem = ItemID(section: Section.header.rawValue, token: "header")
     private static let moviesItem = ItemID(section: Section.movies.rawValue, token: "movies-row")
     private static let showsItem = ItemID(section: Section.shows.rawValue, token: "shows-row")
+    private static let knownForItem = ItemID(section: Section.knownFor.rawValue, token: "known-for-row")
 
     // MARK: - Dependencies / state
 
@@ -66,6 +68,7 @@ final class PersonDetailViewController: UIViewController {
     private var detail: PersonDetail?
     private var movies: [FilmographyEntry] = []
     private var shows: [FilmographyEntry] = []
+    private var knownFor: [FilmographyEntry] = []
     /// True from first paint until the provider returns — drives the header's
     /// loading dots so the page reads as "working".
     private var isLoading = true
@@ -269,7 +272,7 @@ final class PersonDetailViewController: UIViewController {
         guard sectionIndex < sections.count else { return nil }
         switch sections[sectionIndex] {
         case .header:        return makeHeaderSectionLayout()
-        case .movies, .shows: return makeShelfSectionLayout()
+        case .movies, .shows, .knownFor: return makeShelfSectionLayout()
         }
     }
 
@@ -341,6 +344,10 @@ final class PersonDetailViewController: UIViewController {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
             configureShelf(cell, section: .shows, title: "Shows", entries: shows)
             return cell
+        case .knownFor:
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
+            configureShelf(cell, section: .knownFor, title: "Known For", entries: knownFor)
+            return cell
         }
     }
 
@@ -351,7 +358,7 @@ final class PersonDetailViewController: UIViewController {
                 return innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath)
             }
             let poster = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath) as! PosterCell
-            let entries = (section == .movies) ? self.movies : self.shows
+            let entries = self.entries(for: section)
             if indexPath.item < entries.count {
                 poster.configure(item: entries[indexPath.item].item)
             }
@@ -359,7 +366,7 @@ final class PersonDetailViewController: UIViewController {
         }
         cell.onSelect = { [weak self] index in
             guard let self else { return }
-            let entries = (section == .movies) ? self.movies : self.shows
+            let entries = self.entries(for: section)
             guard index < entries.count else { return }
             self.onSelectItem?(entries[index].item)
         }
@@ -378,6 +385,15 @@ final class PersonDetailViewController: UIViewController {
             initialOffset: shelfOffsets[section] ?? 0)
     }
 
+    private func entries(for section: Section) -> [FilmographyEntry] {
+        switch section {
+        case .header: return []
+        case .movies: return movies
+        case .shows: return shows
+        case .knownFor: return knownFor
+        }
+    }
+
     /// Content identity for a shelf — reload its tiles only when this changes.
     private func contentToken(for entries: [FilmographyEntry]) -> Int {
         var hasher = Hasher()
@@ -388,6 +404,7 @@ final class PersonDetailViewController: UIViewController {
     // MARK: - Data
 
     private func reload() async {
+        async let knownForTask = provider.knownFor(person: person)
         let loaded: PersonDetail
         do {
             loaded = try await provider.load(person: person)
@@ -410,6 +427,11 @@ final class PersonDetailViewController: UIViewController {
         shows = loaded.shows
         isLoading = false
         applySnapshot(animated: false)
+
+        let titles = await knownForTask
+        if Task.isCancelled { return }
+        knownFor = FilmographyEntry.excluding(movies + shows, from: titles)
+        if !knownFor.isEmpty { applySnapshot(animated: false) }
     }
 
     private func applySnapshot(animated: Bool) {
@@ -417,6 +439,7 @@ final class PersonDetailViewController: UIViewController {
         var visible: [Section] = [.header]
         if !movies.isEmpty { visible.append(.movies) }
         if !shows.isEmpty { visible.append(.shows) }
+        if !knownFor.isEmpty { visible.append(.knownFor) }
         sections = visible
 
         var snapshot = NSDiffableDataSourceSnapshot<Int, ItemID>()
@@ -426,6 +449,7 @@ final class PersonDetailViewController: UIViewController {
             case .header: snapshot.appendItems([Self.headerItem], toSection: section.rawValue)
             case .movies: snapshot.appendItems([Self.moviesItem], toSection: section.rawValue)
             case .shows:  snapshot.appendItems([Self.showsItem], toSection: section.rawValue)
+            case .knownFor: snapshot.appendItems([Self.knownForItem], toSection: section.rawValue)
             }
         }
         dataSource.apply(snapshot, animatingDifferences: animated)
@@ -456,6 +480,10 @@ final class PersonDetailViewController: UIViewController {
             case .shows:
                 if let row = cell as? ShelfRowCell {
                     configureShelf(row, section: .shows, title: "Shows", entries: shows)
+                }
+            case .knownFor:
+                if let row = cell as? ShelfRowCell {
+                    configureShelf(row, section: .knownFor, title: "Known For", entries: knownFor)
                 }
             }
         }

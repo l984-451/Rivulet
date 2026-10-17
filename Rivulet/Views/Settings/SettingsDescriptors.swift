@@ -29,6 +29,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
         if id.hasPrefix("sq_") { return descriptors["streamingQualityOption"] }
+        if id.hasPrefix("plexServer_") { return descriptors["plexServerOption"] }
         return nil
     }
 
@@ -234,7 +235,23 @@ enum SettingsDescriptorStore {
         // MARK: Servers
         "plexServer": SettingDescriptor(
             icon: "server.rack",
-            description: "Manage your Plex server connection, view server details, or sign out."
+            description: "Manage your Plex server connection, switch to another server on your account, or sign out."
+        ),
+        "plexServerPicker": SettingDescriptor(
+            icon: "server.rack",
+            description: "The Plex server Rivulet browses and plays from. Choose another server on your account to switch to it."
+        ),
+        "plexServerOption": SettingDescriptor(
+            icon: "server.rack",
+            description: "Switch to this server. Home and your libraries reload from it. A server shared with you shows who owns it."
+        ),
+        "plexServersLoading": SettingDescriptor(
+            icon: "server.rack",
+            description: "Finding the servers on your Plex account."
+        ),
+        "plexServersRetry": SettingDescriptor(
+            icon: "arrow.clockwise",
+            description: "Plex didn't return your servers. Check your network, then select to try again."
         ),
         "signOut": SettingDescriptor(
             icon: "rectangle.portrait.and.arrow.right",
@@ -430,6 +447,7 @@ enum SettingsDescriptorStore {
         case .servers: return ("server.rack", .systemOrange)
         case .about: return ("info.circle.fill", .systemGray)
         case .plex: return ("server.rack", .systemOrange)
+        case .plexServerPicker: return ("server.rack", .systemOrange)
         case .jellyfin: return ("server.rack", .systemPurple)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)

@@ -49,23 +49,13 @@ extension IOSPlexSession {
         return try await PlexNetworkManager.shared.getServers(authToken: token)
     }
 
-    /// Whether `server` is the one in use. `selectedServer` is unset after relaunch, so fall back to URL and name.
     func isCurrentServer(_ server: PlexDevice) -> Bool {
-        let auth = PlexAuthManager.shared
-        if let current = auth.selectedServer { return current.clientIdentifier == server.clientIdentifier }
-        if let url = auth.selectedServerURL, server.connections?.contains(where: { $0.uri == url }) == true {
-            return true
-        }
-        return server.name == auth.savedServerName
+        PlexAuthManager.shared.isCurrentServer(server)
     }
 
-    /// Switches servers. Returns false when no connection to it worked.
+    /// Switches servers. If the app cannot connect, this returns false and the old server stays in use.
     func switchServer(to server: PlexDevice) async -> Bool {
-        guard await PlexAuthManager.shared.selectServer(server) else {
-            // The old server is still selected; reload clears the failed state the attempt left behind.
-            await refresh()
-            return false
-        }
+        guard await PlexAuthManager.shared.selectServer(server) else { return false }
         contentSessionChanged()
         await refresh()
         return true

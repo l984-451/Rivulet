@@ -236,12 +236,13 @@ final class PersonHeaderCell: UICollectionViewCell {
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         self.fullBiography = bio
-        bioLabel.text = bio
+        bioLabel.text = bio.isEmpty && !isLoading ? "No biography available." : bio
 
         // Three states:
         //   loading            → panel visible, dots, no bio/MORE (focusable)
         //   loaded, has bio     → panel visible, bio (+ MORE if it overflows)
-        //   loaded, no bio      → panel hidden (focus falls to the rows)
+        //   loaded, no bio      → panel visible with a placeholder, so the page
+        //                         always has a focus target even with no rows
         if isLoading {
             bioPanel.isHidden = false
             loadingSpinner.startAnimating()
@@ -249,8 +250,8 @@ final class PersonHeaderCell: UICollectionViewCell {
             moreLabel.isHidden = true
         } else {
             loadingSpinner.stopAnimating()
-            bioLabel.isHidden = bio.isEmpty
-            bioPanel.isHidden = bio.isEmpty
+            bioLabel.isHidden = false
+            bioPanel.isHidden = false
             moreLabel.isHidden = true   // re-measured in layoutSubviews
         }
         // Truncation (and thus MORE visibility) can only be measured after the

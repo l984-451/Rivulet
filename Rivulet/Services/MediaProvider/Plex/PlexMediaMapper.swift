@@ -382,7 +382,13 @@ enum PlexMediaMapper {
                 id: $0.id,
                 name: $0.tag ?? "",
                 role: nil,
-                imageURL: personURL($0.thumb)
+                imageURL: personURL($0.thumb),
+                tagKey: $0.tagKey,
+                originActorId: $0.originTagId,
+                originFilter: "director",
+                titleTmdbId: titleTmdbId,
+                titleIsMovie: titleIsMovie,
+                backdropURL: titleBackdropURL
             )
         }
         let writers = (meta.Writer ?? []).map {
@@ -390,7 +396,13 @@ enum PlexMediaMapper {
                 id: $0.id,
                 name: $0.tag ?? "",
                 role: nil,
-                imageURL: personURL($0.thumb)
+                imageURL: personURL($0.thumb),
+                tagKey: $0.tagKey,
+                originActorId: $0.originTagId,
+                originFilter: "writer",
+                titleTmdbId: titleTmdbId,
+                titleIsMovie: titleIsMovie,
+                backdropURL: titleBackdropURL
             )
         }
         let chapters = (meta.Chapter ?? []).map { ch in

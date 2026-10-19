@@ -28,4 +28,14 @@ final class PlexRolePersonDecodeTests: XCTestCase {
         XCTAssertNil(role.tagKey)
         XCTAssertNil(role.originActorId)
     }
+
+    func test_directorDecodesTagKeyAndFilter() throws {
+        let json = """
+        { "tag": "Greta Gerwig", "thumb": "https://metadata-static.plex.tv/p/people/g.jpg",
+          "tagKey": "5d77683254f42c001f8c3a1d", "filter": "director=77" }
+        """.data(using: .utf8)!
+        let crew = try JSONDecoder().decode(PlexCrewMember.self, from: json)
+        XCTAssertEqual(crew.tagKey, "5d77683254f42c001f8c3a1d")
+        XCTAssertEqual(crew.originTagId, "77")
+    }
 }

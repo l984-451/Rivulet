@@ -36,6 +36,15 @@ nonisolated struct PlexCrewMember: Codable, Identifiable, Sendable {
     var id: String { "\(tag ?? "unknown")-\(thumb ?? "")" }
     var tag: String?
     var thumb: String?
+    var tagKey: String?     // Plex Discover person GUID fragment
+    var filter: String?     // Origin-library filter, e.g. "director=49"
+
+    /// Numeric origin-library tag id parsed from `filter` ("director=49" -> "49").
+    var originTagId: String? {
+        guard let filter, let eq = filter.firstIndex(of: "=") else { return nil }
+        let v = String(filter[filter.index(after: eq)...])
+        return v.isEmpty ? nil : v
+    }
 }
 
 /// Plex image entry (clearLogo, coverPoster, background, snapshot, etc.)

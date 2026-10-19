@@ -48,15 +48,15 @@ private let _defaultServerFilmography: @Sendable (_ person: MediaPerson) async -
     let headers = await PlexNetworkManager.shared.plexHeaders(authToken: token)
 
     var actorId = person.originActorId
-    if actorId == nil {
+    if actorId == nil, person.originFilter == "actor" {
         actorId = await searchActorId(serverURL: serverURL, name: person.name, headers: headers)
     }
     guard let actorId else { return [] }
 
     // Plex type 1 = movie, 2 = show.
-    async let movies = libraryItems(serverURL: serverURL, type: 1, actorId: actorId,
+    async let movies = libraryItems(serverURL: serverURL, type: 1, filter: person.originFilter, actorId: actorId,
                                     providerID: providerID, token: token, headers: headers)
-    async let shows = libraryItems(serverURL: serverURL, type: 2, actorId: actorId,
+    async let shows = libraryItems(serverURL: serverURL, type: 2, filter: person.originFilter, actorId: actorId,
                                    providerID: providerID, token: token, headers: headers)
     return await movies + shows
 }
@@ -84,10 +84,10 @@ private func searchActorId(serverURL: String, name: String, headers: [String: St
 }
 
 /// Every title of one Plex type featuring the actor, across all libraries.
-private func libraryItems(serverURL: String, type: Int, actorId: String, providerID: String, token: String, headers: [String: String]) async -> [FilmographyEntry] {
+private func libraryItems(serverURL: String, type: Int, filter: String, actorId: String, providerID: String, token: String, headers: [String: String]) async -> [FilmographyEntry] {
     guard var components = URLComponents(string: "\(serverURL)/library/all") else { return [] }
     components.queryItems = [URLQueryItem(name: "type", value: String(type)),
-                             URLQueryItem(name: "actor", value: actorId),
+                             URLQueryItem(name: filter, value: actorId),
                              URLQueryItem(name: "includeGuids", value: "1")]
     guard let url = components.url else { return [] }
     let container: PlexMediaContainerWrapper? = try? await PlexNetworkManager.shared.request(url, headers: headers)

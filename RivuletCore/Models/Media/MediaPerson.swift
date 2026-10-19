@@ -15,8 +15,9 @@ struct MediaPerson: Hashable, Identifiable, Sendable {
     let name: String
     let role: String?
     let imageURL: URL?
-    var tagKey: String? = nil           // Discover person key (cast only)
+    var tagKey: String? = nil           // Discover person key
     var originActorId: String? = nil    // Plex actor tag id (server-wide)
+    var originFilter: String = "actor"  // library query key for originActorId ("actor", "director", "writer")
     var titleTmdbId: Int? = nil       // originating title's TMDB id (for actor->TMDB resolution)
     var titleIsMovie: Bool = true     // originating title type (movie vs show)
     var backdropURL: URL? = nil       // backdrop of the originating title (for person detail page background)

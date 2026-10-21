@@ -155,6 +155,9 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         rowButtons = []
         stepperRows = []
         hasPinnedInitialFocus = false
+        // The rows below are a different length; an offset left over from a long
+        // list would sit past the end of a short one and show nothing.
+        scrollView.contentOffset = .zero
 
         if let index = openChoice {
             buildSubmenu(choices[index])

@@ -769,6 +769,7 @@ struct UniversalPlayerView: View {
             hasStartedPlayback = true
             // Notify that playback is starting (pauses hub polling)
             NotificationCenter.default.post(name: .plexPlaybackStarted, object: nil)
+            LiveTVDataStore.shared.beginPlaybackGuideHold()
             // Activate audio session BEFORE playback starts
             NowPlayingService.shared.attach(to: viewModel, inputCoordinator: inputCoordinator)
             await viewModel.startPlayback()
@@ -779,6 +780,8 @@ struct UniversalPlayerView: View {
             AppHangContext.setScreen("browse")
             // Notify that playback is stopping (resumes hub polling)
             NotificationCenter.default.post(name: .plexPlaybackStopped, object: nil)
+            // Only a player whose .task ran holds the guide.
+            if hasStartedPlayback { LiveTVDataStore.shared.endPlaybackGuideHold() }
             // Stop playback first, then detach from Now Playing
             // (audio session must remain active until player stops)
             viewModel.stopPlayback()

@@ -267,6 +267,10 @@ actor PlexLiveTVProvider: LiveTVProvider {
             }
         }
 
+        // A cancelled fill (the guide pauses under a VOD player) can come back with only the DVRs that
+        // answered before the cancel. Caching that as the whole window would serve the gap on resume.
+        try Task.checkCancellation()
+
         // Update cache: MERGE this window into the retained grid (append +
         // de-dupe by id) and widen the covered range, so a later lazy-load
         // window adds to what's cached instead of replacing it.

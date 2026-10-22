@@ -43,6 +43,11 @@ class LiveTVDataStore: ObservableObject {
     private static let fillChunkHours = 12
     private var fillTask: Task<Void, Never>?
     private var keepFreshTask: Task<Void, Never>?
+    /// VOD players currently up. While any is, the half-day fill holds: the far-off guide (a 16 MB,
+    /// ~6 s `/grid` response per half day on a slow PMS) is not needed behind a film, and filling it
+    /// then cost the player network and main-actor time. A count, not a flag, so a player that
+    /// disappears after the next one started does not resume the fill under it.
+    private var playersHoldingGuideFill = 0
     /// Last full `loadEPG`. Past 6 hours a refresh reloads every day, not
     /// just the next hours, so far-off schedule changes show up too.
     private var lastFullEPGLoad: Date?
@@ -281,12 +286,27 @@ class LiveTVDataStore: ObservableObject {
     /// window paints. Stops at the ceiling or on a failure; the next refresh
     /// starts it again.
     private func fillGuide() {
-        guard fillTask == nil, !epg.isEmpty else { return }
+        guard fillTask == nil, !epg.isEmpty, playersHoldingGuideFill == 0 else { return }
         fillTask = Task { [weak self] in
             while !Task.isCancelled, await self?.extendEPG() == true {}
-            // A cancelled fill was already replaced by `loadEPG`.
+            // A cancelled fill was already replaced by `loadEPG`, or paused for playback.
             if !Task.isCancelled { self?.fillTask = nil }
         }
+    }
+
+    /// Holds the half-day fill while a VOD title plays and picks it up where it stopped once the last
+    /// player is gone. The near-term refresh keeps running, so a guide behind the player still moves
+    /// forward. Each `beginPlaybackGuideHold` is matched by one `endPlaybackGuideHold`.
+    func beginPlaybackGuideHold() {
+        playersHoldingGuideFill += 1
+        fillTask?.cancel()
+        fillTask = nil
+    }
+
+    func endPlaybackGuideHold() {
+        guard playersHoldingGuideFill > 0 else { return }
+        playersHoldingGuideFill -= 1
+        if playersHoldingGuideFill == 0 { fillGuide() }
     }
 
     /// Refresh the guide when the app returns to the foreground. tvOS suspends

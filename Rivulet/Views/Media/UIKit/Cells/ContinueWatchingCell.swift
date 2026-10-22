@@ -34,9 +34,14 @@ final class ContinueWatchingCell: UICollectionViewCell {
     private var artworkLoadTask: Task<Void, Never>?
     private var currentArtworkURL: URL?
 
-    // TVCardView resets its platter to the system 20pt on every focus change; a larger
-    // clip shows the platter past the corners (#343).
-    private let cornerRadius: CGFloat = 20
+    // TVCardView resets its platter to the system radius on every focus change, and a larger clip shows
+    // the platter past the corners (#343). That radius is 20pt on tvOS 27 and 12pt on tvOS 26: read off
+    // the platter on an Apple TV 4K 1st gen (tvOS 26.6), 13.76pt at the focused card's 1.1465 scale,
+    // where the 20pt clip left its near-white fill showing in every corner.
+    private let cornerRadius: CGFloat = {
+        if #available(tvOS 27, *) { return 20 }
+        return 12
+    }()
 
     fileprivate static let geometry = ContinueWatchingCardCompositor.Geometry(
         cardWidth: MediaRowMetrics.continueWatching.art.width)

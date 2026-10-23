@@ -332,6 +332,18 @@ enum TrackIntentResolver {
 
     // MARK: Audio
 
+    /// Whether Plex's `selected: true` audio stream may override the global intent.
+    ///
+    /// With an Audio Language stored, only a selection that differs from the file's
+    /// default counts (Plex also sets `selected` on its own default). With none
+    /// stored, Plex's pick for the account is the best signal there is, so it wins.
+    static func plexSelectedAudioMayOverride(selectedId: Int, defaultId: Int?,
+                                             hasStoredIntent: Bool) -> Bool {
+        guard hasStoredIntent else { return true }
+        guard let defaultId else { return false }
+        return selectedId != defaultId
+    }
+
     /// Resolve the stored audio intent against the tracks of the current title.
     ///
     /// Ladder (`TrackLanguage.original` takes the file's main track instead):

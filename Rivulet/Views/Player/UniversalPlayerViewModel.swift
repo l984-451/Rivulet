@@ -3323,7 +3323,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         let defaultAudio = streams.first { $0.isAudio && $0.default == true }?.id
         if let id = initialAudioTrackId, audio.contains(where: { $0.id == id }) {
             ids.audio = id
-        } else if let selectedAudio, let defaultAudio, selectedAudio != defaultAudio,
+        } else if let selectedAudio,
+                  TrackIntentResolver.plexSelectedAudioMayOverride(
+                      selectedId: selectedAudio, defaultId: defaultAudio,
+                      hasStoredIntent: TrackIntentStore.audioIntent != nil),
                   audio.contains(where: { $0.id == selectedAudio }) {
             ids.audio = selectedAudio
         } else {
@@ -4469,8 +4472,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         //    (here, or in Plex Web / mobile), and that persists server-side.
         let plexAudioStreams = (metadata.Media?.first?.Part?.first?.Stream ?? []).filter { $0.isAudio }
         if let selectedId = plexAudioStreams.first(where: { $0.selected == true })?.id,
-           let defaultId = plexAudioStreams.first(where: { $0.default == true })?.id,
-           selectedId != defaultId,
+           TrackIntentResolver.plexSelectedAudioMayOverride(
+               selectedId: selectedId,
+               defaultId: plexAudioStreams.first(where: { $0.default == true })?.id,
+               hasStoredIntent: TrackIntentStore.audioIntent != nil),
            let track = audioTrackMatchingPlexStreamId(selectedId) {
             selectAudioTrackWithoutSaving(id: track.id)
             return

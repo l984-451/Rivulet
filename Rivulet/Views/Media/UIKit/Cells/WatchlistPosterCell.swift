@@ -24,7 +24,10 @@ final class WatchlistPosterCell: UICollectionViewCell {
     private var hasArtwork = false
 
     private let cornerRadius: CGFloat = 20
-    private let tile = MediaRowMetrics.poster
+    /// Re-read from `MediaRowMetrics` on every configure, so a reused cell follows a Display Size change.
+    private var tile = MediaRowMetrics.poster
+    private var posterWidthConstraint: NSLayoutConstraint!
+    private var posterHeightConstraint: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -66,11 +69,13 @@ final class WatchlistPosterCell: UICollectionViewCell {
         // Insert placeholder below the poster view so the image covers it.
         contentView.insertSubview(placeholderView, belowSubview: posterView)
 
+        posterWidthConstraint = posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width)
+        posterHeightConstraint = posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height)
         NSLayoutConstraint.activate([
             posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             posterView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width),
-            posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height),
+            posterWidthConstraint,
+            posterHeightConstraint,
 
             placeholderView.topAnchor.constraint(equalTo: posterView.imageView.topAnchor),
             placeholderView.bottomAnchor.constraint(equalTo: posterView.imageView.bottomAnchor),
@@ -107,6 +112,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
     }
 
     func configure(item: PlexWatchlistItem) {
+        applyPosterSize()
         // `film` for movies, `tv` for shows.
         let iconName = item.type == .movie ? "film" : "tv"
         let icon = UIImage(systemName: iconName)?
@@ -116,7 +122,15 @@ final class WatchlistPosterCell: UICollectionViewCell {
 
     /// MediaItem path. Artwork URLs are already resolved — no serverURL/token needed.
     func configure(item: MediaItem) {
+        applyPosterSize()
         loadImage(from: item.artwork.poster, failureIcon: failureIconImage(for: item.kind))
+    }
+
+    private func applyPosterSize() {
+        tile = MediaRowMetrics.poster
+        let host = tile.hostSize
+        if posterWidthConstraint.constant != host.width { posterWidthConstraint.constant = host.width }
+        if posterHeightConstraint.constant != host.height { posterHeightConstraint.constant = host.height }
     }
 
     override func prepareForReuse() {

@@ -26,8 +26,9 @@ enum MediaRowMetrics {
         return (column * CGFloat(span) + tileGap * CGFloat(span - 1)).rounded(.down)
     }
 
-    /// Fully-visible tile count per shelf type (the N in the equation).
-    static let posterFullCount = 6
+    /// Fully-visible tile count per shelf type (the N in the equation). Posters follow
+    /// Settings › Appearance › Display Size; a change re-lays out the screens showing them.
+    static var posterFullCount: Int { DisplaySize.current.posterColumns }
     static let cwFullCount = 5
     static let liveFullCount = 4
 
@@ -79,17 +80,23 @@ enum MediaRowMetrics {
     // MARK: Tiles
 
     /// 2:3 poster (PosterCell, WatchlistPosterCell, detail Related row).
-    static let poster: Tile = {
+    static var poster: Tile {
         let width = gridWidth(columns: posterFullCount)
         return Tile(art: CGSize(width: width, height: width * 1.5), growth: CGSize(width: 20, height: 30))
-    }()
-    static let posterWidth = poster.frame.width
-    static let posterHeight = poster.frame.height
+    }
+    static var posterWidth: CGFloat { poster.frame.width }
+    static var posterHeight: CGFloat { poster.frame.height }
 
     /// 1:1 square for music (artist/album/track): the poster's grid column.
-    static let music = Tile(art: CGSize(width: poster.art.width, height: poster.art.width))
-    static let musicWidth = music.frame.width
-    static let musicHeight = music.frame.height
+    static var music: Tile { square(columns: posterFullCount) }
+
+    /// A 1:1 square on a `columns`-wide grid, for a surface that keeps its own column count.
+    static func square(columns: Int) -> Tile {
+        let width = gridWidth(columns: columns)
+        return Tile(art: CGSize(width: width, height: width))
+    }
+    static var musicWidth: CGFloat { music.frame.width }
+    static var musicHeight: CGFloat { music.frame.height }
 
     /// Continue Watching card: a 16:9 still over a 48pt band (Apple's Up Next).
     static let continueWatching: Tile = {

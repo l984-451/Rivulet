@@ -15,7 +15,9 @@ import UIKit
 final class PhotoGridViewController: UIViewController {
     private enum Section: Int, CaseIterable { case folders, media }
     private static let headerKind = "PhotoGridHeader"
-    private static let columns = MediaRowMetrics.posterFullCount
+    /// Photos keep the Normal grid: their cells size themselves once, and the controller outlives a
+    /// Display Size change in its tab, so following the setting would leave stale tiles.
+    private static let columns = DisplaySize.normal.posterColumns
 
     var onOpenFolder: ((PhotoItem) -> Void)?
 
@@ -69,7 +71,7 @@ final class PhotoGridViewController: UIViewController {
     }
 
     private func makeLayout() -> UICollectionViewLayout {
-        let tile = MediaRowMetrics.music
+        let tile = MediaRowMetrics.square(columns: Self.columns)
         return UICollectionViewCompositionalLayout { index, _ in
             let size = PhotoCell.size(for: index == Section.folders.rawValue ? .folder : .photo)
             let item = NSCollectionLayoutItem(layoutSize: NSCollectionLayoutSize(

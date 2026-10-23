@@ -270,7 +270,11 @@ final class ShelfRowCell: UICollectionViewCell {
                    contentToken: Int,
                    initialOffset: CGFloat,
                    panelOvershoot: (left: CGFloat, right: CGFloat) = (0, 0)) {
-        let kindChanged = kind != tileKind || panelOvershoot != self.panelOvershoot
+        // A Display Size change moves the poster metrics under a row whose kind is unchanged, so the
+        // laid-out size counts as a change too.
+        let metricsChanged = flow.itemSize != CGSize(width: kind.tileWidth, height: kind.tileHeight)
+            || appliedFullCount != kind.fullCount
+        let kindChanged = kind != tileKind || panelOvershoot != self.panelOvershoot || metricsChanged
         tileKind = kind
         self.panelOvershoot = panelOvershoot
         if kindChanged {
@@ -466,9 +470,16 @@ final class ShelfRowCell: UICollectionViewCell {
             }
     }
 
+    /// The pitch and full count the row was last laid out with. The offset math reads these rather
+    /// than the live metrics, which a Display Size change moves before this row is reconfigured.
+    private var appliedPitch: CGFloat = 0
+    private var appliedFullCount = 0
+
     private func applyMetrics(for kind: TileKind) {
         flow.itemSize = CGSize(width: kind.tileWidth, height: kind.tileHeight)
         flow.minimumLineSpacing = kind.gap
+        appliedPitch = kind.pitch
+        appliedFullCount = kind.fullCount
         flow.minimumInteritemSpacing = kind.gap
         flow.sectionInset = UIEdgeInsets(
             top: 0,
@@ -485,11 +496,11 @@ final class ShelfRowCell: UICollectionViewCell {
     /// First fully-visible column implied by an offset (offsets only ever
     /// hold pitch multiples; rounding guards float fuzz).
     private func column(for offset: CGFloat) -> Int {
-        Int((offset / tileKind.pitch).rounded())
+        appliedPitch > 0 ? Int((offset / appliedPitch).rounded()) : 0
     }
 
     private func maxColumn() -> Int {
-        max(0, displayCount - tileKind.fullCount)
+        max(0, displayCount - appliedFullCount)
     }
 
     /// Smallest window shift that brings `itemIndex` fully into view. While a
@@ -499,15 +510,15 @@ final class ShelfRowCell: UICollectionViewCell {
     private func snappedOffset(toShow itemIndex: Int) -> CGFloat {
         let logicalX = offsetLink != nil ? animTargetX : rowCollectionView.contentOffset.x
         let fCur = column(for: logicalX)
-        var f = min(max(fCur, itemIndex - (tileKind.fullCount - 1)), itemIndex)
+        var f = min(max(fCur, itemIndex - (appliedFullCount - 1)), itemIndex)
         f = min(max(0, f), maxColumn())
-        return CGFloat(f) * tileKind.pitch
+        return CGFloat(f) * appliedPitch
     }
 
     private func setOffset(clampedTo x: CGFloat, animated: Bool = false) {
         offsetLink?.invalidate()
         offsetLink = nil
-        let maxOffset = CGFloat(maxColumn()) * tileKind.pitch
+        let maxOffset = CGFloat(maxColumn()) * appliedPitch
         let clamped = min(max(0, x), maxOffset)
         rowCollectionView.setContentOffset(CGPoint(x: clamped, y: 0), animated: animated)
         onOffsetChanged?(clamped)

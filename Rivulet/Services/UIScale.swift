@@ -34,6 +34,24 @@ enum DisplaySize: String, CaseIterable, CustomStringConvertible {
         case .extraLarge: return 1.3
         }
     }
+
+    /// Posters fully visible across a shelf or library grid row: the most whole columns of the
+    /// Apple TV app grid (`MediaRowMetrics`) whose tiles are at least `scale` times the Normal tile,
+    /// so a row still ends on a whole tile and its peek. Normal 6, Large 5 (1.23×), Extra Large 4 (1.58×).
+    var posterColumns: Int {
+        switch self {
+        case .normal: return 6
+        case .large: return 5
+        case .extraLarge: return 4
+        }
+    }
+
+    /// The `displaySize` setting as stored (Settings › Appearance › Display Size).
+    static let storageKey = "displaySize"
+
+    static var current: DisplaySize {
+        DisplaySize(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .normal
+    }
 }
 
 // MARK: - Environment Key

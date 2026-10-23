@@ -3440,7 +3440,7 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// React to AppStorage-backed settings (`showHomeHero`,
-    /// `enablePersonalizedRecommendations`) flipping while the home is on
+    /// `enablePersonalizedRecommendations`, `displaySize`) flipping while the home is on
     /// screen. `UserDefaults.didChangeNotification` fires once per change.
     /// We just re-evaluate the relevant subsystem; no need to filter by key.
     private func observeUserDefaults() {
@@ -3448,6 +3448,7 @@ final class PlexHomeViewController: UIViewController {
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                self.applyDisplaySizeIfChanged()
                 self.backdropView.isHidden = !self.showHomeHero
                 if !self.showHomeHero {
                     self.setHeroBackdrop(url: nil)
@@ -3485,6 +3486,24 @@ final class PlexHomeViewController: UIViewController {
                 }
             }
             .store(in: &dataStoreObservers)
+    }
+
+    /// The poster column count this page was last laid out with (Display Size).
+    private var appliedPosterColumns = MediaRowMetrics.posterFullCount
+
+    /// Settings › Appearance › Display Size moves the poster and music tiles: re-query every section's
+    /// layout and rebind every cell so rows and grids take the new size without a relaunch. Row offsets
+    /// are pitch multiples of the old size, so the rows start over at their first tile.
+    private func applyDisplaySizeIfChanged() {
+        let columns = MediaRowMetrics.posterFullCount
+        guard columns != appliedPosterColumns, collectionView != nil, dataSource != nil else { return }
+        appliedPosterColumns = columns
+        shelfOffsets.removeAll()
+        collectionView.collectionViewLayout.invalidateLayout()
+        var snapshot = dataSource.snapshot()
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        updateVisibleShelfRows()
     }
 
     /// Last-seen shown-on-Home library set, so the UserDefaults observer can

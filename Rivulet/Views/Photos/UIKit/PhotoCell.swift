@@ -15,7 +15,8 @@ import TVUIKit
 @MainActor
 final class PhotoCell: UICollectionViewCell {
     static let reuseID = "PhotoCell"
-    private static let tile = MediaRowMetrics.music
+    /// The Normal grid's square (see `PhotoGridViewController.columns`), not `MediaRowMetrics.music`.
+    private static let tile = MediaRowMetrics.square(columns: DisplaySize.normal.posterColumns)
 
     /// The lockup frame; a folder adds the Music lockup's two-line footer under the art.
     static func size(for kind: PhotoItem.Kind) -> CGSize {

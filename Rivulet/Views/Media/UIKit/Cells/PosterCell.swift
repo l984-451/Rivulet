@@ -67,8 +67,10 @@ final class PosterCell: UICollectionViewCell {
 
     /// The system image corner on tvOS 26.
     private let cornerRadius: CGFloat = 20
-    /// The tile the cell shows; the host view is TVUIKit's focused size (`hostSize`).
+    /// The tile the cell shows; the host view is TVUIKit's focused size (`hostSize`). Re-read from
+    /// `MediaRowMetrics` with `isSquare` on every configure, so a reused cell follows a Display Size change.
     private var tile = MediaRowMetrics.poster
+    private var isSquare = false
 
     /// Swappable so music tiles render the 1:1 square lockup instead of the
     /// 2:3 poster one. Set per item in `configure(...)`.
@@ -264,11 +266,12 @@ final class PosterCell: UICollectionViewCell {
     /// The badge's text while it shows (tests).
     var sourceBadgeText: String? { sourceBadge.isHidden ? nil : sourceBadge.text }
 
-    /// Music tiles are 1:1 square; everything else keeps the 2:3 poster ratio.
+    /// Music tiles are 1:1 square; everything else keeps the 2:3 poster ratio. Both follow Display Size.
     private func setSquare(_ square: Bool) {
+        isSquare = square
         tile = square ? MediaRowMetrics.music : MediaRowMetrics.poster
         let host = tile.hostSize
-        if posterHeightConstraint.constant != host.height {
+        if posterWidthConstraint.constant != host.width || posterHeightConstraint.constant != host.height {
             posterWidthConstraint.constant = host.width
             posterHeightConstraint.constant = host.height
         }
@@ -286,6 +289,7 @@ final class PosterCell: UICollectionViewCell {
     /// occupant here rather than assume `prepareForReuse` ran.
     func configurePlaceholder() {
         resetContent()
+        setSquare(isSquare)
         placeholderPanel.isHidden = false
     }
 

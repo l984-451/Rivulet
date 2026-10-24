@@ -22,6 +22,7 @@ struct RivuletiOSApp: App {
         #endif
         PlexAPI.platform = "iOS"
         PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
+        LiveHLSScrubThumbnails.playerDevice = UIDevice.current.model
         let session = IOSPlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)

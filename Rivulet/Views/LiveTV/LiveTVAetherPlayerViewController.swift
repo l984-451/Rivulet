@@ -344,6 +344,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // screensaver must not take over mid-programme.
         UIApplication.shared.isIdleTimerDisabled = true
 
+        // Backgrounding or sleep ends the session: the engine tears its
+        // pipeline down and the tune expires, so resuming only showed black (#390).
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification, object: nil)
+
         startPlayback()
 
         // What is already set to record, for the rail's record button.
@@ -506,6 +512,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 if !isFallbackInFlight { self.advanceFallback(after: error) }
             }
         }
+    }
+
+    /// Leaves the player so the host screen is what the user returns to. The
+    /// normal dismissal path (`viewDidDisappear`) releases the tuner.
+    @objc func appDidEnterBackground() {
+        guard presentingViewController != nil, !isBeingDismissed else { return }
+        dismissPlayer(animated: false)
     }
 
     override func viewDidAppear(_ animated: Bool) {

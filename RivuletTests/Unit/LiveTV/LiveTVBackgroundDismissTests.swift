@@ -13,10 +13,13 @@ final class LiveTVBackgroundDismissTests: XCTestCase {
                                      streamURL: URL(string: "http://127.0.0.1:1/x.ts"))
         let player = LiveTVAetherPlayerViewController(channel: channel)
         host.present(player, animated: false)
-        XCTAssertNotNil(host.presentedViewController)
+        XCTAssertNotNil(host.presentedViewController, "player was not presented")
 
         NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
 
-        XCTAssertNil(host.presentedViewController)
+        let done = expectation(description: "dismissed")
+        DispatchQueue.main.async { done.fulfill() }
+        wait(for: [done], timeout: 2)
+        XCTAssertNil(host.presentedViewController, "player still presented, being dismissed: \(player.isBeingDismissed)")
     }
 }

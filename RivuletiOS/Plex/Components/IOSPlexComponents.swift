@@ -380,8 +380,8 @@ struct IOSPlexShelfHeader: View {
 }
 
 /// The tvOS shelf equation: width = 2*leading + N*tile + (N-1)*gap with N odd,
-/// so the middle tile is centred and every snap shows a (leading - gap) peek
-/// of each neighbour. Tiles take their width from the row's container.
+/// so every snap shows a (leading - gap) peek of each neighbour. Tiles take
+/// their width from the row's container.
 struct IOSShelfGeometry {
     enum Kind {
         case poster, landscape, person
@@ -396,7 +396,7 @@ struct IOSShelfGeometry {
         }
 
         /// Largest share of a phone-width row one tile may take; a capped tile
-        /// stays centred with wider, still equal, peeks.
+        /// keeps the row's leading margin and shows more of the next tile.
         func maximumShare(wide: Bool) -> CGFloat? {
             self == .landscape && !wide ? 0.64 : nil
         }
@@ -407,8 +407,6 @@ struct IOSShelfGeometry {
     /// system large title and toolbar sit on it too.
     static let leading: CGFloat = 20
     let tileWidth: CGFloat
-    /// The row's content margin: `leading`, or more when a capped tile is centred.
-    let rowLeading: CGFloat
 
     /// `textScale` grows the minimum with Dynamic Type, so larger text gets fewer, wider tiles.
     init(width: CGFloat, kind: Kind, textScale: CGFloat = 1) {
@@ -421,8 +419,6 @@ struct IOSShelfGeometry {
         var width0 = tile(count)
         if let share = kind.maximumShare(wide: width >= 600) { width0 = min(width0, width * share) }
         tileWidth = max(0, width0)
-        let used = CGFloat(count) * tileWidth + CGFloat(count - 1) * Self.gap
-        rowLeading = max(Self.leading, (width - used) / 2)
     }
 }
 
@@ -462,7 +458,7 @@ struct IOSShelfRow<Items: RandomAccessCollection, Header: View, Tile: View>: Vie
                     }
                     .scrollTargetLayout()
                 }
-                .contentMargins(.horizontal, geometry.rowLeading, for: .scrollContent)
+                .contentMargins(.horizontal, IOSShelfGeometry.leading, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $anchor, anchor: .leading)
                 .scrollIndicators(.hidden)

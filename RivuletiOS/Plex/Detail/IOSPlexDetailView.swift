@@ -52,7 +52,7 @@ struct IOSPlexDetailView: View {
             .refreshable { await load() }
         }
         // The page is dark in both modes, like the header art it continues.
-        .background(.black)
+        .iosPlexAmbient(shown)
         .environment(\.colorScheme, .dark)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationTitle(shown.showTitle)
@@ -271,17 +271,30 @@ private struct IOSPlexDetailHeader: View {
 
     var body: some View {
         ZStack(alignment: isWide ? .bottomLeading : .bottom) {
-            IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
-                .backgroundExtensionEffect()
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.25),
-                    .init(color: .black.opacity(0.7), location: 0.7),
-                    .init(color: .black, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            // The art and its scrim fade out into the page's ambient wash.
+            ZStack {
+                IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
+                    .backgroundExtensionEffect()
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.25),
+                        .init(color: .black.opacity(0.7), location: 0.7),
+                        .init(color: .black, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white, location: 0.75),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
             titleBlock
                 .frame(maxWidth: isWide ? 560 : .infinity, alignment: isWide ? .leading : .center)
                 .padding(.horizontal, IOSShelfGeometry.leading)

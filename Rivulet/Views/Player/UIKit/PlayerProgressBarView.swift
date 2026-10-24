@@ -145,6 +145,15 @@ final class PlayerProgressBarView: UIView {
     private var snapNextUpdate = false
     private var isPaused = false
     private var isLive = false
+    /// Live rewind window reaching past the programme's start: where the
+    /// reachable part begins (fill and ghost start there), and the earlier
+    /// programmes' boundaries, which cut the track into sections. VOD and a
+    /// live bar without a window leave both at rest: fill from the left edge,
+    /// one uncut track.
+    private var liveFillStart: Double = 0
+    private var liveSections: [Double] = []
+    /// The cut between programme sections.
+    private static let sectionGap: CGFloat = 4
 
     private static let clockFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -312,11 +321,14 @@ final class PlayerProgressBarView: UIView {
     /// up to it shows in the ghost. `scrubTime` puts a paused, timeshifted
     /// stream in scrub mode.
     func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date, liveEdgeTime: Date? = nil,
-                            scrubTime: Date? = nil, scrubThumbnail: UIImage? = nil) {
+                            scrubTime: Date? = nil, scrubThumbnail: UIImage? = nil,
+                            seekableStart: Date? = nil, sectionBoundaries: [Date] = []) {
         let duration = endTime.timeIntervalSince(startTime)
         guard duration > 0 else { return }
         isLive = true
         func offset(_ date: Date) -> TimeInterval { min(max(0, date.timeIntervalSince(startTime)), duration) }
+        liveFillStart = seekableStart.map { offset($0) / duration } ?? 0
+        liveSections = sectionBoundaries.map { offset($0) / duration }.filter { $0 > 0 && $0 < 1 }.sorted()
         var ghost: Double?
         if scrubTime == nil, let liveEdgeTime, liveEdgeTime.timeIntervalSince(currentTime) > 1 {
             ghost = offset(liveEdgeTime) / duration
@@ -390,11 +402,12 @@ final class PlayerProgressBarView: UIView {
 
         track.frame = CGRect(x: 0, y: centerY - height / 2, width: width, height: height)
         track.layer.cornerRadius = height / 2
-        fill.frame = CGRect(x: 0, y: 0, width: playheadX, height: height)
+        let fillX = width * CGFloat(isLive ? liveFillStart : 0)
+        fill.frame = CGRect(x: fillX, y: 0, width: max(0, playheadX - fillX), height: height)
         fill.alpha = isFocusDimmed ? 0 : 1
         ghost.alpha = isFocusDimmed ? 0 : 1
         ghost.isHidden = ghostProgress == nil
-        ghost.frame = CGRect(x: 0, y: 0, width: width * CGFloat(ghostProgress ?? 0), height: height)
+        ghost.frame = CGRect(x: fillX, y: 0, width: max(0, width * CGFloat(ghostProgress ?? 0) - fillX), height: height)
         updateTrackHoles(ring: ring, playheadX: playheadX, currentX: currentX)
 
         // Dimmed, AVKit's marker shrinks to a 1pt line inside the track.
@@ -505,7 +518,7 @@ final class PlayerProgressBarView: UIView {
     /// Ring mode punches the track out under the ring and the hollow playback marker.
     private func updateTrackHoles(ring: Bool, playheadX: CGFloat, currentX: CGFloat) {
         guard ring else {
-            track.layer.mask = nil
+            updateSectionMask()
             return
         }
         let path = UIBezierPath(rect: track.bounds.insetBy(dx: -Metrics.ring, dy: -Metrics.ring))
@@ -517,6 +530,31 @@ final class PlayerProgressBarView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         trackMask.frame = track.bounds
+        trackMask.path = path.cgPath
+        CATransaction.commit()
+        track.layer.mask = trackMask
+    }
+
+    /// Live: one rounded section per programme the rewind window reaches into.
+    private func updateSectionMask() {
+        let bounds = track.bounds
+        guard isLive, !liveSections.isEmpty, bounds.width > 0, bounds.height > 0 else {
+            track.layer.mask = nil
+            return
+        }
+        let edges = [0] + liveSections + [1]
+        let radius = bounds.height / 2
+        let path = UIBezierPath()
+        for (from, to) in zip(edges, edges.dropFirst()) {
+            let minX = bounds.width * CGFloat(from) + (from > 0 ? Self.sectionGap / 2 : 0)
+            let maxX = bounds.width * CGFloat(to) - (to < 1 ? Self.sectionGap / 2 : 0)
+            guard maxX > minX else { continue }
+            let section = CGRect(x: minX, y: 0, width: maxX - minX, height: bounds.height)
+            path.append(UIBezierPath(roundedRect: section, cornerRadius: min(radius, section.width / 2)))
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        trackMask.frame = bounds
         trackMask.path = path.cgPath
         CATransaction.commit()
         track.layer.mask = trackMask

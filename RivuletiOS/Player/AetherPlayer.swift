@@ -398,12 +398,25 @@ final class AetherPlayer: ObservableObject {
         }
         if isLive {
             let clock = engine.clock
-            let window = LiveWindow(
+            var window = LiveWindow(
                 seekableRange: clock.seekableLiveRange,
                 edgeTime: clock.liveEdgeTime,
                 playhead: time,
                 isAtLiveEdge: clock.isAtLiveEdge
             )
+            // Direct HLS: the engine publishes an unbounded `0...edge` (AVPlayer
+            // clamps seeks itself), which would offer media the origin evicted
+            // long ago. The window is the AVPlayer item's own, on the same axis,
+            // and one no deeper than the live holdback is no window at all.
+            if engine.videoRoute == .remoteBypass {
+                if let remote = remoteLiveWindow, remote.isSeekable {
+                    window = LiveWindow(seekableRange: remote.lowerBound...remote.upperBound,
+                                        edgeTime: remote.upperBound, playhead: time,
+                                        isAtLiveEdge: remote.isAtLiveEdge(time))
+                } else {
+                    window = LiveWindow(seekableRange: nil, edgeTime: clock.liveEdgeTime, playhead: time, isAtLiveEdge: true)
+                }
+            }
             if window != liveWindow { liveWindow = window }
         }
         if let source = engine.softwarePiPSource {
@@ -425,6 +438,19 @@ final class AetherPlayer: ObservableObject {
     private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool) async throws {
         beginLoad()
         let isNativeHLS = Self.isHLSURL(url) && !forceEngineDemux
+        // Direct HLS: AVPlayer fetches the segments, so the engine holds none to
+        // draw scrub previews from. These read them from the playlist instead.
+        liveHLSPreviews = isNativeHLS
+            ? LiveHLSScrubThumbnails(
+                playlistURL: url, headers: headers,
+                // The media playlist AVPlayer is really fetching.
+                playingMediaPlaylist: { [weak self] in
+                    (self?.engine.currentAVPlayer?.currentItem?.accessLog()?.events.last?.uri)
+                        .flatMap(URL.init(string:))
+                },
+                decodeFirstFrame: { await AetherPlayer.decodeFirstFrame($0, fileExtension: $1, maxWidth: $2) }
+            )
+            : nil
         // Forced onto the engine demuxer AND a playlist: the Plex direct-play grant.
         let usesHLSIngest = !isNativeHLS && Self.isHLSURL(url)
         // A wireless receiver buffers ~2 s before it sounds; mount paused and
@@ -652,7 +678,10 @@ final class AetherPlayer: ObservableObject {
     func seekLive(to sessionSeconds: Double) async {
         let window = liveWindow
         guard let range = window.seekableRange else { return }
-        let target = min(max(sessionSeconds, range.lowerBound), window.edgeTime)
+        // On direct HLS, clear of the oldest segment: the next playlist refresh
+        // may evict it before the seek lands.
+        let floor = remoteLiveWindow.map { $0.seekTarget($0.lowerBound) } ?? range.lowerBound
+        let target = min(max(sessionSeconds, floor), window.edgeTime)
         if window.edgeTime - target < 1 {
             await seekToLiveEdge()
         } else {
@@ -676,6 +705,55 @@ final class AetherPlayer: ObservableObject {
     func seekToLiveEdge() async {
         pendingSeekTarget = nil
         await engine.seekToLiveEdge()
+    }
+
+    // MARK: - Live scrub previews
+
+    /// A still from the rewind window at `sessionSeconds`, for the scrub
+    /// preview. The engine decodes one from what it holds; on direct HLS it
+    /// holds nothing, and the frame is read from the playlist instead.
+    func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
+        if engine.videoRoute == .remoteBypass {
+            guard let previews = liveHLSPreviews, let window = remoteLiveWindow else { return nil }
+            return await previews.thumbnail(secondsIntoWindow: sessionSeconds - window.lowerBound, maxWidth: maxWidth)
+        }
+        return await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// Warms the direct-HLS previews (playlist, init segment, key) once per
+    /// load, when the viewer looks about to scrub. A no-op elsewhere.
+    func prewarmLivePreviews() {
+        guard engine.videoRoute == .remoteBypass, let previews = liveHLSPreviews,
+              prewarmedPreviews !== previews else { return }
+        prewarmedPreviews = previews
+        Task { await previews.prewarm() }
+    }
+    private weak var prewarmedPreviews: LiveHLSScrubThumbnails?
+
+    /// Scrub previews on direct HLS, read from the playlist (see `performLiveLoad`).
+    private var liveHLSPreviews: LiveHLSScrubThumbnails?
+
+    /// The AVPlayer item's own seekable window on direct HLS.
+    private var remoteLiveWindow: LiveSeekableWindow? {
+        guard engine.videoRoute == .remoteBypass,
+              let item = engine.currentAVPlayer?.currentItem, item.status == .readyToPlay else { return nil }
+        return LiveSeekableWindow(ranges: item.seekableTimeRanges.map {
+            let range = $0.timeRangeValue
+            return (start: range.start.seconds, duration: range.duration.seconds)
+        })
+    }
+
+    /// One small frame from the head of a media segment, for direct-HLS
+    /// previews. Here because the decoder is the engine's `FrameExtractor`.
+    nonisolated static func decodeFirstFrame(_ data: Data, fileExtension: String, maxWidth: Int) async -> CGImage? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("live-scrub-\(UUID().uuidString).\(fileExtension)")
+        guard (try? data.write(to: url)) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let extractor = FrameExtractor(url: url)
+        let image = await extractor.thumbnail(at: 0, maxWidth: maxWidth)
+        await extractor.shutdown()
+        return image
     }
 
     func selectAudioTrack(id: Int) {
@@ -716,6 +794,7 @@ final class AetherPlayer: ObservableObject {
         pendingSeekTarget = nil
         isStarting = false
         liveWindow = .idle
+        liveHLSPreviews = nil
         rate = 1
         engine.pictureInPictureActive = false
         engine.stop()

@@ -26,6 +26,17 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertNil(cell.sourceBadgeText, "configure alone never adds a badge")
     }
 
+    func test_posterCell_noArtwork_showsTitle() {
+        let cell = PosterCell(frame: CGRect(x: 0, y: 0, width: 220, height: 400))
+        var show = PlexMetadata()
+        show.type = "show"
+        show.title = "Some Show"
+        cell.configure(item: show)
+        XCTAssertEqual(cell.failureTitleShown, "Some Show")
+        cell.prepareForReuse()
+        XCTAssertNil(cell.failureTitleShown)
+    }
+
     // MARK: - Plex paths
 
     func test_isJellyfin() {

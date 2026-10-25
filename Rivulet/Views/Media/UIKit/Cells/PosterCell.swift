@@ -21,6 +21,8 @@ final class PosterCell: UICollectionViewCell {
     private let watchedBadge = PosterWatchedBadge()
     private let sourceBadge = SourceBadgeView(style: .onArtwork)
     private let failureIcon = UIImageView()
+    /// The title on the failure card, so an item with no artwork is still named.
+    private let failureTitle = UILabel()
     private let progressInfoBar = MediaProgressInfoBar()
 
     /// Apple-style watched glyph, bottom-left (the progress bar's slot).
@@ -54,6 +56,10 @@ final class PosterCell: UICollectionViewCell {
         bottomInfoBlur = blur
         return blur
     }
+
+    private var failureTitleText: String?
+    /// The title showing on the failure card (tests).
+    var failureTitleShown: String? { failureTitle.isHidden ? nil : failureTitle.text }
 
     private var imageLoadTask: Task<Void, Never>?
     private var currentURL: URL?
@@ -141,6 +147,14 @@ final class PosterCell: UICollectionViewCell {
         failureIcon.isHidden = true
         overlayContainer.addSubview(failureIcon)
 
+        failureTitle.translatesAutoresizingMaskIntoConstraints = false
+        failureTitle.font = .systemFont(ofSize: 24, weight: .medium)
+        failureTitle.textColor = UIColor.white.withAlphaComponent(0.6)
+        failureTitle.textAlignment = .center
+        failureTitle.numberOfLines = 4
+        failureTitle.isHidden = true
+        overlayContainer.addSubview(failureTitle)
+
         // Watched glyph: bottom-left, same slot as the progress bar / play icon.
         watchedGlyph.isHidden = true
         overlayContainer.addSubview(watchedGlyph)
@@ -178,6 +192,9 @@ final class PosterCell: UICollectionViewCell {
             failureIcon.centerYAnchor.constraint(equalTo: overlayContainer.centerYAnchor),
             failureIcon.widthAnchor.constraint(equalToConstant: 32),
             failureIcon.heightAnchor.constraint(equalToConstant: 32),
+            failureTitle.topAnchor.constraint(equalTo: failureIcon.bottomAnchor, constant: 12),
+            failureTitle.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor, constant: 16),
+            failureTitle.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor, constant: -16),
 
             // Glass placeholder fills the image surface; spinner centered on it.
             placeholderPanel.topAnchor.constraint(equalTo: overlayContainer.topAnchor),
@@ -241,6 +258,7 @@ final class PosterCell: UICollectionViewCell {
         sourceBadge.text = nil
         setSquare(["artist", "album", "track"].contains(item.type ?? ""))
         let url = posterURL(for: item)
+        failureTitleText = item.title
         loadImage(from: url, item: item)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
@@ -253,6 +271,7 @@ final class PosterCell: UICollectionViewCell {
         // Episodes prefer the grandparent (show) poster so hub rows render
         // show art instead of letterboxed episode stills, matching the Plex path.
         let url = item.grandparentArtwork?.poster ?? item.artwork.poster
+        failureTitleText = item.title
         loadImage(from: url, failureKind: item.kind)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
@@ -304,6 +323,8 @@ final class PosterCell: UICollectionViewCell {
         watchedGlyph.isHidden = true
         failureIcon.isHidden = true
         failureIcon.image = nil
+        failureTitle.isHidden = true
+        failureTitle.text = nil
         // A recycled cell must not inherit a prior occupant's stranded focus
         // (enlarged) appearance — clear any leftover scale transform.
         resetStaleFocusAppearance()
@@ -375,6 +396,7 @@ final class PosterCell: UICollectionViewCell {
     private func showPlaceholderLoading() {
         placeholderPanel.isHidden = false
         failureIcon.isHidden = true
+        failureTitle.isHidden = true
         // Delay the spinner so a fast cache hit doesn't flash it on scroll.
         cancelSpinnerDelay()
         spinnerDelayTask = Task { [weak self] in
@@ -393,6 +415,8 @@ final class PosterCell: UICollectionViewCell {
         placeholderPanel.isHidden = false
         failureIcon.image = icon
         failureIcon.isHidden = false
+        failureTitle.text = failureTitleText
+        failureTitle.isHidden = (failureTitleText ?? "").isEmpty
     }
 
     /// Artwork resolved — tear the placeholder down.
@@ -401,6 +425,7 @@ final class PosterCell: UICollectionViewCell {
         loadingSpinner.stopAnimating()
         placeholderPanel.isHidden = true
         failureIcon.isHidden = true
+        failureTitle.isHidden = true
     }
 
     private func cancelSpinnerDelay() {

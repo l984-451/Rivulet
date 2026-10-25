@@ -267,9 +267,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var scrubSpeed: Int = 0  // -8...8 shuttle level (0 = not shuttling); see ShuttleGrammar
     private var scrubStartTime: Date?  // When scrubbing started (for YouTube-style acceleration)
     @Published private(set) var audioTracks: [MediaTrack] = []
-    @Published private(set) var subtitleTracks: [MediaTrack] = []
+    @Published private(set) var subtitleTracks: [MediaTrack] = [] { didSet { syncWebVTTSidecar() } }
     @Published private(set) var currentAudioTrackId: Int?
-    @Published private(set) var currentSubtitleTrackId: Int?
+    @Published private(set) var currentSubtitleTrackId: Int? { didSet { syncWebVTTSidecar() } }
     /// Active skip-back subtitle window, if the user is currently
     /// inside one. Cleared (without reverting) by any user-initiated
     /// absolute seek, manual subtitle-track change, or stopPlayback.
@@ -508,6 +508,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var plexSessionId: String?
     /// The Plex stream whose transcode subtitle feeds the caption overlay (hls route).
     private var transcodeSubtitleTrackId: Int?
+    /// A WebVTT sidecar Rivulet read itself, standing in for the engine's cues
+    /// of that track (see `VTTParser.captionCues`).
+    private var webVTTSidecar: (url: URL, cues: [AetherSubtitleCue])?
+    private var webVTTSidecarTask: Task<Void, Never>?
+    private var webVTTSidecarLoadingURL: URL?
     private var transcodeSubtitleTask: Task<Void, Never>?
     private var transcodeSubtitleTimeObserver: Any?
     private var lastTranscodeSubtitleRestart = Date.distantPast
@@ -945,6 +950,58 @@ final class UniversalPlayerViewModel: ObservableObject {
         transcodeSubtitleTrackId = nil
         aetherSubtitleModel.update(cues: [])
         assTrack = nil
+    }
+
+    // MARK: - WebVTT sidecars (aether route)
+
+    /// The active track's sidecar, when it is WebVTT the overlay should read itself.
+    private func activeWebVTTSidecarURL() -> URL? {
+        guard aetherPlayer != nil, let id = currentSubtitleTrackId,
+              let track = subtitleTracks.first(where: { $0.id == id }), track.isExternal,
+              let ordinal = subtitleTracks.filter(\.isExternal).firstIndex(where: { $0.id == id }),
+              let sidecar = aetherExternalSubtitles()[safe: ordinal],
+              VTTParser.isWebVTT(formatHint: sidecar.formatHint, url: sidecar.url) else { return nil }
+        return sidecar.url
+    }
+
+    /// Swaps Rivulet's reading of a WebVTT sidecar in for the engine's cues while
+    /// that track is on, and hands the overlay back to the engine otherwise. A
+    /// file that fails to load or parse leaves the engine's plain cues showing.
+    private func syncWebVTTSidecar() {
+        guard let url = activeWebVTTSidecarURL() else {
+            clearWebVTTSidecar()
+            return
+        }
+        if let loaded = webVTTSidecar, loaded.url == url { return }
+        if webVTTSidecar != nil { clearWebVTTSidecar() }
+        guard webVTTSidecarLoadingURL != url else { return }
+        webVTTSidecarTask?.cancel()
+        webVTTSidecarLoadingURL = url
+        webVTTSidecarTask = Task { [weak self] in
+            guard case .body(let text) = await ContentFilterSources.fetchText(url) else { return }
+            let document = await Task.detached(priority: .userInitiated) { WebVTTDocument.parse(text) }.value
+            guard let self, !Task.isCancelled, self.webVTTSidecarLoadingURL == url else { return }
+            self.webVTTSidecarLoadingURL = nil
+            guard let document, self.activeWebVTTSidecarURL() == url else { return }
+            let cues = VTTParser.captionCues(from: document)
+            guard !cues.isEmpty else { return }
+            self.webVTTSidecar = (url, cues)
+            self.aetherSubtitleModel.update(cues: cues)
+        }
+    }
+
+    private func clearWebVTTSidecar() {
+        webVTTSidecarTask?.cancel()
+        webVTTSidecarTask = nil
+        webVTTSidecarLoadingURL = nil
+        guard webVTTSidecar != nil else { return }
+        webVTTSidecar = nil
+        if let aetherPlayer {
+            aetherSubtitleModel.update(cues: aetherPlayer.subtitleCues)
+        } else if transcodeSubtitleTrackId == nil {
+            // Fell back to hls: the transcode reader owns the model once it runs.
+            aetherSubtitleModel.update(cues: [])
+        }
     }
 
     private func activeSubtitleTextForFilter() -> [String] {
@@ -2205,6 +2262,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Same instance on a next-episode swap, so drop the previous bind
         // before adding this one.
         aetherCancellables.removeAll()
+        clearWebVTTSidecar()
         player.playbackStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
@@ -2287,7 +2345,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] cues in
-                self?.aetherSubtitleModel.update(cues: cues)
+                // libavcodec has stripped a WebVTT sidecar's styling; ours stands in.
+                guard let self, self.webVTTSidecar == nil else { return }
+                self.aetherSubtitleModel.update(cues: cues)
             }
             .store(in: &aetherCancellables)
 

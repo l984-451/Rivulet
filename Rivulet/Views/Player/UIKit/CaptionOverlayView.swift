@@ -416,8 +416,9 @@ final class CaptionOverlayView: UIView {
     /// letterboxed film's signs land on the image, not in the black bar).
     ///
     /// A fine position (WebVTT `line:`, ASS `\pos`) names the box's top edge, since
-    /// WebVTT's default `line-align` is `start`. Without one (teletext) the cue
-    /// takes its numpad band's resting place.
+    /// WebVTT's default `line-align` is `start`. A WebVTT line number snaps to
+    /// rendered lines. Without either (teletext) the cue takes its numpad band's
+    /// resting place.
     private func layoutPlaced(_ box: CaptionBoxView,
                               placement: AetherSubtitleCue.TextPlacement,
                               in size: CGSize,
@@ -478,6 +479,14 @@ final class CaptionOverlayView: UIView {
             let lowestCentre = max(0, floor - letterbox) + halfBox
             let requestedCentre = (1 - ay) * rect.height - halfBox
             centreY = rect.maxY - max(requestedCentre, lowestCentre)
+        } else if let lineNumber = placement.lineNumber {
+            let top = Self.snappedLineTop(lineNumber: lineNumber,
+                                          lineHeight: box.lineHeight,
+                                          boxHeight: fitted.height,
+                                          picture: rect)
+            // Same floor as every placed cue: never into the letterbox or the rail.
+            let lowestTop = size.height - floor - fitted.height
+            centreY = min(top, lowestTop) + fitted.height / 2
         } else if row == 2 {
             centreY = rect.minY + rect.height * Metrics.bandEdgeFraction + fitted.height / 2
         } else if row == 1 {
@@ -493,6 +502,20 @@ final class CaptionOverlayView: UIView {
                            y: (centreY - fitted.height / 2).rounded(),
                            width: fitted.width,
                            height: fitted.height)
+    }
+
+    /// Top edge of a cue placed by a WebVTT snap-to-lines `line:` number, clamped
+    /// to the picture. Line N >= 0 puts the box top N lines below the picture's
+    /// top; a negative N puts the box bottom |N| - 1 lines above its bottom, so
+    /// -1 is the last line.
+    static func snappedLineTop(lineNumber: Int,
+                               lineHeight: CGFloat,
+                               boxHeight: CGFloat,
+                               picture rect: CGRect) -> CGFloat {
+        let top = lineNumber >= 0
+            ? rect.minY + CGFloat(lineNumber) * lineHeight
+            : rect.maxY + CGFloat(lineNumber + 1) * lineHeight - boxHeight
+        return min(max(top, rect.minY), max(rect.minY, rect.maxY - boxHeight))
     }
 
     /// How far libass lifts unpositioned dialogue, as its line position
@@ -588,6 +611,12 @@ private final class CaptionBoxView: UIView {
         }
     }
 
+    /// Height of one rendered caption line at the applied size, the unit a
+    /// WebVTT line number counts in.
+    var lineHeight: CGFloat {
+        style.font(ofSize: appliedPointSize).lineHeight
+    }
+
     /// Inset from the box's edge to the text, zero for the box-less uniform edge.
     private var padding: (h: CGFloat, v: CGFloat) {
         guard style.edge != .uniform else { return (0, 0) }
@@ -621,6 +650,7 @@ private final class CaptionBoxView: UIView {
     /// Builds the cue's attributed string, applying each content attribute only
     /// where the matching system Video Override allows it:
     ///  - colour                                          -> `allowsContentColor`
+    ///  - background                                      -> `allowsContentBackground`
     ///  - bold/italic/underline/strikethrough, font face   -> `allowsContentFont`
     ///  - relative size                                    -> `allowsContentFontSize`
     ///
@@ -654,6 +684,10 @@ private final class CaptionBoxView: UIView {
                 let contentColor = style.allowsContentColor ? run.color : nil
                 attributes[.foregroundColor] =
                     contentColor?.withAlphaComponent(style.foregroundOpacity) ?? userColor
+                // Painted over the system box, so a silent run shows the box.
+                if style.allowsContentBackground, let background = run.backgroundColor {
+                    attributes[.backgroundColor] = background
+                }
                 if style.allowsContentFont {
                     if run.isUnderlined {
                         attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue

@@ -83,7 +83,7 @@ Rivulet/                # The tvOS app — everything below.
 │   │       ├── ContentFilter/ # Local mute/skip filter (see "Content Filter (VOD)"),
 │   │       │                  #   SubtitleImageReader (reads image subtitles on device)
 │   │       └── Subtitles/    # LibassRenderer + ASSCompositor (the libass layer), SubtitleCue,
-│   │                          #   VTT/SRT/ASS parsers (content-filter only; captions are not app-parsed)
+│   │                          #   VTT/SRT/ASS parsers (content filter; VTT also draws WebVTT sidecars)
 │   ├── LiveTV/         # LiveTVSessionHandoff (store + providers live in RivuletCore/LiveTV)
 │   ├── Insights/       # InsightsTriviaClient, InsightsShowIDResolver (in-player cast/trivia panel)
 │   ├── Cache/          # CacheManager, ImageCacheManager, TopShelfComposer,
@@ -523,12 +523,20 @@ Key components:
     transcode at the playhead instead (one extra rebuffer).
   RPlayer's old sidecar pipeline (`SubtitleManager`, `SubtitleOverlayView`) is
   deleted; do not revive it. Jellyfin's transcode still uses server subtitles.
-- `SubtitleParser.swift` survived that cull and is NOT dead, but nothing in it
-  renders: it serves the content filter. `VTTParser` reads `text/mcf+vtt` lists
-  (`ContentFilterParsers`), and all three parsers (VTT, SRT, ASS) read a title's
-  external subtitle file in full so language muting works with subtitles off and on
-  the `hls` route (`ContentFilterSources`). Check for the type, not the filename,
-  before deleting anything here.
+- `SubtitleParser.swift` survived that cull and is NOT dead. It serves the content
+  filter: `VTTParser` reads `text/mcf+vtt` lists (`ContentFilterParsers`), and all
+  three parsers (VTT, SRT, ASS) read a title's external subtitle file in full so
+  language muting works with subtitles off and on the `hls` route
+  (`ContentFilterSources`). Check for the type, not the filename, before deleting
+  anything here.
+- **A WebVTT sidecar on the aether route is drawn from `VTTParser`, not the
+  engine.** libavcodec's WebVTT decoder keeps only b/i/u, so colour classes, `bg_*`
+  backgrounds, STYLE `::cue` rules and `line:` numbers would be lost. The engine
+  still selects the track; `UniversalPlayerViewModel.syncWebVTTSidecar` fetches the
+  file and swaps `VTTParser.captionCues` in for the engine's cues of that track.
+  SRT and ASS sidecars keep their styling through the engine and stay there.
+  `.green` is a class on purpose: 7plus files carry CEA-608 green under that name,
+  where the spec says `lime`.
 
 **Playback States** (PlayerProtocol): `.idle`, `.loading`, `.playing`, `.paused`, `.buffering`, `.ended`, `.failed`
 

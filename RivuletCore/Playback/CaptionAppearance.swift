@@ -33,6 +33,10 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     /// Opacity of the character-cell background (0...1).
     var backgroundOpacity: Double
 
+    /// Video Override state for the background colour — gates a run's own
+    /// background (WebVTT `bg_*` classes, `::cue` `background-color`).
+    var allowsContentBackground: Bool
+
     /// Font size multiplier derived from the system relative-character-size preference.
     /// Applied on top of the size Apple bases on the presentation (view) height.
     var fontScale: CGFloat
@@ -75,6 +79,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
         foregroundOpacity: 1.0,
         backgroundColor: .black,
         backgroundOpacity: 0.75,
+        allowsContentBackground: true,
         fontScale: 1.0,
         allowsContentFontSize: true,
         fontDescriptor: nil,
@@ -88,6 +93,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
             && lhs.foregroundOpacity == rhs.foregroundOpacity
             && lhs.backgroundColor == rhs.backgroundColor
             && lhs.backgroundOpacity == rhs.backgroundOpacity
+            && lhs.allowsContentBackground == rhs.allowsContentBackground
             && lhs.fontScale == rhs.fontScale
             && lhs.allowsContentFontSize == rhs.allowsContentFontSize
             && lhs.allowsContentFont == rhs.allowsContentFont
@@ -137,6 +143,7 @@ enum CaptionAppearance {
 
         // Background color + opacity — the box drawn directly behind the glyphs.
         let bgCG = MACaptionAppearanceCopyBackgroundColor(.user, &behavior).takeRetainedValue()
+        let allowsContentBackground = contentMayOverride()
         let bgOpacity = Double(MACaptionAppearanceGetBackgroundOpacity(.user, &behavior))
 
         // Window color + opacity — the larger region box. Several built-in styles
@@ -176,6 +183,7 @@ enum CaptionAppearance {
             foregroundOpacity: foregroundOpacity,
             backgroundColor: backgroundColor,
             backgroundOpacity: backgroundOpacity,
+            allowsContentBackground: allowsContentBackground,
             fontScale: scale,
             allowsContentFontSize: allowsContentFontSize,
             fontDescriptor: fontDescriptor,

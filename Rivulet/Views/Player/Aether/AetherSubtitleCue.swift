@@ -45,6 +45,9 @@ struct AetherSubtitleCue: Identifiable {
     struct StyledRun: Hashable {
         var text: String
         var color: UIColor?
+        /// Background behind this run's glyphs (WebVTT `bg_*` classes), drawn
+        /// over the system caption box where `allowsContentBackground` allows.
+        var backgroundColor: UIColor?
         var isBold: Bool = false
         var isItalic: Bool = false
         var isUnderlined: Bool = false
@@ -63,6 +66,10 @@ struct AetherSubtitleCue: Identifiable {
         /// `\pos` anchor normalized to [0, 1] against the video frame, y from
         /// the top — the same convention `SubtitleImage.position` uses.
         var position: CGPoint?
+        /// WebVTT snap-to-lines `line:` as written: 0 is the first line from
+        /// the top, -1 the last line at the bottom. Needs the rendered line
+        /// height, so only the overlay can resolve it. `position.y` wins.
+        var lineNumber: Int? = nil
     }
 
     /// Content identity: collapses the engine's re-decode duplicates while

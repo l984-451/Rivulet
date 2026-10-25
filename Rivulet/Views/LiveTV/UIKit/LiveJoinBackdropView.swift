@@ -38,7 +38,7 @@ final class LiveJoinBackdropView: UIView {
         let scrim = CAGradientLayer()
         scrim.colors = [UIColor.black.withAlphaComponent(0.35).cgColor,
                         UIColor.black.withAlphaComponent(0.85).cgColor]
-        let scrimView = GradientView(layer: scrim)
+        let scrimView = LiveJoinScrimView(layer: scrim)
         scrimView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrimView)
 
@@ -95,7 +95,7 @@ final class LiveJoinBackdropView: UIView {
 }
 
 /// A view whose backing layer is the given gradient's configuration.
-private final class GradientView: UIView {
+private final class LiveJoinScrimView: UIView {
     override class var layerClass: AnyClass { CAGradientLayer.self }
     init(layer template: CAGradientLayer) {
         super.init(frame: .zero)

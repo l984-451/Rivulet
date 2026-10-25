@@ -34,7 +34,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Shown until the first frame plays; the engine spins up demux + decode
     /// before any picture, so give the user something in the meantime.
-    private let loadingSpinner = UIActivityIndicatorView(style: .large)
+    private let loadingSpinner = LiveJoinSpinner(style: .large)
+
+    /// The programme's guide artwork and summary behind the spinner while joining.
+    private let joinBackdrop = LiveJoinBackdropView()
 
     private let subtitleModel = SubtitleModel()
     private var subtitleOverlay: CaptionOverlayView?
@@ -306,6 +309,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         engineSurfaceView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(engineSurfaceView)
 
+        joinBackdrop.frame = view.bounds
+        joinBackdrop.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(joinBackdrop)
+        loadingSpinner.onChange = { [weak self] spinning in
+            guard let self else { return }
+            if spinning {
+                self.joinBackdrop.show(LiveJoinBackdropContent.make(
+                    program: LiveTVDataStore.shared.getCurrentProgram(for: self.channel)))
+            } else {
+                self.joinBackdrop.hide()
+            }
+        }
         loadingSpinner.color = .white
         loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(loadingSpinner)

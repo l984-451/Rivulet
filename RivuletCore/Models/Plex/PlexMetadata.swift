@@ -313,7 +313,7 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var originalTitle: String?
     var editionTitle: String?     // Plex movie edition, e.g. "Director's Cut"
     var studio: String?
-    var contentRating: String?    // "PG-13", "TV-MA", etc.
+    var contentRating: String?    // "PG-13", "TV-MA", or country-prefixed "uk/12A"
     var summary: String?
     var tagline: String?
     var year: Int?
@@ -990,5 +990,22 @@ extension PlexMetadata {
     /// All markers
     var allMarkers: [PlexMarker] {
         Marker ?? []
+    }
+}
+
+
+extension PlexMetadata {
+    /// `contentRating` for display: Plex stores non-US ratings with an ISO
+    /// country prefix ("uk/12A") and its own clients show what follows the
+    /// first slash. The raw value stays in `contentRating`.
+    var displayContentRating: String? {
+        Self.displayContentRating(contentRating)
+    }
+
+    static func displayContentRating(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        guard let slash = raw.firstIndex(of: "/") else { return raw }
+        let stripped = raw[raw.index(after: slash)...].trimmingCharacters(in: .whitespaces)
+        return stripped.isEmpty ? raw : stripped
     }
 }

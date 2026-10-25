@@ -318,7 +318,7 @@ private struct IOSPlexDetailHeader: View {
             }
             HStack(spacing: 8) {
                 Text(metadataItems.joined(separator: " · "))
-                if let rating = item.contentRating, !rating.isEmpty {
+                if let rating = item.displayContentRating, !rating.isEmpty {
                     Text(rating).plexPill()
                 }
             }

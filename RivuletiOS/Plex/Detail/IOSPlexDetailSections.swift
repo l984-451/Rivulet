@@ -228,7 +228,7 @@ struct IOSPlexInformationSection: View {
         [
             ("Studio", item.studio),
             ("Genre", item.Genre?.compactMap(\.tag).joined(separator: ", ")),
-            ("Rated", item.contentRating),
+            ("Rated", item.displayContentRating),
             ("Released", item.originallyAvailableAt.flatMap(Self.formattedDate)),
             ("Runtime", item.runtimeText),
             ("Audio", languages(streamType: 2)),

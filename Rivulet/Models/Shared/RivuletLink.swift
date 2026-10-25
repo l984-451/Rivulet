@@ -31,12 +31,19 @@ struct RivuletLink: Equatable, Sendable {
         self.server = server
     }
 
+    /// Parses `rivulet://<action>?ratingKey=<key>` and `rivulet://<action>/<key>`.
+    /// The path form exists for senders that drop the query string (the Apple TV
+    /// Companion channel). A query ratingKey wins when both are present.
     init?(url: URL) {
         guard url.scheme == Self.scheme,
               let action = url.host.flatMap(Action.init(rawValue:)),
-              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
-              let ratingKey = items.first(where: { $0.name == "ratingKey" })?.value,
-              !ratingKey.isEmpty else { return nil }
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = components.queryItems ?? []
+        let segments = components.path.split(separator: "/", omittingEmptySubsequences: true)
+        let fromPath = segments.count == 1 ? String(segments[0]).removingPercentEncoding : nil
+        let fromQuery = items.first(where: { $0.name == "ratingKey" })?.value
+        guard let ratingKey = [fromQuery, fromPath].compactMap({ $0 }).first(where: { !$0.isEmpty })
+        else { return nil }
         self.init(action, ratingKey: ratingKey,
                   server: items.first(where: { $0.name == "server" })?.value)
     }

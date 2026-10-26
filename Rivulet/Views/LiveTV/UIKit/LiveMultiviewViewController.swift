@@ -126,6 +126,11 @@ final class LiveMultiviewViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = UIColor(white: 0.05, alpha: 1)
 
+        // Backgrounding ends every tile, as it ends the full-screen player (#390).
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .sink { [weak self] _ in self?.exitMultiview(handingOff: nil, animated: false) }
+            .store(in: &cancellables)
+
         view.addSubview(watchHint)
         view.addSubview(editHint)
         editHint.isHidden = true

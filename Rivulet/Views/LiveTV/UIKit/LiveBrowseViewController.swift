@@ -118,6 +118,10 @@ final class LiveBrowseViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] loading in self?.updateEmptyState(loading: loading) }
             .store(in: &cancellables)
+        // Backgrounding ends the corner channel too: its tune expires (#390).
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .sink { [weak self] _ in self?.stopMini() }
+            .store(in: &cancellables)
 
         Task { @MainActor in
             if store.channels.isEmpty { await store.loadChannels() }

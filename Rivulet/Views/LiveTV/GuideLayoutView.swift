@@ -227,6 +227,11 @@ struct GuideLayoutView: View {
             }
         }
         .onReceive(tick) { t in now = t }
+        // Backgrounding ends the corner channel too: its tune expires (#390).
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            miniSession?.stop()
+            miniSession = nil
+        }
         .onDisappear {
             // Leaving the guide (another tab, a full-screen page) ends the
             // corner player. Opening the player takes the session first, so

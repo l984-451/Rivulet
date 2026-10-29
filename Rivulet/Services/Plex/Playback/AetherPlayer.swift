@@ -811,6 +811,19 @@ final class AetherPlayer: PlayerProtocol {
         // direct-play case. See the ingest branch below.
         let usesHLSIngest = !isHLS && Self.isHLSURL(url)
         let httpHeaders = headers ?? [:]
+        // Direct HLS: AVPlayer fetches the segments, so the engine holds none to
+        // draw scrub previews from. These read them from the playlist instead.
+        liveHLSPreviews = isHLS && role == .fullscreen
+            ? LiveHLSScrubThumbnails(
+                playlistURL: url, headers: httpHeaders,
+                // The media playlist AVPlayer is really fetching.
+                playingMediaPlaylist: { [weak self] in
+                    (self?.engine.currentAVPlayer?.currentItem?.accessLog()?.events.last?.uri)
+                        .flatMap(URL.init(string:))
+                },
+                decodeFirstFrame: { await AetherPlayer.decodeFirstFrame($0, fileExtension: $1, maxWidth: $2) }
+            )
+            : nil
         // A wireless receiver (HomePod, an AirPlay speaker) buffers about two
         // seconds before its first sample sounds. A join that starts the clock
         // the moment a frame is ready plays that stretch as silent picture and
@@ -1282,6 +1295,7 @@ final class AetherPlayer: PlayerProtocol {
         partIndex = 0
         finishAVCapture()
         dropFrameExtractor()
+        liveHLSPreviews = nil
         engine.stop()
     }
 
@@ -1424,8 +1438,28 @@ final class AetherPlayer: PlayerProtocol {
 
     /// A snapshot of the live window. Cheap: these are the clock's own
     /// published values, which the engine keeps current even while paused.
+    ///
+    /// Direct HLS is the exception: there the engine publishes an unbounded
+    /// `0...edge` (AVPlayer clamps seeks itself), which would offer media the
+    /// origin evicted long ago. The window comes from the AVPlayer item, on the
+    /// same axis (the engine applies no playlist shift on that route), and one
+    /// no deeper than the playlist's live holdback is no window at all.
     var liveTimeshift: LiveTimeshift {
         let clock = engine.clock
+        if engine.isLive, engine.videoRoute == .remoteBypass {
+            guard let window = remoteLiveWindow, window.isSeekable else {
+                return LiveTimeshift(seekableRange: nil, edgeTime: clock.liveEdgeTime, playhead: clock.currentTime,
+                                     behindLiveSeconds: 0, isAtLiveEdge: true)
+            }
+            let playhead = clock.currentTime
+            return LiveTimeshift(
+                seekableRange: window.lowerBound...window.upperBound,
+                edgeTime: window.upperBound,
+                playhead: playhead,
+                behindLiveSeconds: max(0, window.upperBound - playhead),
+                isAtLiveEdge: window.isAtLiveEdge(playhead)
+            )
+        }
         return LiveTimeshift(
             seekableRange: clock.seekableLiveRange,
             edgeTime: clock.liveEdgeTime,
@@ -1450,7 +1484,10 @@ final class AetherPlayer: PlayerProtocol {
     func seekLive(to sessionSeconds: Double) async -> Bool {
         let shift = liveTimeshift
         guard let range = shift.seekableRange else { return false }
-        let target = min(max(sessionSeconds, range.lowerBound), shift.edgeTime)
+        // On direct HLS, clear of the oldest segment: the next playlist refresh
+        // may evict it before the seek lands.
+        let floor = remoteLiveWindow.map { $0.seekTarget($0.lowerBound) } ?? range.lowerBound
+        let target = min(max(sessionSeconds, floor), shift.edgeTime)
         if shift.edgeTime - target < 1 {
             await engine.seekToLiveEdge()
         } else {
@@ -1468,7 +1505,49 @@ final class AetherPlayer: PlayerProtocol {
     /// the session already holds (no network). nil outside the window, on the
     /// remote-HLS bypass, or across a channel change.
     func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
-        await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+        if engine.videoRoute == .remoteBypass {
+            guard let previews = liveHLSPreviews, let window = remoteLiveWindow else { return nil }
+            return await previews.thumbnail(secondsIntoWindow: sessionSeconds - window.lowerBound, maxWidth: maxWidth)
+        }
+        return await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// Warms the direct-HLS previews (playlist, init segment, key) once per
+    /// load, when the viewer looks about to scrub. A no-op elsewhere.
+    func prewarmLivePreviews() {
+        guard engine.videoRoute == .remoteBypass, let previews = liveHLSPreviews,
+              prewarmedPreviews !== previews else { return }
+        prewarmedPreviews = previews
+        Task { await previews.prewarm() }
+    }
+    private weak var prewarmedPreviews: LiveHLSScrubThumbnails?
+
+    /// Scrub previews on direct HLS, read from the playlist (see `loadLive`).
+    private var liveHLSPreviews: LiveHLSScrubThumbnails?
+
+    /// The AVPlayer item's own seekable window on direct HLS.
+    private var remoteLiveWindow: LiveSeekableWindow? {
+        guard engine.videoRoute == .remoteBypass,
+              let item = engine.currentAVPlayer?.currentItem, item.status == .readyToPlay else { return nil }
+        return LiveSeekableWindow(ranges: item.seekableTimeRanges.map {
+            let range = $0.timeRangeValue
+            return (start: range.start.seconds, duration: range.duration.seconds)
+        })
+    }
+
+    /// One small frame from the head of a media segment (`ts`, `mp4`, or a raw
+    /// `h264` stream), for direct-HLS scrub previews. Here because the decoder
+    /// is the engine's `FrameExtractor`. A segment head starts on its keyframe,
+    /// so time zero lands on the first decodable frame whatever its timestamps.
+    nonisolated static func decodeFirstFrame(_ data: Data, fileExtension: String, maxWidth: Int) async -> CGImage? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("live-scrub-\(UUID().uuidString).\(fileExtension)")
+        guard (try? data.write(to: url)) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let extractor = FrameExtractor(url: url)
+        let image = await extractor.thumbnail(at: 0, maxWidth: maxWidth)
+        await extractor.shutdown()
+        return image
     }
 
     /// True once the current load has its first frame on screen (an audio-only

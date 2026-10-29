@@ -1026,7 +1026,13 @@ class LiveTVDataStore: ObservableObject {
 
     // MARK: - EPG Loading
 
-    /// Load EPG for the specified time range
+    /// How far before now a full EPG load keeps programmes: the live player's
+    /// timeline splits a stream's rewind window at the programmes it reaches
+    /// into, and those have ended (`LiveTimelineLayout.maximumLookback`).
+    static let epgLookback: TimeInterval = 4 * 3_600
+
+    /// Load EPG for the specified time range. The provider fetch also reaches
+    /// back `epgLookback`; the guide drops whatever ended before its timeline.
     func loadEPG(startDate: Date = Date(), hours: Int = 24) async {
         guard !providers.isEmpty, !channels.isEmpty else {
             return
@@ -1086,7 +1092,7 @@ class LiveTVDataStore: ObservableObject {
                         do {
                             let epg = try await provider.fetchEPG(
                                 for: sourceChannels,
-                                startDate: startDate,
+                                startDate: min(startDate, Date().addingTimeInterval(-Self.epgLookback)),
                                 endDate: endDate
                             )
                             return (sourceId, .success(epg))

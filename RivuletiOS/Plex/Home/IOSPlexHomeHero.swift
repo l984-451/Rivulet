@@ -5,12 +5,13 @@ import SwiftUI
 
 /// Edge-to-edge paging hero. Advances every 7 s; a swipe restarts the wait.
 /// Only the artwork pages, with a parallax lag like the tvOS detail carousel; the title
-/// crossfades and the buttons stay put.
+/// crossfades and the buttons stay put. The artwork fades out at the bottom into the
+/// page's ambient wash, which follows `selection`.
 struct IOSPlexHomeHero: View {
     let items: [PlexMetadata]
     /// Screen size including the area under the navigation bar.
     let size: CGSize
-    @State private var selection: String?
+    @Binding var selection: String?
 
     /// Share of the page travel the artwork lags behind, as in `PreviewCarouselLayout`.
     private static let parallax: CGFloat = 0.3
@@ -29,16 +30,28 @@ struct IOSPlexHomeHero: View {
     var body: some View {
         if let current {
             ZStack(alignment: isWide ? .bottomLeading : .bottom) {
-                artworkPager
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.35),
-                        .init(color: .black.opacity(0.75), location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .allowsHitTesting(false)
+                ZStack {
+                    artworkPager
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.35),
+                            .init(color: .black.opacity(0.75), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .allowsHitTesting(false)
+                }
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0.8),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
                 IOSPlexHeroControls(item: current, isWide: isWide)
                 if items.count > 1 {
                     pageDots

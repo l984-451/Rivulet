@@ -12,6 +12,7 @@ struct IOSPlexHomeView: View {
     @AppStorage("showHomeHero") private var showHero = true
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true
+    @State private var heroSelection: String?
 
     private var hasContent: Bool { plex.continueWatching != nil || !plex.shelves.isEmpty }
 
@@ -26,7 +27,7 @@ struct IOSPlexHomeView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 30) {
                             if hero {
-                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy))
+                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), selection: $heroSelection)
                             }
                             if let continueWatching = plex.continueWatching {
                                 IOSPlexShelfView(hub: continueWatching)
@@ -44,6 +45,7 @@ struct IOSPlexHomeView: View {
                     .task(id: hero ? heroItems.map(\.id) + ["\(proxy.size.width)"] : []) {
                         if hero { await prefetchHero(width: proxy.size.width) }
                     }
+                    .iosPlexAmbient(hero ? heroItems.first { $0.id == heroSelection } ?? heroItems.first : nil)
                 }
             } else {
                 ScrollView {

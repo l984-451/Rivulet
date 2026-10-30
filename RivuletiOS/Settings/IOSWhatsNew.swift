@@ -21,6 +21,7 @@ enum IOSChangelog {
             "New Audio & Subtitles settings in Playback, saved for each Plex profile",
             "Audio tracks are listed by language and format, and audio description tracks are no longer picked on their own",
             "New Chapters list in the player, with a picture for each chapter",
+            "The Home hero can show Trending, Continue Watching, Recently Added or your Watchlist",
             "Updated AetherEngine to 7.53.0",
         ]),
         ("1.0.7 (81)", [

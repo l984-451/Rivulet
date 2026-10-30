@@ -668,6 +668,16 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Metadata?.first
     }
 
+    /// Every owned library item among `guids` (plex:// guids; the server indexes no external ones),
+    /// in one request: `/library/all` reads a comma list as any-of.
+    func findByGuids(serverURL: String, authToken: String, guids: [String]) async throws -> [PlexMetadata] {
+        guard !guids.isEmpty, var components = URLComponents(string: "\(serverURL)/library/all") else { return [] }
+        components.queryItems = [URLQueryItem(name: "guid", value: guids.joined(separator: ","))]
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
+        let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
+        return container.MediaContainer.Metadata ?? []
+    }
+
     /// The hubs `/library/metadata/{rk}/related` returns, raw: at most one
     /// `collection.related.*` hub per library section, then people and
     /// similar-title hubs. The caller decides which hub feeds which row.

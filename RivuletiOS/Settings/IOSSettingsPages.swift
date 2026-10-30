@@ -5,15 +5,28 @@ import SwiftUI
 
 /// Account > Home.
 struct IOSHomeSettingsView: View {
-    /// Same key as the tvOS Home > Hero setting.
+    /// Same keys as the tvOS Home > Hero setting.
     @AppStorage("showHomeHero") private var showHero = true
+    @AppStorage(heroContentKey) private var heroContent = "trending"
+
+    static let heroContentKey = "homeHeroContent"
+    private static let heroChoices = [("off", "Off"), ("trending", "Trending"), ("continueWatching", "Continue Watching"),
+                                      ("recentlyAdded", "Recently Added"), ("watchlist", "Watchlist")]
 
     var body: some View {
         Form {
             Section {
-                Toggle("Hero", isOn: $showHero)
+                Picker("Hero", selection: Binding(
+                    get: { showHero ? heroContent : "off" },
+                    set: { choice in
+                        showHero = choice != "off"
+                        if choice != "off" { heroContent = choice }
+                    }
+                )) {
+                    ForEach(Self.heroChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
             } footer: {
-                Text("Shows featured titles at the top of Home.")
+                Text("What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending.")
             }
         }
         .navigationTitle("Home")

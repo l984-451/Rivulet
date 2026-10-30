@@ -37,6 +37,9 @@ final class IOSPlexSession: ObservableObject {
     @Published private(set) var shelves: [PlexHub] = []
     /// One row across every server (#87): the same title on two servers is one card.
     @Published private(set) var continueWatching: PlexHub?
+    /// Home hero slides (#414): trending for an hour, the watchlist's per list of entries.
+    private var trendingHero: (items: [PlexMetadata], at: Date)?
+    private var watchlistHero: (ids: [String], items: [PlexMetadata])?
     @Published private(set) var isLoadingContent = false
     @Published private(set) var contentError: String?
     /// Bumped after a watched-state change so open grids and detail pages reload.
@@ -608,9 +611,35 @@ final class IOSPlexSession: ObservableObject {
         ]
     }
 
+    // MARK: - Home hero
+
+    /// TMDB's trending titles this server owns.
+    func trendingHeroItems() async -> [PlexMetadata] {
+        if let trendingHero, Date.now.timeIntervalSince(trendingHero.at) < 3600 { return trendingHero.items }
+        guard let (serverURL, token) = try? configuration(), let account = auth.authToken else { return [] }
+        let items = await PlexTrendingHero.items(serverURL: serverURL, serverToken: token, accountToken: account)
+        if !items.isEmpty { trendingHero = (items, .now) }
+        return items
+    }
+
+    /// The watchlist's first ten entries that this server owns, in watchlist order.
+    func watchlistHeroItems() async -> [PlexMetadata] {
+        let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
+        let ids = entries.map(\.id)
+        if let watchlistHero, watchlistHero.ids == ids { return watchlistHero.items }
+        let guids = entries.compactMap(\.plexGUID)
+        guard let (serverURL, token) = try? configuration(),
+              let owned = try? await network.findByGuids(serverURL: serverURL, authToken: token, guids: guids) else { return [] }
+        let items = PlexTrendingHero.ordered(owned, by: guids, limit: 10)
+        watchlistHero = (ids, items)
+        return items
+    }
+
     // MARK: - Private
 
     func clearContent() {
+        trendingHero = nil
+        watchlistHero = nil
         libraries = []
         videoPlaylists = [:]
         shelves = []

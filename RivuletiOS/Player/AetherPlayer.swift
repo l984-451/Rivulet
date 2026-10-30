@@ -417,6 +417,9 @@ final class AetherPlayer: ObservableObject {
     /// through the engine's demux. `forceEngineDemux` is for Plex
     /// `/livetv/sessions/` grants, whose broadcast mp2 and teletext AVPlayer
     /// cannot decode (tvOS AetherPlayer.loadLive).
+    /// Same key as the tvOS Upscale SD and 720p setting; absent = off.
+    static let upscaleKey = "upscaleLowResolution"
+
     func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
         try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
@@ -452,6 +455,10 @@ final class AetherPlayer: ObservableObject {
                 // engine's own SPS check catches mis-signalled H.264 (#150).
                 preferredDecodePath: (!nativeRemoteHLS && Self.needsDeinterlacing(url)) ? .software : .automatic
             )
+            // Join at the newest keyframe instead of the ~18 s holdback (#415). Costs rewind
+            // depth on short-GOP channels: the playlist caps at 900 segments.
+            options.liveJoinProfile = .fastZap
+            options.audioDelaySeconds = AudioSync.seconds()
             if joinsWirelessAudio {
                 options.liveJoinStartsImmediately = false
                 options.autoplay = false
@@ -542,6 +549,9 @@ final class AetherPlayer: ObservableObject {
             teletextPage: Self.regionTeletextPage()
         )
         options.autoplay = userIntendsToPlay
+        options.audioDelaySeconds = AudioSync.seconds()
+        // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
+        options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
@@ -624,6 +634,12 @@ final class AetherPlayer: ObservableObject {
     func setRate(_ newRate: Float) {
         rate = newRate
         if state == .playing { engine.setRate(newRate) }
+    }
+
+    /// Steps the saved `AudioSync` offset and pushes it into the running session.
+    func stepAudioDelay(by steps: Int) {
+        AudioSync.step(by: steps)
+        engine.setAudioDelay(AudioSync.seconds())
     }
 
     func setMuted(_ muted: Bool) {

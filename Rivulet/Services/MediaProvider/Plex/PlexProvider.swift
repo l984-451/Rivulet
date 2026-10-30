@@ -415,7 +415,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     func updateProgress(_ itemRef: MediaItemRef, position: TimeInterval) async throws {
-        try await plexCall {
+        _ = try await plexCall {
             try await networkManager.reportProgress(
                 serverURL: serverURL, authToken: authToken,
                 ratingKey: itemRef.itemID, timeMs: Int(position * 1000), state: "playing"

@@ -27,6 +27,8 @@ struct IOSPlayerContextualAction {
 struct IOSPlayerFailure: Equatable {
     let message: String
     let canRetry: Bool
+    var title = "Couldn't Play"
+    var systemImage = "exclamationmark.triangle.fill"
 }
 
 /// Everything the chrome can ask its host to do. Plain closures, so Plex VOD
@@ -42,6 +44,8 @@ struct IOSPlayerChromeActions {
     var selectQuality: (StreamingQuality) -> Void = { _ in }
     var selectAudio: (Int) -> Void = { _ in }
     var selectSubtitle: (Int?) -> Void = { _ in }
+    /// Steps the audio delay by `AudioSync.stepMs` units; nil hides it.
+    var stepAudioDelay: ((Int) -> Void)?
     var pictureInPicture: () -> Void = {}
     var toggleMute: () -> Void = {}
     var setFillsScreen: (Bool) -> Void = { _ in }
@@ -82,6 +86,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
 
     @AppStorage("playerSkipBackwardSeconds") private var skipBackwardSeconds = 10
     @AppStorage("playerSkipForwardSeconds") private var skipForwardSeconds = 30
+    @AppStorage(AudioSync.key) private var audioDelayMs = 0
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var chromeVisible = true
     @State private var hideTask: Task<Void, Never>?
@@ -447,6 +452,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     }
                 }
                 .pickerStyle(.inline)
+                if let step = actions.stepAudioDelay { audioDelayControls(step) }
             }
             Picker("Subtitles", selection: Binding(
                 get: { selectedSubtitleID },
@@ -465,6 +471,22 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         }
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel("Audio and Subtitles")
+    }
+
+    /// − / value / + kept open while tapping, so the delay can be tuned by ear.
+    private func audioDelayControls(_ step: @escaping (Int) -> Void) -> some View {
+        Section("Audio Delay") {
+            ControlGroup {
+                Button { interact { step(-1) } } label: { Label("Earlier", systemImage: "minus") }
+                Button { interact { step(-audioDelayMs / AudioSync.stepMs) } } label: {
+                    Text(AudioSync.formatted(audioDelayMs))
+                }
+                .disabled(audioDelayMs == 0)
+                .accessibilityLabel("Reset audio delay")
+                Button { interact { step(1) } } label: { Label("Later", systemImage: "plus") }
+            }
+            .menuActionDismissBehavior(.disabled)
+        }
     }
 
     @ViewBuilder
@@ -513,10 +535,10 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
 
     private func failureCard(_ failure: IOSPlayerFailure) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(systemName: failure.systemImage)
                 .font(.title)
                 .foregroundStyle(.yellow)
-            Text("Couldn't Play")
+            Text(failure.title)
                 .font(.headline)
             Text(failure.message)
                 .font(.subheadline)

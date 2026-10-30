@@ -1075,15 +1075,18 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     // MARK: - Progress Reporting
 
-    /// Report playback progress to Plex
+    /// Report playback progress to Plex. `sessionIdentifier` ties the timeline to a
+    /// direct-play session (#423). Returns the server's reason when it has ended the session.
+    @discardableResult
     func reportProgress(
         serverURL: String,
         authToken: String,
         ratingKey: String,
         timeMs: Int,
         state: String = "playing",
-        duration: Int? = nil
-    ) async throws {
+        duration: Int? = nil,
+        sessionIdentifier: String? = nil
+    ) async throws -> String? {
         guard var components = URLComponents(string: "\(serverURL)/:/timeline") else {
             throw PlexAPIError.invalidURL
         }
@@ -1099,6 +1102,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         if let dur = duration {
             queryItems.append(URLQueryItem(name: "duration", value: "\(dur)"))
         }
+        if let sessionIdentifier {
+            queryItems.append(URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier))
+        }
 
         components.queryItems = queryItems
 
@@ -1112,13 +1118,32 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         for (key, value) in plexHeaders(authToken: authToken) {
             request.addValue(value, forHTTPHeaderField: key)
         }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw PlexAPIError.invalidResponse
         }
+        return Self.timelineTermination(in: data)
+    }
+
+    /// The timeline reply carries `terminationCode` / `terminationText` once the
+    /// server has ended the session (dashboard Stop, paused too long).
+    nonisolated static func timelineTermination(in data: Data) -> String? {
+        guard let container = try? JSONDecoder().decode(TimelineReply.self, from: data).MediaContainer,
+              container.terminationCode != nil || container.terminationText != nil else { return nil }
+        let text = container.terminationText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? "Your Plex server stopped this stream." : text
+    }
+
+    nonisolated private struct TimelineReply: Decodable {
+        nonisolated struct Container: Decodable {
+            let terminationCode: Int?
+            let terminationText: String?
+        }
+        let MediaContainer: Container
     }
 
     /// Mark item as watched

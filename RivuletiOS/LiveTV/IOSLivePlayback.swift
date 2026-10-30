@@ -162,6 +162,7 @@ private struct IOSLivePlayerScreen: View {
                     goLive: { Task { await player.seekToLiveEdge() } },
                     selectAudio: player.selectAudioTrack,
                     selectSubtitle: player.selectSubtitleTrack,
+                    stepAudioDelay: player.stepAudioDelay,
                     pictureInPicture: controller.startPictureInPicture,
                     toggleMute: { player.setMuted(!player.isMuted) },
                     setFillsScreen: { player.fillsScreen = $0 },

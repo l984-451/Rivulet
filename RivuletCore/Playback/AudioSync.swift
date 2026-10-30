@@ -6,7 +6,7 @@ enum AudioSync {
     static let stepMs = 10
     /// AetherEngine clamps at 2 s (`AudioDelayPolicy.maxAbsSeconds`).
     static let maxMs = 2000
-    private static let key = "audioSyncOffsetMs"
+    static let key = "audioSyncOffsetMs"
 
     static func offsetMs(defaults: UserDefaults = .standard) -> Int {
         clamp(defaults.integer(forKey: key))

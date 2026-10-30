@@ -19,6 +19,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     var onItemChange: (() -> Void)?
     /// A playlist plays through this instead of the show's next episode.
     @Published private(set) var queue: PlayQueue<PlexMetadata>?
+    /// The server's reason when it ended this play session (dashboard Stop, paused too long; #403).
+    @Published private(set) var serverStopReason: String?
 
     private let plex: IOSPlexSession
     private var skippedMarkerIDs: Set<String> = []
@@ -29,6 +31,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var nextTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     private var longStallTask: Task<Void, Never>?
+    /// Paused timelines every 10 s, as Plex clients send, so the server can end a paused session.
+    private var pausedTimelineTask: Task<Void, Never>?
     private var stallTracker = StallTracker()
     /// The player-menu pick; nil follows the Home or Away setting, item by item.
     private var sessionQuality: StreamingQuality?
@@ -66,6 +70,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         nextTask?.cancel()
         reloadTask?.cancel()
         longStallTask?.cancel()
+        pausedTimelineTask?.cancel()
         let finish = finishItem(at: player.currentTime)
         let plex = plex
         let request = request
@@ -91,7 +96,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         // Direct play otherwise opens on the file default; Plex's pick follows the account language (#382).
         pendingEngineAudio = isTranscoding ? nil : chosenAudioID ?? request.selectedPlexStreamID(streamType: 2)
         pendingEngineSubtitle = isTranscoding ? selectedSubtitleID : chosenSubtitleID
-        await plex.openTranscode(request)
+        await plex.openPlaySession(request)
         try? await player.load(
             url: request.url,
             headers: request.headers,
@@ -330,6 +335,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     private func stateChanged(_ state: AetherPlayer.State) {
+        pausedTimelineTask?.cancel()
         switch state {
         case .playing:
             hasPlayed = true
@@ -337,6 +343,13 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             report("playing")
         case .paused:
             report("paused")
+            pausedTimelineTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(10))
+                    guard !Task.isCancelled else { return }
+                    self?.report("paused")
+                }
+            }
         case .ended:
             finishItem(at: max(player.duration, player.currentTime))
             startUpNextCountdown()
@@ -359,11 +372,27 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     private func report(_ state: String) {
-        guard !reportedStopped else { return }
+        // A session must open with "playing": the engine holds paused while loading, and a
+        // "paused" first makes Plex fire media.pause and never media.play (#433).
+        guard !reportedStopped, state != "paused" || hasPlayed else { return }
         let request = request
         let time = player.currentTime
         let plex = plex
-        Task { await plex.reportProgress(for: request, time: time, state: state) }
+        Task { [weak self] in
+            guard let reason = await plex.reportProgress(for: request, time: time, state: state),
+                  let self, self.request.id == request.id, !self.reportedStopped else { return }
+            self.endForServerTermination(reason)
+        }
+    }
+
+    /// The server stopped this stream: stop and show its reason, with nothing to retry.
+    private func endForServerTermination(_ reason: String) {
+        reportedStopped = true
+        pausedTimelineTask?.cancel()
+        countdownTask?.cancel()
+        upNextCountdown = nil
+        player.stop()
+        serverStopReason = reason
     }
 
     /// Stopped, then a scrobble when the viewer got past the watched ceiling.
@@ -463,6 +492,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private func switchItem(to next: PlexMetadata, queueIndex: Int?) {
         countdownTask?.cancel()
         upNextCountdown = nil
+        pausedTimelineTask?.cancel()
         finishItem(at: player.currentTime)
         nextTask?.cancel()
         reloadTask?.cancel()
@@ -486,6 +516,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             skippedMarkerIDs = []
             lastReportBucket = -1
             reportedStopped = false
+            serverStopReason = nil
             onItemChange?()
             lookUpNextEpisode()
             await load()
@@ -506,8 +537,8 @@ private struct IOSPlexPlayerScreen: View {
             title: item.displayTitle,
             subtitle: item.subtitle,
             isPlaying: player.state == .playing,
-            isBusy: player.state == .idle || player.state == .loading || player.isBuffering
-                || (player.isStarting && player.state == .playing),
+            isBusy: session.serverStopReason == nil && (player.state == .idle || player.state == .loading
+                || player.isBuffering || (player.isStarting && player.state == .playing)),
             timeline: .vod(
                 position: player.pendingSeekTarget ?? player.currentTime,
                 duration: player.duration > 0 ? player.duration : item.durationSeconds
@@ -536,6 +567,7 @@ private struct IOSPlexPlayerScreen: View {
                 selectQuality: session.switchQuality,
                 selectAudio: session.selectAudio,
                 selectSubtitle: session.selectSubtitle,
+                stepAudioDelay: player.stepAudioDelay,
                 pictureInPicture: controller.startPictureInPicture,
                 toggleMute: { player.setMuted(!player.isMuted) },
                 setFillsScreen: { player.fillsScreen = $0 },
@@ -579,6 +611,9 @@ private struct IOSPlexPlayerScreen: View {
     }
 
     private var failure: IOSPlayerFailure? {
+        if let reason = session.serverStopReason {
+            return IOSPlayerFailure(message: reason, canRetry: false, title: "Playback Stopped", systemImage: "stop.circle.fill")
+        }
         guard case .failed(let message) = player.state else { return nil }
         return IOSPlayerFailure(message: message, canRetry: player.canRetry)
     }

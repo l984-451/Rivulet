@@ -55,6 +55,7 @@ struct IOSPlaybackSettingsView: View {
     /// Same keys as the tvOS Home and Away Streaming Quality settings.
     @AppStorage(StreamingQuality.homeKey) private var homeQuality = StreamingQuality.homeDefault
     @AppStorage(StreamingQuality.awayKey) private var awayQuality = StreamingQuality.awayDefault
+    @AppStorage(AetherPlayer.upscaleKey) private var upscales = false
 
     var body: some View {
         Form {
@@ -89,6 +90,12 @@ struct IOSPlaybackSettingsView: View {
                 Text("Skip Markers")
             } footer: {
                 Text("Button shows a skip button, Automatic skips on its own, and Off shows nothing.")
+            }
+
+            Section {
+                Toggle("Upscale SD and 720p", isOn: $upscales)
+            } footer: {
+                Text("Sharpens video smaller than your screen with Apple's machine learning upscaler. Uses more power, and stops on its own if the device can't keep up. HDR and Dolby Vision play as before.")
             }
 
             Section {

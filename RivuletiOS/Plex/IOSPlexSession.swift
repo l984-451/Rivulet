@@ -550,30 +550,36 @@ final class IOSPlexSession: ObservableObject {
             transcodeSessionID: sessionID,
             measuredKbps: measurement?.kbps,
             measuredAt: measurement?.at,
-            startTime: startTime
+            startTime: startTime,
+            directPlaySessionID: sessionID == nil ? UUID().uuidString : nil
         )
     }
 
-    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async {
-        guard let key = request.item.ratingKey else { return }
+    /// Returns the server's reason when it has ended this play session (#403).
+    @discardableResult
+    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
+        guard let key = request.item.ratingKey else { return nil }
         let at = Date()
         let offsetMs = Int(time * 1000)
         if request.isLocal {
             IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
-        guard !request.serverURL.isEmpty else { return }
+        guard !request.serverURL.isEmpty else { return nil }
         do {
-            try await network.reportProgress(
+            let terminated = try await network.reportProgress(
                 serverURL: request.serverURL,
                 authToken: request.token,
                 ratingKey: key,
                 timeMs: offsetMs,
                 state: state,
-                duration: request.item.duration
+                duration: request.item.duration,
+                sessionIdentifier: request.directPlaySessionID
             )
             IOSOfflineProgress.reached(key, at: at)
+            return terminated
         } catch {
             IOSOfflineProgress.failed(key, offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
+            return nil
         }
     }
 
@@ -714,6 +720,8 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     var measuredKbps: Int?
     var measuredAt: Date?
     let startTime: TimeInterval?
+    /// The Plex play session a direct-play file's timeline carries, so the dashboard shows it (#423).
+    var directPlaySessionID: String? = nil
     /// Set for a downloaded file: its saved subtitles and poster.
     var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
     var localArtworkURL: URL? = nil

@@ -12,6 +12,12 @@ enum IOSChangelog {
         ("1.0.7 (82)", [
             "New Tvheadend support in Live TV, with channels, guide and recording",
             "Add Source in Live TV lists Dispatcharr, Tvheadend and Threadfin by name",
+            "Live TV channels now start in a few seconds",
+            "New Audio Delay control in the player's audio and subtitles menu",
+            "New Upscale SD and 720p setting in Playback",
+            "Posters now show the edition, such as Director's Cut",
+            "Plex's dashboard now shows bandwidth for Direct Play",
+            "The player stops and shows the reason when Plex ends your session",
             "Updated AetherEngine to 7.53.0",
         ]),
         ("1.0.7 (81)", [

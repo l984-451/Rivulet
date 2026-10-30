@@ -218,6 +218,7 @@ struct IOSPlexPosterCard: View {
             )
             .modifier(TileSize(width: width, ratio: ratio))
             .plexWatchState(item)
+            .overlay(alignment: .topLeading) { editionBadge }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .plexZoomSource(item)
 
@@ -236,9 +237,26 @@ struct IOSPlexPosterCard: View {
         .frame(width: width, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel([item.showTitle, item.type == "episode" ? item.episodeCode : nil]
+        .accessibilityLabel([item.showTitle, item.type == "episode" ? item.episodeCode : nil, edition]
             .compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(item.watchStateDescription)
+    }
+
+    /// Plex edition ("Director's Cut"), so two editions sharing a poster tell apart (#413).
+    private var edition: String? { item.editionTitle?.isEmpty == false ? item.editionTitle : nil }
+
+    @ViewBuilder
+    private var editionBadge: some View {
+        if let edition {
+            Text(edition)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(.black.opacity(0.55), in: Capsule())
+                .padding(6)
+        }
     }
 }
 

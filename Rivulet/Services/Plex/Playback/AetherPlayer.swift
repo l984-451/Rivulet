@@ -756,7 +756,8 @@ final class AetherPlayer: PlayerProtocol {
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
                             onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
-                            presentsHDR: engine.videoFormat != .sdr)
+                            presentsHDR: engine.videoFormat != .sdr,
+                            panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
     /// FEL or MEL for the current Profile 7 load; nil when the engine didn't classify it (FEL setting off, no DV panel).

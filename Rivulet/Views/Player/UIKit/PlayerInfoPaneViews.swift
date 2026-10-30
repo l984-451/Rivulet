@@ -640,22 +640,26 @@ private final class CardBandGradientView: UIView {
 enum DolbyVisionPlayback: String, Equatable {
     case dualLayer = "Dual Layer (FEL)"
     case convertedTo81 = "Profile 8.1 (converted)"
+    case convertedTo81Unconfirmed = "Profile 8.1 (converted), TV not confirmed"
     case dolbyVision = "Dolby Vision"
+    case dolbyVisionUnconfirmed = "Dolby Vision, TV not confirmed"
     case hdr10BaseLayer = "HDR10 Base Layer"
     case sdr = "SDR"
 
     /// A Profile 7 source shown as Dolby Vision without the 8.1 rewrite is on
     /// the engine's dual-layer route, which only FEL takes.
     /// videoFormat read SDR on the dual-layer route in #362; an unconverted P7 on the software route is it.
+    /// The engine reads SDR until it proves the panel is in HDR, which a TV already in HDR may never
+    /// prove (#438), so Dolby Vision sent to a Dolby Vision TV is "not confirmed", never SDR.
     init?(sourceProfile: Int?, convertedTo81: Bool, onSoftwareRoute: Bool = false,
-          presentsDolbyVision: Bool, presentsHDR: Bool) {
+          presentsDolbyVision: Bool, presentsHDR: Bool, panelSupportsDolbyVision: Bool = false) {
         guard let sourceProfile else { return nil }
-        if convertedTo81 {
-            self = .convertedTo81
-        } else if sourceProfile == 7, onSoftwareRoute {
+        if sourceProfile == 7, !convertedTo81, onSoftwareRoute {
             self = .dualLayer
         } else if presentsDolbyVision {
-            self = sourceProfile == 7 ? .dualLayer : .dolbyVision
+            self = convertedTo81 ? .convertedTo81 : sourceProfile == 7 ? .dualLayer : .dolbyVision
+        } else if panelSupportsDolbyVision {
+            self = convertedTo81 ? .convertedTo81Unconfirmed : .dolbyVisionUnconfirmed
         } else {
             self = presentsHDR ? .hdr10BaseLayer : .sdr
         }

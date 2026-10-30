@@ -45,7 +45,7 @@ final class JellyfinPlaylistTests: XCTestCase {
         {"Items":[{"Name":"Pilot","Id":"ep1","Type":"Episode","PlaylistItemId":"pi-1"},
                   {"Name":"Heat","Id":"m1","Type":"Movie"}],"TotalRecordCount":2}
         """)
-        let entries = try await provider().playlistEntries(ref("P"))
+        let entries = try await provider().playlistEntries(ref("P")).entries
         XCTAssertEqual(entries.map(\.entryID), ["pi-1", "m1"])
         XCTAssertEqual(entries.map(\.item.title), ["Pilot", "Heat"])
     }

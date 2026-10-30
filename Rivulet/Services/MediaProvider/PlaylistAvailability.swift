@@ -19,12 +19,6 @@ final class PlaylistAvailability {
     private(set) var providerIDs: Set<String> = []
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
-    /// The listed playlist for a tile, so a page knows whether it is smart.
-    func playlist(for item: MediaItem) -> MediaPlaylist {
-        playlistsByProvider[item.ref.providerID]?.first { $0.item.ref == item.ref }
-            ?? MediaPlaylist(item: item, isSmart: false)
-    }
-
     /// Asks the selected Plex server and the other signed-in servers.
     func refresh() async {
         let registry = MediaProviderRegistry.shared

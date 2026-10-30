@@ -617,7 +617,8 @@ extension JellyfinProvider {
             .sorted { $0.item.title.localizedCaseInsensitiveCompare($1.item.title) == .orderedAscending }
     }
 
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] {
+    /// Jellyfin playlists have no rules, so none is smart.
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
         let size = 200
         var entries: [PlaylistEntry] = []
         while true {
@@ -633,7 +634,9 @@ extension JellyfinProvider {
                     PlaylistEntry(entryID: $0, item: JellyfinMediaMapper.item(dto, providerID: id, baseURL: client.baseURL))
                 }
             }
-            if rows.isEmpty || entries.count >= (page.totalRecordCount ?? entries.count) { return entries }
+            if rows.isEmpty || entries.count >= (page.totalRecordCount ?? entries.count) {
+                return PlaylistContents(entries: entries, isSmart: false)
+            }
         }
     }
 

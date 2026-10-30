@@ -127,7 +127,7 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Regular and smart video playlists, sorted by title.
     func videoPlaylists() async throws -> [MediaPlaylist]
     /// Every row, all pages, in the server's order.
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry]
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents
     func createPlaylist(title: String, seededWith items: [MediaItemRef]) async throws -> MediaPlaylist
     func addToPlaylist(_ playlist: MediaItemRef, items: [MediaItemRef]) async throws
     func removeFromPlaylist(_ playlist: MediaItemRef, entryID: String) async throws
@@ -190,7 +190,9 @@ extension MediaProvider {
 
     var supportsPlaylists: Bool { false }
     func videoPlaylists() async throws -> [MediaPlaylist] { [] }
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] { [] }
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
+        PlaylistContents(entries: [], isSmart: false)
+    }
     func createPlaylist(title: String, seededWith items: [MediaItemRef]) async throws -> MediaPlaylist {
         throw MediaProviderError.backendSpecific(underlying: "playlists not supported")
     }

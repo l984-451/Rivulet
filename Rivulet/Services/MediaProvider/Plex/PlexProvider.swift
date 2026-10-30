@@ -557,16 +557,18 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] {
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
         try await plexCall {
-            try await networkManager.getAllPlaylistItems(serverURL: serverURL, authToken: authToken, ratingKey: playlist.itemID)
-                // Smart playlist items carry no playlistItemID; their ratingKey is unique in the list.
-                .compactMap { meta in
-                    (meta.playlistItemID.map(String.init) ?? meta.ratingKey).map {
-                        PlaylistEntry(entryID: $0,
-                                      item: PlexMediaMapper.item(meta, providerID: id, serverURL: serverURL, authToken: authToken))
-                    }
+            let result = try await networkManager.getAllPlaylistItems(
+                serverURL: serverURL, authToken: authToken, ratingKey: playlist.itemID)
+            // Smart playlist items carry no playlistItemID; their ratingKey is unique in the list.
+            let entries = result.items.compactMap { meta in
+                (meta.playlistItemID.map(String.init) ?? meta.ratingKey).map {
+                    PlaylistEntry(entryID: $0,
+                                  item: PlexMediaMapper.item(meta, providerID: id, serverURL: serverURL, authToken: authToken))
                 }
+            }
+            return PlaylistContents(entries: entries, isSmart: result.isSmart)
         }
     }
 

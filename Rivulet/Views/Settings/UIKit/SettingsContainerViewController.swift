@@ -175,7 +175,10 @@ final class SettingsContainerViewController: UIViewController {
             guard let self, let vc, self.topPage === vc else { return }
             self.pop(levels: 2)
         }
-        vc.onFocusRow = { [weak self] id in self?.leftPanel.show(id: id) }
+        vc.onFocusRow = { [weak self] id, section in
+            self?.leftPanel.show(id: id)
+            self?.leftPanel.showSection(section)
+        }
         return vc
     }
 
@@ -201,8 +204,10 @@ final class SettingsContainerViewController: UIViewController {
         pages.append(newVC)
         installPageView(newVC, into: rightPane)
         rightPane.layoutIfNeeded()
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
+        // Chrome first: the focus move in `animateTransition` reports the focused
+        // row's group to the panel, which must already be showing the new page.
         updateChrome(for: page, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -228,8 +233,8 @@ final class SettingsContainerViewController: UIViewController {
             newVC.collectionView?.layoutIfNeeded()
             rightPane.layoutIfNeeded()
         }
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateChrome(for: topPage?.page ?? rootPage, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -302,7 +307,7 @@ final class SettingsContainerViewController: UIViewController {
         } else {
             titleLabel.text = page.title
         }
-        leftPanel.configure(page: page, animated: animated)
+        leftPanel.configure(page: page, section: topPage?.focusedSection, animated: animated)
     }
 
     private func updateFocusGuide() {

@@ -546,6 +546,20 @@ enum SettingsDescriptorStore {
 
     // MARK: - Page Descriptors
 
+    /// A group's own panel icon on pages whose icon follows focus between groups,
+    /// keyed by the group's header title. Nil keeps the page icon.
+    static func sectionIcon(for page: SettingsPage, section: String?) -> String? {
+        guard page == .appearance else { return nil }
+        switch section {
+        case "Home": return "house.fill"
+        case "Library": return "books.vertical.fill"
+        case "Details": return "star.leadinghalf.filled"
+        case "Live TV": return "tv.fill"
+        case "Extras": return "sparkles"
+        default: return nil
+        }
+    }
+
     /// Icon and title for each settings page (shown in left panel header).
     /// `UIColor` rather than SwiftUI `Color`: the only consumer is the UIKit
     /// left panel, and vending a `Color` forced it to import SwiftUI just to

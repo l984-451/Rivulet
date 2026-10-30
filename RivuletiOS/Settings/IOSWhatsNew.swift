@@ -12,7 +12,7 @@ enum IOSChangelog {
         ("1.0.7 (82)", [
             "New Tvheadend support in Live TV, with channels, guide and recording",
             "Add Source in Live TV lists Dispatcharr, Tvheadend and Threadfin by name",
-            "Updated AetherEngine to 7.50.0",
+            "Updated AetherEngine to 7.53.0",
         ]),
         ("1.0.7 (81)", [
             "New video playlists: play, shuffle, add titles, reorder, rename and delete",

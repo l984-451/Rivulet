@@ -166,6 +166,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var titleLogoResolveTask: Task<Void, Never>?
 
     @Published var shouldDismiss = false  // Used to request player dismissal on tvOS
+    /// Set with `shouldDismiss` when the player should land on Home, not the screen it opened from.
+    private(set) var exitsToHome = false
     @Published var compatibilityNotice: String?
 
     // MARK: - Seek Indicator State
@@ -6523,6 +6525,17 @@ final class UniversalPlayerViewModel: ObservableObject {
         clearPreloadedData()
     }
 
+    /// Back (or the close button) on the Up Next page. Closes the page and,
+    /// per Settings → Playback → After Up Next, either stays on the credits or
+    /// leaves the player for the previous screen or Home.
+    func leaveUpNext() {
+        let exit = UpNextExit.current
+        dismissPostVideo()
+        guard exit != .credits else { return }
+        exitsToHome = exit == .home
+        shouldDismiss = true
+    }
+
     // MARK: - Navigation
 
     /// Navigate to the current episode's season
@@ -6763,6 +6776,8 @@ extension Notification.Name {
     /// Posted when player requests navigation to a specific content item
     /// userInfo contains: "ratingKey" (String), "type" (String: "show", "season", "movie")
     static let navigateToContent = Notification.Name("navigateToContent")
+    /// The player closed and asks the shell to show Home.
+    static let returnToHome = Notification.Name("returnToHome")
 
     /// Posted when Plex data needs to be refreshed (e.g., after playback ends)
     /// Views showing Plex content should refresh their data when receiving this

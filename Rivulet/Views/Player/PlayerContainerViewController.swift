@@ -408,7 +408,7 @@ class PlayerContainerViewController: UIViewController {
             // had to restart the episode. A second press then exits, through
             // the checks below.
             if vm.postVideoState != .hidden {
-                vm.dismissPostVideo()
+                vm.leaveUpNext()
                 return
             }
             if vm.isScrubbing {
@@ -525,6 +525,11 @@ class PlayerContainerViewController: UIViewController {
         // Notify when dismissed
         if isBeingDismissed || isMovingFromParent {
             onDismiss?()
+            // After Up Next → Home: the shell clears whatever the player
+            // opened from once the player itself is gone.
+            if viewModel?.exitsToHome == true {
+                NotificationCenter.default.post(name: .returnToHome, object: nil)
+            }
         }
     }
 
@@ -894,7 +899,7 @@ class PlayerContainerViewController: UIViewController {
                 // exiting the player (see handleInputAction(.back)). This is
                 // the target-less fallback; the primary path routes .back
                 // through the coordinator to the same behavior.
-                vm.dismissPostVideo()
+                vm.leaveUpNext()
             } else if vm.isScrubbing {
                 vm.cancelScrub()
             } else if let panel = activeRailPanel {
@@ -1899,7 +1904,7 @@ class PlayerContainerViewController: UIViewController {
             if vm.countdownSeconds > 0 && !vm.isCountdownPaused {
                 vm.cancelCountdown()
             } else {
-                vm.dismissPostVideo()
+                vm.leaveUpNext()
             }
         }
         overlay.onUserFocusMove = { [weak self] in

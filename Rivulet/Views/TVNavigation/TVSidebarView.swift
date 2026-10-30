@@ -382,6 +382,12 @@ struct TVSidebarView: View {
                 break
             }
         }
+        // After Up Next → Home: close any detail page the player opened from.
+        .onReceive(NotificationCenter.default.publisher(for: .returnToHome)) { _ in
+            Self.rootViewController()?.dismiss(animated: false)
+            selectedTab = .home
+            sidebarCollapseRequest += 1
+        }
         // Content is withheld until a profile is entered: ask who is watching.
         .onChange(of: profileManager.needsProfileSelection) { _, needed in
             if needed {

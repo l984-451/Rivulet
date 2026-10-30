@@ -141,6 +141,36 @@ enum AutoplayLimit: Int, CaseIterable, CustomStringConvertible {
     func allowsAutoplay(afterEpisodesInARow count: Int) -> Bool { self == .off || count < rawValue }
 }
 
+// MARK: - Leaving Up Next
+
+/// Where Back (or the Up Next page's close button) goes once the Up Next page
+/// is up. `.credits` is the original behavior: the page closes and the credits
+/// play on at full size.
+enum UpNextExit: Int, CaseIterable, CustomStringConvertible {
+    case credits = 0
+    case previousScreen = 1
+    case home = 2
+
+    static let storageKey = "upNextExit"
+
+    static var current: UpNextExit {
+        UpNextExit(rawValue: UserDefaults.standard.integer(forKey: storageKey)) ?? .credits
+    }
+
+    var description: String {
+        switch self {
+        case .credits: return "Credits"
+        case .previousScreen: return "Previous Screen"
+        case .home: return "Home"
+        }
+    }
+
+    var next: UpNextExit {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+}
+
 // MARK: - Skip Length
 
 /// Single Left/Right tap-skip length (seconds). Drives `InputConfig.tapSeekSeconds`.

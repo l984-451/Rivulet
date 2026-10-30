@@ -463,7 +463,10 @@ enum SettingsContent {
                             kind: .navigationValue(.detailRatingPicker, value: { MediaRating.detailSource.name })),
 
             .header("Live TV"),
-        ] + liveTVLookRows
+        ] + liveTVLookRows + [
+            .header("Extras"),
+            toggle("easterEggs", "Easter Eggs", key: EasterEggs.key, default: true)
+        ]
         return rows
     }
 

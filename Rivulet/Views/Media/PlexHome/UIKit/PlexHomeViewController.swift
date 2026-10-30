@@ -1940,6 +1940,7 @@ final class PlexHomeViewController: UIViewController {
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
         refreshOnReappearIfNeeded()
+        if !isDrillInPage { HalloweenBats.showIfHalloween(in: view) }
         if let window = view.window {
             MenuPressInterceptor.install(in: window)
             MenuPressInterceptor.register(self)

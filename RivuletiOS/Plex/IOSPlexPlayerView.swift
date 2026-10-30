@@ -527,6 +527,28 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         Task { await player.seek(to: marker.end) }
     }
 
+    // MARK: - Chapters
+
+    var chapters: [PlexChapter] { (request.item.Chapter ?? []).filter { $0.startTimeOffset != nil } }
+
+    /// The server's chapter image, sized for a `width`-point row.
+    func chapterImageURL(_ chapter: PlexChapter, width: Int) -> URL? {
+        guard !request.isLocal else { return nil }
+        return plex.imageURL(path: chapter.thumb, width: width, height: width * 9 / 16, serverID: request.item.serverID)
+    }
+
+    /// A frame from the file for a chapter the server has no image for. Not on a transcode,
+    /// where a second reader would open another server session.
+    func chapterStill(at seconds: TimeInterval) async -> UIImage? {
+        guard !isTranscoding, let frame = await player.still(atSeconds: seconds) else { return nil }
+        return UIImage(cgImage: frame)
+    }
+
+    func seekToChapter(_ chapter: PlexChapter) {
+        guard let start = chapter.startTimeOffset else { return }
+        Task { await player.seek(to: TimeInterval(start) / 1000) }
+    }
+
     // MARK: - Up Next
 
     /// Near the end: inside the credits marker, or the last 30 s.
@@ -625,6 +647,7 @@ private struct IOSPlexPlayerScreen: View {
     @ObservedObject var controller: IOSPlaybackController
     @State private var captionStyle = CaptionAppearance.current()
     @State private var showsPlaylist = false
+    @State private var showsChapters = false
 
     var body: some View {
         let item = session.request.item
@@ -682,6 +705,15 @@ private struct IOSPlexPlayerScreen: View {
                 )
             }
         } trailing: {
+            if !session.chapters.isEmpty {
+                Button { showsChapters = true } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .accessibilityLabel("Chapters")
+            }
             if session.queue != nil {
                 Button { showsPlaylist = true } label: {
                     Image(systemName: "list.bullet")
@@ -691,6 +723,9 @@ private struct IOSPlexPlayerScreen: View {
                 }
                 .accessibilityLabel("Playlist")
             }
+        }
+        .sheet(isPresented: $showsChapters) {
+            IOSPlayerChaptersPane(session: session, currentTime: player.currentTime)
         }
         .sheet(isPresented: $showsPlaylist) {
             if let queue = session.queue {
@@ -790,5 +825,82 @@ private struct IOSPlayerPlaylistPane: View {
 
     private var window: Range<Int> {
         max(0, queue.index - 5)..<min(queue.entries.count, queue.index + 31)
+    }
+}
+
+/// The title's chapters, opened on the one playing: the server's image, else a frame from the file.
+private struct IOSPlayerChaptersPane: View {
+    let session: IOSPlexPlayback
+    let currentTime: TimeInterval
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let chapters = session.chapters
+        let current = chapters.lastIndex { TimeInterval($0.startTimeOffset ?? 0) / 1000 <= currentTime }
+        NavigationStack {
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(Array(chapters.enumerated()), id: \.offset) { index, chapter in
+                        Button {
+                            session.seekToChapter(chapter)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                ChapterThumbnail(session: session, chapter: chapter)
+                                    .frame(width: 96, height: 54)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(chapter.tag ?? "Chapter \(index + 1)").font(.headline).lineLimit(2)
+                                    Text(Self.time(chapter.startTimeOffset ?? 0))
+                                        .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                if index == current {
+                                    Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
+                                        .accessibilityLabel("Now Playing")
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .id(index)
+                    }
+                }
+                .listStyle(.plain)
+                .onAppear { if let current { proxy.scrollTo(current, anchor: .center) } }
+            }
+            .navigationTitle("Chapters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(role: .confirm) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private static func time(_ ms: Int) -> String {
+        let duration = Duration.milliseconds(ms)
+        return duration.formatted(.time(pattern: ms >= 3_600_000 ? .hourMinuteSecond : .minuteSecond))
+    }
+}
+
+private struct ChapterThumbnail: View {
+    let session: IOSPlexPlayback
+    let chapter: PlexChapter
+    @Environment(\.displayScale) private var displayScale
+    @State private var still: UIImage?
+
+    var body: some View {
+        if let url = session.chapterImageURL(chapter, width: Int(96 * displayScale)) {
+            IOSPlexImage(url: url)
+        } else {
+            Rectangle()
+                .fill(.quaternary)
+                .overlay { if let still { Image(uiImage: still).resizable().scaledToFill() } }
+                .clipped()
+                .task { still = await session.chapterStill(at: TimeInterval(chapter.startTimeOffset ?? 0) / 1000) }
+        }
     }
 }

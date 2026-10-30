@@ -115,6 +115,8 @@ final class AetherPlayer: ObservableObject {
     private static let nativeAudioTrackIDBase = 300_000
 
     private let engine: AetherEngine
+    /// Opened on the first chapter still and closed with the source.
+    private var frameExtractor: FrameExtractor?
     private var cancellables = Set<AnyCancellable>()
     private var nativeItemObservation: AnyCancellable?
     private var nativeVideoSizeObservation: AnyCancellable?
@@ -582,6 +584,7 @@ final class AetherPlayer: ObservableObject {
     }
 
     private func beginLoad(keepingTransport: Bool = false) {
+        dropFrameExtractor()
         state = .loading
         canRetry = true
         videoSize = .zero
@@ -740,8 +743,27 @@ final class AetherPlayer: ObservableObject {
         liveWindow = .idle
         rate = 1
         engine.pictureInPictureActive = false
+        dropFrameExtractor()
         engine.stop()
         state = .idle
+    }
+
+    /// A still of the loaded file at `seconds`, keyframe-snapped and cached by the engine.
+    /// nil when the source cannot open a second reader.
+    func still(atSeconds seconds: TimeInterval, maxWidth: Int = 480) async -> CGImage? {
+        if frameExtractor == nil { frameExtractor = engine.makeFrameExtractor() }
+        guard let extractor = frameExtractor else { return nil }
+        return await extractor.thumbnail(at: seconds, maxWidth: maxWidth)
+    }
+
+    private func dropFrameExtractor() {
+        guard let extractor = frameExtractor else { return }
+        frameExtractor = nil
+        Task { await extractor.shutdown() }
+    }
+
+    deinit {
+        if let extractor = frameExtractor { Task { await extractor.shutdown() } }
     }
 
     // MARK: - Render surface and Picture in Picture

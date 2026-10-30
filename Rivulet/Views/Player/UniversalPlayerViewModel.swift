@@ -3510,39 +3510,17 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// What `applyAudioPreference` and `applySubtitlePreference` will pick on the Plex list, so a
     /// transcode starts on those tracks instead of restarting once they load. nil leaves the server's choice.
     private var startingTrackSelection: PlexTrackIDs {
-        let streams = metadata.Media?.first?.Part?.first?.Stream ?? []
-        let audio = plexAudioTracksFromMetadata()
-        let subs = plexSubtitleTracksFromMetadata()
-        var ids = PlexTrackIDs()
-        if let id = initialAudioTrackId, audio.contains(where: { $0.id == id }) {
-            ids.audio = id
-        } else if let selectedAudio = plexChosenAudioStreamId,
-                  audio.contains(where: { $0.id == selectedAudio }) {
-            ids.audio = selectedAudio
-        } else {
-            ids.audio = TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
-        }
+        let override = initialAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
+        let start = TrackIntentResolver.startingPlexSelection(streams: metadata.Media?.first?.Part?.first?.Stream ?? [],
+                                                              audioOverride: override)
         switch initialSubtitleSelection {
         case .off:
-            ids.subtitle = 0
-            return ids
-        case .track(let id) where subs.contains(where: { $0.id == id }):
-            ids.subtitle = id
-            return ids
+            return PlexTrackIDs(audio: start.audio, subtitle: 0)
+        case .track(let id) where plexSubtitleTracksFromMetadata().contains(where: { $0.id == id }):
+            return PlexTrackIDs(audio: start.audio, subtitle: id)
         default:
-            break
+            return PlexTrackIDs(audio: start.audio, subtitle: start.subtitle)
         }
-        let intent = TrackIntentStore.effectiveSubtitleIntent
-        if let selected = streams.first(where: { $0.isSubtitle && $0.selected == true })?.id,
-           let track = subs.first(where: { $0.id == selected }), !track.isDefault, !track.isForced,
-           TrackIntentResolver.plexSelectedSubtitleMayOverride(track, intent: intent) {
-            ids.subtitle = selected
-        } else {
-            let playing = audio.first { $0.id == ids.audio }
-            ids.subtitle = TrackIntentResolver.resolveSubtitle(
-                intent: intent, in: subs, audioLanguage: playing?.languageCode ?? playing?.language)?.id ?? 0
-        }
-        return ids
     }
 
     /// The playing audio and subtitle tracks; a nil subtitle is off.
@@ -4662,11 +4640,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// per-item pick (selected but not the file default), or, with no audio
     /// language set in Rivulet, the server's pick from the account's language (#382).
     private var plexChosenAudioStreamId: Int? {
-        let streams = (metadata.Media?.first?.Part?.first?.Stream ?? []).filter { $0.isAudio }
-        guard let selectedId = streams.first(where: { $0.selected == true })?.id else { return nil }
-        if TrackIntentStore.audioIntent == nil { return selectedId }
-        guard let defaultId = streams.first(where: { $0.default == true })?.id else { return nil }
-        return selectedId != defaultId ? selectedId : nil
+        TrackIntentResolver.plexChosenAudioStreamID(in: metadata.Media?.first?.Part?.first?.Stream ?? [],
+                                                    hasAudioIntent: TrackIntentStore.audioIntent != nil)
     }
 
     /// Apply saved audio preference, in the numbered priority below. Every tier

@@ -18,6 +18,8 @@ enum IOSChangelog {
             "Posters now show the edition, such as Director's Cut",
             "Plex's dashboard now shows bandwidth for Direct Play",
             "The player stops and shows the reason when Plex ends your session",
+            "New Audio & Subtitles settings in Playback, saved for each Plex profile",
+            "Audio tracks are listed by language and format, and audio description tracks are no longer picked on their own",
             "Updated AetherEngine to 7.53.0",
         ]),
         ("1.0.7 (81)", [

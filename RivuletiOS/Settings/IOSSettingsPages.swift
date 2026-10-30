@@ -56,9 +56,13 @@ struct IOSPlaybackSettingsView: View {
     @AppStorage(StreamingQuality.homeKey) private var homeQuality = StreamingQuality.homeDefault
     @AppStorage(StreamingQuality.awayKey) private var awayQuality = StreamingQuality.awayDefault
     @AppStorage(AetherPlayer.upscaleKey) private var upscales = false
+    /// Bumped on every track-intent write: `TrackIntentStore` is not observable.
+    @State private var trackRevision = 0
 
     var body: some View {
         Form {
+            audioAndSubtitles
+
             Section {
                 Picker("Home", selection: $homeQuality) { qualityOptions }
                 Picker("Away", selection: $awayQuality) { qualityOptions }
@@ -105,6 +109,46 @@ struct IOSPlaybackSettingsView: View {
             }
         }
         .navigationTitle("Playback")
+    }
+
+    /// Same intents as the tvOS Audio & Subtitles settings, saved per Plex profile.
+    private var audioAndSubtitles: some View {
+        let _ = trackRevision
+        let subtitlesOn = SubtitleMode.current != .off
+        return Section {
+            Picker("Audio Language", selection: trackBinding(
+                get: { TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) } ?? "" },
+                set: { TrackIntentStore.audioIntent = $0.isEmpty ? nil : AudioIntent(language: $0) }
+            )) {
+                Text(TrackLanguage.audioSettingName(nil)).tag("")
+                ForEach([TrackLanguage.original] + TrackLanguage.sortedChoices, id: \.self) {
+                    Text(TrackLanguage.audioSettingName($0)).tag($0)
+                }
+            }
+            Picker("Subtitles", selection: trackBinding(get: { SubtitleMode.current },
+                                                        set: { TrackIntentStore.setSubtitles(mode: $0) })) {
+                ForEach(SubtitleMode.choices, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            Picker("Subtitle Language", selection: trackBinding(
+                get: { TrackLanguage.normalize(TrackIntentStore.subtitleLanguage) },
+                set: { TrackIntentStore.setSubtitles(language: $0) }
+            )) {
+                ForEach(TrackLanguage.sortedChoices, id: \.self) { Text(TrackLanguage.displayName($0)).tag($0) }
+            }
+            .disabled(!subtitlesOn)
+            Toggle("SDH Subtitles", isOn: trackBinding(get: { TrackIntentStore.subtitleSDH },
+                                                       set: { TrackIntentStore.setSubtitles(sdh: $0) }))
+                .disabled(!subtitlesOn)
+        } header: {
+            Text("Audio & Subtitles")
+        } footer: {
+            Text("Foreign Audio shows subtitles when a title's audio is in another language, and only forced subtitles otherwise. Saved for each Plex profile.")
+        }
+        .onAppear { trackRevision += 1 }
+    }
+
+    private func trackBinding<Value>(get: @escaping () -> Value, set: @escaping (Value) -> Void) -> Binding<Value> {
+        Binding(get: get, set: { set($0); trackRevision += 1 })
     }
 
     private var qualityOptions: some View {

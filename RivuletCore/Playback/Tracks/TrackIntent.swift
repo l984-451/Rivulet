@@ -633,3 +633,107 @@ enum TrackIntentStore {
         var preferHearingImpaired: Bool
     }
 }
+
+// MARK: - Starting Tracks
+
+extension TrackIntentResolver {
+    /// Plex's `selected` audio stream when it outranks the global intent: a per-item pick
+    /// (selected but not the file default), or, with no audio language set, the server's
+    /// pick from the account's language (#382).
+    static func plexChosenAudioStreamID(in streams: [PlexStream], hasAudioIntent: Bool) -> Int? {
+        let audio = streams.filter(\.isAudio)
+        guard let selectedID = audio.first(where: { $0.selected == true })?.id else { return nil }
+        if !hasAudioIntent { return selectedID }
+        guard let defaultID = audio.first(where: { $0.default == true })?.id else { return nil }
+        return selectedID != defaultID ? selectedID : nil
+    }
+
+    /// Plex's `selected` subtitle stream when it is a deliberate per-item pick (neither the
+    /// default nor forced, here or in Plex Web / mobile) that may override `intent`.
+    static func plexChosenSubtitleStreamID(in streams: [PlexStream], intent: SubtitleIntent) -> Int? {
+        guard let stream = streams.first(where: { $0.isSubtitle && $0.selected == true }) else { return nil }
+        let track = MediaTrack(from: stream)
+        guard !track.isDefault, !track.isForced, plexSelectedSubtitleMayOverride(track, intent: intent) else { return nil }
+        return track.id
+    }
+
+    /// The Plex stream ids a title starts on, subtitle 0 being off: Plex's per-item picks,
+    /// then the stored intents. `audioOverride` is a pick made before playback.
+    static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> (audio: Int?, subtitle: Int) {
+        let audio = streams.filter(\.isAudio).map { MediaTrack(from: $0) }
+        let subtitles = streams.filter(\.isSubtitle).map { MediaTrack(from: $0) }
+        let chosenAudio = audioOverride
+            ?? plexChosenAudioStreamID(in: streams, hasAudioIntent: TrackIntentStore.audioIntent != nil)
+        let audioID = chosenAudio.flatMap { id in audio.contains { $0.id == id } ? id : nil }
+            ?? resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
+        let intent = TrackIntentStore.effectiveSubtitleIntent
+        if let chosen = plexChosenSubtitleStreamID(in: streams, intent: intent) { return (audioID, chosen) }
+        let playing = audio.first { $0.id == audioID }
+        let subtitle = resolveSubtitle(intent: intent, in: subtitles,
+                                       audioLanguage: playing?.languageCode ?? playing?.language)
+        return (audioID, subtitle?.id ?? 0)
+    }
+}
+
+// MARK: - Settings
+
+/// The subtitle setting as Settings shows it; Forced Only is set only by a player pick.
+enum SubtitleMode: String, CaseIterable {
+    case foreignAudio = "Foreign Audio", always = "Always", off = "Off", forcedOnly = "Forced Only"
+
+    init(_ intent: SubtitleIntent) {
+        switch intent {
+        case .off: self = .off
+        case .foreignAudio: self = .foreignAudio
+        case .track(_, let forced, _, _): self = forced ? .forcedOnly : .always
+        }
+    }
+
+    /// The modes a picker lists: Forced Only only while it is current.
+    static var choices: [SubtitleMode] {
+        [.off, .foreignAudio, .always] + (current == .forcedOnly ? [.forcedOnly] : [])
+    }
+
+    static var current: SubtitleMode { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) }
+}
+
+extension TrackIntentStore {
+    /// The subtitle language Settings shows, the device's when nothing names one.
+    static var subtitleLanguage: String {
+        effectiveSubtitleIntent.language ?? TrackLanguage.device
+    }
+
+    static var subtitleSDH: Bool {
+        switch effectiveSubtitleIntent {
+        case .off: return false
+        case .track(_, _, let hi, _), .foreignAudio(_, let hi): return hi
+        }
+    }
+
+    /// A Settings change: one of mode, language or SDH, keeping the other two.
+    static func setSubtitles(mode: SubtitleMode = .current, language: String? = nil, sdh: Bool? = nil) {
+        let language = language ?? subtitleLanguage
+        let sdh = sdh ?? subtitleSDH
+        switch mode {
+        case .off:
+            subtitleIntent = .off
+        case .foreignAudio:
+            subtitleIntent = .foreignAudio(language: language, hearingImpaired: sdh)
+        case .always, .forcedOnly:
+            subtitleIntent = .track(language: language, forced: mode == .forcedOnly, hearingImpaired: sdh, codec: nil)
+        }
+    }
+}
+
+extension TrackLanguage {
+    /// The Audio Language setting's name for a stored code; nil follows the Plex account.
+    static func audioSettingName(_ code: String?) -> String {
+        guard let code else { return "Plex Account" }
+        if code == original { return "Original" }
+        // An untagged or unknown pick resolves to English (see resolveAudio).
+        return isKnown(code) ? displayName(code) : displayName(english)
+    }
+
+    /// `choices` in display order.
+    static var sortedChoices: [String] { choices.sorted { displayName($0) < displayName($1) } }
+}

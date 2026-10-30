@@ -297,12 +297,10 @@ enum SettingsContent {
 
     /// Forced Only is set only by a player pick, so it is listed only while it is current.
     private static var subtitleModePicker: [SettingsRowItem] {
-        let current = SubtitleMode(TrackIntentStore.effectiveSubtitleIntent)
-        let modes: [SubtitleMode] = [.off, .foreignAudio, .always] + (current == .forcedOnly ? [.forcedOnly] : [])
-        return modes.map { mode in
+        SubtitleMode.choices.map { mode in
             SettingsRowItem(id: "sm_\(mode)", title: mode.rawValue, kind: .option(
-                isSelected: { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) == mode },
-                select: { setSubtitles(mode: mode) }))
+                isSelected: { SubtitleMode.current == mode },
+                select: { TrackIntentStore.setSubtitles(mode: mode) }))
         }
     }
 
@@ -336,74 +334,30 @@ enum SettingsContent {
     }
 
     private static var audioLanguagePicker: [SettingsRowItem] {
-        let languages = TrackLanguage.choices.sorted { TrackLanguage.displayName($0) < TrackLanguage.displayName($1) }
+        let languages = TrackLanguage.sortedChoices
         // No stored intent follows the Plex account's audio language (#382).
-        let account = SettingsRowItem(id: "al_account", title: audioLanguageName(nil), kind: .option(
+        let account = SettingsRowItem(id: "al_account", title: TrackLanguage.audioSettingName(nil), kind: .option(
             isSelected: { TrackIntentStore.audioIntent == nil },
             select: { TrackIntentStore.audioIntent = nil }))
         return [account] + ([TrackLanguage.original] + languages).map { code in
-            SettingsRowItem(id: "al_\(code)", title: audioLanguageName(code), kind: .option(
+            SettingsRowItem(id: "al_\(code)", title: TrackLanguage.audioSettingName(code), kind: .option(
                 isSelected: { TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) } == code },
                 select: { TrackIntentStore.audioIntent = AudioIntent(language: code) }))
         }
     }
 
     private static var subtitleLanguagePicker: [SettingsRowItem] {
-        TrackLanguage.choices.sorted { TrackLanguage.displayName($0) < TrackLanguage.displayName($1) }.map { code in
+        TrackLanguage.sortedChoices.map { code in
             SettingsRowItem(id: "sl_\(code)", title: TrackLanguage.displayName(code), kind: .option(
-                isSelected: { TrackLanguage.normalize(subtitleLanguage) == code },
-                select: { setSubtitles(mode: SubtitleMode(TrackIntentStore.effectiveSubtitleIntent), language: code) }))
+                isSelected: { TrackLanguage.normalize(TrackIntentStore.subtitleLanguage) == code },
+                select: { TrackIntentStore.setSubtitles(language: code) }))
         }
     }
 
     // MARK: Audio and subtitles (read and written through TrackIntentStore)
 
-    private static func audioLanguageName(_ code: String?) -> String {
-        guard let code else { return "Plex Account" }
-        if code == TrackLanguage.original { return "Original" }
-        // An untagged or unknown pick resolves to English (see resolveAudio).
-        return TrackLanguage.isKnown(code) ? TrackLanguage.displayName(code) : TrackLanguage.displayName(TrackLanguage.english)
-    }
-
-    private enum SubtitleMode: String {
-        case foreignAudio = "Foreign Audio", always = "Always", off = "Off", forcedOnly = "Forced Only"
-
-        init(_ intent: SubtitleIntent) {
-            switch intent {
-            case .off: self = .off
-            case .foreignAudio: self = .foreignAudio
-            case .track(_, let forced, _, _): self = forced ? .forcedOnly : .always
-            }
-        }
-    }
-
-    private static var subtitleLanguage: String {
-        TrackIntentStore.effectiveSubtitleIntent.language ?? TrackLanguage.device
-    }
-
     private static var heightSpeakers: String {
         SettingsStore.string(AetherPlayer.heightSpeakersKey, default: "")
-    }
-
-    private static var subtitleSDH: Bool {
-        switch TrackIntentStore.effectiveSubtitleIntent {
-        case .off: return false
-        case .track(_, _, let hi, _), .foreignAudio(_, let hi): return hi
-        }
-    }
-
-    private static func setSubtitles(mode: SubtitleMode, language: String? = nil, sdh: Bool? = nil) {
-        let language = language ?? subtitleLanguage
-        let sdh = sdh ?? subtitleSDH
-        switch mode {
-        case .off:
-            TrackIntentStore.subtitleIntent = .off
-        case .foreignAudio:
-            TrackIntentStore.subtitleIntent = .foreignAudio(language: language, hearingImpaired: sdh)
-        case .always, .forcedOnly:
-            TrackIntentStore.subtitleIntent = .track(language: language, forced: mode == .forcedOnly,
-                                                     hearingImpaired: sdh, codec: nil)
-        }
     }
 
     // MARK: Root
@@ -484,23 +438,23 @@ enum SettingsContent {
     // MARK: Playback
 
     private static var playback: [SettingsRowItem] {
-        let subtitlesOn = { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) != .off }
+        let subtitlesOn = { SubtitleMode.current != .off }
         // Grouped under headers whose titles the rows then drop ("Intro" under AUTO-SKIP).
         return [
             .header("Audio & Subtitles"),
             SettingsRowItem(id: "audioLanguage", title: "Audio Language",
                             kind: .navigationValue(.audioLanguagePicker, value: {
-                                audioLanguageName(TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) })
+                                TrackLanguage.audioSettingName(TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) })
                             })),
             SettingsRowItem(id: "subtitleMode", title: "Subtitles",
-                            kind: .navigationValue(.subtitleModePicker, value: { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent).rawValue })),
+                            kind: .navigationValue(.subtitleModePicker, value: { SubtitleMode.current.rawValue })),
             SettingsRowItem(id: "subtitleLanguage", title: "Subtitle Language",
                             kind: .navigationValue(.subtitleLanguagePicker, value: {
-                                TrackLanguage.displayName(TrackLanguage.normalize(subtitleLanguage))
+                                TrackLanguage.displayName(TrackLanguage.normalize(TrackIntentStore.subtitleLanguage))
                             }), isEnabled: subtitlesOn),
             SettingsRowItem(id: "subtitleSDH", title: "SDH Subtitles",
-                            kind: .toggle(get: { subtitleSDH },
-                                          set: { setSubtitles(mode: SubtitleMode(TrackIntentStore.effectiveSubtitleIntent), sdh: $0) }),
+                            kind: .toggle(get: { TrackIntentStore.subtitleSDH },
+                                          set: { TrackIntentStore.setSubtitles(sdh: $0) }),
                             isEnabled: subtitlesOn),
             // Turning it on fetches the speech model that writes them; the value shows its download.
             SettingsRowItem(id: "generatedSubtitles", title: "Generated Subtitles (English)", kind: .selectable(

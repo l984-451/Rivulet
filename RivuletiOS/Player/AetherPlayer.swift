@@ -39,8 +39,14 @@ final class AetherPlayer: ObservableObject {
         let isDefault: Bool
         let isForced: Bool
         let isHearingImpaired: Bool
+        var isCommentary = false
+        var isAudioDescription = false
+        var isExternal = false
+        /// The menu's second line when the caller has a better one ("TrueHD 7.1 Atmos").
+        var menuDetail: String?
 
         var detail: String {
+            if let menuDetail { return menuDetail }
             var parts: [String] = []
             if let language, !language.isEmpty {
                 parts.append(Locale.current.localizedString(forLanguageCode: language) ?? language)
@@ -894,7 +900,10 @@ final class AetherPlayer: ObservableObject {
             channels: track.channels,
             isDefault: track.isDefault,
             isForced: track.isForced,
-            isHearingImpaired: track.isHearingImpaired
+            isHearingImpaired: track.isHearingImpaired,
+            isCommentary: track.isCommentary,
+            isAudioDescription: track.isVisualImpaired,
+            isExternal: track.isExternal
         )
     }
 

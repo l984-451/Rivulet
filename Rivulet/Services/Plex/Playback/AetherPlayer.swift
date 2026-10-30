@@ -761,6 +761,15 @@ final class AetherPlayer: PlayerProtocol {
                             panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
+    /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
+    var upscaleSummary: String? {
+        guard let status = engine.activeUpscale else { return nil }
+        if status.disabledReason != nil { return "Stopped" }
+        let size = "\(Int(status.sourceSize.height))p → \(Int(status.targetSize.height))p"
+        guard let ml = status.mlScale else { return "\(size) (MetalFX)" }
+        let mlOnly = status.degraded || abs(status.sourceSize.height * CGFloat(ml) - status.targetSize.height) < 2
+        return mlOnly ? "\(size) (ML)" : "\(size) (ML + MetalFX)"
+    }
     /// FEL or MEL for the current Profile 7 load; nil when the engine didn't classify it (FEL setting off, no DV panel).
     private(set) var dolbyVisionEnhancementLayer: DolbyVisionEnhancementLayer?
 
@@ -982,6 +991,9 @@ final class AetherPlayer: PlayerProtocol {
     /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
     static let heightSpeakersKey = "heightSpeakers"
 
+    /// ML upscaling of SDR below 1080p (#846); absent = off.
+    static let upscaleKey = "upscaleLowResolution"
+
     /// Profile 7 FEL composition; absent = off.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
     private static let felDefaultSettledKey = "dolbyVisionFELDefaultSettled"
@@ -1150,6 +1162,8 @@ final class AetherPlayer: PlayerProtocol {
         let panelDV = AetherEngine.displayCapabilities.supportsDolbyVision
         let felOn = UserDefaults.standard.bool(forKey: Self.dolbyVisionFELKey)
         options.preferDualLayerDolbyVision = panelDV && felOn
+        // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
+        options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
         // #362: catch the engine's one Profile 7 route line for Sentry. Live TV's capture owns the
         // handler while it runs, and VOD never loads then.

@@ -552,6 +552,7 @@ enum SettingsContent {
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
             toggle("showPostVideoUpNext", "Up Next Panel", key: "showPostVideoUpNext", default: true),
             .header("Home Theater"),
+            toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: false),
             SettingsRowItem(id: "heightSpeakers", title: "Height Speakers",
                             kind: .navigationValue(.heightSpeakersPicker, value: { heightSpeakers.isEmpty ? "Off" : heightSpeakers })),

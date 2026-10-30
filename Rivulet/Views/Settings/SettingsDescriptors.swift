@@ -207,6 +207,10 @@ enum SettingsDescriptorStore {
             icon: "hifispeaker.2",
             description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
         ),
+        "upscaleLowResolution": SettingDescriptor(
+            icon: "sparkles.tv",
+            description: "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before."
+        ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
             description: "Plays the full Dolby Vision Profile 7 layer on a Dolby Vision TV, without AirPlay or Picture in Picture. Off plays it as 8.1."

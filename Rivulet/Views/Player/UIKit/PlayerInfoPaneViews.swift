@@ -910,7 +910,8 @@ final class PlayerDetailsPaneView: UIView {
     static func mediaSections(metadata: PlexMetadata, modes: StreamingModeInfo,
                               dolbyVision: DolbyVisionPlayback? = nil,
                               enhancementLayer: DolbyVisionEnhancementLayer? = nil,
-                              enhanceDialogue: String? = nil) -> [Section] {
+                              enhanceDialogue: String? = nil,
+                              upscale: String? = nil) -> [Section] {
         let media = metadata.Media?.first
         let streams = media?.Part?.first?.Stream ?? []
         var sections: [Section] = []
@@ -940,6 +941,7 @@ final class PlayerDetailsPaneView: UIView {
                 video.append(Row(label: "Dimensions", value: "\(width) × \(height)"))
             }
             if let frameRate = media.videoFrameRate { video.append(Row(label: "Frame Rate", value: frameRate)) }
+            if let upscale { video.append(Row(label: "Upscaling", value: upscale)) }
             // Plex reports kbps; the formatter takes bits/sec.
             if let bitrate = media.bitrate {
                 video.append(Row(label: "Bitrate", value: PlayerInfoSheetStyle.bitrate(bitrate * 1000)))

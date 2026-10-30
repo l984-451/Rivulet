@@ -57,6 +57,13 @@ class PlexUserProfileManager: ObservableObject {
         }
     }
 
+    /// Whether to show the profile picker when the app returns from the background
+    @Published var showProfilePickerOnReturn: Bool {
+        didSet {
+            userDefaults.set(showProfilePickerOnReturn, forKey: showProfilePickerOnReturnKey)
+        }
+    }
+
     /// Set of user UUIDs that have remembered PINs (for UI updates)
     @Published var usersWithRememberedPins: Set<String> = []
 
@@ -77,6 +84,7 @@ class PlexUserProfileManager: ObservableObject {
     private let selectedUserUUIDKey = "selectedPlexUserUUID"
     private let selectedUserNameKey = "selectedPlexUserName"
     private let showProfilePickerOnLaunchKey = "showPlexProfilePickerOnLaunch"
+    private let showProfilePickerOnReturnKey = "showPlexProfilePickerOnReturn"
     private let restrictedKey = "selectedPlexUserRestricted"
 
     // MARK: - Dependencies
@@ -110,6 +118,7 @@ class PlexUserProfileManager: ObservableObject {
     private init() {
         // Load saved preference for profile picker
         showProfilePickerOnLaunch = userDefaults.bool(forKey: showProfilePickerOnLaunchKey)
+        showProfilePickerOnReturn = userDefaults.bool(forKey: showProfilePickerOnReturnKey)
 
         // Load saved user info (will be validated when fetchHomeUsers is called)
     }

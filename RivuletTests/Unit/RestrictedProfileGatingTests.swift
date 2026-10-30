@@ -33,6 +33,7 @@ final class RestrictedProfileGatingTests: XCTestCase {
         XCTAssertFalse(liveTV.contains("liveTVSources"))
         XCTAssertFalse(playback.contains("cat_contentFilter"))
         XCTAssertFalse(appearance.contains("profilePickerOnLaunch"))
+        XCTAssertFalse(appearance.contains("profilePickerOnReturn"))
         XCTAssertTrue(root.contains("cat_playback"))
 
         manager.selectedUser = PlexHomeUser(id: 1, uuid: "owner", title: "Owner", admin: true)

@@ -353,6 +353,10 @@ enum SettingsDescriptorStore {
             icon: "person.2.circle",
             description: "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use."
         ),
+        "profilePickerOnReturn": SettingDescriptor(
+            icon: "person.crop.circle.badge.questionmark",
+            description: "Shows the profile picker whenever you come back to Rivulet from the Home screen or another app, so nobody picks up where the last profile left off."
+        ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",
             description: "Add your own Live TV sources: your Plex server's Live TV or an IPTV playlist from your provider. Rivulet provides no channels of its own."

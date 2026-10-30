@@ -31,6 +31,7 @@ struct TVSidebarView: View {
     @StateObject private var profileManager = PlexUserProfileManager.shared
     @StateObject private var nestedNavState = NestedNavigationState()
     @StateObject private var deepLinkHandler = DeepLinkHandler.shared
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("combineLiveTVSources") private var combineLiveTVSources = true
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("showWatchlistTab") private var showWatchlistTab = true
@@ -48,6 +49,8 @@ struct TVSidebarView: View {
     @State private var sidebarProfileRowRequest = 0
     @State private var hasCheckedProfilePicker = false
     @State private var isAwaitingProfileSelection = false
+    /// The app went to the background; the next return to .active may ask who is watching.
+    @State private var didEnterBackground = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
@@ -365,6 +368,20 @@ struct TVSidebarView: View {
                 }
             }
         }
+        // Profile Picker on Return: only a real trip to the background counts.
+        // The screensaver and Control Center leave the app inactive, not
+        // backgrounded, so they do not interrupt whatever is on screen.
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                didEnterBackground = true
+            case .active where didEnterBackground:
+                didEnterBackground = false
+                presentProfilePickerOnReturn()
+            default:
+                break
+            }
+        }
         // Content is withheld until a profile is entered: ask who is watching.
         .onChange(of: profileManager.needsProfileSelection) { _, needed in
             if needed {
@@ -389,6 +406,40 @@ struct TVSidebarView: View {
                 profileManager: profileManager
             )
             .presentationBackground(.clear)
+        }
+    }
+
+    // MARK: - Profile Picker on Return
+
+    /// Asks who is watching again after the app comes back from the background,
+    /// using the same hard gate as the launch picker: content stays hidden until
+    /// a profile is entered, and backing out re-presents the picker.
+    private func presentProfilePickerOnReturn() {
+        guard profileManager.showProfilePickerOnReturn,
+              authManager.hasCredentials,
+              hasCheckedProfilePicker,
+              !showProfilePicker,
+              !profileManager.needsProfileSelection else { return }
+
+        Task {
+            // Home users are fetched late at launch; a quick return may beat them.
+            if !profileManager.hasLoadedProfiles {
+                await profileManager.fetchHomeUsers()
+            }
+            guard profileManager.hasMultipleProfiles,
+                  !showProfilePicker,
+                  !profileManager.needsProfileSelection else { return }
+
+            isAwaitingProfileSelection = true
+            deepLinkHandler.isShellReady = false
+            // The picker cannot present over a player, and the last profile's
+            // music should not keep playing under it.
+            MusicQueue.shared.stop()
+            MusicQueue.shared.clear()
+            showProfileSwitcher = false
+            Self.rootViewController()?.dismiss(animated: false)
+            profileChosen = false
+            showProfilePicker = true
         }
     }
 

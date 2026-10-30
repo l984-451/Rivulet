@@ -176,7 +176,7 @@ enum SettingsContent {
 
     /// Rows a restricted (managed) Plex profile does not get: other servers,
     /// sources, sign-out, and the parental controls themselves.
-    static let ownerOnlyRowIDs: Set<String> = ["cat_servers", "liveTVSources", "hdr_Filtering", "cat_contentFilter", "profilePickerOnLaunch"]
+    static let ownerOnlyRowIDs: Set<String> = ["cat_servers", "liveTVSources", "hdr_Filtering", "cat_contentFilter", "profilePickerOnLaunch", "profilePickerOnReturn"]
 
     static func rows(for page: SettingsPage) -> [SettingsRowItem] {
         let rows = allRows(for: page)
@@ -438,6 +438,10 @@ enum SettingsContent {
                             kind: .toggle(
                                 get: { PlexUserProfileManager.shared.showProfilePickerOnLaunch },
                                 set: { PlexUserProfileManager.shared.showProfilePickerOnLaunch = $0 })),
+            SettingsRowItem(id: "profilePickerOnReturn", title: "Profile Picker on Return",
+                            kind: .toggle(
+                                get: { PlexUserProfileManager.shared.showProfilePickerOnReturn },
+                                set: { PlexUserProfileManager.shared.showProfilePickerOnReturn = $0 })),
             SettingsRowItem(id: "topShelfStyle", title: "Top Shelf",
                             kind: .cycle(value: { TopShelfCache.shared.fullScreen ? "Full Screen" : "Posters" },
                                          next: { TopShelfCache.shared.fullScreen.toggle() })),

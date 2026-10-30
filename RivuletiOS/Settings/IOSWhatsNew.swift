@@ -8,7 +8,6 @@ import SwiftUI
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
-        // confirm build number at release
         ("1.0.7 (82)", [
             "New Tvheadend support in Live TV, with channels, guide and recording",
             "Add Source in Live TV lists Dispatcharr, Tvheadend and Threadfin by name",

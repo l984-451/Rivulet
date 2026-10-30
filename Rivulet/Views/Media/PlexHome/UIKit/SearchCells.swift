@@ -244,16 +244,20 @@ final class SearchStateCell: UICollectionViewCell {
         case searching
         case error(message: String)
         case noResults
+        case noResultsWithRequests
 
         /// Only the error state renders Try Again, so only it is worth making
         /// the cell focusable for.
         var hasFocusableAction: Bool {
-            if case .error = self { return true }
-            return false
+            switch self {
+            case .error, .noResultsWithRequests: return true
+            default: return false
+            }
         }
     }
 
     var onRetry: (() -> Void)?
+    var onRequests: (() -> Void)?
 
     private let spinner = UIActivityIndicatorView(style: .large)
     private let iconView = UIImageView()
@@ -347,6 +351,8 @@ final class SearchStateCell: UICollectionViewCell {
             titleLabel.text = "Search Not Available"
             messageLabel.isHidden = false
             messageLabel.text = "This request wasn’t completed. Wait a moment and try again."
+            retryLabel.text = "Try Again"
+            retryButton.onPrimaryAction = { [weak self] in self?.onRetry?() }
             retryButton.isHidden = false
         case .noResults:
             spinner.stopAnimating()
@@ -358,6 +364,18 @@ final class SearchStateCell: UICollectionViewCell {
             messageLabel.isHidden = false
             messageLabel.text = "Try a different title or check your spelling."
             retryButton.isHidden = true
+        case .noResultsWithRequests:
+            spinner.stopAnimating()
+            spinner.isHidden = true
+            iconView.isHidden = false
+            iconView.image = UIImage(systemName: "magnifyingglass")?
+                .withConfiguration(UIImage.SymbolConfiguration(pointSize: 48, weight: .light))
+            titleLabel.text = "No Results"
+            messageLabel.isHidden = false
+            messageLabel.text = "Search available titles to request."
+            retryLabel.text = "Search Requests"
+            retryButton.onPrimaryAction = { [weak self] in self?.onRequests?() }
+            retryButton.isHidden = false
         }
     }
 }

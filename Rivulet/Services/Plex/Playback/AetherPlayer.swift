@@ -102,6 +102,17 @@ final class AetherPlayer: PlayerProtocol {
     /// Equal to currentTime on all current Aether paths (PlaybackClock
     /// unifies source-PTS and wall-clock onto a single value).
     @Published private(set) var sourceTime: Double = 0
+    private var externalSubtitleTimelineOffset: TimeInterval = 0
+    private var providerSubtitleGeneration = 0
+    private var providerSubtitleDownload: Task<URL, Error>?
+    /// A committed candidate stays readable for engine background/audio reloads.
+    private var providerSubtitleFile: URL?
+
+    private func subtitleClockTime(_ time: TimeInterval) -> TimeInterval {
+        guard let selected = engine.activeSubtitleTrackIndex,
+              engine.subtitleTracks.contains(where: { $0.id == selected && $0.isExternal }) else { return time }
+        return time + externalSubtitleTimelineOffset
+    }
 
     @Published private(set) var audioTracks: [MediaTrack] = []
     /// Published so the host can rebuild its merged track list the moment the
@@ -232,7 +243,8 @@ final class AetherPlayer: PlayerProtocol {
         engine.clock.$sourceTime
             .receive(on: DispatchQueue.main)
             .sink { [weak self] t in
-                self?.sourceTime = t
+                guard let self else { return }
+                self.sourceTime = self.subtitleClockTime(t)
             }
             .store(in: &cancellables)
 
@@ -519,6 +531,8 @@ final class AetherPlayer: PlayerProtocol {
         /// File-extension hint ("srt", "ass", "vtt") for URLs whose path
         /// hides the format (Plex stream keys have no extension).
         let formatHint: String?
+        /// Explicit per-delivery authority; empty prevents inheriting the media source's headers.
+        var httpHeaders: [String: String]? = nil
     }
 
     /// Read panel HDR state for LoadOptions.panelIsInHDRMode. Matches
@@ -803,6 +817,8 @@ final class AetherPlayer: PlayerProtocol {
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
                   role: LiveLoadRole = .fullscreen) async throws {
         finishAVCapture()
+        invalidateProviderSubtitlePreparation()
+        removeProviderSubtitleFile()
         dropFrameExtractor()
         if role == .fullscreen { startAVCapture(url: url) }
         let isHLS = Self.liveRoute(for: url, forceEngineDemux: forceEngineDemux) == .nativeHLS
@@ -1030,6 +1046,7 @@ final class AetherPlayer: PlayerProtocol {
         preferredAudioLanguages: [String] = [],
         preferredSubtitleLanguages: [String] = [],
         externalSubtitles: [SidecarSubtitle] = [],
+        externalSubtitleTimelineOffset: TimeInterval = 0,
         isLive: Bool = false,
         stackedParts: StackedParts<PartFile>? = nil
     ) async throws {
@@ -1041,7 +1058,8 @@ final class AetherPlayer: PlayerProtocol {
             try await loadFile(url: url, headers: headers, startTime: startTime,
                                preferredAudioLanguages: preferredAudioLanguages,
                                preferredSubtitleLanguages: preferredSubtitleLanguages,
-                               externalSubtitles: externalSubtitles, isLive: isLive)
+                               externalSubtitles: externalSubtitles,
+                               externalSubtitleTimelineOffset: externalSubtitleTimelineOffset, isLive: isLive)
             return
         }
         partLoad = (headers, preferredAudioLanguages, preferredSubtitleLanguages)
@@ -1101,13 +1119,25 @@ final class AetherPlayer: PlayerProtocol {
         preferredAudioLanguages: [String],
         preferredSubtitleLanguages: [String],
         externalSubtitles: [SidecarSubtitle],
+        externalSubtitleTimelineOffset: TimeInterval = 0,
         isLive: Bool
     ) async throws {
+        invalidateProviderSubtitlePreparation()
+        removeProviderSubtitleFile()
         // .lossless: FLAC for non-stream-copy audio, ~3x realtime on A15 against EAC3's
         // ~0.5x, so 4K segments keep up. Needs a multichannel LPCM sink; others downmix.
         // subtitleLanguageHintsByStreamIndex is unused (the engine has no such parameter).
         // isLive must be declared: the engine does not auto-detect live (broken MKV durations).
-        // externalSubtitles: nil httpHeaders inherits the media's Plex auth headers.
+        // Reanchored HLS sidecars retain source timestamps. Register those after load
+        // for the host overlay, not a native WebVTT rendition on the player's axis.
+        self.externalSubtitleTimelineOffset = externalSubtitleTimelineOffset
+        let sidecars = externalSubtitles.map { sub in
+            ExternalSubtitleTrack(
+                url: sub.url, name: sub.name, language: sub.language,
+                isForced: sub.isForced, isHearingImpaired: sub.isHearingImpaired,
+                isDefault: sub.isDefault, httpHeaders: sub.httpHeaders, formatHint: sub.formatHint
+            )
+        }
         var options = LoadOptions(
             suppressDisplayCriteria: false,
             httpHeaders: headers ?? [:],
@@ -1121,18 +1151,7 @@ final class AetherPlayer: PlayerProtocol {
             preserveASSMarkup: true,
             preferredAudioLanguages: preferredAudioLanguages,
             preferredSubtitleLanguages: preferredSubtitleLanguages,
-            externalSubtitles: externalSubtitles.map { sub in
-                ExternalSubtitleTrack(
-                    url: sub.url,
-                    name: sub.name,
-                    language: sub.language,
-                    isForced: sub.isForced,
-                    isHearingImpaired: sub.isHearingImpaired,
-                    isDefault: sub.isDefault,
-                    httpHeaders: nil,
-                    formatHint: sub.formatHint
-                )
-            },
+            externalSubtitles: externalSubtitleTimelineOffset == 0 ? sidecars : [],
             // Same teletext rule as Live TV: a teletext stream decodes the same
             // way whichever surface plays it (VOD recordings/rips included).
             teletextPage: Self.regionTeletextPage()
@@ -1176,6 +1195,9 @@ final class AetherPlayer: PlayerProtocol {
         pendingReloadSince = nil
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
+            if externalSubtitleTimelineOffset != 0 {
+                for sidecar in sidecars { engine.addExternalSubtitleTrack(sidecar) }
+            }
         } catch {
             // User navigated away / switched items mid-load. Rethrow untouched
             // and stay off errorSubject: wrapping it as PlayerError.loadFailed
@@ -1238,12 +1260,12 @@ final class AetherPlayer: PlayerProtocol {
         if let timebase = engine.softwarePresentationTimebase {
             // The software path presents on the source axis already.
             let t = CMSyncConvertTime(host, from: CMClockGetHostTimeClock(), to: timebase)
-            return t.isNumeric ? t.seconds : nil
+            return t.isNumeric ? subtitleClockTime(t.seconds) : nil
         }
         guard let timebase = engine.currentAVPlayerItem?.timebase else { return nil }
         let item = CMSyncConvertTime(host, from: CMClockGetHostTimeClock(), to: timebase)
         guard item.isNumeric else { return nil }
-        return engine.presentationAxisMap.sourceSeconds(forItemSeconds: item.seconds)
+        return engine.presentationAxisMap.sourceSeconds(forItemSeconds: item.seconds).map { subtitleClockTime($0) }
     }
 
     /// Hand external metadata (title, artwork, description, genre) to the
@@ -1280,6 +1302,7 @@ final class AetherPlayer: PlayerProtocol {
     /// `resetDisplayCriteria: false` keeps the TV's mode for a following load
     /// on this player, so a same-format channel change makes no HDMI switch (#419).
     func stop(resetDisplayCriteria: Bool) {
+        invalidateProviderSubtitlePreparation()
         foregroundReloadTask?.cancel()
         pendingReloadSince = nil
         userIntendsToPlay = false
@@ -1288,9 +1311,12 @@ final class AetherPlayer: PlayerProtocol {
         finishAVCapture()
         dropFrameExtractor()
         engine.stop(resetDisplayCriteria: resetDisplayCriteria)
+        removeProviderSubtitleFile()
     }
 
     deinit {
+        providerSubtitleDownload?.cancel()
+        if let providerSubtitleFile { try? FileManager.default.removeItem(at: providerSubtitleFile) }
         if let extractor = frameExtractor { Task { await extractor.shutdown() } }
     }
 
@@ -1517,14 +1543,174 @@ final class AetherPlayer: PlayerProtocol {
     var currentSubtitleTrackId: Int? { activeSubtitleTrackId }
 
     func selectAudioTrack(id: Int) {
+        invalidateProviderSubtitlePreparation()
         engine.selectAudioTrack(index: id)
     }
 
     func selectSubtitleTrack(id: Int?) {
+        invalidateProviderSubtitlePreparation()
         if let id {
             engine.selectSubtitleTrack(index: id)
         } else {
             engine.clearSubtitle()
+        }
+    }
+
+    /// Decode a fresh, bounded text sidecar before changing any visible cues.
+    /// The caller's identity fence complements the engine's load/intent fence:
+    /// a provider menu pick may be queued without touching the engine yet.
+    @discardableResult
+    func replaceProviderSubtitle(
+        _ track: SubtitleTrack?, timelineOffset: TimeInterval,
+        isCurrent: @MainActor () -> Bool
+    ) async throws -> Bool {
+        invalidateProviderSubtitlePreparation()
+        let generation = providerSubtitleGeneration
+        guard isCurrent() else { throw CancellationError() }
+        if let track, !track.isEmbedded {
+            guard let url = track.externalURL else { return false }
+            let format = track.codec.lowercased()
+            guard ["srt", "vtt", "ass", "ssa"].contains(format) else {
+                throw ExternalSubtitlePreparationError.unsupportedFormat
+            }
+            let policy = ExternalSubtitlePreparationPolicy()
+            let download = Task {
+                try await Self.downloadProviderSubtitle(
+                    url, headers: track.externalHTTPHeaders ?? [:],
+                    format: format, maximumBytes: policy.maximumFileBytes)
+            }
+            providerSubtitleDownload = download
+            defer {
+                if generation == providerSubtitleGeneration { providerSubtitleDownload = nil }
+            }
+            let file = try await withTaskCancellationHandler {
+                try await download.value
+            } onCancel: {
+                download.cancel()
+            }
+            var installed = false
+            defer { if !installed { try? FileManager.default.removeItem(at: file) } }
+            try Task.checkCancellation()
+            guard generation == providerSubtitleGeneration, isCurrent() else { throw CancellationError() }
+            let candidate = try await engine.prepareExternalSubtitle(ExternalSubtitleTrack(
+                url: file, name: track.extendedTitle ?? track.title, language: track.language,
+                isForced: track.isForced, isHearingImpaired: track.isHearingImpaired,
+                isDefault: track.isDefault, httpHeaders: [:], formatHint: format), policy: policy)
+            defer { candidate.discard() }
+            let nativeItem = engine.currentAVPlayer?.currentItem
+            let nativeLegibleGroup: AVMediaSelectionGroup?
+            if let nativeItem {
+                nativeLegibleGroup = try await nativeItem.asset.loadMediaSelectionGroup(for: .legible)
+            } else {
+                nativeLegibleGroup = nil
+            }
+            try Task.checkCancellation()
+            guard generation == providerSubtitleGeneration, isCurrent(),
+                  engine.currentAVPlayer?.currentItem === nativeItem else { throw CancellationError() }
+            let registered = try engine.commitExternalSubtitle(candidate)
+            // HLS can still have the old injected rendition selected. Clear
+            // that native option only after the prepared overlay commit wins.
+            if let nativeItem, let nativeLegibleGroup {
+                nativeItem.select(nil, in: nativeLegibleGroup)
+            }
+            // Commit and cleanup do not suspend. Failure above leaves the old
+            // registry, decoded cues, active file and timeline offset untouched.
+            externalSubtitleTimelineOffset = timelineOffset
+            removeProviderExternalSubtitles(except: registered.id)
+            removeProviderSubtitleFile()
+            providerSubtitleFile = file
+            installed = true
+            return true
+        }
+        if let track {
+            guard let index = track.nativeStreamIndex,
+                  engine.subtitleTracks.contains(where: { !$0.isExternal && $0.id == index }) else { return false }
+            engine.selectSubtitleTrack(index: index)
+        } else {
+            engine.clearSubtitle()
+        }
+        externalSubtitleTimelineOffset = timelineOffset
+        removeProviderExternalSubtitles()
+        removeProviderSubtitleFile()
+        return true
+    }
+
+    func invalidateProviderSubtitlePreparation() {
+        providerSubtitleGeneration &+= 1
+        providerSubtitleDownload?.cancel()
+        providerSubtitleDownload = nil
+    }
+
+    private func removeProviderExternalSubtitles(except retainedID: Int? = nil) {
+        while let old = engine.subtitleTracks.first(where: { $0.isExternal && $0.id != retainedID }) {
+            engine.removeExternalSubtitleTrack(id: old.id)
+        }
+    }
+
+    private func removeProviderSubtitleFile() {
+        if let providerSubtitleFile { try? FileManager.default.removeItem(at: providerSubtitleFile) }
+        providerSubtitleFile = nil
+    }
+
+    /// Match the host's existing bounded AsyncBytes download pattern. Never
+    /// forward credentials through redirects or reuse cached, uncorrected bytes.
+    private nonisolated static func downloadProviderSubtitle(
+        _ url: URL, headers: [String: String], format: String, maximumBytes: Int
+    ) async throws -> URL {
+        let data: Data
+        if url.isFileURL {
+            let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true, values.isSymbolicLink != true,
+                  let size = values.fileSize, size > 0, size <= maximumBytes else {
+                throw ExternalSubtitlePreparationError.resourceLimit
+            }
+            data = try Data(contentsOf: url, options: .uncached)
+        } else {
+            let session = URLSession(configuration: .ephemeral,
+                                     delegate: ProviderSubtitleNoRedirects(), delegateQueue: nil)
+            defer { session.invalidateAndCancel() }
+            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+            request.allHTTPHeaderFields = headers
+            let (bytes, response) = try await session.bytes(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, response.url == url else {
+                throw ExternalSubtitlePreparationError.decodeFailed
+            }
+            guard response.expectedContentLength <= Int64(maximumBytes) else {
+                throw ExternalSubtitlePreparationError.resourceLimit
+            }
+            var result = Data()
+            result.reserveCapacity(min(maximumBytes, 256 * 1024))
+            var chunk = [UInt8]()
+            chunk.reserveCapacity(64 * 1024)
+            for try await byte in bytes {
+                chunk.append(byte)
+                if chunk.count == 64 * 1024 {
+                    try Task.checkCancellation()
+                    guard result.count <= maximumBytes - chunk.count else {
+                        throw ExternalSubtitlePreparationError.resourceLimit
+                    }
+                    result.append(contentsOf: chunk)
+                    chunk.removeAll(keepingCapacity: true)
+                }
+            }
+            guard result.count <= maximumBytes - chunk.count else {
+                throw ExternalSubtitlePreparationError.resourceLimit
+            }
+            result.append(contentsOf: chunk)
+            data = result
+        }
+        guard !data.isEmpty else { throw ExternalSubtitlePreparationError.empty }
+        guard data.count <= maximumBytes else { throw ExternalSubtitlePreparationError.resourceLimit }
+        try Task.checkCancellation()
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rivulet-caption-\(UUID().uuidString)").appendingPathExtension(format)
+        do {
+            try data.write(to: file, options: .atomic)
+            try Task.checkCancellation()
+            return file
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            throw error
         }
     }
 
@@ -1690,5 +1876,13 @@ struct AetherAdvancedStats {
             && serverBytesSentLifetime == nil && serverRequestCount == nil
             && demuxerBytesFetched == nil && audioBridgeLiveBytes == nil
             && rssMb == nil
+    }
+}
+
+private final class ProviderSubtitleNoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }

@@ -170,7 +170,7 @@ enum SettingsContent {
     private static var serverRuns: [(name: String, kind: MediaProviderKind, providerID: String?)] {
         [(PlexAuthManager.shared.savedServerName ?? "Plex", .plex, nil)]
             + ServerDataStore.shared.sources.map { source in
-                (source.name, source.providerID.hasPrefix("jellyfin:") ? .jellyfin : .plex, source.providerID)
+                (source.name, MediaProviderRegistry.shared.provider(for: source.providerID)?.kind ?? .plex, source.providerID)
             }
     }
 
@@ -195,6 +195,10 @@ enum SettingsContent {
         case .plex:        return plex
         case .plexServerDetail: return plexServerDetail
         case .jellyfin:    return jellyfin
+        case .silo:        return silo
+        case .siloProfiles: return siloProfiles
+        case .siloProfilePIN: return siloProfilePIN
+        case .siloSubtitleLanguagePicker: return SiloPlaybackSettingsContent.siloSubtitleLanguagePicker
         case .libraries:   return libraries
         case .homeRows:    return homeRows
         case .cache:       return cache
@@ -767,7 +771,9 @@ enum SettingsContent {
                 id: "jellyfinServer", title: "Jellyfin Server",
                 kind: .navigationAction(.jellyfin,
                                         value: { JellyfinSession.account?.serverName ?? "" },
-                                        prepare: { addSourceDraft = AddSourceDraft() }))
+                                        prepare: { addSourceDraft = AddSourceDraft() })),
+            SettingsRowItem(id: "siloServer", title: "Silo Server",
+                            kind: .navigationValue(.silo, value: { SiloSession.account?.serverName ?? "" }))
         ]
     }
 
@@ -858,6 +864,9 @@ enum SettingsContent {
             let kind = connection.relay ? "Relay" : connection.local ? "Local" : "Remote"
             rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? "\(kind), Secure" : kind))
         }
+        if let machineID = server.machineIdentifier {
+            rows.insert(serverLibrariesToggle(id: "plexServerLibraries", providerID: "plex:\(machineID)"), at: 1)
+        }
         let ds = LiveTVDataStore.shared
         if let id = server.machineIdentifier, ds.plexMachineIDs.values.contains(id) {
             rows.insert(plexLiveTVToggle(id: "plexServerLiveTV", machineID: id), at: 1)
@@ -878,6 +887,13 @@ enum SettingsContent {
             }
         })))
         return rows
+    }
+
+    static func serverLibrariesToggle(id: String, providerID: String) -> SettingsRowItem {
+        SettingsRowItem(id: id, title: "Show Libraries", kind: .toggle(
+            get: { LibrarySettingsManager.shared.areServerLibrariesVisible(providerID) },
+            set: { LibrarySettingsManager.shared.setServerLibrariesVisible($0, providerID: providerID) },
+            didChange: { _, vc in (vc as? SettingsPageViewController)?.reloadRows() }))
     }
 
     /// Shows or hides a Plex server's DVR in Live TV (#406), from either settings page.
@@ -1155,7 +1171,7 @@ enum SettingsContent {
                 kind = .toggle(get: { LibrarySettingsManager.shared.isPlaylistsRowVisible(key) },
                                set: { LibrarySettingsManager.shared.setPlaylistsRow(key, visible: $0, allKeys: playlistKeys) })
             default:
-                kind = .toggle(get: { LibrarySettingsManager.shared.isLibraryVisible(key) },
+                kind = .toggle(get: { !LibrarySettingsManager.shared.hiddenLibraryKeys.contains(key) },
                                set: { _ in LibrarySettingsManager.shared.toggleVisibility(for: key) })
             }
             // Hold Select to grab + reorder (Apple-Home style). The page VC

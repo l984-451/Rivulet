@@ -28,6 +28,8 @@ struct MediaSource: Hashable, Sendable, Identifiable {
 
     let streamKind: StreamKind
     let streamURL: URL?            // nil until provider.resolveStream(for:) materializes it
+    /// Nil uses legacy item-level chapters; an explicit empty list means this version has none.
+    var chapters: [MediaChapter]? = nil
 
     enum StreamKind: Sendable, Hashable, Codable {
         case directPlay
@@ -53,7 +55,8 @@ extension MediaSource {
         case .hdr10Plus: return ["HDR10+"]
         case .hdr10: return video.hasHDR10Plus ? ["HDR10+"] : ["HDR"]
         case .hlg: return ["HLG"]
-        case .sdr: return []
+        case .hdr: return ["HDR"]
+        case .sdr, .unknown: return []
         }
     }
 
@@ -79,6 +82,73 @@ extension MediaSource {
         case 576:  return scan("576")
         case 480:  return scan("480")
         default:   return nil
+        }
+    }
+
+
+    var technicalInformation: [(String, String)] {
+        var rows: [(String, String)] = []
+        if let container, !container.isEmpty { rows.append(("Container", container.uppercased())) }
+        if let fileName, !fileName.isEmpty { rows.append(("File", fileName)) }
+        if duration.isFinite, duration > 0 { rows.append(("File Duration", String(format: "%.0f s", duration))) }
+        if let fileSize, fileSize > 0 {
+            rows.append(("File Size", ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)))
+        }
+        if let bitrate, bitrate > 0 { rows.append(("Bitrate", String(format: "%.2f Mbps", Double(bitrate) / 1_000_000))) }
+        for (index, video) in videoTracks.enumerated() {
+            let name = videoTracks.count > 1 ? "Video \(index + 1)" : "Video"
+            let codec = [video.codec == "unknown" ? nil : video.codec.uppercased(), video.profile]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            if !codec.isEmpty { rows.append((name, codec)) }
+            if let range = video.sourceRangeLabel { rows.append(("Dynamic Range", range)) }
+            if video.hasHDR10Plus, video.videoRange != .hdr10Plus { rows.append(("HDR10+", "Yes")) }
+            if let base = video.compatibleRangeLabel { rows.append(("Compatible Base Range", base)) }
+            if let width = video.width, let height = video.height, width > 0, height > 0 {
+                rows.append(("Dimensions", "\(width) × \(height)"))
+            } else if let resolutionBadge { rows.append(("Resolution", resolutionBadge)) }
+            if let rate = video.frameRate, rate.isFinite, rate > 0 { rows.append(("Frame Rate", String(format: "%.3f fps", rate))) }
+            if let level = video.level, level > 0 { rows.append(("Video Codec Level", "\(level)")) }
+            if let bitrate = video.bitrate, bitrate > 0 {
+                rows.append(("Video Bitrate", String(format: "%.2f Mbps", Double(bitrate) / 1_000_000)))
+            }
+            if let scan = video.scanType, !scan.isEmpty { rows.append(("Scan", scan.capitalized)) }
+            if let depth = video.bitDepth, depth > 0 { rows.append(("Video Bit Depth", "\(depth)-bit")) }
+            if let value = video.aspectRatio { rows.append(("Aspect Ratio", value)) }
+            if let value = video.pixelFormat { rows.append(("Pixel Format", value)) }
+            if let value = video.colorPrimaries { rows.append(("Color Primaries", value)) }
+            if let value = video.colorTransfer { rows.append(("Transfer", value)) }
+            if let value = video.colorSpace { rows.append(("Color Space", value)) }
+            if let value = video.colorRange { rows.append(("Color Range", value)) }
+            if let level = video.dolbyVisionLevel, level > 0 { rows.append(("Dolby Vision Level", "\(level)")) }
+            if let compat = video.dolbyVisionCompatibilityID { rows.append(("Dolby Vision Compatibility ID", "\(compat)")) }
+        }
+        for (index, audio) in audioTracks.enumerated() {
+            var facts = [audio.qualityLabel]
+            if let language = audio.language, !language.isEmpty { facts.append(language) }
+            if let rate = audio.samplingRate, rate > 0 { facts.append("\(rate) Hz") }
+            if let depth = audio.bitDepth, depth > 0 { facts.append("\(depth)-bit") }
+            if let bitrate = audio.bitrate, bitrate > 0 { facts.append("\(bitrate / 1000) kbps") }
+            rows.append(("Audio \(index + 1)", facts.joined(separator: " · ")))
+        }
+        return rows
+    }
+}
+
+extension VideoTrack {
+    var sourceRangeLabel: String? {
+        switch videoRange {
+        case .unknown: return nil
+        case .sdr: return "SDR"
+        case .hdr: return "HDR"
+        case .hdr10: return "HDR10"
+        case .hdr10Plus: return "HDR10+"
+        case .hlg: return "HLG"
+        case .dolbyVision(let profile):
+            var label = profile > 0 ? "Dolby Vision P\(profile)" : "Dolby Vision"
+            if let layer = dolbyVisionEnhancementLayer?.lowercased(), ["fel", "mel"].contains(layer) {
+                label += " \(layer.uppercased())"
+            }
+            return label
         }
     }
 }

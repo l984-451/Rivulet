@@ -139,6 +139,9 @@ final class SettingsPageViewController: UIViewController {
     private var hasAppeared = false
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if page == .silo, let account = SiloSession.account, let provider = SiloSession.storedProvider() {
+            SiloPlaybackSettingsContent.refresh(provider: provider, account: account) { [weak self] in self?.reloadRows() }
+        }
         // On RE-appearance (e.g. returning from a presented modal like the
         // Plex sign-in sheet), rebuild rows so the page reflects new state
         // (Connect → Sign Out) and refreshed values. Skip the first appear

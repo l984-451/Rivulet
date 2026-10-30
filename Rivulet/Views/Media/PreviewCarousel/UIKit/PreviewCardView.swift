@@ -98,6 +98,7 @@ final class PreviewCardView: UICollectionViewCell {
 
     /// The shelf-peek reserve (`carouselChromeShelfPeek`), the same in both modes.
     private var chromeBottomConstraint: NSLayoutConstraint!
+    private var chromeTopConstraint: NSLayoutConstraint!
 
     // MARK: - Init
 
@@ -136,6 +137,7 @@ final class PreviewCardView: UICollectionViewCell {
             equalTo: contentView.bottomAnchor,
             constant: -PreviewCarouselGeometry.carouselChromeShelfPeek
         )
+        chromeTopConstraint = chromeView.topAnchor.constraint(greaterThanOrEqualTo: contentView.topAnchor, constant: 40)
 
         NSLayoutConstraint.activate([
             // Vignette covers the full card; gradient stops do the fade.
@@ -188,6 +190,7 @@ final class PreviewCardView: UICollectionViewCell {
         vignetteContainer.alpha = 0
         chromeView.chromeAlpha = 0
         chromeView.reset()
+        onDetailArtwork = nil
         item = nil
     }
 
@@ -197,6 +200,7 @@ final class PreviewCardView: UICollectionViewCell {
     func setIsCurrent(_ current: Bool, animated: Bool) {
         guard isCurrent != current || !animated else { return }
         isCurrent = current
+        chromeView.isDescriptionTranslationActive = current
         cascadeToken &+= 1
         let token = cascadeToken
 
@@ -264,6 +268,7 @@ final class PreviewCardView: UICollectionViewCell {
     var onPlayVersion: ((MediaItem, String) -> Void)?
     /// Info button → show the structured info popup (carries the loaded detail).
     var onShowInfo: ((MediaItemDetail) -> Void)?
+    var onDetailArtwork: ((MediaItemRef, MediaArtwork) -> Void)?
 
     /// Repaint the hero chrome's watch-derived bits from a re-fetched copy of
     /// the same item, without rebuilding the card (issue #228). Also updates
@@ -297,6 +302,10 @@ final class PreviewCardView: UICollectionViewCell {
         chromeView.onShowFullDescription = { [weak self] detail in
             self?.onShowInfo?(detail)
         }
+        chromeView.onDetailArtwork = { [weak self] ref, artwork in
+            guard let self, self.item?.ref == ref else { return }
+            self.onDetailArtwork?(ref, artwork)
+        }
     }
 
     // MARK: - Expand state
@@ -310,6 +319,7 @@ final class PreviewCardView: UICollectionViewCell {
             : PreviewCarouselGeometry.carouselChromeInset
         chromeLeadingConstraint.constant = inset
         chromeTrailingConstraint.constant = -inset
+        chromeTopConstraint.isActive = expanded
         chromeView.mode = expanded ? .expandedDetail : .carouselStable
         // The centred card's hairline fades out as it grows to fullscreen.
         hairlineView.alpha = expanded ? 0 : 1

@@ -31,6 +31,11 @@ final class SettingsContainerViewController: UIViewController {
     private let slideDistance: CGFloat = 72
     private let transitionDuration: TimeInterval = 0.67
     private var isAnimating = false
+    private enum Navigation {
+        case push(SettingsPage)
+        case pop(Int)
+    }
+    private var pendingNavigation: Navigation?
 
     var depth: Int { pages.count }
 
@@ -61,6 +66,7 @@ final class SettingsContainerViewController: UIViewController {
         super.viewDidLoad()
         if drawsBackdrop { installBackdrop() } else { view.backgroundColor = .clear }
         setupLayout()
+        if rootPage == .silo { SettingsContent.beginSiloFlow() }
         let root = makePage(rootPage)
         pages = [root]
         installPageView(root, into: rightPane)
@@ -108,6 +114,14 @@ final class SettingsContainerViewController: UIViewController {
         super.viewDidAppear(animated)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if view.window == nil, presentedViewController == nil,
+           pages.contains(where: { $0.page.isSiloFlow }) {
+            SettingsContent.cancelSiloFlow()
+        }
     }
 
     private func setupLayout() {
@@ -163,10 +177,13 @@ final class SettingsContainerViewController: UIViewController {
 
     private func makePage(_ page: SettingsPage) -> SettingsPageViewController {
         let vc = SettingsPageViewController(page: page)
-        vc.onPush = { [weak self] target in self?.push(target) }
+        vc.onPush = { [weak self, weak vc] target in
+            guard let self, let vc, self.topPage === vc else { return }
+            self.push(target)
+        }
         // A page closes itself after async work (a sign-in, an add-source
         // check) too, by which time the user may have left it. Only the page
-        // on screen may pop; Menu goes through `pop()` directly.
+        // on screen may navigate; Menu goes through `pop()` directly.
         vc.onPop = { [weak self, weak vc] in
             guard let self, let vc, self.topPage === vc else { return }
             self.pop()
@@ -175,7 +192,10 @@ final class SettingsContainerViewController: UIViewController {
             guard let self, let vc, self.topPage === vc else { return }
             self.pop(levels: 2)
         }
-        vc.onFocusRow = { [weak self] id in self?.leftPanel.show(id: id) }
+        vc.onFocusRow = { [weak self, weak vc] id in
+            guard let self, let vc, self.topPage === vc else { return }
+            self.leftPanel.show(id: id)
+        }
         return vc
     }
 
@@ -195,14 +215,19 @@ final class SettingsContainerViewController: UIViewController {
     // MARK: - Navigation
 
     func push(_ page: SettingsPage) {
-        guard !isAnimating else { return }
+        if isAnimating {
+            pendingNavigation = .push(page)
+            return
+        }
+        if page == .silo, topPage?.page.isSiloFlow != true { SettingsContent.beginSiloFlow() }
+        if topPage?.page.isSiloFlow == true, !page.isSiloFlow { SettingsContent.cancelSiloFlow() }
         let newVC = makePage(page)
         let oldVC = topPage
         pages.append(newVC)
         installPageView(newVC, into: rightPane)
         rightPane.layoutIfNeeded()
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
         updateChrome(for: page, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -210,15 +235,34 @@ final class SettingsContainerViewController: UIViewController {
     /// Pops `levels` pages in one transition: the pages between are dropped
     /// unseen (they hold no view while covered).
     func pop(levels: Int = 1) {
-        if pages.count <= levels, let onExit { onExit(); return }
-        guard !isAnimating, pages.count > levels else { return }
+        // The incoming page already accepts focus and asynchronous form results.
+        if isAnimating {
+            if case let .pop(pendingLevels)? = pendingNavigation {
+                pendingNavigation = .pop(max(pendingLevels, levels))
+            } else {
+                pendingNavigation = .pop(levels)
+            }
+            return
+        }
+        if pages.count <= levels, let onExit {
+            if let page = topPage?.page, page.isSiloFlow {
+                SettingsContent.leaveSiloPage(page)
+                SettingsContent.cancelSiloFlow()
+            }
+            onExit()
+            return
+        }
+        guard pages.count > levels else { return }
         for _ in 1..<max(levels, 1) {
             let skipped = pages.remove(at: pages.count - 2)
+            if skipped.page.isSiloFlow { SettingsContent.leaveSiloPage(skipped.page) }
             skipped.willMove(toParent: nil)
             skipped.removeFromParent()
         }
         let oldVC = pages.removeLast()
+        if oldVC.page.isSiloFlow { SettingsContent.leaveSiloPage(oldVC.page) }
         let newVC = topPage
+        if oldVC.page.isSiloFlow, newVC?.page.isSiloFlow != true { SettingsContent.cancelSiloFlow() }
         if let newVC {
             installPageView(newVC, into: rightPane)
             // Rebuild the kept page's rows (the pushed page may have changed
@@ -228,8 +272,8 @@ final class SettingsContainerViewController: UIViewController {
             newVC.collectionView?.layoutIfNeeded()
             rightPane.layoutIfNeeded()
         }
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateChrome(for: topPage?.page ?? rootPage, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -271,6 +315,14 @@ final class SettingsContainerViewController: UIViewController {
                 outgoing?.view.alpha = 1
             }
             self.isAnimating = false
+            if let navigation = self.pendingNavigation {
+                self.pendingNavigation = nil
+                switch navigation {
+                case let .push(page): self.push(page)
+                case let .pop(levels): self.pop(levels: levels)
+                }
+                return
+            }
             // Defense-in-depth: if the start-of-transition focus request raced
             // the incoming collection's layout and focus settled to nil, land
             // it now (the incoming is opaque + laid out). Guard on nil so we

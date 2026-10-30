@@ -95,7 +95,7 @@ nonisolated struct ShowExternalIDs: Sendable, Equatable {
 }
 
 /// Canonical categories for Plex extras. Declaration order is render order.
-enum ExtraSubtype: Int, CaseIterable, Sendable, Comparable {
+nonisolated enum ExtraSubtype: Int, CaseIterable, Sendable, Comparable {
     case trailer
     case featurette
     case behindTheScenes

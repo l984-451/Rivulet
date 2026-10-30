@@ -14,6 +14,7 @@ final class LibrarySettingsProviderScopeTests: XCTestCase {
     private let plexProfileA = 990_001
     private let plexProfileB = 990_002
     private var savedHidden: Set<String> = []
+    private var savedHiddenServers: Set<String> = []
     private var savedOrder: [String] = []
     private var savedPlexUser: Int?
 
@@ -25,6 +26,7 @@ final class LibrarySettingsProviderScopeTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         savedHidden = settings.hiddenLibraryKeys
+        savedHiddenServers = settings.hiddenLibraryServerIDs
         savedOrder = settings.libraryOrder
         savedPlexUser = UserDefaults.standard.object(forKey: "selectedPlexUserId") as? Int
     }
@@ -32,12 +34,14 @@ final class LibrarySettingsProviderScopeTests: XCTestCase {
     override func tearDown() async throws {
         let defaults = UserDefaults.standard
         for key in defaults.dictionaryRepresentation().keys
-        where key.contains(provider) || key.hasSuffix("_user_\(plexProfileA)") || key.hasSuffix("_user_\(plexProfileB)") {
+        where key.contains(provider) || key.contains("silo:scope-test:profile")
+            || key.hasSuffix("_user_\(plexProfileA)") || key.hasSuffix("_user_\(plexProfileB)") {
             defaults.removeObject(forKey: key)
         }
         settings.setProviderScopes([])
         settings.switchToUser(savedPlexUser)
         settings.hiddenLibraryKeys = savedHidden
+        settings.hiddenLibraryServerIDs = savedHiddenServers
         settings.libraryOrder = savedOrder
         try await super.tearDown()
     }
@@ -86,5 +90,76 @@ final class LibrarySettingsProviderScopeTests: XCTestCase {
 
         let plexList = UserDefaults.standard.array(forKey: "hiddenLibraryKeys_user_\(plexProfileA)") as? [String]
         XCTAssertEqual(plexList, ["7"])
+    }
+
+    func test_serverGate_preservesLibraryChoicesAndOrder_andHidesNewLibraries() {
+        settings.setProviderScopes([scope("u1")])
+        let shows = "\(provider)/shows"
+        settings.libraryOrder = [shows, movies]
+        settings.hideLibrary(shows)
+        settings.setServerLibrariesVisible(false, providerID: provider)
+
+        XCTAssertFalse(settings.isLibraryVisible(movies))
+        XCTAssertFalse(settings.isLibraryVisible("\(provider)/new"))
+        XCTAssertTrue(settings.isLibraryVisible("silo:other/profile/movies"))
+        XCTAssertEqual(settings.libraryOrder, [shows, movies])
+        XCTAssertTrue(settings.hiddenLibraryKeys.contains(shows))
+        XCTAssertFalse(settings.hiddenLibraryKeys.contains(movies))
+
+        settings.setServerLibrariesVisible(true, providerID: provider)
+        XCTAssertTrue(settings.isLibraryVisible(movies))
+        XCTAssertFalse(settings.isLibraryVisible(shows))
+        XCTAssertTrue(settings.isLibraryVisible("\(provider)/new"))
+        XCTAssertEqual(settings.libraryOrder, [shows, movies])
+    }
+
+    func test_nativeServerGate_reloadsForItsOwnAccount_notPlexProfile() {
+        settings.switchToUser(plexProfileA)
+        settings.setProviderScopes([scope("u1")])
+        settings.setServerLibrariesVisible(false, providerID: provider)
+        settings.switchToUser(plexProfileB)
+        XCTAssertFalse(settings.isLibraryVisible(movies))
+
+        settings.setProviderScopes([scope("u2")])
+        XCTAssertTrue(settings.isLibraryVisible(movies))
+        settings.setProviderScopes([])
+        settings.setProviderScopes([scope("u1")])
+        XCTAssertFalse(settings.isLibraryVisible(movies), "reopening the account restores its server gate")
+    }
+
+    func test_siloServerGate_restoresTheSelectedProfilesOwnVisibility() {
+        let silo = "silo:scope-test:profile"
+        settings.setProviderScopes([.init(providerID: silo, accountID: "profile-a")])
+        settings.setServerLibrariesVisible(false, providerID: silo)
+        XCTAssertFalse(settings.isLibraryVisible("\(silo)/movies"))
+
+        settings.setProviderScopes([.init(providerID: silo, accountID: "profile-b")])
+        XCTAssertTrue(settings.isLibraryVisible("\(silo)/movies"))
+        settings.switchToUser(plexProfileB)
+        settings.setProviderScopes([.init(providerID: silo, accountID: "profile-a")])
+        XCTAssertFalse(settings.isLibraryVisible("\(silo)/new-library"))
+    }
+
+    func test_plexServerGate_followsProfile_andAppliesToSelectedAndSecondaryKeys() {
+        let registry = MediaProviderRegistry.shared
+        let previous = registry.plexProvider
+        let plex = StubMediaProvider(id: "plex:scope-test", kind: .plex)
+        registry.register(plex)
+        defer {
+            registry.unregister(providerID: plex.id)
+            if let previous { registry.register(previous) }
+        }
+        settings.switchToUser(plexProfileA)
+        settings.setServerLibrariesVisible(false, providerID: plex.id)
+        XCTAssertFalse(settings.isLibraryVisible("7"), "selected-server section keys use the same gate")
+        XCTAssertFalse(settings.isLibraryVisible("\(plex.id)/7"), "the gate survives moving to a secondary role")
+        XCTAssertTrue(settings.isLibraryVisible("plex:another/7"))
+
+        settings.switchToUser(plexProfileB)
+        XCTAssertTrue(settings.isLibraryVisible("7"))
+        settings.switchToUser(plexProfileA)
+        XCTAssertFalse(settings.isLibraryVisible("7"))
+        settings.setServerLibrariesVisible(true, providerID: plex.id)
+        XCTAssertTrue(settings.isLibraryVisible("7"))
     }
 }

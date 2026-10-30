@@ -18,6 +18,7 @@ final class AboutCollectionCell: UICollectionViewCell {
     private let titleLabel = UILabel()
     private let genresLabel = UILabel()
     private let synopsisLabel = UILabel()
+    private let descriptionAttribution = DescriptionTranslationView()
 
     // Right card = Common Sense Media advisory (inline: age + seal + one-liner;
     // full topic dots + paragraph live in the popup), content-rating fallback.
@@ -37,7 +38,7 @@ final class AboutCollectionCell: UICollectionViewCell {
     private let paragraphLabel = UILabel()
     private let fallbackCaption = UILabel()
 
-    // Review scores beside the advisory: two columns of three; select → ratings popup.
+    // Review scores wrap to the card's measured width; select → ratings popup.
     private let ratingsCard = AboutCardControl()
     private let ratingsGrid = RatingsGridView()
 
@@ -76,8 +77,11 @@ final class AboutCollectionCell: UICollectionViewCell {
         synopsisLabel.translatesAutoresizingMaskIntoConstraints = false
         synopsisLabel.font = .systemFont(ofSize: 25, weight: .semibold)
         synopsisLabel.textColor = UIColor.white.withAlphaComponent(0.85)
-        synopsisLabel.numberOfLines = 6
+        synopsisLabel.numberOfLines = 3
+        synopsisLabel.lineBreakMode = .byTruncatingTail
         leftCard.addSubview(synopsisLabel)
+        descriptionAttribution.translatesAutoresizingMaskIntoConstraints = false
+        leftCard.addSubview(descriptionAttribution)
 
         // Advisory vertical stack.
         advisoryStack.translatesAutoresizingMaskIntoConstraints = false
@@ -162,6 +166,10 @@ final class AboutCollectionCell: UICollectionViewCell {
             synopsisLabel.topAnchor.constraint(equalTo: genresLabel.bottomAnchor, constant: 14),
             synopsisLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             synopsisLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            descriptionAttribution.topAnchor.constraint(equalTo: synopsisLabel.bottomAnchor, constant: 8),
+            descriptionAttribution.leadingAnchor.constraint(equalTo: synopsisLabel.leadingAnchor),
+            descriptionAttribution.trailingAnchor.constraint(equalTo: synopsisLabel.trailingAnchor),
+            descriptionAttribution.bottomAnchor.constraint(lessThanOrEqualTo: leftCard.bottomAnchor, constant: -22),
 
             advisoryStack.topAnchor.constraint(equalTo: rightCard.topAnchor, constant: 22),
             advisoryStack.leadingAnchor.constraint(equalTo: rightCard.leadingAnchor, constant: 24),
@@ -186,12 +194,22 @@ final class AboutCollectionCell: UICollectionViewCell {
     private static let wideCard = (cardsWidth * 2 / 5).rounded(.down)
     private static let narrowCard = (cardsWidth / 5).rounded(.down)
 
+    static func height(for detail: MediaItemDetail?) -> CGFloat {
+        guard let detail else { return 370 }
+        let grid = RatingsGridView()
+        grid.configure(detail.ratings)
+        return max(370, 94 + grid.sizeThatFits(CGSize(width: wideCard - 48, height: .greatestFiniteMagnitude)).height)
+    }
+
     func configure(detail: MediaItemDetail) {
         currentDetail = detail
         titleLabel.text = detail.item.title
         genresLabel.text = detail.genres.prefix(3).joined(separator: ", ")
         genresLabel.isHidden = detail.genres.isEmpty
         synopsisLabel.text = detail.item.overview
+        descriptionAttribution.configure(isTranslating: false,
+                                         isMachineTranslated: detail.item.overviewIsMachineTranslated == true
+                                            && detail.item.overview?.isEmpty == false)
 
         let advisory = detail.contentAdvisory
         if let a = advisory, a.hasAny {
@@ -228,7 +246,8 @@ final class AboutCollectionCell: UICollectionViewCell {
         guard let ratings = currentDetail?.ratings, !ratings.isEmpty,
               var top = window?.rootViewController else { return }
         while let presented = top.presentedViewController { top = presented }
-        top.present(InfoPopupViewController(content: InfoPopupContent.ratings(ratings), width: 720), animated: true)
+        top.present(InfoPopupViewController(content: InfoPopupContent.ratings(ratings), width: 720,
+                                            scrollable: ratings.contains(where: { $0.nativeDisplay != nil })), animated: true)
     }
     // Focus lives on the cards (AboutCardControl), not the cell itself.
     override var canBecomeFocused: Bool { false }
@@ -588,86 +607,18 @@ private func sectionHeaderLabel(_ text: String) -> UILabel {
 
 // MARK: - Ratings grid
 
-/// Up to six scores, two per row in display order, each in its source's own
-/// format ("83%", "8.7/10", "4.2/5").
-final class RatingsGridView: UIView {
-    private let rows = UIStackView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        rows.axis = .vertical
-        rows.distribution = .fillEqually
-        rows.spacing = 12
-        rows.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(rows)
-        NSLayoutConstraint.activate([
-            rows.topAnchor.constraint(equalTo: topAnchor),
-            rows.leadingAnchor.constraint(equalTo: leadingAnchor),
-            rows.trailingAnchor.constraint(equalTo: trailingAnchor),
-            rows.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
-        ])
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
+/// Shared score presentation for About, carousel, episode and full information.
+/// Each source keeps its own icon, native value and accessible source identity.
+final class RatingsGridView: MediaMetadataFlowView {
     func configure(_ ratings: [MediaRating]) {
-        rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let shown = Array(ratings.prefix(6))
-        for start in stride(from: 0, to: shown.count, by: 2) {
-            let row = UIStackView()
-            row.axis = .horizontal
-            row.distribution = .fillEqually
-            row.spacing = MediaRowMetrics.tileGap
-            for rating in shown[start..<min(start + 2, shown.count)] {
-                row.addArrangedSubview(Self.entry(rating))
-            }
-            if row.arrangedSubviews.count == 1 { row.addArrangedSubview(UIView()) }
-            rows.addArrangedSubview(row)
-        }
+        accessibilityIdentifier = "media.ratings"
+        setItems(ratings.map { MediaRatingChipView(rating: $0) })
     }
 
-    /// Every score on one line, each over its source's name (the info popup's row).
     static func row(_ ratings: [MediaRating]) -> UIView {
-        let row = UIStackView(arrangedSubviews: ratings.prefix(6).map { entry($0, score: 29, scale: 19, name: 16) })
-        row.axis = .horizontal
-        row.alignment = .top
-        // Five or six spread across the popup's width (six need about 600 of its 660); fewer sit left.
-        if row.arrangedSubviews.count >= 5 {
-            row.distribution = .equalSpacing
-            row.spacing = 16
-        } else {
-            row.spacing = 40
-            let spacer = UIView()
-            spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-            row.addArrangedSubview(spacer)
-        }
-        return row
-    }
-
-    static func entry(_ rating: MediaRating, score scoreSize: CGFloat = 38, scale scaleSize: CGFloat = 23,
-                      name nameSize: CGFloat = 19) -> UIView {
-        let score = UILabel()
-        let text = NSMutableAttributedString(
-            string: rating.badgeText,
-            attributes: [.font: UIFont.systemFont(ofSize: scoreSize, weight: .bold), .foregroundColor: UIColor.white])
-        if let scale = rating.scale {
-            text.append(NSAttributedString(
-                string: scale,
-                attributes: [.font: UIFont.systemFont(ofSize: scaleSize, weight: .semibold),
-                             .foregroundColor: UIColor.white.withAlphaComponent(0.6)]))
-        }
-        score.attributedText = text
-
-        let name = UILabel()
-        name.text = rating.name
-        name.font = .systemFont(ofSize: nameSize, weight: .semibold)
-        name.textColor = UIColor.white.withAlphaComponent(0.6)
-
-        let stack = UIStackView(arrangedSubviews: [score, name])
-        stack.axis = .vertical
-        stack.alignment = .leading
-        stack.spacing = 2
-        return stack
+        let grid = RatingsGridView()
+        grid.configure(ratings)
+        return grid
     }
 }
 

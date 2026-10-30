@@ -32,7 +32,7 @@ struct RivuletApp: App {
             let window = note.object as? UIWindow
             MainActor.assumeIsolated { window?.overrideUserInterfaceStyle = .dark }
         }
-        AetherPlayer.settleFELDefault(existingInstall: PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil)
+        AetherPlayer.settleFELDefault(existingInstall: PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil || SiloSession.account != nil)
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
 
@@ -51,6 +51,15 @@ struct RivuletApp: App {
             Task { await ImageCacheManager.shared.clearAll() }
         }
         JellyfinSession.onChanged = { ServerDataStore.shared.reload() }
+        SiloSession.onChanged = {
+            MediaProviderRegistry.shared.populateFromCurrentAuth()
+            NotificationCenter.default.post(name: .mediaProviderAccountsChanged, object: nil)
+            ServerDataStore.shared.reload()
+        }
+        Task { @MainActor in
+            do { try await SiloSession.restore() }
+            catch { DiagLog.error(.servers, "Silo session restoration failed: \(DiagLog.describe(error))") }
+        }
         PlexLiveTimelineKeepalive.releaseOtherSession = { JellyfinLiveTVProvider.closeLiveStream($0) }
         PlexUserProfileManager.onProfileChanged = {
             // The queue reports progress with whichever token is current.
@@ -62,8 +71,8 @@ struct RivuletApp: App {
             MediaProviderRegistry.shared.populateFromCurrentAuth()
             ServerDataStore.shared.reload()
         }
-        ContinueWatchingRow.shared.fetchShowKeys = { providerID, showIDs in
-            await MediaProviderRegistry.shared.provider(for: providerID)?.showIdentityKeys(for: showIDs) ?? [:]
+        ContinueWatchingRow.shared.fetchIdentityKeys = { providerID, itemIDs in
+            await MediaProviderRegistry.shared.provider(for: providerID)?.itemIdentityKeys(for: itemIDs) ?? [:]
         }
         ContinueWatchingRow.shared.onResolved = { await TopShelfFeed.refresh() }
         PlexExtraServers.onChanged = {

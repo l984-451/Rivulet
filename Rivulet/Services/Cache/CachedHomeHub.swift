@@ -18,6 +18,12 @@ nonisolated struct CachedHomeHub: Codable, Sendable {
     /// The library the row belongs to, as `LibrarySettingsManager` keys it, so
     /// Home follows the sidebar's order across servers. nil for Continue Watching.
     var libraryKey: String? = nil
+    /// Native provider metadata; optional so existing Plex disk caches remain readable.
+    var nativeProviderID: String? = nil
+    var providerHubID: String? = nil
+    var style: MediaHub.HubStyle? = nil
+    var nextPage: Page? = nil
+    var canBrowse: Bool? = nil
 }
 
 /// An ordered list of home/library hub rows — the full projection for one

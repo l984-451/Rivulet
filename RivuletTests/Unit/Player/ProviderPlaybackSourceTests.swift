@@ -62,6 +62,123 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         return ProviderPlayback(provider: provider, item: item, detail: detail, stream: stream, extras: PlaybackExtras())
     }
 
+    private func nativeTransitionStream(session: String = "session", file: String = "src",
+                                        relayURL: URL? = nil, origin: URL? = nil,
+                                        headers: [String: String] = [:], audio: String = "audio:0",
+                                        delivery: MediaDelivery = .original,
+                                        subtitle: ProviderSubtitleDelivery = .sidecar,
+                                        recipe: MediaEffectiveRecipe? = nil, quality: String? = nil) -> StreamInfo {
+        let nativeSource = MediaSource(id: file, container: "mkv", duration: 100,
+            bitrate: nil, fileSize: nil, fileName: nil, videoResolution: nil,
+            videoTracks: [], audioTracks: [], subtitleTracks: [], streamKind: .directPlay,
+            streamURL: relayURL ?? directURL)
+        var result = StreamInfo(source: nativeSource, playSessionID: session, trackInfoAvailable: true)
+        result.prefersAetherPlayback = true
+        result.canSelectTracksLocally = false
+        result.videoTransport = ProviderVideoTransport(
+            url: origin ?? directURL, headers: headers, delivery: delivery, container: "mkv",
+            recipe: recipe, qualityID: quality, audioID: audio)
+        result.subtitleDelivery = subtitle
+        return result
+    }
+
+    func test_nativeSubtitleSwitchRetainsVideoAcrossSidecarEmbeddedAndOff() {
+        let playing = nativeTransitionStream()
+        for subtitle in [ProviderSubtitleDelivery.sidecar, .embedded, .off] {
+            let next = nativeTransitionStream(subtitle: subtitle)
+            XCTAssertEqual(ProviderStreamTransition.between(playing, next), .cuesOnly)
+        }
+        // Relay addresses and initial player-start recommendations can rotate
+        // on a new plan without changing the already playing canonical stream.
+        var next = nativeTransitionStream(relayURL: URL(string: "http://127.0.0.1:9001/new-relay")!)
+        next.playerStartTime = 72
+        XCTAssertEqual(ProviderStreamTransition.between(playing, next), .cuesOnly)
+    }
+
+    func test_nativeTransportAuthorizationAudioAndTimelineChangesRequireOwnedReload() {
+        let playing = nativeTransitionStream()
+        let changes = [
+            nativeTransitionStream(origin: hlsURL),
+            nativeTransitionStream(headers: ["Authorization": "Bearer replacement"]),
+            nativeTransitionStream(audio: "audio:1"),
+            nativeTransitionStream(subtitle: .hlsRendition)
+        ]
+        for next in changes {
+            XCTAssertEqual(ProviderStreamTransition.between(playing, next), .reloadPreservingDisplay)
+        }
+        var reanchored = playing
+        reanchored.timelineOffset = 60
+        reanchored.canSeekAnywhere = false
+        XCTAssertEqual(ProviderStreamTransition.between(playing, reanchored), .reloadPreservingDisplay)
+    }
+
+    func test_nativeNewSourceSessionAndBurnInCannotInheritDisplayOwnership() {
+        let playing = nativeTransitionStream()
+        for next in [
+            nativeTransitionStream(session: "another-session"),
+            nativeTransitionStream(file: "another-file"),
+            nativeTransitionStream(delivery: .hlsRemux),
+            nativeTransitionStream(subtitle: .video),
+            nativeTransitionStream(quality: "720p")
+        ] {
+            XCTAssertEqual(ProviderStreamTransition.between(playing, next), .reload)
+        }
+        let burnedIn = nativeTransitionStream(subtitle: .video)
+        XCTAssertEqual(ProviderStreamTransition.between(burnedIn, playing), .reload)
+    }
+
+    private func recipe(dynamicRange: String) -> MediaEffectiveRecipe {
+        MediaEffectiveRecipe(videoCodec: "hevc", videoSampleEntry: "hvc1", segmentContainer: "fmp4",
+            audioCodec: "aac", width: 3840, height: 2160, frameRate: 24, bitrateKbps: 20_000,
+            dynamicRange: dynamicRange, audioChannels: 2, audioLayout: "stereo")
+    }
+
+    func test_nativeTranscodeRequiresKnownUnchangedVideoRecipeToKeepDisplay() {
+        let dv = nativeTransitionStream(delivery: .hlsTranscode, recipe: recipe(dynamicRange: "dolby_vision"))
+        let sameVideo = nativeTransitionStream(origin: hlsURL, delivery: .hlsTranscode,
+                                              recipe: recipe(dynamicRange: "dolby_vision"))
+        XCTAssertEqual(ProviderStreamTransition.between(dv, sameVideo), .reloadPreservingDisplay)
+        XCTAssertEqual(ProviderStreamTransition.between(dv, dv), .cuesOnly)
+        let sdr = nativeTransitionStream(delivery: .hlsTranscode, recipe: recipe(dynamicRange: "sdr"))
+        XCTAssertEqual(ProviderStreamTransition.between(dv, sdr), .reload)
+        let unknown = nativeTransitionStream(delivery: .hlsTranscode)
+        XCTAssertEqual(ProviderStreamTransition.between(unknown, unknown), .reload)
+    }
+
+    func test_nativePlanSeedsSubtitleAndRejectsUnadvertisedQuality() {
+        let provider = SiloProvider(serverID: "server", displayName: "Silo", profileID: "profile",
+            client: SiloClient(baseURL: URL(string: "https://media.invalid")!, profileID: "profile"))
+        let nativeSource = MediaSource(id: "file-1", container: "mkv", duration: 100,
+            bitrate: nil, fileSize: nil, fileName: "Sample.mkv", videoResolution: "1080",
+            videoTracks: [], audioTracks: [], subtitleTracks: [
+                subtitle("11", index: 5, codec: "srt", language: "eng", title: "English", external: nil)
+            ], streamKind: .directPlay, streamURL: URL(string: "https://media.invalid/video"))
+        var planned = StreamInfo(source: nativeSource, playSessionID: "session-1", trackInfoAvailable: true)
+        planned.authoritativeSubtitleSelection = .track(id: "11", index: 5)
+        planned.negotiatedStatus = MediaNegotiatedStatus(delivery: .original,
+            availableQualities: [MediaQuality(id: "safe", displayName: "Safe", height: nil,
+                bitrateKbps: 1_200, preservesSource: false)], activeQualityID: "safe",
+            effectiveRecipe: nil, decisionReason: nil, degradationWarnings: [],
+            bandwidthLimit: nil, headerRefreshURL: nil)
+        let fixture = JellyfinFixtures.mediaItem("m1")
+        let item = MediaItem(ref: MediaItemRef(providerID: provider.id, itemID: "m1"),
+            kind: fixture.kind, title: fixture.title, sortTitle: fixture.sortTitle,
+            overview: fixture.overview, year: fixture.year, contentRating: fixture.contentRating,
+            runtime: fixture.runtime, parentRef: nil, grandparentRef: nil,
+            episodeNumber: nil, seasonNumber: nil, childProgress: nil,
+            userState: fixture.userState, artwork: fixture.artwork,
+            parentArtwork: nil, grandparentArtwork: nil)
+        let detail = MediaItemDetail(item: item, tagline: nil, genres: [], studios: [], cast: [],
+            directors: [], writers: [], chapters: [], mediaSources: [planned.source], trailerURL: nil,
+            contentRating: nil, nextEpisode: nil, collections: [])
+        let playback = ProviderPlayback(provider: provider, item: item, detail: detail,
+            stream: planned, extras: PlaybackExtras())
+        let vm = UniversalPlayerViewModel(providerPlayback: playback, startOffset: nil)
+        XCTAssertEqual(vm.currentSubtitleTrackId, 11)
+        vm.selectSiloQuality(.offered(id: "not-offered"))
+        XCTAssertEqual(vm.siloSelectedQuality, .automatic)
+    }
+
     func test_plexSource_isDefault() {
         let metadata = ProviderPlaybackMetadata.make(
             detail: playback(provider: StubMediaProvider(), stream: stream()).detail,
@@ -70,26 +187,6 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         )
         let vm = UniversalPlayerViewModel(metadata: metadata, serverURL: "http://plex.local:32400", authToken: "t")
         guard case .plex = vm.source else { return XCTFail("expected .plex, got \(vm.source)") }
-    }
-
-    func test_initialRoutes_directPlayHasATranscodeFallback() throws {
-        let routes = try XCTUnwrap(UniversalPlayerViewModel.initialRoutes(for: stream(kind: .directPlay)))
-        guard case .aether(let url, let headers) = routes.primary else {
-            return XCTFail("expected aether, got \(routes.primary)")
-        }
-        XCTAssertEqual(url, directURL)
-        XCTAssertNil(headers)
-        XCTAssertTrue(routes.hasTranscodeFallback)
-    }
-
-    func test_initialRoutes_hlsPlaysOnAVPlayerWithoutFallback() throws {
-        let routes = try XCTUnwrap(UniversalPlayerViewModel.initialRoutes(for: stream(kind: .hlsTranscode, url: hlsURL)))
-        guard case .hls(let url, let headers) = routes.primary else {
-            return XCTFail("expected hls, got \(routes.primary)")
-        }
-        XCTAssertEqual(url, hlsURL)
-        XCTAssertNil(headers)
-        XCTAssertFalse(routes.hasTranscodeFallback)
     }
 
     func test_providerReporting_routesToProviderReporter() async {

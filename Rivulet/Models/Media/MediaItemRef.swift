@@ -13,7 +13,7 @@
 import Foundation
 import Synchronization
 
-struct MediaItemRef: Hashable, Codable, Sendable {
+nonisolated struct MediaItemRef: Hashable, Codable, Sendable {
     /// Provider identifier — "plex:<machineId>" / "tmdb" / future "jellyfin:<serverId>".
     let providerID: String
     /// Provider-native item identifier (Plex ratingKey / TMDB id / Jellyfin Guid).

@@ -307,17 +307,13 @@ class PlexDataStore: ObservableObject {
             }
         }
 
-        // Same for the sidebar order — it decides Home's row order too
-        // (`librariesPinnedToHome`), so a reorder in Settings has to repaint on
-        // the way back out. `dropFirst` skips the initial value; the
-        // `syncOrderWithLibraries` append inside the library fetch is followed
-        // by its own projection either way.
-        librarySettings.$libraryOrder
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                Task { @MainActor in self?.projectHomeItems() }
-            }
+        // Sidebar visibility and order also project Home immediately, without fetching.
+        Publishers.Merge3(
+            librarySettings.$libraryOrder.dropFirst().removeDuplicates().map({ _ in () }),
+            librarySettings.$hiddenLibraryKeys.dropFirst().removeDuplicates().map({ _ in () }),
+            librarySettings.$hiddenLibraryServerIDs.dropFirst().removeDuplicates().map({ _ in () }))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.projectHomeItems() }
             .store(in: &cancellables)
     }
 
@@ -1181,13 +1177,16 @@ class PlexDataStore: ObservableObject {
         //   row and adds `home.playlists`, which the Plex app never shows.
         // - `/hubs/continueWatching` is the merged in-progress + On Deck hub.
         var rail: CachedHomeRail = []
+        let serverVisible = MediaProviderRegistry.shared.plexProvider.map {
+            librarySettings.areServerLibrariesVisible($0.id)
+        } ?? true
         var carriedContinueWatching = false
 
         // Continue Watching. Not gated on promotion: it is a global row that
         // every scoped `/hubs/promoted` call returns, and PMS already scopes its
         // items to pinned libraries (measured: every item came from a
         // `hidden == 0` library).
-        if let cw = continueWatchingHub, let metas = cw.Metadata, !metas.isEmpty,
+        if serverVisible, let cw = continueWatchingHub, let metas = cw.Metadata, !metas.isEmpty,
            !HomeRowSettings.isHidden(cw.hubIdentifier) {
             rail.append(makeCachedHub(
                 id: "hub:\(cw.id)",
@@ -1197,7 +1196,7 @@ class PlexDataStore: ObservableObject {
                 hubIdentifier: cw.hubIdentifier,
                 metas: metas
             ))
-        } else if let cached = homeItems.first(where: \.isContinueWatching),
+        } else if serverVisible, let cached = homeItems.first(where: \.isContinueWatching),
                   Self.carriesOverContinueWatching(hasFetched: hasFetchedContinueWatching,
                                                    isHidden: HomeRowSettings.isHidden(cached.hubIdentifier)) {
             rail.append(cached)
@@ -1266,7 +1265,7 @@ class PlexDataStore: ObservableObject {
 
         // An empty rail replaces Home only after a fetch completes: `setHomeItems`
         // persists it, so an early call would bake an empty Home into warm launches (#236).
-        guard rail.count > (carriedContinueWatching ? 1 : 0) || didCompleteInitialHubFetch else { return }
+        guard !serverVisible || rail.count > (carriedContinueWatching ? 1 : 0) || didCompleteInitialHubFetch else { return }
 
         setHomeItems(rail)
     }

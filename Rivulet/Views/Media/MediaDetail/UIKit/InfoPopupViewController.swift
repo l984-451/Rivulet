@@ -248,7 +248,7 @@ final class InfoPopupViewController: UIViewController {
 enum InfoPopupContent {
 
     /// Title + genre line + full body (the About "description" popup).
-    static func description(title: String, subtitle: String?, body: String?) -> UIView {
+    static func description(title: String, subtitle: String?, body: String?, overviewIsMachineTranslated: Bool = false) -> UIView {
         let stack = verticalStack(spacing: 10)
         stack.addArrangedSubview(label(title, size: 31, weight: .bold, color: .white, lines: 2))
         if let subtitle, !subtitle.isEmpty {
@@ -258,27 +258,20 @@ enum InfoPopupContent {
         }
         if let body, !body.isEmpty {
             stack.addArrangedSubview(label(body, size: 24, weight: .regular, color: .white.withAlphaComponent(0.9), lines: 0))
+            if overviewIsMachineTranslated {
+                let attribution = DescriptionTranslationView()
+                attribution.configure(isTranslating: false, isMachineTranslated: true)
+                stack.addArrangedSubview(attribution)
+            }
         }
         return stack
     }
 
-    /// Every review score, one row each: score, then source and who it's from.
+    /// Every supplied source, using the same branded marks as the title page.
     static func ratings(_ ratings: [MediaRating]) -> UIView {
         let stack = verticalStack(spacing: 22)
         stack.addArrangedSubview(label("Ratings", size: 30, weight: .semibold, color: .white, lines: 1))
-        for rating in ratings {
-            let score = label(rating.badgeText + (rating.scale ?? ""), size: 30, weight: .bold, color: .white, lines: 1)
-            score.widthAnchor.constraint(equalToConstant: 170).isActive = true
-            let text = verticalStack(spacing: 2)
-            text.addArrangedSubview(label(rating.name, size: 24, weight: .semibold, color: .white, lines: 1))
-            text.addArrangedSubview(label(rating.detailText, size: 20, weight: .medium,
-                                          color: .white.withAlphaComponent(0.6), lines: 1))
-            let row = UIStackView(arrangedSubviews: [score, text])
-            row.axis = .horizontal
-            row.alignment = .center
-            row.spacing = 20
-            stack.addArrangedSubview(row)
-        }
+        stack.addArrangedSubview(RatingsGridView.row(ratings))
         return stack
     }
 
@@ -328,7 +321,15 @@ enum InfoPopupContent {
         if let overviewText, !overviewText.isEmpty {
             let syn = label(overviewText, size: 24, weight: .regular, color: .white.withAlphaComponent(0.9), lines: 0)
             stack.addArrangedSubview(syn)
-            stack.setCustomSpacing(22, after: syn)
+            if detail.item.overviewIsMachineTranslated == true {
+                let attribution = DescriptionTranslationView()
+                attribution.configure(isTranslating: false, isMachineTranslated: true)
+                stack.addArrangedSubview(attribution)
+                stack.setCustomSpacing(6, after: syn)
+                stack.setCustomSpacing(22, after: attribution)
+            } else {
+                stack.setCustomSpacing(22, after: syn)
+            }
         } else {
             // Seasons (and some shows) carry no synopsis of their own on Plex,
             // which left the popup showing only the title. Say so rather than
@@ -362,13 +363,21 @@ enum InfoPopupContent {
         if let region = detail.regionOfOrigin, !region.isEmpty { info.append(("Region of Origin", region)) }
         addSection(title: "Information", rows: info, to: stack)
 
+        if detail.showsTechnicalMetadata {
+            for (index, source) in detail.mediaSources.enumerated() {
+                let name = source.versionName.flatMap { $0.isEmpty ? nil : $0 }
+                    ?? (detail.mediaSources.count > 1 ? "Source File \(index + 1)" : "Source File")
+                addSection(title: name, rows: source.technicalInformation, to: stack)
+            }
+        }
+
         // Languages
         var langs: [(String, String)] = []
         if let first = source?.audioTracks.first, let n = InfoColumnsView.languageName(first.language) {
             langs.append(("Original Audio", n))
         }
         if let audio = source?.audioTracks, !audio.isEmpty {
-            let summary = audioSummary(audio)
+            let summary = audioSummary(audio, detailed: detail.showsTechnicalMetadata)
             if !summary.isEmpty { langs.append(("Audio", summary)) }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {
@@ -401,60 +410,32 @@ enum InfoPopupContent {
     }
 
     private static func metaRow(_ detail: MediaItemDetail) -> UIView {
-        let row = UIStackView()
-        row.axis = .horizontal
-        row.alignment = .center
-        row.spacing = 10
+        let row = verticalStack(spacing: 12)
         var parts: [String] = []
         if let y = detail.item.year { parts.append("\(y)") }
         if let rt = detail.item.runtime, rt > 0 { parts.append(runtimeString(rt)) }
         if let r = detail.contentRating, !r.isEmpty { parts.append(r) }
         if !parts.isEmpty {
-            row.addArrangedSubview(label(parts.joined(separator: "  ·  "), size: 20, weight: .semibold, color: .white.withAlphaComponent(0.7), lines: 1))
+            row.addArrangedSubview(label(parts.joined(separator: "  ·  "), size: 20, weight: .semibold, color: .white.withAlphaComponent(0.7), lines: 0))
         }
-        let source = detail.primarySource
-        var badges = source?.qualityBadges() ?? []
-        if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
-        if source?.audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) ?? false { badges.append("AD") }
-        for raw in badges {
-            let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { row.addArrangedSubview(badgeLabel(text)) }
-        }
-        let spacer = UIView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        row.addArrangedSubview(spacer)
+        let badges = MediaCapabilityBadgesView()
+        badges.configure(source: detail.primarySource,
+                         style: detail.showsTechnicalMetadata ? .technical : .standard,
+                         includesAccessibility: true)
+        row.addArrangedSubview(badges)
         return row
     }
 
-    private static func badgeLabel(_ text: String) -> UIView {
-        let l = UILabel()
-        l.text = text
-        l.font = .systemFont(ofSize: 16, weight: .semibold)
-        l.textColor = .white.withAlphaComponent(0.9)
-        l.translatesAutoresizingMaskIntoConstraints = false
-        let container = UIView()
-        container.layer.borderWidth = 1
-        container.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
-        container.layer.cornerRadius = 4
-        container.addSubview(l)
-        NSLayoutConstraint.activate([
-            l.topAnchor.constraint(equalTo: container.topAnchor, constant: 3),
-            l.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -3),
-            l.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 7),
-            l.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -7),
-        ])
-        return container
-    }
 
     /// "English (Dolby Atmos, Dolby 5.1, AAC, AD), French (Canada) (…)" — group
     /// audio tracks by language and list each language's distinct formats.
-    private static func audioSummary(_ tracks: [AudioTrack]) -> String {
+    private static func audioSummary(_ tracks: [AudioTrack], detailed: Bool = false) -> String {
         var byLang: [String: [String]] = [:]
         var order: [String] = []
         for t in tracks {
             guard let name = InfoColumnsView.languageName(t.language) else { continue }
             if byLang[name] == nil { byLang[name] = []; order.append(name) }
-            let fmt = audioFormat(t)
+            let fmt = detailed ? t.qualityLabel : audioFormat(t)
             if !fmt.isEmpty, !(byLang[name]?.contains(fmt) ?? false) { byLang[name]?.append(fmt) }
             if (t.title ?? t.extendedTitle ?? "").localizedCaseInsensitiveContains("descri"),
                !(byLang[name]?.contains("AD") ?? false) { byLang[name]?.append("AD") }

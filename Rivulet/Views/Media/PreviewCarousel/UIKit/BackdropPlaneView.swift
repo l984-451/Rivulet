@@ -16,6 +16,8 @@ final class BackdropPlaneView: UIView {
         let dimView = UIView()
         var index: Int
         var loadToken: UInt64 = 0
+        var loadTask: Task<Void, Never>?
+        deinit { loadTask?.cancel() }
         init(index: Int) {
             self.index = index
             container.clipsToBounds = true
@@ -44,6 +46,8 @@ final class BackdropPlaneView: UIView {
 
     /// Items provider injected by the VC.
     private var items: [MediaItem] = []
+    /// Detail can resolve a larger variant without replacing browse/watch state.
+    private var resolvedArtwork: [MediaItemRef: URL] = [:]
 
     /// While a morph is in flight, sync() is suppressed so the morph
     /// controller has exclusive control of the centered panel's frames.
@@ -60,6 +64,30 @@ final class BackdropPlaneView: UIView {
 
     func configure(items: [MediaItem]) {
         self.items = items
+        resolvedArtwork.removeAll()
+        for panel in panels.values {
+            panel.loadTask?.cancel()
+            panel.container.removeFromSuperview()
+        }
+        panels.removeAll()
+    }
+
+    /// Only replace this plane's artwork, never the item's identity or watch state.
+    func updateArtwork(_ artwork: MediaArtwork, for ref: MediaItemRef) {
+        guard let index = items.firstIndex(where: { $0.ref == ref }),
+              let url = artwork.backdrop ?? items[index].artwork.backdrop
+                ?? artwork.poster ?? items[index].artwork.poster,
+              url != artworkURL(for: index) else { return }
+        resolvedArtwork[ref] = url
+        for (index, panel) in panels where items[index].ref == ref {
+            loadArtwork(into: panel)
+        }
+    }
+
+    func artworkURL(for index: Int) -> URL? {
+        guard items.indices.contains(index) else { return nil }
+        let item = items[index]
+        return resolvedArtwork[item.ref] ?? item.artwork.backdrop ?? item.artwork.poster
     }
 
     // MARK: - Carousel-mode sync
@@ -74,6 +102,7 @@ final class BackdropPlaneView: UIView {
 
         // Recycle panels that scrolled away.
         for (idx, panel) in panels where !visible.contains(idx) {
+            panel.loadTask?.cancel()
             panel.container.removeFromSuperview()
             panels[idx] = nil
         }
@@ -126,12 +155,12 @@ final class BackdropPlaneView: UIView {
 
     private func loadArtwork(into panel: Panel) {
         guard panel.index >= 0 && panel.index < items.count else { return }
-        let item = items[panel.index]
+        panel.loadTask?.cancel()
         panel.loadToken &+= 1
         let token = panel.loadToken
         // Backdrop falls back to poster. This plane fills most of the screen in
         // both carousel and expanded-detail, so decode at full quality.
-        guard let url = item.artwork.backdrop ?? item.artwork.poster else {
+        guard let url = artworkURL(for: panel.index) else {
             panel.imageView.image = nil
             return
         }
@@ -140,11 +169,11 @@ final class BackdropPlaneView: UIView {
             panel.imageView.image = cached
             return
         }
-        panel.imageView.image = nil
-        Task { [weak panel] in
+        // Keep the existing image visible while a higher-quality detail variant loads.
+        panel.loadTask = Task { [weak panel] in
             let image = await ImageCacheManager.shared.image(for: url, quality: .full)
             await MainActor.run {
-                guard let panel, panel.loadToken == token else { return }
+                guard !Task.isCancelled, let panel, panel.loadToken == token, let image else { return }
                 UIView.transition(with: panel.imageView, duration: 0.5, options: [.transitionCrossDissolve, .allowUserInteraction]) {
                     panel.imageView.image = image
                 }

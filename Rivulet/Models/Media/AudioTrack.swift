@@ -29,14 +29,16 @@ struct AudioTrack: Hashable, Sendable, Identifiable {
     /// file's authoring default, while `isSelected` reflects a per-user-per-item
     /// override that may have been set in any client.
     let isSelected: Bool
+    var bitDepth: Int? = nil
+    /// Explicit source metadata only; TrueHD by itself does not imply Atmos.
+    var hasAtmos = false
 }
 
 extension AudioTrack {
-    /// Variant-accurate codec + channel layout badge, e.g.
-    /// "E-AC3 5.1", "DTS-HD MA 7.1", "TrueHD 7.1 Atmos", "AAC 2.0", "FLAC 1.0".
-    var qualityLabel: String {
+    /// Codec family/variant independent of channels and object-audio signaling.
+    var codecLabel: String {
         let p = profile?.lowercased() ?? ""
-        var name: String
+        let name: String
         switch codec.lowercased() {
         case "ac3":                     name = "AC3"
         case "eac3":                    name = "E-AC3"
@@ -54,14 +56,22 @@ extension AudioTrack {
         case "mp3", "mp2":              name = "MP3"
         default:                        name = codec.uppercased()
         }
+        return name
+    }
+
+    var isAtmos: Bool { hasAtmos || profile?.localizedCaseInsensitiveContains("atmos") == true }
+
+    /// Variant-accurate codec, channel layout and explicit Atmos signaling.
+    var qualityLabel: String {
+        var name = codecLabel
         if let layout = channelLayoutLabel { name += " \(layout)" }
-        if p.contains("atmos")          { name += " Atmos" }
+        if isAtmos { name += " Atmos" }
         return name
     }
 
     /// Normalized channel layout: drops placement suffix ("5.1(side)" → "5.1"),
     /// maps "stereo"/"mono" → "2.0"/"1.0", falls back to channel count.
-    private var channelLayoutLabel: String? {
+    var channelLayoutLabel: String? {
         if let raw = channelLayout, !raw.isEmpty {
             let base = raw.lowercased()
                 .split(separator: "(").first

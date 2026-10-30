@@ -72,6 +72,72 @@ final class MediaRatingTests: XCTestCase {
         XCTAssertTrue(plex(rating: 0, audience: 0, audienceImage: "themoviedb://image.rating").isEmpty)
     }
 
+    func test_plex_certifiedMarkRetainsEvidenceInFullAndFlatMetadata() {
+        let image = "rottentomatoes://image.rating.certified"
+        let full = plex(rating: 9.9, ratingImage: "rottentomatoes://image.rating.ripe", entries: [
+            PlexRatingEntry(image: image, value: 8.3, type: "critic"),
+        ]).first
+        XCTAssertEqual(full?.value, 8.3)
+        XCTAssertEqual(full?.rottenTomatoesDesignation, .certifiedFresh)
+        XCTAssertEqual(full?.rottenTomatoesStatus, .certifiedFresh)
+        XCTAssertEqual(full?.plexRatingImage, image)
+        XCTAssertEqual(plex(rating: 8.3, ratingImage: image).first?.rottenTomatoesStatus, .certifiedFresh)
+    }
+
+    func test_plex_fullOrdinaryMarkWinsOverFlatCertifiedMark() {
+        let ratings = plex(rating: 9.9, ratingImage: "rottentomatoes://image.rating.certified", entries: [
+            PlexRatingEntry(image: "rottentomatoes://image.rating.ripe", value: 8.3, type: "critic"),
+        ])
+        XCTAssertEqual(ratings.first?.rottenTomatoesStatus, .fresh)
+        XCTAssertNil(ratings.first?.rottenTomatoesDesignation)
+    }
+
+    func test_plex_certifiedMarkCannotUpgradeAudienceOrUnknownMarks() {
+        XCTAssertEqual(plex(audience: 9.9, audienceImage: "rottentomatoes://image.rating.certified")
+            .first?.rottenTomatoesStatus, .hot)
+        XCTAssertEqual(plex(rating: 9.9, ratingImage: "rottentomatoes://image.rating.certified-unrecognized")
+            .first?.rottenTomatoesStatus, .fresh)
+    }
+
+    func test_rottenTomatoesOrdinaryThresholdsDoNotInventAwards() {
+        let cases: [(MediaRating.Source, MediaRating.RottenTomatoesStatus, MediaRating.RottenTomatoesStatus)] = [
+            (.rottenTomatoes, .rotten, .fresh),
+            (.rottenTomatoesAudience, .stale, .hot),
+        ]
+        for (source, low, high) in cases {
+            XCTAssertEqual(MediaRating(5.99, source: source)?.rottenTomatoesStatus, low)
+            XCTAssertEqual(MediaRating(6, source: source)?.rottenTomatoesStatus, high)
+            XCTAssertEqual(MediaRating(10, source: source)?.rottenTomatoesStatus, high)
+        }
+    }
+
+    func test_officialAwardsRequireMatchingRatingFamily() {
+        let critic = MediaRating(8, source: .rottenTomatoes, rottenTomatoesDesignation: .certifiedFresh)
+        let audience = MediaRating(9.5, source: .rottenTomatoesAudience, rottenTomatoesDesignation: .verifiedHot)
+        let wrongCritic = MediaRating(9.5, source: .rottenTomatoes, rottenTomatoesDesignation: .verifiedHot)
+        let wrongAudience = MediaRating(9.5, source: .rottenTomatoesAudience, rottenTomatoesDesignation: .certifiedFresh)
+        let unrelated = MediaRating(9.5, source: .imdb, rottenTomatoesDesignation: .certifiedFresh)
+        XCTAssertEqual(critic?.rottenTomatoesStatus, .certifiedFresh)
+        XCTAssertEqual(audience?.rottenTomatoesStatus, .verifiedHot)
+        XCTAssertEqual(wrongCritic?.rottenTomatoesStatus, .fresh)
+        XCTAssertEqual(wrongAudience?.rottenTomatoesStatus, .hot)
+        XCTAssertNil(unrelated?.rottenTomatoesStatus)
+    }
+
+    func test_nativeScoreAndDisplayCannotEstablishOfficialAward() throws {
+        let json = """
+        {"content_id":"rt-title","type":"movie","title":"Title","ratings":[
+          {"source":"rt_critic","name":"RT","score":99,"display":"99%"},
+          {"source":"rt_audience","name":"RT Audience","score":99,"display":"99%"}
+        ]}
+        """
+        let dto = try SiloJSON.decoder().decode(SiloItem.self, from: Data(json.utf8))
+        let detail = SiloMediaMapper.detail(dto, providerID: "silo:test", baseURL: URL(string: "https://silo.invalid")!)
+        XCTAssertEqual(detail.ratings.map(\.rottenTomatoesStatus), [.fresh, .hot])
+        XCTAssertTrue(detail.ratings.allSatisfy { $0.rottenTomatoesDesignation == nil })
+        XCTAssertEqual(detail.ratings.map(\.badgeText), ["99%", "99%"])
+    }
+
     // MARK: - Jellyfin
 
     func test_jellyfin_criticAndCommunity() {
@@ -92,6 +158,21 @@ final class MediaRatingTests: XCTestCase {
             MediaRating(9.0, source: .imdb),
         ])
         XCTAssertEqual(texts(r), ["IMDb 8.7/10"])
+    }
+
+    func test_preferredDetailScoreStillUsesAppearanceAndCriticFallbackOnly() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: MediaRating.detailSourceKey)
+        defer {
+            if let previous { defaults.set(previous, forKey: MediaRating.detailSourceKey) }
+            else { defaults.removeObject(forKey: MediaRating.detailSourceKey) }
+        }
+        let ratings = [MediaRating(8.5, source: .imdb), MediaRating(9, source: .rottenTomatoes)].compactMap { $0 }
+        defaults.set(MediaRating.Source.imdb.rawValue, forKey: MediaRating.detailSourceKey)
+        XCTAssertEqual(MediaRating.detailRating(in: ratings)?.source, .imdb)
+        defaults.set(MediaRating.Source.letterboxd.rawValue, forKey: MediaRating.detailSourceKey)
+        XCTAssertEqual(MediaRating.detailRating(in: ratings)?.source, .rottenTomatoes)
+        XCTAssertNil(MediaRating.detailRating(in: ratings.filter { $0.source == .imdb }))
     }
 
     /// The Worker's response for The Matrix, native scales.

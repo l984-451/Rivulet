@@ -167,7 +167,11 @@ extension MediaItem {
     /// Episodes and seasons fall back to the grandparent's backdrop.
     func heroBackdropRequest() -> HeroBackdropRequest {
         let backdrop = artwork.backdrop ?? grandparentArtwork?.backdrop
-        let thumbnail = artwork.thumbnail ?? artwork.poster
+        // The loading lockup is portrait for movies/shows, whereas thumbnail
+        // may be a separate low-resolution landscape image. Episodes use stills.
+        let thumbnail = kind == .episode
+            ? artwork.thumbnail ?? artwork.poster
+            : artwork.poster ?? artwork.thumbnail
         return HeroBackdropRequest(
             cacheKey: ref.itemID,
             backdropURL: backdrop,

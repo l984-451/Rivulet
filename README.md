@@ -6,7 +6,7 @@
 
 **Built for simplicity.**
 
-A native Apple TV app for Plex, Jellyfin, and Live TV.
+A native Apple TV app for Plex, Jellyfin, Silo, and Live TV.
 
 <a href="https://apps.apple.com/us/app/rivulet-for-plex/id6756892857">
   <img src="https://img.shields.io/badge/Download_on_the-App_Store-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download on the App Store">
@@ -53,9 +53,51 @@ I began this project in Decemeber 2025. At the time there was quite a lack of Pl
 - **HomePod Integration**: the Plex app has never worked well when setting HomePod as the default audio output on my Apple TV. It hurts to have a HomePod sitting there collecting dust while my sub-par TV speakers play sound. This app helps the hurt.
 - **Apple-Esque**: I enjoy Apple’s designs and apps, and enjoy the challenge of creating an app that feels native to the Apple ecosystem.
 <br></br>
+## Silo
+
+Choose **Silo** during setup or add it from Settings → Servers. Enter the server's web address, sign in with a password or approve a QR/device-code request where the server offers it, and choose a household profile. PIN-protected profiles require their PIN. Login tokens and profile verification are kept in Keychain; passwords and PINs are not saved. QR approval supports pending, expired, and cancelled requests, with password sign-in still available.
+
+The Apple TV app uses Silo's native `/api/v2` API, not its Jellyfin compatibility interface:
+
+- Movie and TV libraries, search, details, versions, and manual, shared, and smart collections.
+- Native people search and person details with paged filmographies restricted to visible libraries.
+- Server-offered catalog filters, with selections saved locally for each Silo profile and library.
+- Native Requests search, creation, status, following, and cancellation, gated by server configuration and permissions. Requests are reachable from the sidebar, unavailable title details, and searches without local results.
+- Server-curated Home layouts, featured/highlighted lists, trending, and automatically paged section rails without See All buttons. External feeds follow the services configured in Silo.
+- Discover uses the same profile-specific recommendation feed as [Silo Apple's](https://github.com/Silo-Server/silo-apple) For You → Recommendations. For You stays first, empty rows are omitted, and the returned cards display without separate section requests or a Plex account.
+- Native watchlists, including saved titles not yet in the library, favorites, watched state, and resume progress. Continue Watching and Next Up context menus dismiss entries without clearing their playback position.
+- Native playback negotiation for originals, progressive remux, HLS remux, and HLS transcodes. The player offers the server's exact quality choices and shows negotiated delivery, effective output quality, and server-reported degradation reasons separately from source-format badges.
+- Never, Ask First, and Automatically buffering-quality policies, with learned limits and an explicit restore-quality action.
+- Current bearer-auth token refresh and recoverable playback-session renewal. Administratively ended sessions stop rather than being recreated.
+- Embedded subtitles retain Silo's authoritative track identity, including explicit FFmpeg stream indices. Effective Silo subtitle language, mode, and forced-subtitle preferences apply on first playback, independently of the optional playback-preference switch; explicit title-level track and Off choices take precedence. Only the selected negotiated sidecar is loaded; Off does not extract the entire subtitle inventory.
+- Subtitle search and download from the providers configured on Silo, directly from the player's subtitle menu. Partial provider failures retain successful results.
+- Server-side AI subtitle translation and audio transcription when enabled in Silo, with job progress, cancellation, and selection of the completed subtitle. Transcription respects the server quota; provider credentials and AI models remain on the server.
+- Silo-localized descriptions with a discreet translation icon on title pages (icon plus ellipsis while translating), and explanatory AI attribution in full-description/player surfaces. Viewed details and the player follow the server's auto/button/off policy; original text stays readable and failures offer Retry. Ordinary carousel previews do not start AI jobs.
+- Synopsis previews show up to three lines, truncating longer text with an ellipsis; Info retains the full description. Short text keeps year/runtime close; spare space moves before the technical tags. Source-format capsules, including HDR10+, stay on one line and wrap as complete badges.
+- Display-sized portraits and full-resolution Home/carousel backdrops and episode stills, rather than Silo's small-card defaults. Reopened saved searches promote old artwork to the current full-detail image without clearing search history or the image cache.
+- Compact source-capability badges for resolution, codec, Dolby Vision profile and FEL/MEL, TrueHD, channels, and explicitly identified Atmos. Full Info retains available track, HDR compatibility, frame-rate, bitrate, bit-depth, and color metadata. These describe the source, not measured HDMI output.
+- Compact, wrapping rating tags with source logo and score on one line, aligned in height with the video/audio badges. Movie and episode details and Full Info retain every canonical score supplied by Silo. When Silo caps that list at three, native RT critic/audience columns supplement it only for sources explicitly enabled by the server's ratings capability; existing canonical scores win. Rotten Tomatoes marks distinguish Fresh/Rotten and Hot/Stale at the 60% boundary; elevated accolades require explicit source evidence, not a high score alone.
+- Local trailers and extras on the details page, played through the native negotiated player.
+- Remote YouTube and Vimeo videos in the trailer/extra rows. YouTube opens its installed Apple TV app; Vimeo requires a compatible external app. Silo supplies watch-page links, not streams Rivulet can play directly.
+- Optional **Follow Silo Playback** reads effective server playback preferences without modifying them. Explicit local overrides take precedence, and clearing an override is distinct from inheriting a server value.
+- Optional title theme music and looping are local opt-ins. Native original or converted theme audio follows the visible selected title, not prefetched neighbors, and stops for playback, backgrounding, or lost profile authority.
+
+Direct Silo originals use the same **Height Speakers** and **Dolby Vision FEL** settings as Plex. Rivulet declares its client-managed dynamic-range capability for original delivery so Silo can retain Profile 7 and TrueHD rather than stripping Dolby Vision and adapting audio for HLS. This does not bypass bitrate, subtitle, or other server delivery constraints. Non-default audio tracks remain eligible for original delivery, and Silo's selected track is applied after engine startup.
+
+Silo AI jobs continue on the server when playback stops. Reopen the title's **Silo AI Subtitles** menu to follow a job or select its completed file. This integration installs the finished subtitle file; it does not attach to live partial-cue delivery. Rivulet's on-device generated subtitles are a separate feature.
+
+Description language follows the selected Silo profile's metadata preferences, falling back to the library's language. Rivulet does not synchronize this with its Playback subtitle language or change the Silo profile's settings. Only an explicit `overview` machine-translation mark labels a description as AI-translated; an AI-translated tagline alone does not.
+
+Silo's current native rating contract does not include Certified Fresh or Verified Hot designations. The six-state renderer includes both seals, but uses them only when an upstream source explicitly supplies the designation (such as Plex's certified-critic image); Silo percentages alone retain the ordinary score marks.
+
+Use a trusted HTTPS certificate, or HTTP on a trusted local network. Reverse-proxy path prefixes are supported. Accounts requiring a password change must complete it in Silo's web app first.
+
+Silo support is tvOS-only. Silo music/books, editable native playlists, and multipart-only playback are not supported. Calendar, personal collection editing, presentation-preference synchronization, companion control/handoff/nearby pairing, and Watch Party are outside this integration. The still-undefined `header_refresh=session` transport mode is not advertised; this does not prevent current bearer-auth refresh or supported playback-session renewal.
+
+<br></br>
 ## Live TV
 
-Rivulet works with several kinds of Live TV source. You don't need a Plex or Jellyfin server. Add just a Live TV source and the app opens straight to Live TV.
+Rivulet works with several kinds of Live TV source. You don't need a Plex, Jellyfin, or Silo server. Add just a Live TV source and the app opens straight to Live TV.
 
 - **What's On**: what's airing now, what starts soon, and a For You row that learns what you watch.
 - **Guide**: standard guide layout if you want.
@@ -166,13 +208,17 @@ Third-party components retain their original licenses. FFmpeg is included under 
 - [libass](https://github.com/libass/libass): ASS/SSA subtitle rendering
 - [Plex](https://plex.tv/): media server platform
 - [Jellyfin](https://jellyfin.org/): open source media server
+- [Silo](https://siloserver.org/): native media server
 - [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr): IPTV management
 - [TMDB](https://www.themoviedb.org/): artwork and metadata for Discover
+- [Simple Icons 11.15.0](https://github.com/simple-icons/simple-icons/tree/11.15.0) ([CC0](https://github.com/simple-icons/simple-icons/blob/11.15.0/LICENSE.md)): IMDb, TMDB, Letterboxd, Metacritic, Trakt, and Kinopoisk rating marks.
+- Rotten Tomatoes® score-state artwork by Emily Oberman/Pentagram, adapted by Wikimedia Commons contributors: [Fresh](https://commons.wikimedia.org/wiki/File:Rotten_Tomatoes.svg), [Rotten](https://commons.wikimedia.org/wiki/File:Rotten_Tomatoes_rotten.svg), [Hot](https://commons.wikimedia.org/wiki/File:Rotten_Tomatoes_positive_audience.svg), and [Stale](https://commons.wikimedia.org/wiki/File:Rotten_Tomatoes_negative_audience.svg). Commons identifies these files as public-domain logos; trademark rights remain with their owner.
+- Certified Fresh and Verified Hot retain their original Rotten Tomatoes® artwork and trademark ownership: [Certified Fresh SVG](https://static.wikia.nocookie.net/logopedia/images/3/36/Rotten_Tomatoes_Certified_Fresh_2018.svg), [Verified Hot SVG](https://static.wikia.nocookie.net/logopedia/images/7/7e/Rotten_Tomatoes_Verified_Hot_Audience_2024.svg/revision/latest?cb=20251128031446).
 
 ---
 
 <div align="center">
 
-Rivulet is not affiliated with or endorsed by Plex, Inc. or the Jellyfin project.
+Rivulet is not affiliated with or endorsed by Plex, Inc., the Jellyfin project, or Silo.
 
 </div>

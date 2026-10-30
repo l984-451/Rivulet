@@ -20,6 +20,10 @@ final class HubHeaderView: UICollectionReusableView {
     private let badge = SourceBadgeView(style: .inline)
     private let stack = UIStackView()
     private var stackBottom: NSLayoutConstraint!
+    private let seeAllButton = UIButton(type: .system)
+    var onSeeAll: (() -> Void)? {
+        didSet { seeAllButton.isHidden = onSeeAll == nil }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -45,6 +49,11 @@ final class HubHeaderView: UICollectionReusableView {
         badge.setContentCompressionResistancePriority(.required, for: .horizontal)
         badge.setContentHuggingPriority(.required, for: .horizontal)
         stack.addArrangedSubview(countLabel)
+        seeAllButton.setTitle("See All", for: .normal)
+        seeAllButton.titleLabel?.font = .systemFont(ofSize: 23, weight: .semibold)
+        seeAllButton.isHidden = true
+        seeAllButton.addAction(UIAction { [weak self] _ in self?.onSeeAll?() }, for: .primaryActionTriggered)
+        stack.addArrangedSubview(seeAllButton)
         addSubview(stack)
 
         stackBottom = stack.bottomAnchor.constraint(equalTo: bottomAnchor)

@@ -163,6 +163,14 @@ final class RootShellViewController: UIViewController {
     /// Live sidebar content, pushed from SwiftUI on every relevant change.
     func updateSections(_ sections: [ShellSidebarSection]) {
         guard isViewLoaded else { pendingSections = sections; return }
+        let available = Set(sections.flatMap(\.items).map(\.tab))
+        for (tab, controller) in contentVCs where !available.contains(tab) && tab != .home {
+            if let requests = controller as? SiloRequestsViewController { requests.invalidateAuthority() }
+            controller.willMove(toParent: nil)
+            controller.view.removeFromSuperview()
+            controller.removeFromParent()
+            contentVCs[tab] = nil
+        }
         sidebar.setSections(sections)
     }
 

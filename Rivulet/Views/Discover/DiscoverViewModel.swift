@@ -19,6 +19,21 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var inLibraryTMDBIds: Set<Int> = []
     @Published private(set) var heroItems: [TMDBListItem] = []
     @Published private(set) var loading = false
+    @Published private(set) var nativeHubs: [MediaHub] = []
+    @Published private(set) var nativeErrors: [String: String] = [:]
+    @Published private(set) var nativeSupportedProviders: Set<String> = []
+    private var generation = 0
+
+    func invalidate() {
+        generation += 1
+        nativeHubs = []
+        nativeErrors = [:]
+        nativeSupportedProviders = []
+        sectionItems = [:]
+        forYou = []
+        heroItems = []
+        inLibraryTMDBIds = []
+    }
 
     private let discoverService = TMDBDiscoverService.shared
     private let recommendationService = DiscoverRecommendationService.shared
@@ -32,8 +47,39 @@ final class DiscoverViewModel: ObservableObject {
     private let heroItemCap = 9
 
     func load() async {
+        generation += 1
+        let expected = generation
+        let providers = MediaProviderRegistry.shared.enabledProviders().filter {
+            (!PlexUserProfileManager.shared.isRestrictedProfile || $0.kind == .plex)
+                && LibrarySettingsManager.shared.areServerLibrariesVisible($0.id)
+        }
         loading = true
-        defer { loading = false }
+        defer { if expected == generation { loading = false } }
+        var hubs: [String: [MediaHub]] = [:]
+        var errors: [String: String] = [:]
+        var supported = Set<String>()
+        // Keep native feed collection on the model's actor and authority generation.
+        for provider in providers {
+            do {
+                if let rows = try await provider.discoveryHubs() {
+                    hubs[provider.id] = rows
+                    supported.insert(provider.id)
+                }
+            } catch {
+                errors[provider.id] = error.localizedDescription
+            }
+        }
+        guard expected == generation, !Task.isCancelled else { return }
+        nativeHubs = providers.flatMap { hubs[$0.id] ?? [] }
+        nativeErrors = errors
+        nativeSupportedProviders = supported
+        guard PlexAuthManager.shared.hasCredentials else {
+            sectionItems = [:]
+            forYou = []
+            heroItems = []
+            inLibraryTMDBIds = []
+            return
+        }
 
         // Fetch all 8 sections in parallel.
         await withTaskGroup(of: (TMDBDiscoverSection, [TMDBListItem]).self) { group in
@@ -44,12 +90,15 @@ final class DiscoverViewModel: ObservableObject {
                 }
             }
             for await (section, items) in group {
+                guard expected == generation, !Task.isCancelled else { continue }
                 sectionItems[section] = items
             }
         }
 
+        guard expected == generation, !Task.isCancelled else { return }
         // Precompute the in-library TMDB id set for sync lookup from row closures.
         await recomputeInLibrarySet()
+        guard expected == generation, !Task.isCancelled else { return }
 
         // Pick hero items from the same popular sources the home page uses.
         heroItems = computeHeroItems(cap: heroItemCap)
@@ -63,9 +112,12 @@ final class DiscoverViewModel: ObservableObject {
         // the user. Hides itself on cold-start (too few watched items to
         // produce a meaningful profile).
         let watchedItems = await collectWatchHistory()
+        guard expected == generation, !Task.isCancelled else { return }
         if watchedItems.count >= forYouColdStartMinWatched {
             let profile = await WatchProfileBuilder.build(from: watchedItems)
-            forYou = await recommendationService.forYouRow(profile: profile)
+            let recommendations = await recommendationService.forYouRow(profile: profile)
+            guard expected == generation, !Task.isCancelled else { return }
+            forYou = recommendations
         } else {
             forYou = []
         }
@@ -76,10 +128,16 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     func libraryMatch(for item: TMDBListItem) async -> PlexMetadata? {
-        guard let entry = await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType),
+        guard let plex = MediaProviderRegistry.shared.plexProvider,
+              LibrarySettingsManager.shared.areServerLibrariesVisible(plex.id),
+              let entry = await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType),
               let serverURL = PlexAuthManager.shared.selectedServerURL,
-              let token = PlexAuthManager.shared.selectedServerToken else { return nil }
-        return await LibraryGUIDIndex.items(for: [entry], serverURL: serverURL, authToken: token)[entry.ratingKey]
+              let token = PlexAuthManager.shared.selectedServerToken,
+              let match = await LibraryGUIDIndex.items(for: [entry], serverURL: serverURL, authToken: token)[entry.ratingKey]
+        else { return nil }
+        let keys = PlexLibraryVisibilityFilter.normalizedKeySet(PlexDataStore.shared.visibleVideoLibraries.map(\.key))
+        guard !keys.isEmpty, PlexLibraryVisibilityFilter.isVisible(match, in: keys) else { return nil }
+        return match
     }
 
     /// Re-derive the in-library TMDB id set (call when LibraryGUIDIndex
@@ -138,11 +196,11 @@ final class DiscoverViewModel: ObservableObject {
     /// Rebuild `inLibraryTMDBIds` by asking the library index for each fetched item.
     /// This runs after section items load. Single pass, one actor hop per id — cheap.
     private func recomputeInLibrarySet() async {
-        let allIds = sectionItems.values.flatMap { $0.map { ($0.id, $0.mediaType) } }
+        let allItems = sectionItems.values.flatMap { $0 }
         var newSet: Set<Int> = []
-        for (id, mediaType) in allIds {
-            if await libraryIndex.lookup(tmdbId: id, type: mediaType) != nil {
-                newSet.insert(id)
+        for item in allItems {
+            if await libraryMatch(for: item) != nil {
+                newSet.insert(item.id)
             }
         }
         inLibraryTMDBIds = newSet

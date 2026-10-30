@@ -48,7 +48,7 @@ enum TopShelfFeed {
         if !otherRows.isEmpty, let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
             let primaryRow = PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []
             let shown = Set(ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
-                                                             showKey: \.showKey, watched: \.userState.lastViewedAt)
+                                                             lookupKey: \.lookupKey, watched: \.userState.lastViewedAt)
                                 .map(\.item.ref))
             plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
             others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }

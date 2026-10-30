@@ -97,7 +97,7 @@ final class SettingsCell: UICollectionViewCell {
     private var bgBottom: NSLayoutConstraint!
     private var bgLeading: NSLayoutConstraint!
     private var bgTrailing: NSLayoutConstraint!
-    private var valueToChevron: NSLayoutConstraint!
+    private var valueToAccessory: NSLayoutConstraint!
     private var valueToEdge: NSLayoutConstraint!
 
     // Measured off tvOS Settings: fill white 0.10 (0.24 in light mode), value and chevron
@@ -176,8 +176,8 @@ final class SettingsCell: UICollectionViewCell {
         bgLeading = bg.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
         bgTrailing = bg.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
 
-        // tvOS Settings: value ink ends 86 from the edge before a chevron, 31 without.
-        valueToChevron = valueLabel.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -85)
+        // tvOS Settings: leave room for the trailing chevron or selection mark.
+        valueToAccessory = valueLabel.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -85)
         valueToEdge = valueLabel.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -30)
 
         NSLayoutConstraint.activate([
@@ -195,7 +195,7 @@ final class SettingsCell: UICollectionViewCell {
             spinner.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
             spinner.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
 
-            valueToChevron,
+            valueToAccessory,
             valueLabel.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
             valueLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16)
         ])
@@ -209,8 +209,8 @@ final class SettingsCell: UICollectionViewCell {
         valueLabel.isHidden = busy || (value == nil || value?.isEmpty == true)
         if busy { spinner.startAnimating() } else { spinner.stopAnimating() }
         chevron.isHidden = !showsChevron
-        NSLayoutConstraint.deactivate([valueToChevron, valueToEdge])
-        (showsChevron ? valueToChevron : valueToEdge).isActive = true
+        NSLayoutConstraint.deactivate([valueToAccessory, valueToEdge])
+        (showsChevron || showsCheckmark ? valueToAccessory : valueToEdge).isActive = true
         self.destructive = destructive
         setDimmed(dimmed)
         applyAppearance(focused: isFocused)

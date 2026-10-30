@@ -13,6 +13,7 @@ import Foundation
 enum MediaProviderKind: String, Sendable, Hashable, Codable {
     case plex
     case jellyfin
+    case silo
 }
 
 enum ConnectionState: Sendable, Hashable {
@@ -36,6 +37,7 @@ extension MediaProviderKind {
         switch self {
         case .plex: "Plex"
         case .jellyfin: "Jellyfin"
+        case .silo: "Silo"
         }
     }
 }

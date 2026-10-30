@@ -83,7 +83,8 @@ enum ProviderPlaybackMetadata {
                            startTimeOffset: ms(marker.start), endTimeOffset: ms(marker.end))
             }
         )
-        metadata.Chapter = detail.chapters.isEmpty ? nil : detail.chapters.enumerated().map { i, chapter in
+        let chapters = source.chapters ?? detail.chapters
+        metadata.Chapter = chapters.isEmpty ? nil : chapters.enumerated().map { i, chapter in
             PlexChapter(
                 id: nil,
                 tag: chapter.title,
@@ -128,7 +129,7 @@ enum ProviderPlaybackMetadata {
         var transfer: String?
         var doviProfile: Int?
         switch t.videoRange {
-        case .sdr: break
+        case .sdr, .unknown, .hdr: break
         case .hdr10, .hdr10Plus: (primaries, transfer) = ("bt2020", "smpte2084")
         case .hlg: (primaries, transfer) = ("bt2020", "arib-std-b67")
         case .dolbyVision(let profile): doviProfile = profile
@@ -146,7 +147,7 @@ enum ProviderPlaybackMetadata {
             id: t.id, ordinal: ordinal, type: 2, index: t.index, codec: t.codec, language: t.language,
             title: t.title, extendedTitle: t.extendedTitle, isDefault: t.isDefault,
             isForced: t.isForced, isSelected: t.isSelected, profile: t.profile,
-            channelLayout: t.channelLayout, channels: t.channels, samplingRate: t.samplingRate
+            channelLayout: t.channelLayout, channels: t.channels, samplingRate: t.samplingRate, hasAtmos: t.hasAtmos
         )
     }
 
@@ -154,7 +155,7 @@ enum ProviderPlaybackMetadata {
     /// carry their URL as `key`.
     private static func subtitleStream(_ t: SubtitleTrack, ordinal: Int) -> PlexStream {
         stream(
-            id: t.id, ordinal: ordinal, type: 3, index: t.isEmbedded ? t.index : nil, codec: t.codec,
+            id: t.id, ordinal: ordinal, type: 3, index: t.isEmbedded ? t.nativeStreamIndex ?? t.index : nil, codec: t.codec,
             language: t.language, title: t.title, extendedTitle: t.extendedTitle,
             isDefault: t.isDefault, isForced: t.isForced, isSelected: t.isSelected,
             hearingImpaired: t.isHearingImpaired,
@@ -173,7 +174,7 @@ enum ProviderPlaybackMetadata {
         colorPrimaries: String? = nil, colorTrc: String? = nil, doviProfile: Int? = nil,
         frameRate: Double? = nil, height: Int? = nil, width: Int? = nil, level: Int? = nil,
         profile: String? = nil, scanType: String? = nil, channelLayout: String? = nil,
-        channels: Int? = nil, samplingRate: Int? = nil, key: String? = nil
+        channels: Int? = nil, samplingRate: Int? = nil, hasAtmos: Bool? = nil, key: String? = nil
     ) -> PlexStream {
         PlexStream(
             _id: Int(id) ?? -(10_000_000 + ordinal),
@@ -218,6 +219,7 @@ enum ProviderPlaybackMetadata {
             channels: channels,
             bitrate: nil,
             samplingRate: samplingRate,
+            hasAtmos: hasAtmos,
             format: nil,
             key: key,
             extendedDisplayTitle: extendedTitle,

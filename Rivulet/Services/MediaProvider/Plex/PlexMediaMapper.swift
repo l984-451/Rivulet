@@ -511,12 +511,22 @@ enum PlexMediaMapper {
             default: .unknown
             }
         }
+        func rating(_ value: Double?, image: String?, audience: Bool) -> MediaRating? {
+            let ratingSource = source(image, audience: audience)
+            // Plex's certified mark is authoritative. Ordinary ripe/upright
+            // marks and high scores do not establish either official award.
+            let designation: MediaRating.RottenTomatoesDesignation? =
+                image == "rottentomatoes://image.rating.certified" && ratingSource == .rottenTomatoes
+                ? .certifiedFresh : nil
+            return MediaRating(value, source: ratingSource,
+                               rottenTomatoesDesignation: designation, plexRatingImage: image)
+        }
         let entries = (meta.Rating ?? []).map {
-            MediaRating($0.value, source: source($0.image, audience: $0.type == "audience"))
+            rating($0.value, image: $0.image, audience: $0.type == "audience")
         }
         return MediaRating.ordered(entries + [
-            MediaRating(meta.rating, source: source(meta.ratingImage, audience: false)),
-            MediaRating(meta.audienceRating, source: source(meta.audienceRatingImage, audience: true)),
+            rating(meta.rating, image: meta.ratingImage, audience: false),
+            rating(meta.audienceRating, image: meta.audienceRatingImage, audience: true),
         ])
     }
 

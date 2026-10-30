@@ -88,6 +88,35 @@ final class PreviewCarouselViewController: UIViewController {
     /// Below-fold detail, above the collection view. Inert until the expand morph
     /// ends; reports `onScrollProgress` so the VC fades the blur and the cell chrome.
     private let expandedDetail = ExpandedDetailContainerView()
+    private var themeOwnerID: String?
+    private var themeTask: Task<Void, Never>?
+
+    private func activateVisibleTheme() {
+        guard isViewLoaded, view.window != nil, presentedViewController == nil,
+              items.indices.contains(selectedIndex) else { return }
+        let item = items[selectedIndex]
+        guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) as? SiloProvider,
+              SiloSession.account?.providerID == provider.id,
+              SiloSession.authorityRevision == provider.authorityRevision else { stopVisibleTheme(); return }
+        if themeOwnerID == item.ref.itemID { return }
+        stopVisibleTheme()
+        themeOwnerID = item.ref.itemID
+        themeTask = Task { [weak self] in
+            await SiloThemeMusicController.shared.refresh(provider: provider)
+            guard let self, !Task.isCancelled, self.themeOwnerID == item.ref.itemID,
+                  self.view.window != nil, self.presentedViewController == nil,
+                  self.items.indices.contains(self.selectedIndex),
+                  self.items[self.selectedIndex].ref == item.ref else { return }
+            await SiloThemeMusicController.shared.activate(ownerID: item.ref.itemID, provider: provider)
+        }
+    }
+
+    private func stopVisibleTheme() {
+        themeTask?.cancel()
+        themeTask = nil
+        themeOwnerID = nil
+        SiloThemeMusicController.shared.stop()
+    }
 
     /// Blur under the chrome, scrubbed by a paused animator's `fractionComplete`.
     /// Not by alpha: alpha on an effect view artifacts.
@@ -103,6 +132,7 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     private func teardown() {
+        stopVisibleTheme()
         onTeardown?()
         onTeardown = nil
     }
@@ -265,7 +295,8 @@ final class PreviewCarouselViewController: UIViewController {
             let content = InfoPopupContent.description(
                 title: detail.item.title,
                 subtitle: detail.genres.prefix(3).joined(separator: ", "),
-                body: detail.item.overview)
+                body: detail.item.overview,
+                overviewIsMachineTranslated: detail.item.overviewIsMachineTranslated == true)
             let size = InfoPopupViewController.descriptionSize
             self.present(InfoPopupViewController(content: content, width: size.width, height: size.height), animated: true)
         }
@@ -311,9 +342,31 @@ final class PreviewCarouselViewController: UIViewController {
                          animated: true)
         }
         // Cast / crew cell Select → person detail page (full-screen).
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.view.window != nil, self.presentedViewController == nil else { return }
+                SiloThemeMusicController.shared.resume()
+                self.themeOwnerID = nil
+                self.activateVisibleTheme()
+            }
+            .store(in: &refreshObservers)
+
         expandedDetail.onSelectPerson = { [weak self] person in
             guard let self else { return }
-            let page = PersonDetailViewController(person: person)
+            let provider = self.items.indices.contains(self.selectedIndex)
+                ? MediaProviderRegistry.shared.provider(for: self.items[self.selectedIndex].ref.providerID) as? SiloProvider
+                : nil
+            let page: PersonDetailViewController
+            if let provider {
+                let libraries = ServerDataStore.shared.visibleLibraries
+                    .filter { $0.providerID == provider.id }.map(\.id)
+                guard let native = try? PersonDetailViewController.silo(
+                    cast: person, provider: provider, inLibraries: libraries) else { return }
+                page = native
+            } else {
+                page = PersonDetailViewController(person: person)
+            }
             page.onSelectItem = { [weak self] item in self?.presentPersonFilmographyItem(item) }
             self.present(page, animated: true)
         }
@@ -470,6 +523,7 @@ final class PreviewCarouselViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        activateVisibleTheme()
         // Focus, not first responder, is what routes presses here on tvOS.
         becomeFirstResponder()
         // Re-arm a shelf row (Related) on its tile before the update resolves:
@@ -722,6 +776,7 @@ final class PreviewCarouselViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        stopVisibleTheme()
         previewCarouselLog.info("[Lifecycle] viewWillDisappear isExpanded=\(self.isExpanded) presentingVC=\(self.presentingViewController != nil)")
     }
 
@@ -873,6 +928,9 @@ final class PreviewCarouselViewController: UIViewController {
                       self.items.indices.contains(index),
                       self.items[index].ref == detail.item.ref
                 else { return }
+                if provider.kind == .silo {
+                    self.backdropPlane.updateArtwork(detail.item.artwork, for: detail.item.ref)
+                }
                 let refreshed = detail.item
                 guard refreshed != self.items[index] else { return }
                 self.items[index] = refreshed
@@ -1050,6 +1108,12 @@ final class PreviewCarouselViewController: UIViewController {
     /// extra has none, only `key`, an absolute part path (`/services/iva/assets/...`) that
     /// 404s under `/library/metadata` (#255); it plays directly through a synthetic PlexMetadata.
     private func presentExtraPlayer(_ trailer: BelowFoldTrailer) {
+        if let url = trailer.externalURL {
+            guard let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID),
+                  MediaProviderRegistry.shared.isCurrentAuthority(provider) else { return }
+            openRemoteVideo(url)
+            return
+        }
         let key = trailer.playbackKey ?? trailer.id
         // Off Plex an extra is a library item of its own provider.
         if let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID), provider.kind != .plex {
@@ -1091,6 +1155,31 @@ final class PreviewCarouselViewController: UIViewController {
         }
     }
 
+    /// Remote metadata videos are watch pages, not Aether inputs. Apple TV has
+    /// no web view; YouTube's TV app accepts its app-scheme watch destination.
+    private func openRemoteVideo(_ url: URL) {
+        var destination = url
+        if url.host == "www.youtube.com", var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.scheme = "youtube"
+            destination = components.url ?? url
+        }
+        let options: [UIApplication.OpenExternalURLOptionsKey: Any] = destination.scheme == "https"
+            ? [.universalLinksOnly: true] : [:]
+        UIApplication.shared.open(destination, options: options) { [weak self] opened in
+            guard !opened else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let message = url.host == "www.youtube.com"
+                    ? "Install or update YouTube on this Apple TV, then try again. Silo provides a YouTube link, not a video stream Rivulet can play."
+                    : "No installed Apple TV app can open this Vimeo video. Open it in Vimeo on another device."
+                let popup = ConfirmationPopupViewController(
+                    title: "Couldn't Open Video", message: message,
+                    confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                self.present(popup, animated: true)
+            }
+        }
+    }
+
     private func playProviderExtra(_ ref: MediaItemRef, provider: any MediaProvider) {
         Task { [weak self] in
             do {
@@ -1099,6 +1188,11 @@ final class PreviewCarouselViewController: UIViewController {
                 ProviderPlayer.play(detail.item, fromBeginning: false, from: self, onDismiss: nil)
             } catch {
                 previewCarouselLog.error("[PCV] extra play: \(error.localizedDescription, privacy: .public)")
+                guard let self else { return }
+                let popup = ConfirmationPopupViewController(
+                    title: "Couldn't Play", message: ProviderPlayer.errorMessage(for: error),
+                    confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                self.present(popup, animated: true)
             }
         }
     }
@@ -1284,10 +1378,12 @@ final class PreviewCarouselViewController: UIViewController {
             outgoingCell?.setPagingFade(1)
             expandedDetail.setCurrent(false, animated: false)
             expandedDetail.alpha = 1
+            stopVisibleTheme()
             selectedIndex = anim.targetIndex
             dismissSourceTarget = makeSourceTarget(for: selectedIndex)
             pagingAnimation = nil
             state.finishPaging()
+            activateVisibleTheme()
             // Cascade chrome on the new center cell.
             updateCurrentCellChrome(animated: true)
         }
@@ -1610,6 +1706,11 @@ extension PreviewCarouselViewController: UICollectionViewDataSource, UICollectio
             withReuseIdentifier: PreviewCardView.reuseIdentifier,
             for: indexPath
         ) as! PreviewCardView
+        cell.onDetailArtwork = { [weak self] ref, artwork in
+            guard let self,
+                  MediaProviderRegistry.shared.provider(for: ref.providerID)?.kind == .silo else { return }
+            self.backdropPlane.updateArtwork(artwork, for: ref)
+        }
         if items.indices.contains(indexPath.item) {
             cell.item = items[indexPath.item]
         }

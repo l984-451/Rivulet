@@ -17,6 +17,10 @@ struct MediaHub: Identifiable, Hashable, Sendable {
     let title: String
     let style: HubStyle
     let items: [MediaItem]
+    var total: Int? = nil
+    var nextPage: Page? = nil
+    /// False for bounded rows whose server contract has no dedicated browse route.
+    var canBrowse: Bool = true
 
     enum HubStyle: Sendable, Hashable, Codable {
         case shelf

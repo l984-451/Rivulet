@@ -85,6 +85,7 @@ final class ShelfRowCell: UICollectionViewCell {
     /// in-place content change (cross-dissolved) from binding a freshly
     /// (re)used cell (instant).
     private var hasBoundContent = false
+    private var pendingInitialOffset: CGFloat?
     /// How far this cell extends PAST the visible panel on each side (the
     /// expanded detail's below-fold is translated/widened off-screen by a
     /// constant pull). The shelf margin + equation are panel-relative: the
@@ -236,6 +237,12 @@ final class ShelfRowCell: UICollectionViewCell {
         if abs(rowWidthConstraint.constant - targetWidth) > 0.5 {
             rowWidthConstraint.constant = targetWidth
         }
+        if let offset = pendingInitialOffset {
+            pendingInitialOffset = nil
+            contentView.layoutIfNeeded()
+            rowCollectionView.layoutIfNeeded()
+            setOffset(clampedTo: offset)
+        }
     }
 
     @available(*, unavailable)
@@ -247,6 +254,7 @@ final class ShelfRowCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         pendingFocusIndex = nil
+        pendingInitialOffset = nil
         // Belongs to the row this cell WAS showing; carrying it into a
         // different row would restore focus to an unrelated tile index.
         lastFocusedItemIndex = nil
@@ -290,8 +298,9 @@ final class ShelfRowCell: UICollectionViewCell {
             hasBoundContent = true
             let applyContent = {
                 self.rowCollectionView.reloadData()
-                self.rowCollectionView.layoutIfNeeded()
-                self.setOffset(clampedTo: initialOffset)
+                // A reused row still has its previous kind's frame during configure.
+                self.pendingInitialOffset = initialOffset
+                self.setNeedsLayout()
             }
             if batchUpdateInFlight {
                 // Reloading now would strand that batch's inserted cells; run

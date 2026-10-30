@@ -22,6 +22,7 @@ extension SettingsContent {
             return [
                 SettingsRowItem(id: "jellyfinServerInfo", title: "Server",
                                 kind: .info(value: { account.serverName })),
+                serverLibrariesToggle(id: "jellyfinLibraries", providerID: account.providerID),
             ] + (hasLiveTV ? [jellyfinLiveTVToggle(id: "jellyfinLiveTV")] : []) + [
                 SettingsRowItem(id: "jellyfinUserInfo", title: "User",
                                 kind: .info(value: { account.userName })),

@@ -42,6 +42,7 @@ struct BelowFoldTrailer: Hashable, Sendable {
     /// `/services/iva/assets/...` path, which 404s under /library/metadata.
     var playbackKey: String?
     var providerID: String
+    var externalURL: URL? = nil
 }
 
 @MainActor
@@ -66,8 +67,8 @@ final class BelowFoldContentLoader {
         content.cast = resolvedDetail?.cast ?? []
         content.directors = resolvedDetail?.directors ?? []
         content.detail = resolvedDetail
-        // Real Plex extras, split into Trailers vs other Extras (behind the
-        // scenes, featurettes, etc.) by the extra's type.
+        // Native local extras and remote provider videos share the existing rows.
+        // Their distinct playback destinations survive the detail-to-tile mapping.
         let fallbackArt = item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster
         func makeTrailer(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
             BelowFoldTrailer(
@@ -77,7 +78,8 @@ final class BelowFoldContentLoader {
                 durationFormatted: extra.duration.map(Self.formatTrailerDuration),
                 subtype: extra.subtype,
                 playbackKey: extra.playbackKey,
-                providerID: extra.providerID
+                providerID: extra.providerID,
+                externalURL: extra.externalURL
             )
         }
         let allExtras = resolvedDetail?.extras ?? []

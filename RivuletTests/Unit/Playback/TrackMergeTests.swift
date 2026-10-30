@@ -83,6 +83,79 @@ final class TrackMergeTests: XCTestCase {
         )
     }
 
+    private func nativeSubtitle(index: Int, embedded: Bool, streamIndex: Int? = nil, url: URL? = nil) -> SubtitleTrack {
+        SubtitleTrack(id: "subtitle:\(index)", index: index, codec: "subrip", language: "nld",
+                      title: nil, extendedTitle: nil, isDefault: false, isForced: false,
+                      isHearingImpaired: false, isEmbedded: embedded, externalURL: url,
+                      isSelected: true, nativeStreamIndex: streamIndex)
+    }
+
+    func testNativeSubtitleUsesExplicitContainerIndexNotCombinedIndexOrOrdinal() {
+        let selected = nativeSubtitle(index: 0, embedded: true, streamIndex: 7)
+        XCTAssertEqual(NativeSubtitleSelection.engineID(ordinal: 0, tracks: [selected],
+                                                       engine: [engine(id: 0), engine(id: 7)]), 7)
+        XCTAssertNil(NativeSubtitleSelection.engineID(ordinal: 0, tracks: [selected],
+                                                     engine: [engine(id: 0), engine(id: 8)]))
+        let unknown = nativeSubtitle(index: 7, embedded: true)
+        XCTAssertNil(NativeSubtitleSelection.engineID(ordinal: 0, tracks: [unknown], engine: [engine(id: 7)]))
+    }
+
+    func testNativeSidecarPairsOnlyActuallyRegisteredDeliveries() {
+        let tracks = [
+            nativeSubtitle(index: 0, embedded: false),
+            nativeSubtitle(index: 1, embedded: true, streamIndex: 4),
+            nativeSubtitle(index: 5, embedded: false, url: URL(string: "http://127.0.0.1/subtitle/selected.srt")!)
+        ]
+        let loaded = [engine(id: 4), engine(id: 100_000, external: true)]
+        XCTAssertEqual(NativeSubtitleSelection.engineID(ordinal: 2, tracks: tracks, engine: loaded), 100_000)
+        XCTAssertNil(NativeSubtitleSelection.engineID(ordinal: 0, tracks: tracks, engine: loaded))
+        XCTAssertNil(NativeSubtitleSelection.engineID(ordinal: 3, tracks: tracks, engine: loaded))
+    }
+
+    func testNativePlanAudioSurvivesEngineStartupDefaultSelection() {
+        // The native plan selects English TrueHD, not the same-language AC3
+        // fallback. FFmpeg stream IDs also include video/subtitle streams.
+        let tracks = [
+            engine(id: 1, codec: "ac3", channels: 6, isDefault: true),
+            engine(id: 4, codec: "truehd", channels: 8)
+        ]
+        var selection = NativeAudioSelection()
+        var playing = 1
+        if let id = selection.resolve(ordinal: 1, engine: tracks, loadReturned: false) {
+            playing = id
+        }
+        // After publishing the probe, engine.load resolves its own initial
+        // default and starts that transport. A premature selection is lost.
+        playing = 1
+        if let id = selection.resolve(ordinal: 1, engine: tracks, loadReturned: true) {
+            playing = id
+        }
+        XCTAssertEqual(playing, 4, "The authoritative TrueHD track must be selected after startup settles.")
+        XCTAssertNil(selection.resolve(ordinal: 1, engine: tracks, loadReturned: true),
+                     "Duplicate track publications must not trigger another engine reload.")
+    }
+
+    func testNativePlanWaitsForSelectedAudioInsteadOfConsumingPartialInventory() {
+        let ac3 = engine(id: 1, codec: "ac3", channels: 6)
+        let truehd = engine(id: 4, codec: "truehd", channels: 8)
+        var selection = NativeAudioSelection()
+        XCTAssertNil(selection.resolve(ordinal: 1, engine: [ac3], loadReturned: true))
+        XCTAssertEqual(selection.resolve(ordinal: 1, engine: [ac3, truehd], loadReturned: true), 4)
+    }
+
+    func testNativeReplanCanSelectAnotherTrackWithoutChangingContainerIDSpace() {
+        let tracks = [
+            engine(id: 1, codec: "ac3", channels: 6),
+            engine(id: 4, codec: "truehd", channels: 8)
+        ]
+        var selection = NativeAudioSelection()
+        XCTAssertEqual(selection.resolve(ordinal: 1, engine: tracks, loadReturned: true), 4)
+        // A fresh provider load, including a seek/replan, resets selection.
+        selection = NativeAudioSelection()
+        XCTAssertNil(selection.resolve(ordinal: 0, engine: tracks, loadReturned: false))
+        XCTAssertEqual(selection.resolve(ordinal: 0, engine: tracks, loadReturned: true), 1)
+    }
+
     // MARK: - Invariant 1: the engine's id survives
 
     func testMergedTrackKeepsEngineIdNotPlexId() {

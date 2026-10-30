@@ -204,9 +204,4 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(source(range: .dolbyVision(profile: 8), hdr10Plus: false).qualityBadges(), ["4K", "DV"])
     }
 
-    @MainActor
-    func test_carouselBadges_keepRangeAndDropPlainCodecs() {
-        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(range: .dolbyVision(profile: 8), hdr10Plus: true)), ["4K", "DV", "HDR10+"])
-        XCTAssertEqual(MediaDetailChromeView.calmBadges(nil), [])
-    }
 }

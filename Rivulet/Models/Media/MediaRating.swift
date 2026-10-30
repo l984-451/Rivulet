@@ -24,19 +24,101 @@ nonisolated struct MediaRating: Sendable, Hashable {
     let value: Double
     let source: Source
 
+    /// Official awards are not score thresholds. Only an upstream designation
+    /// may set these; Silo's current score-only contract cannot supply one.
+    enum RottenTomatoesDesignation: Sendable, Hashable {
+        case certifiedFresh, verifiedHot
+    }
+
+    enum RottenTomatoesStatus: Sendable, Hashable {
+        case certifiedFresh, fresh, rotten, verifiedHot, hot, stale
+
+        var imageName: String {
+            switch self {
+            case .certifiedFresh: "RatingRTCertifiedFresh"
+            case .fresh: "RatingRTFresh"
+            case .rotten: "RatingRTRotten"
+            case .verifiedHot: "RatingRTVerifiedHot"
+            case .hot: "RatingRTHot"
+            case .stale: "RatingRTStale"
+            }
+        }
+
+        var name: String {
+            switch self {
+            case .certifiedFresh: "Certified Fresh"
+            case .fresh: "Fresh"
+            case .rotten: "Rotten"
+            case .verifiedHot: "Verified Hot"
+            case .hot: "Hot"
+            case .stale: "Stale"
+            }
+        }
+    }
+
+    let rottenTomatoesDesignation: RottenTomatoesDesignation?
+    /// Retain the provider's original URI as evidence, including unrecognized
+    /// marks. Never infer an award from an arbitrary URI substring.
+    let plexRatingImage: String?
+
+    var rottenTomatoesStatus: RottenTomatoesStatus? {
+        switch source {
+        case .rottenTomatoes:
+            if rottenTomatoesDesignation == .certifiedFresh { return .certifiedFresh }
+            return value >= 6 ? .fresh : .rotten
+        case .rottenTomatoesAudience:
+            if rottenTomatoesDesignation == .verifiedHot { return .verifiedHot }
+            return value >= 6 ? .hot : .stale
+        default:
+            return nil
+        }
+    }
+
+    /// A provider's authoritative mark and formatted score. Keeping its source
+    /// identity avoids collapsing unrelated plugin ratings into `.unknown`.
+    struct NativeDisplay: Sendable, Hashable {
+        let sourceID: String
+        let name: String
+        let text: String
+    }
+    let nativeDisplay: NativeDisplay?
+
     /// Nil for a missing or zero score: Plex, Jellyfin and TMDB all send 0
     /// for "no score yet".
-    init?(_ value: Double?, source: Source) {
+    init?(
+        _ value: Double?, source: Source,
+        rottenTomatoesDesignation: RottenTomatoesDesignation? = nil,
+        plexRatingImage: String? = nil
+    ) {
         // Server-supplied: a NaN or huge value would trap the badge's Int conversion.
         guard let value, value > 0, value <= 100 else { return nil }
         self.value = value
         self.source = source
+        self.nativeDisplay = nil
+        self.rottenTomatoesDesignation = rottenTomatoesDesignation
+        self.plexRatingImage = plexRatingImage
+    }
+
+    init?(scoreOutOf100: Double, source: Source, sourceID: String, name: String, display: String) {
+        guard scoreOutOf100.isFinite, (0...100).contains(scoreOutOf100),
+              !sourceID.isEmpty, !name.isEmpty, !display.isEmpty else { return nil }
+        self.value = scoreOutOf100 / 10
+        self.source = source
+        self.nativeDisplay = NativeDisplay(sourceID: sourceID, name: name, text: display)
+        self.rottenTomatoesDesignation = nil
+        self.plexRatingImage = nil
     }
 
     /// One score per source in display order; the first of a source wins. An
     /// unnamed score (Jellyfin's community rating) is dropped once IMDb or
     /// TMDB is present, since it is one of those.
     static func ordered(_ ratings: [MediaRating?]) -> [MediaRating] {
+        if ratings.contains(where: { $0?.nativeDisplay != nil }) {
+            var seen = Set<String>()
+            return ratings.compactMap { $0 }.filter {
+                seen.insert($0.nativeDisplay?.sourceID ?? "legacy:\($0.source.rawValue)").inserted
+            }
+        }
         var seen = Set<Source>()
         let unique = ratings.compactMap { $0 }.filter { seen.insert($0.source).inserted }
         let named = seen.contains(.imdb) || seen.contains(.tmdb)
@@ -53,11 +135,12 @@ nonisolated struct MediaRating: Sendable, Hashable {
         ratings.first { $0.source == detailSource } ?? ratings.first { $0.source == .rottenTomatoes }
     }
 
-    var name: String { source.name }
+    var name: String { nativeDisplay?.name ?? source.name }
 
     /// Each source in its own format: "89%", "73", "4.2", "7.6".
     var badgeText: String {
-        switch source {
+        if let nativeDisplay { return nativeDisplay.text }
+        return switch source {
         case .rottenTomatoes, .rottenTomatoesAudience: "\(Int((value * 10).rounded()))%"
         case .metacritic: "\(Int((value * 10).rounded()))"
         case .letterboxd: String(format: "%.1f", value / 2)
@@ -67,7 +150,8 @@ nonisolated struct MediaRating: Sendable, Hashable {
 
     /// Who the score is from, for the ratings popup.
     var detailText: String {
-        switch source {
+        if let nativeDisplay { return nativeDisplay.name }
+        return switch source {
         case .rottenTomatoes: "Tomatometer, critics"
         case .rottenTomatoesAudience: "Popcornmeter, audience"
         case .imdb: "IMDb users"
@@ -80,7 +164,8 @@ nonisolated struct MediaRating: Sendable, Hashable {
 
     /// The scale suffix drawn after the score, nil when the score carries its own.
     var scale: String? {
-        switch source {
+        if nativeDisplay != nil { return nil } // Native display already carries its own scale.
+        return switch source {
         case .rottenTomatoes, .rottenTomatoesAudience: nil
         case .metacritic: "/100"
         case .letterboxd: "/5"

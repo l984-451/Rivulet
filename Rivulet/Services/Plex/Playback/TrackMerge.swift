@@ -70,6 +70,7 @@ enum TrackMerge {
             extendedDisplayTitle: plexTrack.extendedDisplayTitle,
             channels: engineTrack.channels ?? plexTrack.channels,
             profile: plexTrack.profile,
+            hasAtmos: engineTrack.hasAtmos || plexTrack.hasAtmos,
             subtitleKey: plexTrack.subtitleKey,
             streamIndex: engineTrack.streamIndex,
             isExternal: engineTrack.isExternal
@@ -81,5 +82,39 @@ enum TrackMerge {
     private static func preferredName(engine: MediaTrack, plex: MediaTrack) -> String {
         let plexName = plex.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return plexName.isEmpty ? engine.name : plexName
+    }
+}
+
+/// Silo's audio identity is an ordinal within the original file's audio tracks,
+/// not an FFmpeg stream index. Probe publications during load are not a settled
+/// selection: the engine still has to choose its initial track and start it.
+struct NativeAudioSelection {
+    private var applied = false
+
+    mutating func resolve(ordinal: Int?, engine: [MediaTrack], loadReturned: Bool) -> Int? {
+        guard !applied, loadReturned, let ordinal, engine.indices.contains(ordinal) else { return nil }
+        applied = true
+        return engine[ordinal].id
+    }
+}
+
+/// Provider request indices and native container indices are distinct identities.
+enum NativeSubtitleSelection {
+    static func engineID(ordinal: Int, tracks: [SubtitleTrack], engine: [MediaTrack]) -> Int? {
+        guard tracks.indices.contains(ordinal) else { return nil }
+        let selected = tracks[ordinal]
+        if selected.isEmbedded {
+            guard let index = selected.nativeStreamIndex else { return nil }
+            return engine.first { !$0.isExternal && $0.id == index }?.id
+        }
+        guard selected.externalURL != nil else { return nil }
+        var remaining = tracks[..<ordinal].reduce(0) {
+            $0 + (!$1.isEmbedded && $1.externalURL != nil ? 1 : 0)
+        }
+        for track in engine where track.isExternal {
+            if remaining == 0 { return track.id }
+            remaining -= 1
+        }
+        return nil
     }
 }

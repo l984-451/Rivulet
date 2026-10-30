@@ -52,6 +52,8 @@ final class PlayerInfoCardView: UIView {
         /// Channel logos are fitted, not cropped to the poster frame.
         var posterFits = false
         var showsFromBeginning = true
+        var isDescriptionTranslating = false
+        var overviewIsMachineTranslated = false
     }
 
     private enum Metrics {
@@ -75,6 +77,10 @@ final class PlayerInfoCardView: UIView {
 
     private let posterView = UIImageView()
     private var posterTask: Task<Void, Never>?
+    private let summaryButton = PlayerSummaryButton(text: "")
+    private let translationView = DescriptionTranslationView()
+    private var translationBelowSummary: NSLayoutConstraint?
+    private var translationWithoutSummary: NSLayoutConstraint?
 
     init(content: Content) {
         super.init(frame: .zero)
@@ -91,8 +97,12 @@ final class PlayerInfoCardView: UIView {
         title.font = .systemFont(ofSize: 31, weight: .bold)
         title.textColor = .white
 
-        let summary = PlayerSummaryButton(text: content.summary ?? "")
+        let summary = summaryButton
+        summary.setText(content.summary ?? "")
+        summary.setTranslating(content.isDescriptionTranslating)
         summary.isHidden = (content.summary ?? "").isEmpty
+        translationView.configure(isTranslating: content.isDescriptionTranslating,
+                                  isMachineTranslated: content.overviewIsMachineTranslated)
         summary.onPress = { [weak self, weak summary] in
             guard let summary else { return }
             self?.onExpandSummary?(summary)
@@ -119,10 +129,14 @@ final class PlayerInfoCardView: UIView {
         action.isHidden = !content.showsFromBeginning
         action.onPress = { [weak self] in self?.onFromBeginning?() }
 
-        [glass, posterView, title, summary, meta, action].forEach {
+        [glass, posterView, title, summary, translationView, meta, action].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
+        translationBelowSummary = translationView.topAnchor.constraint(equalTo: summary.bottomAnchor, constant: 2)
+        translationWithoutSummary = translationView.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.summaryTop)
+        translationBelowSummary?.isActive = !summary.isHidden
+        translationWithoutSummary?.isActive = summary.isHidden
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: Metrics.height),
             glass.topAnchor.constraint(equalTo: topAnchor),
@@ -142,6 +156,9 @@ final class PlayerInfoCardView: UIView {
             summary.textLeading.constraint(equalTo: leadingAnchor, constant: Metrics.textX),
             summary.textTop.constraint(equalTo: topAnchor, constant: Metrics.summaryTop),
             summary.textWidth.constraint(equalToConstant: Metrics.summaryWidth),
+
+            translationView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.textX),
+            translationView.widthAnchor.constraint(equalToConstant: Metrics.summaryWidth),
 
             meta.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.textX),
             meta.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.metaTop),
@@ -163,6 +180,20 @@ final class PlayerInfoCardView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     deinit { posterTask?.cancel() }
+
+    func updateDescription(text: String?, isTranslating: Bool, isMachineTranslated: Bool) {
+        let text = text ?? ""
+        summaryButton.setText(text)
+        summaryButton.setTranslating(isTranslating)
+        summaryButton.isHidden = text.isEmpty
+        translationView.configure(isTranslating: isTranslating, isMachineTranslated: isMachineTranslated)
+        translationBelowSummary?.isActive = false
+        translationWithoutSummary?.isActive = false
+        translationBelowSummary?.isActive = !summaryButton.isHidden
+        translationWithoutSummary?.isActive = summaryButton.isHidden
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
 }
 
 /// AVKit's expanding summary: two lines, a focus plate 12pt past the text,
@@ -212,6 +243,7 @@ final class PlayerSummaryButton: UIControl {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func setText(_ text: String) { label.text = text }
+    func setTranslating(_ translating: Bool) { label.alpha = translating ? 0.65 : 1 }
 
     /// Reading mode: the text may shrink to show more of itself in the same lines.
     func setShrinksToFit(_ shrinks: Bool) {
@@ -350,17 +382,23 @@ final class PlayerDescriptionOverlayView: UIView {
     private let textClip = UIView()
     private let scrollView = FocusableTextScrollView()
     private let label = UILabel()
+    private let translationView = DescriptionTranslationView()
     private let fadeMask = CAGradientLayer()
 
-    init(text: String) {
+    init(text: String, isTranslating: Bool = false, isMachineTranslated: Bool = false,
+         canTranslate: Bool = false, errorMessage: String? = nil, onTranslate: (() -> Void)? = nil) {
         super.init(frame: .zero)
         label.text = text
+        label.alpha = isTranslating ? 0.65 : 1
         label.font = .systemFont(ofSize: 29, weight: .medium)
         label.textColor = .white
         label.numberOfLines = 0
+        translationView.configure(isTranslating: isTranslating, isMachineTranslated: isMachineTranslated,
+                                  canTranslate: canTranslate, errorMessage: errorMessage, onTranslate: onTranslate)
         scrollView.showsVerticalScrollIndicator = false
         scrollView.panGestureRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
         scrollView.addSubview(label)
+        scrollView.addSubview(translationView)
         textClip.addSubview(scrollView)
         let glass = makePaneGlass(cornerRadius: Metrics.radius)
         glass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -373,20 +411,41 @@ final class PlayerDescriptionOverlayView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    func updateDescription(text: String?, isTranslating: Bool, isMachineTranslated: Bool,
+                           canTranslate: Bool = false, errorMessage: String? = nil,
+                           onTranslate: (() -> Void)? = nil) {
+        label.text = text ?? ""
+        label.alpha = isTranslating ? 0.65 : 1
+        translationView.configure(isTranslating: isTranslating, isMachineTranslated: isMachineTranslated,
+                                  canTranslate: canTranslate, errorMessage: errorMessage, onTranslate: onTranslate)
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         let textWidth = Metrics.width - Metrics.sideInset * 2
         let textHeight = ceil(label.sizeThatFits(CGSize(width: textWidth, height: .greatestFiniteMagnitude)).height)
-        let scrolls = textHeight + Metrics.verticalInset * 2 > Metrics.maxHeight
+        let translationHeight = translationView.sizeThatFits(
+            CGSize(width: textWidth, height: .greatestFiniteMagnitude)).height
+        let translationSpacing: CGFloat = textHeight > 0 && translationHeight > 0 ? 12 : 0
+        let contentHeight = textHeight + translationSpacing + translationHeight
+        let scrolls = contentHeight + Metrics.verticalInset * 2 > Metrics.maxHeight
         let inset = scrolls ? Metrics.scrollingInset : Metrics.verticalInset
-        let height = min(Metrics.maxHeight, textHeight + inset * 2)
+        let height = min(Metrics.maxHeight, contentHeight + inset * 2)
         platter.frame = CGRect(x: (bounds.width - Metrics.width) / 2, y: (bounds.height - height) / 2,
                                width: Metrics.width, height: height)
         platter.subviews.first?.frame = platter.bounds
         textClip.frame = CGRect(x: Metrics.sideInset, y: 0, width: textWidth, height: height)
         scrollView.frame = textClip.bounds
-        label.frame = CGRect(x: 0, y: inset, width: textWidth, height: textHeight)
-        scrollView.contentSize = CGSize(width: textWidth, height: textHeight + inset * 2)
+        translationView.frame = CGRect(x: 0, y: inset, width: textWidth, height: translationHeight)
+        label.frame = CGRect(x: 0, y: inset + translationHeight + translationSpacing,
+                             width: textWidth, height: textHeight)
+        scrollView.contentSize = CGSize(width: textWidth, height: contentHeight + inset * 2)
+        let maximumOffset = max(0, scrollView.contentSize.height - scrollView.bounds.height)
+        if scrollView.contentOffset.y > maximumOffset, !scrollView.isDragging, !scrollView.isDecelerating {
+            scrollView.contentOffset.y = maximumOffset
+        }
         textClip.layer.mask = scrolls ? fadeMask : nil
         if scrolls {
             let edge = NSNumber(value: Double(Metrics.verticalInset / height))
@@ -681,6 +740,7 @@ enum DolbyVisionEnhancementLayer: String, Equatable {
 
 struct StreamingModeInfo {
     enum Mode: String {
+        case unknown = "Unknown"
         case directPlay = "Direct Play"
         case directStream = "Direct Stream"
         case transcode = "Transcode"
@@ -822,7 +882,10 @@ final class PlayerDetailsPaneView: UIView {
             y = 0
         }
         func height(of view: UIView) -> CGFloat {
-            view.systemLayoutSizeFitting(CGSize(width: Metrics.columnWidth, height: 0),
+            if let label = view as? UILabel {
+                return ceil(label.sizeThatFits(CGSize(width: Metrics.columnWidth, height: .greatestFiniteMagnitude)).height)
+            }
+            return view.systemLayoutSizeFitting(CGSize(width: Metrics.columnWidth, height: 0),
                                          withHorizontalFittingPriority: .required,
                                          verticalFittingPriority: .fittingSizeLevel).height
         }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-//  First-run landing: one card each for Plex, Jellyfin and Live TV, each opening
+//  First-run landing: Plex, Jellyfin, Silo and Live TV, each opening
 //  its own setup flow. A finished card shows a check, and Start Watching appears
 //  once any source is connected.
 
@@ -10,9 +10,10 @@ import UIKit
 
 final class SetupLandingViewController: UIViewController {
 
-    /// Plex, Jellyfin, or a Live TV source the user added (not one that follows a server).
+    /// A connected media server or a Live TV source the user added.
     static var hasAnySource: Bool {
-        PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil || !addedLiveTVSources.isEmpty
+        PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil
+            || SiloSession.account != nil || !addedLiveTVSources.isEmpty
     }
 
     private static var addedLiveTVSources: [LiveTVDataStore.LiveTVSourceInfo] {
@@ -23,6 +24,7 @@ final class SetupLandingViewController: UIViewController {
 
     private let plexCard = SetupLandingViewController.makeCard(title: "Plex", symbol: "play.rectangle.fill")
     private let jellyfinCard = SetupLandingViewController.makeCard(title: "Jellyfin", symbol: "server.rack")
+    private let siloCard = SetupLandingViewController.makeCard(title: "Silo", symbol: "externaldrive.fill")
     private let liveTVCard = SetupLandingViewController.makeCard(title: "Live TV",
                                                                  symbol: "antenna.radiowaves.left.and.right")
     private let doneButton = UIButton(configuration: .glass())
@@ -46,8 +48,9 @@ final class SetupLandingViewController: UIViewController {
 
         plexCard.addAction(UIAction { [weak self] _ in self?.connectPlex() }, for: .primaryActionTriggered)
         jellyfinCard.addAction(UIAction { [weak self] _ in self?.connectJellyfin() }, for: .primaryActionTriggered)
+        siloCard.addAction(UIAction { [weak self] _ in self?.presentSettingsFlow(.silo) }, for: .primaryActionTriggered)
         liveTVCard.addAction(UIAction { [weak self] _ in self?.addLiveTV() }, for: .primaryActionTriggered)
-        let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, liveTVCard])
+        let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, siloCard, liveTVCard])
         cards.spacing = 48
 
         doneButton.configuration?.title = "Start Watching"
@@ -157,6 +160,7 @@ final class SetupLandingViewController: UIViewController {
         Self.setDone(plexCard, prompt: "Sign In", detail: plexServers > 1 ? "\(plexServers) Servers"
                      : plexServers == 1 ? auth.savedServerName ?? "Connected" : nil)
         Self.setDone(jellyfinCard, prompt: "Sign In", detail: JellyfinSession.account?.serverName)
+        Self.setDone(siloCard, prompt: "Sign In", detail: SiloSession.account?.serverName)
         let added = Self.addedLiveTVSources
         Self.setDone(liveTVCard, prompt: "Add a Source", detail: added.isEmpty ? nil
                      : added.count == 1 ? added[0].displayName : "\(added.count) Sources")

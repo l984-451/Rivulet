@@ -26,6 +26,7 @@ enum SidebarTab: Hashable {
     case providerLibrary(providerID: String, libraryID: String)
     /// One server's video playlists, by provider id.
     case playlists(providerID: String)
+    case requests(providerID: String)
     case liveTV(sourceId: String?)
     case settings
 }
@@ -70,4 +71,3 @@ extension Notification.Name {
     /// page it shows. The shell drives focus into it as on a tab switch.
     static let tabContentReplaced = Notification.Name("tabContentReplaced")
 }
-

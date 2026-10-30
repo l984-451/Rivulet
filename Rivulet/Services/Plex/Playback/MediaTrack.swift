@@ -31,6 +31,8 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     let channels: Int?
     /// Plex's codec profile ("ma", "dolby truehd + dolby atmos"); nil from the engine.
     let profile: String?
+    /// Explicit source metadata only; TrueHD by itself does not imply Atmos.
+    let hasAtmos: Bool
 
     // Subtitle-specific
     let subtitleKey: String?  // Plex URL path for external subtitles (e.g., "/library/streams/12345")
@@ -67,6 +69,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         extendedDisplayTitle: String? = nil,
         channels: Int? = nil,
         profile: String? = nil,
+        hasAtmos: Bool = false,
         subtitleKey: String? = nil,
         streamIndex: Int? = nil,
         isExternal: Bool = false
@@ -83,6 +86,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.extendedDisplayTitle = extendedDisplayTitle
         self.channels = channels
         self.profile = profile
+        self.hasAtmos = hasAtmos
         self.subtitleKey = subtitleKey
         self.streamIndex = streamIndex
         self.isExternal = isExternal
@@ -102,6 +106,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.extendedDisplayTitle = stream.extendedDisplayTitle
         self.channels = stream.channels
         self.profile = stream.profile
+        self.hasAtmos = stream.hasAtmos == true
         self.subtitleKey = stream.key
         self.streamIndex = stream.index
         self.isExternal = false
@@ -124,6 +129,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.extendedDisplayTitle = track.extendedTitle
         self.channels = track.channels
         self.profile = track.profile
+        self.hasAtmos = track.hasAtmos
         self.subtitleKey = nil
         self.streamIndex = track.index
         self.isExternal = false
@@ -143,6 +149,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.extendedDisplayTitle = track.extendedTitle
         self.channels = nil
         self.profile = nil
+        self.hasAtmos = false
         self.subtitleKey = track.externalURL?.path
         // Sidecars aren't in the container, so they have no stream index.
         self.streamIndex = track.externalURL == nil ? track.index : nil
@@ -168,11 +175,11 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
 
     // MARK: - Audio Display Helpers
 
-    /// "TrueHD 7.1 Atmos", from codec, profile and channels.
+    /// "TrueHD 7.1 Atmos", from codec, profile, channels and explicit source evidence.
     var audioFormat: String {
         AudioTrack(id: "", index: 0, codec: codec ?? "", profile: profile, channels: inferredChannels,
                    channelLayout: nil, language: nil, title: nil, extendedTitle: nil, bitrate: nil,
-                   samplingRate: nil, isDefault: false, isForced: false, isSelected: false).qualityLabel
+                   samplingRate: nil, isDefault: false, isForced: false, isSelected: false, hasAtmos: hasAtmos).qualityLabel
     }
 
     /// "Commentary" or "Audio Description", the only thing a track's own title

@@ -5,9 +5,9 @@
 //  SettingsAsyncFormFinishTests.swift
 //  RivuletTests
 //
-//  The Jellyfin sign-in and the Live TV add-source forms finish after a
-//  network call. By then the user may have pressed Menu and moved on; the
-//  late finish must not pop someone else's page or erase their new draft.
+//  Server sign-in/profile and Live TV forms finish after a network call.
+//  A fast finish must survive the incoming transition; a late finish must
+//  not navigate someone else's page or erase their new draft.
 //
 
 import XCTest
@@ -17,19 +17,20 @@ import XCTest
 final class SettingsAsyncFormFinishTests: XCTestCase {
 
     override func tearDown() async throws {
+        SettingsContent.cancelSiloFlow()
         SettingsContent.addSourceDraft = nil
         try await super.tearDown()
     }
 
     private func settle() async throws {
-        try await Task.sleep(for: .milliseconds(700))   // one page transition is 0.45s
+        try await Task.sleep(for: .milliseconds(700))
     }
 
     private func page(_ page: SettingsPage, in container: SettingsContainerViewController) -> SettingsPageViewController? {
         container.children.compactMap { $0 as? SettingsPageViewController }.first { $0.page == page }
     }
 
-    func test_pageThatIsNoLongerOnTop_cannotPop() async throws {
+    func test_pageThatIsNoLongerOnTop_cannotNavigate() async throws {
         let container = SettingsContainerViewController()
         container.loadViewIfNeeded()
         container.push(.servers)
@@ -38,10 +39,11 @@ final class SettingsAsyncFormFinishTests: XCTestCase {
         try await settle()
         XCTAssertEqual(container.depth, 3)
 
+        page(.servers, in: container)?.onPush?(.servers)
         page(.servers, in: container)?.onPop?()
         try await settle()
 
-        XCTAssertEqual(container.depth, 3, "a page underneath the top one popped the top one")
+        XCTAssertEqual(container.depth, 3, "a stale page changed the navigation stack")
     }
 
     func test_topPage_canStillPop() async throws {
@@ -75,17 +77,31 @@ final class SettingsAsyncFormFinishTests: XCTestCase {
         XCTAssertNil(SettingsContent.addSourceDraft)
     }
 
-    // MARK: - Jellyfin failure copy
+    func test_fastProfileCompletionDuringIncomingTransition_returnsToServerPage() async throws {
+        for hasPIN in [false, true] {
+            let container = SettingsContainerViewController(rootPage: .silo)
+            container.loadViewIfNeeded()
+            let serverPage = try XCTUnwrap(page(.silo, in: container))
+            container.push(.siloProfiles)
+            if hasPIN {
+                page(.siloProfiles, in: container)?.onPush?(.siloProfilePIN)
+                let deadline = Date().addingTimeInterval(5)
+                while page(.siloProfilePIN, in: container) == nil, Date() < deadline {
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            let completingPage = try XCTUnwrap(page(hasPIN ? .siloProfilePIN : .siloProfiles, in: container))
+            if hasPIN { completingPage.onPopTwo?() }
+            else { completingPage.onPop?() }
 
-    func test_tooOldCopy_namesBothVersions() {
-        let copy = SettingsContent.jellyfinFailureCopy(for: JellyfinSignInError.serverTooOld(version: "10.8.13"))
-        let floor = "\(JellyfinSession.minimumVersion.major).\(JellyfinSession.minimumVersion.minor)"
-        XCTAssertTrue(copy.contains("10.8.13"), copy)
-        XCTAssertTrue(copy.contains(floor), copy)
+            let deadline = Date().addingTimeInterval(5)
+            while completingPage.parent != nil, Date() < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            XCTAssertEqual(container.children.compactMap { ($0 as? SettingsPageViewController)?.page }, [.silo])
+            XCTAssertTrue(container.children.first === serverPage)
+            XCTAssertEqual(container.depth, 1)
+        }
     }
 
-    func test_untrustedCertificateCopy_namesTheCertificate() {
-        let copy = SettingsContent.jellyfinFailureCopy(for: JellyfinSignInError.untrustedCertificate)
-        XCTAssertTrue(copy.localizedCaseInsensitiveContains("certificate"), copy)
-    }
 }

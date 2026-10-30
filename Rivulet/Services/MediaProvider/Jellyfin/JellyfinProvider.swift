@@ -232,15 +232,15 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return dates
     }
 
-    func showIdentityKeys(for showIDs: [String]) async -> [String: [String]] {
-        guard !showIDs.isEmpty else { return [:] }
+    func itemIdentityKeys(for itemIDs: [String]) async -> [String: [String]] {
+        guard !itemIDs.isEmpty else { return [:] }
         let result: JFQueryResult? = try? await client.get("Items", [
-            URLQueryItem(name: "ids", value: showIDs.joined(separator: ",")),
+            URLQueryItem(name: "ids", value: itemIDs.joined(separator: ",")),
             URLQueryItem(name: "fields", value: "ProviderIds"),
             URLQueryItem(name: "enableImages", value: "false")
         ])
-        return Dictionary((result?.items ?? []).compactMap { show in
-            show.id.map { ($0, ContinueWatchingMerge.providerIDKeys(show.providerIds ?? [:], scope: "s")) }
+        return Dictionary((result?.items ?? []).compactMap { item in
+            item.id.map { ($0, ContinueWatchingMerge.providerIDKeys(item.providerIds ?? [:], scope: item.type == "Movie" ? "m" : "s")) }
         }, uniquingKeysWith: { first, _ in first })
     }
 

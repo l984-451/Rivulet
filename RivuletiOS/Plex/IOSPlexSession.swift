@@ -82,11 +82,13 @@ final class IOSPlexSession: ObservableObject {
         PlexUserProfileManager.onProfileEntered = { token in
             Task { await PlexExtraServers.shared.refresh(plexToken: token) }
         }
-        ContinueWatchingRow.shared.fetchShowKeys = { [weak self] serverID, showIDs in
+        ContinueWatchingRow.shared.fetchIdentityKeys = { [weak self] serverID, itemIDs in
             guard let self, let (serverURL, token) = try? self.configuration(serverID: self.extraServerID(serverID)),
-                  let shows = try? await self.network.getGuids(serverURL: serverURL, authToken: token, ratingKeys: showIDs)
+                  let items = try? await self.network.getGuids(serverURL: serverURL, authToken: token, ratingKeys: itemIDs)
             else { return [:] }
-            return Dictionary(shows.compactMap { show in show.ratingKey.map { ($0, ContinueWatchingMerge.plexShowKeys(show)) } },
+            return Dictionary(items.compactMap { item in
+                item.ratingKey.map { ($0, item.type == "movie" ? ContinueWatchingMerge.plexKeys(item) : ContinueWatchingMerge.plexShowKeys(item)) }
+            },
                               uniquingKeysWith: { first, _ in first })
         }
         ContinueWatchingRow.shared.$version.dropFirst()
@@ -676,9 +678,10 @@ final class IOSPlexSession: ObservableObject {
         let cards = ContinueWatchingRow.shared.cards(
             continueWatchingRows,
             identity: ContinueWatchingMerge.plexKeys,
-            showKey: { [primaryServerKey] item in
-                let show = item.type == "episode" ? item.grandparentRatingKey : item.type == "season" ? item.parentRatingKey : nil
-                return show.map { "\(item.serverID ?? primaryServerKey)|\($0)" }
+            lookupKey: { [primaryServerKey] item in
+                let target = item.type == "episode" ? item.grandparentRatingKey : item.type == "season" ? item.parentRatingKey :
+                    (item.type == "movie" || item.type == "show") && ContinueWatchingMerge.plexKeys(item).isEmpty ? item.ratingKey : nil
+                return target.map { "\(item.serverID ?? primaryServerKey)|\($0)" }
             },
             watched: { $0.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) } })
         continueWatchingCopies = Dictionary(cards.filter { !$0.others.isEmpty }.map { ($0.item.id, $0.others) },

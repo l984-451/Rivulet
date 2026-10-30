@@ -67,6 +67,7 @@ enum PlayerPresenter {
             guard allowed else { return false }
         }
         let vc = makeViewController(viewModel: viewModel, onDismiss: onDismiss)
+        SiloThemeMusicController.shared.suspend()
         presenter.topmostPresented.present(vc, animated: animated)
         return true
     }

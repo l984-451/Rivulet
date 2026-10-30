@@ -158,7 +158,7 @@ struct WhatsNewView: View {
             "New Delay control in the player's audio menu moves sound earlier or later.",
             "Fixed smart playlists showing up empty.",
             "Library grids now follow each Plex library's Collections setting.",
-            "Updated AetherEngine to 7.53.0, adding an Upscale SD and 720p setting in Playback.",
+            "Updated AetherEngine to 7.53.0 with SD and 720p upscaling. Enable in Settings → Playback.",
         ]),
         ("1.1.1 (118)", [
             "The Home hero now shows what's trending in your Jellyfin libraries.",

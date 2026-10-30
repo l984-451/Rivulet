@@ -147,6 +147,17 @@ final class TrackMergeTests: XCTestCase {
         XCTAssertTrue(TrackCommentary.isCommentaryOrDescription(merged[2]), "Plex extendedDisplayTitle")
     }
 
+    /// An audio-description track titled only by language is skipped and labelled.
+    func testAudioDescriptionFlagExcludesAndLabels() {
+        let main = MediaTrack(id: 1, name: "English", languageCode: "eng", codec: "eac3", channels: 6)
+        let described = MediaTrack(id: 2, name: "English", languageCode: "eng", codec: "eac3",
+                                   isDefault: true, isAudioDescription: true, channels: 6)
+        XCTAssertTrue(TrackCommentary.isCommentaryOrDescription(described))
+        XCTAssertEqual(described.audioRole, "Audio Description")
+        XCTAssertEqual(TrackIntentResolver.resolveAudio(intent: AudioIntent(language: "eng"),
+                                                        in: [described, main])?.id, 1)
+    }
+
     /// End to end: auto-selection must not land on the commentary track when it
     /// shares codec and channel count with the main mix.
     func testAutoSelectAvoidsCommentaryAfterMerge() {

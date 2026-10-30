@@ -67,6 +67,7 @@ enum TrackMerge {
             isForced: engineTrack.isForced || plexTrack.isForced,
             isHearingImpaired: engineTrack.isHearingImpaired || plexTrack.isHearingImpaired,
             isCommentary: engineTrack.isCommentary,   // engine-only flag
+            isAudioDescription: engineTrack.isAudioDescription,
             extendedDisplayTitle: plexTrack.extendedDisplayTitle,
             channels: engineTrack.channels ?? plexTrack.channels,
             profile: plexTrack.profile,

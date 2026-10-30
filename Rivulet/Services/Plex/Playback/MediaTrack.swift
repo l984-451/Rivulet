@@ -43,6 +43,9 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     /// falls back to matching the title text.
     let isCommentary: Bool
 
+    /// True for an audio-description track (`TrackInfo.isVisualImpaired`). Engine-only, like `isCommentary`.
+    let isAudioDescription: Bool
+
     /// The track's index within the container's stream list.
     ///
     /// The join key between the engine and Plex (see TrackMerge). `nil` for external sidecars.
@@ -64,6 +67,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         isForced: Bool = false,
         isHearingImpaired: Bool = false,
         isCommentary: Bool = false,
+        isAudioDescription: Bool = false,
         extendedDisplayTitle: String? = nil,
         channels: Int? = nil,
         profile: String? = nil,
@@ -80,6 +84,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isForced = isForced
         self.isHearingImpaired = isHearingImpaired
         self.isCommentary = isCommentary
+        self.isAudioDescription = isAudioDescription
         self.extendedDisplayTitle = extendedDisplayTitle
         self.channels = channels
         self.profile = profile
@@ -99,6 +104,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isForced = stream.forced ?? false
         self.isHearingImpaired = stream.hearingImpaired ?? false
         self.isCommentary = false  // Plex has no commentary flag; title-matched instead.
+        self.isAudioDescription = false
         self.extendedDisplayTitle = stream.extendedDisplayTitle
         self.channels = stream.channels
         self.profile = stream.profile
@@ -121,6 +127,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isForced = track.isForced
         self.isHearingImpaired = false
         self.isCommentary = false
+        self.isAudioDescription = false
         self.extendedDisplayTitle = track.extendedTitle
         self.channels = track.channels
         self.profile = track.profile
@@ -140,6 +147,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isForced = track.isForced
         self.isHearingImpaired = track.isHearingImpaired
         self.isCommentary = false
+        self.isAudioDescription = false
         self.extendedDisplayTitle = track.extendedTitle
         self.channels = nil
         self.profile = nil
@@ -180,7 +188,8 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     var audioRole: String? {
         guard TrackCommentary.isCommentaryOrDescription(self) else { return nil }
         let text = [extendedDisplayTitle, name].compactMap { $0?.lowercased() }.joined(separator: " ")
-        let described = ["descri", "narration", "dvs", "impaired"].contains(where: text.contains)
+        let described = isAudioDescription
+            || ["descri", "narration", "dvs", "impaired"].contains(where: text.contains)
         return described ? "Audio Description" : "Commentary"
     }
 

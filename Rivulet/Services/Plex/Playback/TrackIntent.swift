@@ -258,7 +258,7 @@ enum TrackCommentary {
         // outright. Trust it when set; the title match below is the fallback for
         // files that don't flag the disposition (and for the Plex/HLS route,
         // which has no such flag at all).
-        if track.isCommentary { return true }
+        if track.isCommentary || track.isAudioDescription { return true }
 
         let haystacks = [track.extendedDisplayTitle, track.name, track.language]
             .compactMap { $0?.lowercased() }

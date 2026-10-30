@@ -160,6 +160,7 @@ struct WhatsNewView: View {
             "Top Shelf now leaves out rows you've hidden from Home.",
             "Recently Added items in Top Shelf no longer show progress bars.",
             "New Delay control in the player's audio menu moves sound earlier or later.",
+            "Audio description tracks are no longer picked on their own, and the audio menu labels them.",
             "Updated AetherEngine to 7.53.0.",
         ]),
         ("1.1.1 (118)", [

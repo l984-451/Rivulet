@@ -492,6 +492,7 @@ final class AetherPlayer: PlayerProtocol {
             isForced: t.isForced,
             isHearingImpaired: t.isHearingImpaired,
             isCommentary: t.isCommentary,
+            isAudioDescription: t.isVisualImpaired,
             channels: t.channels > 0 ? t.channels : nil,
             // `TrackInfo.id` IS the container stream index (Demuxer enumerates
             // all streams and passes the loop counter through as `id`). It is

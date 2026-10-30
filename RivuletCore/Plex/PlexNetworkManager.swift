@@ -453,6 +453,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         sort: String? = nil,
         type: Int? = nil,
         includeGuids: Bool = false,
+        followCollectionMode: Bool = false,
         filters: [URLQueryItem] = []
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
@@ -463,6 +464,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Container-Start", value: "\(start)"),
             URLQueryItem(name: "X-Plex-Container-Size", value: "\(size)")
         ]
+
+        // The library's Collections setting (show, hide items in collections, hide
+        // collections) applies only to includeCollections under a title sort. Other
+        // sorts would just append every collection, so they stay titles only.
+        if followCollectionMode, sort?.hasPrefix("titleSort") ?? true {
+            queryItems.append(URLQueryItem(name: "includeCollections", value: "1"))
+        }
 
         // Add sort parameter if specified
         if let sort = sort, !sort.isEmpty {
@@ -504,9 +512,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     func getLibraryFirstCharacters(
         serverURL: String,
         authToken: String,
-        sectionId: String
+        sectionId: String,
+        followCollectionMode: Bool = false
     ) async throws -> [PlexFirstCharacter] {
-        guard let url = URL(string: "\(serverURL)/library/sections/\(sectionId)/firstCharacter") else {
+        // Must match the grid's own includeCollections, or the letter offsets drift.
+        let query = followCollectionMode ? "?includeCollections=1" : ""
+        guard let url = URL(string: "\(serverURL)/library/sections/\(sectionId)/firstCharacter\(query)") else {
             throw PlexAPIError.invalidURL
         }
         let container: PlexFirstCharacterContainer = try await request(

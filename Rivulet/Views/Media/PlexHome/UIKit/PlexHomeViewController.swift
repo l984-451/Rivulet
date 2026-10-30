@@ -1508,7 +1508,8 @@ final class PlexHomeViewController: UIViewController {
                         sectionId: key,
                         start: start,
                         size: pageSize,
-                        sort: sort
+                        sort: sort,
+                        followCollectionMode: true
                     )
                     return (result.items.map(map), result.totalSize)
                 }
@@ -1636,7 +1637,7 @@ final class PlexHomeViewController: UIViewController {
                   let token = authManager.selectedServerToken else { return }
             fetchCounts = {
                 try await PlexNetworkManager.shared.getLibraryFirstCharacters(
-                    serverURL: serverURL, authToken: token, sectionId: key)
+                    serverURL: serverURL, authToken: token, sectionId: key, followCollectionMode: true)
             }
         }
         Task { @MainActor [weak self] in
@@ -5549,7 +5550,11 @@ final class PlexHomeViewController: UIViewController {
         // its index in that list. Every other section maps 1:1 and keeps its
         // nil index map, which the shelf entry morph reads as "all tiles".
         let allIDs = sourceItemIDs(for: section)
-        let loaded = section.items.indices.filter { !section.items[$0].isGridPlaceholder }
+        // A Titles grid can hold collection tiles (the library's Collections setting); paging onto one
+        // in the carousel would offer to play it.
+        let loaded = section.items.indices.filter {
+            !section.items[$0].isGridPlaceholder && section.items[$0].kind != .collection
+        }
         guard let selected = loaded.firstIndex(of: indexPath.item) else { return }
 
         presentPreviewOverlay(

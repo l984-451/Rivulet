@@ -65,7 +65,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
                 sectionId: library.id,
                 start: page.offset,
                 size: page.limit,
-                sort: plexSortString(for: sort)
+                sort: plexSortString(for: sort),
+                followCollectionMode: true
             )
             let mapped = result.items.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)

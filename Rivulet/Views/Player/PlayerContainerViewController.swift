@@ -1406,6 +1406,7 @@ class PlayerContainerViewController: UIViewController {
             self.presentRailPanel(
                 content: CardTrackListView.audioMenu(
                     tracks: vm.audioTracks, selectedTrackId: vm.currentAudioTrackId,
+                    syncing: vm.aetherPlayer,
                     onSelect: { [weak vm, weak self] id in
                         if let id { vm?.selectAudioTrack(id: id) }
                         self?.activeRailPanel?.dismissPanel()

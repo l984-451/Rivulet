@@ -852,6 +852,7 @@ final class AetherPlayer: PlayerProtocol {
             // out the standard ~18s holdback (loopback joins measured 8-34s, #415).
             // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
+            options.audioDelaySeconds = AudioSync.seconds()
             if role == .multiviewSlot {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
@@ -1148,6 +1149,7 @@ final class AetherPlayer: PlayerProtocol {
         let panelDV = AetherEngine.displayCapabilities.supportsDolbyVision
         let felOn = UserDefaults.standard.bool(forKey: Self.dolbyVisionFELKey)
         options.preferDualLayerDolbyVision = panelDV && felOn
+        options.audioDelaySeconds = AudioSync.seconds()
         // #362: catch the engine's one Profile 7 route line for Sentry. Live TV's capture owns the
         // handler while it runs, and VOD never loads then.
         let p7RouteLine = OSAllocatedUnfairLock<String?>(initialState: nil)
@@ -1505,6 +1507,12 @@ final class AetherPlayer: PlayerProtocol {
 
     func setTeletextPage(_ page: Int?) {
         engine.setTeletextPage(page)
+    }
+
+    /// Pushes the saved `AudioSync` offset into the running session. The engine
+    /// re-cuts at the playhead (a brief held frame on the loopback route).
+    func applyAudioSync() {
+        engine.setAudioDelay(AudioSync.seconds())
     }
 
     /// True while the software backend is serving the session. Live joins use

@@ -159,6 +159,7 @@ struct WhatsNewView: View {
             "The player's Details panel shows your Enhance Dialogue setting under Audio.",
             "Top Shelf now leaves out rows you've hidden from Home.",
             "Recently Added items in Top Shelf no longer show progress bars.",
+            "New Delay control in the player's audio menu moves sound earlier or later.",
         ]),
         ("1.1.1 (118)", [
             "The Home hero now shows what's trending in your Jellyfin libraries.",

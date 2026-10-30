@@ -1263,7 +1263,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if !aether.audioTracks.isEmpty {
             let list = CardTrackListView.audioMenu(
                 tracks: aether.audioTracks,
-                selectedTrackId: aether.currentAudioTrackId
+                selectedTrackId: aether.currentAudioTrackId,
+                syncing: aether
             ) { [weak self] trackId in
                 if let trackId { self?.aetherPlayer?.selectAudioTrack(id: trackId) }
                 self?.activePanel?.dismissPanel()

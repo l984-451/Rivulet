@@ -126,15 +126,24 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     }
 
     /// The audio menu in the TV app's order: Audio Adjustments, then Audio Track.
-    static func audioMenu(tracks: [MediaTrack], selectedTrackId: Int?,
+    /// `syncing` adds the A/V sync stepper; nil where the engine can't move audio.
+    static func audioMenu(tracks: [MediaTrack], selectedTrackId: Int?, syncing player: AetherPlayer? = nil,
                           onSelect: @escaping (Int?) -> Void) -> CardTrackListView {
         let choices = SystemAudioAdjustment.menuChoices
         let toggles = SystemAudioAdjustment.menuToggles
-        let adjusts = !choices.isEmpty || !toggles.isEmpty
+        let steppers = player.map { player in
+            [CardStepperConfig(title: "Delay",
+                               value: { AudioSync.formatted(AudioSync.offsetMs()) },
+                               onStep: { [weak player] step in
+                                   AudioSync.step(by: step)
+                                   player?.applyAudioSync()
+                               })]
+        } ?? []
+        let adjusts = !choices.isEmpty || !toggles.isEmpty || !steppers.isEmpty
         return CardTrackListView(header: adjusts ? "Audio Adjustments" : "Audio Track", tracks: tracks,
                                  selectedTrackId: selectedTrackId, showsOffRow: false, audio: true,
                                  trackHeader: adjusts ? "Audio Track" : nil,
-                                 choices: choices, toggles: toggles, onSelect: onSelect)
+                                 choices: choices, toggles: toggles, steppers: steppers, onSelect: onSelect)
     }
 
     /// A plain list of choices: each row's `trackId` is what `onSelect` receives.
@@ -253,6 +262,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         // The TV app's audio menu: adjustments first, then the tracks under their own header.
         if let trackHeader {
             buildAdjustments()
+            buildSteppers()
             stack.addArrangedSubview(MenuSeparatorView())
             stack.addArrangedSubview(MenuSectionHeaderView(title: trackHeader))
             buildTracks()

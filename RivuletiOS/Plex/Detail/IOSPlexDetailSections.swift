@@ -208,6 +208,8 @@ struct IOSPlexExtrasRow: View {
 struct IOSPlexInformationSection: View {
     let item: PlexMetadata
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// With iPhone Duo's fold down its middle, four columns instead of three so none sits on it.
+    @State private var crossesFold = false
 
     nonisolated static func formattedDate(_ isoDay: String) -> String? {
         guard let date = try? Date(isoDay, strategy: .iso8601.year().month().day().dateSeparator(.dash)) else { return nil }
@@ -244,7 +246,10 @@ struct IOSPlexInformationSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), alignment: .topLeading), count: sizeClass == .regular ? 3 : 2),
+                    columns: Array(
+                        repeating: GridItem(.flexible(), alignment: .topLeading),
+                        count: crossesFold ? 4 : sizeClass == .regular ? 3 : 2
+                    ),
                     alignment: .leading,
                     spacing: 14
                 ) {
@@ -256,6 +261,7 @@ struct IOSPlexInformationSection: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
+                .onGeometryChange(for: Bool.self) { $0.duoFoldDividesMiddle() } action: { crossesFold = $0 }
             }
         }
     }

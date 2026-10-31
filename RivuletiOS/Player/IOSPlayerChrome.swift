@@ -93,6 +93,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     @State private var scrubValue: Double?
     @State private var ripple: Ripple?
     @State private var bottomBarTop: CGFloat?
+    @State private var transportSize: CGSize = .zero
 
     /// - Parameters:
     ///   - rate: nil hides the speed menu (live).
@@ -213,7 +214,12 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
 
-            transport
+            GeometryReader { proxy in
+                transport
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { transportSize = $0 }
+                    .offset(foldOffset(proxy))
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+            }
         }
         .background {
             LinearGradient(
@@ -257,6 +263,15 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 }
             }
         }
+    }
+
+    /// Moves the centred transport just clear of iPhone Duo's fold while partly
+    /// folded: trailing for a book fold, below for a laptop fold. Zero otherwise.
+    private func foldOffset(_ proxy: GeometryProxy) -> CGSize {
+        guard let fold = proxy.duoFold() else { return .zero }
+        return fold.height > fold.width
+            ? CGSize(width: max(0, fold.maxX + transportSize.width / 2 - proxy.size.width / 2), height: 0)
+            : CGSize(width: 0, height: max(0, fold.maxY + transportSize.height / 2 - proxy.size.height / 2))
     }
 
     /// Live without a rewind window has nothing to skip through.

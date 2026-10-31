@@ -271,17 +271,20 @@ private struct IOSPlexDetailHeader: View {
 
     var body: some View {
         ZStack(alignment: isWide ? .bottomLeading : .bottom) {
+            // The fade is extended with the art, so the strip under a side bar darkens with it.
             IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
+                .overlay {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.25),
+                            .init(color: .black.opacity(0.7), location: 0.7),
+                            .init(color: .black, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
                 .backgroundExtensionEffect()
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.25),
-                    .init(color: .black.opacity(0.7), location: 0.7),
-                    .init(color: .black, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
             titleBlock
                 .frame(maxWidth: isWide ? 560 : .infinity, alignment: isWide ? .leading : .center)
                 .padding(.horizontal, IOSShelfGeometry.leading)

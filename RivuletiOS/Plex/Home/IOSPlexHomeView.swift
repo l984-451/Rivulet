@@ -31,7 +31,7 @@ struct IOSPlexHomeView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 30) {
                             if hero {
-                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy))
+                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), bleed: proxy.safeAreaInsets)
                             }
                             if let continueWatching = plex.continueWatching {
                                 IOSPlexShelfView(hub: continueWatching)
@@ -46,8 +46,8 @@ struct IOSPlexHomeView: View {
                     } action: { _, under in heroUnderBar = under }
                     .scrollEdgeEffectHidden(hero && heroUnderBar, for: .top)
                     .refreshable { await plex.refresh() }
-                    .task(id: hero ? heroItems.map(\.id) + ["\(proxy.size.width)"] : []) {
-                        if hero { await prefetchHero(width: proxy.size.width) }
+                    .task(id: hero ? heroItems.map(\.id) + ["\(heroPageWidth(proxy))"] : []) {
+                        if hero { await prefetchHero(width: heroPageWidth(proxy)) }
                     }
                 }
             } else {
@@ -127,6 +127,10 @@ struct IOSPlexHomeView: View {
                 .filter { seen.insert($0.grandparentRatingKey ?? $0.id).inserted }
                 .prefix(6)
         )
+    }
+
+    private func heroPageWidth(_ proxy: GeometryProxy) -> CGFloat {
+        IOSPlexHomeHero.pageWidth(proxy.size.width, bleed: proxy.safeAreaInsets)
     }
 
     private func fullSize(_ proxy: GeometryProxy) -> CGSize {

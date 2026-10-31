@@ -10,12 +10,17 @@ struct IOSPlexHomeHero: View {
     let items: [PlexMetadata]
     /// Screen size including the area under the navigation bar.
     let size: CGSize
+    /// Side safe-area insets the artwork runs under, such as iPhone Duo's side bars.
+    var bleed = EdgeInsets()
     @State private var selection: String?
+    /// iPhone Duo's fold runs down the middle, so the dots sit at the leading margin.
+    @State private var dotsLeading = false
 
     /// Share of the page travel the artwork lags behind, as in `PreviewCarouselLayout`.
     private static let parallax: CGFloat = 0.3
 
     private var isWide: Bool { size.width > size.height }
+    private var pageWidth: CGFloat { Self.pageWidth(size.width, bleed: bleed) }
     private var heroHeight: CGFloat { max(Self.height(for: size), 300) }
     private var current: PlexMetadata? { items.first { $0.id == selection } ?? items.first }
 
@@ -26,19 +31,28 @@ struct IOSPlexHomeHero: View {
             : min(size.width * 0.92, size.height * 0.46)
     }
 
+    /// One artwork page: the content width plus the side insets it bleeds under.
+    static func pageWidth(_ width: CGFloat, bleed: EdgeInsets) -> CGFloat {
+        width + bleed.leading + bleed.trailing
+    }
+
     var body: some View {
         if let current {
             ZStack(alignment: isWide ? .bottomLeading : .bottom) {
-                artworkPager
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.35),
-                        .init(color: .black.opacity(0.75), location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .allowsHitTesting(false)
+                // Full bleed, so no neighbouring page shows under a side bar.
+                Group {
+                    artworkPager
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.35),
+                            .init(color: .black.opacity(0.75), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .allowsHitTesting(false)
+                }
+                .ignoresSafeArea(edges: .horizontal)
                 IOSPlexHeroControls(item: current, isWide: isWide)
                 if items.count > 1 {
                     pageDots
@@ -62,28 +76,36 @@ struct IOSPlexHomeHero: View {
     }
 
     private var artworkPager: some View {
-        ScrollView(.horizontal) {
-            // Eager on purpose: a lazy stack blanked the outgoing page mid-scroll.
-            HStack(spacing: 0) {
-                ForEach(items) { item in
-                    IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
-                        .frame(width: size.width, height: heroHeight)
-                        .clipped()
-                        .visualEffect { content, proxy in
-                            content.offset(x: -proxy.frame(in: .scrollView(axis: .horizontal)).minX * Self.parallax)
-                        }
-                        .frame(width: size.width, height: heroHeight)
-                        .clipped()
-                        .plexZoomSource(item)
-                        .environment(\.plexZoomScope, "hero")
-                        .id(item.id)
+        ScrollViewReader { reader in
+            ScrollView(.horizontal) {
+                // Eager on purpose: a lazy stack blanked the outgoing page mid-scroll.
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        // Pages take the pager's own width, so they always match its paging step.
+                        IOSPlexArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                            .visualEffect { content, proxy in
+                                content.offset(x: -proxy.frame(in: .scrollView(axis: .horizontal)).minX * Self.parallax)
+                            }
+                            .containerRelativeFrame(.horizontal)
+                            .frame(height: heroHeight)
+                            .clipped()
+                            .plexZoomSource(item)
+                            .environment(\.plexZoomScope, "hero")
+                            .id(item.id)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $selection)
+            // A resize (rotation, opening or closing iPhone Duo) keeps the old offset; re-seat the shown page.
+            .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, _ in
+                if let selection { reader.scrollTo(selection, anchor: .leading) }
+            }
         }
-        .scrollTargetBehavior(.paging)
-        .scrollIndicators(.hidden)
-        .scrollPosition(id: $selection)
         .accessibilityHidden(true)
     }
 
@@ -95,8 +117,13 @@ struct IOSPlexHomeHero: View {
                     .frame(width: 7, height: 7)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: dotsLeading ? .leading : .center)
+        .padding(.horizontal, IOSShelfGeometry.leading)
         .padding(.bottom, 14)
+        // Inactive folds count too, so the dots don't jump as the device folds.
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.duoFold(includeInactive: true).map { $0.height > $0.width } ?? false
+        } action: { dotsLeading = $0 }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

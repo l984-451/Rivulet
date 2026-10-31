@@ -3,9 +3,6 @@
 
 import SwiftUI
 
-/// Pushes the Downloads list onto a tab's stack.
-struct IOSDownloadsRoute: Hashable {}
-
 /// Every download of the current profile: Movies, then each show's seasons.
 /// Renders from local records only, so it works with no server at all.
 struct IOSDownloadsView: View {

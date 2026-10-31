@@ -27,6 +27,9 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     /// tracks are distinguishable from the main mix.
     let extendedDisplayTitle: String?
 
+    /// The stream's own title tag ("Signs & Songs", "Commentary"); nil when it has none.
+    let title: String?
+
     // Audio-specific
     let channels: Int?
     /// Plex's codec profile ("ma", "dolby truehd + dolby atmos"); nil from the engine.
@@ -69,6 +72,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         isCommentary: Bool = false,
         isAudioDescription: Bool = false,
         extendedDisplayTitle: String? = nil,
+        title: String? = nil,
         channels: Int? = nil,
         profile: String? = nil,
         subtitleKey: String? = nil,
@@ -86,6 +90,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isCommentary = isCommentary
         self.isAudioDescription = isAudioDescription
         self.extendedDisplayTitle = extendedDisplayTitle
+        self.title = title
         self.channels = channels
         self.profile = profile
         self.subtitleKey = subtitleKey
@@ -106,6 +111,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isCommentary = false  // Plex has no commentary flag; title-matched instead.
         self.isAudioDescription = false
         self.extendedDisplayTitle = stream.extendedDisplayTitle
+        self.title = stream.title
         self.channels = stream.channels
         self.profile = stream.profile
         self.subtitleKey = stream.key
@@ -129,6 +135,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isCommentary = false
         self.isAudioDescription = false
         self.extendedDisplayTitle = track.extendedTitle
+        self.title = track.title
         self.channels = track.channels
         self.profile = track.profile
         self.subtitleKey = nil
@@ -149,6 +156,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         self.isCommentary = false
         self.isAudioDescription = false
         self.extendedDisplayTitle = track.extendedTitle
+        self.title = track.title
         self.channels = nil
         self.profile = nil
         self.subtitleKey = track.externalURL?.path
@@ -197,6 +205,22 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     var audioMenuTitle: String { language ?? "Unknown Language" }
     var audioMenuSubtitle: String {
         [codec == nil ? nil : audioFormat, audioRole].compactMap { $0 }.joined(separator: " • ")
+    }
+
+    /// Subtitle menu row: the language over "Forced • Signs & Songs • ASS" (#447).
+    var subtitleMenuTitle: String { language ?? name }
+    var subtitleMenuSubtitle: String {
+        var flags: [String] = []
+        if isForced { flags.append("Forced") }
+        if isHearingImpaired { flags.append("SDH") }
+        if isCommentary { flags.append("Commentary") }
+        // The track's own title, unless it only repeats the language and the flags.
+        var leftover = title?.lowercased() ?? ""
+        for word in [language, languageCode].compactMap({ $0?.lowercased() }) + flags.map({ $0.lowercased() }) {
+            leftover = leftover.replacingOccurrences(of: word, with: "")
+        }
+        let described = leftover.contains { $0.isLetter || $0.isNumber } ? title : nil
+        return (flags + [described, codec == nil ? nil : formattedCodec]).compactMap { $0 }.joined(separator: " • ")
     }
 
     /// Formatted codec name (e.g., "AAC", "TrueHD", "DTS-HD MA")

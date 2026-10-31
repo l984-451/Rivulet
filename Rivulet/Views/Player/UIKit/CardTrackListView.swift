@@ -91,18 +91,14 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         }
         rows.append(contentsOf: tracks.map { track in
             Row(
-                title: audio ? track.audioMenuTitle : track.name,
-                subtitle: audio ? track.audioMenuSubtitle : Self.subtitleLine(track),
+                title: audio ? track.audioMenuTitle : track.subtitleMenuTitle,
+                subtitle: audio ? track.audioMenuSubtitle : track.subtitleMenuSubtitle,
                 trackId: track.id,
                 isSelected: track.id == selectedTrackId
             )
         })
         self.init(header: header, rows: rows, actions: actions, choices: choices, toggles: toggles,
                   steppers: steppers, trackHeader: trackHeader, onSelect: onSelect)
-    }
-
-    private static func subtitleLine(_ track: MediaTrack) -> String {
-        [track.language, track.codec?.uppercased()].compactMap { $0 }.joined(separator: " • ")
     }
 
     /// AVKit's subtitles menu: On and Off, then Language (the tracks) and Style one level in.
@@ -115,17 +111,18 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         if let onTrackId {
             rows.insert(Row(title: "On", subtitle: nil, trackId: onTrackId, isSelected: selectedTrackId != nil), at: 0)
             languageRows = tracks.map {
-                Row(title: $0.name, subtitle: subtitleLine($0), trackId: $0.id, isSelected: $0.id == selectedTrackId)
+                Row(title: $0.subtitleMenuTitle, subtitle: $0.subtitleMenuSubtitle, trackId: $0.id,
+                    isSelected: $0.id == selectedTrackId)
             }
         }
-        let value = tracks.first { $0.id == (selectedTrackId ?? onTrackId) }?.name
+        let value = tracks.first { $0.id == (selectedTrackId ?? onTrackId) }?.subtitleMenuTitle
         return CardTrackListView(header: "Subtitles", rows: rows, actions: actions,
                                  choices: [CardChoiceConfig.captionStyle()].compactMap { $0 },
                                  steppers: steppers, languageRows: languageRows, languageValue: value,
                                  onSelect: onSelect)
     }
 
-    /// The audio menu in the TV app's order: Audio Adjustments, then Audio Track.
+    /// The audio menu in the TV app's order: Audio Adjustments, then Audio Track, then Delay.
     /// `syncing` adds the A/V sync stepper; nil where the engine can't move audio.
     static func audioMenu(tracks: [MediaTrack], selectedTrackId: Int?, syncing player: AetherPlayer? = nil,
                           onSelect: @escaping (Int?) -> Void) -> CardTrackListView {
@@ -139,7 +136,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
                                    player?.applyAudioSync()
                                })]
         } ?? []
-        let adjusts = !choices.isEmpty || !toggles.isEmpty || !steppers.isEmpty
+        let adjusts = !choices.isEmpty || !toggles.isEmpty
         return CardTrackListView(header: adjusts ? "Audio Adjustments" : "Audio Track", tracks: tracks,
                                  selectedTrackId: selectedTrackId, showsOffRow: false, audio: true,
                                  trackHeader: adjusts ? "Audio Track" : nil,
@@ -259,13 +256,14 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
             return
         }
 
-        // The TV app's audio menu: adjustments first, then the tracks under their own header.
+        // The TV app's audio menu: adjustments first, then the tracks under their own header,
+        // then the steppers at the bottom as in the subtitles menu.
         if let trackHeader {
             buildAdjustments()
-            buildSteppers()
             stack.addArrangedSubview(MenuSeparatorView())
             stack.addArrangedSubview(MenuSectionHeaderView(title: trackHeader))
             buildTracks()
+            buildSteppers()
             return
         }
         buildTracks()
@@ -437,7 +435,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
 
 // MARK: - MenuSeparatorView
 
-/// AVKit's section break: an 18pt gap, then a 1pt line inset 15pt from the rows.
+/// A section break: a 1pt line inset 15pt from the rows, centred in its 18pt gap.
 private final class MenuSeparatorView: UIView {
     init() {
         super.init(frame: .zero)
@@ -448,7 +446,7 @@ private final class MenuSeparatorView: UIView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: CardTrackListView.Metrics.separatorGap + 1),
             line.heightAnchor.constraint(equalToConstant: 1),
-            line.bottomAnchor.constraint(equalTo: bottomAnchor),
+            line.centerYAnchor.constraint(equalTo: centerYAnchor),
             line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: CardTrackListView.Metrics.separatorInset),
             line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -CardTrackListView.Metrics.separatorInset),
         ])

@@ -69,6 +69,7 @@ enum TrackMerge {
             isCommentary: engineTrack.isCommentary,   // engine-only flag
             isAudioDescription: engineTrack.isAudioDescription,
             extendedDisplayTitle: plexTrack.extendedDisplayTitle,
+            title: plexTrack.title ?? engineTrack.title,
             channels: engineTrack.channels ?? plexTrack.channels,
             profile: plexTrack.profile,
             subtitleKey: plexTrack.subtitleKey,

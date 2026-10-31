@@ -340,7 +340,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var generatedSubtitlesPickedOn: String?
     /// The subtitle menu: the title's tracks, plus generated ones on the aether route.
     var subtitleMenuTracks: [MediaTrack] {
-        let generated = MediaTrack(id: Self.generatedSubtitleId, name: "English", language: Self.generatedSubtitleStatus)
+        let generated = MediaTrack(id: Self.generatedSubtitleId, name: "English", language: "English",
+                                   title: Self.generatedSubtitleStatus)
         return subtitleTracks + (offersGeneratedSubtitles ? [generated] : [])
     }
     var offersGeneratedSubtitles: Bool { aetherPlayer != nil }

@@ -493,6 +493,8 @@ final class AetherPlayer: PlayerProtocol {
             isHearingImpaired: t.isHearingImpaired,
             isCommentary: t.isCommentary,
             isAudioDescription: t.isVisualImpaired,
+            // The engine names an untitled track "ENG (subrip)" or "Track 3 (subrip)".
+            title: t.name.isEmpty || t.name.hasSuffix("(\(t.codec))") ? nil : t.name,
             channels: t.channels > 0 ? t.channels : nil,
             // `TrackInfo.id` IS the container stream index (Demuxer enumerates
             // all streams and passes the loop counter through as `id`). It is

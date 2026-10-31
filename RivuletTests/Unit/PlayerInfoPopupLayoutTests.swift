@@ -41,6 +41,18 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
         XCTAssertEqual(described.audioMenuSubtitle, "AC3 2.0 • Audio Description")
     }
 
+    func testSubtitleMenuShowsLanguageOverFlagsTitleAndFormat() {
+        func track(_ title: String?, forced: Bool = false) -> MediaTrack {
+            MediaTrack(id: 1, name: "English (SRT)", language: "English", languageCode: "en", codec: "subrip",
+                       isForced: forced, title: title)
+        }
+        XCTAssertEqual(track(nil).subtitleMenuTitle, "English")
+        XCTAssertEqual(track(nil).subtitleMenuSubtitle, "SRT")
+        XCTAssertEqual(track("English Forced", forced: true).subtitleMenuSubtitle, "Forced • SRT")
+        XCTAssertEqual(track("Commentary").subtitleMenuSubtitle, "Commentary • SRT")
+        XCTAssertEqual(track("Signs & Songs", forced: true).subtitleMenuSubtitle, "Forced • Signs & Songs • SRT")
+    }
+
     func testDetailsMediaSectionsCarryEveryVideoFact() {
         var movie = PlexMetadata()
         movie.type = "movie"

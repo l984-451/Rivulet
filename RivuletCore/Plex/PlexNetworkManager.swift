@@ -2799,14 +2799,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
         // The grid returns flat programs with channel info in each program's Media array
         // We need to parse this and group by channel
-        nonisolated struct GridEPGContainer: Codable {
+        nonisolated struct GridEPGContainer: Decodable {
             let MediaContainer: GridEPGMediaContainer
         }
-        nonisolated struct GridEPGMediaContainer: Codable {
+        nonisolated struct GridEPGMediaContainer: Decodable {
             let size: Int?
             let Metadata: [GridEPGProgram]?
         }
-        nonisolated struct GridEPGProgram: Codable {
+        nonisolated struct GridEPGProgram: Decodable {
             let ratingKey: String?
             let key: String?
             let guid: String?
@@ -2829,7 +2829,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let Genre: [PlexGenreTag]?
             let Media: [GridEPGMedia]?
         }
-        nonisolated struct GridEPGMedia: Codable {
+        nonisolated struct GridEPGMedia: Decodable {
             let channelCallSign: String?
             let channelIdentifier: String?
             let channelThumb: String?
@@ -2837,6 +2837,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             let channelVcn: String?
             let beginsAt: Int?
             let endsAt: Int?
+            /// Per airing, as "1" (PMS 1.43.4); the program itself never carries it (#429).
+            let premiere: LenientInt?
         }
 
         let results: [Result<GridEPGContainer, Error>] = await fetchConcurrently(
@@ -2889,7 +2891,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                     endsAt: media.endsAt,
                     onAir: nil,
                     live: nil,
-                    premiere: nil,
+                    premiere: media.premiere?.value == 1,
                     Genre: program.Genre,
                     Media: nil,
                     index: program.index,

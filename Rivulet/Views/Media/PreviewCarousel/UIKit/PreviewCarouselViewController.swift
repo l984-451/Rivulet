@@ -1015,123 +1015,12 @@ final class PreviewCarouselViewController: UIViewController {
     /// Fetches a Plex ratingKey's metadata and presents the player. A nil `resumeOffset`
     /// means ask the server: the only place an extra's resume point appears (#303).
     private func presentPlayer(ratingKey: String, resumeOffset: Double?, mediaID: String? = nil) {
-        let server = shownItemServer
-        Task { [weak self] in
-            guard let serverURL = server?.address, let token = server?.token else {
-                previewCarouselLog.error("[PCV] play handoff: no server/token")
-                return
-            }
-            let network = PlexNetworkManager.shared
-            let playItem: PlexMetadata
-            do {
-                playItem = try await network.getFullMetadata(
-                    serverURL: serverURL, authToken: token, ratingKey: ratingKey)
-            } catch {
-                do {
-                    playItem = try await network.getMetadata(
-                        serverURL: serverURL, authToken: token, ratingKey: ratingKey)
-                } catch {
-                    previewCarouselLog.error("[PCV] play handoff fetch failed: \(String(describing: error), privacy: .public)")
-                    return
-                }
-            }
-            // `viewOffset` is ms, gated on the shared resume policy rather than `> 0`.
-            let serverResume = playItem.isInProgress
-                ? playItem.viewOffset.map { Double($0) / 1000 }
-                : nil
-            await MainActor.run {
-                self?.present(playItem: playItem, serverURL: serverURL, token: token,
-                              resumeOffset: resumeOffset ?? serverResume, mediaID: mediaID)
-            }
-        }
+        ExtraPlayer.presentPlayer(ratingKey: ratingKey, resumeOffset: resumeOffset, mediaID: mediaID,
+                                  server: shownItemServer, from: self)
     }
 
-    /// Plays a trailer or extra. A user-added extra has a library ratingKey. A Plex IVA
-    /// extra has none, only `key`, an absolute part path (`/services/iva/assets/...`) that
-    /// 404s under `/library/metadata` (#255); it plays directly through a synthetic PlexMetadata.
     private func presentExtraPlayer(_ trailer: BelowFoldTrailer) {
-        let key = trailer.playbackKey ?? trailer.id
-        // Off Plex an extra is a library item of its own provider.
-        if let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID), provider.kind != .plex {
-            playProviderExtra(MediaItemRef(providerID: trailer.providerID, itemID: key), provider: provider)
-            return
-        }
-        let route = ExtraPlaybackKey.route(for: key)
-
-        // Context for the request's own Sentry capture, whose endpoint tag cannot group IVA paths.
-        let crumb = Breadcrumb(level: .info, category: "playback.extra")
-        crumb.message = "Playing extra"
-        crumb.data = [
-            "route": route.telemetryName,
-            "subtype": trailer.subtype.displayName,
-            "key_shape": ExtraPlaybackKey.keyShape(key),
-            "had_playback_key": trailer.playbackKey != nil
-        ]
-        SentryBridge.addBreadcrumb(crumb)
-
-        switch route {
-        case .libraryMetadata(let ratingKey):
-            // nil = resume from whatever the server has for this extra.
-            presentPlayer(ratingKey: ratingKey, resumeOffset: nil)
-
-        case .directPartPath(let path):
-            // IVA extras aren't library items, so /:/timeline never recorded a
-            // position for them — there is nothing to resume from.
-            guard let serverURL = shownItemServer?.address, let token = shownItemServer?.token else {
-                previewCarouselLog.error("[PCV] extra play: no server/token")
-                return
-            }
-            previewCarouselLog.info("[PCV] extra play: direct part path (non-library extra)")
-            present(
-                playItem: Self.syntheticMetadata(forPartKey: path, trailer: trailer),
-                serverURL: serverURL,
-                token: token,
-                resumeOffset: nil
-            )
-        }
-    }
-
-    private func playProviderExtra(_ ref: MediaItemRef, provider: any MediaProvider) {
-        Task { [weak self] in
-            do {
-                let detail = try await provider.fullDetail(for: ref)
-                guard let self else { return }
-                ProviderPlayer.play(detail.item, fromBeginning: false, from: self, onDismiss: nil)
-            } catch {
-                previewCarouselLog.error("[PCV] extra play: \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    /// Minimal PlexMetadata standing in for a non-library extra, carrying the
-    /// part path ContentRouter needs to build a direct-play URL.
-    private static func syntheticMetadata(forPartKey key: String, trailer: BelowFoldTrailer) -> PlexMetadata {
-        let part = PlexPart(id: 0, key: key, duration: nil, file: nil, size: nil, container: nil, Stream: nil)
-        let media = PlexMedia(
-            id: 0, duration: nil, bitrate: nil, width: nil, height: nil, aspectRatio: nil,
-            audioChannels: nil, audioCodec: nil, videoCodec: nil, videoResolution: nil,
-            container: nil, videoFrameRate: nil, Part: [part]
-        )
-        return PlexMetadata(
-            ratingKey: trailer.id,
-            key: key,
-            type: "clip",
-            title: trailer.title,
-            Media: [media]
-        )
-    }
-
-    private func present(playItem: PlexMetadata, serverURL: String, token: String, resumeOffset: Double?,
-                         mediaID: String? = nil) {
-        let viewModel = UniversalPlayerViewModel(
-            metadata: playItem,
-            serverURL: serverURL,
-            authToken: token,
-            startOffset: resumeOffset,
-            preferredMediaID: mediaID
-        )
-        // From the topmost VC, so Play also works from the episode page over the carousel.
-        PlayerPresenter.present(viewModel: viewModel, from: self)
+        ExtraPlayer.play(trailer, server: shownItemServer, from: self)
     }
 
     // Menu belongs to the recognizer alone. Do not also handle it in pressesEnded or

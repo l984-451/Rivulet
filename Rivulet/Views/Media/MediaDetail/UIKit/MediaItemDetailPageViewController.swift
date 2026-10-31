@@ -42,7 +42,11 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let belowFold = UIView()
     private let belowFoldTitle = UILabel()
     private let infoColumns = InfoColumnsView()
-    private var scrolledDown = false
+    /// 0 hero, 1 below-fold from the top, 2 scrolled on to the info columns (only with extras).
+    private var scrollStage = 0
+    private let extrasShelf = ExtrasShelfView(leading: PreviewCarouselGeometry.expandedChromeInset)
+    private var hasExtras = false
+    private var infoTopConstraint: NSLayoutConstraint!
 
     // Hero rows (async-filled ones start hidden so the stack doesn't reserve a gap).
     private let showTitleLabel = UILabel()
@@ -171,31 +175,49 @@ final class MediaItemDetailPageViewController: UIViewController {
         guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
             switch press.type {
-            case .downArrow where !scrolledDown:
-                setScrolledDown(true); return
-            case .upArrow where scrolledDown:
-                setScrolledDown(false); return
+            case .downArrow where scrollStage == 0:
+                setScrollStage(1); return
+            case .downArrow where scrollStage == 1 && hasExtras:
+                setScrollStage(2); return
+            case .upArrow where scrollStage > 0:
+                setScrollStage(scrollStage - 1); return
             default: break
             }
         }
         super.pressesBegan(presses, with: event)
     }
 
-    private func setScrolledDown(_ down: Bool) {
-        scrolledDown = down
+    private func setScrollStage(_ stage: Int) {
+        let wasHero = scrollStage == 0
+        scrollStage = stage
         view.layoutIfNeeded()
         let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
-        // Scroll so the below-fold's TOP aligns with the screen top (one
-        // viewport), making the light-top / dark-bottom split fill the screen.
-        let target = down ? min(view.bounds.height, maxY) : 0
+        // Stage 1 aligns the below-fold's TOP with the screen top (one viewport),
+        // making the light-top / dark-bottom split fill the screen.
+        let target = stage == 0 ? 0 : (stage == 1 ? min(view.bounds.height, maxY) : maxY)
+        // The extras row is a focus stop only once the page is scrolled to it.
+        if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
+        }
+        if hasExtras, wasHero != (stage == 0) {
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
         }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if scrollStage > 0, hasExtras, let card = extrasShelf.firstCard { return [card] }
         if let playButton { return [playButton] }
         return super.preferredFocusEnvironments
+    }
+
+    /// Up and Down leave the extras row by scrolling the page, never by focusing the hero above it.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if scrollStage > 0, extrasShelf.contains(context.previouslyFocusedView),
+           context.nextFocusedView?.isDescendant(of: view) == true,
+           !extrasShelf.contains(context.nextFocusedView) { return false }
+        return super.shouldUpdateFocus(in: context)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -304,6 +326,17 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
         belowFold.addSubview(infoColumns)
 
+        // Hidden until the detail says there are extras.
+        extrasShelf.translatesAutoresizingMaskIntoConstraints = false
+        extrasShelf.isHidden = true
+        extrasShelf.alpha = 0
+        extrasShelf.onPlay = { [weak self] trailer in
+            guard let self else { return }
+            ExtraPlayer.play(trailer, from: self)
+        }
+        belowFold.addSubview(extrasShelf)
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56)
+
         let inset = PreviewCarouselGeometry.expandedChromeInset
         NSLayoutConstraint.activate([
             belowFold.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor),
@@ -333,7 +366,10 @@ final class MediaItemDetailPageViewController: UIViewController {
             belowFoldTitle.leadingAnchor.constraint(greaterThanOrEqualTo: belowFold.leadingAnchor, constant: inset),
 
             // Columns in the bottom (dark) half.
-            infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56),
+            infoTopConstraint,
+            extrasShelf.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 24),
+            extrasShelf.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor),
+            extrasShelf.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor),
             infoColumns.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor, constant: inset),
             infoColumns.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor, constant: -inset),
             infoColumns.bottomAnchor.constraint(lessThanOrEqualTo: belowFold.bottomAnchor, constant: -80),
@@ -489,6 +525,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         applyWatchState(from: detail.item)
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
+        showExtras(detail)
         // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
         // parenthetical channel-layout noise ("5.1(side)" → "5.1").
         let source = detail.primarySource
@@ -504,6 +541,21 @@ final class MediaItemDetailPageViewController: UIViewController {
             if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
         }
         addVersionsButton(detail)
+    }
+
+    /// The Extras row between the title and the info columns, only when the episode has some.
+    private func showExtras(_ detail: MediaItemDetail) {
+        let split = BelowFoldContentLoader.extraTiles(
+            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster)
+        let tiles = split.trailers + split.extras
+        guard !tiles.isEmpty, !hasExtras else { return }
+        hasExtras = true
+        extrasShelf.configure(tiles)
+        extrasShelf.isHidden = false
+        extrasShelf.alpha = scrollStage > 0 ? 1 : 0
+        infoTopConstraint.isActive = false
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: extrasShelf.bottomAnchor, constant: 40)
+        infoTopConstraint.isActive = true
     }
 
     /// Versions button after Watchlist, once the detail shows two or more files.

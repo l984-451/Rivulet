@@ -1932,10 +1932,6 @@ final class PlexHomeViewController: UIViewController {
         if !hasMarkedFirstFrame {
             hasMarkedFirstFrame = true
             Perf.event(.homeFirstFrameOnScreen, message: "viewDidAppear")
-
-            if PerfAutoScroll.enabled {
-                runAutoScroll()
-            }
         }
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
@@ -2059,21 +2055,6 @@ final class PlexHomeViewController: UIViewController {
         else { return }
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
-    }
-
-    private func runAutoScroll() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            guard let self else { return }
-            let id = Perf.begin(.homeScroll, message: "auto-scroll vertical")
-            self.collectionView.setContentOffset(
-                CGPoint(x: 0, y: max(0, self.collectionView.contentSize.height - self.collectionView.bounds.height)),
-                animated: true
-            )
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                Perf.end(.homeScroll, id: id)
-                Perf.event(.homeScroll, message: "auto-scroll done")
-            }
-        }
     }
 
     // MARK: - Backdrop

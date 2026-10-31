@@ -89,12 +89,7 @@ SENTRY_PATCHES/
 # Personal test content map (rating keys are user-specific)
 Docs/TEST_CONTENT_RATING_KEYS.md
 
-# Local perf-test output
-perf_results.csv
-perf_results_device.csv
-
 # Instruments traces + exported XML (multi-hundred-MB to multi-GB; do not commit)
-perf-spike/traces/
 *.trace
 
 # Sentry CLI auth (do not commit)
@@ -108,11 +103,12 @@ perf-spike/traces/
 *.psd
 Screenshots/*
 !Screenshots/AppStore/
+!Screenshots/tvOS/
+!Screenshots/iOS/
 Screenshots/AppStore/*
 !Screenshots/AppStore/*.png
 .repowise/
 
 # MCP server config — machine-specific, holds absolute local paths.
 .mcp.json
-.vscode/mcp.json
-.vscode/extensions.json
+.vscode/

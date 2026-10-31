@@ -980,13 +980,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Chrome auto-hides after a few idle seconds, same spirit as the VOD
     /// container. Any focus movement inside the rail restarts the clock; an
-    /// open menu suspends it. An untouched info pane closes, as in AVKit (#411).
+    /// open menu suspends it. An untouched info pane closes from the pills (#411).
     private func restartAutoHide() {
         autoHideTimer?.invalidate()
-        // Measured in AVKit: a pane waits 20s while focus is inside its content.
+        autoHideTimer = nil
+        // No timer while focus is inside a pane's content; the pills close it after 8s.
         let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView
         let inPane = activePanel.map { $0.isPane && focused?.isDescendant(of: $0) == true } ?? false
-        autoHideTimer = Timer.scheduledTimer(withTimeInterval: inPane ? 20 : 8, repeats: false) { [weak self] _ in
+        if inPane { return }
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.descriptionOverlay == nil else { return }
                 if let pane = self.activePanel, pane.isPane {

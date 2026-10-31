@@ -2120,10 +2120,10 @@ class PlayerContainerViewController: UIViewController {
         paneIdleTimer?.invalidate()
         paneIdleTimer = nil
         guard let pane = activeRailPanel, pane.isPane else { return }
-        // Measured in AVKit: 8s with focus on the pills, 20s inside the pane's content.
+        // Closes 8s after the last move on the pills; never while focus is in the pane.
         let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView
-        let delay: TimeInterval = focused?.isDescendant(of: pane) == true ? 20 : 8
-        paneIdleTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+        if focused?.isDescendant(of: pane) == true { return }
+        paneIdleTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 // The full summary is its own screen; closing it moves focus and re-arms.
                 guard let self, let vm = self.viewModel, let pane = self.activeRailPanel, pane.isPane,

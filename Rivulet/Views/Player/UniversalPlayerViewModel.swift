@@ -4704,6 +4704,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             break
         }
 
+        // Generated subtitles carry on to the next item; preferRealSubtitlesOverGenerated decides.
+        guard !showsGeneratedSubtitles else { return }
+
         // 2. Plex's per-item explicit selection. A `selected: true` stream
         //    that's neither the default nor the forced one is a deliberate
         //    user pick (here, or in Plex Web / mobile) — honor it over the
@@ -6470,6 +6473,12 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // Clear preloaded data
         clearPreloadedData()
+
+        // The track intent resolves again on the new item (#445).
+        hasAppliedAudioPreference = false
+        hasAppliedSubtitlePreference = false
+        audioTracks = []
+        subtitleTracks = []
 
         // The swap reuses this AetherPlayer, so the engine replaces the item on
         // a layer that is already on screen. Without this the outgoing item is

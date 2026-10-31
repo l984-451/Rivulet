@@ -1818,6 +1818,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         var meta = [channelLine]
         if let current {
             meta.append(Self.airTime(current.startTime, current.endTime))
+            if let year = current.year { meta.append(String(year)) }
         }
         if let next {
             meta.append("Next: \(next.title) at \(Self.timeFormatter.string(from: next.startTime))")

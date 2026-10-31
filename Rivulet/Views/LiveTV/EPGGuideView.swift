@@ -1875,7 +1875,7 @@ struct GuideInfoBar: View {
                     .foregroundStyle(EPGTheme.textPrimary)
                     .lineLimit(1)
                 if let program {
-                    Text(timeRange(program))
+                    Text(timeRange(program) + (program.year.map { " · \($0)" } ?? ""))
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(EPGTheme.textSecondary)
                 }

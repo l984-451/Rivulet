@@ -453,7 +453,8 @@ extension XMLTVParser.ParsedProgram {
             posterURL: posterIcon.flatMap { URL(string: $0) },
             landscapeURL: landscapeIcon.flatMap { URL(string: $0) },
             episodeNumber: episodeNum,
-            isNew: isNew
+            isNew: isNew,
+            year: year
         )
     }
 }

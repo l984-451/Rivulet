@@ -303,6 +303,7 @@ final class LiveBrowseViewController: UIViewController {
             if let name = recording?.channelName ?? channel?.name { detail.append(name) }
         }
         if let episode = program?.episodeNumber, !episode.isEmpty { detail.append(episode) }
+        if let year = program?.year { detail.append(String(year)) }
         if let rating = program?.contentRating, !rating.isEmpty { detail.append(rating) }
         detailLabel.text = detail.joined(separator: " · ")
         var summary = program?.description

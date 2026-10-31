@@ -17,6 +17,7 @@
 //  Wrapped in `TVCardView` for native tvOS focus motion (parallax, glow).
 //
 
+import Combine
 import UIKit
 import TVUIKit
 
@@ -33,6 +34,11 @@ final class ContinueWatchingCell: UICollectionViewCell {
 
     private var artworkLoadTask: Task<Void, Never>?
     private var currentArtworkURL: URL?
+    private var defaultsObserver: AnyCancellable?
+
+    /// Off for artwork that already carries its title (#450).
+    static let showTitlesKey = "showContinueWatchingTitles"
+    private static var showsTitles: Bool { SettingsStore.bool(showTitlesKey, default: true) }
 
     // TVCardView resets its platter to the system radius on every focus change, and a larger clip shows
     // the platter past the corners (#343). That radius is 20pt on tvOS 27 and 12pt on tvOS 26: read off
@@ -93,7 +99,11 @@ final class ContinueWatchingCell: UICollectionViewCell {
 
         // Title logo (Plex clearLogo, falling back to the title).
         titleLogoView.translatesAutoresizingMaskIntoConstraints = false
+        titleLogoView.isHidden = !Self.showsTitles
         card.contentView.addSubview(titleLogoView)
+        defaultsObserver = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.titleLogoView.isHidden = !Self.showsTitles }
 
         // Bottom info bar.
         infoBar.translatesAutoresizingMaskIntoConstraints = false

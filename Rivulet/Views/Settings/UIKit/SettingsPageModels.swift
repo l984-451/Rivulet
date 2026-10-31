@@ -404,6 +404,7 @@ enum SettingsContent {
             SettingsRowItem(id: "homeRows", title: "Rows", kind: .navigation(.homeRows)),
             SettingsRowItem(id: "homeHero", title: "Hero",
                             kind: .navigationValue(.homeHeroPicker, value: { homeHeroTitle })),
+            toggle("cwTitles", "Continue Watching Titles", key: ContinueWatchingCell.showTitlesKey, default: true),
             toggle("personalizedRecs", "Personalized Recommendations", key: "enablePersonalizedRecommendations", default: false)
         ]
         rows += [

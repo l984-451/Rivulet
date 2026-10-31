@@ -138,6 +138,10 @@ enum SettingsDescriptorStore {
             icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
             description: "Shows Recently Added and Recently Released rows in each library."
         ),
+        "cwTitles": SettingDescriptor(
+            icon: "textformat",
+            description: "Shows each title's logo or name on Continue Watching cards. Turn off if your artwork already includes the title."
+        ),
         "personalizedRecs": SettingDescriptor(
             icon: "person.3",
             description: "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content."

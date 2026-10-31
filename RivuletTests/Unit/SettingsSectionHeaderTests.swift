@@ -71,6 +71,15 @@ final class SettingsSectionHeaderTests: XCTestCase {
                        "root should no longer offer the profiles page")
     }
 
+    func test_profilePickerOnReturn_sitsBesideLaunchToggle() {
+        let ids = appearance.map(\.id)
+        guard let launch = ids.firstIndex(of: "profilePickerOnLaunch") else {
+            return XCTFail("the launch-picker toggle lost its home")
+        }
+        XCTAssertEqual(ids.indices.contains(launch + 1) ? ids[launch + 1] : nil, "profilePickerOnReturn")
+        XCTAssertNotNil(SettingsDescriptorStore.descriptor(for: "profilePickerOnReturn"))
+    }
+
     func test_triviaSpoilerRow_isGone() {
         XCTAssertFalse(appearance.contains { $0.id == "hideTriviaSpoilers" })
         XCTAssertNil(SettingsDescriptorStore.descriptor(for: "hideTriviaSpoilers"))

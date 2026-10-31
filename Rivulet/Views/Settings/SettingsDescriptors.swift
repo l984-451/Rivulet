@@ -231,6 +231,10 @@ enum SettingsDescriptorStore {
             icon: "backward.fill",
             description: "How far a single Left press skips back during playback."
         ),
+        "upNextExit": SettingDescriptor(
+            icon: "arrow.uturn.backward",
+            description: "Where Back goes from the Up Next page: keep watching the credits, return to the screen you started from, or go Home."
+        ),
         "showPostVideoUpNext": SettingDescriptor(
             icon: "rectangle.stack",
             description: "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode."
@@ -356,6 +360,10 @@ enum SettingsDescriptorStore {
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
             description: "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use."
+        ),
+        "profilePickerOnReturn": SettingDescriptor(
+            icon: "person.crop.circle.badge.questionmark",
+            description: "Shows the profile picker whenever you come back to Rivulet from the Home screen or another app, so nobody picks up where the last profile left off."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",

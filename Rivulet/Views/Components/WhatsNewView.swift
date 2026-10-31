@@ -149,6 +149,17 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.1.1 (120)", [
+            "Episode and season pages now show their extras.",
+            "The player's info panels stay open while you're reading them.",
+            "New Appearance setting hides titles on Continue Watching cards.",
+            "Live TV now shows a film's release year in the guide, What's On and Info.",
+            "The Live TV guide now marks new airings from Plex guides.",
+            "Music's Now Playing remembers whether lyrics were showing.",
+            "Returning to Rivulet while music plays opens Now Playing.",
+            "Subtitle settings now apply to every autoplayed episode, not just the first.",
+            "Subtitle tracks now list their language first, then title and format.",
+        ]),
         ("1.1.1 (119)", [
             "Subtitle and audio language settings are now saved for each Plex profile.",
             "New Seasons page lists the episodes beside the season poster.",

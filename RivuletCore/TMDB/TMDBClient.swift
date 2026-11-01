@@ -28,18 +28,6 @@ struct TMDBGenre: Codable, Sendable {
     let name: String?
 }
 
-struct TMDBDetails: Codable {
-    let genres: [TMDBGenre]?
-    let voteAverage: Double?
-    let voteCount: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case genres
-        case voteAverage = "vote_average"
-        case voteCount = "vote_count"
-    }
-}
-
 struct TMDBCredit: Codable, Sendable {
     let id: Int?
     let name: String?
@@ -62,14 +50,19 @@ struct TMDBPersonDetails: Codable, Sendable {
     }
 }
 
-private struct TMDBKeywordsResponse: Codable {
+/// `details?append=keywords`: genres and votes, the top cast, directors, and keywords.
+private struct TMDBFeaturesResponse: Codable {
+    let genres: [TMDBGenre]?
+    let voteAverage: Double?
+    let voteCount: Int?
+    let cast: [TMDBCredit]?
+    let crew: [TMDBCredit]?
     let keywords: [TMDBKeyword]?
-    let results: [TMDBKeyword]?
 
-    var allKeywords: [TMDBKeyword] {
-        if let keywords { return keywords }
-        if let results { return results }
-        return []
+    enum CodingKeys: String, CodingKey {
+        case genres, cast, crew, keywords
+        case voteAverage = "vote_average"
+        case voteCount = "vote_count"
     }
 }
 
@@ -143,16 +136,18 @@ final class TMDBClient: @unchecked Sendable {
         }
 
         do {
-            async let keywordsResponse: TMDBKeywordsResponse = request(endpoint: "tmdb/keywords/\(tmdbId)", type: type)
-            async let creditsResponse: TMDBCreditsResponse = request(endpoint: "tmdb/credits/\(tmdbId)", type: type)
-            async let detailsResponse: TMDBDetails = request(endpoint: "tmdb/details/\(tmdbId)", type: type)
-
-            let (keywords, credits, details) = try await (keywordsResponse, creditsResponse, detailsResponse)
+            // One request: the proxy folds keywords, cast and directors into details.
+            let details: TMDBFeaturesResponse = try await request(endpoint: "tmdb/details/\(tmdbId)", queryItems: [
+                URLQueryItem(name: "type", value: type.rawValue),
+                URLQueryItem(name: "append", value: "keywords"),
+            ])
+            // A proxy without `append` sends no keywords; caching that would pin empty features for 30 days.
+            guard let keywords = details.keywords else { return nil }
 
             let features = TMDBItemFeatures(
-                keywords: keywords.allKeywords.compactMap { $0.name?.lowercased() },
-                cast: (credits.cast ?? []).prefix(8).compactMap { $0.name?.lowercased() },
-                directors: (credits.crew ?? []).filter { $0.job?.lowercased() == "director" }.prefix(4).compactMap { $0.name?.lowercased() },
+                keywords: keywords.compactMap { $0.name?.lowercased() },
+                cast: (details.cast ?? []).prefix(8).compactMap { $0.name?.lowercased() },
+                directors: (details.crew ?? []).filter { $0.job?.lowercased() == "director" }.prefix(4).compactMap { $0.name?.lowercased() },
                 genres: (details.genres ?? []).compactMap { $0.name?.lowercased() },
                 voteAverage: details.voteAverage,
                 voteCount: details.voteCount

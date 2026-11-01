@@ -36,9 +36,16 @@ actor AppAttestClient {
     /// The last assertion started; the next one waits for it.
     private var assertionTail: Task<Void, Never>?
 
-    /// After a hard failure, stop hammering Apple / the Worker for a while.
+    /// After a failed enrollment, stop hammering Apple / the Worker for a while:
+    /// one minute, doubling per consecutive failure up to an hour.
     private var backoffUntil: Date?
+    private var enrollmentFailures = 0
     private static let backoff: TimeInterval = 60
+    private static let maxBackoff: TimeInterval = 60 * 60
+
+    /// A key that fails assertions with `invalidInput` is discarded once per launch.
+    /// Once only: if a fresh key fails the same way, re-enrolling per request would cost more.
+    private var discardedForInvalidInput = false
 
     init(baseURL: URL = InsightsConfig.apiBaseURL, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -50,6 +57,12 @@ actor AppAttestClient {
 
     /// True on real hardware, false in the Simulator (no Secure Enclave).
     nonisolated var isSupported: Bool { DCAppAttestService.shared.isSupported }
+
+    /// Whether `attest` signed the request (an assertion, or the Simulator's dev key).
+    nonisolated static func isSigned(_ request: URLRequest) -> Bool {
+        request.value(forHTTPHeaderField: "X-Rivulet-Assertion") != nil
+            || request.value(forHTTPHeaderField: "X-Rivulet-Dev-Key") != nil
+    }
 
     // MARK: - Signing
 
@@ -83,8 +96,10 @@ actor AppAttestClient {
                   let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
                 return request
             }
-            let query = comps.query.map { "?\($0)" } ?? ""
-            clientData = Data("\(comps.path)\(query)\n\(ts)".utf8)
+            // Percent-encoded, as sent: the Worker rebuilds it from the raw URL, so a
+            // decoded `|` in Discover's genre list never matched (bad_signature).
+            let query = comps.percentEncodedQuery.map { "?\($0)" } ?? ""
+            clientData = Data("\(comps.percentEncodedPath)\(query)\n\(ts)".utf8)
         }
 
         do {
@@ -103,9 +118,18 @@ actor AppAttestClient {
             return r
         } catch {
             reportFailure("App Attest assertion failed", step: "generateAssertion", error: error)
-            // Only a key the Secure Enclave no longer recognises (restored
-            // backup, reinstall) is dead; any other failure keeps it.
-            if (error as? DCError)?.code == .invalidKey { invalidateKey(ifCurrent: keyId) }
+            // A key the Secure Enclave no longer recognises (restored backup,
+            // reinstall) is dead. `invalidInput` on a key that used to work has
+            // stuck devices unsigned for days, so it gets one fresh key per launch.
+            switch (error as? DCError)?.code {
+            case .invalidKey:
+                invalidateKey(ifCurrent: keyId)
+            case .invalidInput where !discardedForInvalidInput:
+                discardedForInvalidInput = true
+                invalidateKey(ifCurrent: keyId)
+            default:
+                break
+            }
             return request
         }
     }
@@ -162,10 +186,13 @@ actor AppAttestClient {
             log.notice("device attested")
             DiagLog.notice(.attest, "Device attested")
             SentryBridge.log(.info, "App Attest enrolled", attributes: ["component": "app_attest"])
+            enrollmentFailures = 0
             return newKeyId
         } catch {
             reportFailure("App Attest enrollment failed", step: step, error: error, always: true)
-            backoffUntil = Date().addingTimeInterval(Self.backoff)
+            let delay = min(Self.backoff * pow(2, Double(enrollmentFailures)), Self.maxBackoff)
+            enrollmentFailures += 1
+            backoffUntil = Date().addingTimeInterval(delay)
             return nil
         }
     }

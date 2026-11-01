@@ -87,6 +87,31 @@ final class TMDBDiscoverServiceTests: XCTestCase {
         XCTAssertEqual(second.first?.id, 1)
     }
 
+    func testFetchSectionWaitsAfterFailure() async {
+        TMDBMockURLProtocol.hitCounts = [:]
+        TMDBMockURLProtocol.responses["tmdb/list/popular?type=movie"] = (500, Data())
+        let service = TMDBDiscoverService(session: makeMockSession())
+        _ = await service.fetchSection(.moviePopular)
+
+        // The list is back, but a failed section does not ask again right away.
+        TMDBMockURLProtocol.responses["tmdb/list/popular?type=movie"] = (200, Data(#"{"results": [{"id": 1, "title": "A"}]}"#.utf8))
+        let second = await service.fetchSection(.moviePopular)
+        XCTAssertTrue(second.isEmpty)
+        XCTAssertEqual(TMDBMockURLProtocol.hitCounts["tmdb/list/popular?type=movie"], 1)
+    }
+
+    func testConcurrentFetchSectionSharesOneRequest() async {
+        TMDBMockURLProtocol.hitCounts = [:]
+        TMDBMockURLProtocol.responses["tmdb/list/trending?type=movie"] = (200, Data(#"{"results": [{"id": 1, "title": "A"}]}"#.utf8))
+        let service = TMDBDiscoverService(session: makeMockSession())
+        async let a = service.fetchSection(.movieTrending)
+        async let b = service.fetchSection(.movieTrending)
+        let (first, second) = await (a, b)
+        XCTAssertEqual(first.first?.id, 1)
+        XCTAssertEqual(second.first?.id, 1)
+        XCTAssertEqual(TMDBMockURLProtocol.hitCounts["tmdb/list/trending?type=movie"], 1)
+    }
+
     func testFetchDetailStampsTVMediaType() async {
         let json = """
         {"id": 300, "name": "Test Show", "genres": [], "cast": []}

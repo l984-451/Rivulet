@@ -209,4 +209,32 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(MediaDetailChromeView.calmBadges(source(range: .dolbyVision(profile: 8), hdr10Plus: true)), ["4K", "DV", "HDR10+"])
         XCTAssertEqual(MediaDetailChromeView.calmBadges(nil), [])
     }
+
+    @MainActor
+    func test_carouselBadges_fullResolution_namesHD() {
+        let hd = MediaSource(
+            id: "1", container: "mkv", duration: 7200, bitrate: 10_000_000, fileSize: nil, fileName: nil,
+            videoResolution: "1080",
+            videoTracks: [VideoTrack(id: "v1", codec: "h264", profile: nil, level: nil, width: 1920, height: 1080,
+                                     frameRate: 24, bitrate: 10_000_000, videoRange: .sdr, isDefault: true,
+                                     scanType: "progressive")],
+            audioTracks: [], subtitleTracks: [], streamKind: .directPlay, streamURL: nil
+        )
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(hd), [])
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(hd, fullResolution: true), ["1080p"])
+    }
+
+    /// The row names the item's server only once a second server is signed in.
+    @MainActor
+    func test_serverName_onlyWithMoreThanOneServer() {
+        let registry = MediaProviderRegistry()
+        registry.register(StubMediaProvider(id: "plex:home", displayName: "Home"))
+        let item = JellyfinFixtures.mediaItem("m1", providerID: "plex:home")
+        XCTAssertNil(MediaDetailChromeView.serverName(for: item, in: registry))
+
+        registry.register(StubMediaProvider(id: "jellyfin:den", kind: .jellyfin, displayName: "Den"))
+        XCTAssertEqual(MediaDetailChromeView.serverName(for: item, in: registry), "Home")
+        let unknown = JellyfinFixtures.mediaItem("m2", providerID: "plex:gone")
+        XCTAssertNil(MediaDetailChromeView.serverName(for: unknown, in: registry))
+    }
 }

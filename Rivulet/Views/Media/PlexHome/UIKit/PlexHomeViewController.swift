@@ -5686,33 +5686,22 @@ final class PlexHomeViewController: UIViewController {
         }
         lookups.merge(cold) { warm, _ in warm }
 
-        // Titles the selected server lacks, on the account's other Plex servers (#459): one request per
-        // server, the first server in sidebar order wins.
+        // Titles on the account's other Plex servers (#459): one request per server, then the
+        // best-quality copy opens, so a title owned only there, or better there, opens that server's
+        // item. Ties stay on the selected server, then go to the first in sidebar order.
         var elsewhere: [Int: MediaItem] = [:]
-        let extraPlex = MediaProviderRegistry.shared.secondaryProviders.compactMap { $0 as? PlexProvider }
-        let missingGUIDs = Array(Set(entries.indices.filter { lookups[$0] == nil }.compactMap { entries[$0].plexGUID }))
-        if !extraPlex.isEmpty, !missingGUIDs.isEmpty {
-            let found = await withTaskGroup(of: (String, [PlexMetadata]).self) { group in
-                for provider in extraPlex {
-                    group.addTask {
-                        (provider.id, (try? await PlexNetworkManager.shared.findByGuids(
-                            serverURL: provider.serverURL, authToken: provider.authToken, guids: missingGUIDs)) ?? [])
-                    }
-                }
-                var out: [String: [PlexMetadata]] = [:]
-                for await (id, items) in group { out[id] = items }
-                return out
-            }
-            for provider in extraPlex {
-                for metadata in found[provider.id] ?? [] {
-                    for index in entries.indices
-                    where lookups[index] == nil && elsewhere[index] == nil && entries[index].plexGUID == metadata.guid {
-                        elsewhere[index] = PlexMediaMapper.item(metadata, providerID: provider.id,
-                                                                serverURL: provider.serverURL,
-                                                                authToken: provider.authToken)
-                    }
-                }
-            }
+        let otherServers = MediaProviderRegistry.shared.secondaryProviders.compactMap { $0 as? PlexProvider }
+            .map { PlexOwnedLookup.Server(id: $0.id, url: $0.serverURL, token: $0.authToken) }
+        let selectedServer = PlexOwnedLookup.Server(id: providerID, url: serverURL, token: token)
+        let copies = await PlexOwnedLookup.owners(of: Array(Set(entries.compactMap(\.plexGUID))), on: otherServers)
+        for (index, entry) in entries.enumerated() {
+            guard let guid = entry.plexGUID, let found = copies[guid] else { continue }
+            let selectedCopy = lookups[index].map { PlexOwnedLookup.Match(server: selectedServer, item: $0) }
+            guard let best = PlexOwnedLookup.betterElsewhere(selected: selectedCopy, elsewhere: found)
+            else { continue }
+            elsewhere[index] = PlexMediaMapper.item(best.item, providerID: best.server.id,
+                                                    serverURL: best.server.url, authToken: best.server.token)
+            lookups[index] = nil
         }
 
         // The carousel renders artwork as-is, so add the TMDB logo to every item (withLogoIfMissing keeps

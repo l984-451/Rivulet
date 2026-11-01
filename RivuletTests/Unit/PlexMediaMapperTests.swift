@@ -180,6 +180,17 @@ final class PlexMediaMapperTests: XCTestCase {
         XCTAssertEqual(detail.externalIDs, ["tmdb": "603", "imdb": "tt0133093", "tvdb": "169"])
     }
 
+    func test_detail_carriesThePlexGuidAndLibrary() {
+        var meta = PlexMetadata()
+        meta.ratingKey = "1"
+        meta.type = "movie"
+        meta.guid = "plex://movie/abc"
+        meta.librarySectionTitle = "Movies 4K"
+        let detail = PlexMediaMapper.detail(meta, providerID: "plex:abc", serverURL: "https://x", authToken: "T")
+        XCTAssertEqual(detail.plexGUID, "plex://movie/abc")
+        XCTAssertEqual(detail.library, "Movies 4K")
+    }
+
     func test_item_season_pullsSeasonNumberFromIndex() {
         // Regression: seasonNumber was read from parentIndex for every kind,
         // which made every season pill render "Season 1" because Plex stores

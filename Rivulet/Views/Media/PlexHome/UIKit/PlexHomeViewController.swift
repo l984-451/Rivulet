@@ -5990,7 +5990,13 @@ final class PlexHomeViewController: UIViewController {
                     }
                 }
             } else {
-                collectionView.scrollToItem(at: indexPath, at: [.centeredVertically, .centeredHorizontally], animated: false)
+                // Grids rest where focus will hold the cell (`scrollGridCellIntoView`), so the exit
+                // flight lands on the tile focus ends on. Centring did not, near a short grid's edges.
+                if let restY = gridRestingOffsetY(for: indexPath, from: collectionView.contentOffset.y) {
+                    offsetLink?.invalidate()
+                    offsetLink = nil
+                    collectionView.contentOffset.y = restY
+                }
                 collectionView.layoutIfNeeded()
             }
         }
@@ -6144,15 +6150,20 @@ final class PlexHomeViewController: UIViewController {
     /// as the system's focus scroll would: the row stays 180 pt inside the
     /// edges. Measured from the in-flight target so rapid moves add up.
     private func scrollGridCellIntoView(at indexPath: IndexPath) {
-        guard let attrs = collectionView.layoutAttributesForItem(at: indexPath) else { return }
         let from = offsetLink != nil ? offsetTargetY : collectionView.contentOffset.y
+        guard let clamped = gridRestingOffsetY(for: indexPath, from: from),
+              abs(from - clamped) > 1 else { return }
+        animateContentOffset(toY: clamped)
+    }
+
+    /// The offset that keeps a grid cell's row on screen, starting from `from`.
+    private func gridRestingOffsetY(for indexPath: IndexPath, from: CGFloat) -> CGFloat? {
+        guard let attrs = collectionView.layoutAttributesForItem(at: indexPath) else { return nil }
         let target = FocusScrollMotion.minimalOffset(revealing: attrs.frame, from: from,
                                                      height: collectionView.bounds.height)
         let top = -collectionView.adjustedContentInset.top
         let maxOffset = max(top, collectionView.contentSize.height - collectionView.bounds.height)
-        let clamped = max(top, min(target, maxOffset))
-        guard abs(from - clamped) > 1 else { return }
-        animateContentOffset(toY: clamped)
+        return max(top, min(target, maxOffset))
     }
 
     /// Section of the focused item, nil outside this page. Read from the focused view, because shelf

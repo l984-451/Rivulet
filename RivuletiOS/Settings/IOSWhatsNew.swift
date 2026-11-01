@@ -10,8 +10,10 @@ enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.0.7 (84)", [
             "Continue Watching no longer adds a title to artwork that already shows one",
-            "The Live TV guide now marks new airings from Plex guides",
-            "More Live TV guides now show a film's release year",
+            "Live TV guides now show film release years and mark new airings from Plex",
+            "Home and detail pages now sit on a soft blur of the artwork",
+            "Downloads can be paused and show their progress as a Live Activity",
+            "At home, Rivulet now prefers your Plex server's local connection",
         ]),
         ("1.0.7 (83)", [
             "iPhone Duo optimization",

@@ -2809,13 +2809,11 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// Full-width section for `MediaLibrarySortControl` (library mode only).
-    /// Height is estimated at 96pt (34pt title + 4pt gap + ~21pt count +
-    /// 20+20pt vertical padding) — ported from
-    /// MediaLibraryViewController.makeSortHeaderSectionLayout().
+    /// Self-sizing: 48pt title, 29pt count, 20pt padding above and below.
     private func makeSortHeaderSectionLayout() -> NSCollectionLayoutSection {
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(96)
+            heightDimension: .estimated(136)
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: itemSize, subitems: [item])

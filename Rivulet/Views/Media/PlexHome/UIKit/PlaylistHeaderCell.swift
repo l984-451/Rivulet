@@ -50,7 +50,6 @@ final class PlaylistHeaderCell: UICollectionViewCell {
             upGuide.bottomAnchor.constraint(equalTo: playButton.bottomAnchor),
         ])
         for button in [playButton, shuffleButton] {
-            button.heightAnchor.constraint(equalToConstant: 44).isActive = true
             button.widthAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
         }
     }

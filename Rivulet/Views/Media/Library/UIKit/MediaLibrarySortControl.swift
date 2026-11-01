@@ -53,17 +53,17 @@ enum LibraryViewMode: String {
 
 // MARK: - SortButton
 
-/// A focusable rounded button that renders a sort label + SF Symbol icon.
-/// Manages its own glass/focus appearance via UIFocusAnimationCoordinator.
+/// A focusable glass pill with an SF Symbol and a label, on the hero's pill
+/// metrics (66 tall, 29 pt label) so it matches every other button.
 /// A UIButton so it can carry a `menu`, which Select then opens.
 final class SortButton: UIButton {
+
+    private static let iconConfig = UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
 
     // MARK: - Subviews
 
     private let iconView: UIImageView = {
-        let cfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        let img = UIImage(systemName: "arrow.up.arrow.down", withConfiguration: cfg)
-        let iv = UIImageView(image: img)
+        let iv = UIImageView()
         iv.tintColor = .white
         iv.contentMode = .scaleAspectFit
         iv.translatesAutoresizingMaskIntoConstraints = false
@@ -72,7 +72,7 @@ final class SortButton: UIButton {
 
     private let sortLabel: UILabel = {
         let lb = UILabel()
-        lb.font = .systemFont(ofSize: 17, weight: .semibold)
+        lb.font = HeroPillButton.titleFont
         lb.textColor = .white
         lb.translatesAutoresizingMaskIntoConstraints = false
         return lb
@@ -80,11 +80,19 @@ final class SortButton: UIButton {
 
     private let bgView: UIView = {
         let v = UIView()
-        v.backgroundColor = UIColor.white.withAlphaComponent(0.15)
-        v.layer.cornerRadius = 14
+        v.backgroundColor = UIColor.white.withAlphaComponent(0.2)
+        v.layer.cornerRadius = HeroPillButton.buttonHeight / 2
         v.layer.cornerCurve = .continuous
-        v.layer.borderWidth = 1
-        v.layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
+        v.isUserInteractionEnabled = false
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
+
+    private let glassView: UIVisualEffectView = {
+        let v = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+        v.layer.cornerRadius = HeroPillButton.buttonHeight / 2
+        v.layer.cornerCurve = .continuous
+        v.clipsToBounds = true
         v.isUserInteractionEnabled = false
         v.translatesAutoresizingMaskIntoConstraints = false
         return v
@@ -104,24 +112,28 @@ final class SortButton: UIButton {
     required init?(coder: NSCoder) { fatalError() }
 
     private func setup() {
-        addSubview(bgView)
-        bgView.addSubview(iconView)
-        bgView.addSubview(sortLabel)
+        for v in [bgView, glassView, iconView, sortLabel] as [UIView] { addSubview(v) }
+        let pad = HeroPillButton.sidePadding
 
         NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
             bgView.topAnchor.constraint(equalTo: topAnchor),
             bgView.bottomAnchor.constraint(equalTo: bottomAnchor),
             bgView.leadingAnchor.constraint(equalTo: leadingAnchor),
             bgView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassView.topAnchor.constraint(equalTo: topAnchor),
+            glassView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            glassView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassView.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            iconView.leadingAnchor.constraint(equalTo: bgView.leadingAnchor, constant: 16),
-            iconView.centerYAnchor.constraint(equalTo: bgView.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 18),
-            iconView.heightAnchor.constraint(equalToConstant: 18),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: pad),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 24),
+            iconView.heightAnchor.constraint(equalToConstant: 24),
 
-            sortLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
-            sortLabel.trailingAnchor.constraint(equalTo: bgView.trailingAnchor, constant: -16),
-            sortLabel.centerYAnchor.constraint(equalTo: bgView.centerYAnchor),
+            sortLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: HeroPillButton.iconGap),
+            sortLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
+            sortLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -137,9 +149,7 @@ final class SortButton: UIButton {
 
     func configure(sortName: String, symbol: String = "arrow.up.arrow.down") {
         sortLabel.text = sortName
-        iconView.image = UIImage(
-            systemName: symbol,
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+        iconView.image = UIImage(systemName: symbol, withConfiguration: Self.iconConfig)
     }
 
     // MARK: - Focus
@@ -150,11 +160,10 @@ final class SortButton: UIButton {
         let focused = context.nextFocusedView === self
         coordinator.addCoordinatedAnimations { [weak self] in
             guard let self else { return }
-            self.transform = focused ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
-            self.bgView.backgroundColor = focused ? .white : UIColor.white.withAlphaComponent(0.15)
-            self.bgView.layer.borderColor = focused
-                ? UIColor.white.withAlphaComponent(0.0).cgColor
-                : UIColor.white.withAlphaComponent(0.2).cgColor
+            let scale = HeroPillButton.focusScale
+            self.transform = focused ? CGAffineTransform(scaleX: scale, y: scale) : .identity
+            self.bgView.backgroundColor = focused ? .white : UIColor.white.withAlphaComponent(0.2)
+            self.glassView.alpha = focused ? 0 : 1
             self.iconView.tintColor = focused ? .black : .white
             self.sortLabel.textColor = focused ? .black : .white
         }
@@ -174,7 +183,8 @@ final class MediaLibrarySortControl: UICollectionViewCell {
 
     private let titleLabel: UILabel = {
         let lb = UILabel()
-        lb.font = .systemFont(ofSize: 34, weight: .bold)
+        // The folder and photo library pages' title size.
+        lb.font = .systemFont(ofSize: 48, weight: .bold)
         lb.textColor = .white
         lb.translatesAutoresizingMaskIntoConstraints = false
         return lb
@@ -182,8 +192,8 @@ final class MediaLibrarySortControl: UICollectionViewCell {
 
     private let countLabel: UILabel = {
         let lb = UILabel()
-        lb.font = .systemFont(ofSize: 17)
-        lb.textColor = UIColor.white.withAlphaComponent(0.5)
+        lb.font = .systemFont(ofSize: 29)
+        lb.textColor = UIColor.white.withAlphaComponent(0.6)
         lb.translatesAutoresizingMaskIntoConstraints = false
         return lb
     }()
@@ -241,19 +251,18 @@ final class MediaLibrarySortControl: UICollectionViewCell {
             // Count: just below the title, same left edge.
             countLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             countLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            countLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
 
             // View button: pinned to the right edge, so it never moves under
             // focus when the sort button hides.
             viewButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             viewButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            viewButton.heightAnchor.constraint(equalToConstant: 44),
             viewButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
 
             // Sort button: left of the View button, or at the edge
             // (configure() swaps these two).
             sortAtEdge,
             sortButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            sortButton.heightAnchor.constraint(equalToConstant: 44),
             sortButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
 
             // Keep the buttons from overrunning the title. Both stay active: a

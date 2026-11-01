@@ -431,7 +431,6 @@ private final class FolderHeaderView: UICollectionReusableView {
         addSubview(viewButton)
         NSLayoutConstraint.activate([
             viewButton.trailingAnchor.constraint(equalTo: trailingAnchor),
-            viewButton.heightAnchor.constraint(equalToConstant: 44),
             viewButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
             viewCenterY,
         ])

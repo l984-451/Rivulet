@@ -38,6 +38,7 @@ final class SettingsPageViewController: UIViewController {
     /// Move mode for a grabbed row: Up/Down slide it, Select drops it.
     private var reorder: GrabReorderController!
     private var speechModelState: AnyCancellable?
+    private var homeRowsUpdates: AnyCancellable?
 
     init(page: SettingsPage) {
         self.page = page
@@ -116,6 +117,18 @@ final class SettingsPageViewController: UIViewController {
                 .dropFirst()
                 .throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] _ in self?.refreshVisibleValues() }
+        }
+
+        // Home Rows: a favorites or playlist row just switched on can move once
+        // its row has loaded. Never mid-move: the list would shift under the grab.
+        if page == .homeRows {
+            homeRowsUpdates = PersonalHomeRows.shared.$rows
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self, !reorder.isMoving else { return }
+                    reloadRows()
+                }
         }
     }
 
@@ -202,8 +215,27 @@ final class SettingsPageViewController: UIViewController {
     /// that mutate this page's OWN data and need the list to refresh in place
     /// (e.g. Libraries' Add All / Remove All).
     func reloadRows() {
+        let oldIDs = rows.map(\.id)
+        let focusedID = focusedIndexPath.flatMap { oldIDs.indices.contains($0.item) ? oldIDs[$0.item] : nil }
         rebuildRows()
-        collectionView?.reloadData()
+        let newIDs = rows.map(\.id)
+        guard let collectionView else { return }
+        // Rows that moved (Home Rows: a toggle sends its row across "Hidden
+        // from Home") move as cells, so focus moves with the focused one. A
+        // full reload left focus on the old index, which could be a header.
+        guard oldIDs != newIDs, Set(oldIDs).count == oldIDs.count, Set(newIDs).count == newIDs.count else {
+            collectionView.reloadData()
+            return
+        }
+        let path: (Int) -> IndexPath = { IndexPath(item: $0, section: 0) }
+        collectionView.performBatchUpdates({
+            collectionView.deleteItems(at: oldIDs.indices.filter { !newIDs.contains(oldIDs[$0]) }.map(path))
+            collectionView.insertItems(at: newIDs.indices.filter { !oldIDs.contains(newIDs[$0]) }.map(path))
+            for (from, id) in oldIDs.enumerated() {
+                if let to = newIDs.firstIndex(of: id), to != from { collectionView.moveItem(at: path(from), to: path(to)) }
+            }
+        }, completion: { [weak self] _ in self?.refreshVisibleValues() })
+        focusedIndexPath = focusedID.flatMap { newIDs.firstIndex(of: $0) }.map(path)
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {

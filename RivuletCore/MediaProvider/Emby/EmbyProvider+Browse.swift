@@ -456,6 +456,21 @@ extension EmbyProvider {
         ]).items)
     }
 
+    var supportsFavorites: Bool { true }
+
+    /// The library's favorites by name, the order of Emby's own Favorites tab.
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] {
+        map(try await query([
+            URLQueryItem(name: "ParentId", value: library.id),
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "IncludeItemTypes", value: Self.itemTypes(for: library.kind)),
+            URLQueryItem(name: "Filters", value: "IsFavorite"),
+            URLQueryItem(name: "SortBy", value: "SortName"),
+            URLQueryItem(name: "Limit", value: "\(limit)"),
+            Self.listFields
+        ]).items)
+    }
+
     // MARK: - A to Z
 
     /// `Items/Prefixes` (bare route only; the user route is a 500) lists the letters in use with

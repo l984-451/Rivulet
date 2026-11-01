@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 //
-//  Which Home rows this device hides, and which collections it pins. The row set
+//  Which Home rows this device hides, and which collections and playlists it pins. The row set
 //  comes from the server (`PlexDataStore.projectHomeItems`); hiding can only remove
 //  rows. Rows are keyed by `hubIdentifier`, which carries the section id, so a key
 //  for a row no longer offered just stops matching.
@@ -46,7 +46,7 @@ enum HomeRowSettings {
         write(ids)
     }
 
-    /// Un-hide everything. The "Show All" bulk action.
+    /// Un-hide everything. Part of Settings' Reset to Default.
     static func showAll() {
         write([])
     }
@@ -169,5 +169,146 @@ enum HomeCollectionPins {
         guard let data = try? JSONEncoder().encode(pins) else { return }
         defaults.set(data, forKey: storageKey(for: destination))
         NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+}
+
+/// Playlists shown on Home, switched on in Settings > Home > Rows.
+/// Any server with playlists, keyed by provider id. Stored as JSON per Plex Home
+/// profile, for the same reason as `HomeRowSettings.hiddenKey`.
+enum HomePlaylistPins {
+
+    nonisolated struct Pin: Codable, Hashable, Sendable {
+        let providerID: String
+        let playlistID: String
+        /// The title at pin time; Home prefers the server's current one.
+        var title: String
+
+        var id: String { "\(providerID)/\(playlistID)" }
+    }
+
+    /// Posted after any change. `PersonalHomeRows` refetches on it.
+    static let changedNotification = Notification.Name("homePlaylistPinsChanged")
+
+    private static var defaults: UserDefaults { .standard }
+
+    static var storageKey: String {
+        guard let userId = defaults.object(forKey: "selectedPlexUserId") as? Int else {
+            return "homePlaylistPins"
+        }
+        return "homePlaylistPins_user_\(userId)"
+    }
+
+    /// Every pin for the current profile, in the order they were switched on, which Home draws.
+    static var pins: [Pin] {
+        guard let data = defaults.data(forKey: storageKey) else { return [] }
+        return (try? JSONDecoder().decode([Pin].self, from: data)) ?? []
+    }
+
+    static func isPinned(_ ref: MediaItemRef) -> Bool {
+        pins.contains { $0.providerID == ref.providerID && $0.playlistID == ref.itemID }
+    }
+
+    static func pin(_ pin: Pin) {
+        guard !pins.contains(where: { $0.id == pin.id }) else { return }
+        write(pins + [pin])
+    }
+
+    /// No-op, and no notification, when the pin is already gone.
+    static func unpin(_ ref: MediaItemRef) {
+        let current = pins
+        let kept = current.filter { !($0.providerID == ref.providerID && $0.playlistID == ref.itemID) }
+        guard kept.count != current.count else { return }
+        write(kept)
+    }
+
+    /// Takes every playlist off Home. Settings' Reset to Default.
+    static func removeAll() {
+        guard !pins.isEmpty else { return }
+        write([])
+    }
+
+    private static func write(_ pins: [Pin]) {
+        guard let data = try? JSONEncoder().encode(pins) else { return }
+        defaults.set(data, forKey: storageKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+}
+
+/// The order Home draws its rows in, set by holding Select on a row in
+/// Settings > Home > Rows. With nothing saved, Home's own order. Once saved, a
+/// row with no saved place (a playlist just switched on) goes last. Per Plex
+/// Home profile, for the same reason as `HomeRowSettings.hiddenKey`.
+enum HomeRowOrder {
+
+    /// Every server's Continue Watching is one row on Home, so they share a key.
+    nonisolated static let continueWatchingKey = "rivulet.continueWatching"
+
+    nonisolated static func key(for row: CachedHomeHub) -> String {
+        row.isContinueWatching ? continueWatchingKey : (row.hubIdentifier ?? row.id)
+    }
+
+    private static var defaults: UserDefaults { .standard }
+
+    static var storageKey: String {
+        guard let userId = defaults.object(forKey: "selectedPlexUserId") as? Int else {
+            return "homeRowOrder"
+        }
+        return "homeRowOrder_user_\(userId)"
+    }
+
+    static var savedKeys: [String] { defaults.stringArray(forKey: storageKey) ?? [] }
+
+    static func arrange<T>(_ rows: [T], key: (T) -> String) -> [T] {
+        arrange(rows, key: key, savedOrder: savedKeys)
+    }
+
+    /// Rows sharing a key stay together, in their default order, at that key's place.
+    nonisolated static func arrange<T>(_ rows: [T], key: (T) -> String, savedOrder: [String]) -> [T] {
+        var defaultKeys: [String] = []
+        for row in rows where !defaultKeys.contains(key(row)) { defaultKeys.append(key(row)) }
+        let order = savedOrder.filter(defaultKeys.contains) + defaultKeys.filter { !savedOrder.contains($0) }
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return rows.enumerated()
+            .sorted { (rank[key($0.element)] ?? .max, $0.offset) < (rank[key($1.element)] ?? .max, $1.offset) }
+            .map(\.element)
+    }
+
+    /// Settings' hold-Select reorder: swaps `key` with its neighbour in
+    /// `shownKeys` (the page's list, already arranged) and saves that order.
+    static func move(_ key: String, up: Bool, among shownKeys: [String]) {
+        let keys = moved(key, up: up, among: shownKeys, saved: savedKeys)
+        guard keys != savedKeys else { return }
+        defaults.set(keys, forKey: storageKey)
+        NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
+    }
+
+    /// Settings' toggle: a row switched on goes last. Its saved place is
+    /// dropped, and `shownKeys` (the page's rows, the new one still off) are saved.
+    static func placeLast(_ key: String, among shownKeys: [String]) {
+        let keys = placedLast(key, among: shownKeys, saved: savedKeys)
+        guard keys != savedKeys else { return }
+        defaults.set(keys, forKey: storageKey)
+        NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
+    }
+
+    nonisolated static func placedLast(_ key: String, among shownKeys: [String], saved: [String]) -> [String] {
+        (shownKeys + saved.filter { !shownKeys.contains($0) }).filter { $0 != key }
+    }
+
+    /// Back to Home's own order. Settings' Reset.
+    static func reset() {
+        guard !savedKeys.isEmpty else { return }
+        defaults.removeObject(forKey: storageKey)
+        NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
+    }
+
+    /// Saved keys not shown now (a server offline) follow, so they are not lost.
+    nonisolated static func moved(_ key: String, up: Bool, among shownKeys: [String], saved: [String]) -> [String] {
+        var keys = shownKeys
+        guard let i = keys.firstIndex(of: key) else { return saved }
+        let j = up ? i - 1 : i + 1
+        guard keys.indices.contains(j) else { return saved }
+        keys.swapAt(i, j)
+        return keys + saved.filter { !shownKeys.contains($0) }
     }
 }

@@ -399,6 +399,22 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return components.string
     }
 
+    var supportsFavorites: Bool { true }
+
+    /// The library's favorites by name, the order of Jellyfin's own Favorites tab.
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] {
+        let result: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "parentId", value: library.id),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: Self.itemTypes(for: library.kind)),
+            URLQueryItem(name: "filters", value: "IsFavorite"),
+            URLQueryItem(name: "sortBy", value: "SortName"),
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            Self.listFields
+        ])
+        return map(result.items)
+    }
+
     /// Two requests: the library's TMDB ids, then the matches. 12.1 ignores
     /// `anyProviderIdEquals` (measured: every title comes back), so the ids are listed.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] {

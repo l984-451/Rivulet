@@ -991,53 +991,35 @@ enum SettingsContent {
 
     // MARK: Home Rows (local subtractive filter over the server's row set)
 
-    /// Jellyfin's Home rows for the Home Rows page, titled the way Home titles
-    /// them: Continue Watching, then each sidebar-visible library's row in
-    /// sidebar order. Rows hidden here stay listed so they can be switched
-    /// back on; rows of libraries hidden from the sidebar never draw on Home,
-    /// so they are not offered.
-    static func serverHomeRowEntries(providerID: String) -> [(id: String, title: String)] {
-        ServerDataStore.shared.homeRowsInSidebarOrder.compactMap { row in
-            guard row.id.hasPrefix("\(providerID)|") else { return nil }
-            return row.hubIdentifier.map { ($0, row.title) }
-        }
+    /// Every row Home can draw, hidden ones included, in Home's order: one per
+    /// `HomeRowOrder` key, so every server's Continue Watching is one row and a
+    /// kind's favorites rows are one. Pinned collections have their own group.
+    static func orderedHomeRows() -> [(row: CachedHomeHub, kind: MediaProviderKind)] {
+        let rail = PlexHomeViewController.homeRail(
+            plex: plexHomeRows.filter { !($0.hubIdentifier ?? "").hasPrefix("rivulet.pin.") },
+            otherServers: ServerDataStore.shared.homeRowsInSidebarOrder,
+            personal: PersonalHomeRows.shared.rows,
+            libraryOrder: PlexHomeViewController.sidebarLibraryOrder(),
+            kindOf: { MediaProviderRegistry.shared.kind(of: $0) })
+        var seen = Set<String>()
+        return HomeRowOrder.arrange(rail, key: { HomeRowOrder.key(for: $0.row) })
+            .filter { seen.insert(HomeRowOrder.key(for: $0.row)).inserted }
     }
 
-    /// One toggle per row Plex offers Home, in Home's order. Built from
-    /// `PlexDataStore.homeItems`, the projection Home renders, so titles match
-    /// the shelves; hidden rows are added back so they can be switched on.
-    private static var homeRows: [SettingsRowItem] {
+    /// The selected Plex server's rows, hidden ones included (only the visible
+    /// ones before the first projection after a warm launch).
+    private static var plexHomeRows: CachedHomeRail {
         let store = PlexDataStore.shared
-        let visible = store.homeItems
-        // Hidden rows are absent from the projection by definition, so recover
-        // them from the hubs the projection was built from.
-        let hiddenRows: [(id: String, title: String)] = store.librariesPinnedToHome
-            .flatMap { store.libraryHubs[$0.key] ?? [] }
-            .filter { $0.promoted == true && HomeRowSettings.isHidden($0.hubIdentifier) }
-            .compactMap { hub in
-                guard let id = hub.hubIdentifier else { return nil }
-                return (id, hub.title ?? id)
-            }
-        let continueWatching: [(id: String, title: String)] = {
-            guard let cw = store.continueWatchingHub, let id = cw.hubIdentifier,
-                  HomeRowSettings.isHidden(id) else { return [] }
-            return [(id, cw.title ?? id)]
-        }()
+        return store.allHomeItems.isEmpty ? store.homeItems : store.allHomeItems
+    }
 
-        let plexEntries: [(id: String, title: String)] =
-            continueWatching
-            + visible.compactMap { row in
-                // Pinned collections are listed below with an Unpin action,
-                // never as a hide toggle.
-                guard let id = row.hubIdentifier, !id.hasPrefix("rivulet.pin.") else { return nil }
-                return (id, row.title)
-            }
-            + hiddenRows
-        let runs = serverRuns
-        let entriesByRun = runs.map { run in run.providerID.map(serverHomeRowEntries(providerID:)) ?? plexEntries }
-
-        let pinRows = pinnedCollectionRows(store: store)
-        guard entriesByRun.contains(where: { !$0.isEmpty }) else {
+    /// The Home Rows list: every row that is on, in Home's order (hold Select
+    /// to move one), then, under "Hidden from Home", every row that is off. A toggle
+    /// moves its row across at once.
+    private static var homeRows: [SettingsRowItem] {
+        let ordered = orderedHomeRows()
+        let pinRows = pinnedCollectionRows(store: PlexDataStore.shared)
+        guard !ordered.isEmpty || PlexAuthManager.shared.hasCredentials || ServerDataStore.shared.isSignedIn else {
             // A pin can outlive every Plex row (its library taken off Home),
             // and this page is the only place left to unpin it.
             guard pinRows.isEmpty else { return pinRows }
@@ -1046,29 +1028,173 @@ enum SettingsContent {
                                     kind: .info(value: { "" }))]
         }
 
-        var rows: [SettingsRowItem] = [
-            SettingsRowItem(id: "showAllHomeRows", title: "Show All",
-                            kind: .action(destructive: false, handler: { vc in
-                HomeRowSettings.showAll()
-                (vc as? SettingsPageViewController)?.reloadRows()
-            }))
-        ]
-        // Several servers listed: each run under its server's name, as Sidebar
-        // Libraries does.
-        let labelsRuns = entriesByRun.filter { !$0.isEmpty }.count > 1
-        // De-dupe defensively: Continue Watching can be reported by both the
-        // dedicated hub and the projection.
-        var seen = Set<String>()
-        let headers = serverRunHeaders(runs.map { ($0.name, $0.kind) })
-        for (header, entries) in zip(headers, entriesByRun) where !entries.isEmpty {
-            if labelsRuns { rows.append(.header(verbatim: header)) }
-            for entry in entries where seen.insert(entry.id).inserted {
-                rows.append(SettingsRowItem(id: "homeRow_\(entry.id)", verbatim: entry.title, kind: .toggle(
-                    get: { !HomeRowSettings.isHidden(entry.id) },
-                    set: { shown in HomeRowSettings.setHidden(!shown, for: entry.id) })))
+        let move = { (key: String) -> (Bool) -> Void in
+            { up in HomeRowOrder.move(key, up: up, among: shownHomeRowKeys()) }
+        }
+        // With more than one server, every row names its own.
+        let labelsServers = ServerDataStore.shared.labelsServers
+        let labeled = { (title: String, providerID: String?) -> String in
+            guard labelsServers, let providerID else { return title }
+            let kind = MediaProviderRegistry.shared.kind(of: providerID) ?? .plex
+            return "\(title) (\(PlexHomeViewController.serverName(providerID: providerID, kind: kind)))"
+        }
+
+        var on: [SettingsRowItem] = []
+        var off: [SettingsRowItem] = []
+        var listedFavorites: Set<MediaLibrary.LibraryKind> = []
+        var listedPlaylists: Set<String> = []
+        func add(_ item: SettingsRowItem, isOn: Bool) {
+            if isOn { on.append(item) } else { off.append(item) }
+        }
+        for (row, kind) in ordered {
+            let key = HomeRowOrder.key(for: row)
+            let isOn = isHomeRowOn(row)
+            if row.isContinueWatching {
+                let ids = continueWatchingIDs
+                add(SettingsRowItem(
+                    id: "homeRow_\(key)", title: "Continue Watching", kind: .toggle(
+                        get: { ids.contains { !HomeRowSettings.isHidden($0) } },
+                        set: { shown in
+                            if shown { HomeRowOrder.placeLast(key, among: shownHomeRowKeys()) }
+                            ids.forEach { HomeRowSettings.setHidden(!shown, for: $0) }
+                        },
+                        didChange: reloadPage),
+                    onReorder: isOn ? move(key) : nil, reorderGroup: isOn ? "homeRows" : nil), isOn: isOn)
+            } else if let favoriteKind = PersonalHomeRows.favoriteKinds.first(where: {
+                PersonalHomeRows.favoritesIdentifier($0) == key
+            }) {
+                listedFavorites.insert(favoriteKind)
+                add(favoritesRow(favoriteKind, onReorder: isOn ? move(key) : nil), isOn: isOn)
+            } else if row.id.hasPrefix(PersonalHomeRows.playlistRowPrefix) {
+                // A playlist just switched off can outlive its pin for a moment:
+                // it is listed with the others under "Hidden from Home".
+                guard let pin = HomePlaylistPins.pins.first(where: {
+                    PersonalHomeRows.playlistRowID(providerID: $0.providerID, playlistID: $0.playlistID) == row.id
+                }) else { continue }
+                listedPlaylists.insert(pin.id)
+                on.append(playlistToggle(providerID: pin.providerID, playlistID: pin.playlistID,
+                                         title: row.title, label: labeled(row.title, pin.providerID),
+                                         onReorder: move(key)))
+            } else if let id = row.hubIdentifier {
+                let server = PlexHomeViewController.serverName(providerID: row.items.first?.ref.providerID, kind: kind)
+                add(SettingsRowItem(
+                    id: "homeRow_\(id)", verbatim: labelsServers ? "\(row.title) (\(server))" : row.title,
+                    kind: .toggle(
+                        get: { !HomeRowSettings.isHidden(id) },
+                        set: { shown in
+                            if shown { HomeRowOrder.placeLast(key, among: shownHomeRowKeys()) }
+                            HomeRowSettings.setHidden(!shown, for: id)
+                        },
+                        didChange: reloadPage),
+                    onReorder: isOn ? move(key) : nil, reorderGroup: isOn ? "homeRows" : nil), isOn: isOn)
             }
         }
-        return rows + pinRows
+        // A favorites kind or playlist that is on but has no row yet (still
+        // loading, or nothing in it) sits at the end of the on rows, unmovable.
+        // Favorites are offered only where a server has them.
+        for kind in PersonalHomeRows.favoriteKinds
+        where PersonalHomeRows.offersFavorites && !listedFavorites.contains(kind) {
+            add(favoritesRow(kind, onReorder: nil), isOn: PersonalHomeRows.showsFavorites(kind))
+        }
+        for entry in homePlaylists() where !listedPlaylists.contains("\(entry.providerID)/\(entry.playlistID)") {
+            add(playlistToggle(providerID: entry.providerID, playlistID: entry.playlistID,
+                               title: entry.title, label: labeled(entry.title, entry.providerID), onReorder: nil),
+                isOn: HomePlaylistPins.isPinned(MediaItemRef(providerID: entry.providerID, itemID: entry.playlistID)))
+        }
+
+        let reset = SettingsRowItem(id: "resetHomeRows", title: "Reset",
+                                    kind: .action(destructive: true, handler: { vc in
+            presentConfirm(on: vc, title: "Reset Home Rows?",
+                           message: "Every row from your servers comes back in the original order. Favorites and playlists are turned off.",
+                           confirmTitle: "Reset", destructive: true) {
+                HomeRowSettings.showAll()
+                HomeRowOrder.reset()
+                PersonalHomeRows.favoriteKinds.forEach { PersonalHomeRows.setShowsFavorites(false, $0) }
+                HomePlaylistPins.removeAll()
+                (vc as? SettingsPageViewController)?.reloadRows()
+            }
+        }))
+        return [reset] + on + (off.isEmpty ? [] : [.header("Hidden from Home")] + off) + pinRows
+    }
+
+    /// The page's rows as `HomeRowOrder` keys: those that are on, as listed,
+    /// then the hidden ones. A move swaps with a neighbour that is on, never a
+    /// hidden row between them.
+    private static func shownHomeRowKeys() -> [String] {
+        let keys = orderedHomeRows().map(\.row).map { (key: HomeRowOrder.key(for: $0), isOn: isHomeRowOn($0)) }
+        return keys.filter(\.isOn).map(\.key) + keys.filter { !$0.isOn }.map(\.key)
+    }
+
+    /// Every server's Continue Watching is one row here, as on Home: its toggle covers them all.
+    private static var continueWatchingIDs: [String] {
+        Array(Set((plexHomeRows + ServerDataStore.shared.homeRowsInSidebarOrder)
+            .filter(\.isContinueWatching).compactMap(\.hubIdentifier)))
+    }
+
+    /// Whether a row of `orderedHomeRows` is on, which puts it above "Hidden from Home".
+    private static func isHomeRowOn(_ row: CachedHomeHub) -> Bool {
+        if row.isContinueWatching { return continueWatchingIDs.contains { !HomeRowSettings.isHidden($0) } }
+        if let kind = PersonalHomeRows.favoriteKinds.first(where: { PersonalHomeRows.favoritesIdentifier($0) == row.hubIdentifier }) {
+            return PersonalHomeRows.showsFavorites(kind)
+        }
+        if row.id.hasPrefix(PersonalHomeRows.playlistRowPrefix) {
+            return HomePlaylistPins.pins.contains {
+                PersonalHomeRows.playlistRowID(providerID: $0.providerID, playlistID: $0.playlistID) == row.id
+            }
+        }
+        return row.hubIdentifier.map { !HomeRowSettings.isHidden($0) } ?? false
+    }
+
+    /// Moves a toggled row across the "Hidden from Home" line.
+    private static let reloadPage: (Bool, UIViewController) -> Void = { _, vc in
+        (vc as? SettingsPageViewController)?.reloadRows()
+    }
+
+    private static func favoritesRow(_ kind: MediaLibrary.LibraryKind, onReorder: ((Bool) -> Void)?) -> SettingsRowItem {
+        SettingsRowItem(id: kind == .shows ? "homeFavoriteShows" : "homeFavoriteMovies",
+                        title: kind == .shows ? "Favorite TV Shows" : "Favorite Movies", kind: .toggle(
+            get: { PersonalHomeRows.showsFavorites(kind) },
+            set: { shown in
+                if shown { HomeRowOrder.placeLast(PersonalHomeRows.favoritesIdentifier(kind), among: shownHomeRowKeys()) }
+                PersonalHomeRows.setShowsFavorites(shown, kind)
+            },
+            didChange: reloadPage),
+            onReorder: onReorder, reorderGroup: onReorder == nil ? nil : "homeRows")
+    }
+
+    /// `title` is the playlist's own, stored with the pin; `label` may add its server.
+    private static func playlistToggle(providerID: String, playlistID: String, title: String, label: String,
+                                       onReorder: ((Bool) -> Void)?) -> SettingsRowItem {
+        let ref = MediaItemRef(providerID: providerID, itemID: playlistID)
+        return SettingsRowItem(id: "homePlaylist_\(providerID)/\(playlistID)", verbatim: label, kind: .toggle(
+            get: { HomePlaylistPins.isPinned(ref) },
+            set: { shown in
+                if shown {
+                    HomeRowOrder.placeLast(PersonalHomeRows.playlistRowID(providerID: providerID, playlistID: playlistID),
+                                           among: shownHomeRowKeys())
+                    HomePlaylistPins.pin(.init(providerID: providerID, playlistID: playlistID, title: title))
+                } else {
+                    HomePlaylistPins.unpin(ref)
+                }
+            },
+            didChange: reloadPage),
+            onReorder: onReorder, reorderGroup: onReorder == nil ? nil : "homeRows")
+    }
+
+    /// Every server's video playlists, plus any pin whose playlist is no longer
+    /// listed, so it can still be switched off.
+    private static func homePlaylists() -> [(providerID: String, playlistID: String, title: String)] {
+        let listed = PlaylistAvailability.shared.playlistsByProvider
+        let providerIDs = ([MediaProviderRegistry.shared.plexProvider?.id].compactMap { $0 }
+            + ServerDataStore.shared.sources.map(\.providerID)).filter { listed[$0] != nil }
+        var entries = providerIDs.flatMap { id in
+            (listed[id] ?? []).map { (providerID: id, playlistID: $0.item.ref.itemID, title: $0.item.title) }
+        }
+        for pin in HomePlaylistPins.pins
+        where !entries.contains(where: { $0.providerID == pin.providerID && $0.playlistID == pin.playlistID }) {
+            entries.append((pin.providerID, pin.playlistID, pin.title))
+        }
+        return entries
     }
 
     /// The Pinned Collections group: every pin on the current server, not only

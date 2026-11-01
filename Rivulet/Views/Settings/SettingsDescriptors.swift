@@ -35,6 +35,7 @@ enum SettingsDescriptorStore {
         // is what the panel wants to explain anyway.
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
         if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
+        if id.hasPrefix("homePlaylist_") { return descriptors["homePlaylist"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
         if id.hasPrefix("cfw_"), id != "cfw_add" { return descriptors["customWordRow"] }
         if id.hasPrefix("sq_") { return descriptors["streamingQualityOption"] }
@@ -103,19 +104,31 @@ enum SettingsDescriptorStore {
 
         "homeRows": SettingDescriptor(
             icon: "rectangle.grid.1x2",
-            description: "Turn Home rows off on this Apple TV. Rows come from your Plex account; a library shows here once it is pinned to Home in Plex."
+            description: "Choose what appears on Home and in what order."
         ),
-        "showAllHomeRows": SettingDescriptor(
-            icon: "eye",
-            description: "Show every row your Plex account puts on Home again."
+        "resetHomeRows": SettingDescriptor(
+            icon: "arrow.counterclockwise",
+            description: "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay."
         ),
         "homeRowItem": SettingDescriptor(
             icon: "rectangle.grid.1x2",
-            description: "Turn this row off to hide it on this Apple TV. Your Plex account is unchanged, so the row keeps showing in the Plex app and on your other devices."
+            description: "Click to show or hide this row on Home. Press and hold to move it up or down."
         ),
         "pinnedCollection": SettingDescriptor(
             icon: "pin",
             description: "A collection you pinned from its tile menu. Hold Select to reorder, or Select to unpin it."
+        ),
+        "homePlaylist": SettingDescriptor(
+            icon: "music.note.list",
+            description: "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down."
+        ),
+        "homeFavoriteMovies": SettingDescriptor(
+            icon: "star",
+            description: "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down."
+        ),
+        "homeFavoriteShows": SettingDescriptor(
+            icon: "star",
+            description: "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down."
         ),
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",

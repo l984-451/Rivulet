@@ -62,6 +62,10 @@ class PlexDataStore: ObservableObject {
     /// hubs. Hero, watchlist and recommendations come from their own services.
     @Published private(set) var homeItems: CachedHomeRail = []
 
+    /// `homeItems` with the rows hidden in Settings > Home > Rows kept. Home's
+    /// hero reads these, so hiding a row never changes the hero. Not cached.
+    private(set) var allHomeItems: CachedHomeRail = []
+
     /// Bumped whenever `homeItems` changes (the projection's content version,
     /// analogous to `hubsVersion`).
     @Published private(set) var homeItemsVersion = UUID()
@@ -1184,26 +1188,29 @@ class PlexDataStore: ObservableObject {
         //   row and adds `home.playlists`, which the Plex app never shows.
         // - `/hubs/continueWatching` is the merged in-progress + On Deck hub.
         var rail: CachedHomeRail = []
+        var all: CachedHomeRail = []
         var carriedContinueWatching = false
 
         // Continue Watching. Not gated on promotion: it is a global row that
         // every scoped `/hubs/promoted` call returns, and PMS already scopes its
         // items to pinned libraries (measured: every item came from a
         // `hidden == 0` library).
-        if let cw = continueWatchingHub, let metas = cw.Metadata, !metas.isEmpty,
-           !HomeRowSettings.isHidden(cw.hubIdentifier) {
-            rail.append(makeCachedHub(
+        if let cw = continueWatchingHub, let metas = cw.Metadata, !metas.isEmpty {
+            let row = makeCachedHub(
                 id: "hub:\(cw.id)",
                 title: cw.title ?? "",
                 isContinueWatching: true,
                 hubKey: cw.key ?? cw.hubKey,
                 hubIdentifier: cw.hubIdentifier,
                 metas: metas
-            ))
+            )
+            all.append(row)
+            if !HomeRowSettings.isHidden(cw.hubIdentifier) { rail.append(row) }
         } else if let cached = homeItems.first(where: \.isContinueWatching),
                   Self.carriesOverContinueWatching(hasFetched: hasFetchedContinueWatching,
                                                    isHidden: HomeRowSettings.isHidden(cached.hubIdentifier)) {
             rail.append(cached)
+            all.append(cached)
             carriedContinueWatching = true
         }
 
@@ -1218,8 +1225,6 @@ class PlexDataStore: ObservableObject {
                 // A library's own in-progress hub would duplicate the global
                 // Continue Watching row above.
                 guard !Self.isContinueWatchingFamily(hubIdentifier: hub.hubIdentifier) else { continue }
-                // Local subtractive filter — see `HomeRowSettings`.
-                guard !HomeRowSettings.isHidden(hub.hubIdentifier) else { continue }
                 guard let metas = hub.Metadata, !metas.isEmpty else { continue }
 
                 var row = makeCachedHub(
@@ -1231,7 +1236,9 @@ class PlexDataStore: ObservableObject {
                     metas: metas
                 )
                 row.libraryKey = library.key
-                rail.append(row)
+                all.append(row)
+                // Local subtractive filter — see `HomeRowSettings`.
+                if !HomeRowSettings.isHidden(hub.hubIdentifier) { rail.append(row) }
             }
 
             // Collections pinned in Rivulet (see `HomeCollectionPins`), after
@@ -1271,6 +1278,7 @@ class PlexDataStore: ObservableObject {
         // persists it, so an early call would bake an empty Home into warm launches (#236).
         guard rail.count > (carriedContinueWatching ? 1 : 0) || didCompleteInitialHubFetch else { return }
 
+        allHomeItems = all
         setHomeItems(rail)
     }
 
@@ -1854,6 +1862,7 @@ class PlexDataStore: ObservableObject {
         pinnedCollectionItems.removeAll()
         lastRecentlyAddedStamp = nil
         homeItems = []
+        allHomeItems = []
         libraryItemsByKey.removeAll()
         hubsVersion = UUID()
         libraryHubsVersion = UUID()

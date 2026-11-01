@@ -477,6 +477,27 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             direct: item.kind == .episode || item.kind == .season ? nil : item.artwork.logo)
     }
 
+    /// Plex has no favorite flag: a rating above three stars is one, as
+    /// `PlexUserRating.isFavorite` and Music's favorites filter have it.
+    var supportsFavorites: Bool { true }
+
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] {
+        try await plexCall {
+            let threshold = Int(PlexUserRating.favoriteStarThreshold * PlexUserRating.starScale)
+            let result = try await networkManager.getLibraryItemsWithTotal(
+                serverURL: serverURL, authToken: authToken,
+                sectionId: library.id,
+                size: limit,
+                sort: "titleSort",
+                // ">>=" is Plex's "greater than", as in Music's favorites filter.
+                filters: [URLQueryItem(name: "userRating>>", value: "\(threshold)")]
+            )
+            return result.items.map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
+        }
+    }
+
     // MARK: - Playback
 
     // MARK: - Per-item track selection

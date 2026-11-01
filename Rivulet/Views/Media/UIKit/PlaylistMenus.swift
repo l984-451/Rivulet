@@ -86,7 +86,10 @@ enum PlaylistMenus {
             message: String(localized: "This removes the playlist from your server. The titles stay in your library."),
             confirmTitle: String(localized: "Delete"), destructive: true,
             onConfirm: {
-                change(from: presenter) { try await provider.deletePlaylist(playlist.item.ref) }
+                change(from: presenter) {
+                    try await provider.deletePlaylist(playlist.item.ref)
+                    HomePlaylistPins.unpin(playlist.item.ref)
+                }
             }), animated: true)
     }
 

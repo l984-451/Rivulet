@@ -2079,6 +2079,7 @@
         }
       }
     },
+    "Choose what appears on Home and in what order." : {},
     "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -2139,6 +2140,7 @@
         }
       }
     },
+    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {},
     "Click to show or hide this row in the sidebar. Press and hold to move it up or down." : {
       "localizations" : {
         "de" : {
@@ -2149,6 +2151,9 @@
         }
       }
     },
+    "Click to show or hide this row on Home. Press and hold to move it up or down." : {},
+    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {},
+    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {},
     "Codec" : {
       "localizations" : {
         "de" : {
@@ -3739,6 +3744,7 @@
         }
       }
     },
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
     "Exit" : {
       "localizations" : {
         "de" : {
@@ -3769,6 +3775,8 @@
         }
       }
     },
+    "Favorite Movies" : {},
+    "Favorite TV Shows" : {},
     "FILE" : {
       "localizations" : {
         "de" : {
@@ -4329,6 +4337,7 @@
         }
       }
     },
+    "Hidden from Home" : {},
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -6691,6 +6700,7 @@
         }
       }
     },
+    "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay." : {},
     "Put every sidebar row back in its original order and show the ones you hid. Home's rows follow the library order." : {
       "localizations" : {
         "de" : {
@@ -6771,6 +6781,7 @@
         }
       }
     },
+    "Reset Home Rows?" : {},
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -8099,26 +8110,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kurzfilm"
-          }
-        }
-      }
-    },
-    "Show All" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle einblenden"
-          }
-        }
-      }
-    },
-    "Show every row your Plex account puts on Home again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt wieder jede Reihe an, die dein Plex-Account auf die Startseite setzt."
           }
         }
       }
@@ -10041,16 +10032,6 @@
         }
       }
     },
-    "Turn Home rows off on this Apple TV. Rows come from your Plex account; a library shows here once it is pinned to Home in Plex." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schalte Reihen der Startseite auf diesem Apple TV aus. Die Reihen kommen aus deinem Plex-Account. Eine Mediathek erscheint hier, sobald sie in Plex an die Startseite angepinnt ist."
-          }
-        }
-      }
-    },
     "Turn off to remove this server from Rivulet: its libraries, Home rows, Continue Watching and Live TV. Your account stays signed in." : {
       "localizations" : {
         "de" : {
@@ -10067,16 +10048,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schalte zuerst einen anderen Server ein oder melde dich von Plex ab."
-          }
-        }
-      }
-    },
-    "Turn this row off to hide it on this Apple TV. Your Plex account is unchanged, so the row keeps showing in the Plex app and on your other devices." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schalte diese Reihe aus, um sie auf diesem Apple TV auszublenden. Dein Plex-Account bleibt unverändert, die Reihe erscheint also weiterhin in der Plex-App und auf deinen anderen Geräten."
           }
         }
       }

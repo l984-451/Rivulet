@@ -20,6 +20,9 @@ final class SyncCatalogTests: XCTestCase {
         XCTAssertTrue(SyncCatalog.isSynced("libraryOrder_provider_jellyfin:abc_u1"))
         XCTAssertTrue(SyncCatalog.isSynced("trackIntent.subtitle_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("homeCollectionPins_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homeRowOrder_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homePlaylistPins_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("showHomeFavoriteMovies"))
         XCTAssertTrue(SyncCatalog.isSynced("mediaLibrarySort.plex:1"))
         XCTAssertTrue(SyncCatalog.isSynced("contentFilter.violence.enabled"))
     }

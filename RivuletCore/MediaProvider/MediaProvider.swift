@@ -74,6 +74,13 @@ protocol MediaProvider: Sendable, Identifiable {
     /// nil when it has none. Home asks for this per library on every reload,
     /// so a provider whose `hubs(in:)` costs more than one request overrides it.
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub?
+    /// Whether the server has favorites (Jellyfin's flag; Plex: rated above
+    /// three stars). Settings offers the favorites rows only then.
+    var supportsFavorites: Bool { get }
+    /// The library's favorites, by name, at most `limit`.
+    /// Home asks for them per movie or TV library while that kind's favorites
+    /// row is on in Settings > Home > Rows. Default: none.
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem]
     /// The library's titles on `trending`, in its order, at most `limit`.
     /// Home's hero on a server with no TMDB index of its own. Default: none.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem]
@@ -238,6 +245,8 @@ extension MediaProvider {
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         try await hubs(in: library).first { $0.id == "\(library.id).recentlyAdded" }
     }
+    var supportsFavorites: Bool { false }
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] { [] }
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] { [] }
     func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
         guard unwatchedOnly else { return try await items(in: library, sort: sort, page: page) }

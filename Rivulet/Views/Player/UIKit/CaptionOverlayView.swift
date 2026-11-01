@@ -406,6 +406,23 @@ final class CaptionOverlayView: UIView {
     }
 
     /// Which edge a cue's lines align to, from its column. An unplaced cue centres.
+    /// Paragraph direction from the cue's dominant script. Right-to-left
+    /// letters (Hebrew, Arabic, Syriac, Thaana, and their presentation forms)
+    /// outnumbering the rest make it right-to-left, so trailing punctuation
+    /// lands on the left end; a cue that opens with a Latin name or a digit
+    /// no longer flips to left-to-right. No letters at all stays natural.
+    static func baseWritingDirection(for text: String) -> NSWritingDirection {
+        var rtl = 0, ltr = 0
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            switch scalar.value {
+            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rtl += 1
+            default: ltr += 1
+            }
+        }
+        if rtl == 0 && ltr == 0 { return .natural }
+        return rtl > ltr ? .rightToLeft : .leftToRight
+    }
+
     static func lineAlignment(for placement: AetherSubtitleCue.TextPlacement?) -> NSTextAlignment {
         guard let placement else { return .center }
         switch captionColumn(for: placement) {
@@ -664,12 +681,21 @@ private final class CaptionBoxView: UIView {
     ///
     /// A gated-off or content-silent attribute renders the system value. The
     /// system foreground opacity applies either way.
+    private var plainText: String {
+        switch body {
+        case .text(let string): return string
+        case .styledText(let runs): return runs.map(\.text).joined()
+        case .image, .assEvents: return ""
+        }
+    }
+
     private func attributedText(pointSize: CGFloat) -> NSAttributedString {
         let userColor = style.foreground.withAlphaComponent(style.foregroundOpacity)
         let baseFont = style.font(ofSize: pointSize)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
+        paragraph.baseWritingDirection = CaptionOverlayView.baseWritingDirection(for: plainText)
         paragraph.lineSpacing = CaptionOverlayView.Metrics.lineSpacing(for: baseFont)
 
         let result = NSMutableAttributedString()

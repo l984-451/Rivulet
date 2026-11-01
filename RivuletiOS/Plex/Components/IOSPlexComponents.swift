@@ -271,6 +271,10 @@ struct IOSPlexContinueCard: View {
     let width: CGFloat
     private let watchStamp: [Int]
 
+    @EnvironmentObject private var plex: IOSPlexSession
+    /// The art already shows the title (#450), keyed by the art it was read from.
+    @State private var artShowsTitle: (art: URL, shows: Bool)?
+
     init(item: PlexMetadata, width: CGFloat) {
         self.item = item
         self.width = width
@@ -278,6 +282,16 @@ struct IOSPlexContinueCard: View {
     }
 
     private var height: CGFloat { width / Self.aspectRatio }
+
+    /// The whole backdrop at the size tvOS reads it, not the card's crop.
+    private var checkedArt: URL? { plex.artworkURL(for: item, kind: .backdrop, width: 900, height: 506) }
+
+    private var hidesLogo: Bool {
+        guard let art = checkedArt else { return false }
+        if let checked = artShowsTitle, checked.art == art { return checked.shows }
+        let key = ArtworkTitleCheck.key(still: art, logo: plex.cachedLogoURL(for: item), title: item.showTitle)
+        return ArtworkTitleCheck.known(key) ?? false
+    }
 
     private var info: String {
         [item.episodeCode, item.timeLeftText ?? item.runtimeText ?? item.year.map(String.init)]
@@ -304,6 +318,8 @@ struct IOSPlexContinueCard: View {
                 textAlignment: .center,
                 targetArea: 18000 * pow(width / 357, 2)
             )
+            .opacity(hidesLogo ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: hidesLogo)
             infoBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 10)
@@ -317,6 +333,21 @@ struct IOSPlexContinueCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([item.showTitle, item.episodeCode].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(item.watchStateDescription)
+        .task(id: checkedArt) { await checkArt() }
+    }
+
+    private func checkArt() async {
+        guard let art = checkedArt else { return }
+        let logo = await plex.logoURL(for: item)
+        let title = item.showTitle
+        let shows = await ArtworkTitleCheck.answer(ArtworkTitleCheck.key(still: art, logo: logo, title: title), title: title) {
+            guard let still = await IOSArtworkCache.shared.image(for: art)?.cgImage else { return nil }
+            guard let logo else { return (still, nil) }
+            guard let image = await IOSArtworkCache.shared.image(for: logo)?.cgImage else { return nil }
+            return (still, image)
+        }
+        guard !Task.isCancelled else { return }
+        artShowsTitle = (art, shows)
     }
 
     private var infoBar: some View {

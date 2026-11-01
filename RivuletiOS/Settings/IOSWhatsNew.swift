@@ -9,6 +9,7 @@ import SwiftUI
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.0.7 (84)", [
+            "Continue Watching no longer adds a title to artwork that already shows one",
             "The Live TV guide now marks new airings from Plex guides",
             "More Live TV guides now show a film's release year",
         ]),

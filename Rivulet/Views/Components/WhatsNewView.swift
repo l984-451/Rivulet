@@ -152,7 +152,7 @@ struct WhatsNewView: View {
         ("1.1.1 (120)", [
             "Episode and season pages now show their extras.",
             "The player's info panels stay open while you're reading them.",
-            "New Appearance setting hides titles on Continue Watching cards.",
+            "Continue Watching no longer adds a title to artwork that already shows one.",
             "Live TV now shows a film's release year in the guide, What's On and Info.",
             "The Live TV guide now marks new airings from Plex guides.",
             "Music's Now Playing remembers whether lyrics were showing.",

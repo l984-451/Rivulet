@@ -1392,3 +1392,23 @@ final class LiveMultiviewHintView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
+
+#if DEBUG
+extension LiveMultiviewViewController {
+    /// `RIVULET_MULTIVIEW=<name>,<name>,…`: open multiview on these channels once Live TV loads.
+    static func debugOpenIfRequested() async {
+        guard let names = ProcessInfo.processInfo.environment["RIVULET_MULTIVIEW"]?.split(separator: ",") else { return }
+        let store = LiveTVDataStore.shared
+        for _ in 0..<60 where store.channels.isEmpty { try? await Task.sleep(for: .milliseconds(500)) }
+        try? await Task.sleep(for: .seconds(3))
+        let channels = names.compactMap { name in store.channels.first { $0.name == String(name) } }
+        guard let first = channels.first,
+              let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              var top = scene.windows.first?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let multiview = LiveMultiviewViewController(adopting: nil, adding: first, sourceIdFilter: nil)
+        top.present(multiview, animated: false)
+        for channel in channels.dropFirst() { await multiview.viewModel.addChannel(channel) }
+    }
+}
+#endif

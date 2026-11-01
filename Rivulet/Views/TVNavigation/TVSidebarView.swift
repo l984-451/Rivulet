@@ -663,8 +663,16 @@ struct TVSidebarView: View {
     /// var once libraries have loaded, so sim iteration skips the sidebar nav.
     private func applyDebugLaunchTab() {
         guard !didApplyDebugLaunch,
-              let name = ProcessInfo.processInfo.environment["RIVULET_OPEN_LIBRARY"],
-              let lib = dataStore.visibleSidebarLibraries.first(where: { $0.title == name }) else { return }
+              let name = ProcessInfo.processInfo.environment["RIVULET_OPEN_LIBRARY"] else { return }
+        #if DEBUG
+        if name == "Live TV" {
+            didApplyDebugLaunch = true
+            selectedTab = .liveTV(sourceId: nil)
+            Task { await LiveMultiviewViewController.debugOpenIfRequested() }
+            return
+        }
+        #endif
+        guard let lib = dataStore.visibleSidebarLibraries.first(where: { $0.title == name }) else { return }
         didApplyDebugLaunch = true
         selectedTab = .library(key: lib.key)
         #if DEBUG

@@ -189,7 +189,7 @@ struct IOSRootView: View {
         // iPad's split view picks a library on appear and clears the path when it does, so pick first.
         if let library = plex.libraries.first(where: { $0.key == item.librarySectionID.map(String.init) }) {
             librarySelection = .library(library)
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: .seconds(2))
         }
         libraryPath = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
     }

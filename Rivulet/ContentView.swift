@@ -289,8 +289,10 @@ private struct AutoPlayLauncherModifier: ViewModifier {
                             viewModel.pause()
                             viewModel.showControlsTemporarily()
                             viewModel.enterControlsFocus()
-                            if env["RIVULET_AUTOPLAY_TRIVIA"] == "1" {
-                                viewModel.debugSetInsightsTrivia(ScrubStatesProbe.fixtureTrivia)
+                            // RIVULET_AUTOPLAY_TRIVIA=1 for the fixture, or a path to a TitleTrivia JSON file.
+                            if let trivia = env["RIVULET_AUTOPLAY_TRIVIA"] {
+                                viewModel.debugSetInsightsTrivia(trivia == "1" ? ScrubStatesProbe.fixtureTrivia
+                                    : FileManager.default.contents(atPath: trivia).flatMap { try? JSONDecoder().decode(TitleTrivia.self, from: $0) })
                             }
                             // RIVULET_AUTOPLAY_PANE=info|chapters|upNext|insights|details
                             if let pane = env["RIVULET_AUTOPLAY_PANE"] {

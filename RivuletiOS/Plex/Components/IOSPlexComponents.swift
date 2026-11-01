@@ -289,8 +289,7 @@ struct IOSPlexContinueCard: View {
     private var hidesLogo: Bool {
         guard let art = checkedArt else { return false }
         if let checked = artShowsTitle, checked.art == art { return checked.shows }
-        let key = ArtworkTitleCheck.key(still: art, logo: plex.cachedLogoURL(for: item), title: item.showTitle)
-        return ArtworkTitleCheck.known(key) ?? false
+        return ArtworkTitleCheck.known(ArtworkTitleCheck.key(still: art, title: item.showTitle)) ?? false
     }
 
     private var info: String {
@@ -340,7 +339,7 @@ struct IOSPlexContinueCard: View {
         guard let art = checkedArt else { return }
         let logo = await plex.logoURL(for: item)
         let title = item.showTitle
-        let shows = await ArtworkTitleCheck.answer(ArtworkTitleCheck.key(still: art, logo: logo, title: title), title: title) {
+        let shows = await ArtworkTitleCheck.answer(ArtworkTitleCheck.key(still: art, title: title), title: title) {
             guard let still = await IOSArtworkCache.shared.image(for: art)?.cgImage else { return nil }
             guard let logo else { return (still, nil) }
             guard let image = await IOSArtworkCache.shared.image(for: logo)?.cgImage else { return nil }

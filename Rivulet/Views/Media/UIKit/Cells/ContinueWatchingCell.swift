@@ -433,7 +433,7 @@ private final class ContinueWatchingTitleLogoView: UIView {
             }
             // A logo that failed to load is not kept: the next display tries again.
             let keep = url == nil || image != nil
-            let known = artworkURL.flatMap { Compositor.knownTitleCheck(still: $0, logo: url, title: title) }
+            let known = artworkURL.flatMap { Compositor.knownTitleCheck(still: $0, title: title) }
             let done = Prepared(image: image, logoSize: logo?.size, placement: placement, hidesTitle: known)
             if known == nil, let artworkURL {
                 done.titleCheck = Task { await Compositor.titleCheck(still: artworkURL, logo: url, title: title) }

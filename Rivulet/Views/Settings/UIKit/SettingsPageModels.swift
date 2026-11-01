@@ -1153,6 +1153,7 @@ enum SettingsContent {
                     Task {
                         await ImageCacheManager.shared.clearAll()
                         ContinueWatchingCardCompositor.clearDisk()
+                        ArtworkTitleCheck.clearDisk()
                         await CacheManager.shared.clearAllCache()
                         await reloadFromServer()
                     }

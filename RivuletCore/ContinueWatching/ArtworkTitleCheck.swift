@@ -22,16 +22,34 @@ nonisolated enum ArtworkTitleCheck {
     private static let answers = NSCache<NSString, NSNumber>()
     /// One serial queue, so checks never crowd out image loads and drawing.
     private static let queue = DispatchQueue(label: "rivulet.artwork-title-check", qos: .utility)
+    // ponytail: pruned by age (30 days since checked) at first use, as the card cache is.
     private static let directory: URL? = {
-        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        let files = FileManager.default
+        guard let caches = files.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
         let directory = caches.appendingPathComponent("ArtworkTitleCheck", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? files.createDirectory(at: directory, withIntermediateDirectories: true)
+        let cutoff = Date(timeIntervalSinceNow: -30 * 24 * 60 * 60)
+        let listed = try? files.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])
+        for file in listed ?? [] {
+            let checked = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if (checked ?? .distantPast) < cutoff { try? files.removeItem(at: file) }
+        }
         return directory
     }()
 
-    /// One answer per still, logo and title.
-    static func key(still: URL, logo: URL?, title: String) -> String {
-        "\(still.absoluteString)#\(logo?.absoluteString ?? "")#\(title)"
+    /// One answer per still and title. Not the logo: its URL is not always known
+    /// when a card first draws, and a Plex still's URL changes with the artwork.
+    static func key(still: URL, title: String) -> String {
+        "\(still.absoluteString)#\(title)"
+    }
+
+    /// Forgets every answer (Settings, Clear All Cache).
+    static func clearDisk() {
+        answers.removeAllObjects()
+        guard let directory else { return }
+        for file in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     private static func file(_ key: String) -> URL? {

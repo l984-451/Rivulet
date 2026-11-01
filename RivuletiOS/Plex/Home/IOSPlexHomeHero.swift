@@ -5,14 +5,15 @@ import SwiftUI
 
 /// Edge-to-edge paging hero. Advances every 7 s; a swipe restarts the wait.
 /// Only the artwork pages, with a parallax lag like the tvOS detail carousel; the title
-/// crossfades and the buttons stay put.
+/// crossfades and the buttons stay put. The artwork fades out at the bottom into the
+/// page's ambient wash, which follows `selection`.
 struct IOSPlexHomeHero: View {
     let items: [PlexMetadata]
     /// Screen size including the area under the navigation bar.
     let size: CGSize
     /// Side safe-area insets the artwork runs under, such as iPhone Duo's side bars.
     var bleed = EdgeInsets()
-    @State private var selection: String?
+    @Binding var selection: String?
     /// iPhone Duo's fold runs down the middle, so the dots sit at the leading margin.
     @State private var dotsLeading = false
 
@@ -53,6 +54,17 @@ struct IOSPlexHomeHero: View {
                     .allowsHitTesting(false)
                 }
                 .ignoresSafeArea(edges: .horizontal)
+                // Fades out at the bottom into the page's ambient wash.
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0.8),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
                 IOSPlexHeroControls(item: current, isWide: isWide)
                 if items.count > 1 {
                     pageDots

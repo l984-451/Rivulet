@@ -52,7 +52,7 @@ struct IOSPlexDetailView: View {
             .refreshable { await load() }
         }
         // The page is dark in both modes, like the header art it continues.
-        .background(.black)
+        .iosPlexAmbient(shown)
         .environment(\.colorScheme, .dark)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationTitle(shown.showTitle)
@@ -285,6 +285,17 @@ private struct IOSPlexDetailHeader: View {
                     )
                 }
                 .backgroundExtensionEffect()
+                // The art and its scrim fade out into the page's ambient wash.
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0.75),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
             titleBlock
                 .frame(maxWidth: isWide ? 560 : .infinity, alignment: isWide ? .leading : .center)
                 .padding(.horizontal, IOSShelfGeometry.leading)

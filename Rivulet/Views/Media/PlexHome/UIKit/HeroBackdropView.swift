@@ -9,7 +9,8 @@
 //  Motion and scrim are the Apple TV app's home hero (VideosUI, read on tvOS
 //  26.5): a page change slides the art over with the image at half the page's
 //  speed, and scrolling down lifts the backdrop until its bottom edge meets the
-//  first shelf, then it rides the content.
+//  first shelf, then it rides the content. Its lower edge dissolves into the
+//  stationary ambient artwork wash behind the shelves.
 //
 
 import UIKit
@@ -45,6 +46,7 @@ final class HeroBackdropView: UIView {
     private var previousPage = Page()
     private let placeholderLayer = CAGradientLayer()
     private let scrimLayers: [CAGradientLayer]
+    private let ambientBlendMask = CAGradientLayer()
 
     private var currentURL: URL?
     private var loadTask: Task<Void, Never>?
@@ -99,6 +101,17 @@ final class HeroBackdropView: UIView {
         backgroundColor = .black
         isUserInteractionEnabled = false
 
+        // Fade the entire hero (art, placeholder and scrims) to transparent,
+        // revealing the matching ambient wash underneath. A black overlay
+        // would still leave a seam when the backdrop lifts above the shelves.
+        ambientBlendMask.colors = [1, 1, 0.94, 0.65, 0.24, 0, 0].map {
+            UIColor.black.withAlphaComponent(CGFloat($0)).cgColor
+        }
+        ambientBlendMask.locations = [0, 0.48, 0.60, 0.75, 0.90, 0.99, 1]
+        ambientBlendMask.startPoint = CGPoint(x: 0.5, y: 0)
+        ambientBlendMask.endPoint = CGPoint(x: 0.5, y: 1)
+        layer.mask = ambientBlendMask
+
         // Placeholder gradient (dark grey -> nearly-black) shows before the
         // first image resolves. Sits beneath both pages.
         placeholderLayer.colors = [
@@ -122,6 +135,7 @@ final class HeroBackdropView: UIView {
         CATransaction.setDisableActions(true)
         placeholderLayer.frame = bounds
         scrimLayers.forEach { $0.frame = bounds }
+        ambientBlendMask.frame = bounds
         CATransaction.commit()
         for page in [previousPage, currentPage] {
             page.bounds = bounds

@@ -4,20 +4,20 @@ import Foundation
 /// no button, a Skip button, or an automatic skip. Stored as two keys so the
 /// older `autoSkip*` toggles keep their meaning.
 enum MarkerSkipMode: String, CaseIterable {
-    case button, automatic, off
+    case off, manual, automatic
 
     var label: String {
         switch self {
-        case .button: return "Button"
+        case .manual: return "Manual"
         case .automatic: return "Automatic"
         case .off: return "Off"
         }
     }
 
     static func current(for markerType: String, defaults: UserDefaults = .standard) -> MarkerSkipMode {
-        guard let suffix = keySuffix(markerType) else { return .button }
+        guard let suffix = keySuffix(markerType) else { return .manual }
         if defaults.object(forKey: "showSkip" + suffix) as? Bool == false { return .off }
-        return defaults.bool(forKey: "autoSkip" + suffix) ? .automatic : .button
+        return defaults.bool(forKey: "autoSkip" + suffix) ? .automatic : .manual
     }
 
     static func set(_ mode: MarkerSkipMode, for markerType: String, defaults: UserDefaults = .standard) {

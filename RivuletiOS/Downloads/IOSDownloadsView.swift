@@ -3,9 +3,6 @@
 
 import SwiftUI
 
-/// Pushes the Downloads list onto a tab's stack.
-struct IOSDownloadsRoute: Hashable {}
-
 /// Every download of the current profile: Movies, then each show's seasons.
 /// Renders from local records only, so it works with no server at all.
 struct IOSDownloadsView: View {
@@ -77,6 +74,7 @@ struct IOSDownloadsView: View {
             case .completed:
                 if let request = downloads.localPlayback(record: record) { playback.play(request) }
             case .failed: downloads.retry(recordID: record.id)
+            case .pausedByUser: downloads.resume(recordID: record.id)
             default: break
             }
         } label: {
@@ -86,6 +84,13 @@ struct IOSDownloadsView: View {
         .swipeActions {
             Button(record.state.isSettled ? "Delete" : "Cancel", systemImage: "trash", role: .destructive) {
                 downloads.delete(recordID: record.id)
+            }
+            if record.state == .pausedByUser {
+                Button("Resume", systemImage: "play.fill") { downloads.resume(recordID: record.id) }
+                    .tint(.blue)
+            } else if !record.state.isSettled {
+                Button("Pause", systemImage: "pause.fill") { downloads.pause(recordID: record.id) }
+                    .tint(.orange)
             }
         }
     }
@@ -123,7 +128,7 @@ private struct IOSDownloadRow: View {
                     .font(.body.weight(.semibold))
                     .lineLimit(2)
                 Text(record.statusText)
-                    .font(.subheadline)
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(isFailed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                     .lineLimit(3)
                 if let progress = record.progress {
@@ -140,12 +145,18 @@ private struct IOSDownloadRow: View {
             } else if isFailed {
                 Image(systemName: "arrow.clockwise")
                     .foregroundStyle(.tint)
+            } else if let percent = record.percentText {
+                // Sized to "100%" so the row doesn't reflow as the number grows.
+                Text("100%").hidden()
+                    .overlay(alignment: .trailing) { Text(percent) }
+                    .font(.title3.weight(.semibold).monospacedDigit())
             }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint(record.state == .completed ? "Plays" : (isFailed ? "Retries the download" : ""))
+        .accessibilityHint(record.state == .completed ? "Plays"
+            : isFailed ? "Retries the download" : record.state == .pausedByUser ? "Resumes the download" : "")
     }
 }
 
@@ -181,7 +192,7 @@ struct IOSDownloadButton: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .accessibilityLabel("Download")
-            .accessibilityValue(record.statusText)
+            .accessibilityValue([record.statusText, record.percentText].compactMap { $0 }.joined(separator: ", "))
         } else {
             Button { actions.download(item) } label: {
                 Image(systemName: "arrow.down").frame(width: 22, height: 22)
@@ -229,14 +240,20 @@ extension DownloadRecord {
         case .waitingForServer:
             return "Waiting for Server"
         case .preparing(let progress):
-            return "Preparing on Server \(Int(progress))%"
+            return "Preparing on Server"
         case .downloading:
             guard let expected = expectedBytes, expected > 0 else {
-                return receivedBytes > 0 ? "Downloading · \(size(receivedBytes))" : "Downloading"
+                return receivedBytes > 0 ? size(receivedBytes) : "Downloading"
             }
-            let percent = Int(Double(receivedBytes) / Double(expected) * 100)
-            return "Downloading \(percent)% · \(size(receivedBytes)) of \(size(expected))"
-        case .paused:
+            // Received in the total's unit, padded with digit-wide figure spaces to its width.
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .file
+            formatter.allowedUnits = expected >= 1_000_000_000 ? .useGB : .useMB
+            formatter.zeroPadsFractionDigits = true
+            let total = formatter.string(fromByteCount: expected)
+            let received = formatter.string(fromByteCount: min(receivedBytes, expected))
+            return String(repeating: "\u{2007}", count: max(0, total.count - received.count)) + "\(received) / \(total)"
+        case .paused, .pausedByUser:
             return "Paused"
         case .failed(let reason):
             return "Failed: \(reason)"
@@ -245,12 +262,15 @@ extension DownloadRecord {
         }
     }
 
+    /// The row's trailing percent while there is progress to show.
+    var percentText: String? { progress.map { "\(Int($0 * 100))%" } }
+
     /// 0 to 1 while the server converts or the file transfers.
     var progress: Double? {
         switch state {
         case .preparing(let progress):
             return min(max(progress / 100, 0), 1)
-        case .downloading:
+        case .downloading, .pausedByUser:
             guard let expected = expectedBytes, expected > 0 else { return nil }
             return min(Double(receivedBytes) / Double(expected), 1)
         default:

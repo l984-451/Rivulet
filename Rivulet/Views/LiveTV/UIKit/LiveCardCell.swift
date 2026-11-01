@@ -375,7 +375,7 @@ final class LiveCardCell: UICollectionViewCell {
         cornerLogo.image = nil
         guard let url else { return }
         logoTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: url, quality: .thumb)
+            let image = await ImageCacheManager.shared.image(for: url, quality: asFallback ? .thumb : .logo)
             guard let self, !Task.isCancelled, self.logoURL == url else { return }
             if asFallback {
                 self.logoFallback.image = image

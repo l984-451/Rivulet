@@ -29,6 +29,7 @@ struct SettingsUIKitBridge: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> SettingsContainerViewController {
         let vc = SettingsContainerViewController()
+        vc.followsSystemAppearance = true
         wire(vc)
         return vc
     }

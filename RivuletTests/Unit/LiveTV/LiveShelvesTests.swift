@@ -17,7 +17,7 @@ final class LiveShelvesTests: XCTestCase {
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func channel(_ id: String, group: String, number: Int) -> UnifiedChannel {
+    private func channel(_ id: String, group: String, number: ChannelNumber) -> UnifiedChannel {
         UnifiedChannel(id: id, sourceType: .genericM3U, sourceId: "s", channelNumber: number, name: id,
                        groupTitle: group)
     }

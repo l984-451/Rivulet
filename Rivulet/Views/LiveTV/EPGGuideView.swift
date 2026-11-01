@@ -1389,6 +1389,9 @@ final class ProgramCellView: UICollectionViewCell {
     static let reuseID = "ProgramCellView"
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
+    /// "NEW" or "LIVE" after the second line (#429).
+    private let tagLabel = PaddingLabel()
+    private lazy var detailRow = UIStackView(arrangedSubviews: [subtitleLabel, tagLabel])
     private let stack = UIStackView()
     private let card = UIView()
     private var stackLeading: NSLayoutConstraint!
@@ -1422,11 +1425,20 @@ final class ProgramCellView: UICollectionViewCell {
         subtitleLabel.numberOfLines = 1
         subtitleLabel.lineBreakMode = .byTruncatingTail
 
+        tagLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        tagLabel.insets = UIEdgeInsets(top: 3, left: 7, bottom: 3, right: 7)
+        tagLabel.layer.cornerRadius = 5
+        tagLabel.layer.cornerCurve = .continuous
+        tagLabel.clipsToBounds = true
+        tagLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        detailRow.spacing = 8
+        detailRow.alignment = .center
+
         stack.axis = .vertical
         stack.spacing = 2
         stack.alignment = .leading
         stack.addArrangedSubview(titleLabel)
-        stack.addArrangedSubview(subtitleLabel)
+        stack.addArrangedSubview(detailRow)
         stack.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(stack)
 
@@ -1486,10 +1498,12 @@ final class ProgramCellView: UICollectionViewCell {
     }
 
     func configure(_ program: UnifiedProgram, isRecording: Bool = false) {
-        titleLabel.text = program.title
-        let sub = program.subtitle
-        subtitleLabel.text = sub
-        subtitleLabel.isHidden = (sub?.isEmpty ?? true)
+        titleLabel.text = program.displayTitle
+        subtitleLabel.text = program.guideDetail
+        subtitleLabel.isHidden = program.guideDetail == nil
+        tagLabel.text = program.guideTag
+        tagLabel.isHidden = program.guideTag == nil
+        detailRow.isHidden = subtitleLabel.isHidden && tagLabel.isHidden
         setRecording(isRecording)
         applyFocus(false)
     }
@@ -1571,6 +1585,8 @@ final class ProgramCellView: UICollectionViewCell {
         card.layer.borderColor = UIColor(white: 1, alpha: 0.1).cgColor
         titleLabel.textColor = focused ? UIColor(white: 0.08, alpha: 1) : .white
         subtitleLabel.textColor = focused ? UIColor(white: 0.08, alpha: 0.6) : UIColor(white: 1, alpha: 0.7)
+        tagLabel.textColor = focused ? UIColor(white: 0.08, alpha: 0.8) : .white
+        tagLabel.backgroundColor = focused ? UIColor(white: 0, alpha: 0.1) : UIColor(white: 1, alpha: 0.2)
     }
 }
 
@@ -1683,7 +1699,7 @@ final class ChannelColumnView: UICollectionReusableView {
         guard let url = currentLogoURL else { return }
 
         logoLoadTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: url, quality: .thumb)
+            let image = await ImageCacheManager.shared.image(for: url, quality: .logo)
             guard let self,
                   !Task.isCancelled,
                   self.currentLogoURL == url
@@ -1859,7 +1875,7 @@ struct GuideInfoBar: View {
                     .foregroundStyle(EPGTheme.textPrimary)
                     .lineLimit(1)
                 if let program {
-                    Text(timeRange(program))
+                    Text(timeRange(program) + (program.year.map { " · \($0)" } ?? ""))
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(EPGTheme.textSecondary)
                 }

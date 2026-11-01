@@ -24,9 +24,6 @@ protocol RailPanelMenuHandling {
 
 final class PlayerRailPanelView: UIView {
 
-    /// The gray laid over `.clear` glass that matches AVKit's panels.
-    static let glassWash = UIColor(white: 0.35, alpha: 0.18)
-
     /// Height available to panel CONTENT at the panel's full size. Content that
     /// wants a constant panel (rather than one that grows and shrinks with what
     /// it happens to be showing) constrains itself to this.
@@ -67,7 +64,6 @@ final class PlayerRailPanelView: UIView {
     }
 
     private let backgroundEffectView: UIVisualEffectView
-    private let wash = UIView()
     private let content: UIView
     private var didDismiss = false
     private var springAnimator: UIViewPropertyAnimator?
@@ -78,20 +74,13 @@ final class PlayerRailPanelView: UIView {
 
     private init(content: UIView, style: Style = .popup) {
         self.content = content
-        // `.clear` glass plus a light gray wash lands on AVKit's private
-        // `.avplayer` glass over black, mid gray and white (within 1-7 levels).
-        // `.regular` darkens where AVKit lifts.
-        backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+        backgroundEffectView = UIVisualEffectView(effect: TransportControlButton.glassEffect())
         super.init(frame: .zero)
 
         backgroundEffectView.clipsToBounds = true
         backgroundEffectView.layer.cornerRadius = Metrics.cornerRadius
         backgroundEffectView.layer.cornerCurve = .continuous
 
-        wash.backgroundColor = Self.glassWash
-        wash.layer.cornerRadius = Metrics.cornerRadius
-        wash.layer.cornerCurve = .continuous
-        wash.isUserInteractionEnabled = false
 
         let padding: CGFloat
         switch style {
@@ -100,16 +89,15 @@ final class PlayerRailPanelView: UIView {
         case .paneContent: padding = 0
         }
         if style != .popup {
-            [backgroundEffectView, wash].forEach { $0.layer.cornerRadius = Metrics.paneCardRadius }
-            wash.backgroundColor = TransportControlButton.restingWash
+            backgroundEffectView.layer.cornerRadius = Metrics.paneCardRadius
         }
         if style == .paneContent {
-            [backgroundEffectView, wash].forEach { $0.isHidden = true }
+            backgroundEffectView.isHidden = true
         }
         let topInset = style == .paneContent ? Metrics.paneContentTop : padding
         let bottom = content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -padding)
         if style == .paneContent { bottom.priority = .defaultLow }
-        [backgroundEffectView, wash, content].forEach {
+        [backgroundEffectView, content].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -121,10 +109,6 @@ final class PlayerRailPanelView: UIView {
             backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
             backgroundEffectView.trailingAnchor.constraint(equalTo: trailingAnchor),
             backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            wash.topAnchor.constraint(equalTo: topAnchor),
-            wash.leadingAnchor.constraint(equalTo: leadingAnchor),
-            wash.trailingAnchor.constraint(equalTo: trailingAnchor),
-            wash.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             content.topAnchor.constraint(equalTo: topAnchor, constant: topInset),
             content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
@@ -150,6 +134,8 @@ final class PlayerRailPanelView: UIView {
     @discardableResult
     static func present(content: UIView, width: CGFloat, in container: UIView, aboveRail rail: UIView, towards button: UIView) -> PlayerRailPanelView {
         let panel = PlayerRailPanelView(content: content)
+        panel.sourceButton = button as? TransportControlButton
+        panel.sourceButton?.showsMenu = true
         container.addSubview(panel)
         panel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -309,10 +295,7 @@ final class PlayerRailPanelView: UIView {
         let fade = UIViewPropertyAnimator(duration: Metrics.contentFade, timingParameters: Metrics.contentFadeCurve)
         fade.addAnimations {
             self.content.alpha = contentAlpha
-            if clearsGlass {
-                self.backgroundEffectView.effect = nil
-                self.wash.alpha = 0
-            }
+            if clearsGlass { self.backgroundEffectView.effect = nil }
         }
         fade.addCompletion { _ in completion?() }
         fade.startAnimation()
@@ -326,9 +309,13 @@ final class PlayerRailPanelView: UIView {
         layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
     }
 
+    /// The tool button this menu opened from, greyed while it is up (AVKit).
+    private weak var sourceButton: TransportControlButton?
+
     func dismissPanel() {
         guard !didDismiss else { return }
         didDismiss = true
+        sourceButton?.showsMenu = false
         isUserInteractionEnabled = false
         if isPane {
             let motion = Self.paneMotion()

@@ -30,6 +30,17 @@ final class CapsuleBackgroundView: UIView {
 /// (`SettingsRowItem.header(_:)` is built on the unfocusable `.info` kind).
 /// The label is bottom-aligned, so the empty top of the cell IS the gap that
 /// separates one group from the previous one.
+/// Settings follows the system appearance, as tvOS Settings does. Light values measured off
+/// tvOS Settings in light mode: rows are white 0.24 over a ~0.87 gray, with black text.
+enum SettingsPalette {
+    static func adaptive(dark: UIColor, light: UIColor) -> UIColor {
+        UIColor { $0.userInterfaceStyle == .light ? light : dark }
+    }
+    static let text = adaptive(dark: .white, light: .black)
+    static let caption = adaptive(dark: .white.withAlphaComponent(0.5), light: .black.withAlphaComponent(0.45))
+    static let dim = adaptive(dark: .white.withAlphaComponent(0.35), light: .black.withAlphaComponent(0.4))
+}
+
 final class SettingsHeaderCell: UICollectionViewCell {
     static let reuseID = "SettingsHeaderCell"
 
@@ -51,12 +62,15 @@ final class SettingsHeaderCell: UICollectionViewCell {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Not tertiaryLabel: the dynamic gray vanishes on the dark page.
+    static let captionColor = SettingsPalette.caption
+
     func configure(title: String) {
         // 31 = tvOS Callout. Measured off tvOS Settings' own captions: 21.0-21.5pt
         // cap height (31 x 0.70 = 21.7), against 27.0pt for a row title.
         label.attributedText = NSAttributedString(string: title.uppercased(), attributes: [
             .font: UIFont.systemFont(ofSize: 31, weight: .semibold),
-            .foregroundColor: UIColor.tertiaryLabel
+            .foregroundColor: Self.captionColor
         ])
     }
 }
@@ -86,9 +100,12 @@ final class SettingsCell: UICollectionViewCell {
     private var valueToChevron: NSLayoutConstraint!
     private var valueToEdge: NSLayoutConstraint!
 
-    // Measured off tvOS Settings: fill white 0.10, value and chevron white 0.3 / black 0.4.
-    private static let restingFill = UIColor.white.withAlphaComponent(0.10)
-    private static let restingValue = UIColor.white.withAlphaComponent(0.3)
+    // Measured off tvOS Settings: fill white 0.10 (0.24 in light mode), value and chevron
+    // white 0.3 / black 0.4.
+    private static let restingFill = SettingsPalette.adaptive(dark: .white.withAlphaComponent(0.10),
+                                                              light: .white.withAlphaComponent(0.24))
+    private static let restingValue = SettingsPalette.adaptive(dark: .white.withAlphaComponent(0.3),
+                                                               light: .black.withAlphaComponent(0.4))
     private static let focusedValue = UIColor.black.withAlphaComponent(0.4)
 
     /// Called when this cell GAINS focus (drives the description panel).
@@ -121,7 +138,7 @@ final class SettingsCell: UICollectionViewCell {
         // 38 = tvOS Headline, and a 27.0pt cap height measured off tvOS
         // Settings' own rows (38 x 0.70 = 26.6).
         titleLabel.font = .systemFont(ofSize: 38, weight: .medium)
-        titleLabel.textColor = .white
+        titleLabel.textColor = SettingsPalette.text
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         bg.addSubview(titleLabel)
 
@@ -256,11 +273,11 @@ final class SettingsCell: UICollectionViewCell {
         } else {
             // Unfocused rows are translucent glass capsules (visible buttons).
             bg.backgroundColor = Self.restingFill
-            titleLabel.textColor = destructive ? .systemRed : .white
+            titleLabel.textColor = destructive ? .systemRed : SettingsPalette.text
             valueLabel.textColor = Self.restingValue
             chevron.tintColor = Self.restingValue
             checkmark.tintColor = .systemBlue
-            spinner.color = .white
+            spinner.color = SettingsPalette.text
         }
         // Grow the capsule outward by the same amount on all four sides. The
         // grown capsule reaches past the cell's own bounds, so lift it above its

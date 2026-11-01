@@ -84,6 +84,65 @@ final class FocusableActionButton: UIControl {
 
     override var canBecomeFocused: Bool { true }
 
+    /// The detail pages' pill: icon and title, white until focus inverts them.
+    static func pill(title: String, systemImage: String?) -> (button: FocusableActionButton, title: UILabel, icon: UIImageView) {
+        let pill = FocusableActionButton()
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        pill.layer.cornerRadius = HeroPillButton.buttonHeight / 2
+        pill.setContentHuggingPriority(.required, for: .horizontal)
+        pill.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let icon = UIImageView(image: systemImage.flatMap { UIImage(systemName: $0) })
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.tintColor = .white
+        icon.contentMode = .scaleAspectFit
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = HeroPillButton.titleFont
+        label.textColor = .white
+        label.text = title
+        pill.addSubview(icon)
+        pill.addSubview(label)
+        NSLayoutConstraint.activate([
+            pill.heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
+            icon.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: HeroPillButton.sidePadding),
+            icon.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 24),
+            icon.heightAnchor.constraint(equalToConstant: 24),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: HeroPillButton.iconGap),
+            label.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -HeroPillButton.sidePadding),
+            label.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+        ])
+        pill.invertOnFocus = [icon, label]
+        return (pill, label, icon)
+    }
+
+    /// The detail pages' round icon button.
+    static func circle(systemImage: String) -> FocusableActionButton {
+        let b = FocusableActionButton()
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.layer.cornerRadius = HeroPillButton.buttonHeight / 2
+        let icon = UIImageView(image: UIImage(systemName: systemImage))
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.tintColor = .white
+        icon.contentMode = .scaleAspectFit
+        b.addSubview(icon)
+        NSLayoutConstraint.activate([
+            b.widthAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
+            b.heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
+            icon.centerXAnchor.constraint(equalTo: b.centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: b.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 30),
+            icon.heightAnchor.constraint(equalToConstant: 30),
+        ])
+        b.invertOnFocus = [icon]
+        return b
+    }
+
+    /// Swaps a `circle`'s glyph.
+    func setIcon(_ systemImage: String) {
+        (subviews.compactMap { $0 as? UIImageView }.first)?.image = UIImage(systemName: systemImage)
+    }
+
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         let focused = context.nextFocusedView === self
         if focusStyle == .glass {

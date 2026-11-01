@@ -66,13 +66,13 @@ final class TopShelfCache: Sendable {
 
     /// Read Top Shelf items from the shared container
     /// Called by TV Services Extension to display items
-    func readItems() -> [TopShelfItem] {
+    func readItems(key: String? = nil) -> [TopShelfItem] {
         guard let defaults = sharedDefaults else {
             print("TopShelfCache: Unable to access App Group UserDefaults")
             return []
         }
 
-        guard let data = defaults.data(forKey: userDefaultsKey) else {
+        guard let data = defaults.data(forKey: key ?? userDefaultsKey) else {
             print("TopShelfCache: No cached items found")
             return []
         }
@@ -88,6 +88,15 @@ final class TopShelfCache: Sendable {
             return []
         }
     }
+
+    /// Full screen carousel instead of the default poster row; set in the app's Settings.
+    var fullScreen: Bool { sharedDefaults?.bool(forKey: "topShelfFullScreen") ?? false }
+
+    /// The poster row's Recently Added group, shown after Continue Watching.
+    func readRecentItems() -> [TopShelfItem] { readItems(key: "topShelfRecentItems") }
+
+    /// "Continue Watching" or "Recently Added", written with the items.
+    var sectionTitle: String? { sharedDefaults?.string(forKey: "topShelfSectionTitle") }
 
     /// Records each time tvOS asks for content, so app diagnostics can tell whether the extension runs at all.
     func noteRead(cached: Int, returned: Int) {

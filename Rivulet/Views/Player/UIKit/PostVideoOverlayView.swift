@@ -29,8 +29,8 @@ final class PostVideoOverlayView: UIView {
     /// A focus move the user made with the remote. Cancels the countdown.
     var onUserFocusMove: (() -> Void)?
 
-    /// The rail panels' glass: `.clear` plus their wash.
-    private let glass = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+    /// The rail panels' glass.
+    private let glass = UIVisualEffectView(effect: TransportControlButton.glassEffect())
     private let contentStack = UIStackView()
     private let headerLabel = UILabel()
     private let headerSubtitleLabel = UILabel()
@@ -58,7 +58,6 @@ final class PostVideoOverlayView: UIView {
         backgroundColor = .clear
         transform = CGAffineTransform(translationX: Metrics.offscreen, y: 0)
 
-        glass.contentView.backgroundColor = PlayerRailPanelView.glassWash
         glass.clipsToBounds = true
         glass.layer.cornerRadius = Metrics.cornerRadius
         glass.layer.cornerCurve = .continuous

@@ -274,7 +274,7 @@ enum PlexMediaMapper {
             overview: meta.summary,
             year: meta.year,
             releaseDate: meta.originallyAvailableAt,
-            contentRating: meta.contentRating,
+            contentRating: meta.displayContentRating,
             runtime: runtime,
             isMusic: isMusic,
             parentRef: parentRef,
@@ -463,6 +463,7 @@ enum PlexMediaMapper {
                 thumbnailURL: artworkURL(ex.thumb, serverURL: serverURL, authToken: authToken),
                 duration: ex.duration.map { TimeInterval($0) / 1000 },
                 playbackKey: ex.key ?? ex.ratingKey,
+                providerID: providerID,
                 subtype: ExtraSubtype.from(subtype: ex.subtype, extraType: ex.extraType)
             )
         }
@@ -486,7 +487,7 @@ enum PlexMediaMapper {
             chapters: chapters,
             mediaSources: mediaSources,
             trailerURL: trailerURL,
-            contentRating: meta.contentRating,
+            contentRating: meta.displayContentRating,
             regionOfOrigin: meta.Country?.first?.tag,
             ratings: Self.ratings(meta),
             nextEpisode: nextEpisode,

@@ -732,8 +732,8 @@ final class MediaItemHeroOverlayView: UIView {
 
     private func prefetchNextBackdrop() {
         guard items.count > 1 else { return }
-        let next = items[(currentIndex + 1) % items.count]
-        if let url = next.artwork.backdrop ?? next.artwork.thumbnail ?? next.artwork.poster {
+        let next = items[(currentIndex + 1) % items.count].heroBackdropRequest()
+        if let url = next.backdropURL ?? next.thumbnailURL {
             Task { await ImageCacheManager.shared.prefetch(urls: [url], quality: .full) }
         }
     }
@@ -896,14 +896,18 @@ private final class MediaItemSlideView: UIView {
         // Tagline: overview first sentence.
         taglineLabel.text = tagline(for: item)
 
+        // An episode's slide is its show's: the show's logo and name.
+        let title = item.kind == .episode ? (item.seriesTitle ?? item.title) : item.title
+        let logo = item.grandparentArtwork?.logo ?? item.artwork.logo
+
         // Logo / fallback title. TMDB-mapped items carry no logo URL in
         // their artwork (the list endpoints don't include images) — resolve
         // one from the TMDB images API via the shared cache, then load.
-        if item.artwork.logo == nil, let tmdbID = item.tmdbID {
+        if logo == nil, let tmdbID = item.tmdbID {
             // Prepare the fallback (hidden behind the caller's alpha hold)
             // but don't signal ready until the resolve completes — the hero
             // fades the whole slide in only once the logo outcome is known.
-            loadLogo(from: nil, fallbackTitle: item.title)
+            loadLogo(from: nil, fallbackTitle: title)
             let itemID = item.ref.itemID
             currentResolveItemID = itemID
             let type: TMDBMediaType = item.kind == .movie ? .movie : .tv
@@ -914,7 +918,7 @@ private final class MediaItemSlideView: UIView {
                 await MainActor.run {
                     guard self.currentResolveItemID == itemID else { return }
                     if let url {
-                        self.loadLogo(from: url, fallbackTitle: item.title, onReady: onReady)
+                        self.loadLogo(from: url, fallbackTitle: title, onReady: onReady)
                     } else {
                         onReady?()  // no logo exists — fallback title is final
                     }
@@ -923,7 +927,7 @@ private final class MediaItemSlideView: UIView {
         } else {
             logoResolveTask?.cancel()
             currentResolveItemID = nil
-            loadLogo(from: item.artwork.logo, fallbackTitle: item.title, onReady: onReady)
+            loadLogo(from: logo, fallbackTitle: title, onReady: onReady)
         }
     }
 
@@ -979,10 +983,15 @@ private final class MediaItemSlideView: UIView {
 
     /// Same labels as the Plex hero (`HeroSlideView`): a season or episode
     /// slide is the show's, so it reads "TV Show", without the episode's year.
+    /// An episode adds which one it is.
     private func metaLine(for item: MediaItem) -> String? {
         var parts: [String] = []
         if let kindLabel = typeLabel(for: item.kind) { parts.append(kindLabel) }
         if item.kind != .season, item.kind != .episode, let year = item.year { parts.append(String(year)) }
+        if item.kind == .episode {
+            if let s = item.seasonNumber, let e = item.episodeNumber { parts.append("S\(s), E\(e)") }
+            if item.seriesTitle != nil { parts.append(item.title) }
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 

@@ -14,9 +14,12 @@ nonisolated enum BoundedDownload {
         var errorDescription: String? { "The download is too large." }
     }
 
+    /// `credential` answers a Basic or Digest challenge once; a refused login
+    /// comes back as its status rather than a thrown error.
     static func data(for request: URLRequest, limit: Int,
-                     configuration: URLSessionConfiguration = .default) async throws -> (Data, URLResponse) {
-        let loader = Loader(limit: limit)
+                     configuration: URLSessionConfiguration = .default,
+                     credential: URLCredential? = nil) async throws -> (Data, URLResponse) {
+        let loader = Loader(limit: limit, credential: credential)
         let session = URLSession(configuration: configuration, delegate: loader, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let task = session.dataTask(with: request)
@@ -31,12 +34,16 @@ nonisolated enum BoundedDownload {
 
     private final class Loader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let limit: Int
+        private let credential: URLCredential?
         private let lock = NSLock()
         private var data = Data()
         private var tooLarge = false
         private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
 
-        init(limit: Int) { self.limit = limit }
+        init(limit: Int, credential: URLCredential?) {
+            self.limit = limit
+            self.credential = credential
+        }
 
         func start(_ task: URLSessionDataTask, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
             lock.withLock { self.continuation = continuation }
@@ -50,6 +57,17 @@ nonisolated enum BoundedDownload {
                 completionHandler(.cancel)
             } else {
                 completionHandler(.allow)
+            }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+            let method = challenge.protectionSpace.authenticationMethod
+            if let credential, challenge.previousFailureCount == 0,
+               method == NSURLAuthenticationMethodHTTPBasic || method == NSURLAuthenticationMethodHTTPDigest {
+                completionHandler(.useCredential, credential)
+            } else {
+                completionHandler(.performDefaultHandling, nil)
             }
         }
 

@@ -86,6 +86,11 @@ final class PlaybackDiagnostics {
             "start_offset": startOffset ?? 0,
             "is_resume": (startOffset ?? 0) > 1
         ]
+        let fingerprint = ["type", "rating_key", "container", "video_codec", "video_profile", "video_resolution",
+                           "video_bitrate_kbps", "video_framerate", "hdr_format", "dv_profile", "audio_codec",
+                           "audio_channels", "subtitle_stream_count", "stream_quality", "stream_location", "is_relay"]
+            .map { "\($0)=\(media[$0].map { "\($0)" } ?? "?")" }.joined(separator: " ")
+        DiagLog.notice(.playback, "Session \(route) offset=\(Int(startOffset ?? 0)) \(fingerprint)")
         step("session_start", detail: route)
     }
 
@@ -182,6 +187,7 @@ final class PlaybackDiagnostics {
     /// empty 200 (starving) are different bugs.
     func recordPreflightAttempt(_ attempt: Int, outcome: String) {
         preflightObservations.append("#\(attempt) \(outcome)")
+        DiagLog.notice(.playback, "HLS preflight #\(attempt): \(outcome.prefix(160))")
     }
 
     // MARK: - Capture

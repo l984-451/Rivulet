@@ -239,6 +239,21 @@ final class JellyfinMediaMapperTests: XCTestCase {
         XCTAssertNil(item(JellyfinFixtures.movie).seriesTitle)
     }
 
+    func test_detail_extras_trailersAndSpecialFeatures() {
+        let trailer: JFItem = JellyfinFixtures.decode(#"{"Id":"t1","Name":"Trailer","RunTimeTicks":1200000000}"#)
+        let feature: JFItem = JellyfinFixtures.decode(
+            #"{"Id":"f1","Name":"Making Of","ExtraType":"BehindTheScenes","ImageTags":{"Primary":"ft"}}"#)
+        let extras = JellyfinMediaMapper.detail(
+            JellyfinFixtures.decode(JellyfinFixtures.movie), nextEpisode: nil,
+            trailers: [trailer], specialFeatures: [feature], providerID: pid, baseURL: base, token: "tok"
+        ).extras
+        XCTAssertEqual(extras.map(\.subtype), [.trailer, .behindTheScenes])
+        XCTAssertEqual(extras.map(\.playbackKey), ["t1", "f1"])
+        XCTAssertEqual(extras.map(\.providerID), [pid, pid])
+        XCTAssertEqual(extras[0].duration, 120)
+        XCTAssertEqual(extras[1].thumbnailURL?.absoluteString, "http://jf.local:8096/Items/f1/Images/Primary?tag=ft")
+    }
+
     func test_detail_providerIds_becomeLowercaseExternalIDs() {
         XCTAssertEqual(detail().externalIDs, ["tmdb": "1396", "imdb": "tt0903747"])
     }

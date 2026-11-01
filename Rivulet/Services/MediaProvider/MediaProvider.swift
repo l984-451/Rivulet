@@ -64,6 +64,9 @@ protocol MediaProvider: Sendable, Identifiable {
     /// nil when it has none. Home asks for this per library on every reload,
     /// so a provider whose `hubs(in:)` costs more than one request overrides it.
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub?
+    /// The library's titles on `trending`, in its order, at most `limit`.
+    /// Home's hero on a server with no TMDB index of its own. Default: none.
+    func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem]
     /// The library's collections (Plex collections, Jellyfin box sets), in
     /// the server's order. Default: none.
     func collections(in library: MediaLibrary) async throws -> [MediaItem]
@@ -124,7 +127,7 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Regular and smart video playlists, sorted by title.
     func videoPlaylists() async throws -> [MediaPlaylist]
     /// Every row, all pages, in the server's order.
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry]
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents
     func createPlaylist(title: String, seededWith items: [MediaItemRef]) async throws -> MediaPlaylist
     func addToPlaylist(_ playlist: MediaItemRef, items: [MediaItemRef]) async throws
     func removeFromPlaylist(_ playlist: MediaItemRef, entryID: String) async throws
@@ -175,6 +178,7 @@ extension MediaProvider {
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         try await hubs(in: library).first { $0.id == "\(library.id).recentlyAdded" }
     }
+    func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] { [] }
     func letterCounts(in library: MediaLibrary) async throws -> [PlexFirstCharacter] { [] }
     func refreshMetadata(_ itemRef: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "refresh not supported")
@@ -186,7 +190,9 @@ extension MediaProvider {
 
     var supportsPlaylists: Bool { false }
     func videoPlaylists() async throws -> [MediaPlaylist] { [] }
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] { [] }
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
+        PlaylistContents(entries: [], isSmart: false)
+    }
     func createPlaylist(title: String, seededWith items: [MediaItemRef]) async throws -> MediaPlaylist {
         throw MediaProviderError.backendSpecific(underlying: "playlists not supported")
     }

@@ -6,8 +6,8 @@
 //  Rivulet
 //
 //  Source-neutral DVR types. Plex records through subscriptions, Dispatcharr
-//  through recordings and recurring rules; the guide and the player only ever
-//  see these.
+//  through recordings and recurring rules, Jellyfin through timers and series
+//  timers; the guide and the player only ever see these.
 //
 
 import Foundation
@@ -85,6 +85,8 @@ nonisolated struct LiveTVRecordingRule: Identifiable, Hashable, Sendable {
 /// Implemented by Live TV sources that can record. The guide and the player
 /// ask the data store, which routes to the source that owns the channel.
 protocol LiveTVRecordingProvider: LiveTVProvider {
+    /// Whether this source can record right now (an API key, a user's rights).
+    nonisolated var supportsRecording: Bool { get }
     /// The ways this source can record `program`. Empty when it cannot
     /// (no guide identity, already ended, no DVR configured).
     func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption]
@@ -95,6 +97,10 @@ protocol LiveTVRecordingProvider: LiveTVProvider {
     func recordingRules() async throws -> [LiveTVRecordingRule]
     /// Remove a rule and what it scheduled.
     func delete(_ rule: LiveTVRecordingRule) async throws
+}
+
+extension LiveTVRecordingProvider {
+    nonisolated var supportsRecording: Bool { true }
 }
 
 nonisolated enum LiveTVRecordingError: LocalizedError {

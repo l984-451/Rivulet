@@ -84,6 +84,16 @@ enum SystemAudioAdjustment: CaseIterable {
         }
     }
 
+    /// Enhance Dialogue's current setting for the Details pane (#356); nil when the route can't apply it.
+    static var dialogueSummary: String? {
+        guard enhanceDialogue.isAvailable else { return nil }
+        return dialogueSummary(levelsAvailable: levelsAvailable, level: dialogueLevel)
+    }
+
+    static func dialogueSummary(levelsAvailable: Bool, level: DialogueLevel) -> String {
+        levelsAvailable ? level.title : (level == .off ? "Off" : "On")
+    }
+
     private static var levelsAvailable: Bool {
         UserDefaults(suiteName: domain)?.bool(forKey: "enhanceDialogueLevelsIsAvailable") ?? false
     }

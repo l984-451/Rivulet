@@ -38,9 +38,9 @@ nonisolated struct DispatcharrChannelIndex: Sendable {
     }
 
     /// The Dispatcharr channel behind a playlist entry.
-    func match(streamURL: URL?, number: Int?, name: String) -> DispatcharrChannelSummary? {
+    func match(streamURL: URL?, number: ChannelNumber?, name: String) -> DispatcharrChannelSummary? {
         if let uuid = Self.streamUUID(streamURL), let hit = byUUID[uuid] { return hit }
-        if let number, let hit = byNumber[Double(number)] { return hit }
+        if let number = number.flatMap({ Double($0.description) }), let hit = byNumber[number] { return hit }
         return byName[name.lowercased()]
     }
 
@@ -94,10 +94,12 @@ extension IPTVProvider: LiveTVRecordingProvider {
     /// Dispatcharr with an API key. Its playlist and guide need no key, so
     /// plenty of sources are set up without one; those simply do not record.
     nonisolated var supportsRecording: Bool {
-        sourceType == .dispatcharr && !(apiToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if tvheadendService != nil { return tvheadendSupportsRecording }
+        return sourceType == .dispatcharr && !(apiToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
     func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption] {
+        if tvheadendService != nil { return try tvheadendRecordOptions(for: program, on: channel) }
         let service = try dvrService()
         guard program.endTime > Date() else { throw LiveTVRecordingError.programEnded }
         guard let target = try await dispatcharrChannel(for: channel, using: service) else {
@@ -122,6 +124,9 @@ extension IPTVProvider: LiveTVRecordingProvider {
     }
 
     func record(_ option: LiveTVRecordOption, program: UnifiedProgram, on channel: UnifiedChannel) async throws {
+        if let tvheadendService {
+            return try await tvheadendRecord(option, program: program, on: channel, using: try tvheadendDVR(tvheadendService))
+        }
         let service = try dvrService()
         guard let target = try await dispatcharrChannel(for: channel, using: service) else {
             throw DispatcharrDVRError.channelNotFound
@@ -150,6 +155,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
     }
 
     func scheduledRecordings() async throws -> [LiveTVScheduledRecording] {
+        if let tvheadendService { return try await tvheadendScheduledRecordings(using: try tvheadendDVR(tvheadendService)) }
         let service = try dvrService()
         let recordings = try await service.fetchRecordings()
         // Best effort: without rules only the "cancel series" distinction is
@@ -198,6 +204,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
     /// One airing: stopped if it is recording (what was recorded is kept),
     /// otherwise removed. Any rule that scheduled it stays.
     func cancel(_ recording: LiveTVScheduledRecording) async throws {
+        if let tvheadendService { return try await tvheadendCancel(recording, using: try tvheadendDVR(tvheadendService)) }
         let service = try dvrService()
         guard let id = Int(recording.id) else { throw LiveTVRecordingError.notSupported }
         if recording.status == .recording {
@@ -208,6 +215,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
     }
 
     func recordingRules() async throws -> [LiveTVRecordingRule] {
+        if let tvheadendService { return try await tvheadendRecordingRules(using: try tvheadendDVR(tvheadendService)) }
         let service = try dvrService()
         var rules: [LiveTVRecordingRule] = []
 
@@ -237,6 +245,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
     }
 
     func delete(_ rule: LiveTVRecordingRule) async throws {
+        if let tvheadendService { return try await tvheadendDVR(tvheadendService).deleteRule(uuid: rule.id) }
         let service = try dvrService()
         switch DispatcharrRuleID(rule.id) {
         case .series(let series):
@@ -249,6 +258,11 @@ extension IPTVProvider: LiveTVRecordingProvider {
     }
 
     // MARK: - Lookups
+
+    private func tvheadendDVR(_ service: TvheadendService) throws -> TvheadendService {
+        guard supportsRecording else { throw LiveTVRecordingError.notSupported }
+        return service
+    }
 
     private func dvrService() throws -> DispatcharrService {
         guard supportsRecording, let dispatcharrService else { throw LiveTVRecordingError.notSupported }
@@ -294,7 +308,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
             return byStream.id
         }
         if let number = summary.channelNumber,
-           let byNumber = cachedChannels.first(where: { $0.channelNumber.map(Double.init) == number }) {
+           let byNumber = cachedChannels.first(where: { $0.channelNumber.flatMap { Double($0.description) } == number }) {
             return byNumber.id
         }
         let name = summary.name?.lowercased()

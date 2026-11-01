@@ -39,18 +39,22 @@ final class PlexWatchlistService: ObservableObject {
     private let cache: WatchlistCacheProtocol
     private let tokenProvider: @MainActor () -> String?
     private var lastFetched: Date?
+    /// The fetch in progress; a second caller waits on it instead of fetching again.
+    private var inFlight: Task<Void, Never>?
 
     // 60s balances responsiveness with network traffic — fresh enough that
     // changes made on another Plex client appear quickly on Home, but not so
     // aggressive that idle screens hammer the API.
-    private let staleAfter: TimeInterval = 60
+    private let staleAfter: TimeInterval
     private let transientErrorDuration: TimeInterval = 3
 
     init(
         api: PlexWatchlistAPIProtocol,
         cache: WatchlistCacheProtocol,
-        tokenProvider: @escaping @MainActor () -> String? = { "test-token" }
+        tokenProvider: @escaping @MainActor () -> String? = { "test-token" },
+        staleAfter: TimeInterval = 60
     ) {
+        self.staleAfter = staleAfter
         self.api = api
         self.cache = cache
         self.tokenProvider = tokenProvider
@@ -63,6 +67,10 @@ final class PlexWatchlistService: ObservableObject {
     }
 
     func fetchWatchlist(force: Bool = false) async {
+        if let inFlight {
+            await inFlight.value
+            if !force { return }
+        }
         if !force, let lastFetched, Date().timeIntervalSince(lastFetched) < staleAfter {
             watchlistLog.debug("fetchWatchlist skipped: cache age <\(self.staleAfter)s")
             return
@@ -71,11 +79,29 @@ final class PlexWatchlistService: ObservableObject {
             watchlistLog.warning("fetchWatchlist aborted: no Plex token")
             return
         }
+        let task = Task { await self.fetch(token: token, force: force) }
+        inFlight = task
+        await task.value
+        if inFlight == task { inFlight = nil }
+    }
+
+    private func fetch(token: String, force: Bool) async {
         do {
+            // Unchanged since the copy we hold: skip the full list (2.2 KB per entry).
+            if !force, !watchlistItems.isEmpty,
+               let head = try? await api.head(token: token),
+               head.totalSize == watchlistItems.count, head.newestID == watchlistItems.first?.id {
+                lastFetched = Date()
+                lastFetchError = nil
+                watchlistLog.debug("fetchWatchlist unchanged: \(head.totalSize) items")
+                return
+            }
             let items = try await api.fetchAll(token: token)
-            watchlistItems = items
-            watchlistGUIDs = Set(items.flatMap(\.guids))
-            cache.save(items)
+            if items != watchlistItems {
+                watchlistItems = items
+                watchlistGUIDs = Set(items.flatMap(\.guids))
+                cache.save(items)
+            }
             lastFetched = Date()
             lastFetchError = nil
             watchlistLog.info("fetchWatchlist success: \(items.count) items")

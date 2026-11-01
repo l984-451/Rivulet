@@ -1,0 +1,140 @@
+{
+ "entries": [
+  {
+   "uuid": "6425c886e330ed3d74bb8f031b88e478",
+   "enabled": true,
+   "autoname": true,
+   "name": "FOX 6 WBRC",
+   "number": 6,
+   "icon": "http://logos.test/api/channels/logos/266492/cache/",
+   "icon_public_url": "http://logos.test/api/channels/logos/266492/cache/",
+   "epgauto": true,
+   "epglimit": 0,
+   "epggrab": [
+    "b723d2875ee6bdd017004343ab6ec03b"
+   ],
+   "dvr_pre_time": 0,
+   "dvr_pst_time": 0,
+   "epg_running": -1,
+   "services": [
+    "c855a7988016e2434ae195d609ce14bc"
+   ],
+   "tags": [
+    "c4983594266657dd7f0de247bdb3acd0",
+    "1a0ae3997c3bb6517da9b35e0b0e0e34",
+    "e6ad9b1f6446f9240be7c0bfec8a34af",
+    "1c35018f4865a50c86453ba2112fc304"
+   ],
+   "bouquet": ""
+  },
+  {
+   "uuid": "6008a616257a1a5da30883654ee2a7a5",
+   "enabled": true,
+   "autoname": true,
+   "name": "ESPN",
+   "number": 0,
+   "icon": "http://logos.test/api/channels/logos/266497/cache/",
+   "icon_public_url": "http://logos.test/api/channels/logos/266497/cache/",
+   "epgauto": true,
+   "epglimit": 0,
+   "epggrab": [
+    "ae8694afebf2766dde10866e7eeda905"
+   ],
+   "dvr_pre_time": 0,
+   "dvr_pst_time": 0,
+   "epg_running": -1,
+   "services": [
+    "5504e69ed329060aabe4a8f40cae3d3c"
+   ],
+   "tags": [
+    "c4983594266657dd7f0de247bdb3acd0",
+    "61d5905273a2237a6c0650b2c9cc149a",
+    "e6ad9b1f6446f9240be7c0bfec8a34af",
+    "1c35018f4865a50c86453ba2112fc304"
+   ],
+   "bouquet": ""
+  },
+  {
+   "uuid": "0c186d9cdf139a7a882e0040398ef048",
+   "enabled": true,
+   "autoname": true,
+   "name": "NBC 13 WVTM",
+   "number": 13,
+   "icon": "",
+   "icon_public_url": "",
+   "epgauto": true,
+   "epglimit": 0,
+   "epggrab": [
+    "38b194b92ede76a83b2ef88e521426da"
+   ],
+   "dvr_pre_time": 0,
+   "dvr_pst_time": 0,
+   "epg_running": -1,
+   "services": [
+    "1c541ce87bafa50bc2460f24f00ce2b8"
+   ],
+   "tags": [
+    "c4983594266657dd7f0de247bdb3acd0",
+    "1a0ae3997c3bb6517da9b35e0b0e0e34",
+    "e6ad9b1f6446f9240be7c0bfec8a34af",
+    "1c35018f4865a50c86453ba2112fc304"
+   ],
+   "bouquet": ""
+  },
+  {
+   "uuid": "d15ab1ed000000000000000000000000",
+   "enabled": false,
+   "autoname": true,
+   "name": "Disabled Channel",
+   "number": 99,
+   "icon": "http://logos.test/api/channels/logos/266492/cache/",
+   "icon_public_url": "http://logos.test/api/channels/logos/266492/cache/",
+   "epgauto": true,
+   "epglimit": 0,
+   "epggrab": [
+    "b723d2875ee6bdd017004343ab6ec03b"
+   ],
+   "dvr_pre_time": 0,
+   "dvr_pst_time": 0,
+   "epg_running": -1,
+   "services": [
+    "c855a7988016e2434ae195d609ce14bc"
+   ],
+   "tags": [
+    "c4983594266657dd7f0de247bdb3acd0",
+    "1a0ae3997c3bb6517da9b35e0b0e0e34",
+    "e6ad9b1f6446f9240be7c0bfec8a34af",
+    "1c35018f4865a50c86453ba2112fc304"
+   ],
+   "bouquet": ""
+  },
+  {
+   "uuid": "91c0000000000000000000000000000a",
+   "enabled": true,
+   "autoname": true,
+   "name": "Picon Channel",
+   "number": 7,
+   "icon": "file:///picons/7.png",
+   "icon_public_url": "imagecache/7",
+   "epgauto": true,
+   "epglimit": 0,
+   "epggrab": [
+    "b723d2875ee6bdd017004343ab6ec03b"
+   ],
+   "dvr_pre_time": 0,
+   "dvr_pst_time": 0,
+   "epg_running": -1,
+   "services": [
+    "c855a7988016e2434ae195d609ce14bc"
+   ],
+   "tags": [
+    "c4983594266657dd7f0de247bdb3acd0",
+    "1a0ae3997c3bb6517da9b35e0b0e0e34",
+    "e6ad9b1f6446f9240be7c0bfec8a34af",
+    "1c35018f4865a50c86453ba2112fc304"
+   ],
+   "bouquet": ""
+  }
+ ],
+ "total": 5
+}

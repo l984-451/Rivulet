@@ -30,6 +30,16 @@ nonisolated struct PlexPlaylistContainer: Decodable, Sendable {
     let MediaContainer: Container
 }
 
+/// A page of a playlist's items. The container says whether the list is smart.
+nonisolated struct PlexPlaylistItemsContainer: Decodable, Sendable {
+    nonisolated struct Container: Decodable, Sendable {
+        let Metadata: [PlexMetadata]?
+        let totalSize: Int?
+        let smart: Bool?
+    }
+    let MediaContainer: Container
+}
+
 nonisolated struct PlexIdentityContainer: Decodable, Sendable {
     nonisolated struct Container: Decodable, Sendable {
         let machineIdentifier: String
@@ -66,23 +76,25 @@ extension PlexNetworkManager {
         ratingKey: String,
         start: Int,
         size: Int
-    ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
+    ) async throws -> (items: [PlexMetadata], totalSize: Int?, isSmart: Bool) {
         guard let url = URL(string: "\(serverURL)/playlists/\(ratingKey)/items?X-Plex-Container-Start=\(start)&X-Plex-Container-Size=\(size)") else {
             throw PlexAPIError.invalidURL
         }
-        let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
-        return (container.MediaContainer.Metadata ?? [], container.MediaContainer.totalSize)
+        let container: PlexPlaylistItemsContainer = try await request(url, headers: plexHeaders(authToken: authToken))
+        let page = container.MediaContainer
+        return (page.Metadata ?? [], page.totalSize, page.smart ?? false)
     }
 
     /// Every item of a playlist, in 200-item pages.
-    func getAllPlaylistItems(serverURL: String, authToken: String, ratingKey: String) async throws -> [PlexMetadata] {
+    func getAllPlaylistItems(serverURL: String, authToken: String, ratingKey: String) async throws
+        -> (items: [PlexMetadata], isSmart: Bool) {
         let size = 200
         var items: [PlexMetadata] = []
         while true {
             let page = try await getPlaylistItemsWithTotal(
                 serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, start: items.count, size: size)
             items += page.items
-            if page.items.isEmpty || items.count >= (page.totalSize ?? items.count) { return items }
+            if page.items.isEmpty || items.count >= (page.totalSize ?? items.count) { return (items, page.isSmart) }
         }
     }
 

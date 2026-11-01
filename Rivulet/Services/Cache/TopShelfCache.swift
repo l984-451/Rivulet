@@ -43,7 +43,8 @@ final class TopShelfCache: Sendable {
 
     /// Write Top Shelf items to the shared container
     /// Called by PlexDataStore when Continue Watching data is refreshed
-    func writeItems(_ items: [TopShelfItem]) {
+    /// `recent` is the poster row's second group, Recently Added after Continue Watching.
+    func writeItems(_ items: [TopShelfItem], sectionTitle: String, recent: [TopShelfItem]) {
 
         guard let defaults = sharedDefaults else {
             return
@@ -54,8 +55,13 @@ final class TopShelfCache: Sendable {
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = .sortedKeys
             let data = try encoder.encode(items)
-            guard defaults.data(forKey: userDefaultsKey) != data else { return }
+            let recentData = try encoder.encode(recent)
+            guard defaults.data(forKey: userDefaultsKey) != data
+                    || defaults.data(forKey: "topShelfRecentItems") != recentData
+                    || defaults.string(forKey: "topShelfSectionTitle") != sectionTitle else { return }
             defaults.set(data, forKey: userDefaultsKey)
+            defaults.set(recentData, forKey: "topShelfRecentItems")
+            defaults.set(sectionTitle, forKey: "topShelfSectionTitle")
             defaults.set(Date().timeIntervalSince1970, forKey: "topShelfWrittenAt")
             defaults.synchronize()
             // Without this tvOS keeps whatever the extension last returned, nil before first sign-in (#364).
@@ -89,12 +95,24 @@ final class TopShelfCache: Sendable {
         }
     }
 
+    // MARK: - Style
+
+    /// Full screen carousel instead of the default poster row. The extension reads the same key.
+    var fullScreen: Bool {
+        get { sharedDefaults?.bool(forKey: "topShelfFullScreen") ?? false }
+        set {
+            sharedDefaults?.set(newValue, forKey: "topShelfFullScreen")
+            TVTopShelfContentProvider.topShelfContentDidChange()
+        }
+    }
+
     // MARK: - Clear
 
     /// Remove all cached Top Shelf items
     func clear() {
         guard sharedDefaults?.data(forKey: userDefaultsKey) != nil else { return }
         sharedDefaults?.removeObject(forKey: userDefaultsKey)
+        sharedDefaults?.removeObject(forKey: "topShelfRecentItems")
         sharedDefaults?.set(Date().timeIntervalSince1970, forKey: "topShelfClearedAt")
         TVTopShelfContentProvider.topShelfContentDidChange()
     }

@@ -3,7 +3,7 @@
 
 //  The one animator and display link behind the expand and collapse morph: layout
 //  swap, backdrop panel, chrome insets, hairline and corner radius all share its
-//  clock, so nothing drifts (perf-spike/UIKIT_FOUNDATIONS.md §1, §5).
+//  clock, so nothing drifts (Docs/UIKIT_FOUNDATIONS.md §1, §5).
 
 import UIKit
 

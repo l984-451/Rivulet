@@ -17,7 +17,7 @@ import Vision
 nonisolated extension ContinueWatchingCardCompositor {
 
     /// Row-major samples in 0...1 covering a whole image, top row first.
-    struct Grid: Equatable, Sendable {
+    struct Grid: Equatable, Sendable, Codable {
         let columns: Int
         let rows: Int
         let values: [Float]
@@ -46,7 +46,7 @@ nonisolated extension ContinueWatchingCardCompositor {
     }
 
     /// What the analysis read off a still, in unit image coordinates, top-left origin.
-    struct Signals: Equatable, Sendable {
+    struct Signals: Equatable, Sendable, Codable {
         /// Source pixel size.
         var size: CGSize
         /// Nil when face detection could not run: the title then stays put.

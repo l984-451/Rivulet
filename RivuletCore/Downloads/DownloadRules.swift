@@ -130,10 +130,10 @@ nonisolated enum DownloadRules {
 }
 
 extension DownloadState {
-    /// Completed or failed: nothing runs until the user acts.
+    /// Completed, failed or paused by the user: nothing runs until the user acts.
     nonisolated var isSettled: Bool {
         switch self {
-        case .completed, .failed: true
+        case .completed, .failed, .pausedByUser: true
         default: false
         }
     }

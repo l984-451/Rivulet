@@ -5,11 +5,11 @@
 //  InsightsPanelContainerView.swift
 //  Rivulet
 //
-//  The Insights tab of the player's info pane, in the same glass box as Info
-//  and Details. Its sub-tabs (Top 10, Cast, one per trivia category) sit on the
-//  rail's pill row; this view shows the selected one as a row of cards.
-//  Selecting a cast member crossfades the box to their bio and filmography
-//  while the video keeps playing; Menu crossfades back.
+//  The Insights tab of the player's info pane. Its sub-tabs (Top 10, Cast, one
+//  per trivia category) sit on the rail's pill row; this view shows the selected
+//  one as a row of glass cards over the video, as Apple's InSight does.
+//  Selecting a cast member crossfades in a glass box with their bio and
+//  filmography while the video keeps playing; Menu crossfades back.
 //
 
 import UIKit
@@ -34,6 +34,8 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
     /// Internal for tests: the actor view a selection built, until Menu tears it down.
     private(set) var actorView: InsightsActorView?
     private let coordinator = InsightsActorLoadCoordinator()
+    /// Backs the actor view only; list cards carry their own glass.
+    private let glass = makePaneGlass(cornerRadius: Metrics.radius)
     private var state: State = .list
 
     init(
@@ -52,7 +54,7 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         self.provider = provider
         super.init(frame: .zero)
 
-        let glass = makePaneGlass(cornerRadius: Metrics.radius)
+        glass.alpha = 0
         [glass, listView].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -108,6 +110,7 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
 
         UIView.animate(withDuration: Metrics.crossfadeDuration, animations: {
             self.listView.alpha = 0
+            self.glass.alpha = 1
             actor.alpha = 1
         }, completion: { [weak self] _ in
             self?.setNeedsFocusUpdate()
@@ -138,6 +141,7 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
 
         UIView.animate(withDuration: Metrics.crossfadeDuration, animations: {
             actor.alpha = 0
+            self.glass.alpha = 0
             self.listView.alpha = 1
         }, completion: { [weak self] _ in
             actor.removeFromSuperview()

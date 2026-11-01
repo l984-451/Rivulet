@@ -53,6 +53,7 @@ struct MediaItemDetail: Sendable {
         let thumbnailURL: URL?
         let duration: TimeInterval?   // seconds
         let playbackKey: String?      // provider-specific (Plex extra key / ratingKey)
+        let providerID: String        // the server the extra plays from
         var subtype: ExtraSubtype = .unknown
 
         var isTrailer: Bool { subtype.isTrailer }

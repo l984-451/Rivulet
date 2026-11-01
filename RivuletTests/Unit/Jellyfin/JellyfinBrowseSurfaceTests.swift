@@ -26,6 +26,17 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertNil(cell.sourceBadgeText, "configure alone never adds a badge")
     }
 
+    func test_posterCell_noArtwork_showsTitle() {
+        let cell = PosterCell(frame: CGRect(x: 0, y: 0, width: 220, height: 400))
+        var show = PlexMetadata()
+        show.type = "show"
+        show.title = "Some Show"
+        cell.configure(item: show)
+        XCTAssertEqual(cell.failureTitleShown, "Some Show")
+        cell.prepareForReuse()
+        XCTAssertNil(cell.failureTitleShown)
+    }
+
     // MARK: - Plex paths
 
     func test_isJellyfin() {
@@ -123,6 +134,28 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertFalse(hero.contains { $0.ref.itemID == "b" }, "no backdrop, nothing to show behind the hero")
         XCTAssertFalse(hero.contains { $0.ref.itemID == "c" }, "Continue Watching has its own row")
         XCTAssertEqual(hero.count, 10)
+    }
+
+    func test_heroItems_trendingFirst_fallsBackToRecentWhenTooFew() {
+        func art(_ id: String) -> MediaItem {
+            let base = JellyfinFixtures.mediaItem(id, kind: .movie)
+            return MediaItem(ref: base.ref, kind: .movie, title: id, sortTitle: nil, overview: nil, year: nil,
+                             runtime: nil, parentRef: nil, grandparentRef: nil, episodeNumber: nil,
+                             seasonNumber: nil, childProgress: nil, userState: base.userState,
+                             artwork: MediaArtwork(poster: nil, backdrop: URL(string: "http://x/\(id)"),
+                                                   thumbnail: nil, logo: nil),
+                             parentArtwork: nil, grandparentArtwork: nil)
+        }
+        let rows: CachedHomeRail = [
+            CachedHomeHub(id: "ra", title: "Recently Added in Movies", isContinueWatching: false, hubKey: nil,
+                          hubIdentifier: nil, totalSize: nil, items: [art("new")])
+        ]
+
+        let trending = PlexHomeViewController.heroItems(trending: [[art("m1"), art("m2")], [art("s1")]], rows: rows)
+        XCTAssertEqual(trending.map(\.ref.itemID), ["m1", "s1", "m2"], "one library at a time")
+
+        let few = PlexHomeViewController.heroItems(trending: [[art("m1")], [art("s1")]], rows: rows)
+        XCTAssertEqual(few.map(\.ref.itemID), ["new"], "two matches are too few for a hero, as on Plex")
     }
 
     // MARK: - Home

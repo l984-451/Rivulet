@@ -117,6 +117,7 @@ struct ContentView: View {
         // Refresh libraries on every return to .active: `loadLibrariesIfNeeded` stops at
         // the cache, so a library added on the server would never appear otherwise.
         .onChange(of: scenePhase) { _, phase in
+            DiagLog.notice(.launch, "Scene \(phase)")
             if phase == .active {
                 Task { await dataStore.refreshLibraries() }
                 ServerDataStore.shared.reload()

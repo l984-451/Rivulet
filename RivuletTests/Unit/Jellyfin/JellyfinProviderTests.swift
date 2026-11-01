@@ -407,6 +407,41 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertTrue(server.query(0).contains(URLQueryItem(name: "recursive", value: "true")))
     }
 
+    func test_trending_matchesTMDBIds_inTrendingOrder() async throws {
+        server.respond("/Items", query: ["fields": "ProviderIds"], body: """
+            {"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"14160"}},
+                      {"Id":"abbott","Type":"Series","ProviderIds":{"Tmdb":"125935"}},
+                      {"Id":"none","Type":"Movie","ProviderIds":{}}],"TotalRecordCount":3}
+            """)
+        server.respond("/Items", body: """
+            {"Items":[{"Id":"abbott","Name":"Abbott Elementary","Type":"Series"},
+                      {"Id":"up","Name":"Up","Type":"Movie"}],"TotalRecordCount":2}
+            """)
+        func title(_ id: Int, _ type: TMDBMediaType) -> TMDBListItem {
+            TMDBListItem(id: id, title: "", overview: nil, posterPath: nil, backdropPath: nil,
+                         releaseDate: nil, voteAverage: nil, mediaType: type)
+        }
+        // A show sharing a movie's TMDB number is a different title.
+        let trending = [title(1, .movie), title(14160, .tv), title(14160, .movie), title(125935, .tv)]
+
+        let items = try await provider().trending(in: movies, from: trending, limit: 10)
+
+        XCTAssertEqual(items.map(\.ref.itemID), ["up", "abbott"])
+        XCTAssertTrue(server.query(0).contains(URLQueryItem(name: "parentId", value: "lib-m")))
+        XCTAssertTrue(server.query(1).contains(URLQueryItem(name: "ids", value: "up,abbott")))
+    }
+
+    func test_trending_noMatches_skipsTheSecondRequest() async throws {
+        server.respond("/Items", body: #"{"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"14160"}}]}"#)
+        let trending = [TMDBListItem(id: 2, title: "", overview: nil, posterPath: nil, backdropPath: nil,
+                                     releaseDate: nil, voteAverage: nil, mediaType: .movie)]
+
+        let items = try await provider().trending(in: movies, from: trending, limit: 10)
+
+        XCTAssertTrue(items.isEmpty)
+        XCTAssertEqual(server.requests.count, 1)
+    }
+
     func test_letterCounts_hashFirstThenAtoZ_fromSortNameCounts() async throws {
         server.respond("/Items", query: ["nameLessThan": "A"], body: #"{"Items":[],"TotalRecordCount":2}"#)
         server.respond("/Items", query: ["nameStartsWith": "A"], body: #"{"Items":[],"TotalRecordCount":1}"#)

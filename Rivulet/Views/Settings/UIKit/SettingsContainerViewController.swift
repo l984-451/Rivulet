@@ -40,6 +40,16 @@ final class SettingsContainerViewController: UIViewController {
     /// Set for a standalone flow: Menu or a pop from its first page calls it.
     var onExit: (() -> Void)?
 
+    /// The pages' frosted wash of the last page's artwork. Off for a flow that brings its own
+    /// backdrop (the setup landing); set before the view loads.
+    var drawsBackdrop = true
+    private let ambientView = AmbientBackdropView()
+
+    /// The Settings tab follows the system appearance, as tvOS Settings does, though the app
+    /// window is pinned dark. A standalone flow keeps the dark of what it sits over.
+    var followsSystemAppearance = false
+    private var sceneStyleRegistration: UITraitChangeRegistration?
+
     init(rootPage: SettingsPage = .root) {
         self.rootPage = rootPage
         super.init(nibName: nil, bundle: nil)
@@ -49,7 +59,7 @@ final class SettingsContainerViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
+        if drawsBackdrop { installBackdrop() } else { view.backgroundColor = .clear }
         setupLayout()
         let root = makePage(rootPage)
         pages = [root]
@@ -65,6 +75,35 @@ final class SettingsContainerViewController: UIViewController {
 
     @objc private func menuPressed() { pop() }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if drawsBackdrop { ambientView.setAmbient(url: AmbientBackdropView.lastURL) }
+    }
+
+    override func viewIsAppearing(_ animated: Bool) {
+        super.viewIsAppearing(animated)
+        // The scene's traits are the system's; the window's dark override sits below it.
+        guard followsSystemAppearance, sceneStyleRegistration == nil,
+              let scene = view.window?.windowScene else { return }
+        overrideUserInterfaceStyle = scene.traitCollection.userInterfaceStyle
+        sceneStyleRegistration = scene.registerForTraitChanges([UITraitUserInterfaceStyle.self]) {
+            [weak self] (scene: UIWindowScene, _: UITraitCollection) in
+            self?.overrideUserInterfaceStyle = scene.traitCollection.userInterfaceStyle
+        }
+    }
+
+    /// Home's background, layer for layer: black, the artwork wash with its vignette, the adaptive material.
+    private func installBackdrop() {
+        view.backgroundColor = .black
+        let frost = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+        for layer in [ambientView, frost] as [UIView] {
+            layer.isUserInteractionEnabled = false
+            layer.frame = view.bounds
+            layer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(layer)
+        }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         setNeedsFocusUpdate()
@@ -73,7 +112,7 @@ final class SettingsContainerViewController: UIViewController {
 
     private func setupLayout() {
         titleLabel.font = .systemFont(ofSize: 57, weight: .bold)
-        titleLabel.textColor = .tertiaryLabel
+        titleLabel.textColor = SettingsHeaderCell.captionColor
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
@@ -98,7 +137,7 @@ final class SettingsContainerViewController: UIViewController {
 
             leftPanel.topAnchor.constraint(equalTo: view.topAnchor, constant: 180),
             leftPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 90),
-            leftPanel.widthAnchor.constraint(equalToConstant: 870),
+            leftPanel.widthAnchor.constraint(equalToConstant: SettingsLeftPanelView.width),
             leftPanel.heightAnchor.constraint(equalToConstant: 654),
 
             rightPane.topAnchor.constraint(equalTo: view.topAnchor, constant: 174),
@@ -136,7 +175,10 @@ final class SettingsContainerViewController: UIViewController {
             guard let self, let vc, self.topPage === vc else { return }
             self.pop(levels: 2)
         }
-        vc.onFocusRow = { [weak self] id in self?.leftPanel.show(id: id) }
+        vc.onFocusRow = { [weak self] id, section in
+            self?.leftPanel.show(id: id)
+            self?.leftPanel.showSection(section)
+        }
         return vc
     }
 
@@ -162,8 +204,10 @@ final class SettingsContainerViewController: UIViewController {
         pages.append(newVC)
         installPageView(newVC, into: rightPane)
         rightPane.layoutIfNeeded()
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
+        // Chrome first: the focus move in `animateTransition` reports the focused
+        // row's group to the panel, which must already be showing the new page.
         updateChrome(for: page, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -189,8 +233,8 @@ final class SettingsContainerViewController: UIViewController {
             newVC.collectionView?.layoutIfNeeded()
             rightPane.layoutIfNeeded()
         }
-        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateChrome(for: topPage?.page ?? rootPage, animated: true)
+        animateTransition(incoming: newVC, outgoing: oldVC, forward: false, removeOutgoing: true)
         updateFocusGuide()
         onDepthChange?(pages.count > 1)
     }
@@ -263,7 +307,7 @@ final class SettingsContainerViewController: UIViewController {
         } else {
             titleLabel.text = page.title
         }
-        leftPanel.configure(page: page, animated: animated)
+        leftPanel.configure(page: page, section: topPage?.focusedSection, animated: animated)
     }
 
     private func updateFocusGuide() {

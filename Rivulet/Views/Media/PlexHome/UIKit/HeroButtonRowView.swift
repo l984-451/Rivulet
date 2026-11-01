@@ -87,7 +87,6 @@ final class HeroButtonRowView: UIView {
         watchlistButton.setImage(UIImage(systemName: "plus"), for: .normal)
         infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal)
         nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
-        nextButton.isBareAtRest = true
 
         playButton.accessibilityLabel = "Play"
         watchlistButton.accessibilityLabel = "Toggle Watchlist"
@@ -351,11 +350,6 @@ final class HeroCircleButton: UIControl {
 
     private let cornerRadius: CGFloat = 33
 
-    /// A bare glyph at rest (the Next chevron): no glass or stroke until focused.
-    var isBareAtRest = false {
-        didSet { applyFocusVisuals(focused: isFocused) }
-    }
-
     override init(frame: CGRect) {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
@@ -441,8 +435,8 @@ final class HeroCircleButton: UIControl {
             let grow = HeroPillButton.circleFocusScale
             self.transform = focused ? CGAffineTransform(scaleX: grow, y: grow) : .identity
             self.background.backgroundColor = focused ? .white : .clear
-            self.materialBackground.alpha = focused || self.isBareAtRest ? 0 : 1
-            self.strokeLayer.opacity = focused || self.isBareAtRest ? 0 : 1
+            self.materialBackground.alpha = focused ? 0 : 1
+            self.strokeLayer.opacity = focused ? 0 : 1
             self.iconView.tintColor = focused ? .black : .white
         }
     }

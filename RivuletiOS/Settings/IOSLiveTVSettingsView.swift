@@ -165,21 +165,35 @@ struct IOSLiveAddSourceSheet: View {
         NavigationStack {
             // No Plex row: the Plex server's DVR is added on its own.
             List {
-                NavigationLink {
-                    IOSLiveXtreamForm { dismiss() }
-                } label: {
-                    row("Xtream Codes", detail: "A server, username and password from your provider",
-                        systemImage: "person.badge.key")
+                Section("Your Server") {
+                    NavigationLink {
+                        IOSLiveDispatcharrForm { dismiss() }
+                    } label: {
+                        row("Dispatcharr", detail: "Channels, guide and recordings", systemImage: "antenna.radiowaves.left.and.right")
+                    }
+                    NavigationLink {
+                        IOSLiveTvheadendForm { dismiss() }
+                    } label: {
+                        row("Tvheadend", detail: "Channels, guide and recordings", systemImage: "tv")
+                    }
+                    NavigationLink {
+                        IOSLiveThreadfinForm { dismiss() }
+                    } label: {
+                        row("Threadfin", detail: "Channels and guide", systemImage: "server.rack")
+                    }
                 }
-                NavigationLink {
-                    IOSLivePlaylistForm { dismiss() }
-                } label: {
-                    row("Playlist URL", detail: "An M3U link from your provider", systemImage: "list.bullet")
-                }
-                NavigationLink {
-                    IOSLiveServerForm { dismiss() }
-                } label: {
-                    row("My Own Server", detail: "Dispatcharr, Threadfin and similar", systemImage: "antenna.radiowaves.left.and.right")
+                Section("Provider") {
+                    NavigationLink {
+                        IOSLiveXtreamForm { dismiss() }
+                    } label: {
+                        row("Xtream Codes", detail: "A server, username and password from your provider",
+                            systemImage: "person.badge.key")
+                    }
+                    NavigationLink {
+                        IOSLivePlaylistForm { dismiss() }
+                    } label: {
+                        row("Playlist URL", detail: "An M3U link from your provider", systemImage: "list.bullet")
+                    }
                 }
             }
             .navigationTitle("Add Source")
@@ -205,9 +219,9 @@ struct IOSLiveAddSourceSheet: View {
     }
 }
 
-private struct IOSLiveServerForm: View {
+private struct IOSLiveDispatcharrForm: View {
     let onAdded: () -> Void
-    @State private var address = ""
+    @State private var address = LiveTVSourceConnector.defaultAddress(for: .dispatcharr)
     @State private var name = ""
     @State private var username = ""
     @State private var password = ""
@@ -215,26 +229,14 @@ private struct IOSLiveServerForm: View {
     @State private var isChecking = false
     @State private var failure: LiveTVConnectError?
 
-    private let host = LiveTVSourceConnector.suggestedHost
-
     var body: some View {
         Form {
             Section {
-                HStack {
-                    IOSFormField("Address", text: $address, prompt: "http://\(host):9191", kind: .url)
-                    Menu {
-                        ForEach(LiveTVSourceConnector.serverSuggestions(host: host), id: \.label) { suggestion in
-                            Button(suggestion.label) { address = suggestion.value }
-                        }
-                    } label: {
-                        Image(systemName: "list.bullet.circle")
-                    }
-                    .accessibilityLabel("Suggestions")
-                }
+                IOSFormField("Address", text: $address, prompt: "Required", kind: .url)
             } header: {
                 Text("Server")
             } footer: {
-                Text("The address of the server on your network, with its port. Pick your app from the list to fill in its usual port.")
+                Text("Your Dispatcharr server's address on your network, with its port.")
             }
 
             Section {
@@ -257,7 +259,7 @@ private struct IOSLiveServerForm: View {
 
             IOSLiveAddButton(isChecking: isChecking, action: add)
         }
-        .navigationTitle("My Own Server")
+        .navigationTitle("Dispatcharr")
         .disabled(isChecking)
         .connectFailureAlert($failure)
     }
@@ -336,6 +338,113 @@ private struct IOSLiveXtreamForm: View {
                 defer { isChecking = false }
                 do {
                     try await connector.connect(request, name: name.trimmingCharacters(in: .whitespaces))
+                    onAdded()
+                } catch {
+                    failure = error as? LiveTVConnectError ?? .source(error.localizedDescription)
+                }
+            }
+        } catch {
+            failure = error as? LiveTVConnectError ?? .source(error.localizedDescription)
+        }
+    }
+}
+
+private struct IOSLiveTvheadendForm: View {
+    let onAdded: () -> Void
+    @State private var address = LiveTVSourceConnector.defaultAddress(for: .tvheadend)
+    @State private var username = ""
+    @State private var password = ""
+    @State private var name = ""
+    @State private var isChecking = false
+    @State private var failure: LiveTVConnectError?
+
+    var body: some View {
+        Form {
+            Section {
+                IOSFormField("Address", text: $address, prompt: "Required", kind: .url)
+            } header: {
+                Text("Server")
+            } footer: {
+                Text("Your Tvheadend server's address on your network, with its port.")
+            }
+            Section {
+                IOSFormField("Username", text: $username, prompt: "Optional", kind: .username)
+                IOSFormField("Password", text: $password, prompt: "Optional", kind: .password)
+            } header: {
+                Text("Tvheadend Sign-In")
+            } footer: {
+                Text("Only needed if your server asks for a login, and to record. Leave both empty to just watch.")
+            }
+            Section {
+                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultTvheadendName)
+            } footer: {
+                Text("How this source appears in Live TV.")
+            }
+            IOSLiveAddButton(isChecking: isChecking, action: add)
+        }
+        .navigationTitle("Tvheadend")
+        .disabled(isChecking)
+        .connectFailureAlert($failure)
+    }
+
+    private func add() {
+        let connector = LiveTVSourceConnector()
+        do {
+            let request = try connector.tvheadendRequest(address: address, username: username, password: password)
+            isChecking = true
+            Task {
+                defer { isChecking = false }
+                do {
+                    try await connector.connect(request, name: name.trimmingCharacters(in: .whitespaces))
+                    onAdded()
+                } catch {
+                    failure = error as? LiveTVConnectError ?? .source(error.localizedDescription)
+                }
+            }
+        } catch {
+            failure = error as? LiveTVConnectError ?? .source(error.localizedDescription)
+        }
+    }
+}
+
+private struct IOSLiveThreadfinForm: View {
+    let onAdded: () -> Void
+    @State private var address = LiveTVSourceConnector.defaultAddress(for: .threadfin)
+    @State private var name = ""
+    @State private var isChecking = false
+    @State private var failure: LiveTVConnectError?
+
+    var body: some View {
+        Form {
+            Section {
+                IOSFormField("Address", text: $address, prompt: "Required", kind: .url)
+            } header: {
+                Text("Server")
+            } footer: {
+                Text("Your Threadfin server's address on your network, with its port.")
+            }
+            Section {
+                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultThreadfinName)
+            } footer: {
+                Text("How this source appears in Live TV.")
+            }
+            IOSLiveAddButton(isChecking: isChecking, action: add)
+        }
+        .navigationTitle("Threadfin")
+        .disabled(isChecking)
+        .connectFailureAlert($failure)
+    }
+
+    private func add() {
+        do {
+            let request = try LiveTVSourceConnector.threadfinRequest(address: address)
+            let name = name.trimmingCharacters(in: .whitespaces)
+            isChecking = true
+            Task {
+                defer { isChecking = false }
+                do {
+                    try await LiveTVSourceConnector().connect(
+                        request, name: name.isEmpty ? LiveTVSourceConnector.defaultThreadfinName : name)
                     onAdded()
                 } catch {
                     failure = error as? LiveTVConnectError ?? .source(error.localizedDescription)

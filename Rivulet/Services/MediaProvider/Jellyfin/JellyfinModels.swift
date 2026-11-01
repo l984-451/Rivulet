@@ -31,12 +31,13 @@ nonisolated struct JFUser: Decodable, Sendable {
     let name: String?
 }
 
-/// `Users/Me`, read for the deletion rights in its policy.
+/// `Users/Me`, read for the deletion and recording rights in its policy.
 nonisolated struct JFUserWithPolicy: Decodable, Sendable {
     let policy: Policy?
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?
         let enableContentDeletion: Bool?
+        let enableLiveTvManagement: Bool?
     }
 }
 
@@ -115,6 +116,9 @@ nonisolated struct JFItem: Decodable, Sendable {
     let productionLocations: [String]?
     let providerIds: [String: String]?
     let mediaSources: [JFMediaSource]?
+    let localTrailerCount: Int?
+    let specialFeatureCount: Int?
+    let extraType: String?          // on a trailer or special feature: Trailer, Featurette, BehindTheScenes, ...
 }
 
 nonisolated struct JFUserData: Decodable, Sendable {

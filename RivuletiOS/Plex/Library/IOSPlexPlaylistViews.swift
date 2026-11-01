@@ -3,16 +3,12 @@
 
 import SwiftUI
 
-/// One server's video playlists.
-struct IOSPlexPlaylistsRoute: Hashable {
-    let serverID: String?
-}
-
 struct IOSPlexPlaylistRoute: Hashable {
     let playlist: PlexPlaylist
     let serverID: String?
 }
 
+/// One server's video playlists.
 struct IOSPlexPlaylistsView: View {
     let serverID: String?
     var showsAccount = false

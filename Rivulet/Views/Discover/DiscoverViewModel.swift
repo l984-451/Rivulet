@@ -76,7 +76,10 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     func libraryMatch(for item: TMDBListItem) async -> PlexMetadata? {
-        await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType)
+        guard let entry = await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType),
+              let serverURL = PlexAuthManager.shared.selectedServerURL,
+              let token = PlexAuthManager.shared.selectedServerToken else { return nil }
+        return await LibraryGUIDIndex.items(for: [entry], serverURL: serverURL, authToken: token)[entry.ratingKey]
     }
 
     /// Re-derive the in-library TMDB id set (call when LibraryGUIDIndex

@@ -14,6 +14,7 @@ import Foundation
 import DeviceCheck
 import CryptoKit
 import os
+import Sentry
 
 private let log = Logger(subsystem: "com.rivulet.app", category: "AppAttest")
 
@@ -101,7 +102,7 @@ actor AppAttestClient {
             r.setValue(assertion.base64EncodedString(), forHTTPHeaderField: "X-Rivulet-Assertion")
             return r
         } catch {
-            log.error("assertion failed: \(error.localizedDescription, privacy: .public)")
+            reportFailure("App Attest assertion failed", step: "generateAssertion", error: error)
             // Only a key the Secure Enclave no longer recognises (restored
             // backup, reinstall) is dead; any other failure keeps it.
             if (error as? DCError)?.code == .invalidKey { invalidateKey(ifCurrent: keyId) }
@@ -139,25 +140,31 @@ actor AppAttestClient {
     }
 
     private func enroll() async -> String? {
+        var step = "generateKey"
         do {
             let newKeyId = try await service.generateKey()
 
             // The challenge must come from the server and be single-use;
             // otherwise a captured attestation could be replayed.
+            step = "challenge"
             let challenge = try await fetchChallenge()
             let digest = Data(SHA256.hash(data: Data(challenge.utf8)))
+            step = "attestKey"
             let attestation = try await service.attestKey(newKeyId, clientDataHash: digest)
 
+            step = "verify"
             try await postAttestation(keyId: newKeyId, attestation: attestation, challenge: challenge)
 
             // Only persist AFTER the Worker accepts it — a key it never
             // registered is worse than no key (every request would 401).
             Keychain.save(Self.keychainAccount, value: newKeyId)
             keyId = newKeyId
-            log.info("device attested")
+            log.notice("device attested")
+            DiagLog.notice(.attest, "Device attested")
+            SentryBridge.log(.info, "App Attest enrolled", attributes: ["component": "app_attest"])
             return newKeyId
         } catch {
-            log.error("attestation failed: \(error.localizedDescription, privacy: .public)")
+            reportFailure("App Attest enrollment failed", step: step, error: error, always: true)
             backoffUntil = Date().addingTimeInterval(Self.backoff)
             return nil
         }
@@ -169,7 +176,7 @@ actor AppAttestClient {
         let url = baseURL.appendingPathComponent("attest/challenge")
         let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw AttestClientError.challengeFailed
+            throw AttestClientError.challengeFailed(status: (response as? HTTPURLResponse)?.statusCode ?? -1)
         }
         return try JSONDecoder().decode(ChallengeResponse.self, from: data).challenge
     }
@@ -190,10 +197,54 @@ actor AppAttestClient {
             attestationObject: attestation.base64EncodedString(),
             challenge: challenge,
         ))
-        let (_, response) = try await session.data(for: r)
+        let (data, response) = try await session.data(for: r)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw AttestClientError.verifyRejected
+            // The Worker answers {"error":"<reason>"}: a fixed code, never anything secret.
+            throw AttestClientError.verifyRejected(
+                status: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                reason: String(decoding: data.prefix(80), as: UTF8.self))
         }
+    }
+
+    private var lastReportAt: Date?
+
+    /// Sends a failure to Sentry Logs (searchable by device, no user action needed) and the
+    /// diagnostics log. Assertion failures can repeat per request, so they report once a minute.
+    private func reportFailure(_ message: String, step: String, error: Error, always: Bool = false) {
+        if !always, let last = lastReportAt, Date().timeIntervalSince(last) < 60 { return }
+        lastReportAt = Date()
+        let ns = error as NSError
+        let detail = (error as? AttestClientError).map { "\($0)" } ?? ns.localizedDescription
+        log.error("\(message, privacy: .public) at \(step, privacy: .public): \(ns.domain, privacy: .public) \(ns.code) \(detail, privacy: .public)")
+        DiagLog.error(.attest, "\(message) at \(step): \(ns.domain) \(ns.code) \(detail)")
+        SentryBridge.log(.warn, message, attributes: [
+            "component": "app_attest",
+            "step": step,
+            "error_domain": ns.domain,
+            "error_code": ns.code,
+            "detail": detail,
+            "supported": isSupported,
+            "had_key": keyId != nil,
+        ])
+    }
+
+    /// A Worker refused a request: `attestation_required` with `signed` false means it went out
+    /// unsigned (no key yet, or enrollment backing off); anything else names the check that failed.
+    func reportRejection(reason: String, path: String, signed: Bool) {
+        if let last = lastReportAt, Date().timeIntervalSince(last) < 60 { return }
+        lastReportAt = Date()
+        let route = path.split(separator: "/").prefix(2).joined(separator: "/")
+        log.error("Worker rejected \(route, privacy: .public): \(reason, privacy: .public) signed=\(signed)")
+        DiagLog.error(.attest, "Worker rejected \(route): \(reason) signed=\(signed) key=\(keyId != nil)")
+        SentryBridge.log(.warn, "App Attest request rejected", attributes: [
+            "component": "app_attest",
+            "route": route,
+            "reason": reason,
+            "signed": signed,
+            "had_key": keyId != nil,
+            "in_backoff": backoffUntil.map { Date() < $0 } ?? false,
+            "supported": isSupported,
+        ])
     }
 
     /// Dev-only bypass for the Simulator. Read from the build environment so
@@ -207,8 +258,8 @@ actor AppAttestClient {
 }
 
 enum AttestClientError: Error {
-    case challengeFailed
-    case verifyRejected
+    case challengeFailed(status: Int)
+    case verifyRejected(status: Int, reason: String)
 }
 
 // MARK: - Keychain

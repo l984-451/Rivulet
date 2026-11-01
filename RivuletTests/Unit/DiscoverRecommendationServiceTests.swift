@@ -17,7 +17,7 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
         owned.Guid = [PlexGuid(id: "tmdb://100")]
 
         let index = LibraryGUIDIndex()
-        await index.replace(with: [owned], completeness: .complete)
+        await index.replace(with: guidIndexEntries([owned]), completeness: .complete)
 
         let stub = StubDiscoverFetcher()
         stub.movies = [

@@ -65,7 +65,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
                 sectionId: library.id,
                 start: page.offset,
                 size: page.limit,
-                sort: plexSortString(for: sort)
+                sort: plexSortString(for: sort),
+                followCollectionMode: true
             )
             let mapped = result.items.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
@@ -414,7 +415,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     func updateProgress(_ itemRef: MediaItemRef, position: TimeInterval) async throws {
-        try await plexCall {
+        _ = try await plexCall {
             try await networkManager.reportProgress(
                 serverURL: serverURL, authToken: authToken,
                 ratingKey: itemRef.itemID, timeMs: Int(position * 1000), state: "playing"
@@ -556,15 +557,18 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] {
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
         try await plexCall {
-            try await networkManager.getAllPlaylistItems(serverURL: serverURL, authToken: authToken, ratingKey: playlist.itemID)
-                .compactMap { meta in
-                    meta.playlistItemID.map {
-                        PlaylistEntry(entryID: String($0),
-                                      item: PlexMediaMapper.item(meta, providerID: id, serverURL: serverURL, authToken: authToken))
-                    }
+            let result = try await networkManager.getAllPlaylistItems(
+                serverURL: serverURL, authToken: authToken, ratingKey: playlist.itemID)
+            // Smart playlist items carry no playlistItemID; their ratingKey is unique in the list.
+            let entries = result.items.compactMap { meta in
+                (meta.playlistItemID.map(String.init) ?? meta.ratingKey).map {
+                    PlaylistEntry(entryID: $0,
+                                  item: PlexMediaMapper.item(meta, providerID: id, serverURL: serverURL, authToken: authToken))
                 }
+            }
+            return PlaylistContents(entries: entries, isSmart: result.isSmart)
         }
     }
 

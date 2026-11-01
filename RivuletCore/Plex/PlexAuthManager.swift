@@ -125,7 +125,7 @@ class PlexAuthManager: ObservableObject {
             || KeychainHelper.get(keychainServerTokenKey) != nil
             || KeychainHelper.get(PlexProfileSession.keychainKey) != nil
         if !hasPersistedSession && keychainHasToken {
-            print("🔐 PlexAuthManager: Detected stale Keychain data from previous install — clearing")
+            DiagLog.notice(.auth, "Stale Keychain data from a previous install, cleared")
             KeychainHelper.delete(keychainTokenKey)
             KeychainHelper.delete(keychainServerTokenKey)
             PlexProfileSession.delete()
@@ -156,7 +156,7 @@ class PlexAuthManager: ObservableObject {
             if let url = selectedServerURL,
                let host = URL(string: url)?.host,
                isDockerOrInternalAddress(host) {
-                print("🔐 PlexAuthManager: ⚠️ Saved URL uses Docker/internal address, will re-select on next server fetch")
+                DiagLog.notice(.connection, "Saved URL is a Docker/internal address, cleared for re-selection")
                 // Clear the bad URL - will trigger re-selection
                 selectedServerURL = nil
                 userDefaults.removeObject(forKey: serverURLKey)
@@ -183,7 +183,7 @@ class PlexAuthManager: ObservableObject {
               let best = await findBestConnection(for: server, reuseLastGood: false),
               Self.isPlayableDirectURL(best),
               selectedServerURL == url else { return }
-        print("🔐 PlexAuthManager: Upgrading connection \(url) -> \(best)")
+        DiagLog.notice(.connection, "Upgrading connection \(DiagLog.describe(url: url)) -> \(DiagLog.describe(url: best))")
         selectedServerURL = best
         userDefaults.set(best, forKey: serverURLKey)
         userDefaults.set(server.machineIdentifier, forKey: serverMachineIDKey)
@@ -258,6 +258,7 @@ class PlexAuthManager: ObservableObject {
 
                 // For shared servers, use server-specific accessToken; for owned, use user's authToken
                 await adoptAccountServerToken(server.accessToken ?? authToken, serverChanged: serverChanged)
+                DiagLog.notice(.connection, "Server selected: owned=\(server.owned ?? false) version=\(server.productVersion) connections=\(server.connections?.count ?? 0) changed=\(serverChanged)")
 
                 isConnected = true
                 connectionError = nil
@@ -271,10 +272,12 @@ class PlexAuthManager: ObservableObject {
 
                 return true
             } else if selectedServerURL != nil {
+                DiagLog.error(.connection, "Server switch failed, keeping the current server")
                 // The switch failed. The current server stays selected.
                 // The app did not test it again, so do not mark it as unreachable.
                 return false
             } else {
+                DiagLog.error(.connection, "Server selection failed, no server connected")
                 isConnected = false
                 connectionError = "Could not connect to server. Check your network."
                 state = .error(message: "Could not connect to server. Check your network.")
@@ -303,12 +306,11 @@ class PlexAuthManager: ObservableObject {
         // machineIdentifier, as plex.direct URLs do). Guards the switch-server
         // flow against reusing another server's URL.
         if reuseLastGood, let lastGood = selectedServerURL, Self.urlBelongs(lastGood, to: server) {
-            print("🔐 PlexAuthManager: Trying last-known-good URL first: \(lastGood)")
             if await testConnection(lastGood, expecting: expectedID) != nil {
-                print("🔐 PlexAuthManager: ✅ Last-known-good works — skipping the probe ladder")
+                DiagLog.notice(.connection, "Last-known-good works: \(DiagLog.describe(url: lastGood))")
                 return lastGood
             }
-            print("🔐 PlexAuthManager: ❌ Last-known-good failed; racing all candidates")
+            DiagLog.notice(.connection, "Last-known-good failed: \(DiagLog.describe(url: lastGood)), racing candidates")
         }
 
         let validConnections = (server.connections ?? [])
@@ -343,7 +345,6 @@ class PlexAuthManager: ObservableObject {
         if let relayConnection = server.connections?.first(where: { $0.relay }) {
             chains.append { [weak self] in
                 guard let self else { return nil }
-                print("🔐 PlexAuthManager: Trying relay as fallback: \(relayConnection.uri)")
                 if await self.testConnection(relayConnection.uri, expecting: expectedID) != nil {
                     return relayConnection.uri
                 }
@@ -353,6 +354,8 @@ class PlexAuthManager: ObservableObject {
 
         guard !chains.isEmpty else { return nil }
         if let winner = await raceByPriority(chains) {
+            let relay = PlexRelay.isRelayURL(winner) ? " relay" : ""
+            DiagLog.notice(.connection, "Connection chosen: \(DiagLog.describe(url: winner))\(relay) of \(sortedConnections.count) candidates")
             return winner
         }
 
@@ -364,6 +367,7 @@ class PlexAuthManager: ObservableObject {
             let net = conn.uri.contains(".plex.direct") ? "plex.direct" : "raw"
             return "\(conn.protocolType)/\(kind)/\(net):\(conn.port)"
         }.joined(separator: ",")
+        DiagLog.error(.connection, "All connection candidates failed: \(candidateSummary)")
         SentryBridge.log(.warn, "All server connection candidates failed", attributes: [
             "component": "plex_auth",
             "operation": "server_connect_failed",
@@ -411,13 +415,11 @@ class PlexAuthManager: ObservableObject {
         if await testConnection(connection.uri, expecting: expectedID) != nil {
             return connection.uri
         }
-        print("🔐 PlexAuthManager: ❌ Connection failed: \(connection.uri)")
 
         let host = connection.IPv6 ? "[\(connection.address)]" : connection.address
         guard connection.protocolType == "http" else {
             guard connection.local else { return nil }
             let rawHTTP = "http://\(host):\(connection.port)"
-            print("🔐 PlexAuthManager: Trying raw-address fallback: \(rawHTTP)")
             return await testConnection(rawHTTP, expecting: expectedID) != nil ? rawHTTP : nil
         }
 
@@ -434,7 +436,6 @@ class PlexAuthManager: ObservableObject {
         if await testConnection(plexDirectURI, expecting: expectedID) != nil {
             return plexDirectURI
         }
-        print("🔐 PlexAuthManager: ❌ plex.direct failed: \(plexDirectURI)")
         return nil
     }
 
@@ -447,7 +448,6 @@ class PlexAuthManager: ObservableObject {
     private func probeRawHTTPS(_ connection: PlexConnection, expecting expectedID: String?) async -> String? {
         let host = connection.IPv6 ? "[\(connection.address)]" : connection.address
         let rawHTTPS = "https://\(host):\(connection.port)"
-        print("🔐 PlexAuthManager: Trying raw-address fallback: \(rawHTTPS)")
         return await testConnection(rawHTTPS, expecting: expectedID) != nil ? rawHTTPS : nil
     }
 
@@ -695,6 +695,7 @@ class PlexAuthManager: ObservableObject {
 
     /// Sign out and clear credentials
     func signOut() {
+        DiagLog.notice(.auth, "Signed out of Plex")
         pollingTask?.cancel()
         pollingTask = nil
 
@@ -791,7 +792,8 @@ class PlexAuthManager: ObservableObject {
     }
 
     /// The profile in use was entered with a PIN, so the next launch starts locked.
-    var relocksOnLaunch: Bool { storedContent == .withheld }
+    /// Signed out of Plex is not a lock: `storedContent` reads `.withheld` with no account token.
+    var relocksOnLaunch: Bool { authToken != nil && storedContent == .withheld }
 
     /// The account token for account-level content (Watchlist, favourite channels),
     /// only while the account itself is the profile in use.
@@ -850,6 +852,7 @@ class PlexAuthManager: ObservableObject {
     /// Locks content until the saved profile is entered through plex.tv. The
     /// account's token is never the fallback.
     func withholdContent() {
+        DiagLog.notice(.profile, "Content withheld until a profile is entered")
         selectedServerToken = nil
         guard let authToken,
               let userID = userDefaults.object(forKey: PlexProfileSession.savedUserIDKey) as? Int else { return }
@@ -931,7 +934,7 @@ class PlexAuthManager: ObservableObject {
                     state = .selectingServer(servers: servers)
                 }
             } catch {
-                print("🔐 PlexAuthManager: Failed to fetch servers: \(error)")
+                DiagLog.error(.connection, "Server discovery failed: \(DiagLog.describe(error))")
                 isConnected = false
                 connectionError = "Unable to reach Plex. Check your network connection."
 
@@ -954,15 +957,20 @@ class PlexAuthManager: ObservableObject {
            await serverAcceptsToken(selectedServerToken, at: currentURL) {
             // Builds before the identity check saved no id; the URL they trusted names it.
             if savedID == nil { userDefaults.set(identity, forKey: serverMachineIDKey) }
+            DiagLog.notice(.connection, "Current connection verified: \(DiagLog.describe(url: currentURL))")
             isConnected = true
             connectionError = nil
+            // A remote URL won away from home still answers there through the router's slow hairpin.
+            if ServerLocation.classify(currentURL) == .remote {
+                await upgradeConnectionIfBetterExists(from: currentURL)
+            }
 
             // Fetch home users for profile switching (if not already loaded)
             if !PlexUserProfileManager.shared.hasLoadedProfiles {
                 await PlexUserProfileManager.shared.fetchHomeUsers()
             }
         } else {
-            print("🔐 PlexAuthManager: ❌ Current connection failed")
+            DiagLog.error(.connection, "Current connection failed: \(DiagLog.describe(url: currentURL)), re-selecting")
             isConnected = false
             connectionError = "Cannot connect to Plex server"
 
@@ -988,13 +996,16 @@ class PlexAuthManager: ObservableObject {
                         // Same server at a new address: a profile's own token still holds.
                         await adoptAccountServerToken(currentServer.accessToken ?? authToken, serverChanged: false)
 
+                        DiagLog.notice(.connection, "Re-selected connection: \(DiagLog.describe(url: workingURL))")
                         isConnected = true
                         connectionError = nil
                         state = .authenticated
                     }
+                } else {
+                    DiagLog.error(.connection, "Saved server not in the account's server list (\(servers.count) servers)")
                 }
             } catch {
-                print("🔐 PlexAuthManager: Failed to fetch servers for re-selection: \(error)")
+                DiagLog.error(.connection, "Server discovery for re-selection failed: \(DiagLog.describe(error))")
                 // Keep existing credentials - just mark as not connected
                 // User can still see cached content
 
@@ -1045,6 +1056,7 @@ class PlexAuthManager: ObservableObject {
     }
 
     private func handleSuccessfulAuth(token: String) async {
+        DiagLog.notice(.auth, "Plex sign-in succeeded")
         authToken = token
         KeychainHelper.set(token, forKey: keychainTokenKey)
         // Mark this install as having a persisted session so a later reinstall

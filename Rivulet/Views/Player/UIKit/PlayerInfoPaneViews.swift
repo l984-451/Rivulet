@@ -13,18 +13,13 @@
 
 import UIKit
 
-/// AVKit's control glass: clear glass plus the fitted wash the tool buttons use.
+/// AVKit's control glass, as the tool buttons use it.
 func makePaneGlass(cornerRadius: CGFloat) -> UIView {
-    let glass = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+    let glass = UIVisualEffectView(effect: TransportControlButton.glassEffect())
     glass.isUserInteractionEnabled = false
     glass.clipsToBounds = true
     glass.layer.cornerRadius = cornerRadius
     glass.layer.cornerCurve = .continuous
-    let wash = UIView()
-    wash.backgroundColor = TransportControlButton.restingWash
-    wash.frame = glass.bounds
-    wash.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    glass.contentView.addSubview(wash)
     return glass
 }
 
@@ -434,6 +429,8 @@ final class PlayerCardRowView: UIView {
 
     struct Card {
         var imageURL: URL?
+        /// Fallback image when there is no URL; the row loads these one at a time.
+        var stillLoader: (() async -> UIImage?)? = nil
         /// "Watching", "Episode 4"... above the title.
         var eyebrow: String?
         var title: String
@@ -446,6 +443,8 @@ final class PlayerCardRowView: UIView {
 
     private let scrollView = UIScrollView()
     private var cells: [PlayerThumbnailCardView] = []
+    /// The tail of the serial still queue.
+    private var stillTask: Task<Void, Never>?
 
     init(cards: [Card]) {
         super.init(frame: .zero)
@@ -471,21 +470,39 @@ final class PlayerCardRowView: UIView {
             stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             stack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
         ])
+        // A card with no image, or whose image fails (Plex lists chapter images it never
+        // generated), takes its fallback still. One at a time: the engine decodes serially.
+        for (cell, card) in zip(cells, cards) {
+            guard let load = card.stillLoader else { continue }
+            let enqueue = { [weak self, weak cell] in
+                guard let self, let cell else { return }
+                let previous = self.stillTask
+                self.stillTask = Task { [weak self, weak cell] in
+                    await previous?.value
+                    // A closed pane's queued stills are skipped, not decoded.
+                    guard self != nil, cell != nil, let image = await load() else { return }
+                    cell?.setImage(image)
+                }
+            }
+            if card.imageURL == nil { enqueue() } else { cell.onImageFailed = enqueue }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
 
     /// Down from the pills lands on the current item, as AVKit's chapters do.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         (cells.first(where: \.isCurrent) ?? cells.first).map { [$0] } ?? []
     }
 
-    /// Shows the current item before the pane appears.
+    /// Puts the current item in the second slot before the pane appears, the
+    /// focus engine's resting place for it, so entering the row doesn't scroll.
     func scrollToCurrent() {
         layoutIfNeeded()
         guard let current = cells.first(where: \.isCurrent) else { return }
         let maxX = max(0, scrollView.contentSize.width - scrollView.bounds.width)
-        scrollView.contentOffset.x = min(maxX, max(0, current.frame.minX))
+        scrollView.contentOffset.x = min(maxX, max(0, current.frame.minX - Self.cardSize.width - Self.gap))
     }
 }
 
@@ -494,6 +511,7 @@ final class PlayerCardRowView: UIView {
 private final class PlayerThumbnailCardView: UIControl {
 
     let isCurrent: Bool
+    var onImageFailed: (() -> Void)?
     private let onSelect: () -> Void
     private let imageView = UIImageView()
     private var imageTask: Task<Void, Never>?
@@ -563,7 +581,7 @@ private final class PlayerThumbnailCardView: UIControl {
             imageTask = Task { [weak self] in
                 let image = await ImageCacheManager.shared.image(for: url)
                 guard let self, !Task.isCancelled else { return }
-                self.imageView.image = image
+                if let image { self.imageView.image = image } else { self.onImageFailed?() }
             }
         }
     }
@@ -571,6 +589,8 @@ private final class PlayerThumbnailCardView: UIControl {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     deinit { imageTask?.cancel() }
+
+    func setImage(_ image: UIImage) { imageView.image = image }
 
     override var canBecomeFocused: Bool { true }
 
@@ -620,22 +640,26 @@ private final class CardBandGradientView: UIView {
 enum DolbyVisionPlayback: String, Equatable {
     case dualLayer = "Dual Layer (FEL)"
     case convertedTo81 = "Profile 8.1 (converted)"
+    case convertedTo81Unconfirmed = "Profile 8.1 (converted), TV not confirmed"
     case dolbyVision = "Dolby Vision"
+    case dolbyVisionUnconfirmed = "Dolby Vision, TV not confirmed"
     case hdr10BaseLayer = "HDR10 Base Layer"
     case sdr = "SDR"
 
     /// A Profile 7 source shown as Dolby Vision without the 8.1 rewrite is on
     /// the engine's dual-layer route, which only FEL takes.
     /// videoFormat read SDR on the dual-layer route in #362; an unconverted P7 on the software route is it.
+    /// The engine reads SDR until it proves the panel is in HDR, which a TV already in HDR may never
+    /// prove (#438), so Dolby Vision sent to a Dolby Vision TV is "not confirmed", never SDR.
     init?(sourceProfile: Int?, convertedTo81: Bool, onSoftwareRoute: Bool = false,
-          presentsDolbyVision: Bool, presentsHDR: Bool) {
+          presentsDolbyVision: Bool, presentsHDR: Bool, panelSupportsDolbyVision: Bool = false) {
         guard let sourceProfile else { return nil }
-        if convertedTo81 {
-            self = .convertedTo81
-        } else if sourceProfile == 7, onSoftwareRoute {
+        if sourceProfile == 7, !convertedTo81, onSoftwareRoute {
             self = .dualLayer
         } else if presentsDolbyVision {
-            self = sourceProfile == 7 ? .dualLayer : .dolbyVision
+            self = convertedTo81 ? .convertedTo81 : sourceProfile == 7 ? .dualLayer : .dolbyVision
+        } else if panelSupportsDolbyVision {
+            self = convertedTo81 ? .convertedTo81Unconfirmed : .dolbyVisionUnconfirmed
         } else {
             self = presentsHDR ? .hdr10BaseLayer : .sdr
         }
@@ -885,7 +909,9 @@ final class PlayerDetailsPaneView: UIView {
 
     static func mediaSections(metadata: PlexMetadata, modes: StreamingModeInfo,
                               dolbyVision: DolbyVisionPlayback? = nil,
-                              enhancementLayer: DolbyVisionEnhancementLayer? = nil) -> [Section] {
+                              enhancementLayer: DolbyVisionEnhancementLayer? = nil,
+                              enhanceDialogue: String? = nil,
+                              upscale: String? = nil) -> [Section] {
         let media = metadata.Media?.first
         let streams = media?.Part?.first?.Stream ?? []
         var sections: [Section] = []
@@ -915,6 +941,7 @@ final class PlayerDetailsPaneView: UIView {
                 video.append(Row(label: "Dimensions", value: "\(width) × \(height)"))
             }
             if let frameRate = media.videoFrameRate { video.append(Row(label: "Frame Rate", value: frameRate)) }
+            if let upscale { video.append(Row(label: "Upscaling", value: upscale)) }
             // Plex reports kbps; the formatter takes bits/sec.
             if let bitrate = media.bitrate {
                 video.append(Row(label: "Bitrate", value: PlayerInfoSheetStyle.bitrate(bitrate * 1000)))
@@ -925,12 +952,8 @@ final class PlayerDetailsPaneView: UIView {
         let audio = streams.filter { $0.isAudio }
         if !audio.isEmpty {
             var rows = [Row(label: "Mode", value: modes.audio.rawValue)]
-            for (index, stream) in audio.enumerated() {
-                var detail = stream.displayTitle ?? stream.extendedDisplayTitle ?? "Track \(index + 1)"
-                if let bitrate = stream.bitrate, bitrate > 0 { detail += " · \(PlayerInfoSheetStyle.bitrate(bitrate * 1000))" }
-                if let sampleRate = stream.samplingRate { detail += " · \(sampleRate / 1000) kHz" }
-                rows.append(Row(label: nil, value: detail))
-            }
+            if let enhanceDialogue { rows.append(Row(label: "Enhance Dialogue", value: enhanceDialogue)) }
+            for (index, stream) in audio.enumerated() { rows.append(audioRow(stream, index: index)) }
             sections.append(Section(title: "AUDIO", rows: rows))
         }
 
@@ -945,6 +968,16 @@ final class PlayerDetailsPaneView: UIView {
             if !rows.isEmpty { sections.append(Section(title: "FILE", rows: rows)) }
         }
         return sections
+    }
+
+    /// "English: TrueHD 7.1 Atmos · 4.5 Mbps": parsed fields only, never the track's title.
+    static func audioRow(_ stream: PlexStream, index: Int) -> Row {
+        let track = MediaTrack(from: stream)
+        var parts = [stream.codec == nil ? nil : track.audioFormat, track.audioRole]
+        if let bitrate = stream.bitrate, bitrate > 0 { parts.append(PlayerInfoSheetStyle.bitrate(bitrate * 1000)) }
+        let value = parts.compactMap { $0 }.joined(separator: " · ")
+        return Row(label: stream.language ?? "Track \(index + 1)",
+                   value: value.isEmpty ? "Unknown" : value)
     }
 
     private typealias StatRow = (title: String, value: (AetherAdvancedStats) -> String?)

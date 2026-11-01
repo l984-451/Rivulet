@@ -1,13 +1,13 @@
 {
-  "originHash" : "81c05ff5b286ae2a06fe415b7b167a19f667a47f4d854912c4caa76ec5f49be9",
+  "originHash" : "2a38af28121ae17dbe28626d46e11c54dbfb9d4719fc126957230ea1159753f1",
   "pins" : [
     {
       "identity" : "aetherengine",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/superuser404notfound/AetherEngine",
       "state" : {
-        "revision" : "a1a70cd63c1fef89cffcf0e8110456807d0fab05",
-        "version" : "7.47.0"
+        "revision" : "4a82484b256deb70a2ae80d6923707d1fe54c6e7",
+        "version" : "7.53.0"
       }
     },
     {
@@ -15,8 +15,16 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/superuser404notfound/FFmpegBuild",
       "state" : {
-        "revision" : "3b398c8f6340fe5fb4a7cb9a2a211a16677171e0",
-        "version" : "3.9.0"
+        "revision" : "6b5d084664234649c258248d16111dbac64684be",
+        "version" : "3.11.1"
+      }
+    },
+    {
+      "identity" : "fluidaudio",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidInference/FluidAudio",
+      "state" : {
+        "revision" : "1b0ed50d686873128a4129b3510ce3914c849bab"
       }
     },
     {
@@ -42,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/superuser404notfound/LibTrueHD",
       "state" : {
-        "revision" : "aebd5ffe1046dadbea833ce87a75d00fd8b1edd1",
-        "version" : "3.0.0"
+        "revision" : "73bee84d7ac7b8619db570e36490b92761fe91a6",
+        "version" : "3.1.0"
       }
     },
     {

@@ -39,6 +39,10 @@ actor IPTVProvider: LiveTVProvider {
 
     let dispatcharrService: DispatcharrService?
     let xtreamService: XtreamService?
+    let tvheadendService: TvheadendService?
+    /// Whether the Tvheadend login may record, checked when the source was added;
+    /// nil when unknown.
+    nonisolated let tvheadendCanRecord: Bool?
 
     /// A guide named in the playlist's own header, used when none was entered.
     private var playlistGuideURL: URL?
@@ -48,6 +52,8 @@ actor IPTVProvider: LiveTVProvider {
     /// Each channel's tvg-id, tvg-name and name, for guide matching.
     private var guideCandidates: [String: [String]] = [:]
     private var cachedEPG: [String: [UnifiedProgram]] = [:]
+    /// The channels the cached guide was parsed for; it only holds theirs.
+    private var cachedEPGChannelIds: Set<String> = []
 
     /// Channel logos parsed from XMLTV `<channel><icon>`, keyed by unified
     /// channel id. Surfaced via `channelLogosFromEPG()` so the data store can
@@ -58,13 +64,18 @@ actor IPTVProvider: LiveTVProvider {
 
     // Cache duration
     private let channelCacheDuration: TimeInterval = 300  // 5 minutes
-    private let epgCacheDuration: TimeInterval = 3600     // 1 hour
+    // Feeds publish about daily; each refetch downloads and parses the whole file.
+    private let epgCacheDuration: TimeInterval = 6 * 3600
 
     // Dispatcharr DVR lookups (IPTVProvider+DVR.swift). The API knows
     // channels by integer id and guide entries by the EPG source's tvg_id,
     // neither of which the playlist carries.
     var dvrChannelIndex: DispatcharrChannelIndex?
     var dvrEPGData: [Int: DispatcharrEPGData] = [:]
+    /// Tvheadend series links by event id, from the last guide fetch.
+    var tvheadendSeriesLinks: [Int: String] = [:]
+    /// The span the cached Tvheadend guide was fetched for.
+    private var tvheadendGuideRange: ClosedRange<Date>?
 
     // MARK: - Initialization
 
@@ -92,6 +103,8 @@ actor IPTVProvider: LiveTVProvider {
         self.dispatcharrService = DispatcharrService(baseURL: cleanedURL, apiToken: apiToken,
                                                      channelProfile: profile)
         self.xtreamService = nil
+        self.tvheadendService = nil
+        self.tvheadendCanRecord = nil
         self.m3uURL = DispatcharrService.outputURL(base: cleanedURL, kind: "m3u",
                                                    channelProfile: profile)
         self.epgURL = DispatcharrService.outputURL(base: cleanedURL, kind: "epg",
@@ -108,6 +121,8 @@ actor IPTVProvider: LiveTVProvider {
         self.baseURL = nil
         self.dispatcharrService = nil
         self.xtreamService = nil
+        self.tvheadendService = nil
+        self.tvheadendCanRecord = nil
         self.m3uURL = m3uURL
         self.epgURL = epgURL
     }
@@ -123,11 +138,32 @@ actor IPTVProvider: LiveTVProvider {
         self.baseURL = account.server
         self.dispatcharrService = nil
         self.xtreamService = service
+        self.tvheadendService = nil
+        self.tvheadendCanRecord = nil
         self.m3uURL = nil
         self.epgURL = service.guideURL
     }
 
     nonisolated var xtreamAccount: XtreamAccount? { xtreamService?.account }
+
+    /// Tvheadend: channels and guide from its JSON API, streams from the server.
+    init(tvheadend account: TvheadendAccount, sourceId: String, displayName: String, canRecord: Bool? = nil,
+         session: URLSession? = nil) {
+        self.sourceType = .tvheadend
+        self.sourceId = sourceId
+        self.displayName = displayName
+        self.apiToken = nil
+        self.channelProfile = nil
+        self.baseURL = account.server
+        self.dispatcharrService = nil
+        self.xtreamService = nil
+        self.tvheadendService = TvheadendService(account: account, session: session)
+        self.tvheadendCanRecord = canRecord
+        self.m3uURL = nil
+        self.epgURL = nil
+    }
+
+    nonisolated var tvheadendAccount: TvheadendAccount? { tvheadendService?.account }
 
     // MARK: - LiveTVProvider Protocol
 
@@ -135,6 +171,9 @@ actor IPTVProvider: LiveTVProvider {
         get async {
             if let xtreamService {
                 return (try? await xtreamService.verify()) != nil
+            }
+            if let tvheadendService {
+                return (try? await tvheadendService.verify()) != nil
             }
             // Check if we can reach the M3U URL
             guard let url = m3uURL else { return false }
@@ -164,7 +203,7 @@ actor IPTVProvider: LiveTVProvider {
     }
 
     func refreshChannels() async throws -> [UnifiedChannel] {
-        guard let url = m3uURL ?? xtreamService?.account.server else {
+        guard let url = m3uURL ?? xtreamService?.account.server ?? tvheadendService?.account.server else {
             throw LiveTVProviderError.sourceNotConfigured
         }
 
@@ -178,6 +217,13 @@ actor IPTVProvider: LiveTVProvider {
                 let info = try await xtreamService.verify()
                 parsedChannels = try await xtreamService.fetchChannels(
                     format: XtreamService.streamFormat(allowed: info.allowedFormats))
+            } else if let tvheadendService {
+                parsedChannels = try await tvheadendService.fetchChannels().map { channel in
+                    M3UParser.ParsedChannel(tvgId: channel.uuid, tvgName: nil, tvgLogo: channel.iconURL?.absoluteString,
+                                            groupTitle: channel.group, channelNumber: channel.number, name: channel.name,
+                                            streamURL: tvheadendService.streamURL(channelUUID: channel.uuid),
+                                            key: "tvh\(channel.uuid)")
+                }
             } else {
                 parsedChannels = try await parser.parse(from: url)
                 playlistGuideURL = await parser.headerGuideURL
@@ -185,7 +231,7 @@ actor IPTVProvider: LiveTVProvider {
         } catch {
             // Only capture unexpected errors to Sentry. HTTP errors mean a dead
             // user-configured URL; transport errors are the provider being down.
-            let isHTTPError = (error is M3UParseError && "\(error)".contains("httpError")) || error is XtreamError
+            let isHTTPError = (error is M3UParseError && "\(error)".contains("httpError")) || error is XtreamError || error is TvheadendError
             if !isHTTPError && shouldCaptureEPGError(error) {
                 let capturedSourceType = self.sourceType
                 let capturedDisplayName = self.displayName
@@ -224,6 +270,9 @@ actor IPTVProvider: LiveTVProvider {
         startDate: Date,
         endDate: Date
     ) async throws -> [String: [UnifiedProgram]] {
+        if let tvheadendService {
+            return try await tvheadendEPG(tvheadendService, for: channels, startDate: startDate, endDate: endDate, now: Date())
+        }
         guard let epgURL = epgURL ?? playlistGuideURL else {
             throw LiveTVProviderError.epgNotAvailable
         }
@@ -231,18 +280,23 @@ actor IPTVProvider: LiveTVProvider {
         // Return cached if still valid
         if let lastFetch = lastEPGFetch,
            Date().timeIntervalSince(lastFetch) < epgCacheDuration,
-           !cachedEPG.isEmpty {
+           !cachedEPG.isEmpty,
+           channels.allSatisfy({ cachedEPGChannelIds.contains($0.id) }) {
             return filterEPG(cachedEPG, channels: channels, startDate: startDate, endDate: endDate)
         }
 
+        let candidates = Dictionary(channels.map { channel in
+            (channel.id, guideCandidates[channel.id] ?? [channel.tvgId, channel.name].compactMap { $0 })
+        }, uniquingKeysWith: { first, _ in first })
+        let filter = XMLTVParser.GuideFilter(candidates: candidates, notBefore: min(startDate, Date()).addingTimeInterval(-3600))
         let xmltvParser = XMLTVParser()
         let parseResult: XMLTVParser.ParseResult
 
         do {
             if let dispatcharr = dispatcharrService {
-                parseResult = try await dispatcharr.fetchParsedEPG()
+                parseResult = try await dispatcharr.fetchParsedEPG(filter: filter)
             } else {
-                parseResult = try await xmltvParser.parse(from: epgURL)
+                parseResult = try await xmltvParser.parse(from: epgURL, filter: filter)
             }
         } catch {
             // Only capture unexpected EPG errors. The EPG URL is user-supplied
@@ -261,9 +315,6 @@ actor IPTVProvider: LiveTVProvider {
             throw error
         }
 
-        let candidates = Dictionary(channels.map { channel in
-            (channel.id, guideCandidates[channel.id] ?? [channel.tvgId, channel.name].compactMap { $0 })
-        }, uniquingKeysWith: { first, _ in first })
         var unifiedEPG: [String: [UnifiedProgram]] = [:]
         // XMLTV `<channel><icon>` logos, for channels whose playlist had no `tvg-logo`.
         var channelLogos: [String: URL] = [:]
@@ -278,6 +329,7 @@ actor IPTVProvider: LiveTVProvider {
 
         // Update cache
         cachedEPG = unifiedEPG
+        cachedEPGChannelIds = Set(channels.map(\.id))
         cachedChannelLogos = channelLogos
         lastEPGFetch = Date()
 
@@ -301,6 +353,60 @@ actor IPTVProvider: LiveTVProvider {
     nonisolated func buildStreamURL(for channel: UnifiedChannel) -> URL? {
         // For IPTV, the stream URL is already in the channel
         return channel.streamURL
+    }
+
+    /// A signed-in Tvheadend stream needs a ticket, and tickets expire after five
+    /// minutes, so each play fetches one.
+    func resolveStreamURL(for channel: UnifiedChannel) async throws -> URL? {
+        guard let tvheadendService, tvheadendService.account.isSignedIn, let uuid = channel.tvgId else {
+            return channel.streamURL
+        }
+        return try await tvheadendService.ticketedStreamURL(channelUUID: uuid)
+    }
+
+    /// `fetchEPG` with the clock passed in, for tests.
+    func fetchEPG(for channels: [UnifiedChannel], startDate: Date, endDate: Date,
+                  now: Date) async throws -> [String: [UnifiedProgram]] {
+        guard let tvheadendService else { return try await fetchEPG(for: channels, startDate: startDate, endDate: endDate) }
+        return try await tvheadendEPG(tvheadendService, for: channels, startDate: startDate, endDate: endDate, now: now)
+    }
+
+    /// What a Tvheadend guide fetch asks for: the request, from an hour back, and
+    /// at least a day ahead so short requests share one fetch.
+    nonisolated static func tvheadendGuideWindow(start: Date, end: Date, now: Date) -> (from: Date, to: Date) {
+        (min(start, now).addingTimeInterval(-3600), max(end, now.addingTimeInterval(24 * 3600)))
+    }
+
+    /// The guide from Tvheadend's event list, matched to channels by uuid. Each
+    /// programme carries its event id, which recording needs.
+    private func tvheadendEPG(_ service: TvheadendService, for channels: [UnifiedChannel],
+                              startDate: Date, endDate: Date, now: Date) async throws -> [String: [UnifiedProgram]] {
+        if let lastFetch = lastEPGFetch, now.timeIntervalSince(lastFetch) < epgCacheDuration, !cachedEPG.isEmpty,
+           let range = tvheadendGuideRange, range.contains(startDate), range.contains(endDate),
+           channels.allSatisfy({ cachedEPGChannelIds.contains($0.id) }) {
+            return filterEPG(cachedEPG, channels: channels, startDate: startDate, endDate: endDate)
+        }
+        let window = Self.tvheadendGuideWindow(start: startDate, end: endDate, now: now)
+        let channelIds = Dictionary(channels.compactMap { channel in channel.tvgId.map { ($0, channel.id) } },
+                                    uniquingKeysWith: { first, _ in first })
+        var guide: [String: [UnifiedProgram]] = [:]
+        var seriesLinks: [Int: String] = [:]
+        for event in try await service.fetchEvents(from: window.from, to: window.to) {
+            guard let channelId = channelIds[event.channelUUID] else { continue }
+            seriesLinks[event.eventId] = event.seriesLink
+            guide[channelId, default: []].append(UnifiedProgram(
+                id: "\(channelId):\(Int(event.start.timeIntervalSince1970))", channelId: channelId,
+                title: event.title, subtitle: event.subtitle, description: event.description,
+                startTime: event.start, endTime: event.stop, iconURL: event.imageURL, landscapeURL: event.imageURL,
+                episodeNumber: event.episode, isNew: event.isNew, sourceGuid: String(event.eventId), year: event.year))
+        }
+        for key in guide.keys { guide[key]?.sort { $0.startTime < $1.startTime } }
+        cachedEPG = guide
+        tvheadendSeriesLinks = seriesLinks
+        tvheadendGuideRange = window.from...window.to
+        cachedEPGChannelIds = Set(channels.map(\.id))
+        lastEPGFetch = now
+        return filterEPG(guide, channels: channels, startDate: startDate, endDate: endDate)
     }
 
     // MARK: - Private Methods

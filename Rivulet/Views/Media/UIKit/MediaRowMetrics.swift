@@ -100,6 +100,12 @@ enum MediaRowMetrics {
     static let cwWidth = continueWatching.frame.width
     static let cwHeight = continueWatching.frame.height
 
+    /// Year in Review banner: one card from margin to margin, 4:1.
+    static let yearInReview: Tile = {
+        let width = gridWidth(columns: 1)
+        return Tile(art: CGSize(width: width, height: (width / 4).rounded()), lockup: .card)
+    }()
+
     /// Playlists grid card: 16:9 art, three across.
     static let playlistFullCount = 3
     static let playlist: Tile = {

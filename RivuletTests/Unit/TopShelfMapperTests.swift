@@ -50,6 +50,21 @@ final class TopShelfMapperTests: XCTestCase {
         XCTAssertTrue(items.contains { $0.ratingKey == "m1" }, "Movie must not be dropped (regression #194)")
     }
 
+    func testRecentlyAddedNewestFirstSkipsWatchedAndOtherTypes() {
+        var old = meta(ratingKey: "old", type: "movie", title: "Old", thumb: "/o")
+        old.addedAt = 100
+        var new = meta(ratingKey: "new", type: "movie", title: "New", thumb: "/n")
+        new.addedAt = 300
+        var seen = meta(ratingKey: "seen", type: "movie", title: "Seen", thumb: "/s")
+        seen.addedAt = 400
+        seen.viewCount = 1
+        var album = meta(ratingKey: "alb", type: "album", title: "Album", thumb: "/a")
+        album.addedAt = 500
+        let items = TopShelfMapper.recentlyAddedItems(from: [old, seen, new, album], serverURL: server, token: token, limit: 5)
+        XCTAssertEqual(items.map(\.ratingKey), ["new", "old"])
+        XCTAssertEqual(items.first?.progress, 0)
+    }
+
     func testSortedByLastViewedDescending() {
         let input = [
             meta(ratingKey: "a", type: "movie", title: "A", thumb: "/a", lastViewedAt: 50),

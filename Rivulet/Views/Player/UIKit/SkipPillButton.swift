@@ -43,16 +43,11 @@ final class SkipPillButton: UIButton {
     private var fillGeneration = 0
 
     init() {
-        if #available(tvOS 26.0, *) {
-            effectView = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
-        } else {
-            effectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        }
+        effectView = UIVisualEffectView(effect: TransportControlButton.glassEffect())
         super.init(frame: .zero)
 
         effectView.isUserInteractionEnabled = false
         effectView.clipsToBounds = true
-        effectView.backgroundColor = UIColor.white.withAlphaComponent(0.1)
         insertSubview(effectView, at: 0)
         effectView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -177,7 +172,7 @@ final class SkipPillButton: UIButton {
         coordinator.addCoordinatedAnimations({
             self.transform = isFocused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
             self.effectView.backgroundColor = isFocused
-                ? UIColor.white.withAlphaComponent(0.9) : UIColor.white.withAlphaComponent(0.1)
+                ? UIColor.white.withAlphaComponent(0.9) : .clear
             self.setTitleColor(isFocused ? .black : .white, for: .normal)
             // Keep the sweep visible on either background: a light overlay on
             // the resting glass, a dark one on the white focused fill.

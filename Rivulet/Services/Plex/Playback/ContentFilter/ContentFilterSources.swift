@@ -19,13 +19,13 @@
 
 import Foundation
 
-/// A stretch of a title's subtitle file whose dialogue contains filterable
-/// language. Whether it mutes is decided at playback time against the user's
-/// settings, so a settings change never needs the file read again.
+/// One cue of a title's subtitle file. Whether it mutes is decided at
+/// playback time against the user's settings, so a settings change never
+/// needs the file read again.
 nonisolated struct LanguageWindow: Sendable, Equatable {
     let start: TimeInterval
     let end: TimeInterval
-    let hits: LanguageHits
+    let text: String
 
     func contains(_ time: TimeInterval) -> Bool {
         time >= start && time < end
@@ -257,13 +257,14 @@ nonisolated enum ContentFilterSources {
         }.value
     }
 
-    /// Every cue in a subtitle file that contains filterable language; nil when no cue could be read.
+    /// Every cue in a subtitle file with dialogue; nil when no cue could be read.
+    /// Kept whole, not just the ones the dictionary hits, so the user's own
+    /// words can be matched against it later.
     static func languageWindows(content: String, format: String) -> [LanguageWindow]? {
         guard let track = parseSubtitles(content, format: format), !track.cues.isEmpty else { return nil }
         return track.cues.compactMap { cue in
-            guard cue.endTime > cue.startTime else { return nil }
-            let hits = ProfanityDictionary.hits(in: cue.text)
-            return hits.isEmpty ? nil : LanguageWindow(start: cue.startTime, end: cue.endTime, hits: hits)
+            guard cue.endTime > cue.startTime, !cue.text.isEmpty else { return nil }
+            return LanguageWindow(start: cue.startTime, end: cue.endTime, text: cue.text)
         }
     }
 

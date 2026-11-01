@@ -28,6 +28,27 @@ final class GuideFeedQuirksTests: XCTestCase {
         XCTAssertEqual(programs[0].stop, programs[1].start)
     }
 
+    func test_filterKeepsOnlyPlaylistChannelsFromNotBefore() async throws {
+        let xml = """
+        <tv>
+          <channel id="fox.us"><display-name>FOX 6</display-name></channel>
+          <channel id="other"><display-name>Elsewhere</display-name></channel>
+          <programme start="20260101100000 +0000" stop="20260101110000 +0000" channel="fox.us"><title>Past</title></programme>
+          <programme start="20260101120000 +0000" stop="20260101130000 +0000" channel="fox.us"><title>Now</title></programme>
+          <programme start="20260101120000 +0000" stop="20260101130000 +0000" channel="other"><title>Not ours</title></programme>
+          <programme start="20260101120000 +0000" stop="20260101130000 +0000" channel="byid"><title>By id</title></programme>
+        </tv>
+        """
+        let filter = XMLTVParser.GuideFilter(
+            candidates: ["u1": ["FOX 6"], "u2": ["BYID"]],
+            notBefore: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-01-01T11:30:00Z"))
+        )
+        let result = try await XMLTVParser().parse(data: Data(xml.utf8), filter: filter)
+        XCTAssertEqual(result.programs["fox.us"]?.map(\.title), ["Now"])
+        XCTAssertNil(result.programs["other"])
+        XCTAssertEqual(result.programs["byid"]?.map(\.title), ["By id"], "an id with no <channel> still matches")
+    }
+
     func test_colonOffset() async throws {
         let xml = """
         <tv><programme start="20260101200000 +08:00" stop="20260101210000 -05:30" channel="a"><title>T</title></programme></tv>

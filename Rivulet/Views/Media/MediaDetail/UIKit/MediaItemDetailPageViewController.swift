@@ -42,7 +42,11 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let belowFold = UIView()
     private let belowFoldTitle = UILabel()
     private let infoColumns = InfoColumnsView()
-    private var scrolledDown = false
+    /// 0 hero, 1 below-fold from the top, 2 scrolled on to the info columns (only with extras).
+    private var scrollStage = 0
+    private let extrasShelf = ExtrasShelfView(leading: PreviewCarouselGeometry.expandedChromeInset)
+    private var hasExtras = false
+    private var infoTopConstraint: NSLayoutConstraint!
 
     // Hero rows (async-filled ones start hidden so the stack doesn't reserve a gap).
     private let showTitleLabel = UILabel()
@@ -171,31 +175,49 @@ final class MediaItemDetailPageViewController: UIViewController {
         guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
             switch press.type {
-            case .downArrow where !scrolledDown:
-                setScrolledDown(true); return
-            case .upArrow where scrolledDown:
-                setScrolledDown(false); return
+            case .downArrow where scrollStage == 0:
+                setScrollStage(1); return
+            case .downArrow where scrollStage == 1 && hasExtras:
+                setScrollStage(2); return
+            case .upArrow where scrollStage > 0:
+                setScrollStage(scrollStage - 1); return
             default: break
             }
         }
         super.pressesBegan(presses, with: event)
     }
 
-    private func setScrolledDown(_ down: Bool) {
-        scrolledDown = down
+    private func setScrollStage(_ stage: Int) {
+        let wasHero = scrollStage == 0
+        scrollStage = stage
         view.layoutIfNeeded()
         let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
-        // Scroll so the below-fold's TOP aligns with the screen top (one
-        // viewport), making the light-top / dark-bottom split fill the screen.
-        let target = down ? min(view.bounds.height, maxY) : 0
+        // Stage 1 aligns the below-fold's TOP with the screen top (one viewport),
+        // making the light-top / dark-bottom split fill the screen.
+        let target = stage == 0 ? 0 : (stage == 1 ? min(view.bounds.height, maxY) : maxY)
+        // The extras row is a focus stop only once the page is scrolled to it.
+        if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
+        }
+        if hasExtras, wasHero != (stage == 0) {
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
         }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if scrollStage > 0, hasExtras, let card = extrasShelf.firstCard { return [card] }
         if let playButton { return [playButton] }
         return super.preferredFocusEnvironments
+    }
+
+    /// Up and Down leave the extras row by scrolling the page, never by focusing the hero above it.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if scrollStage > 0, extrasShelf.contains(context.previouslyFocusedView),
+           context.nextFocusedView?.isDescendant(of: view) == true,
+           !extrasShelf.contains(context.nextFocusedView) { return false }
+        return super.shouldUpdateFocus(in: context)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -304,6 +326,17 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
         belowFold.addSubview(infoColumns)
 
+        // Hidden until the detail says there are extras.
+        extrasShelf.translatesAutoresizingMaskIntoConstraints = false
+        extrasShelf.isHidden = true
+        extrasShelf.alpha = 0
+        extrasShelf.onPlay = { [weak self] trailer in
+            guard let self else { return }
+            ExtraPlayer.play(trailer, from: self)
+        }
+        belowFold.addSubview(extrasShelf)
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56)
+
         let inset = PreviewCarouselGeometry.expandedChromeInset
         NSLayoutConstraint.activate([
             belowFold.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor),
@@ -333,7 +366,10 @@ final class MediaItemDetailPageViewController: UIViewController {
             belowFoldTitle.leadingAnchor.constraint(greaterThanOrEqualTo: belowFold.leadingAnchor, constant: inset),
 
             // Columns in the bottom (dark) half.
-            infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56),
+            infoTopConstraint,
+            extrasShelf.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 24),
+            extrasShelf.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor),
+            extrasShelf.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor),
             infoColumns.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor, constant: inset),
             infoColumns.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor, constant: -inset),
             infoColumns.bottomAnchor.constraint(lessThanOrEqualTo: belowFold.bottomAnchor, constant: -80),
@@ -345,44 +381,17 @@ final class MediaItemDetailPageViewController: UIViewController {
         // route — the primary action is the Watchlist toggle, and the
         // watched/watchlist circles are dropped (no provider state).
         if item.isMetadataOnly { return makeMetadataOnlyActionRow() }
-        let pill = FocusableActionButton()
-        pill.translatesAutoresizingMaskIntoConstraints = false
-        pill.layer.cornerRadius = HeroPillButton.buttonHeight / 2
-        pill.setContentHuggingPriority(.required, for: .horizontal)
-        pill.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        let icon = UIImageView(image: UIImage(systemName: "play.fill"))
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.tintColor = .white
-        icon.contentMode = .scaleAspectFit
-        let title = UILabel()
-        title.translatesAutoresizingMaskIntoConstraints = false
-        title.font = HeroPillButton.titleFont
-        title.textColor = .white
-        title.text = playPillTitle
-        pill.addSubview(icon)
-        pill.addSubview(title)
-        NSLayoutConstraint.activate([
-            pill.heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
-            icon.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: HeroPillButton.sidePadding),
-            icon.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 24),
-            icon.heightAnchor.constraint(equalToConstant: 24),
-            title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: HeroPillButton.iconGap),
-            title.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -HeroPillButton.sidePadding),
-            title.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-        ])
-        pill.invertOnFocus = [icon, title]
+        let (pill, title, _) = FocusableActionButton.pill(title: playPillTitle, systemImage: "play.fill")
         pill.onPrimaryAction = { [weak self] in guard let self else { return }; self.onPlay(self.item, nil) }
         playButton = pill
         playTitleLabel = title
 
         // Match the carousel chrome: Watched = checkmark, Watchlist = plus.
-        let watched = circleButton(systemImage: isWatched ? "checkmark.circle.fill" : "checkmark")
+        let watched = FocusableActionButton.circle(systemImage: isWatched ? "checkmark.circle.fill" : "checkmark")
         watchedButton = watched
         watched.onPrimaryAction = { [weak self] in self?.toggleWatched() }
 
-        let watchlist = circleButton(systemImage: "plus")
+        let watchlist = FocusableActionButton.circle(systemImage: "plus")
         watchlistButton = watchlist
         watchlist.onPrimaryAction = { [weak self] in self?.toggleWatchlist() }
         let ref = item.ref
@@ -397,7 +406,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         // An episode's Watched acts on the episode alone; the whole show is
         // marked from the show's own page, which this opens.
         if item.kind == .episode, let showRef, !showRef.itemID.isEmpty {
-            let goToShow = circleButton(systemImage: "tv")
+            let goToShow = FocusableActionButton.circle(systemImage: "tv")
             goToShow.onPrimaryAction = { [weak self] in
                 guard let self else { return }
                 PreviewCarouselViewController.openShowDetail(showRef, show: self.show, from: self)
@@ -411,34 +420,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     private func makeMetadataOnlyActionRow() -> UIView {
-        let pill = FocusableActionButton()
-        pill.translatesAutoresizingMaskIntoConstraints = false
-        pill.layer.cornerRadius = HeroPillButton.buttonHeight / 2
-        pill.setContentHuggingPriority(.required, for: .horizontal)
-        pill.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        let icon = UIImageView()
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.tintColor = .white
-        icon.contentMode = .scaleAspectFit
-        let title = UILabel()
-        title.translatesAutoresizingMaskIntoConstraints = false
-        title.font = HeroPillButton.titleFont
-        title.textColor = .white
-        title.text = "Watchlist"
-        pill.addSubview(icon)
-        pill.addSubview(title)
-        NSLayoutConstraint.activate([
-            pill.heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
-            icon.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: HeroPillButton.sidePadding),
-            icon.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 24),
-            icon.heightAnchor.constraint(equalToConstant: 24),
-            title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: HeroPillButton.iconGap),
-            title.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -HeroPillButton.sidePadding),
-            title.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-        ])
-        pill.invertOnFocus = [icon, title]
+        let (pill, _, icon) = FocusableActionButton.pill(title: "Watchlist", systemImage: nil)
 
         if let tmdbID = item.tmdbID {
             let guid = "tmdb://\(tmdbID)"
@@ -478,27 +460,6 @@ final class MediaItemDetailPageViewController: UIViewController {
         row.spacing = HeroPillButton.rowGap
         row.alignment = .center
         return row
-    }
-
-    private func circleButton(systemImage: String) -> FocusableActionButton {
-        let b = FocusableActionButton()
-        b.translatesAutoresizingMaskIntoConstraints = false
-        b.layer.cornerRadius = HeroPillButton.buttonHeight / 2
-        let icon = UIImageView(image: UIImage(systemName: systemImage))
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.tintColor = .white
-        icon.contentMode = .scaleAspectFit
-        b.addSubview(icon)
-        NSLayoutConstraint.activate([
-            b.widthAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
-            b.heightAnchor.constraint(equalToConstant: HeroPillButton.buttonHeight),
-            icon.centerXAnchor.constraint(equalTo: b.centerXAnchor),
-            icon.centerYAnchor.constraint(equalTo: b.centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 30),
-            icon.heightAnchor.constraint(equalToConstant: 30),
-        ])
-        b.invertOnFocus = [icon]
-        return b
     }
 
     // MARK: - Data
@@ -564,6 +525,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         applyWatchState(from: detail.item)
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
+        showExtras(detail)
         // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
         // parenthetical channel-layout noise ("5.1(side)" → "5.1").
         let source = detail.primarySource
@@ -581,12 +543,27 @@ final class MediaItemDetailPageViewController: UIViewController {
         addVersionsButton(detail)
     }
 
+    /// The Extras row between the title and the info columns, only when the episode has some.
+    private func showExtras(_ detail: MediaItemDetail) {
+        let split = BelowFoldContentLoader.extraTiles(
+            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster)
+        let tiles = split.trailers + split.extras
+        guard !tiles.isEmpty, !hasExtras else { return }
+        hasExtras = true
+        extrasShelf.configure(tiles)
+        extrasShelf.isHidden = false
+        extrasShelf.alpha = scrollStage > 0 ? 1 : 0
+        infoTopConstraint.isActive = false
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: extrasShelf.bottomAnchor, constant: 40)
+        infoTopConstraint.isActive = true
+    }
+
     /// Versions button after Watchlist, once the detail shows two or more files.
     private func addVersionsButton(_ detail: MediaItemDetail) {
         let versions = VersionPicker.versions(in: detail)
         guard !versions.isEmpty, versionsButton == nil, let row = actionRow, let watchlist = watchlistButton,
               let index = row.arrangedSubviews.firstIndex(of: watchlist) else { return }
-        let button = circleButton(systemImage: "square.stack")
+        let button = FocusableActionButton.circle(systemImage: "square.stack")
         button.onPrimaryAction = { [weak self, weak button] in
             guard let self, let button else { return }
             VersionPicker.present(versions, from: self, sourceFrame: button.convert(button.bounds, to: nil)) {
@@ -625,7 +602,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         item = refreshed
         isWatched = refreshed.isWatched
         resumeOffset = refreshed.userState.viewOffset
-        setCircleIcon(watchedButton, isWatched ? "checkmark.circle.fill" : "checkmark")
+        watchedButton?.setIcon(isWatched ? "checkmark.circle.fill" : "checkmark")
         playTitleLabel?.text = playPillTitle
     }
 
@@ -644,7 +621,7 @@ final class MediaItemDetailPageViewController: UIViewController {
 
     private func toggleWatched() {
         isWatched.toggle()
-        setCircleIcon(watchedButton, isWatched ? "checkmark.circle.fill" : "checkmark")
+        watchedButton?.setIcon(isWatched ? "checkmark.circle.fill" : "checkmark")
         // Plex drops the resume point on scrobble and unscrobble (#270).
         resumeOffset = 0
         playTitleLabel?.text = playPillTitle
@@ -678,10 +655,7 @@ final class MediaItemDetailPageViewController: UIViewController {
 
     // Distinct active glyphs: watched = filled check, watchlist = saved bookmark.
     private func updateWatchlistIcon() {
-        setCircleIcon(watchlistButton, onWatchlist ? "bookmark.fill" : "plus")
-    }
-    private func setCircleIcon(_ button: FocusableActionButton?, _ name: String) {
-        (button?.subviews.compactMap { $0 as? UIImageView }.first)?.image = UIImage(systemName: name)
+        watchlistButton?.setIcon(onWatchlist ? "bookmark.fill" : "plus")
     }
 
     /// The show above an episode (grandparent) or a season (parent).

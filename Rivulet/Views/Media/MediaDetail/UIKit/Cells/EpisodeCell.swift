@@ -12,25 +12,16 @@ import TVUIKit
 /// single-target (`.thumb` only).
 enum EpisodeFocusKind { case none, thumb, description }
 
-/// A TVCardView thumbnail that reports focus and delivers Select.
+/// A TVCardView thumbnail that reports focus. Select comes from EpisodeCell's
+/// tap recognizer, which waits out the hold that opens the episode menu; the
+/// presses still reach TVCardView for its native press-down motion.
 final class EpisodeThumbCardView: TVCardView {
-    var onSelect: (() -> Void)?
     /// (isFocused, nextFocusedView, coordinator)
     var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         onFocusChange?(context.nextFocusedView === self, context.nextFocusedView, coordinator)
-    }
-
-    // Fire on pressesBegan: TVCardView turns the Select's Ended into a Cancelled.
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if presses.contains(where: { $0.type == .select }) { onSelect?(); return }
-        super.pressesBegan(presses, with: event)
-    }
-    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if presses.contains(where: { $0.type == .select }) { return }  // handled in pressesBegan
-        super.pressesEnded(presses, with: event)
     }
 }
 
@@ -44,7 +35,9 @@ final class EpisodeDescriptionView: UIView {
     /// (isFocused, nextFocusedView, coordinator)
     var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
 
-    override var canBecomeFocused: Bool { isFocusEligible }
+    /// Side by side, the description sits beside its thumb and is always a stop.
+    var isAlwaysFocusable = false
+    override var canBecomeFocused: Bool { isAlwaysFocusable || isFocusEligible }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
@@ -65,12 +58,19 @@ final class EpisodeDescriptionView: UIView {
 
 final class EpisodeCell: UIView {
 
+    /// `.stacked` puts the description under the thumb (the show page's rail);
+    /// `.sideBySide` puts it to the thumb's right (the season page's list).
+    enum Layout { case stacked, sideBySide }
+    private let layout: Layout
+
     // MARK: - Focus callbacks (wired by EpisodeCollectionCell)
 
     /// Thumb Select → play this episode. (Episodes only.)
     var onPlay: (() -> Void)?
     /// Description Select → open the episode detail page. (Episodes only.)
     var onShowDetails: (() -> Void)?
+    /// Held Select on the thumb or description, with the thumb's window frame. (Episodes only.)
+    var onLongPress: ((CGRect) -> Void)?
     /// Reports which sub-target is focused on every focus change (thumb /
     /// description / none). Drives season-pill tracking and the Up handler's
     /// "description → thumb, thumb → pills" decision.
@@ -131,8 +131,9 @@ final class EpisodeCell: UIView {
 
     // MARK: - Init
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(layout: Layout = .stacked) {
+        self.layout = layout
+        super.init(frame: .zero)
         commonInit()
     }
 
@@ -149,7 +150,10 @@ final class EpisodeCell: UIView {
         thumbnailCard.translatesAutoresizingMaskIntoConstraints = false
         thumbnailCard.contentSize = CGSize(width: Self.cardWidth + MediaRowMetrics.focusGrowth, height: Self.thumbHeight)
         thumbnailCard.contentView.backgroundColor = UIColor(white: 0.15, alpha: 1)
-        thumbnailCard.onSelect = { [weak self] in self?.onPlay?() }
+        let hold = TileLongPress.makeRecognizer(target: self, action: #selector(handleHold(_:)))
+        addGestureRecognizer(hold)
+        thumbnailCard.addGestureRecognizer(
+            TileLongPress.makeSelectTap(target: self, action: #selector(handleThumbSelect), yieldingTo: hold))
         thumbnailCard.onFocusChange = { [weak self] focused, next, coordinator in
             guard let self else { return }
             self.thumbFocused = focused
@@ -222,6 +226,7 @@ final class EpisodeCell: UIView {
         descriptionBlock.layer.borderWidth = 0
         descriptionBlock.layer.borderColor = UIColor.clear.cgColor
         descriptionBlock.onSelect = { [weak self] in self?.onShowDetails?() }
+        descriptionBlock.isAlwaysFocusable = layout == .sideBySide
         descriptionBlock.onFocusChange = { [weak self] focused, next, coordinator in
             guard let self else { return }
             self.descFocused = focused
@@ -260,7 +265,7 @@ final class EpisodeCell: UIView {
         summaryLabel.translatesAutoresizingMaskIntoConstraints = false
         summaryLabel.font = .systemFont(ofSize: 21, weight: .medium)
         summaryLabel.textColor = UIColor.white.withAlphaComponent(0.7)
-        summaryLabel.numberOfLines = 2
+        summaryLabel.numberOfLines = layout == .sideBySide ? 3 : 2
         descriptionBlock.addSubview(summaryLabel)
 
         footerRow.translatesAutoresizingMaskIntoConstraints = false
@@ -291,12 +296,31 @@ final class EpisodeCell: UIView {
         let summaryLeading = summaryLabel.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: 20)
         let footerLeading = footerRow.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: 20)
 
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Self.cardWidth),
+        let reserve = MediaRowMetrics.focusGrowth / 2
+        switch layout {
+        case .stacked:
+            NSLayoutConstraint.activate([
+                widthAnchor.constraint(equalToConstant: Self.cardWidth),
+                thumbnailCard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: reserve),
+                // The block's edge sits on the thumbnail's leading; its text is padded inside.
+                descriptionBlock.topAnchor.constraint(equalTo: thumbnailCard.bottomAnchor, constant: 8),
+                descriptionBlock.leadingAnchor.constraint(equalTo: leadingAnchor),
+            ])
+        case .sideBySide:
+            NSLayoutConstraint.activate([
+                thumbnailCard.widthAnchor.constraint(equalToConstant: Self.cardWidth + MediaRowMetrics.focusGrowth),
+                bottomAnchor.constraint(equalTo: thumbnailCard.bottomAnchor),
+                // The box's top meets the resting artwork's top, one grid gap to its right.
+                descriptionBlock.topAnchor.constraint(equalTo: thumbnailCard.topAnchor, constant: reserve),
+                descriptionBlock.leadingAnchor.constraint(equalTo: thumbnailCard.trailingAnchor,
+                                                          constant: MediaRowMetrics.tileGap - reserve),
+                descriptionBlock.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            ])
+        }
 
+        NSLayoutConstraint.activate([
             thumbnailCard.topAnchor.constraint(equalTo: topAnchor),
-            thumbnailCard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -MediaRowMetrics.focusGrowth / 2),
-            thumbnailCard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: MediaRowMetrics.focusGrowth / 2),
+            thumbnailCard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -reserve),
             thumbHeightConstraint,
 
             trailerScrim.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
@@ -344,9 +368,6 @@ final class EpisodeCell: UIView {
             subtypeIcon.widthAnchor.constraint(equalToConstant: 22),
             subtypeIcon.heightAnchor.constraint(equalToConstant: 22),
 
-            // The block's edge sits on the thumbnail's leading; its text is padded inside.
-            descriptionBlock.topAnchor.constraint(equalTo: thumbnailCard.bottomAnchor, constant: 8),
-            descriptionBlock.leadingAnchor.constraint(equalTo: leadingAnchor),
             descriptionBlock.trailingAnchor.constraint(equalTo: trailingAnchor),
             // Block HUGS its content (top-aligned): short descriptions sit right
             // under the title instead of vertical-centering in a fixed box.
@@ -532,6 +553,16 @@ final class EpisodeCell: UIView {
         onFocusKindChanged?(kind)
     }
 
+    @objc private func handleThumbSelect() { onPlay?() }
+
+    /// Focus asked of the card lands on its thumb.
+    override var preferredFocusEnvironments: [UIFocusEnvironment] { [thumbnailCard] }
+
+    @objc private func handleHold(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onLongPress?(thumbnailCard.convert(thumbnailCard.bounds, to: nil))
+    }
+
     /// Clear focus visuals + state on reuse.
     func resetFocusVisual() {
         thumbFocused = false
@@ -589,7 +620,7 @@ private final class TrailerScrimView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 }
 
-private final class PaddingLabel: UILabel {
+final class PaddingLabel: UILabel {
     var insets: UIEdgeInsets = .zero { didSet { invalidateIntrinsicContentSize() } }
 
     override func drawText(in rect: CGRect) {

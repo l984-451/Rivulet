@@ -275,3 +275,14 @@ nonisolated struct ContentFilterItem: Sendable, Equatable {
         return String(name[..<dot])
     }
 }
+
+// MARK: - Subtitle line
+
+/// A subtitle cue near the playhead, as the filter reads it: on the audio's
+/// time axis (any subtitle delay already applied) with its words as text.
+nonisolated struct SubtitleLine: Sendable, Equatable {
+    let id: Int
+    let start: TimeInterval
+    let end: TimeInterval
+    let text: String
+}

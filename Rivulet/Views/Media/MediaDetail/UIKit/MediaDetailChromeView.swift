@@ -883,12 +883,25 @@ final class MediaDetailChromeView: UIView {
                 Self.makeCaptionLabel(parts.joined(separator: " · "), alpha: Self.qualityRowAlpha))
         }
 
-        // One score, from the source chosen in Appearance; episodes show none.
-        if item.kind != .episode, let rating = MediaRating.detailRating(in: detail?.ratings ?? []) {
-            let label = Self.makeCaptionLabel(rating.badgeText, alpha: Self.qualityRowAlpha)
+        // One score, from the source chosen in Appearance, and the Common Sense age; episodes show neither.
+        if item.kind != .episode {
+            Self.scoreAndAgeViews(ratings: detail?.ratings ?? [], age: detail?.contentAdvisory?.ageRating,
+                                  alpha: Self.qualityRowAlpha).forEach(qualityRow.addArrangedSubview)
+        }
+
+        for badge in Self.calmBadges(detail?.primarySource) {
+            qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha))
+        }
+    }
+
+    /// The score (glyph or source name, then value) and the Common Sense age with its green seal.
+    static func scoreAndAgeViews(ratings: [MediaRating], age: String?, alpha: CGFloat) -> [UIView] {
+        var views: [UIView] = []
+        if let rating = MediaRating.detailRating(in: ratings) {
+            let label = makeCaptionLabel(rating.badgeText, alpha: alpha)
             let ratingStack: UIStackView
             if rating.source == .rottenTomatoes || rating.source == .rottenTomatoesAudience {
-                let glyph = UIImageView(image: Self.emojiGlyph(
+                let glyph = UIImageView(image: emojiGlyph(
                     rating.source == .rottenTomatoes ? (rating.value >= 6 ? "🍅" : "🤢") : "🍿"))
                 glyph.translatesAutoresizingMaskIntoConstraints = false
                 NSLayoutConstraint.activate([
@@ -898,18 +911,14 @@ final class MediaDetailChromeView: UIView {
                 ratingStack = UIStackView(arrangedSubviews: [glyph, label])
                 ratingStack.spacing = 2
             } else {
-                ratingStack = UIStackView(arrangedSubviews: [
-                    Self.makeCaptionLabel(rating.name, alpha: Self.qualityRowAlpha), label
-                ])
+                ratingStack = UIStackView(arrangedSubviews: [makeCaptionLabel(rating.name, alpha: alpha), label])
                 ratingStack.spacing = 6
             }
             ratingStack.axis = .horizontal
             ratingStack.alignment = .center
-            qualityRow.addArrangedSubview(ratingStack)
+            views.append(ratingStack)
         }
-
-        // The Common Sense age, on movies and shows but not episodes.
-        if item.kind != .episode, let age = detail?.contentAdvisory?.ageRating {
+        if let age {
             let seal = UIImageView(image: UIImage(systemName: "checkmark.circle"))
             seal.tintColor = .systemGreen
             seal.contentMode = .scaleAspectFit
@@ -918,18 +927,13 @@ final class MediaDetailChromeView: UIView {
                 seal.widthAnchor.constraint(equalToConstant: 20),
                 seal.heightAnchor.constraint(equalToConstant: 20)
             ])
-            let ageStack = UIStackView(arrangedSubviews: [
-                seal, Self.makeCaptionLabel(age, alpha: Self.qualityRowAlpha)
-            ])
+            let ageStack = UIStackView(arrangedSubviews: [seal, makeCaptionLabel(age, alpha: alpha)])
             ageStack.axis = .horizontal
             ageStack.spacing = 2
             ageStack.alignment = .center
-            qualityRow.addArrangedSubview(ageStack)
+            views.append(ageStack)
         }
-
-        for badge in Self.calmBadges(detail?.primarySource) {
-            qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha))
-        }
+        return views
     }
 
     /// The row's quality badges, kept short: 4K only, every range badge (DV, HDR10+ ...), and audio only
@@ -1114,7 +1118,7 @@ final class MediaDetailChromeView: UIView {
         }
     }
 
-    private static func makeCaptionLabel(_ text: String, alpha: CGFloat) -> UILabel {
+    static func makeCaptionLabel(_ text: String, alpha: CGFloat) -> UILabel {
         let l = UILabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.text = text
@@ -1124,7 +1128,7 @@ final class MediaDetailChromeView: UIView {
     }
 
     /// Bordered rating / quality badge, 22pt tall in total (Apple's badge cap).
-    private static func makeBadge(_ text: String, alpha: CGFloat) -> UIView {
+    static func makeBadge(_ text: String, alpha: CGFloat) -> UIView {
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.text = text

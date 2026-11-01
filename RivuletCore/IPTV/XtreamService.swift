@@ -205,7 +205,7 @@ actor XtreamService {
                   let id = string(stream["stream_id"]),
                   let name = string(stream["name"])?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !name.isEmpty, !isSectionHeader(name) else { return nil }
-            let number = double(stream["num"]).flatMap { $0 >= 0 && $0 == $0.rounded() ? Int($0) : nil }
+            let number = double(stream["num"]).flatMap { $0 >= 0 && $0 == $0.rounded() ? ChannelNumber(major: Int($0)) : nil }
             return M3UParser.ParsedChannel(
                 tvgId: string(stream["epg_channel_id"]),
                 tvgName: nil,

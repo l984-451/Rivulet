@@ -50,6 +50,18 @@ enum TileLongPress {
         return recognizer
     }
 
+    /// Select for a view that also opens a menu on hold: fires on release, and
+    /// never once `longPress` has claimed the press.
+    static func makeSelectTap(target: Any?, action: Selector,
+                              yieldingTo longPress: UILongPressGestureRecognizer) -> UITapGestureRecognizer {
+        let tap = UITapGestureRecognizer(target: target, action: action)
+        tap.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+        tap.cancelsTouchesInView = false
+        tap.delegate = sharedDelegate
+        tap.require(toFail: longPress)
+        return tap
+    }
+
     /// The collection-view cell that currently has focus, resolved from the
     /// engine's focused view (focus can sit on the cell or a subview).
     /// Not `UIScreen.focusedView`: this app's focus is scene-based, and that

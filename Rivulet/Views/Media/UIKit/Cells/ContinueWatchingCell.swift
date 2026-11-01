@@ -177,7 +177,8 @@ final class ContinueWatchingCell: UICollectionViewCell {
     /// MediaItem path. All artwork URLs are already resolved — no serverURL/token needed.
     func configure(item: MediaItem) {
         let (logoURL, url) = Self.urls(for: item)
-        titleLogoView.configure(logoURL: logoURL, fallbackTitle: item.title, artworkURL: url)
+        // The show's name, as on the Plex path: the still and logo are the show's too.
+        titleLogoView.configure(logoURL: logoURL, fallbackTitle: item.seriesTitle ?? item.title, artworkURL: url)
 
         infoBar.configure(item: item)
 
@@ -317,6 +318,7 @@ private final class ContinueWatchingTitleLogoView: UIView {
 
     private var fetchTask: Task<Void, Never>?
     private var deadlineTask: Task<Void, Never>?
+    private var checkTask: Task<Void, Never>?
     private var currentItemKey: String?
 
     override init(frame: CGRect) {
@@ -382,10 +384,14 @@ private final class ContinueWatchingTitleLogoView: UIView {
         let image: UIImage?
         let logoSize: CGSize?
         let placement: Compositor.Placement
-        init(image: UIImage?, logoSize: CGSize?, placement: Compositor.Placement) {
+        /// The still already shows the title (#450): nil until checked.
+        var hidesTitle: Bool?
+        var titleCheck: Task<Bool, Never>?
+        init(image: UIImage?, logoSize: CGSize?, placement: Compositor.Placement, hidesTitle: Bool?) {
             self.image = image
             self.logoSize = logoSize
             self.placement = placement
+            self.hidesTitle = hidesTitle
         }
     }
 
@@ -427,7 +433,12 @@ private final class ContinueWatchingTitleLogoView: UIView {
             }
             // A logo that failed to load is not kept: the next display tries again.
             let keep = url == nil || image != nil
-            return (Prepared(image: image, logoSize: logo?.size, placement: placement), keep)
+            let known = artworkURL.flatMap { Compositor.knownTitleCheck(still: $0, logo: url, title: title) }
+            let done = Prepared(image: image, logoSize: logo?.size, placement: placement, hidesTitle: known)
+            if known == nil, let artworkURL {
+                done.titleCheck = Task { await Compositor.titleCheck(still: artworkURL, logo: url, title: title) }
+            }
+            return (done, keep)
         }
         preparing[cacheKey] = task
         let (result, keep) = await task.value
@@ -450,9 +461,11 @@ private final class ContinueWatchingTitleLogoView: UIView {
         guard key != currentItemKey else { return }
         fetchTask?.cancel()
         deadlineTask?.cancel()
+        checkTask?.cancel()
         imageView.image = nil
         imageView.alpha = 0
         titleLabel.alpha = 0
+        alpha = 1
         currentItemKey = key
 
         let geometry = ContinueWatchingCell.geometry, scale = traitCollection.displayScale
@@ -460,12 +473,14 @@ private final class ContinueWatchingTitleLogoView: UIView {
         // Worked out ahead (or shown before): in place at once, no fade.
         if let done = Self.prepared.object(forKey: "\(key)#\(scale)" as NSString) {
             show(done.image, logoSize: done.logoSize, placement: done.placement, animated: false)
+            follow(done, key: key)
             return
         }
         fetchTask = Task { [weak self] in
             let done = await Self.prepare(key: key, title: title, artworkURL: artworkURL, scale: scale, logoURL: logoURL)
             guard !Task.isCancelled, let self, self.currentItemKey == key else { return }
             self.show(done.image, logoSize: done.logoSize, placement: done.placement)
+            self.follow(done, key: key)
         }
         // Slow server: show the text in the default slot rather than nothing.
         deadlineTask = Task { [weak self] in
@@ -482,10 +497,24 @@ private final class ContinueWatchingTitleLogoView: UIView {
         return await Compositor.signals(for: artworkURL)
     }
 
+    /// Hides the whole title when the still already shows it, fading out if that is learned after it showed.
+    private func follow(_ done: Prepared, key: String) {
+        alpha = done.hidesTitle == true ? 0 : 1
+        guard done.hidesTitle == nil, let check = done.titleCheck else { return }
+        checkTask = Task { [weak self] in
+            let hides = await check.value
+            done.hidesTitle = hides
+            guard hides, !Task.isCancelled, let self, self.currentItemKey == key else { return }
+            UIView.animate(withDuration: 0.22) { self.alpha = 0 }
+        }
+    }
+
     func prepareForReuse() {
         fetchTask?.cancel()
         fetchTask = nil
         deadlineTask?.cancel()
+        checkTask?.cancel()
+        alpha = 1
         currentItemKey = nil
         imageView.image = nil
         imageView.alpha = 0

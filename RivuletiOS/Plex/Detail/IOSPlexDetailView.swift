@@ -271,30 +271,31 @@ private struct IOSPlexDetailHeader: View {
 
     var body: some View {
         ZStack(alignment: isWide ? .bottomLeading : .bottom) {
-            // The art and its scrim fade out into the page's ambient wash.
-            ZStack {
-                IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
-                    .backgroundExtensionEffect()
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.25),
-                        .init(color: .black.opacity(0.7), location: 0.7),
-                        .init(color: .black, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .mask {
-                LinearGradient(
-                    stops: [
-                        .init(color: .white, location: 0.75),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
+            // The fade is extended with the art, so the strip under a side bar darkens with it.
+            IOSPlexArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
+                .overlay {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.25),
+                            .init(color: .black.opacity(0.7), location: 0.7),
+                            .init(color: .black, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .backgroundExtensionEffect()
+                // The art and its scrim fade out into the page's ambient wash.
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0.75),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
             titleBlock
                 .frame(maxWidth: isWide ? 560 : .infinity, alignment: isWide ? .leading : .center)
                 .padding(.horizontal, IOSShelfGeometry.leading)
@@ -331,7 +332,7 @@ private struct IOSPlexDetailHeader: View {
             }
             HStack(spacing: 8) {
                 Text(metadataItems.joined(separator: " · "))
-                if let rating = item.contentRating, !rating.isEmpty {
+                if let rating = item.displayContentRating, !rating.isEmpty {
                     Text(rating).plexPill()
                 }
             }

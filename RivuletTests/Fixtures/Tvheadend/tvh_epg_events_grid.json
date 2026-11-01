@@ -1,0 +1,97 @@
+{
+ "totalCount": 5,
+ "entries": [
+  {
+   "eventId": 108,
+   "channelName": "FOX 6 WBRC",
+   "channelUuid": "6425c886e330ed3d74bb8f031b88e478",
+   "channelNumber": "6",
+   "channelIcon": "http://logos.test/api/channels/logos/266492/cache/",
+   "start": 1793145600,
+   "stop": 1793156400,
+   "title": "Live: 2026 World Series",
+   "description": "From Tropicana Field in St. Petersburg, Fla.",
+   "new": 1,
+   "image": "http://dtil.tmsimg.com/assets/GNLZZGG003T6C08.jpg?w=960&amp;h=540",
+   "genre": [
+    64
+   ],
+   "nextEventId": 109
+  },
+  {
+   "eventId": 44,
+   "channelName": "NBC 13 WVTM",
+   "channelUuid": "0c186d9cdf139a7a882e0040398ef048",
+   "channelNumber": "13",
+   "channelIcon": "http://logos.test/api/channels/logos/266493/cache/",
+   "start": 1793158440,
+   "stop": 1793162220,
+   "title": "The Tonight Show Starring Jimmy Fallon",
+   "subtitle": "Parker Posey; Nicholas Galitzine; Dominic Fike",
+   "description": "Actress Parker Posey; actor Nicholas Galitzine; Dominic Fike performs.",
+   "new": 1,
+   "seasonNumber": 14,
+   "episodeNumber": 18,
+   "episodeOnscreen": "S14 E18",
+   "image": "http://dtil.tmsimg.com/assets/p9898935_b_h8_am.jpg?w=960&amp;h=540",
+   "copyright_year": 2026,
+   "genre": [
+    20
+   ],
+   "nextEventId": 45
+  },
+  {
+   "eventId": 116,
+   "channelName": "FOX 6 WBRC",
+   "channelUuid": "6425c886e330ed3d74bb8f031b88e478",
+   "channelNumber": "6",
+   "channelIcon": "http://logos.test/api/channels/logos/266492/cache/",
+   "start": 1793171100,
+   "stop": 1793172900,
+   "title": "Absolutely Alabama",
+   "repeat": 1,
+   "image": "http://dtil.tmsimg.com/assets/p9838770_b_h8_aa.jpg?w=960&amp;h=540",
+   "copyright_year": 2013,
+   "nextEventId": 117
+  },
+  {
+   "eventId": 111,
+   "channelName": "FOX 6 WBRC",
+   "channelUuid": "6425c886e330ed3d74bb8f031b88e478",
+   "channelNumber": "6",
+   "channelIcon": "http://logos.test/api/channels/logos/266492/cache/",
+   "start": 1793160300,
+   "stop": 1793162100,
+   "title": "Inside Edition",
+   "description": "A syndicated news magazine includes investigative reports, interviews with newsmakers, human interest stories and celebrity and pop-culture features.",
+   "new": 1,
+   "seasonNumber": 39,
+   "episodeNumber": 32,
+   "episodeOnscreen": "S39 E32",
+   "image": "http://dtil.tmsimg.com/assets/p184110_b_h10_aa.jpg?w=960&amp;h=540",
+   "copyright_year": 2026,
+   "genre": [
+    34
+   ],
+   "nextEventId": 112,
+   "serieslinkUri": "crid://example.test/series1"
+  },
+  {
+   "eventId": 9999,
+   "channelName": "Unknown",
+   "channelUuid": "00000000000000000000000000000000",
+   "channelNumber": "6",
+   "channelIcon": "http://logos.test/api/channels/logos/266492/cache/",
+   "start": 1793145600,
+   "stop": 1793156400,
+   "title": "Live: 2026 World Series",
+   "description": "From Tropicana Field in St. Petersburg, Fla.",
+   "new": 1,
+   "image": "http://dtil.tmsimg.com/assets/GNLZZGG003T6C08.jpg?w=960&amp;h=540",
+   "genre": [
+    64
+   ],
+   "nextEventId": 109
+  }
+ ]
+}

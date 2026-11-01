@@ -59,6 +59,11 @@ public enum SentryStartup {
             // Logs skip beforeSend, so they get their own scrub.
             options.enableLogs = true
             options.beforeSendLog = { SentryEventRedaction.redact($0) }
+            // Every crumb, SDK-made ones (network, screens) included, also goes to the diagnostics log.
+            options.beforeBreadcrumb = { crumb in
+                DiagLog.mirror(crumb)
+                return crumb
+            }
             // App Hang tracking (ANR Tracker V2 on tvOS, no toggle in 9.x).
             // <unknown> in-app frames mean missing dSYMs for that build.
             options.enableAppHangTracking = true

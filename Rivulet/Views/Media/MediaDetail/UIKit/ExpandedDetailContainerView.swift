@@ -156,6 +156,10 @@ final class ExpandedDetailContainerView: UIView {
         get { belowFoldCollection.onShowEpisodeDetails }
         set { belowFoldCollection.onShowEpisodeDetails = newValue }
     }
+    var onEpisodeMenu: ((MediaItem, CGRect) -> Void)? {
+        get { belowFoldCollection.onEpisodeMenu }
+        set { belowFoldCollection.onEpisodeMenu = newValue }
+    }
     var onSelectPerson: ((MediaPerson) -> Void)? {
         get { belowFoldCollection.onSelectPerson }
         set { belowFoldCollection.onSelectPerson = newValue }

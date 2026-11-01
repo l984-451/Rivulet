@@ -168,10 +168,10 @@ actor DispatcharrService {
 
     /// Fetch and parse EPG from Dispatcharr
     /// - Returns: Parsed EPG data
-    func fetchParsedEPG() async throws -> XMLTVParser.ParseResult {
+    func fetchParsedEPG(filter: XMLTVParser.GuideFilter? = nil) async throws -> XMLTVParser.ParseResult {
         let data = try await fetchEPG()
         let parser = XMLTVParser()
-        return try await parser.parse(data: data)
+        return try await parser.parse(data: data, filter: filter)
     }
 
     /// Signs in as a Dispatcharr user and returns that user's API key, so

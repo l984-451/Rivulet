@@ -1,0 +1,3 @@
+#EXTM3U
+#EXTINF:-1 tvg-logo="http://logos.test/api/channels/logos/266492/cache/" tvg-id="6425c886e330ed3d74bb8f031b88e478" tvg-chno="6",FOX 6 WBRC
+http://tvh.test:9981/stream/channelid/113780068?ticket=TICKET&profile=pass

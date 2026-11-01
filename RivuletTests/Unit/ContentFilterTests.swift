@@ -464,10 +464,11 @@ final class ContentFilterTranscriptTests: XCTestCase {
         let windows = try XCTUnwrap(ContentFilterSources.languageWindows(content: srt, format: "srt"))
         // A body with no cues (an error page served with 200) is unreadable, not "no hits".
         XCTAssertNil(ContentFilterSources.languageWindows(content: "<html>503</html>", format: "srt"))
-        XCTAssertEqual(windows.map(\.start), [4, 7])
-        XCTAssertEqual(windows[0].end, 6.5, accuracy: 0.001)
-        XCTAssertTrue(windows[0].hits.categories.contains(.profanity))
-        XCTAssertTrue(windows[1].hits.categories.contains(.blasphemy))
+        // Every cue is kept, so the user's own words can match any of them.
+        XCTAssertEqual(windows.map(\.start), [1, 4, 7])
+        XCTAssertEqual(windows[1].end, 6.5, accuracy: 0.001)
+        XCTAssertTrue(ProfanityDictionary.hits(in: windows[1].text).categories.contains(.profanity))
+        XCTAssertTrue(ProfanityDictionary.hits(in: windows[2].text).categories.contains(.blasphemy))
     }
 
     // The reported title's subtitle streams: two embedded bitmap tracks.
@@ -642,6 +643,7 @@ final class ContentFilterTranscriptTests: XCTestCase {
         """
         let windows = try XCTUnwrap(ContentFilterSources.languageWindows(content: ass, format: ""))
         XCTAssertEqual(windows.map(\.start), [2])
+        XCTAssertFalse(ProfanityDictionary.hits(in: windows[0].text).isEmpty)
     }
 }
 
@@ -747,6 +749,9 @@ final class ProfanityDictionaryTests: XCTestCase {
         XCTAssertTrue(muted("Oh my God!", categories: [.blasphemy]))
         XCTAssertTrue(muted("Oh, God.", categories: [.blasphemy]))
         XCTAssertTrue(muted("I swear to God", categories: [.blasphemy]))
+        XCTAssertTrue(muted("Oh, Christ. I guess you'll do.", categories: [.blasphemy]))
+        XCTAssertTrue(muted("Oh Jesus", categories: [.blasphemy]))
+        XCTAssertFalse(muted("As a Christian, I am doing you a favor", categories: [.blasphemy]))
         XCTAssertFalse(muted("My goddess", categories: [.blasphemy]))
     }
 
@@ -779,7 +784,8 @@ final class ContentFilterManagerTests: XCTestCase {
     private var allKeys: [String] {
         [ContentFilterManager.Keys.enabled,
          ContentFilterManager.Keys.profanityStrength,
-         ContentFilterManager.Keys.listSourceURL]
+         ContentFilterManager.Keys.listSourceURL,
+         ContentFilterManager.Keys.customWords]
         + FilterCategory.allCases.map(\.enabledDefaultsKey)
     }
 
@@ -805,7 +811,7 @@ final class ContentFilterManagerTests: XCTestCase {
     }
 
     private func window(_ start: Double, _ end: Double, _ text: String) -> LanguageWindow {
-        LanguageWindow(start: start, end: end, hits: ProfanityDictionary.hits(in: text))
+        LanguageWindow(start: start, end: end, text: text)
     }
 
     func testOnlyLanguageCategoriesReadSubtitleText() {
@@ -888,24 +894,87 @@ final class ContentFilterManagerTests: XCTestCase {
         XCTAssertFalse(manager.isFilterMuting)
     }
 
-    func testSubtitleTextMutesAndUnmutes() {
-        manager.activeSubtitlesDidChange(texts: ["What the fuck"])
+    func testSubtitleLinesMuteTheirWholeCueUntilWordsArePlaced() {
+        manager.subtitleLinesDidChange([SubtitleLine(id: 1, start: 0.5, end: 3, text: "What the fuck")])
         _ = manager.timeDidUpdate(1)
         XCTAssertTrue(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(3.5)
+        XCTAssertFalse(manager.isFilterMuting)
 
-        manager.activeSubtitlesDidChange(texts: [])
-        _ = manager.timeDidUpdate(2)
+        manager.subtitleLinesDidChange([])
+        _ = manager.timeDidUpdate(1)
         XCTAssertFalse(manager.isFilterMuting)
     }
 
-    func testRefreshSettingsDropsStaleSubtitleMatch() {
-        // Regression: a match latched while a cue was on screen must not
-        // survive a settings refresh, or audio stays muted until the next
-        // cue change re-evaluates.
-        manager.activeSubtitlesDidChange(texts: ["What the fuck"])
+    func testRefreshSettingsRejudgesTheLineOnScreen() {
+        // A line muted under the old settings must not stay muted under new ones.
+        manager.subtitleLinesDidChange([SubtitleLine(id: 1, start: 0, end: 3, text: "What the fuck")])
+        _ = manager.timeDidUpdate(1)
         XCTAssertTrue(manager.isFilterMuting)
+        UserDefaults.standard.set(false, forKey: FilterCategory.profanity.enabledDefaultsKey)
         manager.refreshSettings()
         XCTAssertFalse(manager.isFilterMuting)
+    }
+
+    func testHeardWordsNarrowTheMuteToTheWord() {
+        manager.applyTranscript([window(10, 14, "You stupid son of a bitch, get out")])
+        let words = ["you", "stupid", "son", "of", "a", "bitch", "get", "out"].enumerated().map { index, text in
+            SpokenWord(text: text, start: 10.2 + Double(index) * 0.4, end: 10.5 + Double(index) * 0.4, confidence: 0.9)
+        }
+        // Before the audio is heard, the whole cue mutes.
+        _ = manager.timeDidUpdate(10.3)
+        XCTAssertTrue(manager.isFilterMuting)
+
+        manager.wordsHeard(words, covering: 5...20)
+        _ = manager.timeDidUpdate(10.3)     // "you"
+        XCTAssertFalse(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(11.5)     // "son of a bitch"
+        XCTAssertTrue(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(13.2)     // "out"
+        XCTAssertFalse(manager.isFilterMuting)
+        XCTAssertEqual(manager.nextMuteEdge(after: 12) ?? 0, 12.65, accuracy: 0.01)
+    }
+
+    func testPartlyHeardLineIsPlacedOnceItsWordIsHeard() {
+        manager.applyTranscript([window(10, 14, "Holy shit, that was crazy, I can't believe it")])
+        let words = ["holy", "shit", "that", "was"].enumerated().map { index, text in
+            SpokenWord(text: text, start: 10.2 + Double(index) * 0.4, end: 10.5 + Double(index) * 0.4, confidence: 0.9)
+        }
+        // Heard only to 11.8: the rest of the line isn't transcribed yet.
+        manager.wordsHeard(words, covering: 5...11.8)
+        _ = manager.timeDidUpdate(10.3)
+        XCTAssertFalse(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(10.7)
+        XCTAssertTrue(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(11.3)
+        XCTAssertFalse(manager.isFilterMuting)
+    }
+
+    func testCustomWordsMuteWhateverTheCategories() {
+        FilterCategory.allCases.forEach { UserDefaults.standard.set(false, forKey: $0.enabledDefaultsKey) }
+        UserDefaults.standard.set(["stupid"], forKey: ContentFilterManager.Keys.customWords)
+        defer { UserDefaults.standard.removeObject(forKey: ContentFilterManager.Keys.customWords) }
+        manager.refreshSettings()
+        manager.applyTranscript([window(10, 12, "That's stupid"), window(20, 22, "What the fuck")])
+        _ = manager.timeDidUpdate(11)
+        XCTAssertTrue(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(21)
+        XCTAssertFalse(manager.isFilterMuting)
+    }
+
+    func testSpeechAloneMutesWithNoSubtitles() {
+        manager.wordsHeard([SpokenWord(text: "shit", start: 30, end: 30.4, confidence: 0.9),
+                            SpokenWord(text: "shut", start: 40, end: 40.3, confidence: 0.9),
+                            SpokenWord(text: "damn", start: 50, end: 50.3, confidence: 0.2)],
+                           covering: 25...55)
+        _ = manager.timeDidUpdate(30.2)
+        XCTAssertFalse(manager.isFilterMuting)   // subtitles may still arrive
+        manager.setSpeechOnly(true)
+        XCTAssertTrue(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(40.1)
+        XCTAssertFalse(manager.isFilterMuting)
+        _ = manager.timeDidUpdate(50.1)
+        XCTAssertFalse(manager.isFilterMuting)   // too unsure to act on
     }
 
     func testBackToBackSkipWindowsTakeOneSeek() {

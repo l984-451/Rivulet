@@ -90,10 +90,16 @@ extension IOSPlexSession {
         await network.stopTranscodeSession(serverURL: request.serverURL, authToken: request.token, sessionId: session)
     }
 
-    /// Opens the server's transcode session before the player asks for the playlist.
-    func openTranscode(_ request: IOSPlexPlaybackRequest) async {
-        guard request.transcodeSessionID != nil else { return }
-        await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
+    /// Opens the server's play session before the player asks for media: the transcode's,
+    /// or a direct-play one so the dashboard shows its bandwidth (#423).
+    func openPlaySession(_ request: IOSPlexPlaybackRequest) async {
+        if request.transcodeSessionID != nil {
+            await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
+        } else if let session = request.directPlaySessionID, let key = request.item.ratingKey {
+            await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
+                                                ratingKey: key, mediaIndex: request.mediaIndex,
+                                                sessionIdentifier: session)
+        }
     }
 
     /// Sets the part's audio or subtitle stream, which a new transcode session reads.

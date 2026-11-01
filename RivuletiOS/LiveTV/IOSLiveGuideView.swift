@@ -577,9 +577,9 @@ private final class IOSLiveGuideProgramCell: UICollectionViewCell {
         self.program = program
         self.isRecording = isRecording
         titleLabel.text = program?.displayTitle ?? "No guide data"
-        let subtitle = program?.subtitle.flatMap { $0.isEmpty || $0 == program?.title ? nil : $0 }
-        subtitleLabel.text = subtitle
-        subtitleLabel.isHidden = subtitle == nil
+        let subtitle = [program?.guideDetail, program?.guideTag].compactMap { $0 }.joined(separator: " · ")
+        subtitleLabel.text = subtitle.isEmpty ? nil : subtitle
+        subtitleLabel.isHidden = subtitle.isEmpty
         recordingDot.isHidden = !isRecording
 
         let airing = program?.isCurrentlyAiring ?? true

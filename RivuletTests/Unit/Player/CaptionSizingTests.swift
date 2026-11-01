@@ -5,9 +5,9 @@
 //  CaptionSizingTests.swift
 //  RivuletTests
 //
-//  Pins caption point size to what AVKit renders, at both ends of the size range
-//  (#299). Measured on the tvOS 26.5 simulator against AVPlayerViewController
-//  captioning bipbop, compared by ink width.
+//  Pins caption point size to what AVKit renders (#299, #422). Measured on the
+//  tvOS 27.0 simulator against AVPlayerViewController captioning a black HLS
+//  stream, one caption profile at a time, compared by ink width and height.
 //
 
 import XCTest
@@ -17,25 +17,20 @@ final class CaptionSizingTests: XCTestCase {
 
     private let presentationHeight: CGFloat = 1080
 
-    /// What AVKit actually renders at each value the system can report, on
-    /// tvOS's fixed 1080-point presentation. Every one of these was measured;
-    /// none is derived from another.
+    /// What AVKit draws at each value the system can report, for any style other
+    /// than the built-in Default (edited styles, copies of Default, Classic).
     private let avkitSizes: [(reported: CGFloat, points: CGFloat)] = [
-        (0.35, 18.5), (0.60, 31.0), (1.00, 46.2), (1.50, 78.0), (2.00, 104.1)
+        (0.35, 18.3), (0.60, 31.2), (1.00, 51.9), (1.50, 78.0), (2.00, 104.0)
     ]
 
-    /// The regression issue #299 reported: 57.1pt where AVKit draws 46pt.
-    func test_pointSize_atSystemDefault_matchesAVKit() {
-        let size = CaptionOverlayView.Metrics.pointSize(
-            presentationHeight: presentationHeight, fontScale: 1.0)
-        XCTAssertEqual(size, 46.2, accuracy: 0.6,
-                       "Caption size at the default setting must match AVKit. Got \(size)pt.")
+    /// AVKit's two-line pitch at Default (46.2pt), 1.0 (51.9pt) and 1.5 (78pt): 66, 76 and 112pt.
+    func test_lineSpacing_givesAVKitsLinePitch() {
+        for (size, pitch) in [(CGFloat(46.2), CGFloat(66)), (51.9, 76), (78, 112)] {
+            let font = UIFont.systemFont(ofSize: size)
+            XCTAssertEqual(font.lineHeight + CaptionOverlayView.Metrics.lineSpacing(for: font), pitch, accuracy: 1.5)
+        }
     }
 
-    /// AVKit's size is NOT a linear function of the reported value — it runs
-    /// about 11% above a plain multiply at every setting except the default.
-    /// Asserting every rung is the point: #299 shipped because only one was
-    /// ever checked.
     func test_pointSize_matchesAVKitAtEveryReportableSize() {
         for expected in avkitSizes {
             let size = CaptionOverlayView.Metrics.pointSize(
@@ -46,34 +41,21 @@ final class CaptionSizingTests: XCTestCase {
         }
     }
 
-    /// Guards the specific mistake that caused #299: treating the reported value
-    /// as a multiplier against the default size.
-    func test_pointSize_isNotAPlainMultipleOfTheDefault() {
-        let base = CaptionOverlayView.Metrics.pointSize(
+    /// Apple's built-in Default style reports 1.0 but draws 46.2pt, about 11%
+    /// under every other style at 1.0. #422 was an edited style drawn at 46.2.
+    func test_pointSize_systemDefaultStyle_drawsSmallerThanAnEditedStyleAtTheSameSize() {
+        let systemDefault = CaptionOverlayView.Metrics.pointSize(
+            presentationHeight: presentationHeight, fontScale: 1.0, isSystemDefault: true)
+        let edited = CaptionOverlayView.Metrics.pointSize(
             presentationHeight: presentationHeight, fontScale: 1.0)
-        for reported in [0.35, 0.6, 1.5, 2.0] as [CGFloat] {
-            let size = CaptionOverlayView.Metrics.pointSize(
-                presentationHeight: presentationHeight, fontScale: reported)
-            XCTAssertGreaterThan(size / base, reported * 1.05,
-                                 "Reported \(reported) must not scale linearly; "
-                                 + "AVKit runs ~11% higher.")
-        }
-    }
-
-    /// Values off the ladder must stay bounded by the measured ends rather than
-    /// extrapolating into nonsense.
-    func test_pointSize_clampsBeyondTheMeasuredEnds() {
-        let low = CaptionOverlayView.Metrics.pointSize(presentationHeight: presentationHeight,
-                                                       fontScale: 0.01)
-        let high = CaptionOverlayView.Metrics.pointSize(presentationHeight: presentationHeight,
-                                                        fontScale: 99)
-        XCTAssertEqual(low, 18.5, accuracy: 0.6)
-        XCTAssertEqual(high, 104.1, accuracy: 0.6)
+        XCTAssertEqual(systemDefault, 46.2, accuracy: 0.6)
+        XCTAssertEqual(edited, 51.9, accuracy: 0.6)
     }
 
     /// A degenerate layout pass must not collapse captions to nothing.
     func test_pointSize_withZeroHeight_fallsBackToTheAssumedPresentation() {
-        let size = CaptionOverlayView.Metrics.pointSize(presentationHeight: 0, fontScale: 1.0)
+        let size = CaptionOverlayView.Metrics.pointSize(presentationHeight: 0, fontScale: 1.0,
+                                                        isSystemDefault: true)
         XCTAssertEqual(size, 46.2, accuracy: 0.6)
     }
 

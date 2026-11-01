@@ -17,21 +17,21 @@ struct PlexTimelineReporter: ProgressReporter {
     }
 
     func progress(position: TimeInterval) async {
-        try? await networkManager.reportProgress(
+        _ = try? await networkManager.reportProgress(
             serverURL: serverURL, authToken: authToken,
             ratingKey: ratingKey, timeMs: Int(position * 1000), state: "playing"
         )
     }
 
     func paused(at position: TimeInterval) async {
-        try? await networkManager.reportProgress(
+        _ = try? await networkManager.reportProgress(
             serverURL: serverURL, authToken: authToken,
             ratingKey: ratingKey, timeMs: Int(position * 1000), state: "paused"
         )
     }
 
     func stopped(at position: TimeInterval) async {
-        try? await networkManager.reportProgress(
+        _ = try? await networkManager.reportProgress(
             serverURL: serverURL, authToken: authToken,
             ratingKey: ratingKey, timeMs: Int(position * 1000), state: "stopped"
         )

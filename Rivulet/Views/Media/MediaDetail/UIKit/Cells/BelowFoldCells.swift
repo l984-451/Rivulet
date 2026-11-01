@@ -18,6 +18,8 @@ final class EpisodeCollectionCell: UICollectionViewCell {
     var onPlay: (() -> Void)?
     /// Description Select → open the episode detail page.
     var onShowDetails: (() -> Void)?
+    /// Held Select → the episode menu, from the thumb's window frame.
+    var onLongPress: ((CGRect) -> Void)?
     /// Reports which sub-target is focused (thumb / description / none).
     var onFocusKind: ((EpisodeFocusKind) -> Void)?
 
@@ -30,6 +32,7 @@ final class EpisodeCollectionCell: UICollectionViewCell {
         // real focus targets and report focus/select up through these closures.
         episodeView.onPlay = { [weak self] in self?.onPlay?() }
         episodeView.onShowDetails = { [weak self] in self?.onShowDetails?() }
+        episodeView.onLongPress = { [weak self] frame in self?.onLongPress?(frame) }
         episodeView.onFocusKindChanged = { [weak self] kind in
             self?.onFocusKind?(kind)
             if kind != .none { self?.onFocused?(true) }
@@ -52,6 +55,7 @@ final class EpisodeCollectionCell: UICollectionViewCell {
         onFocused = nil
         onPlay = nil
         onShowDetails = nil
+        onLongPress = nil
         onFocusKind = nil
         episodeView.resetFocusVisual()
     }

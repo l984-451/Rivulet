@@ -4,6 +4,13 @@
 <dict>
 	<key>AVInitialRouteSharingPolicy</key>
 	<string>LongFormAudio</string>
+	<!-- Apple-hosted asset packs (the speech model), fetched by AssetPackExtension. -->
+	<key>BAAppGroupID</key>
+	<string>group.com.bain.Rivulet</string>
+	<key>BAHasManagedAssetPacks</key>
+	<true/>
+	<key>BAUsesAppleHosting</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

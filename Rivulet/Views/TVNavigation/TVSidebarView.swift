@@ -427,17 +427,37 @@ struct TVSidebarView: View {
             dataStore.startBackgroundPrefetch(libraries: dataStore.visibleMediaLibraries)
 
             // Rebuild the GUID index ("do I own this?") with includeGuids, which
-            // Plex omits by default. Deferred 5s: each 5000-item page is ~5MB.
+            // Plex omits by default. Deferred 5s: each 5000-movie page is ~12MB, so
+            // each page is cut to index entries before the next one arrives (#409).
             Task.detached(priority: .background) {
                 try? await Task.sleep(for: .seconds(5))
                 let (serverURL, token) = await MainActor.run {
                     (PlexAuthManager.shared.selectedServerURL, PlexAuthManager.shared.selectedServerToken)
                 }
                 guard let serverURL, let token else { return }
+                guard await LibraryGUIDIndex.shared.claimRebuild() else { return }
+                defer { Task { await LibraryGUIDIndex.shared.finishRebuild() } }
 
                 let visible = await MainActor.run { PlexDataStore.shared.visibleVideoLibraries }
 
-                var allItems: [PlexMetadata] = []
+                // One 1-item probe per section (about 3 KB); an unchanged library skips the
+                // full refetch, about 130 MB at 56k items.
+                var stamps: [String: String] = [:]
+                for library in visible {
+                    if let probe = try? await PlexNetworkManager.shared.getLibraryItemsWithTotal(
+                        serverURL: serverURL, authToken: token, sectionId: library.key,
+                        start: 0, size: 1, sort: "updatedAt:desc"
+                    ), let stamp = LibraryGUIDIndex.sectionStamp(totalSize: probe.totalSize, newest: probe.items.first) {
+                        stamps[library.key] = stamp
+                    }
+                }
+                if stamps.count == visible.count, await LibraryGUIDIndex.shared.isCurrent(for: stamps) {
+                    libraryIndexLog.info("[GUIDIndex] unchanged since last build, skipping rebuild")
+                    return
+                }
+
+                var allItems: [LibraryGUIDIndex.Entry] = []
+                var fetchedCount = 0
                 // Per section: one that failed mid-way still contributes a
                 // plausible count, and the totals would hide it.
                 var incompleteSections = 0
@@ -447,6 +467,10 @@ struct TVSidebarView: View {
                     var start = 0
                     var sectionComplete = false
                     while true {
+                        // Not alongside playback: a 4K software decode needs the headroom (#409).
+                        while await MainActor.run(body: { PlexDataStore.shared.isPlaybackActive }) {
+                            try? await Task.sleep(for: .seconds(10))
+                        }
                         do {
                             let result = try await PlexNetworkManager.shared.getLibraryItemsWithTotal(
                                 serverURL: serverURL,
@@ -456,7 +480,8 @@ struct TVSidebarView: View {
                                 size: pageSize,
                                 includeGuids: true
                             )
-                            allItems.append(contentsOf: result.items)
+                            allItems += result.items.compactMap { LibraryGUIDIndex.Entry($0, sectionID: library.key) }
+                            fetchedCount += result.items.count
                             start += result.items.count
                             // An empty page or reaching the reported total is the
                             // only way out that means we actually saw the section
@@ -484,17 +509,16 @@ struct TVSidebarView: View {
                 let completeness: LibraryGUIDIndex.Completeness =
                     incompleteSections == 0 ? .complete : .partial
 
-                let withGuids = allItems.filter { ($0.Guid ?? []).isEmpty == false }
-                let sample = withGuids.first.flatMap { $0.Guid?.first?.id } ?? "(none)"
-                libraryIndexLog.info("[GUIDIndex] populated: \(allItems.count) items total, \(withGuids.count) with external GUIDs, \(incompleteSections) incomplete sections, sample=\(sample, privacy: .public)")
+                let sample = allItems.first?.guids.first ?? "(none)"
+                libraryIndexLog.info("[GUIDIndex] populated: \(fetchedCount) items total, \(allItems.count) with external GUIDs, \(incompleteSections) incomplete sections, sample=\(sample, privacy: .public)")
 
                 let crumb = Breadcrumb(level: .info, category: "guid_index")
                 crumb.message = "Library GUID index rebuilt"
                 crumb.data = [
                     "libraries": visible.count,
                     "failed_sections": incompleteSections,
-                    "items": allItems.count,
-                    "with_guids": withGuids.count
+                    "items": fetchedCount,
+                    "with_guids": allItems.count
                 ]
                 SentryBridge.addBreadcrumb(crumb)
 
@@ -504,10 +528,13 @@ struct TVSidebarView: View {
                 // An empty result with at least one section incomplete means we
                 // learned nothing from the server, so keep whatever the disk
                 // hydrate gave us rather than blanking a working index.
-                if allItems.isEmpty && completeness == .partial { return }
+                if fetchedCount == 0 && completeness == .partial { return }
                 // The token changed hands while this ran: not that profile's library.
                 guard await MainActor.run(body: { PlexAuthManager.shared.selectedServerToken }) == token else { return }
-                await LibraryGUIDIndex.shared.replace(with: allItems, completeness: completeness)
+                await LibraryGUIDIndex.shared.replace(
+                    with: allItems, completeness: completeness,
+                    stamps: completeness == .complete && stamps.count == visible.count ? stamps : [:]
+                )
             }
         }
     }
@@ -715,7 +742,9 @@ struct TVSidebarView: View {
     }
 
     private func presentDetail(_ item: MediaItem, from top: UIViewController) {
-        if item.kind == .episode || item.kind == .season {
+        if item.kind == .season {
+            top.present(SeasonDetailViewController(season: item), animated: true)
+        } else if item.kind == .episode {
             let page = MediaItemDetailPageViewController(
                 item: item,
                 seriesTitle: nil,

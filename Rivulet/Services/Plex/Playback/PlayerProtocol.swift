@@ -66,6 +66,8 @@ enum PlayerError: Error, Equatable, Sendable {
     /// `kind` is `PlaybackErrorKind.rawValue`, stable upstream API and open-ended, so it stays a
     /// String and reaches Sentry intact. `message` is often localized; never pattern-match it.
     case engineFailure(kind: String, message: String)
+    /// The Plex server ended the session (dashboard Stop, paused too long); carries its reason.
+    case serverTerminated(String)
 
     /// Technical description for logging and Sentry - includes internal details
     var technicalDescription: String {
@@ -82,6 +84,8 @@ enum PlayerError: Error, Equatable, Sendable {
             return "Playback error: \(message)"
         case .engineFailure(let kind, let message):
             return "Playback error [\(kind)]: \(message)"
+        case .serverTerminated(let reason):
+            return "Server ended the session: \(reason)"
         }
     }
 
@@ -124,6 +128,8 @@ enum PlayerError: Error, Equatable, Sendable {
             default:
                 return "This video couldn't be played. Please try again."
             }
+        case .serverTerminated(let reason):
+            return reason
         }
     }
 
@@ -140,7 +146,7 @@ enum PlayerError: Error, Equatable, Sendable {
         switch self {
         case .loadFailed, .networkError, .unknown:
             return true
-        case .invalidURL, .codecUnsupported:
+        case .invalidURL, .codecUnsupported, .serverTerminated:
             return false
         case .engineFailure(let kind, _):
             // A hardware decode limit is the one class retrying cannot move.

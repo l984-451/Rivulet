@@ -71,7 +71,8 @@ enum DiagnosticsReport {
             "locale": Locale.current.identifier,
             "languages": Array(Locale.preferredLanguages.prefix(4)),
             "time_zone": TimeZone.current.identifier,
-            "setup_complete": UserDefaults.standard.bool(forKey: "setupComplete"),
+            // Unset means the shell's default: complete when any source exists.
+            "setup_complete": UserDefaults.standard.object(forKey: "setupComplete") as? Bool ?? "unset",
         ]
     }
 
@@ -172,7 +173,8 @@ enum DiagnosticsReport {
         return [
             "hubs": store.hubs.count,
             "continue_watching": store.continueWatchingHub?.Metadata?.count ?? -1,
-            "libraries": store.libraries.map(\.type),
+            // Visibility 1/2 (excluded from home) also drops the library from Continue Watching.
+            "libraries": store.libraries.map { "\($0.type) visibility=\($0.hidden ?? 0)" },
             "rows": store.homeItems.count,
             "row_items": store.homeItems.map(\.items.count),
             "hubs_error": store.hubsError ?? "none",
@@ -245,19 +247,86 @@ enum DiagnosticsReport {
         return result
     }
 
-    /// The last half hour of this process's log at notice and above, newest last, capped.
-    /// The system keeps only what the app and its frameworks logged through `os_log`.
-    nonisolated private static func recentLogLines() -> [String] {
+    /// This process's log since launch, newest last, in four capped groups so one chatty source
+    /// cannot push out the rest: Rivulet's own lines (the launch kept too), its network lines,
+    /// AetherEngine, and errors from everything else. `print` never reaches OSLog; see `DiagLog`.
+    nonisolated static func recentLogLines() -> [String: Any] {
         guard let store = try? OSLogStore(scope: .currentProcessIdentifier),
-              let entries = try? store.getEntries(at: store.position(date: Date().addingTimeInterval(-1800)))
-        else { return ["log unavailable"] }
+              let entries = try? store.getEntries()
+        else { return ["unavailable": true] }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss.SSS"
-        var lines: [String] = []
+        var app = LogBucket(head: 150, tail: 1350)
+        var http = LogBucket(head: 0, tail: 400)
+        var engine = LogBucket(head: 50, tail: 600)
+        var system = LogBucket(head: 0, tail: 200)
         for case let entry as OSLogEntryLog in entries where entry.level.rawValue >= OSLogEntryLog.Level.notice.rawValue {
-            let line = "\(formatter.string(from: entry.date)) [\(entry.subsystem)/\(entry.category)] \(entry.composedMessage)"
-            lines.append(String(line.prefix(400)))
+            let subsystem = entry.subsystem
+            let isError = entry.level.rawValue >= OSLogEntryLog.Level.error.rawValue
+            let line = "\(formatter.string(from: entry.date)) \(isError ? "E " : "")[\(entry.category)] \(entry.composedMessage)"
+            if subsystem.hasPrefix("com.rivulet") || subsystem.hasPrefix("com.bain") {
+                entry.category == DiagLog.Category.http.rawValue ? http.add(line) : app.add(line)
+            } else if subsystem.hasPrefix("de.superuser404") {
+                engine.add(line)
+            } else if isError {
+                system.add("\(line) {\(subsystem)}")
+            }
         }
-        return Array(lines.suffix(400))
+        return ["app": app.lines, "http": http.lines, "engine": engine.lines, "system_errors": system.lines]
+    }
+}
+
+/// Keeps the first `head` and last `tail` lines, notes how many fell between, and folds runs of
+/// one repeated message into a count.
+nonisolated struct LogBucket {
+    let head: Int
+    let tail: Int
+    private var first: [String] = []
+    private var last: [String] = []
+    private var dropped = 0
+    private var lastMessage = ""
+    private var repeats = 0
+
+    init(head: Int, tail: Int) {
+        self.head = head
+        self.tail = tail
+    }
+
+    mutating func add(_ line: String) {
+        let line = String(line.prefix(400))
+        // Everything after the timestamp, so a repeat at a new time still folds.
+        let message = String(line.drop { $0 != " " })
+        if message == lastMessage {
+            repeats += 1
+            return
+        }
+        flushRepeats()
+        lastMessage = message
+        append(line)
+    }
+
+    var lines: [String] {
+        var copy = self
+        copy.flushRepeats()
+        return copy.first + (copy.dropped > 0 ? ["… \(copy.dropped) lines omitted …"] : []) + copy.last
+    }
+
+    private mutating func flushRepeats() {
+        guard repeats > 0 else { return }
+        append("  (repeated \(repeats)x)")
+        repeats = 0
+    }
+
+    private mutating func append(_ line: String) {
+        if first.count < head {
+            first.append(line)
+            return
+        }
+        last.append(line)
+        if last.count > tail {
+            // ponytail: O(n) removeFirst per overflow; fine at these sizes, ring buffer if it ever shows.
+            last.removeFirst()
+            dropped += 1
+        }
     }
 }

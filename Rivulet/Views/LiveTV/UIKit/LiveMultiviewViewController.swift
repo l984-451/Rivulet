@@ -73,6 +73,9 @@ final class LiveMultiviewViewController: UIViewController {
     private var focusOnAddedChannelId: String?
     /// A re-rank was held back while focus was in the row.
     private var addMoreNeedsRank = false
+    /// Channel id → whether Dispatcharr lists more than one stream for it (#369).
+    /// Present while checking, so each channel is asked once.
+    private var streamChoices: [String: Bool] = [:]
 
     private var cancellables = Set<AnyCancellable>()
     /// Where focus goes on the next update, consumed once it lands.
@@ -125,6 +128,11 @@ final class LiveMultiviewViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(white: 0.05, alpha: 1)
+
+        // Backgrounding ends every tile, as it ends the full-screen player (#390).
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .sink { [weak self] _ in self?.exitMultiview(handingOff: nil, animated: false) }
+            .store(in: &cancellables)
 
         view.addSubview(watchHint)
         view.addSubview(editHint)
@@ -527,6 +535,7 @@ final class LiveMultiviewViewController: UIViewController {
                 tiles[slot.id] = tile
             }
             tile.show(slot)
+            checkStreamChoices(for: slot.channel)
         }
 
         if mode == .edit {
@@ -579,6 +588,11 @@ final class LiveMultiviewViewController: UIViewController {
                 })
             }
         }
+        if streamChoices[slot.channel.id] == true {
+            actions.append(TileMenuAction(title: "Stream", systemImage: "dial.medium") { [weak self] in
+                self?.presentStreamMenu(for: slot.channel, sourceFrame: tile.convert(tile.bounds, to: nil))
+            })
+        }
         let remove = TileMenuAction(title: "Remove", systemImage: "xmark", destructive: true) { [weak self] in
             guard let self, let index = self.viewModel.streams.firstIndex(where: { $0.id == slot.id }) else { return }
             if self.viewModel.streamCount <= 1 {
@@ -599,6 +613,51 @@ final class LiveMultiviewViewController: UIViewController {
             header: header
         )
         present(popup, animated: false)
+    }
+
+    /// Asks Dispatcharr once per channel whether the tile menu offers Stream
+    /// (more than one stream, and an admin key: anyone else gets 403).
+    private func checkStreamChoices(for channel: UnifiedChannel) {
+        guard streamChoices[channel.id] == nil,
+              let target = LiveTVDataStore.shared.dispatcharrChannel(for: channel) else { return }
+        streamChoices[channel.id] = false
+        Task { @MainActor [weak self] in
+            guard let choices = try? await target.service.channelStreams(channelUUID: target.uuid) else { return }
+            self?.streamChoices[channel.id] = choices.streams.count > 1
+        }
+    }
+
+    /// The channel's streams, fetched fresh. A switch moves everyone watching
+    /// this channel on the server, and the tile keeps its connection.
+    private func presentStreamMenu(for channel: UnifiedChannel, sourceFrame: CGRect) {
+        guard let target = LiveTVDataStore.shared.dispatcharrChannel(for: channel) else { return }
+        Task { @MainActor [weak self] in
+            guard let choices = try? await target.service.channelStreams(channelUUID: target.uuid),
+                  let self, !self.isExiting, self.presentedViewController == nil else { return }
+            let rows = choices.streams.map { stream in
+                let isCurrent = stream.id == choices.currentStreamID
+                let title = [stream.name, choices.detail(for: stream)].compactMap { $0 }.joined(separator: " • ")
+                return TileMenuAction(title: title, systemImage: isCurrent ? "checkmark" : "") { [weak self] in
+                    guard !isCurrent else { return }
+                    Task { @MainActor [weak self] in
+                        do {
+                            try await target.service.switchStream(channelUUID: target.uuid, to: stream.id)
+                        } catch {
+                            self?.showStreamSwitchFailed()
+                        }
+                    }
+                }
+            }
+            self.present(TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
+                                                     header: TileMenuHeader(title: "Stream")), animated: false)
+        }
+    }
+
+    private func showStreamSwitchFailed() {
+        guard !isExiting, presentedViewController == nil else { return }
+        let alert = UIAlertController(title: "Couldn't switch streams.", message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+        present(alert, animated: true)
     }
 
     /// The tile grows to fill the screen while the rest fades, then multiview
@@ -1093,7 +1152,7 @@ final class LiveMultiviewViewController: UIViewController {
                 let fa = store.isFavorite(a.channel)
                 let fb = store.isFavorite(b.channel)
                 if fa != fb { return fa }
-                return (a.channel.channelNumber ?? Int.max) < (b.channel.channelNumber ?? Int.max)
+                return (a.channel.channelNumber ?? .max) < (b.channel.channelNumber ?? .max)
             }
             .prefix(80)
             .map { LiveCardItem.channel($0.channel, program: store.getCurrentProgram(for: $0.channel), section: "add") }

@@ -28,6 +28,9 @@ final class AmbientBackdropView: UIView {
     }
     var imageTransform: (@Sendable (UIImage) -> UIImage)?
 
+    /// The artwork any page washed last; Settings borrows it for its own background.
+    static private(set) var lastURL: URL?
+
     private let crossfadeDuration: TimeInterval = 0.6
     private let imageAlpha: CGFloat = 0.85
 
@@ -74,6 +77,7 @@ final class AmbientBackdropView: UIView {
     func setAmbient(url: URL?) {
         guard let url, url != currentURL else { return }
         currentURL = url
+        Self.lastURL = url
         loadTask?.cancel()
         clearPreviousTask?.cancel()
 

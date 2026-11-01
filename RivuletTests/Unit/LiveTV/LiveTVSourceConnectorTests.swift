@@ -164,6 +164,36 @@ final class LiveTVSourceConnectorTests: XCTestCase {
         XCTAssertEqual(LiveTVSourceConnector.suggestedHost(plexServerURL: "http://10.0.0.5:32400"), "10.0.0.5")
         XCTAssertEqual(LiveTVSourceConnector.suggestedHost(plexServerURL: "https://plex.example.com"), "192.168.1.100")
         XCTAssertEqual(LiveTVSourceConnector.suggestedHost(plexServerURL: nil), "192.168.1.100")
-        XCTAssertEqual(LiveTVSourceConnector.serverSuggestions(host: "h").first?.value, "http://h:9191")
+    }
+
+    func test_defaultAddress_perApp() {
+        XCTAssertEqual(LiveTVSourceConnector.defaultAddress(for: .dispatcharr, host: "h"), "http://h:9191")
+        XCTAssertEqual(LiveTVSourceConnector.defaultAddress(for: .tvheadend, host: "h"), "http://h:9981")
+        XCTAssertEqual(LiveTVSourceConnector.defaultAddress(for: .threadfin, host: "h"), "http://h:34400")
+    }
+
+    // MARK: Threadfin
+
+    func test_threadfinRequest_buildsBothURLs() throws {
+        let request = try LiveTVSourceConnector.threadfinRequest(address: "10.0.0.5:34400/")
+        XCTAssertEqual(request.m3uURL.absoluteString, "http://10.0.0.5:34400/m3u/threadfin.m3u")
+        XCTAssertEqual(request.epgURL?.absoluteString, "http://10.0.0.5:34400/xmltv/threadfin.xml")
+        let behindProxy = try LiveTVSourceConnector.threadfinRequest(address: "https://tv.example.com/threadfin")
+        XCTAssertEqual(behindProxy.m3uURL.absoluteString, "https://tv.example.com/threadfin/m3u/threadfin.m3u")
+    }
+
+    func test_threadfinRequest_pastedPlaylistOrLoginIsTrimmed() throws {
+        let pasted = try LiveTVSourceConnector.threadfinRequest(address: "http://10.0.0.5:34400/m3u/threadfin.m3u")
+        XCTAssertEqual(pasted.m3uURL.absoluteString, "http://10.0.0.5:34400/m3u/threadfin.m3u")
+        let guide = try LiveTVSourceConnector.threadfinRequest(address: "http://10.0.0.5:34400/xmltv/threadfin.xml")
+        XCTAssertEqual(guide.epgURL?.absoluteString, "http://10.0.0.5:34400/xmltv/threadfin.xml")
+        let login = try LiveTVSourceConnector.threadfinRequest(address: "http://me:pw@10.0.0.5:34400")
+        XCTAssertEqual(login.m3uURL.absoluteString, "http://10.0.0.5:34400/m3u/threadfin.m3u")
+    }
+
+    func test_threadfinRequest_emptyAddress() {
+        assertThrows(source("Enter your server's address first.")) {
+            _ = try LiveTVSourceConnector.threadfinRequest(address: "  ")
+        }
     }
 }

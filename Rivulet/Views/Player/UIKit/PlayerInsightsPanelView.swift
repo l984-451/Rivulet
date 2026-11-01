@@ -5,7 +5,7 @@
 //  PlayerInsightsPanelView.swift
 //  Rivulet
 //
-//  The Insights box's card row: one sub-tab's cast or trivia, laid out
+//  The Insights card row: one sub-tab's cast or trivia, laid out
 //  sideways and scrolled with focus. Cast cards open the actor view; trivia
 //  cards size to their text so a fact reads in full.
 //
@@ -15,9 +15,7 @@ import UIKit
 final class InsightsCastListView: UIView {
 
     private enum Metrics {
-        static let cardHeight: CGFloat = 206
-        static let gap: CGFloat = 24
-        static let sideInset: CGFloat = 30
+        static let gap: CGFloat = 40
     }
 
     var onSelectCast: (MediaPerson) -> Void
@@ -49,19 +47,17 @@ final class InsightsCastListView: UIView {
         self.onSelectCast = onSelectCast
         super.init(frame: .zero)
 
-        // Cards scroll under the box's own rounded edge.
-        scrollView.clipsToBounds = true
-        scrollView.layer.cornerRadius = 48
-        scrollView.layer.cornerCurve = .continuous
+        // Cards float over the video and run off the screen edge, like the Chapters row.
+        scrollView.clipsToBounds = false
         scrollView.showsHorizontalScrollIndicator = false
-        scrollView.contentInset = UIEdgeInsets(top: 0, left: Metrics.sideInset, bottom: 0, right: Metrics.sideInset)
         stack.axis = .horizontal
         stack.spacing = Metrics.gap
         stack.alignment = .center
         scrollView.addSubview(stack)
 
         attribution.font = .systemFont(ofSize: 15, weight: .regular)
-        attribution.textColor = UIColor.white.withAlphaComponent(0.35)
+        attribution.textColor = UIColor.white.withAlphaComponent(0.6)
+        applyChromeTextShadow([attribution])
         attribution.text = trivia.map { "Info from " + $0.attribution.map(\.name).joined(separator: " · ") }
         attribution.isHidden = true
 
@@ -78,7 +74,7 @@ final class InsightsCastListView: UIView {
             stack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             stack.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor),
-            attribution.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
+            attribution.trailingAnchor.constraint(equalTo: trailingAnchor),
             attribution.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
         buildCards(for: initialTab)
@@ -89,7 +85,7 @@ final class InsightsCastListView: UIView {
 
     func setTab(_ tab: InsightsTab) {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        scrollView.contentOffset.x = -Metrics.sideInset
+        scrollView.contentOffset.x = 0
         buildCards(for: tab)
     }
 
@@ -127,66 +123,100 @@ final class InsightsCastListView: UIView {
 
 // MARK: - Cast card
 
+/// Apple's InSight cards sit on a blur material, not glass. A
+/// glass view per card also cost about 2.5 ms each to build on a pill move.
+private func makeInsightsCardMaterial() -> UIView {
+    let view = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+    view.isUserInteractionEnabled = false
+    view.clipsToBounds = true
+    view.layer.cornerRadius = InsightsCastCardView.Metrics.radius
+    view.layer.cornerCurve = .continuous
+    return view
+}
+
 /// A cast member: round headshot, name and role. Select opens their bio.
+/// Sizes match the Apple TV app's InSight cast card.
 final class InsightsCastCardView: UIControl {
 
-    private enum Metrics {
-        static let size = CGSize(width: 220, height: 206)
-        static let headshot: CGFloat = 128
+    enum Metrics {
+        static let size = CGSize(width: 260, height: 230)
+        static let radius: CGFloat = 48
+        static let padding = UIEdgeInsets(top: 24, left: 20, bottom: 24, right: 20)
+        static let headshot: CGFloat = 116
+        static let headshotToName: CGFloat = 11
     }
 
     var onPress: (() -> Void)?
     private let plate = UIView()
     private let headshot = UIImageView()
+    private let name = UILabel()
+    private let role = UILabel()
     private var imageTask: Task<Void, Never>?
 
     init(person: MediaPerson) {
         super.init(frame: .zero)
-        plate.backgroundColor = UIColor.white.withAlphaComponent(0.12)
-        plate.layer.cornerRadius = 24
+        let material = makeInsightsCardMaterial()
+        // Apple's focused card is a white 0.9 platter with dark text.
+        plate.backgroundColor = UIColor.white.withAlphaComponent(0.9)
+        plate.layer.cornerRadius = Metrics.radius
         plate.layer.cornerCurve = .continuous
         plate.alpha = 0
         plate.isUserInteractionEnabled = false
 
+        let shadow = UIView()
+        shadow.isUserInteractionEnabled = false
+        shadow.layer.shadowColor = UIColor.black.cgColor
+        shadow.layer.shadowOpacity = 0.16
+        shadow.layer.shadowOffset = CGSize(width: 0, height: 8)
+        shadow.layer.shadowRadius = 6
+        shadow.layer.shadowPath = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: Metrics.headshot, height: Metrics.headshot)).cgPath
+
         headshot.contentMode = .scaleAspectFill
         headshot.clipsToBounds = true
         headshot.layer.cornerRadius = Metrics.headshot / 2
+        headshot.layer.borderWidth = 0.5
+        headshot.layer.borderColor = UIColor.white.withAlphaComponent(0.16).cgColor
         headshot.backgroundColor = UIColor.white.withAlphaComponent(0.08)
         headshot.tintColor = UIColor.white.withAlphaComponent(0.35)
         headshot.image = UIImage(systemName: "person.fill")
 
-        let name = UILabel()
         name.text = person.name
-        name.font = .systemFont(ofSize: 23, weight: .semibold)
-        name.textColor = .white
+        name.font = .preferredFont(forTextStyle: .caption1)
         name.textAlignment = .center
-        let role = UILabel()
         role.text = person.role
-        role.font = .systemFont(ofSize: 19, weight: .regular)
-        role.textColor = UIColor.white.withAlphaComponent(0.6)
+        role.font = .preferredFont(forTextStyle: .caption2)
         role.textAlignment = .center
+        applyTextColors(focused: false)
 
-        [plate, headshot, name, role].forEach {
+        [material, plate, shadow, headshot, name, role].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Metrics.size.width),
             heightAnchor.constraint(equalToConstant: Metrics.size.height),
+            material.topAnchor.constraint(equalTo: topAnchor),
+            material.bottomAnchor.constraint(equalTo: bottomAnchor),
+            material.leadingAnchor.constraint(equalTo: leadingAnchor),
+            material.trailingAnchor.constraint(equalTo: trailingAnchor),
             plate.topAnchor.constraint(equalTo: topAnchor),
             plate.bottomAnchor.constraint(equalTo: bottomAnchor),
             plate.leadingAnchor.constraint(equalTo: leadingAnchor),
             plate.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headshot.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            headshot.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.padding.top),
             headshot.centerXAnchor.constraint(equalTo: centerXAnchor),
             headshot.widthAnchor.constraint(equalToConstant: Metrics.headshot),
             headshot.heightAnchor.constraint(equalToConstant: Metrics.headshot),
-            name.topAnchor.constraint(equalTo: headshot.bottomAnchor, constant: 10),
-            name.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            name.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            role.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 2),
-            role.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            role.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            shadow.topAnchor.constraint(equalTo: headshot.topAnchor),
+            shadow.leadingAnchor.constraint(equalTo: headshot.leadingAnchor),
+            shadow.widthAnchor.constraint(equalToConstant: Metrics.headshot),
+            shadow.heightAnchor.constraint(equalToConstant: Metrics.headshot),
+            name.topAnchor.constraint(equalTo: headshot.bottomAnchor, constant: Metrics.headshotToName),
+            name.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.padding.left),
+            name.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.padding.right),
+            role.topAnchor.constraint(equalTo: name.bottomAnchor),
+            role.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.padding.left),
+            role.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.padding.right),
         ])
 
         if let url = person.imageURL {
@@ -218,8 +248,15 @@ final class InsightsCastCardView: UIControl {
         let focused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: focused) {
             self.plate.alpha = focused ? 1 : 0
+            self.applyTextColors(focused: focused)
             self.transform = focused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
         }
+    }
+
+    private func applyTextColors(focused: Bool) {
+        let ink: UIColor = focused ? .black : .white
+        name.textColor = ink
+        role.textColor = ink.withAlphaComponent(0.6)
     }
 }
 
@@ -230,8 +267,8 @@ final class InsightsCastCardView: UIControl {
 final class InsightsTriviaCardView: UIView {
 
     private enum Metrics {
-        static let height: CGFloat = 206
-        static let padding = UIEdgeInsets(top: 18, left: 22, bottom: 18, right: 22)
+        static let height = InsightsCastCardView.Metrics.size.height
+        static let padding = InsightsCastCardView.Metrics.padding
         static let widths: [CGFloat] = [460, 600, 760, 920]
         static let categoryHeight: CGFloat = 26
     }
@@ -256,8 +293,9 @@ final class InsightsTriviaCardView: UIView {
 
     init(fact: TriviaFact, showsCategory: Bool) {
         super.init(frame: .zero)
-        background.backgroundColor = UIColor.white.withAlphaComponent(0.08)
-        background.layer.cornerRadius = 24
+        let material = makeInsightsCardMaterial()
+        background.backgroundColor = .clear
+        background.layer.cornerRadius = InsightsCastCardView.Metrics.radius
         background.layer.cornerCurve = .continuous
         background.isUserInteractionEnabled = false
 
@@ -276,7 +314,7 @@ final class InsightsTriviaCardView: UIView {
         text.adjustsFontSizeToFitWidth = true
         text.minimumScaleFactor = 0.7
 
-        [background, category, text].forEach {
+        [material, background, category, text].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -284,6 +322,10 @@ final class InsightsTriviaCardView: UIView {
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Self.width(for: fact.text, showsCategory: showsCategory)),
             heightAnchor.constraint(equalToConstant: Metrics.height),
+            material.topAnchor.constraint(equalTo: topAnchor),
+            material.bottomAnchor.constraint(equalTo: bottomAnchor),
+            material.leadingAnchor.constraint(equalTo: leadingAnchor),
+            material.trailingAnchor.constraint(equalTo: trailingAnchor),
             background.topAnchor.constraint(equalTo: topAnchor),
             background.bottomAnchor.constraint(equalTo: bottomAnchor),
             background.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -306,7 +348,7 @@ final class InsightsTriviaCardView: UIView {
         super.didUpdateFocus(in: context, with: coordinator)
         let focused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: focused) {
-            self.background.backgroundColor = UIColor.white.withAlphaComponent(focused ? 0.18 : 0.08)
+            self.background.backgroundColor = focused ? UIColor.white.withAlphaComponent(0.12) : .clear
             self.transform = focused ? CGAffineTransform(scaleX: 1.03, y: 1.03) : .identity
         }
     }

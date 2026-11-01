@@ -36,6 +36,7 @@ final class PlexWatchlistAPIPagingTests: XCTestCase {
             URLQueryItem(name: "includeGuids", value: "1"),
             URLQueryItem(name: "X-Plex-Container-Start", value: "\(start)"),
             URLQueryItem(name: "X-Plex-Container-Size", value: "100"),
+            URLQueryItem(name: "excludeElements", value: "Image,Role,Genre,Country,Director,Writer"),
             URLQueryItem(name: "X-Plex-Token", value: "test-token")
         ]
         return components.url!

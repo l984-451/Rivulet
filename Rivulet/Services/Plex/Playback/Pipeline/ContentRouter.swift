@@ -256,11 +256,16 @@ struct ContentRouter {
     static func buildDirectPlayURL(context: ContentRoutingContext) -> (url: URL, headers: [String: String])? {
         guard let media = context.metadata.Media?.first,
               let part = media.Part?.first,
-              let partKey = part.key else {
+              let partKey = part.key,
+              let url = directPlayURL(partKey: partKey, serverURL: context.serverURL, authToken: context.authToken) else {
             return nil
         }
+        return (url, ["X-Plex-Token": context.authToken])
+    }
 
-        var components = URLComponents(url: context.serverURL, resolvingAgainstBaseURL: false)!
+    /// The direct Plex URL of one Part's file.
+    static func directPlayURL(partKey: String, serverURL: URL, authToken: String) -> URL? {
+        var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
 
         // A Part key can carry its OWN query string. Library parts don't
         // (/library/parts/1/2/file.mkv), but Plex's IVA extras do:
@@ -275,13 +280,9 @@ struct ContentRouter {
         components.path = path
 
         var queryItems = inheritedItems
-        queryItems.append(URLQueryItem(name: "X-Plex-Token", value: context.authToken))
+        queryItems.append(URLQueryItem(name: "X-Plex-Token", value: authToken))
         components.queryItems = queryItems
-
-        guard let url = components.url else { return nil }
-
-        let headers = ["X-Plex-Token": context.authToken]
-        return (url, headers)
+        return components.url
     }
 
     /// Build Aether route — Aether demuxes the source itself and remuxes

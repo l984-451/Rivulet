@@ -75,6 +75,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     var onShowRelatedDetails: ((MediaItem) -> Void)?
     /// Episode description Select → open the episode detail page.
     var onShowEpisodeDetails: ((MediaItem) -> Void)?
+    /// Held Select on an episode → its tile menu, anchored at the thumb's window frame.
+    var onEpisodeMenu: ((MediaItem, CGRect) -> Void)?
     /// Cast / crew cell Select → open the person detail page.
     var onSelectPerson: ((MediaPerson) -> Void)?
     /// Selecting the About cards opens the matching popup (synopsis / advisory).
@@ -402,6 +404,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     // Two focus stops: thumb = play, description = detail page.
                     cell.onPlay = { [weak self] in self?.onPlayEpisode?(ep) }
                     cell.onShowDetails = { [weak self] in self?.onShowEpisodeDetails?(ep) }
+                    cell.onLongPress = { [weak self] frame in self?.onEpisodeMenu?(ep, frame) }
                     cell.onFocusKind = { [weak self] kind in
                         guard let self else { return }
                         if kind == .thumb { self.lastThumbFocusTime = CACurrentMediaTime() }

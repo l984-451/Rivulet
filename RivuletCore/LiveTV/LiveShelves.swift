@@ -113,11 +113,20 @@ enum LiveShelves {
 
     static func build(_ input: Input, sourceIdFilter: String?, now: Date) -> [LiveShelf] {
         let epg = input.epg
+        // Each row asks again for the same channel; scan its guide once per build.
+        var currentMemo: [String: UnifiedProgram?] = [:]
+        var nextMemo: [String: UnifiedProgram?] = [:]
         func current(_ channel: UnifiedChannel) -> UnifiedProgram? {
-            epg[channel.id]?.first { $0.startTime <= now && $0.endTime > now }
+            if let memo = currentMemo[channel.id] { return memo }
+            let program = epg[channel.id]?.first { $0.startTime <= now && $0.endTime > now }
+            currentMemo[channel.id] = program
+            return program
         }
         func next(_ channel: UnifiedChannel) -> UnifiedProgram? {
-            epg[channel.id]?.first { $0.startTime > now }
+            if let memo = nextMemo[channel.id] { return memo }
+            let program = epg[channel.id]?.first { $0.startTime > now }
+            nextMemo[channel.id] = program
+            return program
         }
 
         let all = sourceIdFilter.map { id in input.channels.filter { $0.sourceId == id } } ?? input.channels

@@ -63,4 +63,11 @@ final class SystemAudioAdjustmentTests: XCTestCase {
         XCTAssertFalse(SystemAudioAdjustment.showsLevels(available: [], levelsAvailable: true))
         XCTAssertEqual(SystemAudioAdjustment.menuToggleCases(available: [], levelsAvailable: true), [])
     }
+
+    func test_dialogueSummary_namesTheLevelOnlyWhenTheRouteOffersLevels() {
+        XCTAssertEqual(SystemAudioAdjustment.dialogueSummary(levelsAvailable: true, level: .enhanceMore), "Enhance More")
+        XCTAssertEqual(SystemAudioAdjustment.dialogueSummary(levelsAvailable: true, level: .off), "Off")
+        XCTAssertEqual(SystemAudioAdjustment.dialogueSummary(levelsAvailable: false, level: .enhance), "On")
+        XCTAssertEqual(SystemAudioAdjustment.dialogueSummary(levelsAvailable: false, level: .off), "Off")
+    }
 }

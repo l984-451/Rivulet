@@ -16,6 +16,8 @@ actor PlexProgressReporter {
 
     private var lastReportedTimes: [String: TimeInterval] = [:]
     private var lastReportedStates: [String: String] = [:]
+    /// Play session per server|ratingKey for a direct-play item; its timeline carries the id.
+    private var directPlaySessions: [String: String] = [:]
 
     private init() {}
 
@@ -36,6 +38,9 @@ actor PlexProgressReporter {
                              lastState: String?,
                              lastTime: TimeInterval?,
                              force: Bool) -> Bool {
+        // A session must open with "playing": a "paused" first (the engine
+        // holds paused while loading) makes Plex fire media.pause and never media.play (#433).
+        if state == "paused" && (lastState == nil || lastState == "stopped") { return false }
         if force { return true }
         if lastState != state { return true }
         guard let lastTime else { return true }
@@ -51,6 +56,8 @@ actor PlexProgressReporter {
     ///   - duration: Total duration in seconds
     ///   - state: Playback state ("playing", "paused", "stopped")
     ///   - forceReport: If true, bypasses throttle to report immediately (for state changes)
+    /// - Returns: The server's reason when it has ended this play session (#403), else nil.
+    @discardableResult
     func reportProgress(
         ratingKey: String,
         time: TimeInterval,
@@ -58,9 +65,9 @@ actor PlexProgressReporter {
         state: String,
         forceReport: Bool = false,
         server explicit: PlexServerAddress? = nil
-    ) async {
-        guard !ratingKey.isEmpty else { return }
-        guard let server = await server(explicit) else { return }
+    ) async -> String? {
+        guard !ratingKey.isEmpty else { return nil }
+        guard let server = await server(explicit) else { return nil }
         // Keyed by server too: two servers can share a ratingKey.
         let key = server.address + "|" + ratingKey
 
@@ -68,7 +75,7 @@ actor PlexProgressReporter {
                                 time: time,
                                 lastState: lastReportedStates[key],
                                 lastTime: lastReportedTimes[key],
-                                force: forceReport) else { return }
+                                force: forceReport) else { return nil }
         lastReportedTimes[key] = time
         lastReportedStates[key] = state
 
@@ -98,18 +105,41 @@ actor PlexProgressReporter {
             URLQueryItem(name: "X-Plex-Device", value: clientInfo.device),
             URLQueryItem(name: "X-Plex-Product", value: clientInfo.product)
         ]
+        if let session = directPlaySessions[key] {
+            components?.queryItems?.append(URLQueryItem(name: "X-Plex-Session-Identifier", value: session))
+            if state == "stopped" { directPlaySessions[key] = nil }
+        }
 
-        guard let url = components?.url else { return }
+        guard let url = components?.url else { return nil }
 
         do {
-            _ = try await PlexNetworkManager.shared.requestData(
+            let data = try await PlexNetworkManager.shared.requestData(
                 url,
                 method: "GET",
-                headers: ["X-Plex-Token": server.token]
+                headers: ["X-Plex-Token": server.token, "Accept": "application/json"]
             )
+            return PlexNetworkManager.timelineTermination(in: data)
         } catch {
             playerDebugLog("📊 PlexProgress: Failed to report progress: \(error)")
+            return nil
         }
+    }
+
+    /// Opens a Plex play session for a file the engine plays directly, so the
+    /// server dashboard shows its bandwidth (#423). The item's next "stopped" report ends it.
+    func beginDirectPlaySession(ratingKey: String, mediaIndex: Int, server explicit: PlexServerAddress? = nil) async {
+        guard !ratingKey.isEmpty, let server = await server(explicit) else { return }
+        let session = UUID().uuidString
+        directPlaySessions[server.address + "|" + ratingKey] = session
+        await PlexNetworkManager.shared.openDirectPlaySession(
+            serverURL: server.address, authToken: server.token, ratingKey: ratingKey,
+            mediaIndex: mediaIndex, sessionIdentifier: session)
+    }
+
+    /// Drops the direct-play session when the item moves onto a server transcode.
+    func endDirectPlaySession(ratingKey: String, server explicit: PlexServerAddress? = nil) async {
+        guard let server = await server(explicit) else { return }
+        directPlaySessions[server.address + "|" + ratingKey] = nil
     }
 
     /// Marks an item as fully watched (scrobble)

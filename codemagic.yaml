@@ -55,6 +55,12 @@ workflows:
             --type TVOS_APP_STORE \
             --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
             --create
+          # Needs the App Groups capability (group.com.bain.Rivulet) on its App ID.
+          app-store-connect fetch-signing-files "${BUNDLE_ID}.AssetPackExtension" \
+            --platform IOS \
+            --type TVOS_APP_STORE \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --create
 
       - name: Add certificates to keychain
         script: |

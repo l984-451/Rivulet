@@ -24,8 +24,10 @@ final class PlayerRailView: UIView {
         static let titleLeading: CGFloat = 84
         static let subtitleTop: CGFloat = 18
         static let titleTop: CGFloat = 62
-        static let toolTop: CGFloat = 56
-        static let toolDiameter: CGFloat = 70
+        // Tool row measured on device against the TV app and stock AVKit (tvOS 27):
+        // 66pt circles on a 90pt pitch, centred 833pt down. The 1080p sim draws 70.
+        static let toolTop: CGFloat = 60
+        static let toolDiameter: CGFloat = 66
         static let toolGap: CGFloat = 24
         static let pillsTop: CGFloat = 230
         static let pillGap: CGFloat = 24
@@ -73,6 +75,14 @@ final class PlayerRailView: UIView {
     let detailsButton = PlayerInfoPillButton(title: "Details")
 
     var onSubtitles: (() -> Void)?
+    /// Holding Subtitles turns them on or off (AVKit).
+    var onSubtitlesHold: (() -> Void)? {
+        didSet { subtitlesButton.onLongPress = onSubtitlesHold }
+    }
+    /// AVKit's "Subtitles on" / "Subtitles off" note, bottom right: 25pt medium,
+    /// baseline 281pt into the rail, right edge on the inset (measured on device).
+    private let noteLabel = UILabel()
+    private var noteHide: DispatchWorkItem?
     var onAudio: (() -> Void)?
     var onInfo: (() -> Void)?
     var onChapters: (() -> Void)?
@@ -129,7 +139,10 @@ final class PlayerRailView: UIView {
         insightsTabRow.alignment = .center
         insightsTabRow.isHidden = true
 
-        [subtitleLabel, titleLabel, toolRow, pillRow, insightsTabRow].forEach {
+        noteLabel.font = .systemFont(ofSize: 25, weight: .medium)
+        noteLabel.textColor = .white
+        noteLabel.alpha = 0
+        [subtitleLabel, titleLabel, toolRow, pillRow, insightsTabRow, noteLabel].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -148,6 +161,9 @@ final class PlayerRailView: UIView {
 
             pillRow.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.pillsTop),
             pillRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.sideInset),
+
+            noteLabel.lastBaselineAnchor.constraint(equalTo: topAnchor, constant: 281),
+            noteLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.sideInset),
 
             insightsTabRow.centerYAnchor.constraint(equalTo: pillRow.centerYAnchor),
             insightsTabRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.sideInset),
@@ -201,6 +217,19 @@ final class PlayerRailView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     // MARK: - Content
+
+    /// Shows AVKit's toggle note, then fades it.
+    func showNote(_ text: String) {
+        noteHide?.cancel()
+        noteLabel.text = text
+        UIView.animate(withDuration: 0.17) { self.noteLabel.alpha = 1 }
+        let hide = DispatchWorkItem { [weak self] in
+            UIView.animate(withDuration: 0.17) { self?.noteLabel.alpha = 0 }
+        }
+        noteHide = hide
+        // ponytail: 2s is a guess; AVKit's note lifetime is unmeasured.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: hide)
+    }
 
     func setTitle(_ title: String, eyebrow: String?) {
         titleLabel.text = title
@@ -446,7 +475,7 @@ final class PlayerInfoPillButton: UIControl {
     var isSelectedTab = false {
         didSet { if !isFocused { applyAppearance(focused: false) } }
     }
-    private let glass = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+    private let glass = UIVisualEffectView(effect: TransportControlButton.glassEffect())
     private let highlight = UIView()
     private let label = UILabel()
 
@@ -462,7 +491,6 @@ final class PlayerInfoPillButton: UIControl {
         glass.isUserInteractionEnabled = false
         glass.clipsToBounds = true
         glass.layer.cornerRadius = height / 2
-        glass.backgroundColor = TransportControlButton.restingWash
 
         highlight.backgroundColor = .white
         highlight.isUserInteractionEnabled = false

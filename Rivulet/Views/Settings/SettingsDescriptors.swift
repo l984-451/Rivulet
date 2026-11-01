@@ -28,12 +28,14 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
         if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
+        if id.hasPrefix("cfw_"), id != "cfw_add" { return descriptors["customWordRow"] }
         if id.hasPrefix("sq_") { return descriptors["streamingQualityOption"] }
         if id.hasPrefix("al_") { return descriptors["audioLanguage"] }
         if id.hasPrefix("sl_") { return descriptors["subtitleLanguage"] }
         if id.hasPrefix("hs_") { return descriptors["heightSpeakers"] }
         if id.hasPrefix("sm_") { return descriptors["subtitleMode"] }
         if id.hasPrefix("ai_") { return descriptors["appIcon"] }
+        if id.hasPrefix("hh_") { return descriptors["homeHero"] }
         if id.hasPrefix("dr_") { return descriptors["detailRating"] }
         if id.hasPrefix("alim_") { return descriptors["autoplayLimit"] }
         if id.hasPrefix("plexServer_") { return descriptors["plexServerOption"] }
@@ -43,7 +45,7 @@ enum SettingsDescriptorStore {
         return nil
     }
 
-    private static let descriptors: [String: SettingDescriptor] = [
+    static let descriptors: [String: SettingDescriptor] = [
         // MARK: Root Categories
         "cat_appearance": SettingDescriptor(
             icon: "paintbrush.fill",
@@ -69,7 +71,7 @@ enum SettingsDescriptorStore {
         // MARK: Appearance
         "libraries": SettingDescriptor(
             icon: "sidebar.squares.left",
-            description: "Choose what appears in the sidebar and set its order. Libraries apply to Home as well: a library you turn off here loses its Home rows, and the order you set here is the order Home draws them in."
+            description: "Choose what appears in the sidebar and in what order. Home follows it: a library turned off here loses its Home rows."
         ),
         "resetSidebar": SettingDescriptor(
             icon: "arrow.counterclockwise",
@@ -94,7 +96,7 @@ enum SettingsDescriptorStore {
 
         "homeRows": SettingDescriptor(
             icon: "rectangle.grid.1x2",
-            description: "Turn individual Home rows off. The rows and their titles come from your Plex account, so they match the Plex app. Turning one off here hides it on this Apple TV only. A library appears here once it is pinned to Home in Plex, under Settings then Manage then Libraries."
+            description: "Turn Home rows off on this Apple TV. Rows come from your Plex account; a library shows here once it is pinned to Home in Plex."
         ),
         "showAllHomeRows": SettingDescriptor(
             icon: "eye",
@@ -110,7 +112,15 @@ enum SettingsDescriptorStore {
         ),
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",
-            description: "Shows a large featured content banner at the top of the Home screen with artwork and quick actions."
+            description: "The large banner at the top of the Home screen. Trending features popular titles from your library. Or pick one of your Home lists: Continue Watching, Recently Added or your Watchlist."
+        ),
+        "topShelfStyle": SettingDescriptor(
+            icon: "tv",
+            description: "The top row of the Apple TV Home Screen. Posters shows a row of posters. Full Screen fills it with artwork from what you are watching."
+        ),
+        "skipPreview": SettingDescriptor(
+            icon: "rectangle.expand.vertical",
+            description: "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row."
         ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
@@ -135,23 +145,23 @@ enum SettingsDescriptorStore {
         // MARK: Playback
         "autoSkipIntro": SettingDescriptor(
             icon: "play.circle",
-            description: "What happens when an intro starts. Button shows Skip Intro, Automatic skips it after a short countdown, and Off never shows the button."
+            description: "What happens when an intro starts. Manual shows Skip Intro, Automatic skips it after a short countdown, and Off never shows the button."
         ),
         "autoSkipCredits": SettingDescriptor(
             icon: "stop.circle",
-            description: "What happens when the credits start. Button shows Skip Credits, Automatic skips straight to the post-play screen, and Off never shows the button."
+            description: "What happens when the credits start. Manual shows Skip Credits, Automatic skips straight to the post-play screen, and Off never shows the button."
         ),
         "autoSkipAds": SettingDescriptor(
             icon: "forward.frame",
-            description: "What happens when an ad break starts. Button shows Skip Ad, Automatic skips it after a short countdown, and Off never shows the button."
+            description: "What happens when an ad break starts. Manual shows Skip Ad, Automatic skips it after a short countdown, and Off never shows the button."
         ),
         "autoSkipRecap": SettingDescriptor(
             icon: "backward.end.circle",
-            description: "What happens when a 'previously on' recap starts. Button shows Skip Recap, Automatic skips it, and Off never shows the button. Recap markers come from the community database below."
+            description: "When a recap starts. Manual shows Skip Recap, Automatic skips it, Off shows nothing. Recap markers come from the community database below."
         ),
         "useIntroDB": SettingDescriptor(
             icon: "magnifyingglass",
-            description: "Fills in missing intro, recap, and credits markers from the community database introdb.app, sending only the show's ID and episode number. Your own server's markers are always used first."
+            description: "Fills in missing intro, recap and credits markers from introdb.app, sending only the show ID and episode number. Your server's markers come first."
         ),
         "promptResumeOrRestart": SettingDescriptor(
             icon: "questionmark.circle",
@@ -159,7 +169,7 @@ enum SettingsDescriptorStore {
         ),
         "instantResume": SettingDescriptor(
             icon: "play.rectangle.on.rectangle",
-            description: "Selecting a Continue Watching tile resumes it immediately. Turn this off to open the preview instead, the same as every other Home row, which also disables the Resume or Restart Prompt below."
+            description: "Selecting a Continue Watching tile resumes it at once. Off opens the preview instead and turns off the Resume or Restart Prompt."
         ),
         "homeStreamingQuality": SettingDescriptor(
             icon: "house.fill",
@@ -171,15 +181,15 @@ enum SettingsDescriptorStore {
         ),
         "streamingQualityOption": SettingDescriptor(
             icon: "dial.medium",
-            description: "Original plays the file untouched. Auto measures your connection and converts only when the file will not fit. A fixed rate converts anything above it; converted video plays without HDR, Dolby Vision or Atmos."
+            description: "Original plays the file as is. Auto converts only when your connection needs it. A fixed rate converts anything above it, dropping HDR and Atmos."
         ),
         "audioLanguage": SettingDescriptor(
             icon: "waveform",
-            description: "The audio track to play when a title has several. Plex Account follows the audio language set in your Plex account (English on other servers). Original plays the file's main track, so foreign films and anime keep their own language. Picking a track in the player also changes this."
+            description: "The audio track to play when a title has several. Original keeps the file's main track. Picking a track in the player also changes this."
         ),
         "subtitleMode": SettingDescriptor(
             icon: "captions.bubble",
-            description: "Foreign Audio shows subtitles when the audio is not in your subtitle language, and forced subtitles for foreign lines otherwise. Always shows them on every title. Picking a track in the player also changes this."
+            description: "Foreign Audio shows subtitles when the audio is not in your language, otherwise forced ones only. Always shows them on every title."
         ),
         "subtitleLanguage": SettingDescriptor(
             icon: "globe",
@@ -189,13 +199,21 @@ enum SettingsDescriptorStore {
             icon: "ear",
             description: "Prefers subtitles for the deaf and hard of hearing, which also describe sounds and name who is speaking."
         ),
+        "generatedSubtitles": SettingDescriptor(
+            icon: "captions.bubble",
+            description: "English only for now. With Subtitles set to Always, a title with no subtitles in your language gets them written from its dialogue. Downloads 230 MB."
+        ),
         "heightSpeakers": SettingDescriptor(
             icon: "hifispeaker.2",
-            description: "Keeps the height channels of Dolby TrueHD Atmos and DTS:X soundtracks, in a lossy format. Off plays lossless 7.1 without them. DTS:X needs 7.1.4 or 9.1.6. With Dolby Vision FEL on, a FEL video plays its soundtrack without heights."
+            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
+        ),
+        "upscaleLowResolution": SettingDescriptor(
+            icon: "sparkles.tv",
+            description: "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before."
         ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
-            description: "Plays the full enhancement layer of Dolby Vision Profile 7 videos on a Dolby Vision TV. FEL videos play without Atmos and DTS:X height channels, AirPlay or Picture in Picture. Off plays them as Profile 8.1."
+            description: "Plays the full Dolby Vision Profile 7 layer on a Dolby Vision TV, without AirPlay or Picture in Picture. Off plays it as 8.1."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -241,7 +259,7 @@ enum SettingsDescriptorStore {
         ),
         "liveTVSuggestions": SettingDescriptor(
             icon: "sparkles",
-            description: "What's On learns what you watch and suggests what is on now that is like it, in a For You row. It learns on this Apple TV only. Turn it off to hide the row and stop learning."
+            description: "A For You row in What's On, suggesting what is on now like what you watch. It learns on this Apple TV only. Off hides the row."
         ),
         "keepPlayingInGuide": SettingDescriptor(
             icon: "pip",
@@ -278,6 +296,18 @@ enum SettingsDescriptorStore {
         "plexServerEnabled": SettingDescriptor(
             icon: "power",
             description: "Turn off to remove this server from Rivulet: its libraries, Home rows, Continue Watching and Live TV. Your account stays signed in."
+        ),
+        "plexServerLiveTV": SettingDescriptor(
+            icon: "tv.and.mediabox",
+            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+        ),
+        "jellyfinLiveTV": SettingDescriptor(
+            icon: "tv.and.mediabox",
+            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+        ),
+        "src_showInLiveTV": SettingDescriptor(
+            icon: "tv.and.mediabox",
+            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
         ),
         "plexServerRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
@@ -329,7 +359,7 @@ enum SettingsDescriptorStore {
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Add and manage your own Live TV sources — your Plex server's Live TV, or an M3U/IPTV playlist from a provider you subscribe to. Rivulet does not provide any channels or content of its own."
+            description: "Add your own Live TV sources: your Plex server's Live TV or an IPTV playlist from your provider. Rivulet provides no channels of its own."
         ),
         "plexLiveTVSource": SettingDescriptor(
             icon: "play.rectangle.fill",
@@ -357,11 +387,11 @@ enum SettingsDescriptorStore {
         ),
         "addXtream": SettingDescriptor(
             icon: "person.badge.key",
-            description: "Sign in with the server address, username and password your IPTV provider gave you, often called an Xtream Codes login. Rivulet loads the channels, categories and guide. It supplies no channels of its own."
+            description: "Sign in with the server, username and password from your IPTV provider (an Xtream Codes login). Rivulet loads the channels and guide."
         ),
         "xtreamServerField": SettingDescriptor(
             icon: "globe",
-            description: "The server address from your provider, with its port, for example http://provider.example:8080. If your provider gave you a single link with your username and password in it, enter that instead: Rivulet fills in the rest."
+            description: "Your provider's server address with its port, like http://provider.example:8080. A single link with your login in it works too."
         ),
         "xtreamUsernameField": SettingDescriptor(
             icon: "person",
@@ -371,9 +401,33 @@ enum SettingsDescriptorStore {
             icon: "key",
             description: "The password your provider gave you. Rivulet keeps it in the Keychain."
         ),
-        "addOwnServer": SettingDescriptor(
+        "addDispatcharr": SettingDescriptor(
+            icon: "antenna.radiowaves.left.and.right",
+            description: "Your Dispatcharr server. Rivulet loads its channels and guide, and records through it if you sign in."
+        ),
+        "addTvheadend": SettingDescriptor(
+            icon: "tv",
+            description: "Your Tvheadend server. Rivulet loads its channels and guide, and records through it if you sign in."
+        ),
+        "addThreadfin": SettingDescriptor(
             icon: "server.rack",
-            description: "A server you run yourself that serves a playlist and a guide, such as Dispatcharr, Threadfin, xTeVe, ErsatzTV, or Cabernet. You give Rivulet the address and it finds the rest."
+            description: "Your Threadfin server. Rivulet loads its playlist and guide from the address."
+        ),
+        "tvhServerField": SettingDescriptor(
+            icon: "globe",
+            description: "Your Tvheadend server's address on your network, with its port. Tvheadend uses 9981 unless you changed it."
+        ),
+        "tvhUsernameField": SettingDescriptor(
+            icon: "person",
+            description: "A Tvheadend user. Needed if your server asks for a login, and to record. Leave it empty to watch without one."
+        ),
+        "tvhPasswordField": SettingDescriptor(
+            icon: "key",
+            description: "That user's password. Rivulet keeps it in the Keychain."
+        ),
+        "threadfinServerField": SettingDescriptor(
+            icon: "globe",
+            description: "Your Threadfin server's address on your network, with its port. Threadfin uses 34400 unless you changed it."
         ),
         "addPlaylistURL": SettingDescriptor(
             icon: "list.bullet.rectangle",
@@ -381,7 +435,7 @@ enum SettingsDescriptorStore {
         ),
         "serverURL": SettingDescriptor(
             icon: "globe",
-            description: "The address of your server on your network, including the port. Pick your app from the suggestions to fill in the usual one."
+            description: "Your Dispatcharr server's address on your network, with its port. Dispatcharr uses 9191 unless you changed it."
         ),
         "displayNameField": SettingDescriptor(
             icon: "textformat",
@@ -423,34 +477,30 @@ enum SettingsDescriptorStore {
         ),
         "inputDiagnostics": SettingDescriptor(
             icon: "dot.radiowaves.left.and.right",
-            description: "Show every remote button press on screen, with how long it was held and which remote sent it. Helpful when reporting a problem with a third-party remote. Leave this off for normal viewing."
+            description: "Shows every remote press on screen, how long it was held and which remote sent it. Useful when reporting a remote problem."
         ),
         "inputTest": SettingDescriptor(
             icon: "checklist",
-            description: "Asks you to press a short list of buttons, then records what your remote actually sent for each one. The result goes to Rivulet's diagnostics so a reported problem can be traced. Nothing about what you watch is included."
+            description: "Asks you to press a few buttons and records what your remote sent, for Rivulet's diagnostics. Nothing about what you watch is included."
         ),
 
         "sendDiagnostics": SettingDescriptor(
             icon: "stethoscope",
-            description: "Sends a snapshot of how Rivulet is set up and running, with recent log lines, and gives you a short code to include when you report a problem. It holds counts and settings only: no titles, server names, addresses or passwords."
+            description: "Sends a snapshot of Rivulet's setup and recent logs, and gives you a code to quote in a report. No titles, servers, addresses or passwords."
         ),
 
         // MARK: Content Filtering
         "cat_contentFilter": SettingDescriptor(
             icon: "hand.raised.fill",
-            description: "Mute strong language and skip scenes during playback, without ever changing the file. Language is found in the title's English subtitles, even with subtitles turned off. Scene skips come from an imported filter list."
+            description: "Mute language and skip scenes during playback without changing the file. Language comes from English subtitles; skips from a filter list."
         ),
         "cf_master": SettingDescriptor(
             icon: "hand.raised.fill",
-            description: "Turn the local content filter on. Rivulet then mutes and skips in real time based on the categories below. While it's on, a button in the player pauses filtering for the title you're watching."
+            description: "Turns the content filter on, muting and skipping by the categories below. A player button pauses it for the current title."
         ),
         "cf_profanity": SettingDescriptor(
             icon: "exclamationmark.bubble.fill",
-            description: "Mutes profane words in the dialogue. Rivulet reads the title's subtitles even when they are off, including ones inside the video file. Use Profanity Strength to choose how much is filtered."
-        ),
-        "cf_strength": SettingDescriptor(
-            icon: "dial.medium.fill",
-            description: "How much profanity to mute: mild and up, moderate and up, or strong words only. Also applies to profanity in imported filter lists."
+            description: "Mutes profane words: mild and up, moderate and up, or strong only. Also applies to profanity in imported filter lists."
         ),
         "cf_blasphemy": SettingDescriptor(
             icon: "hands.clap.fill",
@@ -463,6 +513,18 @@ enum SettingsDescriptorStore {
         "cf_sexualLanguage": SettingDescriptor(
             icon: "heart.slash.fill",
             description: "Mutes crude and sexual language in the dialogue."
+        ),
+        "cf_customWords": SettingDescriptor(
+            icon: "text.badge.plus",
+            description: "Your own words to mute, such as \"shut up\". Muted whenever the filter is on. A word matches only on its own, never inside another."
+        ),
+        "cfw_add": SettingDescriptor(
+            icon: "plus.circle.fill",
+            description: "Type a word or a short phrase to mute. Capitals and punctuation don't matter."
+        ),
+        "customWordRow": SettingDescriptor(
+            icon: "text.badge.minus",
+            description: "Select to stop muting this word."
         ),
         "cf_violence": SettingDescriptor(
             icon: "burst.fill",
@@ -482,11 +544,25 @@ enum SettingsDescriptorStore {
         ),
         "cf_sourceURL": SettingDescriptor(
             icon: "link",
-            description: "Optional. Where per-title filter files live, in the open MCF (movie content filter) or EDL format. For a folder, Rivulet looks for a file named after the video file, then the IMDb id (tt0133093.edl), then the Plex rating key. An address can use {file}, {imdb}, {tmdb}, {tvdb} or {id} instead. From moviecontentfilter.com, download the EDL format with your copy's start and end times. Rivulet ships no filter data of its own."
+            description: "Optional. A folder or address with per-title MCF or EDL filter files. From moviecontentfilter.com, download the EDL with your copy's times."
         ),
     ]
 
     // MARK: - Page Descriptors
+
+    /// A group's own panel icon on pages whose icon follows focus between groups,
+    /// keyed by the group's header title. Nil keeps the page icon.
+    static func sectionIcon(for page: SettingsPage, section: String?) -> String? {
+        guard page == .appearance else { return nil }
+        switch section {
+        case "Home": return "house.fill"
+        case "Library": return "books.vertical.fill"
+        case "Details": return "star.leadinghalf.filled"
+        case "Live TV": return "tv.fill"
+        case "Extras": return "sparkles"
+        default: return nil
+        }
+    }
 
     /// Icon and title for each settings page (shown in left panel header).
     /// `UIColor` rather than SwiftUI `Color`: the only consumer is the UIKit
@@ -509,6 +585,7 @@ enum SettingsDescriptorStore {
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)
         case .cache: return ("internaldrive", .systemGray)
         case .appIconPicker: return ("app.badge", .systemPurple)
+        case .homeHeroPicker: return ("sparkles.rectangle.stack", .systemPurple)
         case .detailRatingPicker: return ("star.leadinghalf.filled", .systemYellow)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
         case .skipIntervalPicker: return ("forward.fill", .systemBlue)
@@ -522,11 +599,14 @@ enum SettingsDescriptorStore {
         case .subtitleLanguagePicker: return ("captions.bubble", .systemYellow)
         case .contentFilter: return ("hand.raised.fill", .systemOrange)
         case .contentFilterStrength: return ("dial.medium.fill", .systemOrange)
+        case .contentFilterWords: return ("text.badge.plus", .systemOrange)
         case .liveTVSourceDetail: return ("tv.and.mediabox", .systemBlue)
         case .liveTVFavorites: return ("star.fill", .systemYellow)
         case .addLiveTVSource: return ("plus.circle.fill", .systemBlue)
         case .addXtream: return ("person.badge.key.fill", .systemIndigo)
-        case .addOwnServer: return ("server.rack", .systemBlue)
+        case .addDispatcharr: return ("antenna.radiowaves.left.and.right", .systemBlue)
+        case .addTvheadend: return ("tv", .systemBlue)
+        case .addThreadfin: return ("server.rack", .systemBlue)
         case .addPlaylistURL: return ("list.bullet.rectangle", .systemGreen)
         }
     }

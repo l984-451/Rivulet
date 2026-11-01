@@ -84,7 +84,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
             guard !isCancellationError(error) else { return }
             notice = error is PlexLiveTuneError
                 ? "Couldn't tune this channel. All tuners may be busy."
-                : "Couldn't tune this channel."
+                : (error as? TvheadendError)?.errorDescription ?? "Couldn't tune this channel."
             return
         }
         // A tune that finished after Close or a switch still holds the tuner.
@@ -162,6 +162,7 @@ private struct IOSLivePlayerScreen: View {
                     goLive: { Task { await player.seekToLiveEdge() } },
                     selectAudio: player.selectAudioTrack,
                     selectSubtitle: player.selectSubtitleTrack,
+                    stepAudioDelay: player.stepAudioDelay,
                     pictureInPicture: controller.startPictureInPicture,
                     toggleMute: { player.setMuted(!player.isMuted) },
                     setFillsScreen: { player.fillsScreen = $0 },

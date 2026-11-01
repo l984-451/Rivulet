@@ -120,14 +120,13 @@ final class CollectionPageRoutingTests: XCTestCase {
         guard case .playlist(let shown) = page.mode else {
             return XCTFail("presented page is not in playlist mode")
         }
-        XCTAssertEqual(shown.item.ref.itemID, "77")
+        XCTAssertEqual(shown.ref.itemID, "77")
         XCTAssertEqual(page.modalPresentationStyle, .overFullScreen)
         XCTAssertTrue(page.transitioningDelegate is BlurFadeTransitioningDelegate)
     }
 
     func test_openPlaylist_dedupesStack() {
-        let playlist = MediaPlaylist(item: item("77", kind: .playlist), isSmart: false)
-        let page = PlexHomeViewController(mode: .playlist(playlist))
+        let page = PlexHomeViewController(mode: .playlist(item("77", kind: .playlist)))
         let entryDetail = RecordingPresenter()
         entryDetail.below = page
 

@@ -81,13 +81,7 @@ nonisolated struct PlexLiveTVChannel: Codable, Identifiable, Sendable {
 
     var id: String { ratingKey }
 
-    /// Parse channel number as Int
-    var parsedChannelNumber: Int? {
-        guard let numStr = channelNumber else { return nil }
-        // Handle formats like "5.1" or "5-1"
-        let cleaned = numStr.components(separatedBy: CharacterSet(charactersIn: ".-")).first ?? numStr
-        return Int(cleaned)
-    }
+    var parsedChannelNumber: ChannelNumber? { channelNumber.flatMap(ChannelNumber.init) }
 
     /// Channel name without the number PMS prepends to `channelTitle`
     /// ("666 HALLHDP"); the number is shown separately everywhere (#336).

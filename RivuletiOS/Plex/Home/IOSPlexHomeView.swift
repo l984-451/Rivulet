@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import Combine
 import SwiftUI
 
 /// Home tab root: hero carousel, Continue Watching, then each pinned
@@ -10,6 +11,10 @@ struct IOSPlexHomeView: View {
     @Environment(\.displayScale) private var displayScale
     /// Same key as the tvOS Home > Hero setting.
     @AppStorage("showHomeHero") private var showHero = true
+    /// Same key as the tvOS hero choice (#414): trending, continueWatching, recentlyAdded, watchlist.
+    @AppStorage(IOSHomeSettingsView.heroContentKey) private var heroContent = "trending"
+    @State private var trending: [PlexMetadata] = []
+    @State private var watchlist: [PlexMetadata] = []
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true
     @State private var heroSelection: String?
@@ -27,7 +32,8 @@ struct IOSPlexHomeView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 30) {
                             if hero {
-                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), selection: $heroSelection)
+                                IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), bleed: proxy.safeAreaInsets,
+                                                selection: $heroSelection)
                             }
                             if let continueWatching = plex.continueWatching {
                                 IOSPlexShelfView(hub: continueWatching)
@@ -42,8 +48,8 @@ struct IOSPlexHomeView: View {
                     } action: { _, under in heroUnderBar = under }
                     .scrollEdgeEffectHidden(hero && heroUnderBar, for: .top)
                     .refreshable { await plex.refresh() }
-                    .task(id: hero ? heroItems.map(\.id) + ["\(proxy.size.width)"] : []) {
-                        if hero { await prefetchHero(width: proxy.size.width) }
+                    .task(id: hero ? heroItems.map(\.id) + ["\(heroPageWidth(proxy))"] : []) {
+                        if hero { await prefetchHero(width: heroPageWidth(proxy)) }
                     }
                     .iosPlexAmbient(hero ? heroItems.first { $0.id == heroSelection } ?? heroItems.first : nil)
                 }
@@ -60,6 +66,15 @@ struct IOSPlexHomeView: View {
         .toolbarBackgroundVisibility(hero ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
             IOSAccountToolbarItem()
+        }
+        .task(id: [String(showHero), heroContent] + plex.shelves.map(\.id)) {
+            guard showHero else { return }
+            trending = await plex.trendingHeroItems()
+            if heroContent == "watchlist" { watchlist = await plex.watchlistHeroItems() }
+        }
+        .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
+            guard showHero, heroContent == "watchlist" else { return }
+            Task { watchlist = await plex.watchlistHeroItems() }
         }
     }
 
@@ -86,8 +101,27 @@ struct IOSPlexHomeView: View {
         }
     }
 
-    /// Up to six featured items, two per row, one per show.
+    /// The chosen list; an empty one shows trending, and no trending match shows Home's rows.
     private var heroItems: [PlexMetadata] {
+        let chosen: [PlexMetadata] = switch heroContent {
+        case "continueWatching": (plex.continueWatching?.items ?? []).filter { ($0.art ?? $0.grandparentArt) != nil }
+        case "recentlyAdded": recentlyAdded
+        case "watchlist": watchlist
+        default: []
+        }
+        if !chosen.isEmpty { return Array(chosen.prefix(10)) }
+        return trending.isEmpty ? rowItems : trending
+    }
+
+    /// One item from each recently added row in turn, so no library's additions bury another's.
+    private var recentlyAdded: [PlexMetadata] {
+        let rows = plex.shelves.filter { ($0.hubIdentifier ?? "").lowercased().contains("recentlyadded") }.map(\.items)
+        let mixed = (0..<(rows.map(\.count).max() ?? 0)).flatMap { i in rows.compactMap { i < $0.count ? $0[i] : nil } }
+        return mixed.filter { ($0.art ?? $0.grandparentArt) != nil }
+    }
+
+    /// Up to six featured items, two per row, one per show.
+    private var rowItems: [PlexMetadata] {
         var seen = Set<String>()
         return Array(
             plex.shelves
@@ -96,6 +130,10 @@ struct IOSPlexHomeView: View {
                 .filter { seen.insert($0.grandparentRatingKey ?? $0.id).inserted }
                 .prefix(6)
         )
+    }
+
+    private func heroPageWidth(_ proxy: GeometryProxy) -> CGFloat {
+        IOSPlexHomeHero.pageWidth(proxy.size.width, bleed: proxy.safeAreaInsets)
     }
 
     private func fullSize(_ proxy: GeometryProxy) -> CGSize {

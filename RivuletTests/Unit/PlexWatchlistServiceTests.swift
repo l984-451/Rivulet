@@ -56,6 +56,33 @@ final class PlexWatchlistServiceTests: XCTestCase {
         XCTAssertTrue(service.watchlistGUIDs.contains("tmdb://9"))
     }
 
+    func testConcurrentFetchesShareOneRequest() async {
+        let api = StubWatchlistAPI()
+        api.fetchResult = [makeItem(id: "9", guid: "tmdb://9")]
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+
+        async let first: Void = service.fetchWatchlist()
+        async let second: Void = service.fetchWatchlist()
+        _ = await (first, second)
+
+        XCTAssertEqual(api.fetchAllCalls, 1)
+    }
+
+    func testUnchangedHeadSkipsTheFullList() async {
+        let api = StubWatchlistAPI()
+        api.fetchResult = [makeItem(id: "9", guid: "tmdb://9")]
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache(), staleAfter: 0)
+        await service.fetchWatchlist()
+
+        api.headResult = (1, "9")
+        await service.fetchWatchlist()
+        XCTAssertEqual(api.fetchAllCalls, 1, "same count and newest entry: no full fetch")
+
+        api.headResult = (2, "10")
+        await service.fetchWatchlist()
+        XCTAssertEqual(api.fetchAllCalls, 2, "a new entry: full fetch")
+    }
+
     func testContainsTmdbIdMatchesGuid() async {
         let api = StubWatchlistAPI()
         let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
@@ -155,8 +182,19 @@ final class PlexWatchlistServiceTests: XCTestCase {
 final class StubWatchlistAPI: PlexWatchlistAPIProtocol, @unchecked Sendable {
     var shouldFailWrites = false
     var fetchResult: [PlexWatchlistItem] = []
+    var headResult: (totalSize: Int, newestID: String?)?
+    var fetchAllCalls = 0
 
-    func fetchAll(token: String) async throws -> [PlexWatchlistItem] { fetchResult }
+    func fetchAll(token: String) async throws -> [PlexWatchlistItem] {
+        fetchAllCalls += 1
+        try? await Task.sleep(for: .milliseconds(20))
+        return fetchResult
+    }
+
+    func head(token: String) async throws -> (totalSize: Int, newestID: String?) {
+        guard let headResult else { throw URLError(.badServerResponse) }
+        return headResult
+    }
 
     /// Types the service passed through on the last write — the Discover match
     /// is wrong without them (see PlexWatchlistAPI.resolveDiscoverRatingKey).

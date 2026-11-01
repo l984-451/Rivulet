@@ -25,6 +25,19 @@ struct LiveTVConnectError: LocalizedError, Equatable {
     }
 }
 
+/// A server app the add-source page names, with its usual port.
+enum LiveTVServerApp: CaseIterable {
+    case dispatcharr, tvheadend, threadfin
+
+    var defaultPort: Int {
+        switch self {
+        case .dispatcharr: 9191
+        case .tvheadend: 9981
+        case .threadfin: 34400
+        }
+    }
+}
+
 struct LiveTVSourceConnector {
     struct ServerRequest {
         let baseURL: URL
@@ -44,8 +57,15 @@ struct LiveTVSourceConnector {
         let service: XtreamService
     }
 
+    struct TvheadendRequest {
+        let account: TvheadendAccount
+        let service: TvheadendService
+    }
+
     static let defaultServerName = "Live TV"
     static let defaultPlaylistName = "IPTV"
+    static let defaultTvheadendName = "Tvheadend"
+    static let defaultThreadfinName = "Threadfin"
 
     /// For tests. nil uses each request's usual session.
     var session: URLSession?
@@ -146,6 +166,32 @@ struct LiveTVSourceConnector {
         await Self.load(store)
     }
 
+    // MARK: Threadfin
+
+    /// Threadfin's playlist and guide sit at fixed paths under its address. A
+    /// path before them (a reverse proxy) is kept.
+    static func threadfinRequest(address: String) throws -> PlaylistRequest {
+        guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LiveTVConnectError.source("Enter your server's address first.")
+        }
+        guard var components = URLComponents(string: sanitizeURL(address)), components.host != nil else {
+            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+        }
+        // A pasted playlist or guide link is cut back to the server. Threadfin has
+        // no login, so any userinfo is dropped rather than saved.
+        components.user = nil
+        components.password = nil
+        for suffix in ["/m3u/threadfin.m3u", "/xmltv/threadfin.xml"]
+        where components.path.lowercased().hasSuffix(suffix) {
+            components.path.removeLast(suffix.count)
+        }
+        guard let base = components.url else {
+            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+        }
+        return PlaylistRequest(m3uURL: base.appending(path: "m3u/threadfin.m3u"),
+                               epgURL: base.appending(path: "xmltv/threadfin.xml"))
+    }
+
     // MARK: Xtream Codes
 
     /// A login pasted into the address (a provider's `get.php` link) fills in
@@ -196,6 +242,65 @@ struct LiveTVSourceConnector {
         case .refused(let reason): "The server said: \(reason)"
         case .httpError, nil: failureCopy(for: error)
         }
+    }
+
+    // MARK: Tvheadend
+
+    /// An empty username and password means anonymous streaming. A login in the
+    /// address (`http://user:pass@host:9981`, as Tvheadend's docs write it) fills
+    /// empty fields and never stays in the saved address.
+    func tvheadendRequest(address: String, username: String, password: String) throws -> TvheadendRequest {
+        guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw LiveTVConnectError.source("Enter your server's address first.")
+        }
+        guard var components = URLComponents(string: sanitizeURL(address)), components.host != nil else {
+            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+        }
+        var username = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        var password = password
+        if username.isEmpty, password.isEmpty, let user = components.user, !user.isEmpty {
+            username = user
+            password = components.password ?? ""
+        }
+        components.user = nil
+        components.password = nil
+        guard username.isEmpty == password.isEmpty else {
+            throw LiveTVConnectError.source("Enter both your username and password, or neither.")
+        }
+        guard let server = components.url else {
+            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+        }
+        let account = TvheadendAccount(server: server, username: username.isEmpty ? nil : username,
+                                       password: username.isEmpty ? nil : password)
+        return TvheadendRequest(account: account, service: TvheadendService(account: account, session: session))
+    }
+
+    /// Signed in, a ticket for the first channel must come back too: without one
+    /// nothing would play.
+    func connect(_ request: TvheadendRequest, name: String) async throws {
+        do {
+            try await request.service.verify()
+            let channels = try await request.service.fetchChannels()
+            guard let first = channels.first else {
+                throw LiveTVConnectError.source("Connected, but found no channels.")
+            }
+            if request.account.isSignedIn {
+                _ = try await request.service.ticketedStreamURL(channelUUID: first.uuid)
+            }
+        } catch let error as LiveTVConnectError {
+            throw error
+        } catch {
+            throw LiveTVConnectError.source(Self.tvheadendFailureCopy(for: error))
+        }
+        let canRecord = request.account.isSignedIn ? await request.service.canRecord() : nil
+        let store = LiveTVDataStore.shared
+        await store.addTvheadendSource(account: request.account, name: name.isEmpty ? Self.defaultTvheadendName : name,
+                                       canRecord: canRecord)
+        await Self.load(store)
+    }
+
+    static func tvheadendFailureCopy(for error: Error) -> String {
+        (error as? TvheadendError)?.errorDescription ?? failureCopy(for: error)
     }
 
     // MARK: Shared
@@ -254,15 +359,9 @@ struct LiveTVSourceConnector {
         return "192.168.1.100"
     }
 
-    /// One-press fills for the server address, by app.
-    static func serverSuggestions(host: String) -> [(label: String, value: String)] {
-        [
-            ("Dispatcharr", "http://\(host):9191"),
-            ("Threadfin", "http://\(host):34400"),
-            ("xTeVe", "http://\(host):34400"),
-            ("ErsatzTV", "http://\(host):8409"),
-            ("Cabernet", "http://\(host):6077")
-        ]
+    /// The address a form starts with for `app`.
+    static func defaultAddress(for app: LiveTVServerApp, host: String = suggestedHost) -> String {
+        "http://\(host):\(app.defaultPort)"
     }
 
     private static func isLocalIP(_ host: String) -> Bool {

@@ -159,6 +159,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         let dto: JFItem = try await client.get("Items/\(itemRef.itemID)")
+        async let trailers = extras(itemRef.itemID, "LocalTrailers", count: dto.localTrailerCount)
+        async let features = extras(itemRef.itemID, "SpecialFeatures", count: dto.specialFeatureCount)
         var next: JFItem?
         if dto.type == "Series" {
             let up: JFQueryResult? = try? await client.get("Shows/NextUp", [
@@ -168,7 +170,15 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             ])
             next = up?.items?.first
         }
-        return JellyfinMediaMapper.detail(dto, nextEpisode: next, providerID: id, baseURL: baseURL, token: token)
+        return JellyfinMediaMapper.detail(dto, nextEpisode: next, trailers: await trailers,
+                                          specialFeatures: await features,
+                                          providerID: id, baseURL: baseURL, token: token)
+    }
+
+    /// Local trailers or special features; asked only when the item counts some.
+    private func extras(_ itemID: String, _ endpoint: String, count: Int?) async -> [JFItem] {
+        guard (count ?? 0) > 0 else { return [] }
+        return (try? await client.get("Items/\(itemID)/\(endpoint)")) ?? []
     }
 
     // MARK: - Home rails
@@ -317,6 +327,31 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     private func recentlyAddedHub(_ library: MediaLibrary, _ added: [JFItem]) -> MediaHub? {
         added.isEmpty ? nil : MediaHub(id: "\(library.id).recentlyAdded", providerID: id,
                                        title: "Recently Added in \(library.title)", style: .shelf, items: map(added))
+    }
+
+    /// Two requests: the library's TMDB ids, then the matches. 12.1 ignores
+    /// `anyProviderIdEquals` (measured: every title comes back), so the ids are listed.
+    func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] {
+        let index: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "parentId", value: library.id),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "fields", value: "ProviderIds"),
+            URLQueryItem(name: "enableImages", value: "false"),
+            URLQueryItem(name: "enableUserData", value: "false")
+        ])
+        var owned: [String: String] = [:]
+        for dto in index.items ?? [] {
+            guard let itemID = dto.id, let tmdb = dto.providerIds?["Tmdb"] else { continue }
+            owned[TrendingMatch.key(tmdbID: tmdb, type: dto.type == "Series" ? .tv : .movie)] = itemID
+        }
+        let ids = TrendingMatch.ownedIDs(trending, owned: owned, limit: limit)
+        guard !ids.isEmpty else { return [] }
+        let result: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "ids", value: ids.joined(separator: ",")), Self.listFields
+        ])
+        let byID = Dictionary(map(result.items).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.compactMap { byID[$0] }
     }
 
     /// Box sets with a member in this library (measured: `parentId` on a
@@ -582,7 +617,8 @@ extension JellyfinProvider {
             .sorted { $0.item.title.localizedCaseInsensitiveCompare($1.item.title) == .orderedAscending }
     }
 
-    func playlistEntries(_ playlist: MediaItemRef) async throws -> [PlaylistEntry] {
+    /// Jellyfin playlists have no rules, so none is smart.
+    func playlistEntries(_ playlist: MediaItemRef) async throws -> PlaylistContents {
         let size = 200
         var entries: [PlaylistEntry] = []
         while true {
@@ -598,7 +634,9 @@ extension JellyfinProvider {
                     PlaylistEntry(entryID: $0, item: JellyfinMediaMapper.item(dto, providerID: id, baseURL: client.baseURL))
                 }
             }
-            if rows.isEmpty || entries.count >= (page.totalRecordCount ?? entries.count) { return entries }
+            if rows.isEmpty || entries.count >= (page.totalRecordCount ?? entries.count) {
+                return PlaylistContents(entries: entries, isSmart: false)
+            }
         }
     }
 

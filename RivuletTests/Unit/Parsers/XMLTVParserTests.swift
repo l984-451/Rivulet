@@ -744,4 +744,22 @@ final class XMLTVParserTests: XCTestCase {
         }
         XCTAssertGreaterThanOrEqual(XMLTVParser.maxInflatedBytes, 100 * 1024 * 1024)
     }
+
+    func testYearOnlyFromFourDigitDateWithoutEpisode() async throws {
+        let xml = """
+        <tv>
+          <programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1">
+            <title>Film</title><date>2019</date>
+          </programme>
+          <programme start="20240115130000 +0000" stop="20240115140000 +0000" channel="ch1">
+            <title>Aired</title><date>20190304</date>
+          </programme>
+          <programme start="20240115140000 +0000" stop="20240115150000 +0000" channel="ch1">
+            <title>Episode</title><date>2019</date><episode-num system="onscreen">S1E2</episode-num>
+          </programme>
+        </tv>
+        """
+        let programs = try await parser.parse(data: Data(xml.utf8)).programs["ch1"] ?? []
+        XCTAssertEqual(programs.map(\.year), [2019, nil, nil])
+    }
 }

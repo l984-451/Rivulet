@@ -10,7 +10,7 @@ final class MarkerSkipModeTests: XCTestCase {
     }
 
     func testNothingStoredMeansButton() {
-        XCTAssertEqual(MarkerSkipMode.current(for: "intro", defaults: defaults), .button)
+        XCTAssertEqual(MarkerSkipMode.current(for: "intro", defaults: defaults), .manual)
     }
 
     func testOldAutoSkipToggleReadsAsAutomatic() {
@@ -23,6 +23,6 @@ final class MarkerSkipModeTests: XCTestCase {
             MarkerSkipMode.set(mode, for: "credits", defaults: defaults)
             XCTAssertEqual(MarkerSkipMode.current(for: "credits", defaults: defaults), mode)
         }
-        XCTAssertEqual(MarkerSkipMode.current(for: "recap", defaults: defaults), .button)
+        XCTAssertEqual(MarkerSkipMode.current(for: "recap", defaults: defaults), .manual)
     }
 }

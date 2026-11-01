@@ -21,7 +21,7 @@ actor M3UParser {
         let tvgName: String?
         let tvgLogo: String?
         let groupTitle: String?
-        let channelNumber: Int?
+        let channelNumber: ChannelNumber?
         let name: String
         let streamURL: URL
         let httpHeaders: [String: String]
@@ -33,7 +33,7 @@ actor M3UParser {
             tvgName: String?,
             tvgLogo: String?,
             groupTitle: String?,
-            channelNumber: Int?,
+            channelNumber: ChannelNumber?,
             name: String,
             streamURL: URL,
             httpHeaders: [String: String] = [:],
@@ -191,7 +191,7 @@ actor M3UParser {
         let groupTitle = Self.extractAttribute(from: attributesPart, name: "group-title")
         let channelNumberStr = Self.extractAttribute(from: attributesPart, name: "tvg-chno")
             ?? Self.extractAttribute(from: attributesPart, name: "channel-number")
-        let channelNumber = channelNumberStr.flatMap { Int($0) }
+        let channelNumber = channelNumberStr.flatMap(ChannelNumber.init)
 
         return ParsedChannel(
             tvgId: tvgId,

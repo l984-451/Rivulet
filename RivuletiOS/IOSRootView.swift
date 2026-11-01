@@ -17,7 +17,9 @@ struct IOSRootView: View {
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     @State private var backgroundedAt: Date?
-    /// The Library stack's path, so "Go to Downloads" can push the list from any tab.
+    /// The Library tab's selection, column and detail path, so "Go to Downloads" can open it from any tab.
+    @State private var librarySelection: IOSLibrarySelection?
+    @State private var libraryColumn = NavigationSplitViewColumn.sidebar
     @State private var libraryPath = NavigationPath()
     @Namespace private var homeZoom
     @Namespace private var libraryZoom
@@ -30,7 +32,10 @@ struct IOSRootView: View {
                 tabStack(homeZoom) { IOSPlexHomeView() }
             }
             Tab("Library", systemImage: "rectangle.stack", value: "library") {
-                tabStack(libraryZoom, path: $libraryPath) { IOSPlexLibrariesView() }
+                IOSPlexLibrarySplitView(selection: $librarySelection, column: $libraryColumn, path: $libraryPath)
+                    // A server or profile switch drops the split: its pages hold the old one's items.
+                    .id(plex.sessionGeneration)
+                    .environment(\.plexZoomNamespace, libraryZoom)
             }
             // The sidebar lists each library itself, so the list tab would repeat it.
             .defaultVisibility(.hidden, for: .sidebar)
@@ -112,9 +117,14 @@ struct IOSRootView: View {
             }
         }
         .onChange(of: sizeClass) { dropOrphanedLibraryTab() }
-        .onChange(of: plex.sessionGeneration) { libraryPath = NavigationPath() }
+        .onChange(of: plex.sessionGeneration) {
+            librarySelection = nil
+            libraryColumn = .sidebar
+            libraryPath = NavigationPath()
+        }
         .onChange(of: plex.libraries) { _, libraries in
             if !libraries.isEmpty { dropOrphanedLibraryTab() }
+            if case .library(let library) = librarySelection, !libraries.contains(library) { librarySelection = nil }
         }
         .onChange(of: playlistServers) { dropOrphanedLibraryTab() }
     }
@@ -169,11 +179,13 @@ struct IOSRootView: View {
         while plex.libraries.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
         if let library = plex.libraries.first(where: { $0.title == title }) {
             selectedTab = "library"
-            libraryPath = NavigationPath([library])
+            librarySelection = .library(library)
+            libraryColumn = .detail
             return
         }
         guard let item = try? await plex.search(title).first(where: { $0.title == title }) else { return }
         selectedTab = "library"
+        libraryColumn = .detail
         libraryPath = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
     }
     #endif
@@ -182,23 +194,18 @@ struct IOSRootView: View {
         if showsSidebarLibraries {
             selectedTab = "downloads"
         } else {
-            libraryPath = NavigationPath([IOSDownloadsRoute()])
+            librarySelection = .downloads
+            libraryColumn = .detail
+            libraryPath = NavigationPath()
             selectedTab = "library"
         }
     }
 
     private func tabStack<Content: View>(
         _ namespace: Namespace.ID,
-        path: Binding<NavigationPath>? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        Group {
-            if let path {
-                NavigationStack(path: path) { content().iosPlexDestinations() }
-            } else {
-                NavigationStack { content().iosPlexDestinations() }
-            }
-        }
+        NavigationStack { content().iosPlexDestinations() }
         // A server or profile switch pops every stack: open pages hold the old one's items.
         .id(plex.sessionGeneration)
         .environment(\.plexZoomNamespace, namespace)

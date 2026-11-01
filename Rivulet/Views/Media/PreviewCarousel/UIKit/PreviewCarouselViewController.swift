@@ -284,14 +284,16 @@ final class PreviewCarouselViewController: UIViewController {
         }
         // Episode description Select → the episode's detail page.
         expandedDetail.onShowEpisodeDetails = { [weak self] episode in
+            self?.presentEpisodePage(episode)
+        }
+        // Held Select on an episode → Home's tile menu, less the Go to entries.
+        expandedDetail.onEpisodeMenu = { [weak self] episode, thumbFrame in
             guard let self else { return }
-            // No seriesTitle: the page reads the show from the episode's metadata,
-            // and the carousel's selected item is not reliably the show.
-            let page = MediaItemDetailPageViewController(
-                item: episode,
-                seriesTitle: nil,
-                onPlay: { [weak self] ep, sourceID in self?.playMediaItem(ep, sourceID: sourceID) })
-            self.present(page, animated: true)
+            EpisodeMenu.present(for: episode, from: self, sourceFrame: thumbFrame,
+                                play: { [weak self] sourceID, fromBeginning in
+                                    self?.playMediaItem(episode, sourceID: sourceID, fromBeginning: fromBeginning)
+                                },
+                                moreInfo: { [weak self] in self?.presentEpisodePage(episode) })
         }
 
         // Related poster Select → the item's full standalone detail, not the episode page.
@@ -304,13 +306,9 @@ final class PreviewCarouselViewController: UIViewController {
         expandedDetail.onOpenSeason = { [weak self] season in
             guard let self else { return }
             let show = self.items.indices.contains(self.selectedIndex) ? self.items[self.selectedIndex] : nil
-            let page = MediaItemDetailPageViewController(
-                item: season,
-                seriesTitle: show?.kind == .show ? show?.title : nil,
-                // playHeroItem, not playMediaItem: a season key has no media, so
-                // Play must resolve to its first unplayed episode.
-                onPlay: { [weak self] season, _ in self?.playHeroItem(season) })
-            self.present(page, animated: true)
+            self.present(SeasonDetailViewController(season: season,
+                                                    showTitle: show?.kind == .show ? show?.title : nil),
+                         animated: true)
         }
         // Cast / crew cell Select → person detail page (full-screen).
         expandedDetail.onSelectPerson = { [weak self] person in
@@ -986,15 +984,27 @@ final class PreviewCarouselViewController: UIViewController {
         }
     }
 
-    private func playMediaItem(_ item: MediaItem, sourceID: String? = nil) {
+    private func playMediaItem(_ item: MediaItem, sourceID: String? = nil, fromBeginning: Bool = false) {
         // presentPlayer resolves a Plex ratingKey; any other item plays through
         // its own provider.
         if !item.ref.isPlex {
-            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID, from: self, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: fromBeginning, sourceID: sourceID, from: self, onDismiss: nil)
             return
         }
+        // 0, not nil: nil means ask the server for its resume point.
         let offsetSec = item.userState.viewOffset
-        presentPlayer(ratingKey: item.ref.itemID, resumeOffset: offsetSec > 0 ? offsetSec : nil, mediaID: sourceID)
+        let resume: Double? = fromBeginning ? 0 : (offsetSec > 0 ? offsetSec : nil)
+        presentPlayer(ratingKey: item.ref.itemID, resumeOffset: resume, mediaID: sourceID)
+    }
+
+    private func presentEpisodePage(_ episode: MediaItem) {
+        // No seriesTitle: the page reads the show from the episode's metadata,
+        // and the carousel's selected item is not reliably the show.
+        let page = MediaItemDetailPageViewController(
+            item: episode,
+            seriesTitle: nil,
+            onPlay: { [weak self] ep, sourceID in self?.playMediaItem(ep, sourceID: sourceID) })
+        present(page, animated: true)
     }
 
     /// The Plex server the item on screen lives on, which may not be the selected one (#87).
@@ -1005,106 +1015,12 @@ final class PreviewCarouselViewController: UIViewController {
     /// Fetches a Plex ratingKey's metadata and presents the player. A nil `resumeOffset`
     /// means ask the server: the only place an extra's resume point appears (#303).
     private func presentPlayer(ratingKey: String, resumeOffset: Double?, mediaID: String? = nil) {
-        let server = shownItemServer
-        Task { [weak self] in
-            guard let serverURL = server?.address, let token = server?.token else {
-                previewCarouselLog.error("[PCV] play handoff: no server/token")
-                return
-            }
-            let network = PlexNetworkManager.shared
-            let playItem: PlexMetadata
-            do {
-                playItem = try await network.getFullMetadata(
-                    serverURL: serverURL, authToken: token, ratingKey: ratingKey)
-            } catch {
-                do {
-                    playItem = try await network.getMetadata(
-                        serverURL: serverURL, authToken: token, ratingKey: ratingKey)
-                } catch {
-                    previewCarouselLog.error("[PCV] play handoff fetch failed: \(String(describing: error), privacy: .public)")
-                    return
-                }
-            }
-            // `viewOffset` is ms, gated on the shared resume policy rather than `> 0`.
-            let serverResume = playItem.isInProgress
-                ? playItem.viewOffset.map { Double($0) / 1000 }
-                : nil
-            await MainActor.run {
-                self?.present(playItem: playItem, serverURL: serverURL, token: token,
-                              resumeOffset: resumeOffset ?? serverResume, mediaID: mediaID)
-            }
-        }
+        ExtraPlayer.presentPlayer(ratingKey: ratingKey, resumeOffset: resumeOffset, mediaID: mediaID,
+                                  server: shownItemServer, from: self)
     }
 
-    /// Plays a trailer or extra. A user-added extra has a library ratingKey. A Plex IVA
-    /// extra has none, only `key`, an absolute part path (`/services/iva/assets/...`) that
-    /// 404s under `/library/metadata` (#255); it plays directly through a synthetic PlexMetadata.
     private func presentExtraPlayer(_ trailer: BelowFoldTrailer) {
-        let key = trailer.playbackKey ?? trailer.id
-        let route = ExtraPlaybackKey.route(for: key)
-
-        // Context for the request's own Sentry capture, whose endpoint tag cannot group IVA paths.
-        let crumb = Breadcrumb(level: .info, category: "playback.extra")
-        crumb.message = "Playing extra"
-        crumb.data = [
-            "route": route.telemetryName,
-            "subtype": trailer.subtype.displayName,
-            "key_shape": ExtraPlaybackKey.keyShape(key),
-            "had_playback_key": trailer.playbackKey != nil
-        ]
-        SentryBridge.addBreadcrumb(crumb)
-
-        switch route {
-        case .libraryMetadata(let ratingKey):
-            // nil = resume from whatever the server has for this extra.
-            presentPlayer(ratingKey: ratingKey, resumeOffset: nil)
-
-        case .directPartPath(let path):
-            // IVA extras aren't library items, so /:/timeline never recorded a
-            // position for them — there is nothing to resume from.
-            guard let serverURL = shownItemServer?.address, let token = shownItemServer?.token else {
-                previewCarouselLog.error("[PCV] extra play: no server/token")
-                return
-            }
-            previewCarouselLog.info("[PCV] extra play: direct part path (non-library extra)")
-            present(
-                playItem: Self.syntheticMetadata(forPartKey: path, trailer: trailer),
-                serverURL: serverURL,
-                token: token,
-                resumeOffset: nil
-            )
-        }
-    }
-
-    /// Minimal PlexMetadata standing in for a non-library extra, carrying the
-    /// part path ContentRouter needs to build a direct-play URL.
-    private static func syntheticMetadata(forPartKey key: String, trailer: BelowFoldTrailer) -> PlexMetadata {
-        let part = PlexPart(id: 0, key: key, duration: nil, file: nil, size: nil, container: nil, Stream: nil)
-        let media = PlexMedia(
-            id: 0, duration: nil, bitrate: nil, width: nil, height: nil, aspectRatio: nil,
-            audioChannels: nil, audioCodec: nil, videoCodec: nil, videoResolution: nil,
-            container: nil, videoFrameRate: nil, Part: [part]
-        )
-        return PlexMetadata(
-            ratingKey: trailer.id,
-            key: key,
-            type: "clip",
-            title: trailer.title,
-            Media: [media]
-        )
-    }
-
-    private func present(playItem: PlexMetadata, serverURL: String, token: String, resumeOffset: Double?,
-                         mediaID: String? = nil) {
-        let viewModel = UniversalPlayerViewModel(
-            metadata: playItem,
-            serverURL: serverURL,
-            authToken: token,
-            startOffset: resumeOffset,
-            preferredMediaID: mediaID
-        )
-        // From the topmost VC, so Play also works from the episode page over the carousel.
-        PlayerPresenter.present(viewModel: viewModel, from: self)
+        ExtraPlayer.play(trailer, server: shownItemServer, from: self)
     }
 
     // Menu belongs to the recognizer alone. Do not also handle it in pressesEnded or

@@ -23,7 +23,11 @@ extension URLSession {
             return (data, response)
         }
 
-        if String(data: data, encoding: .utf8)?.contains("unknown_key") == true {
+        let reason = String(decoding: data.prefix(80), as: UTF8.self)
+        await AppAttestClient.shared.reportRejection(
+            reason: reason, path: request.url?.path ?? "?",
+            signed: signed.value(forHTTPHeaderField: "X-Rivulet-Assertion") != nil)
+        if reason.contains("unknown_key") {
             await AppAttestClient.shared.invalidateKey(
                 ifCurrent: signed.value(forHTTPHeaderField: "X-Rivulet-Key-Id")
             )

@@ -70,6 +70,7 @@ final class DeepLinkHandler: ObservableObject {
         guard isSignedIn() || providerID(of: link) != nil else { return nil }
         // Any app can open a link, and the key is interpolated into a server path.
         guard link.ratingKey.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+        DiagLog.notice(.deepLink, "Link \(link.action) \(link.ratingKey) on \(providerID(of: link).map { String($0.prefix { $0 != ":" }) } ?? "selected plex"), shell ready=\(isShellReady)")
         heldLink = link
         return deliverHeldLink()
     }
@@ -104,7 +105,7 @@ final class DeepLinkHandler: ObservableObject {
             return
         }
         guard let metadata else {
-            print("DeepLinkHandler: could not resolve ratingKey \(link.ratingKey)")
+            DiagLog.error(.deepLink, "Could not resolve \(link.ratingKey)")
             return
         }
         switch link.action {
@@ -116,7 +117,7 @@ final class DeepLinkHandler: ObservableObject {
     private func resolve(_ link: RivuletLink, providerID id: String) async {
         let ref = MediaItemRef(providerID: id, itemID: link.ratingKey)
         guard let provider = provider(id), let item = try? await provider.fullDetail(for: ref).item else {
-            print("DeepLinkHandler: could not resolve \(id) item \(link.ratingKey)")
+            DiagLog.error(.deepLink, "Could not resolve \(link.ratingKey) on \(id.prefix { $0 != ":" })")
             return
         }
         // A profile prompt came up while fetching: hold it for the shell.

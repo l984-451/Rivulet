@@ -74,6 +74,22 @@ enum TopShelfMapper {
         }
     }
 
+    /// Recently Added fallback for an empty Continue Watching: unwatched movies, shows and
+    /// episodes, newest `addedAt` first (stable), deduped, capped at `limit`.
+    static func recentlyAddedItems(
+        from metadata: [PlexMetadata],
+        serverURL: String,
+        token: String,
+        limit: Int = 5
+    ) -> [TopShelfItem] {
+        let playable = metadata.filter { ["movie", "show", "episode"].contains($0.type ?? "") && !$0.isWatched }
+        let newest = playable.enumerated()
+            .sorted { ($0.element.addedAt ?? 0, $1.offset) > ($1.element.addedAt ?? 0, $0.offset) }
+            .map(\.element)
+        // Unwatched, so no lastViewedAt: `items` keeps this order.
+        return items(from: newest, serverURL: serverURL, token: token, limit: limit)
+    }
+
     /// Map a non-Plex Continue Watching row (Jellyfin) into Top Shelf items.
     /// The logo is known up front, so the composer skips its Plex lookup.
     static func items(from mediaItems: [MediaItem], limit: Int = 5) -> [TopShelfItem] {

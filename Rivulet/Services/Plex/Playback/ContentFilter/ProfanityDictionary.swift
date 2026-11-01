@@ -23,6 +23,25 @@ nonisolated struct ProfanityEntry: Sendable {
     let severity: FilterSeverity
 }
 
+/// One filterable word or phrase found in a line, by its position in
+/// `ProfanityDictionary.tokens(of:)`, so the filter can mute that word alone.
+nonisolated struct LanguageMatch: Sendable, Equatable {
+    let tokens: Range<Int>
+    /// nil for a word from the user's own list.
+    let category: FilterCategory?
+    let severity: FilterSeverity
+
+    var isCustom: Bool { category == nil }
+
+    /// A custom word always mutes; profanity honors the strength threshold;
+    /// every other category is all-or-nothing.
+    func mutes(enabledCategories: Set<FilterCategory>, profanityThreshold: FilterSeverity) -> Bool {
+        guard let category else { return true }
+        guard enabledCategories.contains(category) else { return false }
+        return category != .profanity || severity >= profanityThreshold
+    }
+}
+
 /// Which language categories a line of dialogue contains, independent of the
 /// user's settings. Lets a whole subtitle file be scanned once and re-judged
 /// cheaply when a setting changes.
@@ -30,19 +49,23 @@ nonisolated struct LanguageHits: Sendable, Equatable {
     private(set) var categories: Set<FilterCategory> = []
     /// Strongest profanity in the line; nil when there is none.
     private(set) var strongestProfanity: FilterSeverity?
+    /// The line holds a word from the user's own list.
+    private(set) var hasCustomWord = false
 
-    var isEmpty: Bool { categories.isEmpty }
+    var isEmpty: Bool { categories.isEmpty && !hasCustomWord }
 
-    mutating func record(_ entry: ProfanityEntry) {
-        categories.insert(entry.category)
-        if entry.category == .profanity {
-            strongestProfanity = max(strongestProfanity ?? entry.severity, entry.severity)
+    mutating func record(_ match: LanguageMatch) {
+        guard let category = match.category else { hasCustomWord = true; return }
+        categories.insert(category)
+        if category == .profanity {
+            strongestProfanity = max(strongestProfanity ?? match.severity, match.severity)
         }
     }
 
     /// Profanity honors the user's strength threshold; every other language
     /// category (slurs, blasphemy, crude/sexual) is all-or-nothing.
     func mutes(enabledCategories: Set<FilterCategory>, profanityThreshold: FilterSeverity) -> Bool {
+        if hasCustomWord { return true }
         for category in categories where enabledCategories.contains(category) {
             guard category == .profanity else { return true }
             if let strongestProfanity, strongestProfanity >= profanityThreshold { return true }
@@ -61,50 +84,93 @@ nonisolated enum ProfanityDictionary {
     /// minimum profanity severity the user wants filtered.
     static func shouldMute(text: String,
                            enabledCategories: Set<FilterCategory>,
-                           profanityThreshold: FilterSeverity) -> Bool {
-        guard !enabledCategories.isEmpty else { return false }
-        return hits(in: text).mutes(enabledCategories: enabledCategories,
-                                    profanityThreshold: profanityThreshold)
+                           profanityThreshold: FilterSeverity,
+                           customTerms: [String] = []) -> Bool {
+        guard !enabledCategories.isEmpty || !customTerms.isEmpty else { return false }
+        return hits(in: text, customTerms: customTerms).mutes(enabledCategories: enabledCategories,
+                                                               profanityThreshold: profanityThreshold)
     }
 
     /// Every language category `text` contains.
+    static func hits(in text: String, customTerms: [String] = []) -> LanguageHits {
+        var hits = LanguageHits()
+        for match in matches(in: text, customTerms: customTerms) { hits.record(match) }
+        return hits
+    }
+
+    /// The line's words as the matcher sees them; `LanguageMatch.tokens` indexes this.
+    static func tokens(of text: String) -> [String] {
+        normalize(text).split(separator: " ").map(String.init)
+    }
+
+    /// Every filterable word or phrase in `text`, with its position.
     ///
     /// - Single words match on whole-word boundaries so "class" never trips
     ///   "ass"; masked spellings (f***, sh!t) are matched too.
     /// - "fuck" also matches inside a word ("clusterfuck"): no innocent English
     ///   word contains it. No other term gets that treatment, because every
     ///   other one does ("Scunthorpe", "cocktail", romanized Japanese names).
-    /// - Multi-word phrases (e.g. "god damn") match on the normalized line.
-    static func hits(in text: String) -> LanguageHits {
-        var hits = LanguageHits()
-        guard !text.isEmpty else { return hits }
-        let normalized = normalize(text)
-        guard !normalized.isEmpty else { return hits }
-
-        // Phrase pass (multi-word terms) on the normalized line with masking
-        // characters stripped, so "God damn!" still ends in a word boundary.
-        let phraseLine = normalized
-            .filter { !maskingCharacters.contains($0) }
-            .split(separator: " ").joined(separator: " ")
-        let paddedLine = " \(phraseLine) "
-        for entry in phraseEntries where paddedLine.contains(" \(entry.term) ") {
-            hits.record(entry)
+    /// - Multi-word phrases (e.g. "god damn") match on consecutive words.
+    /// - `customTerms` are the user's own words and phrases, whole-word only.
+    static func matches(in text: String, customTerms: [String] = []) -> [LanguageMatch] {
+        let tokens = tokens(of: text)
+        guard !tokens.isEmpty else { return [] }
+        var found: [LanguageMatch] = []
+        func add(_ range: Range<Int>, _ category: FilterCategory?, _ severity: FilterSeverity) {
+            let match = LanguageMatch(tokens: range, category: category, severity: severity)
+            if !found.contains(match) { found.append(match) }
         }
 
-        // Word pass: tokenize once, test each token's candidate spellings
-        // against the single-word set.
-        for token in normalized.split(separator: " ") {
-            for candidate in candidateForms(String(token)) {
+        // Phrases compare words with masking characters stripped, so "God damn!"
+        // still ends on a word; a word that was only masking is skipped.
+        let plain = tokens.map { $0.filter { !maskingCharacters.contains($0) } }
+        func phraseEnd(_ parts: [Substring], from start: Int) -> Int? {
+            var i = start
+            for part in parts {
+                while i < plain.count, plain[i].isEmpty { i += 1 }
+                guard i < plain.count, plain[i] == part else { return nil }
+                i += 1
+            }
+            return i
+        }
+        for start in plain.indices where !plain[start].isEmpty {
+            for entry in phraseEntries {
+                if let end = phraseEnd(entry.term.split(separator: " "), from: start) {
+                    add(start..<end, entry.category, entry.severity)
+                }
+            }
+        }
+
+        // Word pass: each token's candidate spellings against the single-word set.
+        for (index, token) in tokens.enumerated() {
+            for candidate in candidateForms(token) {
                 if let entry = wordIndex[candidate] {
-                    hits.record(entry)
+                    add(index..<index + 1, entry.category, entry.severity)
                 } else {
                     for entry in infixEntries where candidate.contains(entry.term) {
-                        hits.record(entry)
+                        add(index..<index + 1, entry.category, entry.severity)
                     }
                 }
             }
         }
-        return hits
+
+        for term in customTerms {
+            let parts = normalize(term).filter { !maskingCharacters.contains($0) }.split(separator: " ")
+            guard let first = parts.first else { continue }
+            if parts.count == 1 {
+                let word = first.filter { $0 != "'" }
+                // A plural is its word: "idiot" also mutes "idiots".
+                let forms: Set<String> = [word, word + "s", word + "es"]
+                for (index, token) in tokens.enumerated() where !forms.isDisjoint(with: candidateForms(token)) {
+                    add(index..<index + 1, nil, .strong)
+                }
+            } else {
+                for start in plain.indices where !plain[start].isEmpty {
+                    if let end = phraseEnd(parts, from: start) { add(start..<end, nil, .strong) }
+                }
+            }
+        }
+        return found
     }
 
     // MARK: - Normalization
@@ -264,7 +330,7 @@ nonisolated enum ProfanityDictionary {
     private static let phraseEntries: [ProfanityEntry] = [
         entries(["god's sake"], .blasphemy, .mild),
         entries(["god damn", "jesus christ", "jesus h christ", "jesus fucking christ",
-                 "sweet jesus", "christ almighty", "christ's sake", "god almighty",
+                 "sweet jesus", "oh jesus", "oh christ", "christ almighty", "christ's sake", "god almighty",
                  "my god", "oh god", "good god", "swear to god", "love of god"],
                 .blasphemy, .moderate),
         entries(["piss off", "dumb ass", "jack ass"], .profanity, .moderate),

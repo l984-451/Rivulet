@@ -28,13 +28,39 @@ actor LibraryGUIDIndex {
         let key: String
     }
 
-    enum PlexItemType: Hashable {
+    enum PlexItemType: String, Hashable, Codable, Sendable {
         case movie
         case show
     }
 
-    private var byTypedTmdbId: [TypedKey: PlexMetadata] = [:]
-    private var byGuid: [String: PlexMetadata] = [:]
+    /// What the index keeps per item: enough to answer "do I own this?" and to fetch the item.
+    /// Full metadata for 56k items held 308 MB and its persist encode added 371 MB (#409).
+    nonisolated struct Entry: Codable, Sendable, Equatable {
+        let ratingKey: String
+        let sectionID: String
+        let type: PlexItemType
+        let guids: [String]
+
+        /// Nil for anything the index ignores: not a movie or show, or no external guid.
+        init?(_ item: PlexMetadata, sectionID: String) {
+            guard let ratingKey = item.ratingKey,
+                  let type = PlexItemType(rawValue: item.type ?? "") else { return nil }
+            let guids = (item.Guid ?? []).compactMap(\.id)
+            guard !guids.isEmpty else { return nil }
+            self.ratingKey = ratingKey
+            self.sectionID = sectionID
+            self.type = type
+            self.guids = guids
+        }
+    }
+
+    private var byTypedTmdbId: [TypedKey: Entry] = [:]
+    private var byGuid: [String: Entry] = [:]
+
+    /// Per section, what the server looked like when this snapshot was built (`sectionStamp`).
+    private var stamps: [String: String] = [:]
+    private var snapshotSavedAt: Date?
+    private var isRebuilding = false
 
     /// Live network data always supersedes a disk-hydrated snapshot. Once a real
     /// `replace(with:completeness:)` has run this launch, a late `hydrateFromDisk()`
@@ -65,8 +91,10 @@ actor LibraryGUIDIndex {
     ///
     /// Persists to disk only when `completeness` is `.complete`. See the
     /// `Completeness` doc comment for why a partial build must not be written.
-    func replace(with items: [PlexMetadata], completeness: Completeness) {
+    func replace(with items: [Entry], completeness: Completeness, stamps: [String: String] = [:]) {
         rebuild(from: items, source: "replace")
+        self.stamps = stamps
+        snapshotSavedAt = Date()
 
         // Set regardless of completeness. `hasFreshData` guards against a late
         // `hydrateFromDisk()` overwriting live server data with the older disk
@@ -81,8 +109,34 @@ actor LibraryGUIDIndex {
         // guidIndexLog carries pre-existing actor-isolation warnings we are not
         // adding to.
         if case .complete = completeness {
-            persist(items)
+            persist(items, stamps: stamps)
         }
+    }
+
+    /// One rebuild at a time: a second caller gets false and leaves it to the first.
+    func claimRebuild() -> Bool {
+        guard !isRebuilding else { return false }
+        isRebuilding = true
+        return true
+    }
+
+    func finishRebuild() {
+        isRebuilding = false
+    }
+
+    /// Whether the loaded snapshot already reflects these sections, so a rebuild would refetch
+    /// the same library. Rebuilt weekly regardless, for changes the stamp can't see.
+    func isCurrent(for stamps: [String: String]) -> Bool {
+        guard !byGuid.isEmpty, !stamps.isEmpty, stamps == self.stamps,
+              let savedAt = snapshotSavedAt else { return false }
+        return Date().timeIntervalSince(savedAt) < 7 * 24 * 3600
+    }
+
+    /// A section's item count plus its most recently updated item. Additions and removals move
+    /// the count; edits and re-matches move `updatedAt` (measured, PMS 1.43.4). Watching doesn't.
+    static func sectionStamp(totalSize: Int?, newest: PlexMetadata?) -> String? {
+        guard let totalSize else { return nil }
+        return "\(totalSize)/\(newest?.ratingKey ?? "-")/\(newest?.updatedAt ?? 0)"
     }
 
     /// Populate the index from the last persisted snapshot. Cheap (local decode),
@@ -94,16 +148,16 @@ actor LibraryGUIDIndex {
             guidIndexLog.info("[GUIDIndex] hydrateFromDisk skipped: fresh network data already present")
             return 0
         }
-        guard let items = Self.loadFromDisk() else {
+        guard let cache = Self.loadFromDisk() else {
             guidIndexLog.info("[GUIDIndex] hydrateFromDisk miss: no valid cache on disk")
             return 0
         }
-        rebuild(from: items, source: "hydrateFromDisk")
-        return items.count
+        adopt(cache, source: "hydrateFromDisk")
+        return cache.items.count
     }
 
     /// Shared ingest + notify used by both `replace` and `hydrateFromDisk`.
-    private func rebuild(from items: [PlexMetadata], source: String) {
+    private func rebuild(from items: [Entry], source: String) {
         byTypedTmdbId.removeAll(keepingCapacity: true)
         byGuid.removeAll(keepingCapacity: true)
 
@@ -128,12 +182,12 @@ actor LibraryGUIDIndex {
         byGuid.isEmpty
     }
 
-    func lookup(tmdbId: Int, type: TMDBMediaType) -> PlexMetadata? {
+    func lookup(tmdbId: Int, type: TMDBMediaType) -> Entry? {
         let plexType: PlexItemType = (type == .movie) ? .movie : .show
         return byTypedTmdbId[TypedKey(type: plexType, key: "\(tmdbId)")]
     }
 
-    func lookup(guid: String) -> PlexMetadata? {
+    func lookup(guid: String) -> Entry? {
         byGuid[guid]
     }
 
@@ -143,22 +197,35 @@ actor LibraryGUIDIndex {
 
     // MARK: - Ingestion
 
-    private func ingest(_ item: PlexMetadata) {
-        let plexType: PlexItemType
-        switch item.type {
-        case "movie": plexType = .movie
-        case "show": plexType = .show
-        default: return
-        }
-
-        let externalGuids = (item.Guid ?? []).compactMap { $0.id }
-        for raw in externalGuids {
+    private func ingest(_ item: Entry) {
+        for raw in item.guids {
             byGuid[raw] = item
 
             if let tmdbId = Self.tmdbId(from: raw) {
-                byTypedTmdbId[TypedKey(type: plexType, key: "\(tmdbId)")] = item
+                byTypedTmdbId[TypedKey(type: item.type, key: "\(tmdbId)")] = item
             }
         }
+    }
+
+    /// The library items behind `entries`, keyed by rating key: one request per section per
+    /// 100 keys. A section that fails is missing from the result, as if it were not owned.
+    static func items(
+        for entries: [Entry],
+        serverURL: String,
+        authToken: String
+    ) async -> [String: PlexMetadata] {
+        var out: [String: PlexMetadata] = [:]
+        for (section, group) in Dictionary(grouping: entries, by: \.sectionID) {
+            let keys = Array(Set(group.map(\.ratingKey)))
+            guard let items = try? await PlexNetworkManager.shared.getLibraryItems(
+                serverURL: serverURL, authToken: authToken, sectionId: section, ratingKeys: keys
+            ) else { continue }
+            for item in items {
+                if let key = item.ratingKey { out[key] = item }
+            }
+        }
+        guidIndexLog.info("[GUIDIndex] fetched \(out.count, privacy: .public) of \(entries.count, privacy: .public) owned items")
+        return out
     }
 
     private static func tmdbId(from guid: String) -> Int? {
@@ -171,12 +238,13 @@ actor LibraryGUIDIndex {
 
     /// Bump when the persisted shape changes so old caches are ignored, not
     /// mis-decoded, on the next launch after an app update.
-    private static let cacheVersion = 1
+    private static let cacheVersion = 2
 
-    private struct DiskCache: Codable {
+    private nonisolated struct DiskCache: Codable {
         let version: Int
         let savedAt: Date
-        let items: [PlexMetadata]
+        let items: [Entry]
+        let stamps: [String: String]
     }
 
     private static var cacheURL: URL? {
@@ -185,6 +253,15 @@ actor LibraryGUIDIndex {
         }
         // One snapshot per Home profile: what is "in your library" depends on who looks.
         let owner = UserDefaults.standard.integer(forKey: PlexProfileSession.contentUserIDKey)
+        return dir.appendingPathComponent(owner == 0 ? "library-guid-index-v2.json" : "library-guid-index-v2-\(owner).json")
+    }
+
+    /// Version 1 held full metadata: 113 MB at 56k items, and it never decodes as v2.
+    private static var legacyCacheURL: URL? {
+        guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let owner = UserDefaults.standard.integer(forKey: PlexProfileSession.contentUserIDKey)
         return dir.appendingPathComponent(owner == 0 ? "library-guid-index.json" : "library-guid-index-\(owner).json")
     }
 
@@ -192,16 +269,30 @@ actor LibraryGUIDIndex {
     /// and take this profile's last snapshot.
     func profileChanged() {
         hasFreshData = false
-        rebuild(from: Self.loadFromDisk() ?? [], source: "profileChanged")
+        if let cache = Self.loadFromDisk() {
+            adopt(cache, source: "profileChanged")
+        } else {
+            rebuild(from: [], source: "profileChanged")
+            stamps = [:]
+            snapshotSavedAt = nil
+        }
+    }
+
+    private func adopt(_ cache: DiskCache, source: String) {
+        rebuild(from: cache.items, source: source)
+        stamps = cache.stamps
+        snapshotSavedAt = cache.savedAt
     }
 
     /// Persist the ingested snapshot for the next launch. Fire-and-forget on a
     /// background task so the encode + write never serializes behind other
     /// actor work or the caller's critical path.
-    private func persist(_ items: [PlexMetadata]) {
+    private func persist(_ items: [Entry], stamps: [String: String]) {
         guard let url = Self.cacheURL else { return }
+        let legacy = Self.legacyCacheURL
         Task.detached(priority: .utility) {
-            let cache = DiskCache(version: Self.cacheVersion, savedAt: Date(), items: items)
+            if let legacy { try? FileManager.default.removeItem(at: legacy) }
+            let cache = DiskCache(version: Self.cacheVersion, savedAt: Date(), items: items, stamps: stamps)
             do {
                 let data = try JSONEncoder().encode(cache)
                 try data.write(to: url, options: .atomic)
@@ -214,7 +305,7 @@ actor LibraryGUIDIndex {
 
     /// Load and validate the persisted snapshot. Returns nil on miss, version
     /// mismatch, or decode failure (caller falls back to the network build).
-    private static func loadFromDisk() -> [PlexMetadata]? {
+    private static func loadFromDisk() -> DiskCache? {
         guard let url = cacheURL,
               let data = try? Data(contentsOf: url) else {
             return nil
@@ -227,6 +318,6 @@ actor LibraryGUIDIndex {
             guidIndexLog.info("[GUIDIndex] disk cache version \(cache.version, privacy: .public) != \(cacheVersion, privacy: .public); ignoring")
             return nil
         }
-        return cache.items
+        return cache
     }
 }

@@ -32,7 +32,7 @@ extension IOSPlexSession {
     /// A playlist's rows, stamped with their server.
     func playlistItems(_ playlist: PlexPlaylist, serverID: String?) async throws -> [PlexMetadata] {
         let (serverURL, token) = try configuration(serverID: serverID)
-        let items = try await network.getAllPlaylistItems(serverURL: serverURL, authToken: token, ratingKey: playlist.ratingKey)
+        let items = try await network.getAllPlaylistItems(serverURL: serverURL, authToken: token, ratingKey: playlist.ratingKey).items
         return Self.onServer(items, serverID)
     }
 }

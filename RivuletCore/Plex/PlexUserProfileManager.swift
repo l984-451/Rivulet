@@ -138,10 +138,11 @@ class PlexUserProfileManager: ObservableObject {
 
             // Restore previously selected user or default to admin
             await restoreOrSelectDefaultUser()
+            DiagLog.notice(.profile, "Home users: \(homeUsers.count), selected: \(selectedUser.map { "admin=\($0.admin) managed=\($0.isManagedUser) pin=\($0.requiresPin)" } ?? "none"), picker=\(needsProfileSelection)")
 
             isLoadingUsers = false
         } catch {
-            print("👤 PlexUserProfileManager: Failed to fetch home users: \(error)")
+            DiagLog.error(.profile, "Home users fetch failed: \(DiagLog.describe(error))")
             usersError = "Failed to load profiles"
             isLoadingUsers = false
 
@@ -208,7 +209,7 @@ class PlexUserProfileManager: ObservableObject {
                 pin: pin,
                 authToken: authToken
             ) else {
-                print("👤 PlexUserProfileManager: Invalid PIN for \(user.displayName)")
+                DiagLog.notice(.profile, "PIN rejected by plex.tv")
                 return .rejected
             }
 
@@ -218,7 +219,7 @@ class PlexUserProfileManager: ObservableObject {
                 serverURL: serverURL,
                 serverName: PlexAuthManager.shared.savedServerName
             ) else {
-                print("👤 PlexUserProfileManager: Could not get server access token")
+                DiagLog.error(.profile, "Profile entry: no server access token")
                 return .unavailable
             }
 
@@ -249,10 +250,11 @@ class PlexUserProfileManager: ObservableObject {
                 }
             }
             Self.onProfileEntered?(userPlexToken)
+            DiagLog.notice(.profile, "Profile entered: admin=\(user.admin) managed=\(user.isManagedUser) pin=\(pin != nil) owner_changed=\(contentOwnerChanged)")
 
             return .entered
         } catch {
-            print("👤 PlexUserProfileManager: ❌ Switch failed: \(error)")
+            DiagLog.error(.profile, "Profile switch failed: \(DiagLog.describe(error))")
             return .unavailable
         }
     }
@@ -333,7 +335,7 @@ class PlexUserProfileManager: ObservableObject {
         let entry = await enter(user, pin: savedPin)
         if entry == .rejected {
             forgetPin(for: user)
-            print("👤 PlexUserProfileManager: Remembered PIN invalid for \(user.displayName), cleared")
+            DiagLog.notice(.profile, "Remembered PIN rejected, cleared")
         }
         return entry
     }

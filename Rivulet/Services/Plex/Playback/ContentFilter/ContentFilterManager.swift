@@ -39,13 +39,25 @@ final class ContentFilterManager: ObservableObject {
     private var enabledCategories: Set<FilterCategory> = []
     private var profanityThreshold: FilterSeverity = .moderate
     private var listSourceURL: String = ""
+    private var customWords: [String] = []
 
     // MARK: - Per-item runtime
 
     /// Windows from the imported list.
     private var regions: [FilterRegion] = []
-    /// Windows from the title's subtitle file.
+    /// Every cue of the title's subtitle file, and the ones the settings mute.
     private var transcriptWindows: [LanguageWindow] = []
+    private var transcriptMutes: [CueMute] = []
+    /// Cues near the playhead from the track the engine is reading, already
+    /// on the audio's axis, and the ones the settings mute.
+    private var lastLines: [SubtitleLine] = []
+    private var liveMutes: [CueMute] = []
+    /// Words the speech model heard, and each cue's spans once placed.
+    private var spokenWords = SpokenWordStore()
+    private var spanMemo: [String: [ClosedRange<Double>]] = [:]
+    /// With no subtitles to read, words the model hears are matched directly.
+    private var speechOnly = false
+    private var speechSpans: [ClosedRange<Double>] = []
     /// Which Plex stream those windows came from, and the subtitle delay to
     /// apply to them (see `displayedSubtitleDidChange`).
     private var transcriptStreamKey: String?
@@ -54,8 +66,6 @@ final class ContentFilterManager: ObservableObject {
     private var transcriptDelay: TimeInterval = 0
     private var skippedRegionIDs: Set<Int> = []
     private var currentTime: TimeInterval = 0
-    private var subtitleMatched = false
-    private var lastSubtitleTexts: [String] = []
     private var listTask: Task<Void, Never>?
     private(set) var transcriptTask: Task<Void, Never>?
 
@@ -80,6 +90,7 @@ final class ContentFilterManager: ObservableObject {
         isEnabled = s.enabled
         profanityThreshold = s.profanityThreshold
         listSourceURL = s.listSourceURL
+        customWords = s.customWords
 
         var categories: Set<FilterCategory> = []
         if s.enabled {
@@ -90,12 +101,9 @@ final class ContentFilterManager: ObservableObject {
             categories.insert(.other)
         }
         enabledCategories = categories
-        // Force the next subtitle feed to re-evaluate (categories/strength or the
-        // master switch may have just changed mid-cue). Drop any current match
-        // too — under the new rules it may no longer apply, and holding it
-        // would keep audio muted until the next cue change re-evaluates.
-        lastSubtitleTexts = []
-        subtitleMatched = false
+        // Categories, strength or the word list may have just changed mid-cue:
+        // re-judge every cue under the new rules.
+        rebuildMutes()
         recomputeMute()
     }
 
@@ -122,14 +130,18 @@ final class ContentFilterManager: ObservableObject {
         transcriptTask = nil
         regions = []
         transcriptWindows = []
+        transcriptMutes = []
+        lastLines = []
+        liveMutes = []
+        spokenWords = SpokenWordStore()
+        spanMemo = [:]
+        speechSpans = []
         transcriptStreamKey = nil
         hasTranscript = false
         if hasLanguageSource { hasLanguageSource = false }
         if hasSceneSkips { hasSceneSkips = false }
         transcriptDelay = 0
         skippedRegionIDs = []
-        subtitleMatched = false
-        lastSubtitleTexts = []
         currentTime = 0
         if isPaused { isPaused = false }
         if isFilterMuting { isFilterMuting = false }
@@ -142,7 +154,8 @@ final class ContentFilterManager: ObservableObject {
     /// `allowSkip` is false while the user is scrubbing, so we keep muting in
     /// sync without consuming (or fighting) a scene skip they're seeking through.
     func timeDidUpdate(_ time: TimeInterval, allowSkip: Bool = true) -> TimeInterval? {
-        currentTime = time
+        // A tick sampled just before a timed mute edge must not undo it.
+        if !(time < currentTime && currentTime - time < Self.clockJitter) { currentTime = time }
 
         // Re-arm a consumed skip window once the playhead is outside it: it
         // stays consumed only while inside, where stale ticks from the seek
@@ -189,27 +202,48 @@ final class ContentFilterManager: ObservableObject {
         return skipTarget
     }
 
-    /// Feed the currently-visible subtitle text (one entry per active cue).
-    /// A match mutes for as long as the cue stays active. Cheap to call every
-    /// tick: it early-outs when the on-screen text hasn't changed.
-    func activeSubtitlesDidChange(texts: [String]) {
-        guard isActive, !enabledCategories.isEmpty else {
-            lastSubtitleTexts = texts
-            if subtitleMatched { subtitleMatched = false; recomputeMute() }
-            return
+    /// Feed the subtitle cues near the playhead from the track the engine is
+    /// reading. A muted cue silences its words once the speech model has
+    /// placed them, and the whole cue until then. Cheap to call every tick: it
+    /// early-outs when the lines haven't changed.
+    func subtitleLinesDidChange(_ lines: [SubtitleLine]) {
+        guard lines != lastLines else { return }
+        lastLines = lines
+        liveMutes = lines.compactMap { cueMute(key: "l\($0.id)", start: $0.start, end: $0.end, text: $0.text) }
+        recomputeMute()
+    }
+
+    /// Words the speech model heard in `range` of the source axis.
+    func wordsHeard(_ words: [SpokenWord], covering range: ClosedRange<Double>) {
+        spokenWords.add(words, covering: range)
+        if speechOnly {
+            speechSpans = SpokenWordAlignment.merged(speechSpans + spans(spokenIn: words))
         }
-        if texts == lastSubtitleTexts { return }
-        lastSubtitleTexts = texts
-        let match = texts.contains { text in
-            ProfanityDictionary.shouldMute(
-                text: text,
-                enabledCategories: enabledCategories,
-                profanityThreshold: profanityThreshold)
-        }
-        if match != subtitleMatched {
-            subtitleMatched = match
-            recomputeMute()
-        }
+        recomputeMute()
+    }
+
+    /// Whether words heard with no subtitles behind them are filtered.
+    func setSpeechOnly(_ on: Bool) {
+        guard on != speechOnly else { return }
+        speechOnly = on
+        speechSpans = on ? spans(spokenIn: spokenWords.words) : []
+        recomputeMute()
+    }
+
+    /// The next time the mute decision changes after `time`, within a second,
+    /// so the player can act on it between ticks.
+    func nextMuteEdge(after time: TimeInterval) -> TimeInterval? {
+        guard isActive else { return nil }
+        let horizon = time + 1
+        var edges = regions.filter { $0.action == .mute && acts(on: $0) }.flatMap { [$0.start, $0.end] }
+        edges += muteSpans(near: time...horizon).flatMap { [$0.lowerBound, $0.upperBound] }
+        return edges.filter { $0 > time && $0 <= horizon }.min()
+    }
+
+    /// Re-judge at `time`, reached between ticks by the player's own clock.
+    func clockDidReach(_ time: TimeInterval) {
+        currentTime = time
+        recomputeMute()
     }
 
     /// Tell the filter which external subtitle file is on screen (its Plex
@@ -232,9 +266,6 @@ final class ContentFilterManager: ObservableObject {
     func setPaused(_ paused: Bool) {
         guard paused != isPaused else { return }
         isPaused = paused
-        // Re-judge the line on screen from scratch when filtering resumes.
-        lastSubtitleTexts = []
-        subtitleMatched = false
         recomputeMute()
     }
 
@@ -250,6 +281,7 @@ final class ContentFilterManager: ObservableObject {
     /// Install the language windows read from the title's subtitle file.
     func applyTranscript(_ windows: [LanguageWindow]) {
         transcriptWindows = windows
+        rebuildMutes()
         hasTranscript = true
         refreshLanguageSource()
         recomputeMute()
@@ -281,17 +313,100 @@ final class ContentFilterManager: ObservableObject {
             return
         }
         let time = currentTime
-        // A positive delay shows each cue later, exactly as SubtitleModel does.
-        let transcriptTime = time - transcriptDelay
-        let shouldMute = subtitleMatched
-            || regions.contains { $0.action == .mute && $0.contains(time) && acts(on: $0) }
-            || transcriptWindows.contains {
-                $0.contains(transcriptTime)
-                    && $0.hits.mutes(enabledCategories: enabledCategories, profanityThreshold: profanityThreshold)
-            }
+        let shouldMute = regions.contains { $0.action == .mute && $0.contains(time) && acts(on: $0) }
+            || muteSpans(near: time...time).contains { $0.lowerBound <= time && time < $0.upperBound }
         if shouldMute != isFilterMuting {
             isFilterMuting = shouldMute
         }
+    }
+
+    // MARK: - Word timing
+
+    /// A cue the settings mute, with the positions of the words to silence.
+    private struct CueMute {
+        let key: String
+        let start: TimeInterval
+        let end: TimeInterval
+        let tokens: [String]
+        let flagged: Set<Int>
+    }
+
+    /// Ticks that land this close behind a timed edge are stale, not a seek.
+    private static let clockJitter: TimeInterval = 0.25
+    /// Words heard with no subtitles must be this sure before they mute.
+    private static let speechOnlyConfidence: Float = 0.6
+
+    private func cueMute(key: String, start: TimeInterval, end: TimeInterval, text: String) -> CueMute? {
+        let flagged = ProfanityDictionary.matches(in: text, customTerms: customWords)
+            .filter { $0.mutes(enabledCategories: enabledCategories, profanityThreshold: profanityThreshold) }
+            .flatMap { Array($0.tokens) }
+        guard !flagged.isEmpty else { return nil }
+        return CueMute(key: key, start: start, end: end,
+                       tokens: ProfanityDictionary.tokens(of: text), flagged: Set(flagged))
+    }
+
+    private func rebuildMutes() {
+        spanMemo = [:]
+        transcriptMutes = transcriptWindows.enumerated().compactMap { index, window in
+            cueMute(key: "t\(index)", start: window.start, end: window.end, text: window.text)
+        }
+        liveMutes = lastLines.compactMap { cueMute(key: "l\($0.id)", start: $0.start, end: $0.end, text: $0.text) }
+        speechSpans = speechOnly ? spans(spokenIn: spokenWords.words) : []
+    }
+
+    /// Every mute span from language that could touch `range`: a cue's placed
+    /// words, or the whole cue while the speech model hasn't covered it.
+    private func muteSpans(near range: ClosedRange<Double>) -> [ClosedRange<Double>] {
+        let margin = SpokenWordAlignment.searchMargin
+        var spans = speechSpans.filter { $0.overlaps(range) }
+        for (cue, shift) in transcriptMutes.map({ ($0, transcriptDelay) }) + liveMutes.map({ ($0, 0.0) })
+        where cue.start + shift - margin <= range.upperBound && cue.end + shift + margin >= range.lowerBound {
+            spans += self.spans(for: cue, shift: shift)
+        }
+        return spans
+    }
+
+    private func spans(for cue: CueMute, shift: TimeInterval) -> [ClosedRange<Double>] {
+        let start = cue.start + shift, end = cue.end + shift
+        let search = SpokenWordAlignment.searchRange(cueStart: start, cueEnd: end)
+        let key = "\(cue.key)@\(start)"
+        if let memo = spanMemo[key] { return memo }
+        guard let heardUntil = spokenWords.heardUntil(from: search.lowerBound), heardUntil > start else {
+            return [start...end]
+        }
+        let placed = SpokenWordAlignment.muteSpans(
+            cueStart: start, cueEnd: end, tokens: cue.tokens, flagged: cue.flagged,
+            words: spokenWords.words(in: search.lowerBound...min(search.upperBound, heardUntil)))
+        if heardUntil >= search.upperBound {
+            let result = placed ?? [start...end]
+            spanMemo[key] = result
+            return result
+        }
+        // Part of the line is still unheard: act on a placement only when every
+        // muted word sits inside what was heard, else hold the whole cue.
+        guard let placed, placed.allSatisfy({ $0.upperBound <= heardUntil + SpokenWordAlignment.tailPad }) else {
+            return [start...end]
+        }
+        return placed
+    }
+
+    /// Mute spans for filtered words among `words`, matched on their own
+    /// (phrases across words included) rather than against a subtitle line.
+    private func spans(spokenIn words: [SpokenWord]) -> [ClosedRange<Double>] {
+        let sure = words.filter { $0.confidence >= Self.speechOnlyConfidence }
+        var owner: [Int] = []   // token index -> word index
+        for (index, word) in sure.enumerated() {
+            owner += Array(repeating: index, count: ProfanityDictionary.tokens(of: word.text).count)
+        }
+        let text = sure.map(\.text).joined(separator: " ")
+        let spans = ProfanityDictionary.matches(in: text, customTerms: customWords)
+            .filter { $0.mutes(enabledCategories: enabledCategories, profanityThreshold: profanityThreshold) }
+            .compactMap { match -> ClosedRange<Double>? in
+                guard match.tokens.upperBound <= owner.count else { return nil }
+                let first = sure[owner[match.tokens.lowerBound]], last = sure[owner[match.tokens.upperBound - 1]]
+                return SpokenWordAlignment.padded(first.start...last.end)
+            }
+        return SpokenWordAlignment.merged(spans)
     }
 
     // MARK: - Loading
@@ -351,6 +466,7 @@ extension ContentFilterManager {
         static let enabled = "contentFilter.enabled"
         static let profanityStrength = "contentFilter.profanityStrength"
         static let listSourceURL = "contentFilter.listSourceURL"
+        static let customWords = "contentFilter.customWords"
     }
 
     /// A snapshot of the persisted settings.
@@ -358,6 +474,7 @@ extension ContentFilterManager {
         var enabled: Bool
         var profanityThreshold: FilterSeverity
         var listSourceURL: String
+        var customWords: [String] = []
 
         static func load() -> Settings {
             let d = UserDefaults.standard
@@ -367,7 +484,9 @@ extension ContentFilterManager {
                 : d.integer(forKey: Keys.profanityStrength)
             let threshold = FilterSeverity(rawValue: rawStrength) ?? .moderate
             let source = d.string(forKey: Keys.listSourceURL) ?? ""
-            return Settings(enabled: enabled, profanityThreshold: threshold, listSourceURL: source)
+            let words = d.stringArray(forKey: Keys.customWords) ?? []
+            return Settings(enabled: enabled, profanityThreshold: threshold, listSourceURL: source,
+                            customWords: words)
         }
 
         func isCategoryEnabled(_ category: FilterCategory) -> Bool {
@@ -375,5 +494,18 @@ extension ContentFilterManager {
             let key = category.enabledDefaultsKey
             return d.object(forKey: key) == nil ? category.defaultEnabled : d.bool(forKey: key)
         }
+    }
+
+    /// The user's own words to mute, in the order they were added.
+    static var customWords: [String] {
+        get { UserDefaults.standard.stringArray(forKey: Keys.customWords) ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: Keys.customWords) }
+    }
+
+    /// Add a word or phrase as typed; ignores blanks and repeats.
+    static func addCustomWord(_ raw: String) {
+        let word = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !word.isEmpty, !customWords.contains(word) else { return }
+        customWords.append(word)
     }
 }

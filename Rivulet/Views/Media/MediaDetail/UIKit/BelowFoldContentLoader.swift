@@ -41,6 +41,7 @@ struct BelowFoldTrailer: Hashable, Sendable {
     /// What plays this extra: a library ratingKey, or for a Plex IVA extra its
     /// `/services/iva/assets/...` path, which 404s under /library/metadata.
     var playbackKey: String?
+    var providerID: String
 }
 
 @MainActor
@@ -68,19 +69,9 @@ final class BelowFoldContentLoader {
         // Real Plex extras, split into Trailers vs other Extras (behind the
         // scenes, featurettes, etc.) by the extra's type.
         let fallbackArt = item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster
-        func makeTrailer(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
-            BelowFoldTrailer(
-                id: extra.id,
-                title: extra.title,
-                artworkURL: extra.thumbnailURL ?? fallbackArt,
-                durationFormatted: extra.duration.map(Self.formatTrailerDuration),
-                subtype: extra.subtype,
-                playbackKey: extra.playbackKey
-            )
-        }
-        let allExtras = resolvedDetail?.extras ?? []
-        content.trailers = allExtras.filter { $0.isTrailer }.map(makeTrailer)
-        content.extras = allExtras.filter { !$0.isTrailer }.map(makeTrailer)
+        let tiles = Self.extraTiles(from: resolvedDetail?.extras ?? [], fallbackArt: fallbackArt)
+        content.trailers = tiles.trailers
+        content.extras = tiles.extras
 
         // Seasons and episodes, by item kind.
         switch item.kind {
@@ -127,6 +118,23 @@ final class BelowFoldContentLoader {
     func loadAdvisory(for item: MediaItem) async -> ContentAdvisory? {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else { return nil }
         return (try? await provider.contentAdvisory(for: item.ref)) ?? nil
+    }
+
+    /// An item's extras as tiles, trailers split from the rest (behind the scenes, featurettes, ...).
+    static func extraTiles(from extras: [MediaItemDetail.Extra], fallbackArt: URL?)
+        -> (trailers: [BelowFoldTrailer], extras: [BelowFoldTrailer]) {
+        func tile(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
+            BelowFoldTrailer(
+                id: extra.id,
+                title: extra.title,
+                artworkURL: extra.thumbnailURL ?? fallbackArt,
+                durationFormatted: extra.duration.map(formatTrailerDuration),
+                subtype: extra.subtype,
+                playbackKey: extra.playbackKey,
+                providerID: extra.providerID
+            )
+        }
+        return (extras.filter { $0.isTrailer }.map(tile), extras.filter { !$0.isTrailer }.map(tile))
     }
 
     /// "1m" / "2m 30s" / "45s" — feeds the on-thumbnail ▶ duration badge.

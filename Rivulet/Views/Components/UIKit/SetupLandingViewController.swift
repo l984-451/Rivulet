@@ -129,6 +129,7 @@ final class SetupLandingViewController: UIViewController {
             flow?.dismiss(animated: true) { self?.flowFinished() }
         }
         // Over the landing, dimmed and blurred, so the glow stays behind the form.
+        flow.drawsBackdrop = false
         flow.modalPresentationStyle = .overFullScreen
         flow.transitioningDelegate = SetupFadeTransition.shared
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))

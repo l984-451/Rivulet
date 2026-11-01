@@ -142,6 +142,25 @@ final class AetherPlayer: PlayerProtocol {
     /// background timestamp so the teardown-drain wait still applies.
     private var pendingReloadSince: Date?
 
+    /// One file of a stacked title.
+    struct PartFile {
+        let url: URL
+        let externalSubtitles: [SidecarSubtitle]
+    }
+
+    /// A stacked title (#399) plays one file at a time while the player reports
+    /// the title's timeline: time and duration span every file, a seek into
+    /// another file loads it, and only the last file's end is `.ended`.
+    private var stack: StackedParts<PartFile>?
+    private var partIndex = 0
+    private var partStart: TimeInterval { stack?.starts[partIndex] ?? 0 }
+    /// Arguments of the title's load, repeated for each file.
+    private var partLoad: (headers: [String: String]?, audio: [String], subtitles: [String])?
+    /// True while the next file loads: the engine's idle/loading states and
+    /// zeroed clock belong to the swap, not to the title.
+    private var isSwitchingPart = false
+    private var prewarmedPart: Int?
+
     /// Warms a source's opening bytes so a later `load()` skips the cold open's round trips.
     /// URL and headers must be byte-identical to the load's, or the bytes are never adopted.
     /// Best-effort: declines when the origin has no free request slot.
@@ -181,7 +200,18 @@ final class AetherPlayer: PlayerProtocol {
                 // ".playing while still buffering" reconciliation sees the
                 // combined flag the moment a seek lands.
                 self.recomputeIsBuffering()
-                self.stateSubject.send(Self.translate(aetherState, errorInfo: errorInfo))
+                let state = Self.translate(aetherState, errorInfo: errorInfo)
+                if state == .ended, !self.isSwitchingPart, let stack = self.stack, self.partIndex + 1 < stack.files.count {
+                    self.isSwitchingPart = true
+                    self.stateSubject.send(.buffering)
+                    Task { await self.switchPart(to: self.partIndex + 1, at: 0) }
+                    return
+                }
+                if self.isSwitchingPart, [.idle, .loading, .ended].contains(state) {
+                    self.stateSubject.send(.buffering)
+                    return
+                }
+                self.stateSubject.send(state)
             }
             .store(in: &cancellables)
 
@@ -191,7 +221,9 @@ final class AetherPlayer: PlayerProtocol {
         engine.clock.$currentTime
             .receive(on: DispatchQueue.main)
             .sink { [weak self] t in
-                self?.timeSubject.send(t)
+                guard let self, !self.isSwitchingPart else { return }
+                self.timeSubject.send(t + self.partStart)
+                self.prewarmNextPartIfNear(t)
             }
             .store(in: &cancellables)
 
@@ -460,6 +492,9 @@ final class AetherPlayer: PlayerProtocol {
             isForced: t.isForced,
             isHearingImpaired: t.isHearingImpaired,
             isCommentary: t.isCommentary,
+            isAudioDescription: t.isVisualImpaired,
+            // The engine names an untitled track "ENG (subrip)" or "Track 3 (subrip)".
+            title: t.name.isEmpty || t.name.hasSuffix("(\(t.codec))") ? nil : t.name,
             channels: t.channels > 0 ? t.channels : nil,
             // `TrackInfo.id` IS the container stream index (Demuxer enumerates
             // all streams and passes the loop counter through as `id`). It is
@@ -571,7 +606,7 @@ final class AetherPlayer: PlayerProtocol {
             let drain = max(0, 4.0 - Date().timeIntervalSince(since))
             if drain > 0 { try? await Task.sleep(for: .seconds(drain)) }
             guard let self, !Task.isCancelled else { return }
-            print("[AetherPlayer] foreground reload: pos=\(self.engine.currentTime)")
+            DiagLog.notice(.playback, "Foreground reload at \(Int(self.engine.currentTime))s")
             do {
                 // No-ops if nothing is loaded or the session was stopped while
                 // we waited (public stop() clears the engine's loadedURL). The
@@ -579,13 +614,13 @@ final class AetherPlayer: PlayerProtocol {
                 // the user intends playback.
                 try await self.reloadWithDeadline()
                 self.pendingReloadSince = nil
-                print("[AetherPlayer] foreground reload done: state=\(self.engine.state) pos=\(self.engine.currentTime)")
+                DiagLog.notice(.playback, "Foreground reload done: \(self.engine.state) at \(Int(self.engine.currentTime))s")
             } catch {
                 // Arm the deferred reload so the next Play press retries the
                 // rebuild. Covers the playing-user entry too: that one reloads
                 // eagerly with nothing armed, so without this a failure there
                 // wedges the session just as badly.
-                print("[AetherPlayer] foreground reload failed: \(error)")
+                DiagLog.error(.playback, "Foreground reload failed: \(DiagLog.describe(error))")
                 self.pendingReloadSince = since
             }
         }
@@ -617,16 +652,19 @@ final class AetherPlayer: PlayerProtocol {
     // MARK: - PlayerProtocol state
 
     var isPlaying: Bool { engine.state == .playing }
-    var currentTime: TimeInterval { engine.currentTime }
-    var duration: TimeInterval { engine.duration }
+    var currentTime: TimeInterval { engine.currentTime + partStart }
+    var duration: TimeInterval { stack?.duration ?? engine.duration }
 
     /// Duration updates. The engine publishes `duration` once the source is
     /// probed; the VM needs this (not just `timePublisher`) so Plex progress
     /// reports carry a real duration (viewOffset + watched threshold).
     var durationPublisher: AnyPublisher<TimeInterval, Never> {
-        engine.$duration.eraseToAnyPublisher()
+        engine.$duration
+            .receive(on: DispatchQueue.main)
+            .map { [weak self] seconds in MainActor.assumeIsolated { self?.stack?.duration ?? seconds } }
+            .eraseToAnyPublisher()
     }
-    var bufferedTime: TimeInterval { engine.bufferedPosition }
+    var bufferedTime: TimeInterval { engine.bufferedPosition + partStart }
     var playbackRate: Float {
         get { _playbackRate }
         set {
@@ -656,15 +694,17 @@ final class AetherPlayer: PlayerProtocol {
     /// `.began`, so there is never a hold for it to release.
     var seekEvents: AnyPublisher<SeekHoldEvent, Never> {
         engine.seekEvents
-            .compactMap { event -> SeekHoldEvent? in
+            .receive(on: DispatchQueue.main)
+            .compactMap { [weak self] event -> SeekHoldEvent? in
+                let start = MainActor.assumeIsolated { self?.partStart ?? 0 }
                 let outcome: SeekHoldEvent.Outcome
                 switch event.outcome {
                 case .began: outcome = .began
-                case .landed(let rendered): outcome = .landed(renderedTime: rendered)
+                case .landed(let rendered): outcome = .landed(renderedTime: rendered + start)
                 case .stalled, .superseded: outcome = .settledElsewhere
                 case .rejected: return nil
                 }
-                return SeekHoldEvent(id: event.id, outcome: outcome, target: event.target)
+                return SeekHoldEvent(id: event.id, outcome: outcome, target: event.target + start)
             }
             .eraseToAnyPublisher()
     }
@@ -719,9 +759,19 @@ final class AetherPlayer: PlayerProtocol {
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
                             onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
-                            presentsHDR: engine.videoFormat != .sdr)
+                            presentsHDR: engine.videoFormat != .sdr,
+                            panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
+    /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
+    var upscaleSummary: String? {
+        guard let status = engine.activeUpscale else { return nil }
+        if status.disabledReason != nil { return "Stopped" }
+        let size = "\(Int(status.sourceSize.height))p → \(Int(status.targetSize.height))p"
+        guard let ml = status.mlScale else { return "\(size) (MetalFX)" }
+        let mlOnly = status.degraded || abs(status.sourceSize.height * CGFloat(ml) - status.targetSize.height) < 2
+        return mlOnly ? "\(size) (ML)" : "\(size) (ML + MetalFX)"
+    }
     /// FEL or MEL for the current Profile 7 load; nil when the engine didn't classify it (FEL setting off, no DV panel).
     private(set) var dolbyVisionEnhancementLayer: DolbyVisionEnhancementLayer?
 
@@ -810,12 +860,14 @@ final class AetherPlayer: PlayerProtocol {
                 preferredDecodePath: (role == .fullscreen && !nativeRemoteHLS && Self.needsDeinterlacing(url))
                     ? .software : .automatic
             )
+            // Segments cut at every keyframe join in seconds instead of waiting
+            // out the standard ~18s holdback (loopback joins measured 8-34s, #415).
+            // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
+            options.liveJoinProfile = .fastZap
+            options.audioDelaySeconds = AudioSync.seconds()
             if role == .multiviewSlot {
-                // A tile never scrubs and zaps often: segments cut at every
-                // keyframe join in seconds rather than waiting out the
-                // standard ~18s holdback, and field-rate deinterlacing on a
-                // quarter-screen tile only doubles decoder output for nothing.
-                options.liveJoinProfile = .fastZap
+                // Field-rate deinterlacing on a quarter-screen tile only
+                // doubles decoder output for nothing.
                 options.deinterlaceFieldRate = .frame
             }
             if joinsWirelessAudio {
@@ -941,8 +993,22 @@ final class AetherPlayer: PlayerProtocol {
     /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
     static let heightSpeakersKey = "heightSpeakers"
 
-    /// Profile 7 FEL composition; absent = on.
+    /// ML upscaling of SDR below 1080p (#846); absent = off.
+    static let upscaleKey = "upscaleLowResolution"
+
+    /// Profile 7 FEL composition; absent = off.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
+    private static let felDefaultSettledKey = "dolbyVisionFELDefaultSettled"
+
+    /// FEL used to default on. Once, pin it on for an install that already had a server,
+    /// so only new installs get the off default.
+    static func settleFELDefault(existingInstall: Bool, defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: felDefaultSettledKey) else { return }
+        defaults.set(true, forKey: felDefaultSettledKey)
+        if existingInstall, defaults.object(forKey: dolbyVisionFELKey) == nil {
+            defaults.set(true, forKey: dolbyVisionFELKey)
+        }
+    }
 
     /// DVB teletext caption page, applied to BOTH live and VOD loads. A
     /// `liveTeletextPage` UserDefaults key overrides everything (0 = force
@@ -981,7 +1047,78 @@ final class AetherPlayer: PlayerProtocol {
         preferredAudioLanguages: [String] = [],
         preferredSubtitleLanguages: [String] = [],
         externalSubtitles: [SidecarSubtitle] = [],
-        isLive: Bool = false
+        isLive: Bool = false,
+        stackedParts: StackedParts<PartFile>? = nil
+    ) async throws {
+        stack = stackedParts
+        prewarmedPart = nil
+        guard let stackedParts else {
+            partIndex = 0
+            partLoad = nil
+            try await loadFile(url: url, headers: headers, startTime: startTime,
+                               preferredAudioLanguages: preferredAudioLanguages,
+                               preferredSubtitleLanguages: preferredSubtitleLanguages,
+                               externalSubtitles: externalSubtitles, isLive: isLive)
+            return
+        }
+        partLoad = (headers, preferredAudioLanguages, preferredSubtitleLanguages)
+        let (index, offset) = stackedParts.locate(startTime ?? 0)
+        partIndex = index
+        try await loadFile(url: stackedParts.files[index].url, headers: headers, startTime: offset,
+                           preferredAudioLanguages: preferredAudioLanguages,
+                           preferredSubtitleLanguages: preferredSubtitleLanguages,
+                           externalSubtitles: stackedParts.files[index].externalSubtitles, isLive: false)
+    }
+
+    /// Opens another file of the stacked title at `offset` within it, keeping
+    /// the track picks and the paused state. The last frame holds through the gap.
+    private func switchPart(to index: Int, at offset: TimeInterval) async {
+        isSwitchingPart = true
+        defer { isSwitchingPart = false }
+        guard let stack, let partLoad, stack.files.indices.contains(index) else { return }
+        let audio = activeAudioTrackId
+        let subtitle = activeSubtitleTrackId
+        let wasPlaying = userIntendsToPlay
+        DiagLog.notice(.playback, "Stacked title: part \(index + 1) of \(stack.files.count) at \(Int(offset))s")
+        partIndex = index
+        engine.prepareForItemReplacement()
+        do {
+            try await loadFile(url: stack.files[index].url, headers: partLoad.headers, startTime: offset,
+                               preferredAudioLanguages: partLoad.audio,
+                               preferredSubtitleLanguages: partLoad.subtitles,
+                               externalSubtitles: stack.files[index].externalSubtitles, isLive: false)
+        } catch {
+            // The load already published the failure.
+            return
+        }
+        // Stream indexes match across the files of one release.
+        if let audio, audio != activeAudioTrackId, audioTracks.contains(where: { $0.id == audio }) {
+            selectAudioTrack(id: audio)
+        }
+        if subtitle != activeSubtitleTrackId, subtitle.map({ id in subtitleTracks.contains { $0.id == id } }) ?? true {
+            selectSubtitleTrack(id: subtitle)
+        }
+        if !wasPlaying { pause() }
+    }
+
+    /// Warms the next file's opening bytes in the last 30s of this one.
+    private func prewarmNextPartIfNear(_ time: TimeInterval) {
+        guard let stack, let headers = partLoad?.headers, partIndex + 1 < stack.files.count,
+              prewarmedPart != partIndex + 1,
+              stack.starts[partIndex + 1] - (time + partStart) < 30 else { return }
+        prewarmedPart = partIndex + 1
+        let url = stack.files[partIndex + 1].url
+        Task.detached { await Self.prewarm(url: url, headers: headers) }
+    }
+
+    private func loadFile(
+        url: URL,
+        headers: [String: String]?,
+        startTime: TimeInterval?,
+        preferredAudioLanguages: [String],
+        preferredSubtitleLanguages: [String],
+        externalSubtitles: [SidecarSubtitle],
+        isLive: Bool
     ) async throws {
         // .lossless: FLAC for non-stream-copy audio, ~3x realtime on A15 against EAC3's
         // ~0.5x, so 4K segments keep up. Needs a multichannel LPCM sink; others downmix.
@@ -1017,16 +1154,19 @@ final class AetherPlayer: PlayerProtocol {
             // way whichever surface plays it (VOD recordings/rips included).
             teletextPage: Self.regionTeletextPage()
         )
-        // Settings → Playback → Height Speakers: TrueHD Atmos and DTS:X keep their heights as
-        // lossy APAC (sent to the receiver as Atmos) instead of lossless 7.1 without them.
+        // Settings → Playback → Height Speakers: TrueHD Atmos and DTS:X keep their heights as a
+        // rendered bed (lossless PCM, APAC on AirPlay) instead of 7.1 without them.
         let heightLayout = SpatialSpeakerLayout(rawValue: UserDefaults.standard.string(forKey: Self.heightSpeakersKey) ?? "")
-        if let heightLayout { options.objectAudioRendering = .apac(heightLayout) }
+        if let heightLayout { options.objectAudioRendering = .render(heightLayout) }
         // Profile 7 FEL composes both layers (#345). The engine doesn't check the panel,
         // so keep the native route (HDR10 base) where the TV can't show Dolby Vision.
-        // FEL wins over heights: on a FEL title the soundtrack plays as 7.1 without them (#362).
+        // The FEL route renders heights too, so both settings apply to one title (#362).
         let panelDV = AetherEngine.displayCapabilities.supportsDolbyVision
-        let felOn = UserDefaults.standard.object(forKey: Self.dolbyVisionFELKey) as? Bool ?? true
+        let felOn = UserDefaults.standard.bool(forKey: Self.dolbyVisionFELKey)
         options.preferDualLayerDolbyVision = panelDV && felOn
+        // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
+        options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
+        options.audioDelaySeconds = AudioSync.seconds()
         // #362: catch the engine's one Profile 7 route line for Sentry. Live TV's capture owns the
         // handler while it runs, and VOD never loads then.
         let p7RouteLine = OSAllocatedUnfairLock<String?>(initialState: nil)
@@ -1155,13 +1295,19 @@ final class AetherPlayer: PlayerProtocol {
         userIntendsToPlay = false
         engine.pause()
     }
-    func stop() {
+    func stop() { stop(resetDisplayCriteria: true) }
+
+    /// `resetDisplayCriteria: false` keeps the TV's mode for a following load
+    /// on this player, so a same-format channel change makes no HDMI switch (#419).
+    func stop(resetDisplayCriteria: Bool) {
         foregroundReloadTask?.cancel()
         pendingReloadSince = nil
         userIntendsToPlay = false
+        stack = nil
+        partIndex = 0
         finishAVCapture()
         dropFrameExtractor()
-        engine.stop()
+        engine.stop(resetDisplayCriteria: resetDisplayCriteria)
     }
 
     deinit {
@@ -1173,9 +1319,12 @@ final class AetherPlayer: PlayerProtocol {
     /// is starved. nil with no engine session (the hls route) or when the
     /// source cannot open a second reader.
     func scrubFrame(atSeconds seconds: TimeInterval, maxWidth: Int = 320) async -> CGImage? {
+        // A stacked title's stills come from the open file only.
+        let local = stack.map { $0.locate(seconds) }
+        if let local, local.index != partIndex { return nil }
         if frameExtractor == nil { frameExtractor = engine.makeFrameExtractor() }
         guard let extractor = frameExtractor else { return nil }
-        return await extractor.thumbnail(at: seconds, maxWidth: maxWidth)
+        return await extractor.thumbnail(at: local?.offset ?? seconds, maxWidth: maxWidth)
     }
 
     private func dropFrameExtractor() {
@@ -1226,7 +1375,57 @@ final class AetherPlayer: PlayerProtocol {
         engine.volume = muted ? 0 : 1
         currentAVPlayer?.isMuted = muted
     }
-    func seek(to time: TimeInterval) async { await engine.seek(to: time) }
+
+    /// Bumped per `playbackAudio()` stream, so an ended stream can tell it no longer owns the tap.
+    private var audioTapOwner = 0
+
+    /// Decoded playback audio for on-device speech (the engine's audio tap):
+    /// mono 48 kHz on the source axis, up to ~10 s ahead of the playhead on the
+    /// loopback route. Surround sources deliver the centre (dialogue) channel
+    /// alone; stereo falls back to the downmix. The tap ends on every load or
+    /// reload, so it is re-installed until the stream is cancelled.
+    func playbackAudio() -> AsyncStream<PlaybackAudioChunk> {
+        let (stream, continuation) = AsyncStream<PlaybackAudioChunk>.makeStream(bufferingPolicy: .bufferingNewest(256))
+        let task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let engine = self?.engine else { break }
+                let tap = engine.installAudioTap(channels: .dialogue)
+                if engine.audioTapHasDeliverySource {
+                    var first = true
+                    for await buffer in tap {
+                        continuation.yield(PlaybackAudioChunk(
+                            buffer: buffer.buffer, sourceTime: buffer.sourceTime,
+                            discontinuity: buffer.discontinuity || first))
+                        first = false
+                    }
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            continuation.finish()
+        }
+        audioTapOwner += 1
+        let owner = audioTapOwner
+        continuation.onTermination = { _ in
+            task.cancel()
+            // A newer stream may already own the engine's one tap; only the latest removes it.
+            Task { @MainActor [weak self] in
+                guard let self, self.audioTapOwner == owner else { return }
+                self.engine.removeAudioTap()
+            }
+        }
+        return stream
+    }
+
+    func seek(to time: TimeInterval) async {
+        guard let stack else { return await engine.seek(to: time) }
+        let (index, offset) = stack.locate(time)
+        // ponytail: a seek during a part swap starts a second load; queue it if that ever misbehaves.
+        if index == partIndex {
+            await engine.seek(to: offset)
+        } else {
+            await switchPart(to: index, at: offset)
+        }
+    }
 
     // MARK: - Live timeshift
 
@@ -1325,6 +1524,12 @@ final class AetherPlayer: PlayerProtocol {
 
     func setTeletextPage(_ page: Int?) {
         engine.setTeletextPage(page)
+    }
+
+    /// Pushes the saved `AudioSync` offset into the running session. The engine
+    /// re-cuts at the playhead (a brief held frame on the loopback route).
+    func applyAudioSync() {
+        engine.setAudioDelay(AudioSync.seconds())
     }
 
     /// True while the software backend is serving the session. Live joins use

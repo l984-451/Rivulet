@@ -1,0 +1,65 @@
+{
+ "entries": [
+  {
+   "uuid": "1c35018f4865a50c86453ba2112fc304",
+   "enabled": true,
+   "index": 0,
+   "name": "TV channels",
+   "internal": false,
+   "private": false,
+   "icon": "",
+   "icon_public_url": "",
+   "titled_icon": false,
+   "comment": ""
+  },
+  {
+   "uuid": "e6ad9b1f6446f9240be7c0bfec8a34af",
+   "enabled": true,
+   "index": 0,
+   "name": "SDTV",
+   "internal": false,
+   "private": false,
+   "icon": "",
+   "icon_public_url": "",
+   "titled_icon": false,
+   "comment": ""
+  },
+  {
+   "uuid": "1a0ae3997c3bb6517da9b35e0b0e0e34",
+   "enabled": true,
+   "index": 0,
+   "name": "Birmingham",
+   "internal": false,
+   "private": false,
+   "icon": "",
+   "icon_public_url": "",
+   "titled_icon": false,
+   "comment": ""
+  },
+  {
+   "uuid": "c4983594266657dd7f0de247bdb3acd0",
+   "enabled": true,
+   "index": 0,
+   "name": "FFmpeg",
+   "internal": false,
+   "private": false,
+   "icon": "",
+   "icon_public_url": "",
+   "titled_icon": false,
+   "comment": ""
+  },
+  {
+   "uuid": "61d5905273a2237a6c0650b2c9cc149a",
+   "enabled": true,
+   "index": 0,
+   "name": "Sports",
+   "internal": false,
+   "private": false,
+   "icon": "",
+   "icon_public_url": "",
+   "titled_icon": false,
+   "comment": ""
+  }
+ ],
+ "total": 5
+}

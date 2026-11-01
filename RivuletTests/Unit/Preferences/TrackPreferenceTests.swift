@@ -128,19 +128,19 @@ final class TrackPreferenceTests: XCTestCase {
         XCTAssertFalse(result?.isForced ?? true)
     }
 
-    /// Stored ENG regular + title has ENG forced only → Off (never demoted).
-    func testSubtitleRegularIntentWithOnlyForcedTrackResolvesOff() {
+    /// Stored ENG regular + title has ENG forced only → the forced track (#425), intent kept.
+    func testSubtitleRegularIntentWithOnlyForcedTrackFallsBackToForced() {
         TrackIntentStore.subtitleIntent = .track(
             language: "eng", forced: false, hearingImpaired: false, codec: "srt"
         )
 
-        let tracks = [sub(1, lang: "eng", forced: true)]
+        let tracks = [sub(1, lang: "eng", forced: true), sub(2, lang: "fra", forced: false)]
 
         let result = TrackIntentResolver.resolveSubtitle(
             intent: TrackIntentStore.subtitleIntent!, in: tracks
         )
 
-        XCTAssertNil(result)
+        XCTAssertEqual(result?.id, 1)
         XCTAssertEqual(
             TrackIntentStore.subtitleIntent,
             .track(language: "eng", forced: false, hearingImpaired: false, codec: "srt")
@@ -532,6 +532,52 @@ final class TrackPreferenceTests: XCTestCase {
         XCTAssertEqual(TrackIntentStore.audioIntent, intent)
     }
 
+    // MARK: - Per profile
+
+    private func selectProfile(_ id: Int?) {
+        if let id {
+            testDefaults.set(id, forKey: PlexProfileSession.savedUserIDKey)
+        } else {
+            testDefaults.removeObject(forKey: PlexProfileSession.savedUserIDKey)
+        }
+    }
+
+    /// Each Plex Home profile keeps its own choice (#432).
+    func testProfilesKeepSeparateIntents() {
+        selectProfile(1)
+        TrackIntentStore.subtitleIntent = .off
+        selectProfile(2)
+        let always = SubtitleIntent.track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        TrackIntentStore.subtitleIntent = always
+
+        XCTAssertEqual(TrackIntentStore.subtitleIntent, always)
+        selectProfile(1)
+        XCTAssertEqual(TrackIntentStore.subtitleIntent, .off)
+    }
+
+    /// A profile that has saved nothing reads the device-wide value, which its picks never change.
+    func testProfileInheritsDeviceIntentUntilItPicks() {
+        let foreign = SubtitleIntent.foreignAudio(language: "eng", hearingImpaired: false)
+        TrackIntentStore.subtitleIntent = foreign
+        selectProfile(1)
+        XCTAssertEqual(TrackIntentStore.subtitleIntent, foreign)
+
+        TrackIntentStore.subtitleIntent = .off
+        selectProfile(nil)
+        XCTAssertEqual(TrackIntentStore.subtitleIntent, foreign)
+    }
+
+    /// A profile's "follow the account" audio (nil) does not fall back to the device's language.
+    func testProfileNilAudioDoesNotInheritDevice() {
+        TrackIntentStore.audioIntent = AudioIntent(language: "jpn")
+        selectProfile(1)
+        TrackIntentStore.audioIntent = nil
+
+        XCTAssertNil(TrackIntentStore.audioIntent)
+        selectProfile(nil)
+        XCTAssertEqual(TrackIntentStore.audioIntent, AudioIntent(language: "jpn"))
+    }
+
     // MARK: - Migration
 
     func testMigratesLegacyAudioLanguageKey() {
@@ -653,7 +699,27 @@ final class TrackPreferenceTests: XCTestCase {
         let current = SubtitleIntent.foreignAudio(language: "eng", hearingImpaired: false)
         XCTAssertEqual(SubtitleIntent.afterPick(sub(1, lang: "eng"), replacing: current, audioLanguage: "eng"),
                        .track(language: "eng", forced: false, hearingImpaired: false, codec: "srt"))
-        XCTAssertEqual(SubtitleIntent.afterPick(nil, replacing: current, audioLanguage: "jpn"), .off)
+    }
+
+    /// Off under Foreign Audio covers the title, not the mode (#432).
+    func testOffPickKeepsForeignAudio() {
+        let current = SubtitleIntent.foreignAudio(language: "eng", hearingImpaired: false)
+        XCTAssertEqual(SubtitleIntent.afterPick(nil, replacing: current, audioLanguage: "jpn"), current)
+        let always = SubtitleIntent.track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        XCTAssertEqual(SubtitleIntent.afterPick(nil, replacing: always, audioLanguage: "jpn"), .off)
+    }
+
+    /// A forced pick turns subtitles on in its language; it never switches Always to Forced Only (#425).
+    func testForcedPickNeverStoresForcedUnlessAlreadyForcedOnly() {
+        let forcedTrack = sub(1, lang: "eng", forced: true)
+        let always = SubtitleIntent.track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        XCTAssertEqual(SubtitleIntent.afterPick(forcedTrack, replacing: always, audioLanguage: "jpn"),
+                       .track(language: "eng", forced: false, hearingImpaired: false, codec: "srt"))
+        XCTAssertEqual(SubtitleIntent.afterPick(forcedTrack, replacing: .off, audioLanguage: "eng"),
+                       .track(language: "eng", forced: false, hearingImpaired: false, codec: "srt"))
+        let forcedOnly = SubtitleIntent.track(language: "eng", forced: true, hearingImpaired: false, codec: nil)
+        XCTAssertEqual(SubtitleIntent.afterPick(forcedTrack, replacing: forcedOnly, audioLanguage: "eng"),
+                       .track(language: "eng", forced: true, hearingImpaired: false, codec: "srt"))
     }
 
     func testOldStoredIntentsStillDecode() throws {
@@ -677,5 +743,39 @@ final class TrackPreferenceTests: XCTestCase {
     func testOriginalWithNoDefaultTakesTheFirstTrack() {
         let tracks = [audio(1, lang: "fra"), audio(2, lang: "eng")]
         XCTAssertEqual(TrackIntentResolver.resolveAudio(intent: AudioIntent(language: TrackLanguage.original), in: tracks)?.id, 1)
+    }
+
+    // MARK: - Starting selection
+
+    private func streams(_ json: String) -> [PlexStream] {
+        try! JSONDecoder().decode([PlexStream].self, from: Data(json.utf8))
+    }
+
+    /// Plex's per-item audio pick wins over the intent; the stored intent then picks subtitles.
+    func testStartingSelectionHonorsPerItemAudioPick() {
+        TrackIntentStore.audioIntent = AudioIntent(language: "eng")
+        TrackIntentStore.subtitleIntent = .track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        let start = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","codec":"eac3","default":true},
+             {"id":2,"streamType":2,"index":2,"languageCode":"jpn","codec":"aac","selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"eng","codec":"srt"}]
+            """#))
+        XCTAssertEqual(start.audio, 2)
+        XCTAssertEqual(start.subtitle, 3)
+    }
+
+    /// A deliberate Plex subtitle pick overrides a stored Off; nothing selected resolves to off (0).
+    func testStartingSelectionSubtitleOverrideAndOff() {
+        TrackIntentStore.subtitleIntent = .off
+        let picked = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"spa","selected":true}]
+            """#))
+        XCTAssertEqual(picked.subtitle, 3)
+        let off = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"spa"}]
+            """#))
+        XCTAssertEqual(off.subtitle, 0)
     }
 }

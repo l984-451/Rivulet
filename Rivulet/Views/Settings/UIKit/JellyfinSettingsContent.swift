@@ -17,9 +17,12 @@ extension SettingsContent {
 
     static var jellyfin: [SettingsRowItem] {
         if let account = JellyfinSession.account {
+            let hasLiveTV = JellyfinLiveTVProvider.hiddenSource != nil
+                || LiveTVDataStore.shared.sources.contains { $0.sourceType == .jellyfin }
             return [
                 SettingsRowItem(id: "jellyfinServerInfo", title: "Server",
                                 kind: .info(value: { account.serverName })),
+            ] + (hasLiveTV ? [jellyfinLiveTVToggle(id: "jellyfinLiveTV")] : []) + [
                 SettingsRowItem(id: "jellyfinUserInfo", title: "User",
                                 kind: .info(value: { account.userName })),
                 SettingsRowItem(id: "jellyfinSignOut", title: "Sign Out",

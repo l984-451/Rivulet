@@ -24,6 +24,15 @@ struct RivuletApp: App {
         // which returns false for an unset key, so register the default here
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
+        // Every surface is dark artwork, so menus, popups and alerts stay dark in Light mode
+        // too; Settings alone follows the system. On the window: SwiftUI's preferredColorScheme
+        // never reached UIKit's presented popups.
+        NotificationCenter.default.addObserver(forName: UIWindow.didBecomeVisibleNotification,
+                                               object: nil, queue: .main) { note in
+            let window = note.object as? UIWindow
+            MainActor.assumeIsolated { window?.overrideUserInterfaceStyle = .dark }
+        }
+        AetherPlayer.settleFELDefault(existingInstall: PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil)
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
 
@@ -79,6 +88,9 @@ struct RivuletApp: App {
             await Self.startSentry()
         }
         #endif
+
+        let info = Bundle.main.infoDictionary ?? [:]
+        DiagLog.notice(.launch, "Launch \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?")) tvOS \(ProcessInfo.processInfo.operatingSystemVersionString) signed_in=\(PlexAuthManager.shared.hasCredentials) setup=\(UserDefaults.standard.bool(forKey: "setupComplete"))")
 
         // NowPlayingService disabled — AVPlayerViewController handles Now Playing natively.
         // NowPlayingService.shared.initialize()

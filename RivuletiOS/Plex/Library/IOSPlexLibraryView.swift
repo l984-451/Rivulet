@@ -3,9 +3,56 @@
 
 import SwiftUI
 
-/// Library tab root: Downloads, then the server's movie and TV libraries.
+/// What the Library tab's list has selected; the split view shows it beside the list,
+/// or pushes it at compact width.
+enum IOSLibrarySelection: Hashable {
+    case downloads
+    case library(PlexLibrary)
+    case playlists(serverID: String?)
+}
+
+/// Library tab: the list as a split view's sidebar, so a regular-width iPhone (iPhone Duo
+/// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack.
+struct IOSPlexLibrarySplitView: View {
+    @Binding var selection: IOSLibrarySelection?
+    @Binding var column: NavigationSplitViewColumn
+    @Binding var path: NavigationPath
+    @EnvironmentObject private var plex: IOSPlexSession
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        NavigationSplitView(preferredCompactColumn: $column) {
+            IOSPlexLibrariesView(selection: $selection)
+        } detail: {
+            NavigationStack(path: $path) {
+                // A new selection is a new page: library grids keep their items in view state.
+                detail.id(selection).iosPlexDestinations()
+            }
+        }
+        .onChange(of: selection) { path = NavigationPath() }
+        // Side by side, the detail column is never left empty.
+        .onChange(of: [sizeClass == .regular, plex.libraries.isEmpty], initial: true) {
+            if sizeClass == .regular, selection == nil, let first = plex.libraries.first {
+                selection = .library(first)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selection {
+        case .downloads: IOSDownloadsView()
+        case .library(let library): IOSPlexLibraryView(library: library)
+        case .playlists(let serverID): IOSPlexPlaylistsView(serverID: serverID)
+        case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
+        }
+    }
+}
+
+/// The Library tab's list: Downloads, then the server's movie and TV libraries.
 /// Downloads stays reachable signed out or with the server unreachable.
 struct IOSPlexLibrariesView: View {
+    @Binding var selection: IOSLibrarySelection?
     @EnvironmentObject private var plex: IOSPlexSession
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
@@ -15,9 +62,9 @@ struct IOSPlexLibrariesView: View {
             if !plex.isConfigured, downloads.visibleRecords.isEmpty {
                 IOSPlexConnectView()
             } else {
-                List {
+                List(selection: $selection) {
                     Section {
-                        NavigationLink(value: IOSDownloadsRoute()) {
+                        NavigationLink(value: IOSLibrarySelection.downloads) {
                             Label("Downloads", systemImage: "arrow.down.circle")
                         }
                     }
@@ -30,12 +77,12 @@ struct IOSPlexLibrariesView: View {
                         ForEach(serverGroups, id: \.id) { group in
                             Section(group.name ?? "") {
                                 ForEach(group.libraries) { library in
-                                    NavigationLink(value: library) {
+                                    NavigationLink(value: IOSLibrarySelection.library(library)) {
                                         Label(library.title, systemImage: library.icon)
                                     }
                                 }
                                 if showPlaylists, !plex.playlists(serverID: group.serverID).isEmpty {
-                                    NavigationLink(value: IOSPlexPlaylistsRoute(serverID: group.serverID)) {
+                                    NavigationLink(value: IOSLibrarySelection.playlists(serverID: group.serverID)) {
                                         Label("Playlists", systemImage: "list.and.film")
                                     }
                                 }
@@ -83,13 +130,15 @@ struct IOSPlexLibraryView: View {
     @EnvironmentObject private var plex: IOSPlexSession
     @AppStorage private var sortRaw: String
     @State private var unwatchedOnly = false
-    @State private var items: [PlexMetadata] = []
-    @State private var total: Int?
-    @State private var isLoading = false
+    /// Every item's place, filled page by page as the grid scrolls, so the
+    /// scroll length is the library's from the first page.
+    @State private var slots = PagedSlots<PlexMetadata>(pageSize: Self.pageSize)
     @State private var error: String?
     /// Query and watch-state revision the grid holds, so a reappearing view
     /// keeps its data and scroll position instead of reloading.
-    @State private var loadedKey: String?
+    @State private var loadedQuery: String?
+    @State private var loadedRevision: Int?
+    @State private var isFetchingFirstPage = false
 
     private static let pageSize = 90
     private static let sorts: [(LibrarySortOption, String)] = [
@@ -106,13 +155,13 @@ struct IOSPlexLibraryView: View {
     }
 
     private var sort: LibrarySortOption { LibrarySortOption(rawValue: sortRaw) ?? .titleAsc }
-    private var queryKey: String { "\(sortRaw)|\(unwatchedOnly)|\(plex.watchStateRevision)" }
+    private var queryKey: String { "\(sortRaw)|\(unwatchedOnly)" }
 
     var body: some View {
         Group {
-            if items.isEmpty, let error {
-                IOSPlexErrorView(title: "Couldn't Load Library", message: error, offersDownloads: true) { await reload() }
-            } else if items.isEmpty, !isLoading, loadedKey != nil {
+            if slots.slots.isEmpty, let error {
+                IOSPlexErrorView(title: "Couldn't Load Library", message: error, offersDownloads: true) { await restart() }
+            } else if slots.slots.isEmpty, !slots.claimedPages.isEmpty, !isFetchingFirstPage {
                 ScrollView {
                     ContentUnavailableView(
                         unwatchedOnly ? "Nothing Unwatched" : "No Items",
@@ -120,13 +169,14 @@ struct IOSPlexLibraryView: View {
                     )
                     .containerRelativeFrame([.horizontal, .vertical])
                 }
-                .refreshable { await reload() }
+                .refreshable { await restart() }
+            } else if slots.slots.isEmpty {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    IOSPlexPosterGrid(items: items, loadMore: loadMore)
-                    if isLoading { ProgressView().padding() }
+                    IOSPlexPosterGrid(slots: slots.slots, slotAppeared: slotAppeared)
                 }
-                .refreshable { await reload() }
+                .refreshable { await refetchLoaded() }
             }
         }
         .navigationTitle(plex.displayTitle(library.title, serverID: library.serverID))
@@ -154,50 +204,58 @@ struct IOSPlexLibraryView: View {
             }
             if showsAccount { IOSAccountToolbarItem() }
         }
-        .task(id: queryKey) {
-            guard loadedKey != queryKey else { return }
-            await reload()
+        .task(id: "\(queryKey)|\(plex.watchStateRevision)") {
+            // Nothing claimed and nothing shown: a first page that was cancelled when the view left.
+            if loadedQuery != queryKey || (slots.slots.isEmpty && slots.claimedPages.isEmpty) {
+                await restart()
+            } else if loadedRevision != plex.watchStateRevision {
+                await refetchLoaded()
+            }
         }
     }
 
-    /// Refetches from the top. A watch-state change refetches every loaded
-    /// page in one request so the grid repaints in place.
-    private func reload() async {
-        let key = queryKey
-        let keepCount = loadedKey?.hasPrefix("\(sortRaw)|\(unwatchedOnly)|") == true ? items.count : 0
-        if keepCount == 0 { items = [] }
-        isLoading = true
-        // A superseded load must not clear the flag while the newer one runs.
-        defer { if key == queryKey { isLoading = false } }
+    /// Starts the query over from an empty grid.
+    private func restart() async {
+        slots = PagedSlots(pageSize: Self.pageSize)
+        error = nil
+        loadedQuery = queryKey
+        loadedRevision = plex.watchStateRevision
+        isFetchingFirstPage = true
+        defer { isFetchingFirstPage = false }
+        slots.claim(0)
+        await fetch(0)
+    }
+
+    /// Refetches every page fetched so far, in place: a watch-state change or pull to refresh.
+    private func refetchLoaded() async {
+        loadedRevision = plex.watchStateRevision
+        for start in slots.claimedPages { await fetch(start) }
+    }
+
+    /// Fetches the page under a tile that just appeared, and the one after it
+    /// once the tile is halfway into its page, so scrolling rarely meets a placeholder.
+    private func slotAppeared(_ index: Int) {
+        for target in [index, index + Self.pageSize / 2] where target < slots.slots.count {
+            guard let start = slots.unclaimedPage(containing: target) else { continue }
+            slots.claim(start)
+            Task { await fetch(start) }
+        }
+    }
+
+    private func fetch(_ start: Int) async {
+        let query = queryKey
         do {
             let page = try await plex.libraryPage(
-                library, sort: sort, unwatchedOnly: unwatchedOnly,
-                start: 0, size: max(Self.pageSize, keepCount)
+                library, sort: sort, unwatchedOnly: unwatchedOnly, start: start, size: Self.pageSize
             )
-            guard key == queryKey else { return }
-            items = page.items.uniqued()
-            total = page.totalSize
+            guard query == queryKey else { return }
+            slots.fill(page.items, at: start, total: page.totalSize)
             error = nil
-            loadedKey = key
-        } catch let error where isCancellationError(error) {
         } catch {
-            guard key == queryKey else { return }
-            self.error = error.localizedDescription
-        }
-    }
-
-    private func loadMore() {
-        guard !isLoading, let total, items.count < total else { return }
-        let key = queryKey
-        isLoading = true
-        Task {
-            defer { isLoading = false }
-            guard let page = try? await plex.libraryPage(
-                library, sort: sort, unwatchedOnly: unwatchedOnly, start: items.count, size: Self.pageSize
-            ), key == queryKey else { return }
-            items = (items + page.items).uniqued()
-            // An empty page means the server's count overstated; stop paging.
-            self.total = page.items.isEmpty ? items.count : page.totalSize
+            // A newer query has its own slots; only this query's claim is released.
+            guard query == queryKey else { return }
+            slots.release(start)
+            if !isCancellationError(error), slots.slots.isEmpty { self.error = error.localizedDescription }
         }
     }
 }

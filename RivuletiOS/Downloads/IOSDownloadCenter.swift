@@ -260,6 +260,27 @@ final class IOSDownloadCenter: ObservableObject {
         ensureTicking()
     }
 
+    /// Stops a download, keeping resume data, until `resume`.
+    func pause(recordID id: String) {
+        guard let record = record(id), !record.state.isSettled else { return }
+        activeTasks[id] = nil
+        set(id, .pausedByUser)
+        Task {
+            for task in await transfer.allTasks() where task.taskDescription == id {
+                retiredTasks.insert(task.taskIdentifier)
+                transfer.pause(task)
+            }
+        }
+    }
+
+    func resume(recordID id: String) {
+        guard let index = records.firstIndex(where: { $0.id == id }), records[index].state == .pausedByUser else { return }
+        // Written directly: `update` keeps a user pause against every other writer.
+        records[index].state = .waitingForServer
+        save()
+        ensureTicking()
+    }
+
     /// Cancels or removes a download: its task, files, resume data, record and server queue item.
     func delete(recordID id: String) {
         guard let record = record(id) else { return }
@@ -730,6 +751,8 @@ final class IOSDownloadCenter: ObservableObject {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         var record = records[index]
         change(&record)
+        // Work still in flight when the user paused must not restart it.
+        if records[index].state == .pausedByUser { record.state = .pausedByUser }
         guard record != records[index] else { return }
         records[index] = record
         if shouldSave { save() }

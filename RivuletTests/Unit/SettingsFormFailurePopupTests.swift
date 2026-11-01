@@ -64,11 +64,11 @@ final class SettingsFormFailurePopupTests: XCTestCase {
 
     func test_liveTVFormFailure_isAPopup_notARow() throws {
         SettingsContent.addSourceDraft = AddSourceDraft()   // no address
-        let page = try onScreen(.addOwnServer)
+        let page = try onScreen(.addDispatcharr)
 
         try press("addSourceConfirm", on: page)
 
         XCTAssertTrue(page.presentedViewController is ConfirmationPopupViewController)
-        XCTAssertFalse(SettingsContent.rows(for: .addOwnServer).contains { $0.id == "addSourceError" })
+        XCTAssertFalse(SettingsContent.rows(for: .addDispatcharr).contains { $0.id == "addSourceError" })
     }
 }

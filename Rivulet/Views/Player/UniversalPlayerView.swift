@@ -604,8 +604,7 @@ private final class UniversalPlaybackInputTarget: PlaybackInputTarget {
                 onResetRemoteInput?()
             } else if vm.showPausedPoster {
                 // Back with the ambient pause backdrop up returns to the
-                // paused frame — it does not exit the player. The timer does
-                // not re-arm until the next pause, so the frame stays clean.
+                // paused frame — it does not exit the player.
                 vm.hidePausedPoster()
             } else if vm.controlsFocusActive || vm.showControls {
                 // Back from the transport buttons (or from any visible chrome)
@@ -714,7 +713,6 @@ struct UniversalPlayerView: View {
         }
         .animation(.easeInOut(duration: 1.0), value: viewModel.playbackState)
         .animation(.easeInOut(duration: 0.25), value: viewModel.showControls)
-        .animation(.spring(response: 0.2, dampingFraction: 0.7), value: viewModel.seekIndicator)
         .animation(.easeInOut(duration: 0.5), value: viewModel.pausePresentation)
         // No press handling in this view at all: no .onPlayPauseCommand,
         // .onExitCommand, .onMoveCommand or .onTapGesture. Every press is
@@ -833,17 +831,6 @@ struct UniversalPlayerView: View {
                             )
                         )
                 }
-            }
-
-            // Mid-playback buffering has no centered indicator: the quiet
-            // top-left "Loading" cue in PlayerContainerViewController covers
-            // it in the same slot the Paused indicator uses.
-
-            // Seek Indicator (10s skip) with the chrome hidden; with it up,
-            // the progress bar shows AVKit's glyph beside the time instead.
-            if let indicator = viewModel.seekIndicator, !viewModel.showControls {
-                seekIndicatorView(indicator)
-                    .transition(.scale.combined(with: .opacity))
             }
 
             // Compatibility Notice (e.g., DV fallback)
@@ -975,24 +962,6 @@ struct UniversalPlayerView: View {
         }
     }
 
-    // MARK: - Seek Indicator View
-
-    private func seekIndicatorView(_ indicator: SeekIndicator) -> some View {
-        Image(systemName: indicator.systemImage)
-            .font(.system(size: 48, weight: .medium))
-            .foregroundStyle(.white)
-            .frame(width: 88, height: 88)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.black.opacity(0.6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
-                    )
-            )
-            .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 4)
-    }
-
     // MARK: - Compatibility Notice
 
     private func compatibilityNoticeView(_ message: String) -> some View {
@@ -1037,6 +1006,8 @@ struct UniversalPlayerView: View {
             return "link.badge.plus"
         case .unknown:
             return "exclamationmark.triangle.fill"
+        case .serverTerminated:
+            return "stop.circle.fill"
         case .engineFailure(let kind, _):
             // Reuse the one engine-kind taxonomy instead of opening a third
             // switch over the same strings. "Is this a network thing or a
@@ -1072,6 +1043,8 @@ struct UniversalPlayerView: View {
             return "Invalid Stream"
         case .unknown:
             return "Playback Error"
+        case .serverTerminated:
+            return "Playback Stopped"
         case .engineFailure(let kind, _):
             switch DirectPlayFailureKind(engineKind: kind) {
             case .network: return "Connection Problem"

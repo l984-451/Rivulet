@@ -35,6 +35,9 @@ final class ServerDataStore: ObservableObject {
     /// then one Recently Added row per library in server order.
     @Published private(set) var homeRows: CachedHomeRail = []
     @Published private(set) var isLoading = false
+    /// Each library's titles on TMDB's trending lists, in trending order, by
+    /// `settingsKey`. Home's hero reads them through `visibleTrending`.
+    @Published private(set) var trending: [String: [MediaItem]] = [:]
 
     /// Video, photo and music libraries.
     static let browsableKinds: Set<MediaLibrary.LibraryKind> = [.movies, .shows, .mixed, .photos, .music]
@@ -45,7 +48,12 @@ final class ServerDataStore: ObservableObject {
     private struct Slice {
         var libraries: [MediaLibrary] = []
         var rows: CachedHomeRail = []
+        var trending: [String: [MediaItem]] = [:]
+        var trendingAt: Date?
     }
+
+    /// TMDB's own list cache lifetime; each server's matches are refetched no sooner.
+    private static let trendingLifetime: TimeInterval = 3600
 
     private var slices: [String: Slice] = [:]
     private var loadTask: Task<Void, Never>?
@@ -100,6 +108,11 @@ final class ServerDataStore: ObservableObject {
         homeRowsInSidebarOrder.filter { !HomeRowSettings.isHidden($0.hubIdentifier) }
     }
 
+    /// `trending` for the sidebar's visible libraries, in sidebar order.
+    var visibleTrending: [[MediaItem]] {
+        visibleLibraries.compactMap { trending[$0.settingsKey] }
+    }
+
     /// More than one source is signed in, so rows and tiles name their server.
     var labelsServers: Bool {
         sources.count + (PlexAuthManager.shared.hasCredentials ? 1 : 0) > 1
@@ -138,6 +151,8 @@ final class ServerDataStore: ObservableObject {
                     group.addTask { await self.load(from: provider) }
                 }
             }
+            // Shared store only: tests load providers without reaching TMDB.
+            if self === Self.shared { await self.loadTrending(from: providers) }
         }
     }
 
@@ -156,7 +171,11 @@ final class ServerDataStore: ObservableObject {
         }
         let previous = slices[provider.id] ?? Slice()
         async let fetchedContinuing = provider.continueWatching(limit: 20)
-        guard let fetched = try? await provider.libraries() else {
+        let fetched: [MediaLibrary]
+        do {
+            fetched = try await provider.libraries()
+        } catch {
+            DiagLog.error(.servers, "\(provider.kind) libraries failed: \(DiagLog.describe(error))")
             _ = try? await fetchedContinuing
             return
         }
@@ -173,12 +192,19 @@ final class ServerDataStore: ObservableObject {
                     recent.append(row)
                 }
             } catch {
+                DiagLog.error(.servers, "\(provider.kind) recently added failed: \(DiagLog.describe(error))")
                 // This library's fetch failed: keep its row.
                 if let previous = previous.rows.first(where: { $0.id == id }) { recent.append(previous) }
             }
         }
         var continuingRow: [CachedHomeHub] = []
-        if let continuing = try? await fetchedContinuing {
+        var fetchedContinue: [MediaItem]?
+        do {
+            fetchedContinue = try await fetchedContinuing
+        } catch {
+            DiagLog.error(.servers, "\(provider.kind) continue watching failed: \(DiagLog.describe(error))")
+        }
+        if let continuing = fetchedContinue {
             if !continuing.isEmpty {
                 let id = Self.rowID(provider.id, "continueWatching")
                 continuingRow = [CachedHomeHub(
@@ -189,7 +215,37 @@ final class ServerDataStore: ObservableObject {
             continuingRow = previous.rows.filter(\.isContinueWatching)
         }
         guard !Task.isCancelled else { return }
-        slices[provider.id] = Slice(libraries: browsable, rows: continuingRow + recent)
+        DiagLog.notice(.servers, "\(provider.kind) loaded: \(browsable.count) libraries, continue watching \(continuingRow.first?.items.count ?? 0), recent rows \(recent.count)")
+        slices[provider.id] = Slice(libraries: browsable, rows: continuingRow + recent,
+                                    trending: previous.trending, trendingAt: previous.trendingAt)
+        publish()
+    }
+
+    /// Each server's trending matches, at most once per `trendingLifetime`.
+    /// A failed library keeps its previous matches.
+    private func loadTrending(from providers: [any MediaProvider]) async {
+        let due = providers.filter { provider in
+            guard let slice = slices[provider.id] else { return false }
+            return slice.trendingAt.map { Date().timeIntervalSince($0) > Self.trendingLifetime } ?? true
+        }
+        guard !due.isEmpty else { return }
+        async let movies = TMDBDiscoverService.shared.fetchSection(.movieTrending)
+        async let shows = TMDBDiscoverService.shared.fetchSection(.tvTrending)
+        let titles = TrendingMatch.interleave(movies: await movies, shows: await shows)
+        guard !titles.isEmpty else { return }
+        for provider in due {
+            guard var slice = slices[provider.id] else { continue }
+            for library in slice.libraries where Self.homeRowKinds.contains(library.kind) {
+                do {
+                    slice.trending[library.settingsKey] = try await provider.trending(in: library, from: titles, limit: 10)
+                } catch {
+                    DiagLog.error(.servers, "\(provider.kind) trending failed: \(DiagLog.describe(error))")
+                }
+            }
+            guard !Task.isCancelled else { return }
+            slices[provider.id]?.trending = slice.trending
+            slices[provider.id]?.trendingAt = Date()
+        }
         publish()
     }
 
@@ -199,6 +255,7 @@ final class ServerDataStore: ObservableObject {
         let order = sources.map(\.providerID) + slices.keys.sorted().filter { id in !sources.contains { $0.providerID == id } }
         let ordered = order.compactMap { slices[$0] }
         update(\.libraries, ordered.flatMap(\.libraries))
+        update(\.trending, ordered.reduce(into: [:]) { $0.merge($1.trending) { a, _ in a } })
         let rows = ordered.flatMap(\.rows)
         guard !(rows.isEmpty && homeRows.isEmpty) else { return }
         homeRows = rows

@@ -76,28 +76,29 @@ extension SettingsContent {
 
     // MARK: Picker
 
-    /// Names things by what the user has, not by protocol. The app names on the
-    /// "My Own Server" row are load-bearing: that's how someone running
-    /// Threadfin recognises the row as theirs.
+    /// Names things by what the user has, not by protocol: someone running
+    /// Tvheadend looks for the word Tvheadend.
     static var addLiveTVSource: [SettingsRowItem] {
         // No Plex or Jellyfin row: a signed-in server's Live TV is added on its own.
-        var rows: [SettingsRowItem] = []
-        rows.append(SettingsRowItem(
-            id: "addXtream", title: "Xtream Codes",
-            kind: .navigationAction(.addXtream,
-                                    value: { "Provider login" },
-                                    prepare: { beginDraft(displayName: "") })))
-        rows.append(SettingsRowItem(
-            id: "addPlaylistURL", title: "Playlist URL",
-            kind: .navigationAction(.addPlaylistURL,
-                                    value: { "M3U link" },
-                                    prepare: { beginDraft(displayName: "") })))
-        rows.append(SettingsRowItem(
-            id: "addOwnServer", title: "My Own Server",
-            kind: .navigationAction(.addOwnServer,
-                                    value: { "Dispatcharr, Threadfin" },
-                                    prepare: { beginDraft(displayName: "") })))
-        return rows
+        [
+            .header("Your Server"),
+            serverRow(id: "addDispatcharr", title: "Dispatcharr", page: .addDispatcharr, app: .dispatcharr),
+            serverRow(id: "addTvheadend", title: "Tvheadend", page: .addTvheadend, app: .tvheadend),
+            serverRow(id: "addThreadfin", title: "Threadfin", page: .addThreadfin, app: .threadfin),
+            .header("Provider"),
+            SettingsRowItem(id: "addXtream", title: "Xtream Codes",
+                            kind: .navigationAction(.addXtream, value: { "Provider login" },
+                                                    prepare: { beginDraft(displayName: "") })),
+            SettingsRowItem(id: "addPlaylistURL", title: "Playlist URL",
+                            kind: .navigationAction(.addPlaylistURL, value: { "M3U link" },
+                                                    prepare: { beginDraft(displayName: "") }))
+        ]
+    }
+
+    private static func serverRow(id: String, title: String, page: SettingsPage,
+                                  app: LiveTVServerApp) -> SettingsRowItem {
+        SettingsRowItem(id: id, title: title,
+                        kind: .navigationAction(page, value: nil, prepare: { beginDraft(displayName: "", app: app) }))
     }
 
     /// Clears everything the flow holds. Called when the picker page loads, so
@@ -106,9 +107,11 @@ extension SettingsContent {
         addSourceDraft = nil
     }
 
-    private static func beginDraft(displayName: String) {
+    /// A server app's form starts on that app's usual address.
+    private static func beginDraft(displayName: String, app: LiveTVServerApp? = nil) {
         let draft = AddSourceDraft()
         draft.displayName = displayName
+        draft.serverURL = app.map { LiveTVSourceConnector.defaultAddress(for: $0) } ?? ""
         addSourceDraft = draft
     }
 
@@ -194,20 +197,18 @@ extension SettingsContent {
              connect: { try await connector.connect($0, name: draft.displayName) })
     }
 
-    // MARK: My Own Server
+    // MARK: Dispatcharr
 
-    static var addOwnServer: [SettingsRowItem] {
+    static var addDispatcharr: [SettingsRowItem] {
         guard let draft = addSourceDraft else { return [] }
-        return ownServerSteps(draft).map(\.row) + [addButton(draft) { saveOwnServer(draft, on: $0) }]
+        return dispatcharrSteps(draft).map(\.row) + [addButton(draft) { saveDispatcharr(draft, on: $0) }]
     }
 
-    private static func ownServerSteps(_ draft: AddSourceDraft) -> [EntryStep] {
+    private static func dispatcharrSteps(_ draft: AddSourceDraft) -> [EntryStep] {
         [
             EntryStep(id: "serverURL", title: "Server Address",
-                      message: "Enter the address of the server on your network, with its port. "
-                          + "Pick your app below to fill in its usual address.",
+                      message: "Enter your Dispatcharr server's address, with its port.",
                       placeholder: "Required", keyboard: .URL, contentType: .URL,
-                      suggestions: serverSuggestions,
                       value: { draft.serverURL }, set: { draft.serverURL = $0; draft.status = .idle }),
             EntryStep(id: "usernameField", title: "Username",
                       message: "Your Dispatcharr username. Only needed to record; leave it empty to just watch.",
@@ -226,18 +227,71 @@ extension SettingsContent {
         ]
     }
 
-    private static var serverSuggestions: [(label: String, value: String)] {
-        LiveTVSourceConnector.serverSuggestions(host: LiveTVSourceConnector.suggestedHost)
-    }
-
     /// Verify-then-save as one operation: the server is added only if the
     /// check passed. Failure stays on the page with a real cause.
-    private static func saveOwnServer(_ draft: AddSourceDraft, on vc: UIViewController) {
+    private static func saveDispatcharr(_ draft: AddSourceDraft, on vc: UIViewController) {
         let connector = LiveTVSourceConnector()
         save(draft, on: vc,
              request: { try connector.serverRequest(address: draft.serverURL, username: draft.username,
                                                     password: draft.password, channelProfile: draft.channelProfile) },
              connect: { try await connector.connect($0, name: draft.displayName) })
+    }
+
+    // MARK: Tvheadend
+
+    static var addTvheadend: [SettingsRowItem] {
+        guard let draft = addSourceDraft else { return [] }
+        return tvheadendSteps(draft).map(\.row) + [addButton(draft) { saveTvheadend(draft, on: $0) }]
+    }
+
+    private static func tvheadendSteps(_ draft: AddSourceDraft) -> [EntryStep] {
+        let loginMessage = "Only needed if your server asks for a login, and to record. Leave both empty to just watch."
+        return [
+            EntryStep(id: "tvhServerField", title: "Server Address",
+                      message: "Enter your Tvheadend server's address, with its port.",
+                      placeholder: "Required", keyboard: .URL, contentType: .URL,
+                      value: { draft.serverURL }, set: { draft.serverURL = $0; draft.status = .idle }),
+            EntryStep(id: "tvhUsernameField", title: "Username", message: loginMessage,
+                      keyboard: .asciiCapable, contentType: .username,
+                      value: { draft.username }, set: { draft.username = $0; draft.status = .idle }),
+            EntryStep(id: "tvhPasswordField", title: "Password", message: loginMessage,
+                      keyboard: .asciiCapable, contentType: .password, isSecure: true,
+                      value: { draft.password }, set: { draft.password = $0; draft.status = .idle }),
+            nameStep(draft, fallback: LiveTVSourceConnector.defaultTvheadendName)
+        ]
+    }
+
+    private static func saveTvheadend(_ draft: AddSourceDraft, on vc: UIViewController) {
+        let connector = LiveTVSourceConnector()
+        save(draft, on: vc,
+             request: { try connector.tvheadendRequest(address: draft.serverURL, username: draft.username,
+                                                       password: draft.password) },
+             connect: { try await connector.connect($0, name: draft.displayName) })
+    }
+
+    // MARK: Threadfin
+
+    static var addThreadfin: [SettingsRowItem] {
+        guard let draft = addSourceDraft else { return [] }
+        return threadfinSteps(draft).map(\.row) + [addButton(draft) { saveThreadfin(draft, on: $0) }]
+    }
+
+    private static func threadfinSteps(_ draft: AddSourceDraft) -> [EntryStep] {
+        [
+            EntryStep(id: "threadfinServerField", title: "Server Address",
+                      message: "Enter your Threadfin server's address, with its port.",
+                      placeholder: "Required", keyboard: .URL, contentType: .URL,
+                      value: { draft.serverURL }, set: { draft.serverURL = $0; draft.status = .idle }),
+            nameStep(draft, fallback: LiveTVSourceConnector.defaultThreadfinName)
+        ]
+    }
+
+    private static func saveThreadfin(_ draft: AddSourceDraft, on vc: UIViewController) {
+        let connector = LiveTVSourceConnector()
+        save(draft, on: vc,
+             request: { try LiveTVSourceConnector.threadfinRequest(address: draft.serverURL) },
+             connect: { try await connector.connect($0, name: draft.displayName.isEmpty
+                                                        ? LiveTVSourceConnector.defaultThreadfinName : draft.displayName) })
     }
 
     // MARK: Shared form pieces

@@ -29,6 +29,7 @@ struct RivuletiOSApp: App {
         _ = NetworkPathMonitor.shared
         // Recreates the background session and resumes unfinished downloads.
         IOSDownloadCenter.shared.start()
+        IOSDownloadActivity.shared.start()
         // Folds the old single-source settings into the shared store, then
         // warms the guide so the Live TV tab opens with data.
         Task {

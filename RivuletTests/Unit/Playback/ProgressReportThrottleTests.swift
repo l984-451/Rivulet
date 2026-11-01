@@ -41,7 +41,35 @@ final class ProgressReportThrottleTests: XCTestCase {
         XCTAssertTrue(shouldReport(state: "stopped", time: 1201, lastState: "playing", lastTime: 1200))
     }
 
+    // Plex turns a session's first report into its webhook: paused first sends
+    // media.pause with no media.play (#433).
+    func testPauseBeforePlayingIsDropped() {
+        XCTAssertFalse(shouldReport(state: "paused", time: 0, lastState: nil, lastTime: nil, force: true))
+        XCTAssertFalse(shouldReport(state: "paused", time: 0, lastState: "stopped", lastTime: 1200, force: true))
+    }
+
     func testForceBypassesThrottle() {
         XCTAssertTrue(shouldReport(state: "playing", time: 10, lastState: "playing", lastTime: 10, force: true))
+    }
+}
+
+final class TimelineTerminationTests: XCTestCase {
+    private func text(_ json: String) -> String? {
+        PlexNetworkManager.timelineTermination(in: Data(json.utf8))
+    }
+
+    func testPlainReplyIsNotATermination() {
+        XCTAssertNil(text(#"{"MediaContainer":{"size":1,"playbackState":"ignore","skipCount":1,"viewCount":2,"viewOffset":70200}}"#))
+        XCTAssertNil(text(""))
+    }
+
+    // PMS 1.43.5's reply after a dashboard Stop.
+    func testTerminationCarriesServerReason() {
+        let reply = #"{"MediaContainer":{"size":1,"playbackState":"ignore","skipCount":1,"terminationCode":2006,"terminationText":"\"l984_451\" asked to stop your playback from this server: Bedtime","viewCount":2,"viewOffset":70200}}"#
+        XCTAssertEqual(text(reply), #""l984_451" asked to stop your playback from this server: Bedtime"#)
+    }
+
+    func testCodeWithoutTextStillTerminates() {
+        XCTAssertNotNil(text(#"{"MediaContainer":{"terminationCode":2006}}"#))
     }
 }

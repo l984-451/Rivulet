@@ -68,7 +68,7 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         let frame = captionFrame(
             placement: .init(alignment: 1, position: CGPoint(x: 0.10, y: 0.99)))
 
-        XCTAssertEqual(frame.maxY, 940, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 947.4, accuracy: 0.5)
     }
 
     /// Teletext arrives with a coarse `\an` and no percentage, so the column
@@ -91,7 +91,7 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         XCTAssertEqual(frame.minX, 100, accuracy: 0.5)
         XCTAssertEqual(
             frame.maxY,
-            canvas.height - SubtitleAdjustments.controlsFloor(pictureHeight: canvas.height),
+            canvas.height - SubtitleAdjustments.controlsFloor(isSystemDefault: true),
             accuracy: 0.5)
     }
 
@@ -99,7 +99,16 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         let frame = captionFrame(placement: nil)
 
         XCTAssertEqual(frame.midX, canvas.width / 2, accuracy: 0.5)
-        XCTAssertEqual(frame.maxY, 940, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 947.4, accuracy: 0.5)
+    }
+
+    /// AVKit rests every style but its built-in Default 3.5pt lower at 1080.
+    func testEditedStyleRestsLowerThanSystemDefault() {
+        var style = CaptionStyle.default
+        style.isSystemDefault = false
+        let frame = captionFrame(placement: nil, style: style)
+
+        XCTAssertEqual(frame.maxY, 950.7, accuracy: 0.5)
     }
 
     // A track the content filter reads unseen: cues keep arriving, nothing is drawn.
@@ -120,11 +129,13 @@ final class CaptionOverlayPlacementTests: XCTestCase {
     private func captionFrame(
         placement: AetherSubtitleCue.TextPlacement?,
         text: String = "Caption",
-        controlsVisible: Bool = false
+        controlsVisible: Bool = false,
+        style: CaptionStyle = .default
     ) -> CGRect {
         let model = SubtitleModel()
         let overlay = CaptionOverlayView(
             model: model,
+            style: style,
             controlsVisible: controlsVisible,
             videoSize: canvas)
         overlay.frame = CGRect(origin: .zero, size: canvas)

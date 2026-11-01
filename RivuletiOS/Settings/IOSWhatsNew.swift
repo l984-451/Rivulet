@@ -8,6 +8,29 @@ import SwiftUI
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.0.7 (84)", [
+            "Continue Watching no longer adds a title to artwork that already shows one",
+            "The Live TV guide now marks new airings from Plex guides",
+            "More Live TV guides now show a film's release year",
+        ]),
+        ("1.0.7 (83)", [
+            "iPhone Duo optimization",
+        ]),
+        ("1.0.7 (82)", [
+            "New Tvheadend support in Live TV, with channels, guide and recording",
+            "Add Source in Live TV lists Dispatcharr, Tvheadend and Threadfin by name",
+            "Live TV channels now start in a few seconds",
+            "New Audio Delay control in the player's audio and subtitles menu",
+            "New Upscale SD and 720p setting in Playback",
+            "Posters now show the edition, such as Director's Cut",
+            "Plex's dashboard now shows bandwidth for Direct Play",
+            "The player stops and shows the reason when Plex ends your session",
+            "New Audio & Subtitles settings in Playback, saved for each Plex profile",
+            "Audio tracks are listed by language and format, and audio description tracks are no longer picked on their own",
+            "New Chapters list in the player, with a picture for each chapter",
+            "The Home hero can show Trending, Continue Watching, Recently Added or your Watchlist",
+            "Updated AetherEngine to 7.53.0",
+        ]),
         ("1.0.7 (81)", [
             "New video playlists: play, shuffle, add titles, reorder, rename and delete",
             "Each skip marker can now show a button, skip automatically, or stay off",

@@ -288,7 +288,7 @@ final class MultiStreamViewModel: ObservableObject {
             breadcrumb.data = [
                 "channel_name": channel.name,
                 "channel_id": channel.id,
-                "channel_number": channel.channelNumber ?? 0,
+                "channel_number": channel.channelNumber?.description ?? "none",
                 "source_type": String(describing: channel.sourceType),
                 "stream_type": streamType,
                 "stream_url_scheme": url.scheme ?? "unknown",
@@ -340,7 +340,7 @@ final class MultiStreamViewModel: ObservableObject {
                     scope.setTag(value: url.path.contains("/transcode/") ? "plex_transcode" : "direct", key: "stream_type")
                     scope.setExtra(value: channel.name, key: "channel_name")
                     scope.setExtra(value: channel.id, key: "channel_id")
-                    scope.setExtra(value: channel.channelNumber ?? 0, key: "channel_number")
+                    scope.setExtra(value: channel.channelNumber?.description ?? "none", key: "channel_number")
                     // Plex transcode URLs carry X-Plex-Token in the query, and an
                     // IPTV stream URL can carry the provider username/password.
                     // Keep the query's key names (that's what diagnoses a bad
@@ -361,7 +361,7 @@ final class MultiStreamViewModel: ObservableObject {
             event.extra = [
                 "channel_name": channel.name,
                 "channel_id": channel.id,
-                "channel_number": channel.channelNumber ?? 0,
+                "channel_number": channel.channelNumber?.description ?? "none",
                 "source_type": String(describing: channel.sourceType),
                 "source_id": channel.sourceId,
                 "tvg_id": channel.tvgId ?? "none"

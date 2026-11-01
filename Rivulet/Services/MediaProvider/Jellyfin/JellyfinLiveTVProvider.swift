@@ -7,7 +7,8 @@
 //
 //  The signed-in Jellyfin server's Live TV as a Live TV source. It comes and
 //  goes with the sign-in (`sync`), never through an add-source step, and is
-//  never saved. Measured on 12.1 with an M3U tuner and XMLTV guide.
+//  never saved. Measured on 12.1 with an M3U tuner and XMLTV guide. Records
+//  through timers and series timers when the user may manage Live TV.
 //
 
 import Foundation
@@ -16,14 +17,16 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
     let sourceType: LiveTVSourceType = .jellyfin
     let sourceId: String
     let displayName: String
+    nonisolated let supportsRecording: Bool
 
     private let client: JellyfinClient
     private let userID: String
     private var cachedChannels: [UnifiedChannel] = []
 
-    init(provider: JellyfinProvider) {
+    init(provider: JellyfinProvider, canRecord: Bool) {
         sourceId = provider.id
         displayName = "\(provider.displayName) Live TV"
+        supportsRecording = canRecord
         client = provider.client
         userID = provider.userID
     }
@@ -32,16 +35,30 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
 
     // MARK: - Automatic source
 
+    /// Set when the user hid the server's Live TV (#406).
+    static let hiddenKey = "liveTVHideJellyfin"
+    /// The server's Live TV while hidden, so Settings can list it as Off.
+    @MainActor static var hiddenSource: LiveTVDataStore.LiveTVSourceInfo?
+
+    /// Shows or hides the signed-in server's Live TV; the task ends once the source is found again.
+    @MainActor
+    static func setHidden(_ hide: Bool) -> Task<Void, Never>? {
+        UserDefaults.standard.set(hide, forKey: hiddenKey)
+        let id = JellyfinSession.account?.providerID
+        return sync(MediaProviderRegistry.shared.secondaryProviders.first { $0.id == id } as? JellyfinProvider)
+    }
+
     /// Adds the server's Live TV when it has channels for this user, removes
     /// it when signed out or when it has none. A failed check changes nothing.
-    @MainActor
-    static func sync(_ provider: JellyfinProvider?) {
+    @MainActor @discardableResult
+    static func sync(_ provider: JellyfinProvider?) -> Task<Void, Never>? {
         let store = LiveTVDataStore.shared
         guard let provider else {
+            hiddenSource = nil
             store.setServerSource(nil, of: .jellyfin)
-            return
+            return nil
         }
-        Task { @MainActor in
+        return Task { @MainActor in
             let probe: JFLiveQuery<JFLiveChannel>
             do {
                 probe = try await provider.client.get("LiveTv/Channels", [URLQueryItem(name: "limit", value: "0")])
@@ -49,11 +66,24 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
                 return
             }
             guard (probe.totalRecordCount ?? 0) > 0 else {
+                hiddenSource = nil
                 store.setServerSource(nil, of: .jellyfin)
                 return
             }
+            guard !UserDefaults.standard.bool(forKey: hiddenKey) else {
+                hiddenSource = LiveTVDataStore.LiveTVSourceInfo(
+                    id: provider.id, sourceType: .jellyfin, displayName: "\(provider.displayName) Live TV",
+                    channelCount: 0, isConnected: false, lastSync: nil)
+                store.setServerSource(nil, of: .jellyfin)
+                return
+            }
+            hiddenSource = nil
             if !store.hasSource(id: provider.id) {
-                store.setServerSource(JellyfinLiveTVProvider(provider: provider), of: .jellyfin)
+                // Admins pass without the Live TV management right; the server
+                // answers 403 to timer requests from anyone else.
+                let me: JFUserWithPolicy? = try? await provider.client.get("Users/Me")
+                let canRecord = me?.policy?.isAdministrator == true || me?.policy?.enableLiveTvManagement == true
+                store.setServerSource(JellyfinLiveTVProvider(provider: provider, canRecord: canRecord), of: .jellyfin)
             }
         }
     }
@@ -160,6 +190,103 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
     }
 }
 
+// MARK: - DVR
+
+extension JellyfinLiveTVProvider: LiveTVRecordingProvider {
+
+    /// Jellyfin marks every programme recordable; a series timer matches on
+    /// the programme's name, so films are offered one airing only.
+    func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption] {
+        guard supportsRecording else { throw LiveTVRecordingError.notSupported }
+        guard program.endTime > Date() else { throw LiveTVRecordingError.programEnded }
+        var options = [LiveTVRecordOption(id: "\(program.id)#once", title: "Record", scope: .single, payload: "once")]
+        if !program.isMovie {
+            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: "Record Series",
+                                              scope: .series, payload: "all"))
+            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: "Record New Episodes",
+                                              scope: .series, payload: "new"))
+        }
+        return options
+    }
+
+    /// The server's defaults for the programme (padding, keep rules), posted
+    /// back as a timer or a series timer.
+    func record(_ option: LiveTVRecordOption, program: UnifiedProgram, on channel: UnifiedChannel) async throws {
+        var timer: JFTimerDefaults = try await client.get("LiveTv/Timers/Defaults",
+                                                          [URLQueryItem(name: "programId", value: program.id)])
+        switch option.payload {
+        case "all", "new":
+            timer.recordNewOnly = option.payload == "new"
+            try await client.post("LiveTv/SeriesTimers", query: [], body: timer)
+        default:
+            try await client.post("LiveTv/Timers", query: [], body: timer)
+        }
+    }
+
+    func scheduledRecordings() async throws -> [LiveTVScheduledRecording] {
+        let result: JFLiveQuery<JFTimer> = try await client.get("LiveTv/Timers")
+        let prefix = "\(sourceType.rawValue):\(sourceId):"
+        return (result.items ?? []).compactMap { timer -> LiveTVScheduledRecording? in
+            guard let id = timer.id, let start = jellyfinDate(timer.startDate),
+                  let end = jellyfinDate(timer.endDate) else { return nil }
+            var recording = LiveTVScheduledRecording(
+                id: id,
+                sourceId: sourceId,
+                title: timer.name ?? "Recording",
+                subtitle: timer.programInfo?.episodeTitle,
+                startTime: start,
+                endTime: end,
+                status: Self.status(timer.status),
+                channelName: timer.channelName,
+                channelId: timer.channelId.map { prefix + $0 },
+                programGuid: nil,
+                ruleId: timer.seriesTimerId,
+                posterURL: timer.programId.flatMap {
+                    jellyfinImageURL(client.baseURL, itemID: $0, type: "Primary",
+                                     tag: timer.programInfo?.imageTags?["Primary"])
+                }
+            )
+            recording.ruleIsSeries = timer.seriesTimerId != nil
+            return recording
+        }
+        .sorted { $0.startTime < $1.startTime }
+    }
+
+    /// Deleting an in-progress timer stops it and keeps what was recorded; a
+    /// series timer's airing is marked cancelled and the rule stays.
+    func cancel(_ recording: LiveTVScheduledRecording) async throws {
+        try await client.delete("LiveTv/Timers/\(recording.id)")
+    }
+
+    func recordingRules() async throws -> [LiveTVRecordingRule] {
+        let result: JFLiveQuery<JFSeriesTimer> = try await client.get("LiveTv/SeriesTimers")
+        return (result.items ?? []).compactMap { rule in
+            guard let id = rule.id else { return nil }
+            let mode = rule.recordNewOnly == true ? "New episodes" : "All episodes"
+            let channel = rule.recordAnyChannel == true ? nil : rule.channelName
+            return LiveTVRecordingRule(id: id, sourceId: sourceId, title: rule.name ?? "Series",
+                                       detail: [mode, channel].compactMap { $0 }.joined(separator: " · "))
+        }
+    }
+
+    /// Removes the series timer and the airings it scheduled.
+    func delete(_ rule: LiveTVRecordingRule) async throws {
+        try await client.delete("LiveTv/SeriesTimers/\(rule.id)")
+    }
+
+    /// `RecordingStatus`. Cancelled also marks a series airing the server
+    /// skipped as a repeat.
+    private static func status(_ status: String?) -> LiveTVScheduledRecording.Status {
+        switch status {
+        case "InProgress": return .recording
+        case "Completed": return .completed
+        case "Cancelled": return .cancelled
+        case "Error", "ConflictedNotOk": return .failed
+        default: return .scheduled
+        }
+    }
+}
+
 // MARK: - Mapping
 
 /// No-token image URL with the tag that changes when the image does
@@ -180,8 +307,7 @@ private nonisolated func jellyfinDate(_ string: String?) -> Date? {
 nonisolated extension JFLiveChannel {
     func unifiedChannel(sourceId: String, baseURL: URL) -> UnifiedChannel? {
         guard let id, let name else { return nil }
-        // OTA lineups number "5.1"; the guide sorts on the whole part.
-        let number = (channelNumber ?? self.number).flatMap { Int($0.split(separator: ".").first ?? "") }
+        let number = (channelNumber ?? self.number).flatMap(ChannelNumber.init)
         return UnifiedChannel(
             id: UnifiedChannel.makeId(sourceType: .jellyfin, sourceId: sourceId, channelId: id),
             sourceType: .jellyfin,
@@ -233,7 +359,8 @@ nonisolated extension JFLiveProgram {
             landscapeURL: jellyfinImageURL(baseURL, itemID: id, type: "Thumb", tag: imageTags?["Thumb"])
                 ?? jellyfinImageURL(baseURL, itemID: id, type: "Backdrop", tag: backdropImageTags?.first),
             episodeNumber: episode,
-            isNew: isPremiere ?? false,
+            // Jellyfin web's rule; Schedules Direct flags only season premieres.
+            isNew: isPremiere == true || (isSeries == true && isRepeat != true),
             year: isMovie == true ? productionYear : nil,
             contentRating: officialRating,
             isMovie: isMovie ?? false,
@@ -312,6 +439,58 @@ nonisolated struct JFLiveProgram: Decodable, Sendable {
     let isKids: Bool?
     let isLive: Bool?
     let isPremiere: Bool?
+    let isRepeat: Bool?
+}
+
+/// `LiveTv/Timers/Defaults`, posted back unchanged (but for the new-only
+/// choice) to create a timer or series timer. `ServiceName` is required:
+/// without it the server answers 500.
+nonisolated struct JFTimerDefaults: Codable, Sendable {
+    let serviceName: String?
+    let channelId: String?
+    let programId: String?
+    let name: String?
+    let overview: String?
+    let startDate: String?
+    let endDate: String?
+    let keepUntil: String?
+    let prePaddingSeconds: Int?
+    let postPaddingSeconds: Int?
+    let isPrePaddingRequired: Bool?
+    let isPostPaddingRequired: Bool?
+    let priority: Int?
+    let keepUpTo: Int?
+    let recordAnyTime: Bool?
+    let recordAnyChannel: Bool?
+    var recordNewOnly: Bool?
+    let skipEpisodesInLibrary: Bool?
+    let days: [String]?
+    let dayPattern: String?
+}
+
+nonisolated struct JFTimer: Decodable, Sendable {
+    nonisolated struct Program: Decodable, Sendable {
+        let episodeTitle: String?
+        let imageTags: [String: String]?
+    }
+    let id: String?
+    let status: String?
+    let name: String?
+    let channelId: String?
+    let channelName: String?
+    let programId: String?
+    let seriesTimerId: String?
+    let startDate: String?
+    let endDate: String?
+    let programInfo: Program?
+}
+
+nonisolated struct JFSeriesTimer: Decodable, Sendable {
+    let id: String?
+    let name: String?
+    let channelName: String?
+    let recordNewOnly: Bool?
+    let recordAnyChannel: Bool?
 }
 
 nonisolated struct JFLivePlaybackInfo: Decodable, Sendable {

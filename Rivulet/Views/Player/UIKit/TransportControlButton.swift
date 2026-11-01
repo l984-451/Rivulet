@@ -18,16 +18,39 @@ final class TransportControlButton: UIControl {
     static let diameter: CGFloat = 64
     /// AVKit's tool glyph, fitted by rendered size and stroke.
     private static let glyphConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-    /// AVKit's control glass (tool buttons, info pills, info pane boxes): clear
-    /// glass under this wash reads as 0.77 x backdrop + 25 levels, as AVKit's
-    /// does over a black-to-white stripe pattern (within 3 levels).
-    static let restingWash = UIColor(white: 0.16, alpha: 0.26)
+    /// AVKit's control glass (tool buttons, pills, panes, popups). AVKit blurs
+    /// between `.clear` and `.regular` (`glassblur` probe); tinted `.regular` is the
+    /// nearest public match.
+    static func glassEffect() -> UIGlassEffect {
+        let effect = UIGlassEffect(style: .regular)
+        effect.tintColor = UIColor(white: 1, alpha: 0.15)
+        return effect
+    }
 
     private let diameter: CGFloat
     private let iconView = UIImageView()
     private let backgroundEffectView: UIVisualEffectView
 
     var onPress: (() -> Void)?
+    /// Set: a held Select runs this instead, and `onPress` waits for the release (AVKit's
+    /// hold on Subtitles). Unset buttons act on the press, as before.
+    var onLongPress: (() -> Void)? {
+        didSet {
+            guard holdRecognizer == nil, onLongPress != nil else { return }
+            let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
+            hold.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+            hold.minimumPressDuration = InputConfig.holdThreshold
+            addGestureRecognizer(hold)
+            holdRecognizer = hold
+        }
+    }
+    private var holdRecognizer: UILongPressGestureRecognizer?
+    private var holdFired = false
+    /// While this button's menu is up AVKit greys it (100/255 over black, measured on device).
+    var showsMenu = false {
+        didSet { if !isFocused { backgroundEffectView.backgroundColor = restingColor } }
+    }
+    private var restingColor: UIColor { showsMenu ? UIColor(white: 1, alpha: 0.32) : .clear }
     /// Draws the glyph in this colour, focused or not, instead of white on
     /// glass / black on white (Live TV's Record while set to record).
     var glyphColor: UIColor? {
@@ -36,8 +59,7 @@ final class TransportControlButton: UIControl {
 
     init(icon: UIImage?, accessibilityLabel: String, diameter: CGFloat = TransportControlButton.diameter) {
         self.diameter = diameter
-        // Same fitted material as the popups: clear glass plus a gray wash.
-        backgroundEffectView = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+        backgroundEffectView = UIVisualEffectView(effect: Self.glassEffect())
         super.init(frame: .zero)
 
         self.accessibilityLabel = accessibilityLabel
@@ -49,7 +71,6 @@ final class TransportControlButton: UIControl {
 
         backgroundEffectView.layer.cornerRadius = self.diameter / 2
         backgroundEffectView.clipsToBounds = true
-        backgroundEffectView.backgroundColor = Self.restingWash
         backgroundEffectView.isUserInteractionEnabled = false
 
         addSubview(backgroundEffectView)
@@ -90,14 +111,24 @@ final class TransportControlButton: UIControl {
     // on tvOS; handle the press directly.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         if presses.contains(where: { $0.type == .select }) {
-            onPress?()
+            holdFired = false
+            if onLongPress == nil { onPress?() }
             return
         }
         super.pressesBegan(presses, with: event)
     }
 
+    @objc private func held(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        holdFired = true
+        onLongPress?()
+    }
+
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if presses.contains(where: { $0.type == .select }) { return }
+        if presses.contains(where: { $0.type == .select }) {
+            if onLongPress != nil, !holdFired { onPress?() }
+            return
+        }
         super.pressesEnded(presses, with: event)
     }
 
@@ -105,8 +136,8 @@ final class TransportControlButton: UIControl {
         super.didUpdateFocus(in: context, with: coordinator)
         let isFocused = context.nextFocusedView === self
         coordinator.addCoordinatedAnimations({
-            self.transform = isFocused ? CGAffineTransform(scaleX: 1.15, y: 1.15) : .identity
-            self.backgroundEffectView.backgroundColor = isFocused ? .white : Self.restingWash
+            self.transform = isFocused ? CGAffineTransform(scaleX: 1.12, y: 1.12) : .identity
+            self.backgroundEffectView.backgroundColor = isFocused ? .white : self.restingColor
             self.iconView.tintColor = self.glyphColor ?? (isFocused ? .black : .white)
         }, completion: nil)
     }

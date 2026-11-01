@@ -1,0 +1,14 @@
+// The speech model as an Apple-hosted asset pack (SpeechModelStore.assetPackID).
+// Run from a folder holding the Hugging Face download (Caches/SpeechModels):
+//   xcrun ba-package package <this file> -o SpeechModel.aar
+// then upload SpeechModel.aar to App Store Connect.
+{
+	"assetPackID": "SpeechModel",
+	"downloadPolicy": {
+		"onDemand": {}
+	},
+	"fileSelectors": [
+		{ "directory": "parakeet-tdt-ctc-110m" }
+	],
+	"platforms": ["tvOS"]
+}

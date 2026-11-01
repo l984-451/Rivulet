@@ -12,7 +12,8 @@ import Foundation
 
 enum InsightsConfig {
     /// Base URL of the insights-api Worker that serves trivia JSON from R2.
-    static let apiBaseURL = URL(string: "https://insights-api.baingurley.workers.dev")!
+    /// The custom domain, not workers.dev, so workers.dev can be turned off once old builds drain.
+    static let apiBaseURL = URL(string: "https://insights.gurleystudios.com")!
 
     /// In-memory cache TTL for a fetched title's trivia within a session.
     /// Trivia is immutable per generatedAt, so a session-length cache is safe.

@@ -31,8 +31,6 @@ A native Apple TV app for Plex, Jellyfin, and Live TV.
 <img src="Screenshots/tvOS/02-detail.jpg" alt="Movie detail" width="49%">
 <img src="Screenshots/tvOS/07-music-album.jpg" alt="Music album" width="49%">
 
-<sub>Every title, channel, album, and person in these screenshots is made up. The artwork is AI generated so the screenshots show no copyrighted media.</sub>
-
 </div>
 
 ---
@@ -176,5 +174,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 <div align="center">
 
 Rivulet is not affiliated with or endorsed by Plex, Inc. or the Jellyfin project.
+
+Media used in the README is AI generated for copyright reasons.
 
 </div>

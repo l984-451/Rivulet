@@ -56,7 +56,7 @@ struct IOSRootView: View {
                 }
                 ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { key in
                     let serverID = key.isEmpty ? nil : key
-                    Tab(plex.displayTitle("Playlists", serverID: serverID), systemImage: "list.and.film",
+                    Tab(plex.displayTitle(String(localized: "Playlists"), serverID: serverID), systemImage: "list.and.film",
                         value: "playlists:\(key)") {
                         tabStack(sidebarZoom) { IOSPlexPlaylistsView(serverID: serverID, showsAccount: true) }
                     }
@@ -186,6 +186,11 @@ struct IOSRootView: View {
         guard let item = try? await plex.search(title).first(where: { $0.title == title }) else { return }
         selectedTab = "library"
         libraryColumn = .detail
+        // iPad's split view picks a library on appear and clears the path when it does, so pick first.
+        if let library = plex.libraries.first(where: { $0.key == item.librarySectionID.map(String.init) }) {
+            librarySelection = .library(library)
+            try? await Task.sleep(for: .milliseconds(500))
+        }
         libraryPath = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
     }
     #endif

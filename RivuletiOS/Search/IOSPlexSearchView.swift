@@ -12,6 +12,14 @@ struct IOSPlexSearchView: View {
 
         var id: Self { self }
 
+        var title: String {
+            switch self {
+            case .all: String(localized: "All")
+            case .movies: String(localized: "Movies")
+            case .shows: String(localized: "TV Shows")
+            }
+        }
+
         func includes(_ item: PlexMetadata) -> Bool {
             switch self {
             case .all: true
@@ -34,7 +42,7 @@ struct IOSPlexSearchView: View {
             .navigationTitle("Search")
             .searchable(text: $query, prompt: "Movies, Shows, and Episodes")
             .searchScopes($scope) {
-                ForEach(Scope.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Scope.allCases) { Text($0.title).tag($0) }
             }
             .onSubmit(of: .search) { remember(trimmedQuery) }
             .toolbar {
@@ -115,9 +123,9 @@ struct IOSPlexSearchView: View {
     private var groups: [(title: String, items: [PlexMetadata])] {
         let visible = results.filter(scope.includes)
         let sections: [(String, Set<String>)] = [
-            ("Movies", ["movie"]),
-            ("TV Shows", ["show", "season"]),
-            ("Episodes", ["episode"]),
+            (String(localized: "Movies"), ["movie"]),
+            (String(localized: "TV Shows"), ["show", "season"]),
+            (String(localized: "Episodes"), ["episode"]),
         ]
         return sections.compactMap { title, types in
             let items = visible.filter { types.contains($0.type ?? "") }
@@ -187,9 +195,9 @@ struct IOSPlexSearchRow: View {
 
     private var detail: String {
         let parts: [String?] = switch item.type {
-        case "movie": ["Movie", item.year.map(String.init)]
-        case "show": ["TV Show", item.year.map(String.init)]
-        case "season": ["Season", item.parentTitle]
+        case "movie": [String(localized: "Movie"), item.year.map(String.init)]
+        case "show": [String(localized: "TV Show"), item.year.map(String.init)]
+        case "season": [String(localized: "Season"), item.parentTitle]
         case "episode": [item.grandparentTitle, episodeCode]
         default: [item.type?.capitalized]
         }
@@ -201,6 +209,6 @@ struct IOSPlexSearchRow: View {
 
     private var episodeCode: String? {
         guard let season = item.parentIndex, let episode = item.index else { return nil }
-        return "S\(season), E\(episode)"
+        return String(localized: "S\(season), E\(episode)")
     }
 }

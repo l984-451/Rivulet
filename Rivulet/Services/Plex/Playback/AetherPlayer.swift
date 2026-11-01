@@ -766,7 +766,7 @@ final class AetherPlayer: PlayerProtocol {
     /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
     var upscaleSummary: String? {
         guard let status = engine.activeUpscale else { return nil }
-        if status.disabledReason != nil { return "Stopped" }
+        if status.disabledReason != nil { return String(localized: "Stopped") }
         let size = "\(Int(status.sourceSize.height))p → \(Int(status.targetSize.height))p"
         guard let ml = status.mlScale else { return "\(size) (MetalFX)" }
         let mlOnly = status.degraded || abs(status.sourceSize.height * CGFloat(ml) - status.targetSize.height) < 2
@@ -1571,11 +1571,11 @@ final class AetherPlayer: PlayerProtocol {
     private static func audioDeliveryLabel(_ delivery: AudioDelivery) -> String? {
         switch delivery {
         case .none: return nil  // Pre-load or torn down: nothing to report yet.
-        case .noAudioInSource: return "No audio in source"
-        case .streamCopy: return "Stream copy"
-        case .bridged: return "Bridged"
-        case .decoded: return "Decoded"
-        case .droppedNoPipeline: return "Video only (audio dropped)"
+        case .noAudioInSource: return String(localized: "No audio in source")
+        case .streamCopy: return String(localized: "Stream copy")
+        case .bridged: return String(localized: "Bridged")
+        case .decoded: return String(localized: "Decoded")
+        case .droppedNoPipeline: return String(localized: "Video only (audio dropped)")
         case .playerManaged: return "AVFoundation"
         }
     }

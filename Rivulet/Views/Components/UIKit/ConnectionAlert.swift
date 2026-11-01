@@ -64,14 +64,12 @@ enum ConnectionAlert {
         // Never stack two of these — a flap and a double Play press both get here.
         guard !(host is ConfirmationPopupViewController) else { return }
 
-        let name = PlexAuthManager.shared.savedServerName ?? "your Plex server"
+        let name = PlexAuthManager.shared.savedServerName ?? String(localized: "your Plex server")
         let popup = ConfirmationPopupViewController(
-            title: "Can't Reach Your Server",
-            message: "Rivulet can't connect to \(name). Check that the server is "
-                + "running and your network is connected. Recently loaded content "
-                + "is still available to browse.",
-            confirmTitle: "Retry",
-            cancelTitle: "OK",
+            title: String(localized: "Can't Reach Your Server"),
+            message: String(localized: "Rivulet can't connect to \(name). Check that the server is running and your network is connected. Recently loaded content is still available to browse."),
+            confirmTitle: String(localized: "Retry"),
+            cancelTitle: String(localized: "OK"),
             onConfirm: { retryConnection(from: presenter, then: retry) }
         )
         host.present(popup, animated: true)

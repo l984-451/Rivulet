@@ -24,15 +24,15 @@ enum InputTestScript {
     /// which are what the #212 hypothesis turns on (a late or missing release
     /// makes every tap read as a hold, or blocks the tap recognizer entirely).
     static let steps: [InputTestStep] = [
-        InputTestStep(prompt: "Press Right", type: "right", wantsHold: false),
-        InputTestStep(prompt: "Press Left", type: "left", wantsHold: false),
-        InputTestStep(prompt: "Press Up", type: "up", wantsHold: false),
-        InputTestStep(prompt: "Press Down", type: "down", wantsHold: false),
-        InputTestStep(prompt: "Hold Right for 2 seconds", type: "right", wantsHold: true),
-        InputTestStep(prompt: "Hold Left for 2 seconds", type: "left", wantsHold: true),
-        InputTestStep(prompt: "Hold Up for 2 seconds", type: "up", wantsHold: true),
-        InputTestStep(prompt: "Hold Down for 2 seconds", type: "down", wantsHold: true),
-        InputTestStep(prompt: "Press Play/Pause", type: "playPause", wantsHold: false)
+        InputTestStep(prompt: String(localized: "Press Right"), type: "right", wantsHold: false),
+        InputTestStep(prompt: String(localized: "Press Left"), type: "left", wantsHold: false),
+        InputTestStep(prompt: String(localized: "Press Up"), type: "up", wantsHold: false),
+        InputTestStep(prompt: String(localized: "Press Down"), type: "down", wantsHold: false),
+        InputTestStep(prompt: String(localized: "Hold Right for 2 seconds"), type: "right", wantsHold: true),
+        InputTestStep(prompt: String(localized: "Hold Left for 2 seconds"), type: "left", wantsHold: true),
+        InputTestStep(prompt: String(localized: "Hold Up for 2 seconds"), type: "up", wantsHold: true),
+        InputTestStep(prompt: String(localized: "Hold Down for 2 seconds"), type: "down", wantsHold: true),
+        InputTestStep(prompt: String(localized: "Press Play/Pause"), type: "playPause", wantsHold: false)
     ]
 }
 

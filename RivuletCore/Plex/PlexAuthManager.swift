@@ -217,7 +217,7 @@ class PlexAuthManager: ObservableObject {
             state = .waitingForPIN(code: pinCode, pinId: pinId)
             startPollingForAuth(pinId: pinId)
         } catch {
-            state = .error(message: "Failed to get PIN: \(error.localizedDescription)")
+            state = .error(message: String(localized: "Failed to get PIN: \(error.localizedDescription)"))
             scheduleErrorDismissal()
 
             // Capture PIN request failure to Sentry
@@ -279,8 +279,8 @@ class PlexAuthManager: ObservableObject {
             } else {
                 DiagLog.error(.connection, "Server selection failed, no server connected")
                 isConnected = false
-                connectionError = "Could not connect to server. Check your network."
-                state = .error(message: "Could not connect to server. Check your network.")
+                connectionError = String(localized: "Could not connect to server. Check your network.")
+                state = .error(message: String(localized: "Could not connect to server. Check your network."))
                 // Don't auto-dismiss - let user see the error and retry
                 return false
             }
@@ -936,7 +936,7 @@ class PlexAuthManager: ObservableObject {
             } catch {
                 DiagLog.error(.connection, "Server discovery failed: \(DiagLog.describe(error))")
                 isConnected = false
-                connectionError = "Unable to reach Plex. Check your network connection."
+                connectionError = String(localized: "Unable to reach Plex. Check your network connection.")
 
                 SentryBridge.log(.warn, "Plex server discovery failed", attributes: [
                     "component": "plex_auth",
@@ -972,7 +972,7 @@ class PlexAuthManager: ObservableObject {
         } else {
             DiagLog.error(.connection, "Current connection failed: \(DiagLog.describe(url: currentURL)), re-selecting")
             isConnected = false
-            connectionError = "Cannot connect to Plex server"
+            connectionError = String(localized: "Cannot connect to Plex server")
 
             // Look for a better connection without clearing credentials, so cached
             // content still shows. Match the saved server by URL, then by name
@@ -1041,7 +1041,7 @@ class PlexAuthManager: ObservableObject {
                     attempts += 1
                 } catch {
                     if !Task.isCancelled {
-                        state = .error(message: "Authentication check failed: \(error.localizedDescription)")
+                        state = .error(message: String(localized: "Authentication check failed: \(error.localizedDescription)"))
                         scheduleErrorDismissal()
                     }
                     return
@@ -1049,7 +1049,7 @@ class PlexAuthManager: ObservableObject {
             }
 
             if !Task.isCancelled {
-                state = .error(message: "PIN expired. Please try again.")
+                state = .error(message: String(localized: "PIN expired. Please try again."))
                 scheduleErrorDismissal()
             }
         }
@@ -1082,7 +1082,7 @@ class PlexAuthManager: ObservableObject {
             let servers = try await networkManager.getServers(authToken: token)
 
             if servers.isEmpty {
-                state = .error(message: "No Plex servers found on your account")
+                state = .error(message: String(localized: "No Plex servers found on your account"))
                 scheduleErrorDismissal()
             } else if servers.count == 1 {
                 // Auto-select if only one server - await to ensure connection is established
@@ -1092,7 +1092,7 @@ class PlexAuthManager: ObservableObject {
                 state = .selectingServer(servers: servers)
             }
         } catch {
-            state = .error(message: "Failed to fetch servers: \(error.localizedDescription)")
+            state = .error(message: String(localized: "Failed to fetch servers: \(error.localizedDescription)"))
             scheduleErrorDismissal()
         }
     }

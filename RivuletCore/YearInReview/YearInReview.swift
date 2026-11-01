@@ -136,7 +136,8 @@ nonisolated struct YearInReview: Equatable, Sendable {
             let seasons = Set(group.compactMap(\.parentIndex)).count
             let latest = group.last
             return Title(name: latest?.grandparentTitle ?? "",
-                         detail: "\(group.count) episodes" + (seasons > 1 ? " across \(seasons) seasons" : ""),
+                         detail: seasons > 1 ? String(localized: "\(group.count) episodes across \(seasons) seasons")
+                                : String(localized: "\(group.count) episodes"),
                          art: group.last { $0.grandparentArt != nil }?.grandparentArt,
                          poster: latest?.grandparentThumb,
                          plays: group.count)

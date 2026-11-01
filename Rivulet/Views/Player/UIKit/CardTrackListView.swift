@@ -87,7 +87,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
                      onSelect: @escaping (Int?) -> Void) {
         var rows: [Row] = []
         if showsOffRow {
-            rows.append(Row(title: "Off", subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil))
+            rows.append(Row(title: String(localized: "Off"), subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil))
         }
         rows.append(contentsOf: tracks.map { track in
             Row(
@@ -106,17 +106,17 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     static func subtitleMenu(tracks: [MediaTrack], selectedTrackId: Int?, onTrackId: Int?,
                              actions: [CardActionConfig] = [], steppers: [CardStepperConfig] = [],
                              onSelect: @escaping (Int?) -> Void) -> CardTrackListView {
-        var rows = [Row(title: "Off", subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil)]
+        var rows = [Row(title: String(localized: "Off"), subtitle: nil, trackId: nil, isSelected: selectedTrackId == nil)]
         var languageRows: [Row] = []
         if let onTrackId {
-            rows.insert(Row(title: "On", subtitle: nil, trackId: onTrackId, isSelected: selectedTrackId != nil), at: 0)
+            rows.insert(Row(title: String(localized: "On"), subtitle: nil, trackId: onTrackId, isSelected: selectedTrackId != nil), at: 0)
             languageRows = tracks.map {
                 Row(title: $0.subtitleMenuTitle, subtitle: $0.subtitleMenuSubtitle, trackId: $0.id,
                     isSelected: $0.id == selectedTrackId)
             }
         }
         let value = tracks.first { $0.id == (selectedTrackId ?? onTrackId) }?.subtitleMenuTitle
-        return CardTrackListView(header: "Subtitles", rows: rows, actions: actions,
+        return CardTrackListView(header: String(localized: "Subtitles"), rows: rows, actions: actions,
                                  choices: [CardChoiceConfig.captionStyle()].compactMap { $0 },
                                  steppers: steppers, languageRows: languageRows, languageValue: value,
                                  onSelect: onSelect)
@@ -137,9 +137,9 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
                                })]
         } ?? []
         let adjusts = !choices.isEmpty || !toggles.isEmpty
-        return CardTrackListView(header: adjusts ? "Audio Adjustments" : "Audio Track", tracks: tracks,
+        return CardTrackListView(header: adjusts ? String(localized: "Audio Adjustments") : String(localized: "Audio Track"), tracks: tracks,
                                  selectedTrackId: selectedTrackId, showsOffRow: false, audio: true,
-                                 trackHeader: adjusts ? "Audio Track" : nil,
+                                 trackHeader: adjusts ? String(localized: "Audio Track") : nil,
                                  choices: choices, toggles: toggles, steppers: steppers, onSelect: onSelect)
     }
 
@@ -233,7 +233,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
             return
         }
         if showsLanguages {
-            headerLabel.text = "Language"
+            headerLabel.text = String(localized: "Language")
             for row in languageRows { addTrackButton(row) }
             return
         }
@@ -243,7 +243,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         if !languageRows.isEmpty {
             buildTracks()
             stack.addArrangedSubview(MenuSeparatorView())
-            let language = CardTrackRowButton(row: Row(title: "Language", subtitle: languageValue,
+            let language = CardTrackRowButton(row: Row(title: String(localized: "Language"), subtitle: languageValue,
                                                        trackId: nil, isSelected: false),
                                               showsChevron: true)
             language.onTap = { [weak self] in self?.showLanguages(true) }
@@ -492,7 +492,7 @@ extension CardChoiceConfig {
         let styles = CaptionAppearance.styles()
         guard styles.count > 1 else { return nil }
         return CardChoiceConfig(
-            title: "Style",
+            title: String(localized: "Style"),
             options: styles.map(\.name),
             selected: { styles.firstIndex { $0.id == CaptionAppearance.activeStyleID } ?? -1 },
             onSelect: { CaptionAppearance.activeStyleID = styles[$0].id })
@@ -524,6 +524,12 @@ struct CardStepperConfig {
     let title: String
     let value: () -> String
     let onStep: (Int) -> Void
+
+    init(title: String.LocalizationValue, value: @escaping () -> String, onStep: @escaping (Int) -> Void) {
+        self.title = String(localized: title)
+        self.value = value
+        self.onStep = onStep
+    }
 }
 
 // MARK: - CardStepperRowView

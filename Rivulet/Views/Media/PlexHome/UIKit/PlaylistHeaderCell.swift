@@ -23,8 +23,8 @@ final class PlaylistHeaderCell: UICollectionViewCell {
         super.init(frame: frame)
         titleLabel.font = .systemFont(ofSize: MediaRowMetrics.sectionTitleSize, weight: .bold)
         titleLabel.textColor = .white
-        playButton.configure(sortName: "Play", symbol: "play.fill")
-        shuffleButton.configure(sortName: "Shuffle", symbol: "shuffle")
+        playButton.configure(sortName: String(localized: "Play"), symbol: "play.fill")
+        shuffleButton.configure(sortName: String(localized: "Shuffle"), symbol: "shuffle")
         playButton.addAction(UIAction { [weak self] _ in self?.onPlay?() }, for: .primaryActionTriggered)
         shuffleButton.addAction(UIAction { [weak self] _ in self?.onShuffle?() }, for: .primaryActionTriggered)
         for view in [titleLabel, playButton, shuffleButton] {

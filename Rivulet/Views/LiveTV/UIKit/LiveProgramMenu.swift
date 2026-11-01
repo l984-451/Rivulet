@@ -117,7 +117,7 @@ enum LiveProgramMenu {
             } else if let options = try? await store.recordOptions(for: program, on: channel) {
                 for option in options {
                     record.append(TileMenuAction(
-                        title: option.title,
+                        verbatim: option.title,
                         systemImage: option.scope == .series ? "square.stack.3d.up" : "record.circle"
                     ) {
                         run(on: presenter) { try await store.record(option, program: program, on: channel) }
@@ -136,11 +136,11 @@ enum LiveProgramMenu {
                 try await change()
             } catch {
                 let alert = UIAlertController(
-                    title: "Recording Didn't Change",
+                    title: String(localized: "Recording Didn't Change"),
                     message: error.localizedDescription,
                     preferredStyle: .alert
                 )
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .default))
                 topmost(from: presenter).present(alert, animated: true)
             }
         }

@@ -636,10 +636,10 @@ extension PlexLiveTVProvider: LiveTVRecordingProvider {
             switch template.type {
             // Plex types every non-episodic guide airing (sport, news) as a
             // movie, so "Record Movie" mislabelled most of them.
-            case 1: title = "Record"
-            case 2: title = "Record Series"
-            case 4: title = "Record Episode"
-            default: title = "Record \(template.title)"
+            case 1: title = String(localized: "Record")
+            case 2: title = String(localized: "Record Series")
+            case 4: title = String(localized: "Record Episode")
+            default: title = String(localized: "Record \(template.title)")
             }
             guard let payload = try? String(decoding: encoder.encode(template), as: UTF8.self) else { continue }
             options.append(LiveTVRecordOption(
@@ -653,7 +653,7 @@ extension PlexLiveTVProvider: LiveTVRecordingProvider {
                 if let newPayload = try? String(decoding: encoder.encode(template.withOnlyNewAirings(true)), as: UTF8.self) {
                     options.append(LiveTVRecordOption(
                         id: "\(guid)#\(index)#new",
-                        title: "Record New Episodes",
+                        title: String(localized: "Record New Episodes"),
                         scope: .series,
                         payload: newPayload
                     ))

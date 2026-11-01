@@ -91,7 +91,7 @@ final class LiveBrowseViewController: UIViewController {
         setUpHeader()
         setUpShelves()
 
-        emptyLabel.text = "No channels yet. Add a Live TV source in Settings."
+        emptyLabel.text = String(localized: "No channels yet. Add a Live TV source in Settings.")
         emptyLabel.font = .systemFont(ofSize: 30, weight: .medium)
         emptyLabel.textColor = UIColor.white.withAlphaComponent(0.6)
         emptyLabel.isHidden = true
@@ -280,7 +280,7 @@ final class LiveBrowseViewController: UIViewController {
         switch item.kind {
         case .channel:
             let isLive = program?.isLiveAiring == true
-            eyebrowLabel.text = isLive ? "LIVE" : "ON NOW"
+            eyebrowLabel.text = isLive ? String(localized: "LIVE") : String(localized: "ON NOW")
             eyebrowLabel.textColor = isLive ? .systemRed : UIColor.white.withAlphaComponent(0.8)
             titleLabel.text = program?.displayTitle ?? channel?.name
             if let program, !program.id.contains(":placeholder:") {
@@ -288,13 +288,13 @@ final class LiveBrowseViewController: UIViewController {
             }
             if !channelLine.isEmpty { detail.append(channelLine) }
         case .upcoming:
-            eyebrowLabel.text = program.map { "STARTS \(LiveCardItem.startLabel($0).uppercased())" }
+            eyebrowLabel.text = program.map { String(localized: "STARTS \(LiveCardItem.startLabel($0).uppercased())") }
             eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.8)
             titleLabel.text = program?.displayTitle
             if !channelLine.isEmpty { detail.append(channelLine) }
         case .recording:
             let recording = item.recording
-            eyebrowLabel.text = recording?.status == .recording ? "RECORDING" : "SCHEDULED"
+            eyebrowLabel.text = recording?.status == .recording ? String(localized: "RECORDING") : String(localized: "SCHEDULED")
             eyebrowLabel.textColor = recording?.status == .recording ? .systemRed : UIColor.white.withAlphaComponent(0.8)
             titleLabel.text = recording.map { UnifiedProgram.displayTitle($0.title) }
             if let recording {

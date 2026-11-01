@@ -101,7 +101,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     /// Creates a MediaTrack from a PlexStream
     init(from stream: PlexStream) {
         self.id = stream.id
-        self.name = stream.displayTitle ?? stream.title ?? stream.language ?? "Track \(stream.id)"
+        self.name = stream.displayTitle ?? stream.title ?? stream.language ?? String(localized: "Track \(stream.id)")
         self.language = stream.language
         self.languageCode = stream.languageCode
         self.codec = stream.codec
@@ -125,7 +125,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     /// won't survive this bridge, but Plex/Jellyfin both use numeric IDs.
     init(from track: AudioTrack) {
         self.id = Int(track.id) ?? 0
-        self.name = track.title ?? track.language ?? "Track \(track.id)"
+        self.name = track.title ?? track.language ?? String(localized: "Track \(track.id)")
         self.language = track.language
         self.languageCode = track.language
         self.codec = track.codec
@@ -146,7 +146,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     /// Bridge from agnostic `SubtitleTrack`.
     init(from track: SubtitleTrack) {
         self.id = Int(track.id) ?? 0
-        self.name = track.title ?? track.language ?? "Track \(track.id)"
+        self.name = track.title ?? track.language ?? String(localized: "Track \(track.id)")
         self.language = track.language
         self.languageCode = track.language
         self.codec = track.codec
@@ -198,13 +198,13 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         let text = [extendedDisplayTitle, name].compactMap { $0?.lowercased() }.joined(separator: " ")
         let described = isAudioDescription
             || ["descri", "narration", "dvs", "impaired"].contains(where: text.contains)
-        return described ? "Audio Description" : "Commentary"
+        return described ? String(localized: "Audio Description") : String(localized: "Commentary")
     }
 
-    var describesVideo: Bool { audioRole == "Audio Description" }
+    var describesVideo: Bool { audioRole == String(localized: "Audio Description") }
 
     /// Audio menu row: the language over "TrueHD 7.1 Atmos • Commentary".
-    var audioMenuTitle: String { language ?? "Unknown Language" }
+    var audioMenuTitle: String { language ?? String(localized: "Unknown Language") }
     var audioMenuSubtitle: String {
         [codec == nil ? nil : audioFormat, audioRole].compactMap { $0 }.joined(separator: " • ")
     }
@@ -213,9 +213,9 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
     var subtitleMenuTitle: String { language ?? name }
     var subtitleMenuSubtitle: String {
         var flags: [String] = []
-        if isForced { flags.append("Forced") }
+        if isForced { flags.append(String(localized: "Forced")) }
         if isHearingImpaired { flags.append("SDH") }
-        if isCommentary { flags.append("Commentary") }
+        if isCommentary { flags.append(String(localized: "Commentary")) }
         // The track's own title, unless it only repeats the language and the flags.
         var leftover = title?.lowercased() ?? ""
         for word in [language, languageCode].compactMap({ $0?.lowercased() }) + flags.map({ $0.lowercased() }) {
@@ -227,7 +227,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
 
     /// Formatted codec name (e.g., "AAC", "TrueHD", "DTS-HD MA")
     var formattedCodec: String {
-        guard let codec = codec?.lowercased() else { return "Audio" }
+        guard let codec = codec?.lowercased() else { return String(localized: "Audio") }
 
         switch codec {
         case "aac": return "AAC"
@@ -303,8 +303,8 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         guard let channels = inferredChannels else { return "" }
 
         switch channels {
-        case 1: return "Mono"
-        case 2: return "Stereo"
+        case 1: return String(localized: "Mono")
+        case 2: return String(localized: "Stereo")
         case 3: return "2.1"
         case 6: return "5.1"
         case 8: return "7.1"

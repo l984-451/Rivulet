@@ -443,7 +443,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 return cell
             case .relatedShelf:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-                self.configurePosterShelf(cell, section: .related, title: "Related",
+                self.configurePosterShelf(cell, section: .related, title: String(localized: "Related"),
                                           items: self.relatedItems, trailing: nil)
                 return cell
             case .cast(let id):
@@ -470,10 +470,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             let header = cv.dequeueReusableSupplementaryView(
                 ofKind: kind, withReuseIdentifier: BelowFoldSectionHeader.reuseID, for: indexPath) as! BelowFoldSectionHeader
             switch self.sectionKinds[indexPath.section] {
-            case .trailers: header.configure(title: "Trailers")
-            case .extras:  header.configure(title: "Extras")
-            case .related: header.configure(title: "Related")
-            case .cast:    header.configure(title: "Cast & Crew", baseline: BelowFoldSectionHeader.castBaseline)
+            case .trailers: header.configure(title: String(localized: "Trailers"))
+            case .extras:  header.configure(title: String(localized: "Extras"))
+            case .related: header.configure(title: String(localized: "Related"))
+            case .cast:    header.configure(title: String(localized: "Cast & Crew"), baseline: BelowFoldSectionHeader.castBaseline)
             case .episodes, .collection, .about, .info: header.configure(title: "")
             }
             return header
@@ -737,7 +737,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         for d in content.directors {
             let id = "dir:\(d.id)"
             guard seenCastIDs.insert(id).inserted else { continue }
-            entries[id] = CastEntry(person: d, subtitle: "Director")
+            entries[id] = CastEntry(person: d, subtitle: String(localized: "Director"))
             cachedCastOrder.append((id, .cast(id)))
         }
         for c in content.cast {
@@ -791,7 +791,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     private static func dividerLabel(for episode: MediaItem) -> String {
         guard let n = episode.seasonNumber else { return "·" }
-        return n == 0 ? "SP" : "S\(n)"
+        return n == 0 ? String(localized: "SP") : String(localized: "S\(n)")
     }
 
     /// season ref itemID → chip label ("S3" / "SP"), for the divider cells.

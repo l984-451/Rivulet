@@ -39,12 +39,12 @@ enum TvheadendError: LocalizedError, Equatable {
     /// nil for an HTTP error, which callers describe as unreachable.
     var errorDescription: String? {
         switch self {
-        case .loginRequired: "This Tvheadend server needs a username and password."
-        case .invalidLogin: "Tvheadend didn't accept that username and password."
+        case .loginRequired: String(localized: "This Tvheadend server needs a username and password.")
+        case .invalidLogin: String(localized: "Tvheadend didn't accept that username and password.")
         // Tvheadend also answers a changed password with 403 once signed in.
-        case .forbidden: "Tvheadend refused this user. Check its password and rights in Tvheadend."
-        case .notTvheadend: "That address isn't a Tvheadend server. Check the address and port."
-        case .noTicket: "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend."
+        case .forbidden: String(localized: "Tvheadend refused this user. Check its password and rights in Tvheadend.")
+        case .notTvheadend: String(localized: "That address isn't a Tvheadend server. Check the address and port.")
+        case .noTicket: String(localized: "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend.")
         case .httpError: nil
         }
     }

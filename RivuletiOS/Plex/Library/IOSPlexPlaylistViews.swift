@@ -37,7 +37,7 @@ struct IOSPlexPlaylistsView: View {
             }
         }
         .refreshable { await plex.refreshPlaylists() }
-        .navigationTitle(plex.displayTitle("Playlists", serverID: serverID))
+        .navigationTitle(plex.displayTitle(String(localized: "Playlists"), serverID: serverID))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if showsAccount { IOSAccountToolbarItem() }
@@ -86,7 +86,7 @@ private struct IOSPlexPlaylistRow: View {
                 .background(.quaternary)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
-                Text(playlist.title ?? "Untitled").font(.headline).lineLimit(2)
+                Text(playlist.title ?? String(localized: "Untitled")).font(.headline).lineLimit(2)
                 if let info = playlist.info {
                     Text(info).font(.subheadline).foregroundStyle(.secondary)
                 }
@@ -99,7 +99,7 @@ private struct IOSPlexPlaylistRow: View {
 private extension PlexPlaylist {
     /// "12 items · 3 hr 10 min"
     var info: String? {
-        let count = leafCount.map { "\($0) \($0 == 1 ? "item" : "items")" }
+        let count = leafCount.map { String(localized: "\($0) items") }
         let length = duration.flatMap { ms in
             Duration.seconds(ms / 1000).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
         }
@@ -165,7 +165,7 @@ struct IOSPlexPlaylistView: View {
             }
         }
         .refreshable { await reload() }
-        .navigationTitle(playlist.title ?? "Playlist")
+        .navigationTitle(playlist.title ?? String(localized: "Playlist"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if !isSmart, !items.isEmpty {
@@ -319,7 +319,7 @@ struct IOSPlaylistStart {
             return nil
         }
         if let resume = PlayQueue.continuePoint(in: items, isPlayed: \.isWatched, isStarted: \.isInProgress), resume > 0 {
-            return IOSPlaylistStart(title: title ?? "Playlist", items: items, resume: resume)
+            return IOSPlaylistStart(title: title ?? String(localized: "Playlist"), items: items, resume: resume)
         }
         if let queue = PlayQueue(entries: items, startingAt: 0) { actions.playQueue(queue) }
         return nil
@@ -378,7 +378,7 @@ private struct IOSPlaylistEditAlerts: ViewModifier {
                     run { try await plex.renamePlaylist(playlist, to: name, serverID: serverID) }
                 }
             }
-            .alert(state.deleting.map { "Delete \u{201C}\($0.title ?? "Playlist")\u{201D}?" } ?? "",
+            .alert(state.deleting.map { String(localized: "Delete \u{201C}\($0.title ?? String(localized: "Playlist"))\u{201D}?") } ?? "",
                    isPresented: Binding(get: { state.deleting != nil }, set: { if !$0 { state.deleting = nil } }),
                    presenting: state.deleting) { playlist in
                 Button("Cancel", role: .cancel) {}

@@ -23,11 +23,11 @@ extension IPTVProvider {
         guard program.sourceGuid.flatMap(Int.init) != nil, channel.tvgId != nil else {
             throw LiveTVRecordingError.noGuideIdentity
         }
-        var options = [LiveTVRecordOption(id: "\(program.id)#once", title: "Record", scope: .single, payload: "once")]
+        var options = [LiveTVRecordOption(id: "\(program.id)#once", title: String(localized: "Record"), scope: .single, payload: "once")]
         if !program.isMovie {
-            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: "Record Series", scope: .series,
+            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: String(localized: "Record Series"), scope: .series,
                                               payload: "all"))
-            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: "Record New Episodes", scope: .series,
+            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: String(localized: "Record New Episodes"), scope: .series,
                                               payload: "new"))
         }
         return options
@@ -77,7 +77,7 @@ extension IPTVProvider {
     func tvheadendRecordingRules(using service: TvheadendService) async throws -> [LiveTVRecordingRule] {
         let channels = channelsByUUID()
         return try await service.rules().map { rule in
-            let mode = rule.newOnly ? "New episodes" : "All episodes"
+            let mode = rule.newOnly ? String(localized: "New episodes") : String(localized: "All episodes")
             return LiveTVRecordingRule(id: rule.uuid, sourceId: sourceId, title: rule.title,
                                        detail: [mode, rule.channelUUID.flatMap { channels[$0]?.name }]
                                            .compactMap { $0 }.joined(separator: " · "))

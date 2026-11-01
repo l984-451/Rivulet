@@ -80,7 +80,7 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
         configureDataSource()
 
         let stateFrame = CGRect(x: Self.columnX, y: headerHeight, width: columnWidth, height: 90)
-        emptyLabel.text = "This folder is empty"
+        emptyLabel.text = String(localized: "This folder is empty")
         emptyLabel.frame = stateFrame
         spinner.center = CGPoint(x: stateFrame.midX, y: stateFrame.midY)
         anchor.frame = stateFrame
@@ -131,7 +131,7 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
             guard let entry = entry(ref) else { return }
             cell.configure(title: entry.title, detail: FolderRowDetail.text(for: entry))
         case .failure:
-            cell.configure(title: "Couldn't load this folder", detail: "")
+            cell.configure(title: String(localized: "Couldn't load this folder"), detail: "")
         }
     }
 
@@ -290,8 +290,8 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
             content.lines = [
                 [item.runtime.map { FolderRowDetail.length($0) }, format].compactMap { $0 }.filter { !$0.isEmpty }
                     .joined(separator: " · "),
-                item.isInProgress ? item.runtime.map { FolderRowDetail.length($0 - item.userState.viewOffset) + " left" }
-                    : (item.isWatched ? "Watched" : nil)
+                item.isInProgress ? item.runtime.map { String(localized: "\(FolderRowDetail.length($0 - item.userState.viewOffset)) left") }
+                    : (item.isWatched ? String(localized: "Watched") : nil)
             ].compactMap { $0 }.filter { !$0.isEmpty }
             content.progress = item.watchProgress.flatMap { $0 > 0 && $0 < 1 ? $0 : nil }
             content.path = source?.fileName
@@ -307,7 +307,7 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
         return await ImageCacheManager.shared.image(for: url, quality: .thumb)
     }
 
-    private static func itemCount(_ count: Int) -> String { "\(count.formatted()) \(count == 1 ? "item" : "items")" }
+    private static func itemCount(_ count: Int) -> String { String(localized: "\(count) items") }
 
     // MARK: - Actions
 

@@ -524,9 +524,9 @@ private final class ContinueWatchingTitleLogoView: UIView {
 
     private func displayTitle(for item: PlexMetadata) -> String {
         if item.type == "episode" {
-            return item.grandparentTitle ?? item.title ?? "Unknown"
+            return item.grandparentTitle ?? item.title ?? String(localized: "Unknown")
         }
-        return item.title ?? "Unknown"
+        return item.title ?? String(localized: "Unknown")
     }
 
     /// Both configure paths end here: move to the slot, then fade in.

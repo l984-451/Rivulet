@@ -142,10 +142,10 @@ struct IOSPlexLibraryView: View {
 
     private static let pageSize = 90
     private static let sorts: [(LibrarySortOption, String)] = [
-        (.titleAsc, "Title"),
-        (.addedAtDesc, "Date Added"),
-        (.releaseDateDesc, "Release Date"),
-        (.ratingDesc, "Rating")
+        (.titleAsc, String(localized: "Title")),
+        (.addedAtDesc, String(localized: "Date Added")),
+        (.releaseDateDesc, String(localized: "Release Date")),
+        (.ratingDesc, String(localized: "Rating"))
     ]
 
     init(library: PlexLibrary, showsAccount: Bool = false) {

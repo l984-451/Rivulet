@@ -261,11 +261,11 @@ enum M3UParseError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEncoding:
-            return "Could not decode M3U content as UTF-8"
+            return String(localized: "Could not decode M3U content as UTF-8")
         case .invalidFormat(let message):
-            return "Invalid M3U format: \(message)"
+            return String(localized: "Invalid M3U format: \(message)")
         case .httpError(let code):
-            return "HTTP error \(code)"
+            return String(localized: "HTTP error \(code)")
         }
     }
 }

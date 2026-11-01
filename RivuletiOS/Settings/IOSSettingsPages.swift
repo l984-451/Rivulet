@@ -10,8 +10,9 @@ struct IOSHomeSettingsView: View {
     @AppStorage(heroContentKey) private var heroContent = "trending"
 
     static let heroContentKey = "homeHeroContent"
-    private static let heroChoices = [("off", "Off"), ("trending", "Trending"), ("continueWatching", "Continue Watching"),
-                                      ("recentlyAdded", "Recently Added"), ("watchlist", "Watchlist")]
+    private static let heroChoices = [("off", String(localized: "Off")), ("trending", String(localized: "Trending")),
+                                      ("continueWatching", String(localized: "Continue Watching")),
+                                      ("recentlyAdded", String(localized: "Recently Added")), ("watchlist", String(localized: "Watchlist"))]
 
     var body: some View {
         Form {
@@ -140,7 +141,7 @@ struct IOSPlaybackSettingsView: View {
             }
             Picker("Subtitles", selection: trackBinding(get: { SubtitleMode.current },
                                                         set: { TrackIntentStore.setSubtitles(mode: $0) })) {
-                ForEach(SubtitleMode.choices, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(SubtitleMode.choices, id: \.self) { Text($0.title).tag($0) }
             }
             Picker("Subtitle Language", selection: trackBinding(
                 get: { TrackLanguage.normalize(TrackIntentStore.subtitleLanguage) },

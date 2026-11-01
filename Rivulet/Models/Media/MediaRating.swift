@@ -68,13 +68,13 @@ nonisolated struct MediaRating: Sendable, Hashable {
     /// Who the score is from, for the ratings popup.
     var detailText: String {
         switch source {
-        case .rottenTomatoes: "Tomatometer, critics"
-        case .rottenTomatoesAudience: "Popcornmeter, audience"
-        case .imdb: "IMDb users"
-        case .metacritic: "Metascore, critics"
-        case .letterboxd: "Letterboxd members"
-        case .tmdb: "TMDB users"
-        case .unknown: "Average rating"
+        case .rottenTomatoes: String(localized: "Tomatometer, critics")
+        case .rottenTomatoesAudience: String(localized: "Popcornmeter, audience")
+        case .imdb: String(localized: "IMDb users")
+        case .metacritic: String(localized: "Metascore, critics")
+        case .letterboxd: String(localized: "Letterboxd members")
+        case .tmdb: String(localized: "TMDB users")
+        case .unknown: String(localized: "Average rating")
         }
     }
 
@@ -93,12 +93,12 @@ nonisolated extension MediaRating.Source {
     var name: String {
         switch self {
         case .rottenTomatoes: "Rotten Tomatoes"
-        case .rottenTomatoesAudience: "RT Audience"
+        case .rottenTomatoesAudience: String(localized: "RT Audience")
         case .imdb: "IMDb"
         case .metacritic: "Metacritic"
         case .letterboxd: "Letterboxd"
         case .tmdb: "TMDB"
-        case .unknown: "Rating"
+        case .unknown: String(localized: "Rating")
         }
     }
 }

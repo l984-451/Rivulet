@@ -15,7 +15,7 @@ import Foundation
 //
 
 extension PlexMetadata {
-    var displayTitle: String { title ?? "Untitled" }
+    var displayTitle: String { title ?? String(localized: "Untitled") }
 
     /// One-line supporting text: episode coordinates and show for an episode,
     /// year for everything else.
@@ -29,7 +29,7 @@ extension PlexMetadata {
     /// "S2, E5", the TV app's episode label.
     var episodeCode: String? {
         guard type == "episode", let season = parentIndex, let episode = index else { return nil }
-        return "S\(season), E\(episode)"
+        return String(localized: "S\(season), E\(episode)")
     }
 
     /// The show for an episode or season, the item itself otherwise.
@@ -60,14 +60,14 @@ extension PlexMetadata {
     var timeLeftText: String? {
         guard isInProgress, let duration, let offset = viewOffset, duration > offset else { return nil }
         let minutes = max(1, (duration - offset) / 60_000)
-        return minutes >= 60 ? "\(minutes / 60) hr \(minutes % 60) min left" : "\(minutes) min left"
+        return minutes >= 60 ? String(localized: "\(minutes / 60) hr \(minutes % 60) min left") : String(localized: "\(minutes) min left")
     }
 
     /// "1h 52m" runtime.
     var runtimeText: String? {
         guard let duration, duration > 0 else { return nil }
         let minutes = duration / 60_000
-        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        return minutes >= 60 ? String(localized: "\(minutes / 60)h \(minutes % 60)m") : String(localized: "\(minutes)m")
     }
 
     /// Artwork for a poster tile, matching tvOS `PosterCell`
@@ -122,11 +122,11 @@ extension PlexMarker {
 
     var displayName: String {
         switch type {
-        case "intro": "Intro"
-        case "recap": "Recap"
-        case "credits": "Credits"
-        case "commercial": "Commercial"
-        default: "Segment"
+        case "intro": String(localized: "Intro")
+        case "recap": String(localized: "Recap")
+        case "credits": String(localized: "Credits")
+        case "commercial": String(localized: "Commercial")
+        default: String(localized: "Segment")
         }
     }
 }

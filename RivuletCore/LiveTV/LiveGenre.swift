@@ -52,6 +52,19 @@ enum LiveGenre: String, CaseIterable {
         }
     }
 
+    /// The shelf title. `rawValue` stays English: it is an id and a guide-label match.
+    var title: String {
+        switch self {
+        case .sports: return String(localized: "Sports")
+        case .news: return String(localized: "News")
+        case .kids: return String(localized: "Kids")
+        case .movies: return String(localized: "Movies")
+        case .documentaries: return String(localized: "Documentaries")
+        case .music: return String(localized: "Music")
+        case .entertainment: return String(localized: "Entertainment")
+        }
+    }
+
     private static let suffixKeywords: Set<String> = ["news", "weather"]
 
     /// What `text` (a guide category, or a channel's name) says, if anything.

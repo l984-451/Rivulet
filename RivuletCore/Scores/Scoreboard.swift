@@ -19,7 +19,7 @@ enum League: String, CaseIterable, Codable, Sendable {
     var title: String {
         switch self {
         case .nfl: "NFL"
-        case .collegeFootball: "College Football"
+        case .collegeFootball: String(localized: "College Football")
         case .nba: "NBA"
         case .mlb: "MLB"
         case .nhl: "NHL"

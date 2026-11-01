@@ -1243,11 +1243,11 @@ class LiveTVDataStore: ObservableObject {
         if let xmltv = error as? XMLTVParseError {
             switch xmltv {
             case .httpError(let code):
-                return "EPG server returned HTTP \(code)"
+                return String(localized: "EPG server returned HTTP \(code)")
             case .parseFailed:
-                return "EPG data could not be parsed"
+                return String(localized: "EPG data could not be parsed")
             case .tooLarge:
-                return "EPG data is too large"
+                return String(localized: "EPG data is too large")
             }
         }
 
@@ -1255,30 +1255,30 @@ class LiveTVDataStore: ObservableObject {
         if nsError.domain == NSURLErrorDomain {
             switch nsError.code {
             case NSURLErrorCancelled:
-                return "EPG request cancelled"
+                return String(localized: "EPG request cancelled")
             case NSURLErrorTimedOut:
-                return "EPG server didn't respond in time"
+                return String(localized: "EPG server didn't respond in time")
             case NSURLErrorCannotFindHost:
-                return "EPG server hostname could not be resolved"
+                return String(localized: "EPG server hostname could not be resolved")
             case NSURLErrorCannotConnectToHost:
-                return "Could not connect to EPG server"
+                return String(localized: "Could not connect to EPG server")
             case NSURLErrorNetworkConnectionLost:
-                return "Network connection was lost"
+                return String(localized: "Network connection was lost")
             case NSURLErrorDNSLookupFailed:
-                return "DNS lookup failed for EPG server"
+                return String(localized: "DNS lookup failed for EPG server")
             case NSURLErrorNotConnectedToInternet:
-                return "Not connected to the internet"
+                return String(localized: "Not connected to the internet")
             case NSURLErrorBadServerResponse:
-                return "EPG server returned invalid data"
+                return String(localized: "EPG server returned invalid data")
             case NSURLErrorSecureConnectionFailed,
                  NSURLErrorServerCertificateHasBadDate,
                  NSURLErrorServerCertificateUntrusted,
                  NSURLErrorServerCertificateHasUnknownRoot,
                  NSURLErrorServerCertificateNotYetValid:
-                return "EPG server TLS certificate issue"
+                return String(localized: "EPG server TLS certificate issue")
             case NSURLErrorClientCertificateRejected,
                  NSURLErrorClientCertificateRequired:
-                return "EPG server requires a client certificate"
+                return String(localized: "EPG server requires a client certificate")
             default:
                 break
             }

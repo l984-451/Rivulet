@@ -109,7 +109,7 @@ final class MusicLibrarySidebarView: UIView, UICollectionViewDelegate {
     private lazy var rowRegistration = UICollectionView.CellRegistration<MusicSidebarRowCell, Row> {
         [unowned self] cell, _, row in
         switch row {
-        case .nowPlaying: cell.configure(title: "Now Playing", symbol: "waveform")
+        case .nowPlaying: cell.configure(title: String(localized: "Now Playing"), symbol: "waveform")
         case .destination(let destination): cell.configure(title: destination.title, symbol: destination.symbol)
         case .genresHeader: break
         }
@@ -242,7 +242,7 @@ final class MusicSidebarGenresHeaderCell: UICollectionViewCell {
         divider.autoresizingMask = [.flexibleWidth]
         divider.backgroundColor = UIColor(white: 1, alpha: 0.12)
         let label = MusicChrome.label(size: 25, weight: .medium, color: MusicMetrics.secondary)
-        label.text = "Genres"
+        label.text = String(localized: "Genres")
         label.frame = CGRect(x: 20, y: 96, width: bounds.width - 40, height: 32)
         label.autoresizingMask = [.flexibleWidth]
         [divider, label].forEach(contentView.addSubview)

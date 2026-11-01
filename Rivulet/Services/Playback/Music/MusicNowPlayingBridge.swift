@@ -53,7 +53,7 @@ final class MusicNowPlayingBridge {
 
         // Track metadata
         info[MPMediaItemPropertyTitle] = track.title
-        info[MPMediaItemPropertyArtist] = track.artistName ?? "Unknown Artist"
+        info[MPMediaItemPropertyArtist] = track.artistName ?? String(localized: "Unknown Artist")
         info[MPMediaItemPropertyAlbumTitle] = track.albumTitle ?? ""
         info[MPMediaItemPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
 

@@ -44,16 +44,16 @@ enum TMDBDiscoverSection: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .movieTrending: return "Trending Movies"
-        case .moviePopular: return "Popular Movies"
-        case .movieNowPlaying: return "Now Playing"
-        case .movieUpcoming: return "Upcoming"
-        case .movieTopRated: return "Top Rated Movies"
-        case .tvTrending: return "Trending TV"
-        case .tvPopular: return "Popular TV"
-        case .tvAiringToday: return "Airing Today"
-        case .tvOnTheAir: return "On The Air"
-        case .tvTopRated: return "Top Rated TV"
+        case .movieTrending: return String(localized: "Trending Movies")
+        case .moviePopular: return String(localized: "Popular Movies")
+        case .movieNowPlaying: return String(localized: "Now Playing")
+        case .movieUpcoming: return String(localized: "Upcoming")
+        case .movieTopRated: return String(localized: "Top Rated Movies")
+        case .tvTrending: return String(localized: "Trending TV")
+        case .tvPopular: return String(localized: "Popular TV")
+        case .tvAiringToday: return String(localized: "Airing Today")
+        case .tvOnTheAir: return String(localized: "On The Air")
+        case .tvTopRated: return String(localized: "Top Rated TV")
         }
     }
 

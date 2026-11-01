@@ -21,7 +21,7 @@ struct LiveTVConnectError: LocalizedError, Equatable {
     var errorDescription: String? { message }
 
     static func source(_ message: String) -> LiveTVConnectError {
-        LiveTVConnectError(title: "Couldn't Add Source", message: message)
+        LiveTVConnectError(title: String(localized: "Couldn't Add Source"), message: message)
     }
 }
 
@@ -79,19 +79,19 @@ struct LiveTVSourceConnector {
     func serverRequest(address: String, username: String, password: String,
                        channelProfile: String) throws -> ServerRequest {
         guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LiveTVConnectError.source("Enter your server's address first.")
+            throw LiveTVConnectError.source(String(localized: "Enter your server's address first."))
         }
         let cleaned = sanitizeURL(address)
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard username.isEmpty == password.isEmpty else {
-            throw LiveTVConnectError.source("Enter both your username and password, or neither.")
+            throw LiveTVConnectError.source(String(localized: "Enter both your username and password, or neither."))
         }
         // A typed profile wins; otherwise one pasted as .../output/m3u/Kids is kept,
         // since Dispatcharr scopes the playlist only by that path segment.
         let split = DispatcharrService.splitEndpointPath(from: cleaned)
         let profile = DispatcharrService.normalizedProfile(channelProfile) ?? split.channelProfile
         guard let url = URL(string: split.baseURL) else {
-            throw LiveTVConnectError.source("Couldn't reach that server. Check the address and port.")
+            throw LiveTVConnectError.source(String(localized: "Couldn't reach that server. Check the address and port."))
         }
         return ServerRequest(baseURL: url, channelProfile: profile, username: username, password: password,
                              service: DispatcharrService(baseURL: url, channelProfile: profile, session: session))
@@ -108,8 +108,8 @@ struct LiveTVSourceConnector {
             // An empty playlist with a profile set is nearly always a profile
             // name the server does not have, so point at the field.
             throw LiveTVConnectError.source(request.channelProfile == nil
-                ? "Connected, but found no channels."
-                : "Connected, but that channel profile has no channels. Check the name.")
+                ? String(localized: "Connected, but found no channels.")
+                : String(localized: "Connected, but that channel profile has no channels. Check the name."))
         }
         // Watching needs no sign-in; recording does. The sign-in is traded for
         // the user's API key here and the password dropped.
@@ -131,10 +131,10 @@ struct LiveTVSourceConnector {
 
     static func playlistRequest(m3uURL: String, epgURL: String) throws -> PlaylistRequest {
         guard !m3uURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LiveTVConnectError.source("Enter your playlist URL first.")
+            throw LiveTVConnectError.source(String(localized: "Enter your playlist URL first."))
         }
         guard let m3u = URL(string: sanitizeURL(m3uURL)) else {
-            throw LiveTVConnectError.source("That playlist URL doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That playlist URL doesn't look right. Check it and try again."))
         }
         return PlaylistRequest(m3uURL: m3u, epgURL: epgURL.isEmpty ? nil : URL(string: sanitizeURL(epgURL)))
     }
@@ -153,7 +153,7 @@ struct LiveTVSourceConnector {
             }
             let channels = try await M3UParser().parse(data: data)
             guard !channels.isEmpty else {
-                throw LiveTVConnectError.source("Connected, but found no channels.")
+                throw LiveTVConnectError.source(String(localized: "Connected, but found no channels."))
             }
         } catch let error as LiveTVConnectError {
             throw error
@@ -172,10 +172,10 @@ struct LiveTVSourceConnector {
     /// path before them (a reverse proxy) is kept.
     static func threadfinRequest(address: String) throws -> PlaylistRequest {
         guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LiveTVConnectError.source("Enter your server's address first.")
+            throw LiveTVConnectError.source(String(localized: "Enter your server's address first."))
         }
         guard var components = URLComponents(string: sanitizeURL(address)), components.host != nil else {
-            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That address doesn't look right. Check it and try again."))
         }
         // A pasted playlist or guide link is cut back to the server. Threadfin has
         // no login, so any userinfo is dropped rather than saved.
@@ -186,7 +186,7 @@ struct LiveTVSourceConnector {
             components.path.removeLast(suffix.count)
         }
         guard let base = components.url else {
-            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That address doesn't look right. Check it and try again."))
         }
         return PlaylistRequest(m3uURL: base.appending(path: "m3u/threadfin.m3u"),
                                epgURL: base.appending(path: "xmltv/threadfin.xml"))
@@ -198,17 +198,17 @@ struct LiveTVSourceConnector {
     /// whatever the username and password fields left empty.
     func xtreamRequest(address: String, username: String, password: String) throws -> XtreamRequest {
         guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LiveTVConnectError.source("Enter your provider's server address first.")
+            throw LiveTVConnectError.source(String(localized: "Enter your provider's server address first."))
         }
         let parsed = XtreamService.parseAddress(address)
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? parsed.username ?? "" : username.trimmingCharacters(in: .whitespacesAndNewlines)
         let password = password.isEmpty ? parsed.password ?? "" : password
         guard !username.isEmpty, !password.isEmpty else {
-            throw LiveTVConnectError.source("Enter the username and password from your provider.")
+            throw LiveTVConnectError.source(String(localized: "Enter the username and password from your provider."))
         }
         guard let server = URL(string: parsed.server), server.host != nil else {
-            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That address doesn't look right. Check it and try again."))
         }
         let account = XtreamAccount(server: server, username: username, password: password)
         return XtreamRequest(account: account, service: XtreamService(account: account, session: session))
@@ -220,7 +220,7 @@ struct LiveTVSourceConnector {
             let channels = try await request.service.fetchChannels(
                 format: XtreamService.streamFormat(allowed: info.allowedFormats))
             guard !channels.isEmpty else {
-                throw LiveTVConnectError.source("Signed in, but this account has no live channels.")
+                throw LiveTVConnectError.source(String(localized: "Signed in, but this account has no live channels."))
             }
         } catch let error as LiveTVConnectError {
             throw error
@@ -234,12 +234,12 @@ struct LiveTVSourceConnector {
 
     static func xtreamFailureCopy(for error: Error) -> String {
         switch error as? XtreamError {
-        case .invalidLogin: "The server didn't accept that username and password."
-        case .expired: "This account has expired. Contact your provider to renew it."
-        case .banned: "Your provider has blocked this account."
-        case .disabled: "This account is turned off. Contact your provider."
-        case .notXtream: "That address isn't an Xtream Codes server. Check the address and port."
-        case .refused(let reason): "The server said: \(reason)"
+        case .invalidLogin: String(localized: "The server didn't accept that username and password.")
+        case .expired: String(localized: "This account has expired. Contact your provider to renew it.")
+        case .banned: String(localized: "Your provider has blocked this account.")
+        case .disabled: String(localized: "This account is turned off. Contact your provider.")
+        case .notXtream: String(localized: "That address isn't an Xtream Codes server. Check the address and port.")
+        case .refused(let reason): String(localized: "The server said: \(reason)")
         case .httpError, nil: failureCopy(for: error)
         }
     }
@@ -251,10 +251,10 @@ struct LiveTVSourceConnector {
     /// empty fields and never stays in the saved address.
     func tvheadendRequest(address: String, username: String, password: String) throws -> TvheadendRequest {
         guard !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw LiveTVConnectError.source("Enter your server's address first.")
+            throw LiveTVConnectError.source(String(localized: "Enter your server's address first."))
         }
         guard var components = URLComponents(string: sanitizeURL(address)), components.host != nil else {
-            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That address doesn't look right. Check it and try again."))
         }
         var username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         var password = password
@@ -265,10 +265,10 @@ struct LiveTVSourceConnector {
         components.user = nil
         components.password = nil
         guard username.isEmpty == password.isEmpty else {
-            throw LiveTVConnectError.source("Enter both your username and password, or neither.")
+            throw LiveTVConnectError.source(String(localized: "Enter both your username and password, or neither."))
         }
         guard let server = components.url else {
-            throw LiveTVConnectError.source("That address doesn't look right. Check it and try again.")
+            throw LiveTVConnectError.source(String(localized: "That address doesn't look right. Check it and try again."))
         }
         let account = TvheadendAccount(server: server, username: username.isEmpty ? nil : username,
                                        password: username.isEmpty ? nil : password)
@@ -282,7 +282,7 @@ struct LiveTVSourceConnector {
             try await request.service.verify()
             let channels = try await request.service.fetchChannels()
             guard let first = channels.first else {
-                throw LiveTVConnectError.source("Connected, but found no channels.")
+                throw LiveTVConnectError.source(String(localized: "Connected, but found no channels."))
             }
             if request.account.isSignedIn {
                 _ = try await request.service.ticketedStreamURL(channelUUID: first.uuid)
@@ -314,19 +314,19 @@ struct LiveTVSourceConnector {
     static func failureCopy(for error: Error) -> String {
         if let dispatcharr = error as? DispatcharrError {
             switch dispatcharr {
-            case .unauthorized: return "That server refused Rivulet."
+            case .unauthorized: return String(localized: "That server refused Rivulet.")
             case .invalidResponse, .notFound, .serverError, .httpError:
-                return "Couldn't reach that server. Check the address and port."
+                return String(localized: "Couldn't reach that server. Check the address and port.")
             }
         }
         if error is M3UParseError {
-            return "Connected, but found no channels."
+            return String(localized: "Connected, but found no channels.")
         }
         let ns = error as NSError
         if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorUserAuthenticationRequired {
-            return "That server refused Rivulet."
+            return String(localized: "That server refused Rivulet.")
         }
-        return "Couldn't reach that server. Check the address and port."
+        return String(localized: "Couldn't reach that server. Check the address and port.")
     }
 
     /// The channels already loaded, so the server is reachable: what failed is
@@ -334,13 +334,13 @@ struct LiveTVSourceConnector {
     static func signInFailureCopy(for error: Error) -> String {
         switch error as? DispatcharrError {
         case .unauthorized:
-            return "Dispatcharr didn't accept that username and password."
+            return String(localized: "Dispatcharr didn't accept that username and password.")
         case .notFound:
-            return "That server has no Dispatcharr sign-in. Clear the username and password."
+            return String(localized: "That server has no Dispatcharr sign-in. Clear the username and password.")
         case .httpError(429):
-            return "Too many sign-in attempts. Wait a minute and try again."
+            return String(localized: "Too many sign-in attempts. Wait a minute and try again.")
         default:
-            return "Couldn't sign in to Dispatcharr. Try again."
+            return String(localized: "Couldn't sign in to Dispatcharr. Try again.")
         }
     }
 

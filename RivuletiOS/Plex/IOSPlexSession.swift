@@ -719,7 +719,7 @@ final class IOSPlexSession: ObservableObject {
         continueWatchingCopies = Dictionary(cards.filter { !$0.others.isEmpty }.map { ($0.item.id, $0.others) },
                                             uniquingKeysWith: { first, _ in first })
         guard !cards.isEmpty else { return continueWatching = nil }
-        var hub = primaryContinueWatching ?? PlexHub(hubIdentifier: "continueWatching", title: "Continue Watching")
+        var hub = primaryContinueWatching ?? PlexHub(hubIdentifier: "continueWatching", title: String(localized: "Continue Watching"))
         hub.Metadata = cards.map(\.item)
         // A merged row has no one server to page from.
         if contributing > 1 {
@@ -771,9 +771,9 @@ nonisolated enum IOSPlexSessionError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "No Plex server is connected."
-        case .noPlayableURL: "This item has no playable file."
-        case .watchlistUnavailable: "Couldn't update your Watchlist."
+        case .notConfigured: String(localized: "No Plex server is connected.")
+        case .noPlayableURL: String(localized: "This item has no playable file.")
+        case .watchlistUnavailable: String(localized: "Couldn't update your Watchlist.")
         }
     }
 }

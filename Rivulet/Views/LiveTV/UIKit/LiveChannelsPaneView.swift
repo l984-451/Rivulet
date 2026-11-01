@@ -120,12 +120,12 @@ private final class LiveChannelCardView: UIView {
         art.backgroundColor = UIColor.white.withAlphaComponent(0.08)
 
         let channelLine = UILabel()
-        channelLine.text = [isCurrent ? "Watching" : nil, channel.channelNumber.map(String.init), channel.name]
+        channelLine.text = [isCurrent ? String(localized: "Watching") : nil, channel.channelNumber.map(String.init), channel.name]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         channelLine.font = .systemFont(ofSize: 19, weight: .medium)
         channelLine.textColor = UIColor.white.withAlphaComponent(0.6)
         let title = UILabel()
-        title.text = program?.title ?? "No guide data"
+        title.text = program?.title ?? String(localized: "No guide data")
         title.font = .systemFont(ofSize: 23, weight: .semibold)
         title.textColor = .white
 

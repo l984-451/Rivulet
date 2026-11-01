@@ -196,7 +196,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         header.addArrangedSubview(overviewLabel)
         applyText()
 
-        let (pill, title, _) = FocusableActionButton.pill(title: "Play", systemImage: "play.fill")
+        let (pill, title, _) = FocusableActionButton.pill(title: String(localized: "Play"), systemImage: "play.fill")
         pill.onPrimaryAction = { [weak self] in
             guard let self else { return }
             self.play(EpisodePicker.firstUnplayed(in: self.episodes) ?? self.season, fromBeginning: false)
@@ -349,12 +349,12 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         overviewLabel.text = season.overview
         overviewLabel.isHidden = (season.overview ?? "").isEmpty
         playTitleLabel?.text = EpisodePicker.firstUnplayed(in: episodes)
-            .map { EpisodePicker.playTitle(for: $0, on: .season) } ?? "Play"
+            .map { EpisodePicker.playTitle(for: $0, on: .season) } ?? String(localized: "Play")
         watchedButton?.setIcon(watchedGlyph)
 
         metaRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let count = episodes.isEmpty ? season.childProgress?.total : episodes.count
-        let parts = [count.map { "\($0) Episode\($0 == 1 ? "" : "s")" }, season.year.map(String.init)].compactMap { $0 }
+        let parts = [count.map { String(localized: "\($0) Episodes") }, season.year.map(String.init)].compactMap { $0 }
         if !parts.isEmpty {
             metaRow.addArrangedSubview(MediaDetailChromeView.makeCaptionLabel(parts.joined(separator: " · "), alpha: 0.75))
         }

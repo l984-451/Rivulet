@@ -67,13 +67,13 @@ enum MusicPresenter {
     /// A Music request the server did not answer: the app's notice card, one OK button.
     static func reportFailure(_ error: Error, from presenter: UIViewController? = nil) {
         let message = switch error as? MediaProviderError {
-        case .unreachable: "Couldn't reach the server."
-        case .unauthorized: "The server didn't accept your sign-in."
-        case .notFound: "The server no longer has this item."
-        default: "The server didn't answer as expected."
+        case .unreachable: String(localized: "Couldn't reach the server.")
+        case .unauthorized: String(localized: "The server didn't accept your sign-in.")
+        case .notFound: String(localized: "The server no longer has this item.")
+        default: String(localized: "The server didn't answer as expected.")
         }
         top(from: presenter)?.present(
-            ConfirmationPopupViewController(title: "Couldn't Load", message: message, confirmTitle: "OK",
+            ConfirmationPopupViewController(title: String(localized: "Couldn't Load"), message: message, confirmTitle: String(localized: "OK"),
                                             cancelTitle: nil, onConfirm: {}),
             animated: true)
     }

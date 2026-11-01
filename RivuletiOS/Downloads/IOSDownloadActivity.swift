@@ -96,11 +96,11 @@ final class IOSDownloadActivity {
         let name = current.map { record in
             let item = record.metadata
             guard item.type == "episode" else { return item.displayTitle }
-            return [item.grandparentTitle, item.index.map { "E\($0)" }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
+            return [item.grandparentTitle, item.index.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
         } ?? ""
-        guard items.count > 1 else { return ("Downloading", name) }
+        guard items.count > 1 else { return (String(localized: "Downloading"), name) }
         let done = items.count - open.count
-        return ("Downloading \(min(done + 1, items.count)) of \(items.count)", name)
+        return (String(localized: "Downloading \(min(done + 1, items.count)) of \(items.count)"), name)
     }
 }
 

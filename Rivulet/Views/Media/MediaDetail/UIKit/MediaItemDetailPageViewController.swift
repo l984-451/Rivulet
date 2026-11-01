@@ -420,7 +420,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     private func makeMetadataOnlyActionRow() -> UIView {
-        let (pill, _, icon) = FocusableActionButton.pill(title: "Watchlist", systemImage: nil)
+        let (pill, _, icon) = FocusableActionButton.pill(title: String(localized: "Watchlist"), systemImage: nil)
 
         if let tmdbID = item.tmdbID {
             let guid = "tmdb://\(tmdbID)"
@@ -475,7 +475,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         let body = NSMutableAttributedString()
         let color = UIColor.white.withAlphaComponent(0.9)
         if let s = item.seasonNumber, let e = item.episodeNumber {
-            body.append(NSAttributedString(string: "S\(s), E\(e): ", attributes: [
+            body.append(NSAttributedString(string: String(localized: "S\(s), E\(e): "), attributes: [
                 .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color]))
         }
         body.append(NSAttributedString(string: overview, attributes: [
@@ -713,15 +713,15 @@ final class MediaItemDetailPageViewController: UIViewController {
     private static func formatRuntime(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         let h = total / 3600, m = (total % 3600) / 60
-        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
-        return "\(m) min"
+        if h > 0 { return m > 0 ? String(localized: "\(h)h \(m)m") : String(localized: "\(h)h") }
+        return String(localized: "\(m) min")
     }
 
     private static let dateParser: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withFullDate]; return f
     }()
     private static let dateDisplay: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"; return f
+        let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMdyyyy"); return f
     }()
     private static func displayDate(_ iso: String?) -> String? {
         guard let iso, let date = dateParser.date(from: String(iso.prefix(10))) else { return nil }

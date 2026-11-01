@@ -186,7 +186,7 @@ struct HomeSectionData {
         HomeSectionData(
             id: .watchlist,
             kind: .watchlist,
-            title: "Watchlist",
+            title: String(localized: "Watchlist"),
             headerStyle: .swiftUIWatchlist,
             totalSize: nil,
             items: [],
@@ -217,7 +217,7 @@ struct HomeSectionData {
         HomeSectionData(
             id: .recommendations,
             kind: .recommendations,
-            title: "Personalized Recommendations",
+            title: String(localized: "Personalized Recommendations"),
             headerStyle: .swiftUIInfiniteRow,
             totalSize: nil,
             items: items,
@@ -369,7 +369,7 @@ struct HomeSectionData {
         HomeSectionData(
             id: .yearInReview,
             kind: .yearInReview,
-            title: "Year in Review",
+            title: String(localized: "Year in Review"),
             headerStyle: .swiftUIInfiniteRow,
             totalSize: nil,
             items: [],
@@ -678,21 +678,21 @@ final class PlexHomeViewController: UIViewController {
     private var emptyStateMessage: String {
         switch mode {
         case .discover:
-            return "Recommendations aren't available right now."
+            return String(localized: "Recommendations aren't available right now.")
         case .watchlist:
-            return "Nothing in your Watchlist yet."
+            return String(localized: "Nothing in your Watchlist yet.")
         case .collection:
-            return "This collection is empty."
+            return String(localized: "This collection is empty.")
         case .playlists:
-            return "No playlists yet."
+            return String(localized: "No playlists yet.")
         case .playlist:
-            return "This playlist is empty."
+            return String(localized: "This playlist is empty.")
         case .library where providerLibrary != nil:
-            return "This library is empty."
+            return String(localized: "This library is empty.")
         case .home where isJellyfinOnlyHome:
-            return "Your Jellyfin library appears to be empty."
+            return String(localized: "Your Jellyfin library appears to be empty.")
         case .home, .library, .search:
-            return "Your Plex library appears to be empty."
+            return String(localized: "Your Plex library appears to be empty.")
         }
     }
 
@@ -964,7 +964,7 @@ final class PlexHomeViewController: UIViewController {
             let id = HomeSectionID(raw: "discover.forYou")
             sections.append(.discoverList(
                 id: id,
-                title: "For You",
+                title: String(localized: "For You"),
                 items: discoverModel.forYou.map { TMDBMediaMapper.item($0) }
             ))
             discoverListItems[id] = discoverModel.forYou
@@ -1212,11 +1212,11 @@ final class PlexHomeViewController: UIViewController {
         // Same grouping as PlexSearchView.groupedResults, each group mixing
         // both servers (Jellyfin music is not browsable yet, so Music is Plex's).
         let groups: [(key: String, title: String, metas: [PlexMetadata], jellyfin: [MediaItem])] = [
-            ("titles", "Movies & TV", filtered.filter { $0.type == "movie" || $0.type == "show" },
+            ("titles", String(localized: "Movies & TV"), filtered.filter { $0.type == "movie" || $0.type == "show" },
              jellyfin.filter { $0.kind == .movie || $0.kind == .show }),
-            ("episodes", "Episodes & Seasons", filtered.filter { $0.type == "episode" || $0.type == "season" },
+            ("episodes", String(localized: "Episodes & Seasons"), filtered.filter { $0.type == "episode" || $0.type == "season" },
              jellyfin.filter { $0.kind == .episode || $0.kind == .season }),
-            ("music", "Music", filtered.filter { $0.type == "artist" || $0.type == "album" || $0.type == "track" }, [])
+            ("music", String(localized: "Music"), filtered.filter { $0.type == "artist" || $0.type == "album" || $0.type == "track" }, [])
         ]
 
         var sections: [HomeSectionData] = []
@@ -3223,7 +3223,7 @@ final class PlexHomeViewController: UIViewController {
 
         case .recommendationsError:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: RecommendationsStateCell.reuseID, for: indexPath) as! RecommendationsStateCell
-            cell.configure(state: .error(message: recommendationsError ?? "Unknown error"))
+            cell.configure(state: .error(message: recommendationsError ?? String(localized: "Unknown error")))
             cell.onRetry = { [weak self] in
                 Task { await self?.refreshRecommendations(force: true) }
             }
@@ -4192,24 +4192,24 @@ final class PlexHomeViewController: UIViewController {
 
     private func confirmDelete(_ item: MediaItem, provider: any MediaProvider) {
         let message = item.kind == .show || item.kind == .season
-            ? "Every episode's files will be deleted from \(provider.displayName). This cannot be undone."
-            : "The files will be deleted from \(provider.displayName). This cannot be undone."
-        let alert = UIAlertController(title: "Delete \u{201C}\(item.title)\u{201D}?", message: message,
+            ? String(localized: "Every episode's files will be deleted from \(provider.displayName). This cannot be undone.")
+            : String(localized: "The files will be deleted from \(provider.displayName). This cannot be undone.")
+        let alert = UIAlertController(title: String(localized: "Delete \u{201C}\(item.title)\u{201D}?"), message: message,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) { [weak self] _ in
             Task { @MainActor in
                 do {
                     try await provider.deleteMedia(item.ref)
                     NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
                 } catch {
-                    let failed = UIAlertController(title: "Couldn't Delete", message: error.localizedDescription,
+                    let failed = UIAlertController(title: String(localized: "Couldn't Delete"), message: error.localizedDescription,
                                                    preferredStyle: .alert)
-                    failed.addAction(UIAlertAction(title: "OK", style: .cancel))
+                    failed.addAction(UIAlertAction(title: String(localized: "OK"), style: .cancel))
                     self?.present(failed, animated: true)
                 }
             }
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -4393,7 +4393,7 @@ final class PlexHomeViewController: UIViewController {
                 .filter { card in !card.copies.contains { pendingCWRemovals.contains($0.ref.itemID) } }
             for card in cards where !card.others.isEmpty { cwOthers[card.item.ref] = card.others }
             if !cards.isEmpty {
-                sections.append(.hub(id: Self.mergedContinueWatchingID, title: "Continue Watching",
+                sections.append(.hub(id: Self.mergedContinueWatchingID, title: String(localized: "Continue Watching"),
                                      items: cards.map(\.item), isContinueWatching: true, hubKey: nil,
                                      hubIdentifier: Self.mergedContinueWatchingID.raw))
             }
@@ -4631,7 +4631,7 @@ final class PlexHomeViewController: UIViewController {
         if !libraryCollections.isEmpty {
             sections.insert(.hub(
                 id: .libraryCollections,
-                title: "Collections",
+                title: String(localized: "Collections"),
                 items: libraryCollections,
                 isContinueWatching: false,
                 hubKey: nil,
@@ -5255,17 +5255,17 @@ final class PlexHomeViewController: UIViewController {
         let play = onChoice ?? { [weak self] in self?.resolveAndPlay(item, fromBeginning: $0, sourceID: sourceID) }
         let offsetMs = Int(offsetSec * 1000)
         let alert = UIAlertController(
-            title: "Resume Playback?",
+            title: String(localized: "Resume Playback?"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))"), style: .default) { _ in
             play(false)
         })
-        alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Start from Beginning"), style: .default) { _ in
             play(true)
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -5302,17 +5302,17 @@ final class PlexHomeViewController: UIViewController {
 
     private func presentResumeChoice(for item: PlexMetadata, offsetMs: Int, mediaID: String? = nil) {
         let alert = UIAlertController(
-            title: "Resume Playback?",
+            title: String(localized: "Resume Playback?"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))"), style: .default) { [weak self] _ in
             self?.presentPlayer(for: item, fromBeginning: false, mediaID: mediaID)
         })
-        alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Start from Beginning"), style: .default) { [weak self] _ in
             self?.presentPlayer(for: item, fromBeginning: true, mediaID: mediaID)
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -5537,13 +5537,13 @@ final class PlexHomeViewController: UIViewController {
         var title = title
         if title == nil, case .playlist(let playlist) = mode { title = playlist.title }
         let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
-        for (label, start) in [("Continue with \u{201C}\(entries[resume].item.title)\u{201D}", resume),
-                               ("Play from Beginning", 0)] {
+        for (label, start) in [(String(localized: "Continue with \u{201C}\(entries[resume].item.title)\u{201D}"), resume),
+                               (String(localized: "Play from Beginning"), 0)] {
             alert.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
                 if let queue = PlayQueue(entries: entries, startingAt: start) { self?.playQueue(queue) }
             })
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -6630,7 +6630,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 return nil
             }
         }
-        let actions = [action(homeAction, .home, "Home"), action(libraryAction, .library, "Library")].compactMap { $0 }
+        let actions = [action(homeAction, .home, String(localized: "Home")), action(libraryAction, .library, String(localized: "Library"))].compactMap { $0 }
         return actions.isEmpty ? [] : [actions]
     }
 
@@ -6875,8 +6875,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         return sections.map { group in
             group.map { action in
                 switch action.title {
-                case "Mark as Watched":
-                    return TileMenuAction(title: action.title, systemImage: action.systemImage,
+                case String(localized: "Mark as Watched"):
+                    return TileMenuAction(verbatim: action.title, systemImage: action.systemImage,
                                           destructive: action.destructive) {
                         action.handler()
                         Self.changeOnServer {
@@ -6885,8 +6885,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                             }
                         }
                     }
-                case "Remove from Continue Watching":
-                    return TileMenuAction(title: action.title, systemImage: action.systemImage,
+                case String(localized: "Remove from Continue Watching"):
+                    return TileMenuAction(verbatim: action.title, systemImage: action.systemImage,
                                           destructive: action.destructive) {
                         action.handler()
                         Self.changeOnServer { for copy in others { await Self.removeFromContinueWatching(copy) } }

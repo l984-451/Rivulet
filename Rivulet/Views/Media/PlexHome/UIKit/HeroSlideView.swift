@@ -247,10 +247,10 @@ final class HeroSlideView: UIView {
 
     private func typeLabel(for type: String?) -> String? {
         switch type {
-        case "movie": return "Movie"
-        case "show", "season", "episode": return "TV Show"
-        case "artist": return "Artist"
-        case "album": return "Album"
+        case "movie": return String(localized: "Movie")
+        case "show", "season", "episode": return String(localized: "TV Show")
+        case "artist": return String(localized: "Artist")
+        case "album": return String(localized: "Album")
         case .some(let t): return t.capitalized
         case .none: return nil
         }

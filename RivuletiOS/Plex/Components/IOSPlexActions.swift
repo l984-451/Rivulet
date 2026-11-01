@@ -49,7 +49,7 @@ private struct IOSPlexActionHost: ViewModifier {
                 playQueue: playQueue,
                 addToPlaylist: { item, playlist in
                     if let playlist {
-                        run("Couldn't Add to Playlist") { try await plex.addToPlaylist(playlist, item: item) }
+                        run(String(localized: "Couldn't Add to Playlist")) { try await plex.addToPlaylist(playlist, item: item) }
                     } else {
                         newPlaylistName = ""
                         newPlaylistSeed = item
@@ -57,14 +57,14 @@ private struct IOSPlexActionHost: ViewModifier {
                 },
                 open: { pushed = $0 },
                 setWatched: { item, watched in
-                    run("Couldn't Update") { try await plex.setWatched(watched, for: item) }
+                    run(String(localized: "Couldn't Update")) { try await plex.setWatched(watched, for: item) }
                 },
                 setWatchlisted: { item, on in
-                    run("Couldn't Update Watchlist") { try await plex.setWatchlisted(on, item: item) }
+                    run(String(localized: "Couldn't Update Watchlist")) { try await plex.setWatchlisted(on, item: item) }
                 },
                 download: { item in
                     if item.type == "season" {
-                        run("Couldn't Download Season") { try await downloads.downloadSeason(item) }
+                        run(String(localized: "Couldn't Download Season")) { try await downloads.downloadSeason(item) }
                     } else {
                         downloads.download(item)
                     }
@@ -79,7 +79,7 @@ private struct IOSPlexActionHost: ViewModifier {
                 Button("Create") {
                     let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard let item = newPlaylistSeed, !name.isEmpty else { return }
-                    run("Couldn't Create Playlist") { try await plex.createPlaylist(title: name, seededWith: item) }
+                    run(String(localized: "Couldn't Create Playlist")) { try await plex.createPlaylist(title: name, seededWith: item) }
                 }
             }
             .alert(
@@ -100,7 +100,7 @@ private struct IOSPlexActionHost: ViewModifier {
                 playback.play(try await plex.playback(for: target))
             } catch let error where isCancellationError(error) {
             } catch {
-                failure = ("Couldn't Play", error.localizedDescription)
+                failure = (String(localized: "Couldn't Play"), error.localizedDescription)
             }
         }
     }
@@ -114,7 +114,7 @@ private struct IOSPlexActionHost: ViewModifier {
                 playback.play(try await plex.playback(for: queue.current), queue: queue)
             } catch let error where isCancellationError(error) {
             } catch {
-                failure = ("Couldn't Play", error.localizedDescription)
+                failure = (String(localized: "Couldn't Play"), error.localizedDescription)
             }
         }
     }
@@ -190,7 +190,7 @@ struct IOSPlexItemMenu: View {
                 Button("New Playlist", systemImage: "plus") { actions.addToPlaylist(item, nil) }
                 Section {
                     ForEach(plex.addTargets(for: item), id: \.ratingKey) { playlist in
-                        Button(playlist.title ?? "Untitled") { actions.addToPlaylist(item, playlist) }
+                        Button(playlist.title ?? String(localized: "Untitled")) { actions.addToPlaylist(item, playlist) }
                     }
                 }
             }
@@ -266,7 +266,7 @@ extension PlexMetadata {
             ratingKey: parentRatingKey,
             guid: parentGuid,
             type: "season",
-            title: parentIndex.map { "Season \($0)" } ?? parentTitle,
+            title: parentIndex.map { String(localized: "Season \($0)") } ?? parentTitle,
             thumb: parentThumb,
             art: grandparentArt,
             parentRatingKey: grandparentRatingKey,

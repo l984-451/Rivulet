@@ -40,25 +40,25 @@ nonisolated enum LibrarySortOption: String, CaseIterable, Codable, CustomStringC
     var displayName: String {
         switch self {
         case .addedAtDesc:
-            return "Recently Added"
+            return String(localized: "Recently Added")
         case .addedAtAsc:
-            return "Oldest Added"
+            return String(localized: "Oldest Added")
         case .titleAsc:
-            return "Title A-Z"
+            return String(localized: "Title A-Z")
         case .titleDesc:
-            return "Title Z-A"
+            return String(localized: "Title Z-A")
         case .releaseDateDesc:
-            return "Newest Releases"
+            return String(localized: "Newest Releases")
         case .releaseDateAsc:
-            return "Oldest Releases"
+            return String(localized: "Oldest Releases")
         case .ratingDesc:
-            return "Highest Rated"
+            return String(localized: "Highest Rated")
         case .resolutionDesc:
-            return "Best Quality"
+            return String(localized: "Best Quality")
         case .resolutionAsc:
-            return "Lowest Quality"
+            return String(localized: "Lowest Quality")
         case .lastEpisodeAddedDesc:
-            return "New Episodes"
+            return String(localized: "New Episodes")
         }
     }
 
@@ -66,25 +66,25 @@ nonisolated enum LibrarySortOption: String, CaseIterable, Codable, CustomStringC
     var shortName: String {
         switch self {
         case .addedAtDesc:
-            return "Recent"
+            return String(localized: "Recent")
         case .addedAtAsc:
-            return "Oldest"
+            return String(localized: "Oldest")
         case .titleAsc:
-            return "A-Z"
+            return String(localized: "A-Z")
         case .titleDesc:
-            return "Z-A"
+            return String(localized: "Z-A")
         case .releaseDateDesc:
-            return "Newest"
+            return String(localized: "Newest")
         case .releaseDateAsc:
-            return "Oldest"
+            return String(localized: "Oldest")
         case .ratingDesc:
-            return "Rating"
+            return String(localized: "Rating")
         case .resolutionDesc:
-            return "4K First"
+            return String(localized: "4K First")
         case .resolutionAsc:
-            return "SD First"
+            return String(localized: "SD First")
         case .lastEpisodeAddedDesc:
-            return "Episodes"
+            return String(localized: "Episodes")
         }
     }
 

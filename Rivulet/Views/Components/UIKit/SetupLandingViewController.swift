@@ -23,7 +23,7 @@ final class SetupLandingViewController: UIViewController {
 
     private let plexCard = SetupLandingViewController.makeCard(title: "Plex", symbol: "play.rectangle.fill")
     private let jellyfinCard = SetupLandingViewController.makeCard(title: "Jellyfin", symbol: "server.rack")
-    private let liveTVCard = SetupLandingViewController.makeCard(title: "Live TV",
+    private let liveTVCard = SetupLandingViewController.makeCard(title: String(localized: "Live TV"),
                                                                  symbol: "antenna.radiowaves.left.and.right")
     private let doneButton = UIButton(configuration: .glass())
     private var sourcesObserver: AnyCancellable?
@@ -36,11 +36,11 @@ final class SetupLandingViewController: UIViewController {
         view.addSubview(glow)
 
         let title = UILabel()
-        title.text = "Welcome to Rivulet"
+        title.text = String(localized: "Welcome to Rivulet")
         title.font = .systemFont(ofSize: 57, weight: .bold)
         title.textColor = .white
         let subtitle = UILabel()
-        subtitle.text = "Connect your media and Live TV to get started."
+        subtitle.text = String(localized: "Connect your media and Live TV to get started.")
         subtitle.font = .systemFont(ofSize: 29)
         subtitle.textColor = UIColor.white.withAlphaComponent(0.7)
 
@@ -50,7 +50,7 @@ final class SetupLandingViewController: UIViewController {
         let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, liveTVCard])
         cards.spacing = 48
 
-        doneButton.configuration?.title = "Start Watching"
+        doneButton.configuration?.title = String(localized: "Start Watching")
         doneButton.configuration?.attributedTitle?.font = .systemFont(ofSize: 29, weight: .semibold)
         doneButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 18, leading: 56, bottom: 18, trailing: 56)
         doneButton.addAction(UIAction { [weak self] _ in self?.onDone?() }, for: .primaryActionTriggered)
@@ -154,12 +154,14 @@ final class SetupLandingViewController: UIViewController {
     private func refresh() {
         let auth = PlexAuthManager.shared
         let plexServers = auth.isAuthenticated ? 1 + PlexExtraServers.shared.current.count : 0
-        Self.setDone(plexCard, prompt: "Sign In", detail: plexServers > 1 ? "\(plexServers) Servers"
-                     : plexServers == 1 ? auth.savedServerName ?? "Connected" : nil)
-        Self.setDone(jellyfinCard, prompt: "Sign In", detail: JellyfinSession.account?.serverName)
+        let plexDetail: String? = plexServers > 1 ? String(localized: "\(plexServers) Servers")
+            : plexServers == 1 ? auth.savedServerName ?? String(localized: "Connected") : nil
+        Self.setDone(plexCard, prompt: String(localized: "Sign In"), detail: plexDetail)
+        Self.setDone(jellyfinCard, prompt: String(localized: "Sign In"), detail: JellyfinSession.account?.serverName)
         let added = Self.addedLiveTVSources
-        Self.setDone(liveTVCard, prompt: "Add a Source", detail: added.isEmpty ? nil
-                     : added.count == 1 ? added[0].displayName : "\(added.count) Sources")
+        let liveTVDetail: String? = added.isEmpty ? nil
+            : added.count == 1 ? added[0].displayName : String(localized: "\(added.count) Sources")
+        Self.setDone(liveTVCard, prompt: String(localized: "Add a Source"), detail: liveTVDetail)
         // Held in place while hidden, so nothing moves when it appears.
         doneButton.isEnabled = Self.hasAnySource
         doneButton.alpha = doneButton.isEnabled ? 1 : 0

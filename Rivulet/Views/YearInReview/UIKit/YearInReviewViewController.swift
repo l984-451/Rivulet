@@ -136,36 +136,36 @@ final class YearInReviewViewController: UIViewController {
         let year = review.year
         switch page {
         case .intro:
-            return centered(eyebrow: nil, headline: "Your \(year)", headlineSize: 160,
-                            detail: "A look back at what you watched")
+            return centered(eyebrow: nil, headline: String(localized: "Your \(year)"), headlineSize: 160,
+                            detail: String(localized: "A look back at what you watched"))
         case .started(let title):
             var detail = title.date.map(Self.dateAndTime) ?? ""
-            if let episode = title.detail { detail = "“\(episode)”, " + detail }
-            return titled(eyebrow: "Your \(year) started with", title: title.name, detail: detail, art: title.art)
+            if let episode = title.detail { detail = String(localized: "“\(episode)”, \(detail)") }
+            return titled(eyebrow: String(localized: "Your \(year) started with"), title: title.name, detail: detail, art: title.art)
         case .hours:
             return hoursPage()
         case .topShow(let title):
-            return titled(eyebrow: "Your top show", title: title.name, detail: title.detail, art: title.art)
+            return titled(eyebrow: String(localized: "Your top show"), title: title.name, detail: title.detail, art: title.art)
         case .topMovies:
             return topMoviesPage()
         case .biggestDay(let day):
-            var detail = String(format: "%.1f hours", day.hours)
-            if let top = day.topTitle { detail += ", mostly \(top)" }
-            return centered(eyebrow: "Your biggest day", headline: Self.dayFormatter.string(from: day.date),
+            let hours = day.hours.formatted(.number.precision(.fractionLength(1)))
+            let detail = day.topTitle.map { String(localized: "\(hours) hours, mostly \($0)") } ?? String(localized: "\(hours) hours")
+            return centered(eyebrow: String(localized: "Your biggest day"), headline: Self.dayFormatter.string(from: day.date),
                             headlineSize: 110, detail: detail)
         case .whenYouWatch:
             return whenYouWatchPage()
         case .topArtist(let title):
-            return titled(eyebrow: "Your top artist", title: title.name,
-                          detail: "\(title.plays.formatted()) plays", art: title.art)
+            return titled(eyebrow: String(localized: "Your top artist"), title: title.name,
+                          detail: String(localized: "\(title.plays) plays"), art: title.art)
         case .outro:
-            let counts = [(review.movieCount, "movie", "movies"), (review.episodeCount, "episode", "episodes"),
-                          (review.songCount, "song", "songs")]
-                .filter { $0.0 > 0 }
-                .map { "\($0.0.formatted()) \($0.0 == 1 ? $0.1 : $0.2)" }
+            let counts = [review.movieCount > 0 ? String(localized: "\(review.movieCount) movies") : nil,
+                          review.episodeCount > 0 ? String(localized: "\(review.episodeCount) episodes") : nil,
+                          review.songCount > 0 ? String(localized: "\(review.songCount) songs") : nil]
+                .compactMap { $0 }
                 .joined(separator: " · ")
-            return centered(eyebrow: counts, headline: "That was your \(year)", headlineSize: 120,
-                            detail: "See you in \(year + 1)")
+            return centered(eyebrow: counts, headline: String(localized: "That was your \(year)"), headlineSize: 120,
+                            detail: String(localized: "See you in \(year + 1)"))
         }
     }
 
@@ -218,11 +218,12 @@ final class YearInReviewViewController: UIViewController {
     private func hoursPage() -> UIView {
         let page = UIView()
         let hours = review.hours
-        let headline = stack([label("In \(review.year) you watched".uppercased(), size: 30, weight: .bold, alpha: 0.72),
+        let headline = stack([label(String(localized: "In \(review.year) you watched").uppercased(), size: 30, weight: .bold, alpha: 0.72),
                               label(Int(hours.video.rounded()).formatted(), size: 260, weight: .heavy),
-                              label("hours of movies and TV", size: 48, weight: .semibold, alpha: 0.9)],
+                              label(String(localized: "hours of movies and TV"), size: 48, weight: .semibold, alpha: 0.9)],
                              spacing: 4, alignment: .center)
-        let columns = [(hours.tv, "hours of TV"), (hours.movies, "hours of movies"), (hours.music, "hours of music")]
+        let columns = [(hours.tv, String(localized: "hours of TV")), (hours.movies, String(localized: "hours of movies")),
+                       (hours.music, String(localized: "hours of music"))]
             .filter { $0.0 >= 1 }
             .map { stack([label(Int($0.0.rounded()).formatted(), size: 72, weight: .bold),
                           label($0.1, size: 28, weight: .semibold, alpha: 0.72)], spacing: 4, alignment: .center) }
@@ -241,8 +242,8 @@ final class YearInReviewViewController: UIViewController {
         let page = UIView()
         guard let first = review.topMovies.first else { return page }
         let headline = first.plays > 1
-            ? "You watched \(first.name) \(first.plays) times"
-            : "Your favorite was \(first.name)"
+            ? String(localized: "You watched \(first.name) \(first.plays) times")
+            : String(localized: "Your favorite was \(first.name)")
         let posters = review.topMovies.map { movie -> UIView in
             let poster = UIImageView()
             poster.contentMode = .scaleAspectFill
@@ -261,13 +262,13 @@ final class YearInReviewViewController: UIViewController {
             let name = label(movie.name, size: 26, weight: .semibold)
             name.widthAnchor.constraint(lessThanOrEqualToConstant: 260).isActive = true
             return stack([poster, name,
-                          label("\(movie.plays) \(movie.plays == 1 ? "play" : "plays")", size: 24, weight: .medium, alpha: 0.68)],
+                          label(String(localized: "\(movie.plays) plays"), size: 24, weight: .medium, alpha: 0.68)],
                          spacing: 10, alignment: .center)
         }
         let row = UIStackView(arrangedSubviews: posters)
         row.spacing = 60
         row.alignment = .top
-        let all = stack([label("Your top movies".uppercased(), size: 30, weight: .bold, alpha: 0.72),
+        let all = stack([label(String(localized: "Your top movies").uppercased(), size: 30, weight: .bold, alpha: 0.72),
                          label(headline, size: 64, weight: .heavy, lines: 2), row],
                         spacing: 20, alignment: .center)
         all.setCustomSpacing(70, after: all.arrangedSubviews[1])
@@ -283,10 +284,14 @@ final class YearInReviewViewController: UIViewController {
     private func whenYouWatchPage() -> UIView {
         let page = UIView()
         guard let time = review.watchTime else { return page }
-        let article = time.part == .afternoon || time.part == .evening ? "an" : "a"
-        let headline = "You’re \(article) \(time.part.rawValue) watcher"
-        let detail = "Your busiest hour is \(Self.hourName(time.peakHour))."
-        let text = stack([label("When you watch".uppercased(), size: 30, weight: .bold, alpha: 0.72),
+        let headline = switch time.part {
+        case .morning: String(localized: "You’re a morning watcher")
+        case .afternoon: String(localized: "You’re an afternoon watcher")
+        case .evening: String(localized: "You’re an evening watcher")
+        case .lateNight: String(localized: "You’re a late-night watcher")
+        }
+        let detail = String(localized: "Your busiest hour is \(Self.hourName(time.peakHour)).")
+        let text = stack([label(String(localized: "When you watch").uppercased(), size: 30, weight: .bold, alpha: 0.72),
                           label(headline, size: 96, weight: .heavy),
                           label(detail, size: 36, weight: .medium, alpha: 0.85)],
                          spacing: 12, alignment: .center)
@@ -391,13 +396,12 @@ final class YearInReviewViewController: UIViewController {
     }
 
     private static func hourName(_ hour: Int) -> String {
-        let suffix = hour < 12 ? "AM" : "PM"
-        let twelve = hour % 12 == 0 ? 12 : hour % 12
-        return "\(twelve) \(suffix)"
+        let date = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date()) ?? Date()
+        return date.formatted(.dateTime.hour())
     }
 
     private static func dateAndTime(_ date: Date) -> String {
-        date.formatted(.dateTime.month(.wide).day()) + " at " + date.formatted(date: .omitted, time: .shortened)
+        String(localized: "\(date.formatted(.dateTime.month(.wide).day())) at \(date.formatted(date: .omitted, time: .shortened))")
     }
 
     private static let dayFormatter: DateFormatter = {

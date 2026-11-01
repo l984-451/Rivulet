@@ -200,10 +200,10 @@ final class LiveScoresPaneView: UIView {
 
     /// "Scores paused" while polls fail, "Updated N min ago" on the worker's stale copy.
     static func statusText(board: Scoreboard?, isPaused: Bool, now: Date) -> String? {
-        if isPaused { return "Scores paused" }
+        if isPaused { return String(localized: "Scores paused") }
         guard let board, board.stale else { return nil }
         let minutes = max(1, Int(now.timeIntervalSince(board.fetchedAt) / 60))
-        return "Updated \(minutes) min ago"
+        return String(localized: "Updated \(minutes) min ago")
     }
 
     // MARK: - Content
@@ -409,7 +409,7 @@ private final class ScoresPaneCardView: UIView {
             previous = logo
         }
 
-        liveBadge.text = "LIVE"
+        liveBadge.text = String(localized: "LIVE")
         liveBadge.font = .systemFont(ofSize: 17, weight: .bold)
         liveBadge.textColor = .white
         liveBadge.textAlignment = .center
@@ -443,7 +443,7 @@ private final class ScoresPaneCardView: UIView {
         icon.tintColor = .white
         icon.contentMode = .scaleAspectFit
         let title = UILabel()
-        title.text = "Watch with Scores"
+        title.text = String(localized: "Watch with Scores")
         title.font = .systemFont(ofSize: 25, weight: .semibold)
         title.textColor = .white
         applyChromeTextShadow([title])

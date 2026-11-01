@@ -357,10 +357,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// The generated row's second line: the model's download until it is on disk.
     static var generatedSubtitleStatus: String {
         switch SpeechModelStore.shared.state {
-        case .ready: return "Generated"
-        case .absent: return "Generated, downloads 230 MB"
-        case .downloading(let fraction): return "Downloading \(Int(fraction * 100))%"
-        case .failed: return "Download failed, select to retry"
+        case .ready: return String(localized: "Generated")
+        case .absent: return String(localized: "Generated, downloads 230 MB")
+        case .downloading(let fraction): return String(localized: "Downloading \(Int(fraction * 100))%")
+        case .failed: return String(localized: "Download failed, select to retry")
         }
     }
     /// Why the filter can't mute language on this title right now; nil when it can.
@@ -430,7 +430,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
     @Published private(set) var itemGeneration = 0
-    var title: String { metadata.title ?? "Unknown" }
+    var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
         if metadata.type == "episode" {
             let show = metadata.grandparentTitle ?? ""
@@ -1790,7 +1790,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         await ensureStreamURLPrepared()
 
         guard let url = streamURL else {
-            errorMessage = "No stream URL available"
+            errorMessage = String(localized: "No stream URL available")
             playbackState = .failed(.invalidURL)
             return
         }
@@ -1852,7 +1852,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             if let playerError = error as? PlayerError {
                 errorMessage = playerError.userFacingDescription
             } else {
-                errorMessage = "Something went wrong during playback. Please try again."
+                errorMessage = String(localized: "Something went wrong during playback. Please try again.")
             }
             playbackState = .failed(.loadFailed(technicalError))
 
@@ -2688,7 +2688,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             let seasonNum = metadata.parentIndex ?? 0
             let episodeNum = metadata.index ?? 0
             let epTitle = metadata.title ?? ""
-            displayTitle = "S\(seasonNum) E\(episodeNum) · \(epTitle)"
+            displayTitle = String(localized: "S\(seasonNum) E\(episodeNum) · \(epTitle)")
         } else {
             displayTitle = metadata.title ?? ""
         }
@@ -2864,8 +2864,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         switch channels {
         case 8: channelDesc = "7.1"
         case 6: channelDesc = "5.1"
-        case 2: channelDesc = "Stereo"
-        case 1: channelDesc = "Mono"
+        case 2: channelDesc = String(localized: "Stereo")
+        case 1: channelDesc = String(localized: "Mono")
         default: channelDesc = channels > 0 ? "\(channels)ch" : ""
         }
 
@@ -2967,7 +2967,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 let end = CMTime(value: CMTimeValue(endMs), timescale: 1000)
                 let range = CMTimeRange(start: start, end: end)
 
-                let title = chapter.tag ?? "Chapter \(chapter.index ?? 0)"
+                let title = chapter.tag ?? String(localized: "Chapter \(chapter.index ?? 0)")
                 var items = [makeMetadataItem(.commonIdentifierTitle, value: title)]
 
                 if let index = chapter.index, let imageData = chapterThumbnails[index] {
@@ -2992,7 +2992,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             let end = CMTime(value: CMTimeValue(endMs), timescale: 1000)
             let range = CMTimeRange(start: start, end: end)
 
-            let titleItem = makeMetadataItem(.commonIdentifierTitle, value: marker.type?.capitalized ?? "Marker")
+            let titleItem = makeMetadataItem(.commonIdentifierTitle, value: marker.type?.capitalized ?? String(localized: "Marker"))
             return AVTimedMetadataGroup(items: [titleItem], timeRange: range)
         }
 
@@ -4513,7 +4513,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         let generation = itemGeneration
         let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         var tracks = currentPlexTrackIDs()
-        showCompatibilityNotice("Downloading Subtitles…")
+        showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
         do {
             try await network.downloadSubtitle(
                 serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, resultKey: resultKey)
@@ -4538,10 +4538,10 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
                 return
             }
-            showCompatibilityNotice("Subtitles Didn't Arrive")
+            showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive"))
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
-            showCompatibilityNotice("Couldn't Download Subtitles")
+            showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
         }
     }
 
@@ -5332,17 +5332,17 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Label for current skip button
     var skipButtonLabel: String {
-        guard let marker = activeMarker else { return "Skip" }
+        guard let marker = activeMarker else { return String(localized: "Skip") }
         if marker.isIntro {
-            return "Skip Intro"
+            return String(localized: "Skip Intro")
         } else if marker.isCredits {
-            return "Skip Credits"
+            return String(localized: "Skip Credits")
         } else if marker.isCommercial {
-            return "Skip Ad"
+            return String(localized: "Skip Ad")
         } else if marker.isRecap {
-            return "Skip Recap"
+            return String(localized: "Skip Recap")
         }
-        return "Skip"
+        return String(localized: "Skip")
     }
 
     /// Pill title. The auto-skip countdown is shown as a left-to-right fill
@@ -6258,7 +6258,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Stops the countdown and says why. The post-video page shows it; with
     /// no page up (a pick from the Up Next panel) it shows as a notice.
     private func showNextEpisodeError() {
-        let message = playQueue == nil ? "Couldn't load the next episode." : "Couldn't load the next item."
+        let message = playQueue == nil ? String(localized: "Couldn't load the next episode.") : String(localized: "Couldn't load the next item.")
         nextEpisodeError = message
         cancelCountdown()
         if postVideoState == .hidden { showCompatibilityNotice(message) }

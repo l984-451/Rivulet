@@ -11,7 +11,7 @@ import UIKit
 final class AboutCollectionCell: UICollectionViewCell {
     static let reuseID = "AboutCollectionCell"
 
-    private let header = sectionHeaderLabel("About")
+    private let header = sectionHeaderLabel(String(localized: "About"))
     // Both cards are focusable controls: select the synopsis → description popup;
     // select the advisory → content-rating popup.
     private let leftCard = AboutCardControl()
@@ -101,7 +101,8 @@ final class AboutCollectionCell: UICollectionViewCell {
         sealIcon.setContentHuggingPriority(.required, for: .horizontal)
         sealLabel.font = .systemFont(ofSize: 21, weight: .bold)
         sealLabel.textColor = UIColor.white.withAlphaComponent(0.8)
-        sealLabel.text = "Common Sense"
+        // swiftlint:disable:next unlocalized_ui_text
+        sealLabel.text = "Common Sense"   // brand name
         sealRow.axis = .horizontal
         sealRow.alignment = .center
         sealRow.spacing = 6
@@ -207,7 +208,7 @@ final class AboutCollectionCell: UICollectionViewCell {
             ageLabel.text = detail.contentRating ?? "NR"
             sealRow.isHidden = true
             oneLinerLabel.isHidden = true
-            fallbackCaption.text = "Rated"
+            fallbackCaption.text = String(localized: "Rated")
             fallbackCaption.isHidden = false
         }
         // Topics + paragraph are popup-only; never shown inline.
@@ -353,29 +354,29 @@ final class InfoColumnsView: UIView {
     func configure(detail: MediaItemDetail) {
         // Information
         var info: [(String, String)] = []
-        if let y = detail.item.year { info.append(("Released", "\(y)")) }
-        if let runtime = detail.item.runtime, runtime > 0 { info.append(("Run Time", Self.runtime(runtime))) }
-        if let r = detail.contentRating, !r.isEmpty { info.append(("Rated", r)) }
-        if !detail.genres.isEmpty { info.append(("Genres", detail.genres.prefix(4).joined(separator: ", "))) }
-        if !detail.studios.isEmpty { info.append(("Studio", detail.studios.prefix(2).joined(separator: ", "))) }
-        information.configure(title: "Information", rows: info, style: style)
+        if let y = detail.item.year { info.append((String(localized: "Released"), "\(y)")) }
+        if let runtime = detail.item.runtime, runtime > 0 { info.append((String(localized: "Run Time"), Self.runtime(runtime))) }
+        if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
+        if !detail.genres.isEmpty { info.append((String(localized: "Genres"), detail.genres.prefix(4).joined(separator: ", "))) }
+        if !detail.studios.isEmpty { info.append((String(localized: "Studio"), detail.studios.prefix(2).joined(separator: ", "))) }
+        information.configure(title: String(localized: "Information"), rows: info, style: style)
 
         // Languages — from the first media source's tracks.
         let source = detail.primarySource
         var langs: [(String, String)] = []
         if let audio = source?.audioTracks, !audio.isEmpty {
             let names = uniqueOrdered(audio.compactMap { Self.languageName($0.language) })
-            if !names.isEmpty { langs.append(("Audio", names.joined(separator: ", "))) }
+            if !names.isEmpty { langs.append((String(localized: "Audio"), names.joined(separator: ", "))) }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {
             let names = uniqueOrdered(subs.compactMap { t -> String? in
                 guard let n = Self.languageName(t.language) else { return nil }
                 return t.isHearingImpaired ? "\(n) (SDH)" : n
             })
-            if !names.isEmpty { langs.append(("Subtitles", names.joined(separator: ", "))) }
+            if !names.isEmpty { langs.append((String(localized: "Subtitles"), names.joined(separator: ", "))) }
         }
-        if langs.isEmpty { langs.append(("Audio", "Unknown")) }
-        languages.configure(title: "Languages", rows: langs, style: style)
+        if langs.isEmpty { langs.append((String(localized: "Audio"), String(localized: "Unknown"))) }
+        languages.configure(title: String(localized: "Languages"), rows: langs, style: style)
 
         // Accessibility — SDH / AD presence from the tracks.
         var access: [(String, String)] = []
@@ -383,10 +384,10 @@ final class InfoColumnsView: UIView {
         let hasAD = source?.audioTracks.contains {
             ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri")
         } ?? false
-        if hasSDH { access.append(("SDH", "Subtitles for the deaf and hard of hearing are available.")) }
-        if hasAD { access.append(("AD", "Audio descriptions are available.")) }
-        if access.isEmpty { access.append(("", "No accessibility features detected.")) }
-        accessibility.configure(title: "Accessibility", rows: access, style: style)
+        if hasSDH { access.append(("SDH", String(localized: "Subtitles for the deaf and hard of hearing are available."))) }
+        if hasAD { access.append(("AD", String(localized: "Audio descriptions are available."))) }
+        if access.isEmpty { access.append(("", String(localized: "No accessibility features detected."))) }
+        accessibility.configure(title: String(localized: "Accessibility"), rows: access, style: style)
     }
 
     private func uniqueOrdered(_ values: [String]) -> [String] {
@@ -397,8 +398,8 @@ final class InfoColumnsView: UIView {
 
     private static func runtime(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded()); let h = total / 3600, m = (total % 3600) / 60
-        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
-        return "\(m) min"
+        if h > 0 { return m > 0 ? String(localized: "\(h)h \(m)m") : String(localized: "\(h)h") }
+        return String(localized: "\(m) min")
     }
 
     static func languageName(_ code: String?) -> String? {

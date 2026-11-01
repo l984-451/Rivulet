@@ -151,7 +151,7 @@ final class IOSDownloadCenter: ObservableObject {
         guard record.state == .completed, let name = record.fileName else { return nil }
         let url = Self.directory.appending(path: name)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            fail(record.id, "File missing")
+            fail(record.id, String(localized: "File missing"))
             return nil
         }
 
@@ -418,7 +418,7 @@ final class IOSDownloadCenter: ObservableObject {
             if status == 404 { forgetConversion(id) }
             if let reason = DownloadRules.failureReason(httpStatus: status) { fail(id, reason) } else { set(id, .waitingForServer) }
         } catch PlexAPIError.parsingError {
-            fail(id, "The server sent a response Rivulet couldn't read")
+            fail(id, String(localized: "The server sent a response Rivulet couldn't read"))
         } catch {
             set(id, .waitingForServer)
         }

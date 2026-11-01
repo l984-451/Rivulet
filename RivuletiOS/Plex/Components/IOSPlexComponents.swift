@@ -166,8 +166,8 @@ extension PlexMetadata {
     /// VoiceOver value for a tile's watch state.
     var watchStateDescription: String {
         if let left = timeLeftText { return left }
-        if let fraction = progressBarFraction { return "\(Int(fraction * 100)) percent watched" }
-        return isWatched ? "Watched" : ""
+        if let fraction = progressBarFraction { return String(localized: "\(Int(fraction * 100)) percent watched") }
+        return isWatched ? String(localized: "Watched") : ""
     }
 
     /// PlexMetadata's `==` compares only ratingKey, so SwiftUI skips a tile whose
@@ -665,7 +665,7 @@ extension GeometryProxy {
 /// Error state with Retry, used by every content surface. Home and Library
 /// also offer the Downloads list when there is something in it.
 struct IOSPlexErrorView: View {
-    let title: String
+    let title: LocalizedStringKey
     let message: String
     var offersDownloads = false
     let retry: () async -> Void

@@ -12,14 +12,14 @@ nonisolated enum DownloadPlan: Equatable, Sendable {
 
 /// The download decisions that need no files, network or UI.
 nonisolated enum DownloadRules {
-    static let relayReason = "Downloads need your home network or a direct remote connection"
-    static let remotePassReason = "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home"
-    static let noSpaceReason = "Not enough free space on this device"
-    static let multiPartReason = "This version is split into parts; choose a converted quality"
-    static let noFileReason = "This item has no downloadable file"
-    static let conversionGoneReason = "The server no longer has this conversion"
-    static let mismatchReason = "The downloaded file didn't match the server's copy"
-    static let shortFileReason = "The download was cut short"
+    static let relayReason = String(localized: "Downloads need your home network or a direct remote connection")
+    static let remotePassReason = String(localized: "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home")
+    static let noSpaceReason = String(localized: "Not enough free space on this device")
+    static let multiPartReason = String(localized: "This version is split into parts; choose a converted quality")
+    static let noFileReason = String(localized: "This item has no downloadable file")
+    static let conversionGoneReason = String(localized: "The server no longer has this conversion")
+    static let mismatchReason = String(localized: "The downloaded file didn't match the server's copy")
+    static let shortFileReason = String(localized: "The download was cut short")
 
     /// Transfer errors that mean the server or the network is out of reach for now.
     static let connectivityErrorCodes: Set<Int> = [
@@ -44,7 +44,7 @@ nonisolated enum DownloadRules {
         case .deciding, .processing, .unknown: .preparing(progress: item.progress ?? 0)
         case .waiting: .waitingForServer
         case .available: .downloading
-        case .error: .failed(reason: item.errorText ?? "The server couldn't convert this item")
+        case .error: .failed(reason: item.errorText ?? String(localized: "The server couldn't convert this item"))
         case .expired: .failed(reason: conversionGoneReason)
         }
     }
@@ -91,11 +91,11 @@ nonisolated enum DownloadRules {
     /// The reason to show for an HTTP status, or nil when it is worth retrying later.
     static func failureReason(httpStatus status: Int) -> String? {
         switch status {
-        case 401: "Plex didn't accept the sign-in; sign in again, then retry"
+        case 401: String(localized: "Plex didn't accept the sign-in; sign in again, then retry")
         case 403: remotePassReason
-        case 404, 410: "The file is no longer on the server"
+        case 404, 410: String(localized: "The file is no longer on the server")
         case 408, 429: nil
-        case 400..<500: "The server refused the download (HTTP \(status))"
+        case 400..<500: String(localized: "The server refused the download (HTTP \(status))")
         default: nil
         }
     }

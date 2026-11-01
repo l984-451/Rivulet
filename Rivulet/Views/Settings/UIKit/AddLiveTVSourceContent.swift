@@ -47,7 +47,7 @@ struct EntryStep {
     /// One sentence on the entry page saying what to type, examples included.
     let message: String
     /// What the row shows while the field is empty.
-    var placeholder = "Optional"
+    var placeholder: String
     var keyboard: UIKeyboardType = .default
     var contentType: UITextContentType?
     var isSecure = false
@@ -55,8 +55,26 @@ struct EntryStep {
     let value: () -> String
     let set: (String) -> Void
 
+    /// Literal `title`, `message` and `placeholder` are extracted to the string catalog.
+    init(id: String, title: String.LocalizationValue, message: String.LocalizationValue,
+         placeholder: String.LocalizationValue = "Optional", keyboard: UIKeyboardType = .default,
+         contentType: UITextContentType? = nil, isSecure: Bool = false,
+         suggestions: [(label: String, value: String)] = [],
+         value: @escaping () -> String, set: @escaping (String) -> Void) {
+        self.id = id
+        self.title = String(localized: title)
+        self.message = String(localized: message)
+        self.placeholder = String(localized: placeholder)
+        self.keyboard = keyboard
+        self.contentType = contentType
+        self.isSecure = isSecure
+        self.suggestions = suggestions
+        self.value = value
+        self.set = set
+    }
+
     var row: SettingsRowItem {
-        SettingsRowItem(id: id, title: title,
+        SettingsRowItem(id: id, verbatim: title,
                         kind: .textEntry(value: value, placeholder: placeholder, hint: message,
                                          suggestions: suggestions, keyboardType: keyboard,
                                          isSecure: isSecure, contentType: contentType, set: set))
@@ -87,17 +105,17 @@ extension SettingsContent {
             serverRow(id: "addThreadfin", title: "Threadfin", page: .addThreadfin, app: .threadfin),
             .header("Provider"),
             SettingsRowItem(id: "addXtream", title: "Xtream Codes",
-                            kind: .navigationAction(.addXtream, value: { "Provider login" },
+                            kind: .navigationAction(.addXtream, value: { String(localized: "Provider login") },
                                                     prepare: { beginDraft(displayName: "") })),
             SettingsRowItem(id: "addPlaylistURL", title: "Playlist URL",
-                            kind: .navigationAction(.addPlaylistURL, value: { "M3U link" },
+                            kind: .navigationAction(.addPlaylistURL, value: { String(localized: "M3U link") },
                                                     prepare: { beginDraft(displayName: "") }))
         ]
     }
 
     private static func serverRow(id: String, title: String, page: SettingsPage,
                                   app: LiveTVServerApp) -> SettingsRowItem {
-        SettingsRowItem(id: id, title: title,
+        SettingsRowItem(id: id, verbatim: title,
                         kind: .navigationAction(page, value: nil, prepare: { beginDraft(displayName: "", app: app) }))
     }
 
@@ -125,9 +143,7 @@ extension SettingsContent {
     private static func xtreamSteps(_ draft: AddSourceDraft) -> [EntryStep] {
         [
             EntryStep(id: "xtreamServerField", title: "Server Address",
-                      message: "Enter the server address from your provider, with its port, "
-                          + "for example http://provider.example:8080. You can also paste a link "
-                          + "that includes your username and password.",
+                      message: "Enter the server address from your provider, with its port, for example http://provider.example:8080. You can also paste a link that includes your username and password.",
                       placeholder: "Required", keyboard: .URL, contentType: .URL,
                       value: { draft.serverURL },
                       set: { text in
@@ -177,13 +193,11 @@ extension SettingsContent {
     private static func playlistSteps(_ draft: AddSourceDraft) -> [EntryStep] {
         [
             EntryStep(id: "m3uURLField", title: "Playlist URL",
-                      message: "Enter the M3U playlist link from your provider, "
-                          + "for example http://provider.example/playlist.m3u.",
+                      message: "Enter the M3U playlist link from your provider, for example http://provider.example/playlist.m3u.",
                       placeholder: "Required", keyboard: .URL, contentType: .URL,
                       value: { draft.m3uURL }, set: { draft.m3uURL = $0; draft.status = .idle }),
             EntryStep(id: "epgURLField", title: "Guide URL",
-                      message: "If your provider gave you a guide link (XMLTV), enter it. "
-                          + "Otherwise leave this empty: Rivulet uses the guide the playlist names, if it has one.",
+                      message: "If your provider gave you a guide link (XMLTV), enter it. Otherwise leave this empty: Rivulet uses the guide the playlist names, if it has one.",
                       keyboard: .URL, contentType: .URL,
                       value: { draft.epgURL }, set: { draft.epgURL = $0; draft.status = .idle }),
             nameStep(draft, fallback: LiveTVSourceConnector.defaultPlaylistName)
@@ -219,8 +233,7 @@ extension SettingsContent {
                       keyboard: .asciiCapable, contentType: .password, isSecure: true,
                       value: { draft.password }, set: { draft.password = $0; draft.status = .idle }),
             EntryStep(id: "channelProfileField", title: "Channel Profile",
-                      message: "The name of a Dispatcharr channel profile, to show only its channels. "
-                          + "Leave it empty for every channel.",
+                      message: "The name of a Dispatcharr channel profile, to show only its channels. Leave it empty for every channel.",
                       placeholder: "All Channels", keyboard: .asciiCapable,
                       value: { draft.channelProfile }, set: { draft.channelProfile = $0; draft.status = .idle }),
             nameStep(draft, fallback: LiveTVSourceConnector.defaultServerName)
@@ -245,7 +258,7 @@ extension SettingsContent {
     }
 
     private static func tvheadendSteps(_ draft: AddSourceDraft) -> [EntryStep] {
-        let loginMessage = "Only needed if your server asks for a login, and to record. Leave both empty to just watch."
+        let loginMessage: String.LocalizationValue = "Only needed if your server asks for a login, and to record. Leave both empty to just watch."
         return [
             EntryStep(id: "tvhServerField", title: "Server Address",
                       message: "Enter your Tvheadend server's address, with its port.",
@@ -297,10 +310,11 @@ extension SettingsContent {
     // MARK: Shared form pieces
 
     private static func nameStep(_ draft: AddSourceDraft, fallback: String) -> EntryStep {
-        EntryStep(id: "displayNameField", title: "Name",
-                  message: "How this source appears in Live TV. Leave it empty to use \u{201C}\(fallback)\u{201D}.",
-                  placeholder: fallback,
-                  value: { draft.displayName }, set: { draft.displayName = $0 })
+        var step = EntryStep(id: "displayNameField", title: "Name",
+                             message: "How this source appears in Live TV. Leave it empty to use \u{201C}\(fallback)\u{201D}.",
+                             value: { draft.displayName }, set: { draft.displayName = $0 })
+        step.placeholder = fallback
+        return step
     }
 
     private static func addButton(_ draft: AddSourceDraft, action: @escaping (UIViewController) -> Void) -> SettingsRowItem {
@@ -343,7 +357,7 @@ extension SettingsContent {
         draft?.status = .idle
         page?.reloadRows()
         guard let page else { return }
-        page.present(ConfirmationPopupViewController(title: title, message: message, confirmTitle: "OK",
+        page.present(ConfirmationPopupViewController(title: title, message: message, confirmTitle: String(localized: "OK"),
                                                      cancelTitle: nil, onConfirm: {}),
                      animated: true)
     }

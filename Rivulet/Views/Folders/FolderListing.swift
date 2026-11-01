@@ -130,7 +130,7 @@ enum FolderRowDetail {
         case .video(let item):
             // A resume point outranks the watched flag (CLAUDE.md "Watch State").
             if item.isInProgress, let runtime = item.runtime {
-                return "\(length(runtime - item.userState.viewOffset)) left"
+                return String(localized: "\(length(runtime - item.userState.viewOffset)) left")
             }
             if item.isWatched { return "✓" }
             return item.runtime.map { length($0) } ?? ""
@@ -140,7 +140,7 @@ enum FolderRowDetail {
     /// "11 min", "1 hr 32 min": rounded to the minute, never under one.
     static func length(_ seconds: TimeInterval) -> String {
         let minutes = max(1, Int((seconds / 60).rounded()))
-        guard minutes >= 60 else { return "\(minutes) min" }
-        return minutes % 60 == 0 ? "\(minutes / 60) hr" : "\(minutes / 60) hr \(minutes % 60) min"
+        guard minutes >= 60 else { return String(localized: "\(minutes) min") }
+        return minutes % 60 == 0 ? String(localized: "\(minutes / 60) hr") : String(localized: "\(minutes / 60) hr \(minutes % 60) min")
     }
 }

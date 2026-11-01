@@ -140,7 +140,7 @@ nonisolated final class IOSDownloadTransfer: NSObject, URLSessionDownloadDelegat
             try? files.removeItem(at: destination)
             try files.moveItem(at: location, to: destination)
         } catch {
-            let state = DownloadState.failed(reason: "Couldn't save the file: \(error.localizedDescription)")
+            let state = DownloadState.failed(reason: String(localized: "Couldn't save the file: \(error.localizedDescription)"))
             return send(.interrupted(recordID: recordID, taskID: taskID, state: state))
         }
         Self.excludeFromBackup(destination)

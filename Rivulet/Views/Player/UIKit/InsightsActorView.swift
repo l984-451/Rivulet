@@ -31,7 +31,7 @@ final class InsightsActorView: UIView {
     private(set) var detail: PersonDetail?
 
     private let portrait = UIImageView()
-    private let bio = PlayerSummaryButton(text: "Loading…", lines: 4)
+    private let bio = PlayerSummaryButton(text: String(localized: "Loading…"), lines: 4)
     private let posterScroll = UIScrollView()
     private let posterStack = UIStackView()
     private var bioWidth: NSLayoutConstraint?
@@ -102,7 +102,7 @@ final class InsightsActorView: UIView {
     func populate(_ detail: PersonDetail) {
         self.detail = detail
         let text = detail.biography?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        bio.setText(text.isEmpty ? "No biography available." : text)
+        bio.setText(text.isEmpty ? String(localized: "No biography available.") : text)
         if let url = detail.portraitURL, url != person.imageURL { loadPortrait(url) }
         for entry in detail.movies + detail.shows {
             posterStack.addArrangedSubview(InsightsPosterCardView(item: entry.item))
@@ -111,7 +111,7 @@ final class InsightsActorView: UIView {
 
     /// The load failed or found nothing: portrait and name stay, no posters.
     func showDetailsUnavailable() {
-        bio.setText("No details available.")
+        bio.setText(String(localized: "No details available."))
     }
 
     /// Menu folds a reading bio back first.

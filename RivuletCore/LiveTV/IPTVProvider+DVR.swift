@@ -56,7 +56,7 @@ nonisolated enum DispatcharrDVRError: LocalizedError {
     case channelNotFound
 
     var errorDescription: String? {
-        "Dispatcharr doesn't list this channel, so it can't record it. Refresh the channel list and try again."
+        String(localized: "Dispatcharr doesn't list this channel, so it can't record it. Refresh the channel list and try again.")
     }
 }
 
@@ -107,7 +107,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
         }
         var options = [LiveTVRecordOption(
             id: "\(program.id)#once",
-            title: "Record",
+            title: String(localized: "Record"),
             scope: .single,
             payload: "once"
         )]
@@ -115,9 +115,9 @@ extension IPTVProvider: LiveTVRecordingProvider {
         // channel to be mapped to guide data on the server.
         if !program.isMovie, let guide = await epgData(for: target, using: service),
            let tvgId = guide.tvgId, !tvgId.isEmpty {
-            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: "Record Series",
+            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: String(localized: "Record Series"),
                                               scope: .series, payload: "all"))
-            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: "Record New Episodes",
+            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: String(localized: "Record New Episodes"),
                                               scope: .series, payload: "new"))
         }
         return options
@@ -184,7 +184,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
             var result = LiveTVScheduledRecording(
                 id: String(recording.id),
                 sourceId: sourceId,
-                title: program?.title ?? summary?.name ?? "Recording",
+                title: program?.title ?? summary?.name ?? String(localized: "Recording"),
                 subtitle: program?.subtitle,
                 startTime: start,
                 endTime: end,
@@ -220,11 +220,11 @@ extension IPTVProvider: LiveTVRecordingProvider {
         var rules: [LiveTVRecordingRule] = []
 
         for rule in try await service.fetchSeriesRules() {
-            let mode = rule.mode == "new" ? "New episodes" : "All episodes"
+            let mode = rule.mode == "new" ? String(localized: "New episodes") : String(localized: "All episodes")
             rules.append(LiveTVRecordingRule(
                 id: DispatcharrRuleID.series(rule).encoded,
                 sourceId: sourceId,
-                title: (rule.title?.isEmpty == false ? rule.title : nil) ?? rule.tvgId ?? "Series",
+                title: (rule.title?.isEmpty == false ? rule.title : nil) ?? rule.tvgId ?? String(localized: "Series"),
                 detail: mode
             ))
         }
@@ -237,7 +237,7 @@ extension IPTVProvider: LiveTVRecordingProvider {
             rules.append(LiveTVRecordingRule(
                 id: DispatcharrRuleID.recurring(rule.id).encoded,
                 sourceId: sourceId,
-                title: (rule.name?.isEmpty == false ? rule.name : nil) ?? channelName ?? "Repeating Recording",
+                title: (rule.name?.isEmpty == false ? rule.name : nil) ?? channelName ?? String(localized: "Repeating Recording"),
                 detail: [days, time, channelName].compactMap { $0 }.joined(separator: " · ")
             ))
         }
@@ -341,12 +341,13 @@ extension IPTVProvider: LiveTVRecordingProvider {
 
     /// Dispatcharr numbers days from Monday (0) to Sunday (6).
     private static func dayNames(_ days: [Int]) -> String? {
-        let names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        let symbols = Calendar.current.shortWeekdaySymbols  // Sunday first
+        let names = (1...7).map { symbols[$0 % 7] }
         let valid = days.filter { (0...6).contains($0) }.sorted()
         guard !valid.isEmpty else { return nil }
-        if valid.count == 7 { return "Every day" }
-        if valid == [0, 1, 2, 3, 4] { return "Weekdays" }
-        if valid == [5, 6] { return "Weekends" }
+        if valid.count == 7 { return String(localized: "Every day") }
+        if valid == [0, 1, 2, 3, 4] { return String(localized: "Weekdays") }
+        if valid == [5, 6] { return String(localized: "Weekends") }
         return valid.map { names[$0] }.joined(separator: ", ")
     }
 }

@@ -124,7 +124,7 @@ struct ProfilePickerOverlay: View {
                     } else {
                         isLoading = false
                         // Show PIN entry with error if PIN was invalid
-                        pinEntryError = pinWasInvalid ? "Saved PIN is no longer valid. Please enter your PIN." : nil
+                        pinEntryError = pinWasInvalid ? String(localized: "Saved PIN is no longer valid. Please enter your PIN.") : nil
                         showPinEntry = true
                     }
                 }
@@ -168,7 +168,7 @@ struct ProfilePickerOverlay: View {
             selectedUserForPin = nil
             finish()
         } else {
-            pinEntryError = "Incorrect PIN. Please try again."
+            pinEntryError = String(localized: "Incorrect PIN. Please try again.")
         }
 
         isLoading = false

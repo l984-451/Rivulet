@@ -73,7 +73,7 @@ private struct IOSLiveSourceDetailView: View {
         Form {
             if let source {
                 Section {
-                    LabeledContent("Status", value: source.isConnected ? "Connected" : "Offline")
+                    LabeledContent("Status", value: source.isConnected ? String(localized: "Connected") : String(localized: "Offline"))
                     LabeledContent("Channels", value: "\(source.channelCount)")
                     if let profile = source.channelProfile, !profile.isEmpty {
                         LabeledContent("Channel Profile", value: profile)
@@ -116,7 +116,7 @@ private struct IOSLiveSourceDetailView: View {
                 }
             }
         }
-        .navigationTitle(source?.displayName ?? "Source")
+        .navigationTitle(source?.displayName ?? String(localized: "Source"))
     }
 }
 
@@ -207,7 +207,7 @@ struct IOSLiveAddSourceSheet: View {
         .presentationSizing(.form)
     }
 
-    private func row(_ title: String, detail: String, systemImage: String) -> some View {
+    private func row(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -250,7 +250,7 @@ private struct IOSLiveDispatcharrForm: View {
 
             Section {
                 IOSFormField("Channel Profile", text: $profile, prompt: "All Channels", kind: .username)
-                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultServerName)
+                IOSFormField("Name", text: $name, prompt: LocalizedStringKey(LiveTVSourceConnector.defaultServerName))
             } header: {
                 Text("Options")
             } footer: {
@@ -308,7 +308,7 @@ private struct IOSLiveXtreamForm: View {
                 Text("Account")
             }
             Section {
-                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultPlaylistName)
+                IOSFormField("Name", text: $name, prompt: LocalizedStringKey(LiveTVSourceConnector.defaultPlaylistName))
             } footer: {
                 Text("How this source appears in Live TV.")
             }
@@ -376,7 +376,7 @@ private struct IOSLiveTvheadendForm: View {
                 Text("Only needed if your server asks for a login, and to record. Leave both empty to just watch.")
             }
             Section {
-                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultTvheadendName)
+                IOSFormField("Name", text: $name, prompt: LocalizedStringKey(LiveTVSourceConnector.defaultTvheadendName))
             } footer: {
                 Text("How this source appears in Live TV.")
             }
@@ -424,7 +424,7 @@ private struct IOSLiveThreadfinForm: View {
                 Text("Your Threadfin server's address on your network, with its port.")
             }
             Section {
-                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultThreadfinName)
+                IOSFormField("Name", text: $name, prompt: LocalizedStringKey(LiveTVSourceConnector.defaultThreadfinName))
             } footer: {
                 Text("How this source appears in Live TV.")
             }
@@ -477,7 +477,7 @@ private struct IOSLivePlaylistForm: View {
                 Text("An XMLTV link for what's on. Leave it empty if the playlist names its own guide.")
             }
             Section {
-                IOSFormField("Name", text: $name, prompt: LiveTVSourceConnector.defaultPlaylistName)
+                IOSFormField("Name", text: $name, prompt: LocalizedStringKey(LiveTVSourceConnector.defaultPlaylistName))
             } footer: {
                 Text("How this source appears in Live TV.")
             }
@@ -512,12 +512,12 @@ private struct IOSLivePlaylistForm: View {
 private struct IOSFormField: View {
     enum Kind { case text, url, username, password }
 
-    let label: String
+    let label: LocalizedStringKey
     @Binding var text: String
-    let prompt: String
+    let prompt: LocalizedStringKey
     let kind: Kind
 
-    init(_ label: String, text: Binding<String>, prompt: String, kind: Kind = .text) {
+    init(_ label: LocalizedStringKey, text: Binding<String>, prompt: LocalizedStringKey, kind: Kind = .text) {
         self.label = label
         self._text = text
         self.prompt = prompt
@@ -536,17 +536,17 @@ private struct IOSFormField: View {
     @ViewBuilder private var field: some View {
         switch kind {
         case .password:
-            SecureField(label, text: $text, prompt: Text(verbatim: prompt))
+            SecureField(label, text: $text, prompt: Text(prompt))
                 .textContentType(.password)
         case .url:
-            TextField(label, text: $text, prompt: Text(verbatim: prompt))
+            TextField(label, text: $text, prompt: Text(prompt))
                 .keyboardType(.URL)
                 .textContentType(.URL)
         case .username:
-            TextField(label, text: $text, prompt: Text(verbatim: prompt))
+            TextField(label, text: $text, prompt: Text(prompt))
                 .textContentType(.username)
         case .text:
-            TextField(label, text: $text, prompt: Text(verbatim: prompt))
+            TextField(label, text: $text, prompt: Text(prompt))
         }
     }
 }

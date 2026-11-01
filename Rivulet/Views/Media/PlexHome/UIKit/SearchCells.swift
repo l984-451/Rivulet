@@ -63,7 +63,7 @@ final class SearchRecentsCell: UICollectionViewCell {
 
         // Matches the shelf row headers (ShelfRowCell) so Search reads as the
         // same page as Home, not a separate design.
-        headerLabel.text = "Recently Searched"
+        headerLabel.text = String(localized: "Recently Searched")
         headerLabel.font = Metrics.headerFont
         headerLabel.textColor = UIColor.white.withAlphaComponent(0.5)
         headerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -221,12 +221,12 @@ final class SearchRecentsCell: UICollectionViewCell {
     private static func subtitleText(for item: MediaItem) -> String {
         var parts: [String] = []
         switch item.kind {
-        case .movie: parts.append("Movie")
-        case .show: parts.append("TV Show")
-        case .season: parts.append("Season")
-        case .episode: parts.append("Episode")
-        case .collection: parts.append("Collection")
-        case .playlist: parts.append("Playlist")
+        case .movie: parts.append(String(localized: "Movie"))
+        case .show: parts.append(String(localized: "TV Show"))
+        case .season: parts.append(String(localized: "Season"))
+        case .episode: parts.append(String(localized: "Episode"))
+        case .collection: parts.append(String(localized: "Collection"))
+        case .playlist: parts.append(String(localized: "Playlist"))
         case .person, .unknown: break
         }
         if let year = item.year { parts.append(String(year)) }
@@ -288,7 +288,7 @@ final class SearchStateCell: UICollectionViewCell {
         messageLabel.numberOfLines = 0
         messageLabel.preferredMaxLayoutWidth = 520
 
-        retryLabel.text = "Try Again"
+        retryLabel.text = String(localized: "Try Again")
         retryLabel.font = .systemFont(ofSize: 26, weight: .medium)
         retryLabel.textColor = .white
         retryLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -334,7 +334,7 @@ final class SearchStateCell: UICollectionViewCell {
             spinner.isHidden = false
             spinner.startAnimating()
             iconView.isHidden = true
-            titleLabel.text = "Searching"
+            titleLabel.text = String(localized: "Searching")
             messageLabel.isHidden = true
             retryButton.isHidden = true
         case .error:
@@ -344,9 +344,9 @@ final class SearchStateCell: UICollectionViewCell {
             iconView.image = UIImage(systemName: "exclamationmark.triangle")?
                 .withConfiguration(UIImage.SymbolConfiguration(pointSize: 48, weight: .light))
             // The Apple TV app's wording.
-            titleLabel.text = "Search Not Available"
+            titleLabel.text = String(localized: "Search Not Available")
             messageLabel.isHidden = false
-            messageLabel.text = "This request wasn’t completed. Wait a moment and try again."
+            messageLabel.text = String(localized: "This request wasn’t completed. Wait a moment and try again.")
             retryButton.isHidden = false
         case .noResults:
             spinner.stopAnimating()
@@ -354,9 +354,9 @@ final class SearchStateCell: UICollectionViewCell {
             iconView.isHidden = false
             iconView.image = UIImage(systemName: "sparkles")?
                 .withConfiguration(UIImage.SymbolConfiguration(pointSize: 48, weight: .light))
-            titleLabel.text = "No Results"
+            titleLabel.text = String(localized: "No Results")
             messageLabel.isHidden = false
-            messageLabel.text = "Try a different title or check your spelling."
+            messageLabel.text = String(localized: "Try a different title or check your spelling.")
             retryButton.isHidden = true
         }
     }

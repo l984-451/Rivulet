@@ -52,9 +52,9 @@ final class AetherPlayer: ObservableObject {
                 parts.append(Locale.current.localizedString(forLanguageCode: language) ?? language)
             }
             if !codec.isEmpty { parts.append(codec.uppercased()) }
-            if channels > 0 { parts.append(channels == 2 ? "Stereo" : "\(channels) ch") }
+            if channels > 0 { parts.append(channels == 2 ? String(localized: "Stereo") : String(localized: "\(channels) ch")) }
             if isHearingImpaired { parts.append("SDH") }
-            if isForced { parts.append("Forced") }
+            if isForced { parts.append(String(localized: "Forced")) }
             return parts.joined(separator: " · ")
         }
     }
@@ -895,19 +895,19 @@ final class AetherPlayer: ObservableObject {
 
     /// Only kinds that change what the viewer should do get their own sentence.
     private static func userFacingFailure(_ info: PlaybackErrorInfo?) -> String {
-        let generic = "This video couldn't be played. Check your connection and try again."
+        let generic = String(localized: "This video couldn't be played. Check your connection and try again.")
         guard let kind = info?.kind else { return generic }
         switch kind {
         case .sourceRateLimited:
-            return "The server is refusing new streams right now. Wait a moment and try again."
+            return String(localized: "The server is refusing new streams right now. Wait a moment and try again.")
         case .sourceRefused:
-            return "The server refused this stream. It may have moved, or your access to it may have changed."
+            return String(localized: "The server refused this stream. It may have moved, or your access to it may have changed.")
         case .sourceCertificateRejected:
-            return "The server's security certificate was not accepted."
+            return String(localized: "The server's security certificate was not accepted.")
         case .liveSourceUnavailable:
-            return "This channel is not responding right now."
+            return String(localized: "This channel is not responding right now.")
         case .dolbyVisionRequiresHardware:
-            return "This Dolby Vision file has no fallback layer this device can decode."
+            return String(localized: "This Dolby Vision file has no fallback layer this device can decode.")
         default:
             return generic
         }
@@ -933,7 +933,7 @@ final class AetherPlayer: ObservableObject {
         if let language = track.language, !language.isEmpty {
             return Locale.current.localizedString(forLanguageCode: language) ?? language
         }
-        return track.codec.isEmpty ? "Track \(track.id)" : track.codec.uppercased()
+        return track.codec.isEmpty ? String(localized: "Track \(track.id)") : track.codec.uppercased()
     }
 
     // MARK: - Source predicates (shared with tvOS AetherPlayer)
@@ -1006,7 +1006,7 @@ final class AetherPlayer: ObservableObject {
             self.audioTracks = group.options.enumerated().map { index, option in
                 Track(
                     id: Self.nativeAudioTrackIDBase + index,
-                    name: option.displayName.isEmpty ? "Audio \(index + 1)" : option.displayName,
+                    name: option.displayName.isEmpty ? String(localized: "Audio \(index + 1)") : option.displayName,
                     codec: "",
                     language: option.extendedLanguageTag,
                     channels: 0,

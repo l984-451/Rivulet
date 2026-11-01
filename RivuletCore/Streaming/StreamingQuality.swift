@@ -52,8 +52,8 @@ nonisolated enum StreamingQuality: Hashable, Sendable, RawRepresentable {
 
     var label: String {
         switch self {
-        case .original: "Original"
-        case .auto: "Auto"
+        case .original: String(localized: "Original")
+        case .auto: String(localized: "Auto")
         case .step(let step): step.label
         }
     }

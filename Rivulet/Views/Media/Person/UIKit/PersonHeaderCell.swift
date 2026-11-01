@@ -186,7 +186,7 @@ final class PersonHeaderCell: UICollectionViewCell {
         let bio = (biography ?? "")
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        self.fullBiography = bio.isEmpty && !isLoading ? "No biography available." : bio
+        self.fullBiography = bio.isEmpty && !isLoading ? String(localized: "No biography available.") : bio
 
         // The panel always shows (dots, bio, or a placeholder), so the page always has a focus target.
         if isLoading {

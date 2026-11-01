@@ -714,6 +714,15 @@ enum SubtitleMode: String, CaseIterable {
     }
 
     static var current: SubtitleMode { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) }
+
+    var title: String {
+        switch self {
+        case .foreignAudio: return String(localized: "Foreign Audio")
+        case .always: return String(localized: "Always")
+        case .off: return String(localized: "Off")
+        case .forcedOnly: return String(localized: "Forced Only")
+        }
+    }
 }
 
 extension TrackIntentStore {
@@ -747,8 +756,8 @@ extension TrackIntentStore {
 extension TrackLanguage {
     /// The Audio Language setting's name for a stored code; nil follows the Plex account.
     static func audioSettingName(_ code: String?) -> String {
-        guard let code else { return "Plex Account" }
-        if code == original { return "Original" }
+        guard let code else { return String(localized: "Plex Account") }
+        if code == original { return String(localized: "Original") }
         // An untagged or unknown pick resolves to English (see resolveAudio).
         return isKnown(code) ? displayName(code) : displayName(english)
     }

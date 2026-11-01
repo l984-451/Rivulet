@@ -27,7 +27,7 @@ struct IOSDownloadsView: View {
         let shows = seasons.map { key, records in
             let episodes = records.sorted { ($0.metadata.index ?? 0) < ($1.metadata.index ?? 0) }
             let first = episodes[0].metadata
-            let season = first.parentIndex.map { $0 == 0 ? "Specials" : "Season \($0)" }
+            let season = first.parentIndex.map { $0 == 0 ? String(localized: "Specials") : String(localized: "Season \($0)") }
             return (show: first.showTitle, season: first.parentIndex ?? 0, group: Shelf(
                 id: key, title: [first.showTitle, season].compactMap { $0 }.joined(separator: " · "), records: episodes))
         }
@@ -36,7 +36,7 @@ struct IOSDownloadsView: View {
             return order == .orderedSame ? lhs.season < rhs.season : order == .orderedAscending
         }
         .map(\.group)
-        return (movies.isEmpty ? [] : [Shelf(id: "movies", title: "Movies", records: movies)]) + shows
+        return (movies.isEmpty ? [] : [Shelf(id: "movies", title: String(localized: "Movies"), records: movies)]) + shows
     }
 
     var body: some View {
@@ -110,7 +110,7 @@ private struct IOSDownloadRow: View {
 
     private var title: String {
         guard item.type == "episode" else { return item.displayTitle }
-        return [item.index.map { "E\($0)" }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
+        return [item.index.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var isFailed: Bool {
@@ -236,14 +236,14 @@ extension DownloadRecord {
         func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
         switch state {
         case .waitingForNetwork:
-            return "Waiting for Wi-Fi"
+            return String(localized: "Waiting for Wi-Fi")
         case .waitingForServer:
-            return "Waiting for Server"
+            return String(localized: "Waiting for Server")
         case .preparing(let progress):
-            return "Preparing on Server"
+            return String(localized: "Preparing on Server")
         case .downloading:
             guard let expected = expectedBytes, expected > 0 else {
-                return receivedBytes > 0 ? size(receivedBytes) : "Downloading"
+                return receivedBytes > 0 ? size(receivedBytes) : String(localized: "Downloading")
             }
             // Received in the total's unit, padded with digit-wide figure spaces to its width.
             let formatter = ByteCountFormatter()
@@ -254,11 +254,11 @@ extension DownloadRecord {
             let received = formatter.string(fromByteCount: min(receivedBytes, expected))
             return String(repeating: "\u{2007}", count: max(0, total.count - received.count)) + "\(received) / \(total)"
         case .paused, .pausedByUser:
-            return "Paused"
+            return String(localized: "Paused")
         case .failed(let reason):
-            return "Failed: \(reason)"
+            return String(localized: "Failed: \(reason)")
         case .completed:
-            return ["Downloaded", outputLabel, expectedBytes.map(size)].compactMap { $0 }.joined(separator: " · ")
+            return [String(localized: "Downloaded"), outputLabel, expectedBytes.map(size)].compactMap { $0 }.joined(separator: " · ")
         }
     }
 

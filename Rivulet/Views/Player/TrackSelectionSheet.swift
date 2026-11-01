@@ -16,8 +16,8 @@ enum TrackType {
 
     var title: String {
         switch self {
-        case .audio: return "Audio"
-        case .subtitles: return "Subtitles"
+        case .audio: return String(localized: "Audio")
+        case .subtitles: return String(localized: "Subtitles")
         }
     }
 
@@ -45,7 +45,7 @@ struct TrackSelectionSheet: View {
                     // "Off" option for subtitles
                     if trackType == .subtitles {
                         TrackRow(
-                            name: "Off",
+                            name: String(localized: "Off"),
                             subtitle: nil,
                             isSelected: selectedTrackId == nil,
                             isFocused: focusedTrackId == -1

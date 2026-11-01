@@ -25,7 +25,7 @@ final class ConfirmationPopupViewController: UIViewController {
     init(title: String,
          message: String,
          confirmTitle: String,
-         cancelTitle: String? = "Cancel",
+         cancelTitle: String? = String(localized: "Cancel"),
          destructive: Bool = false,
          width: CGFloat = 840,
          onConfirm: @escaping () -> Void,

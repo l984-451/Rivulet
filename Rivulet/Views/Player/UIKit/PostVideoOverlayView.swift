@@ -121,8 +121,8 @@ final class PostVideoOverlayView: UIView {
     func configure(nextEpisode: PlexMetadata?, serverURL: String, authToken: String,
                    thumbnailURL: URL? = nil, errorMessage: String? = nil) {
         hasNextEpisode = nextEpisode != nil
-        headerLabel.text = hasNextEpisode ? "Up Next" : "End of Series"
-        headerSubtitleLabel.text = errorMessage ?? "You've watched all available episodes"
+        headerLabel.text = hasNextEpisode ? String(localized: "Up Next") : String(localized: "End of Series")
+        headerSubtitleLabel.text = errorMessage ?? String(localized: "You've watched all available episodes")
         headerSubtitleLabel.isHidden = hasNextEpisode && errorMessage == nil
         card.isHidden = !hasNextEpisode
         if let nextEpisode {
@@ -165,11 +165,11 @@ final class PostVideoOverlayView: UIView {
     private func applyButtonState() {
         playNextButton.isHidden = !hasNextEpisode
         playNextButton.configure(
-            title: countdownActive ? "Play Now" : "Play Next", systemImage: "play.fill")
+            title: countdownActive ? String(localized: "Play Now") : String(localized: "Play Next"), systemImage: "play.fill")
         // With a countdown running, Dismiss means "stop the countdown"; with
         // none, it means "close the card".
         dismissButton.configure(
-            title: "Dismiss", systemImage: countdownActive ? nil : "xmark")
+            title: String(localized: "Dismiss"), systemImage: countdownActive ? nil : "xmark")
         dismissButton.setPrimaryLook(!hasNextEpisode)
     }
 
@@ -279,11 +279,11 @@ final class NextEpisodeCardView: UIView {
             ? String(format: "S%02dE%02d", episode.parentIndex ?? 0, episode.index ?? 0)
             : episode.year.map(String.init)
         numberLabel.isHidden = numberLabel.text == nil
-        titleLabel.text = episode.title ?? "Episode"
+        titleLabel.text = episode.title ?? String(localized: "Episode")
         summaryLabel.text = episode.summary
         summaryLabel.isHidden = (episode.summary ?? "").isEmpty
         if let duration = episode.duration {
-            durationLabel.text = "\(duration / 60000) min"
+            durationLabel.text = String(localized: "\(duration / 60000) min")
             durationLabel.isHidden = false
         } else {
             durationLabel.isHidden = true

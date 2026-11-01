@@ -61,11 +61,16 @@ enum EpisodePicker {
     static func playTitle(
         resumes: Bool, watched: Bool, season: Int? = nil, episode: Int? = nil, isFirstEpisode: Bool = false
     ) -> String {
-        let code = season.flatMap { s in episode.map { " S\(s), E\($0)" } } ?? ""
-        if resumes { return "Resume" + code }
-        if watched { return "Play Again" }
-        if isFirstEpisode { return "Play First Episode" }
-        return "Play" + code
+        // One string per form, never "Resume" + code: word order differs by language.
+        if let season, let episode {
+            if resumes { return String(localized: "Resume S\(season), E\(episode)") }
+        } else if resumes {
+            return String(localized: "Resume")
+        }
+        if watched { return String(localized: "Play Again") }
+        if isFirstEpisode { return String(localized: "Play First Episode") }
+        if let season, let episode { return String(localized: "Play S\(season), E\(episode)") }
+        return String(localized: "Play")
     }
 
     /// Sorts by season then episode; an item missing either number keeps its server position.

@@ -867,7 +867,7 @@ final class MultiStreamViewModel: ObservableObject {
         markSlotAsIntentionallyStopped(slotId)
         cancellables.removeValue(forKey: slotId)
         streams[index].stop()
-        streams[index].playbackState = .failed(.networkError("Channel unavailable"))
+        streams[index].playbackState = .failed(.networkError(String(localized: "Channel unavailable")))
         streams[index].isUnavailable = true
     }
 

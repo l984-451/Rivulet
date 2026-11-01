@@ -11,7 +11,7 @@ nonisolated enum BoundedDownload {
     static let guideLimit = 512 << 20
 
     struct TooLarge: LocalizedError {
-        var errorDescription: String? { "The download is too large." }
+        var errorDescription: String? { String(localized: "The download is too large.") }
     }
 
     /// `credential` answers a Basic or Digest challenge once; a refused login

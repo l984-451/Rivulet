@@ -1277,7 +1277,7 @@ class PlayerContainerViewController: UIViewController {
                 self.upNextEpisodesCache = episodes
                 if let queue = vm.playQueue {
                     // A playlist of any type gets the pane, titled for what it lists.
-                    self.rail?.upNextButton.setTitle("Playlist")
+                    self.rail?.upNextButton.setTitle(String(localized: "Playlist"))
                     self.rail?.setUpNextAvailable(queue.entries.count > 1)
                 } else {
                     self.rail?.setUpNextAvailable(!episodes.isEmpty && vm.metadata.type == "episode")
@@ -1352,7 +1352,7 @@ class PlayerContainerViewController: UIViewController {
                     tracks: vm.subtitleMenuTracks,
                     selectedTrackId: vm.currentSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
                     actions: vm.canSearchSubtitles ? [
-                        CardActionConfig(title: "Search for Subtitles") { [weak self] row in
+                        CardActionConfig(title: String(localized: "Search for Subtitles")) { [weak self] row in
                             self?.searchSubtitles(from: row)
                         },
                     ] : [],
@@ -1393,12 +1393,12 @@ class PlayerContainerViewController: UIViewController {
             guard let self, let vm = self.viewModel else { return }
             if vm.currentSubtitleTrackId != nil {
                 vm.selectSubtitleTrack(id: nil)
-                self.rail?.showNote("Subtitles off")
+                self.rail?.showNote(String(localized: "Subtitles off"))
             } else if let id = vm.subtitleOnTrackId,
                       // A hold never starts the generated model's download.
                       id != UniversalPlayerViewModel.generatedSubtitleId || SpeechModelStore.shared.state == .ready {
                 vm.selectSubtitleTrack(id: id)
-                self.rail?.showNote("Subtitles on")
+                self.rail?.showNote(String(localized: "Subtitles on"))
             }
         }
         rail.onAudio = { [weak self] in
@@ -1436,9 +1436,9 @@ class PlayerContainerViewController: UIViewController {
             guard let self, let vm = self.viewModel else { return }
             let filter = vm.contentFilter
             self.presentRailPanel(
-                content: CardTrackListView(header: "Content Filter", rows: [
-                    .init(title: "Filtering On", subtitle: vm.contentFilterNotice, trackId: 0, isSelected: !filter.isPaused),
-                    .init(title: "Pause for This Title", subtitle: nil, trackId: 1, isSelected: filter.isPaused),
+                content: CardTrackListView(header: String(localized: "Content Filter"), rows: [
+                    .init(title: String(localized: "Filtering On"), subtitle: vm.contentFilterNotice, trackId: 0, isSelected: !filter.isPaused),
+                    .init(title: String(localized: "Pause for This Title"), subtitle: nil, trackId: 1, isSelected: filter.isPaused),
                 ], onSelect: { [weak self, weak filter] choice in
                     filter?.setPaused(choice == 1)
                     self?.activeRailPanel?.dismissPanel()
@@ -1450,7 +1450,7 @@ class PlayerContainerViewController: UIViewController {
         rail.onQuality = { [weak self] in
             guard let self, let vm = self.viewModel else { return }
             let choices = StreamingQuality.allChoices
-            let playing = "Playing " + (vm.activeStreamPlan.step?.label ?? "Original")
+            let playing = String(localized: "Playing \(vm.activeStreamPlan.step?.label ?? String(localized: "Original"))")
             let rows = choices.enumerated().map { index, choice in
                 CardTrackListView.Row(
                     title: choice.label,
@@ -1459,7 +1459,7 @@ class PlayerContainerViewController: UIViewController {
                     isSelected: choice == vm.qualityChoice)
             }
             self.presentRailPanel(
-                content: CardTrackListView(header: "Quality", rows: rows, onSelect: { [weak vm, weak self] index in
+                content: CardTrackListView(header: String(localized: "Quality"), rows: rows, onSelect: { [weak vm, weak self] index in
                     if let index, choices.indices.contains(index) { vm?.selectQuality(choices[index]) }
                     self?.activeRailPanel?.dismissPanel()
                 }),
@@ -1512,28 +1512,28 @@ class PlayerContainerViewController: UIViewController {
     private func searchSubtitles(from row: CardTrackRowButton) {
         guard let vm = viewModel, subtitleSearchTask == nil else { return }
         let origin = activeRailPanel
-        row.setTitle("Searching…")
+        row.setTitle(String(localized: "Searching…"))
         subtitleSearchTask = Task { [weak self, weak vm, weak row] in
             let results = try? await vm?.searchSubtitles()
             guard let self else { return }
             self.subtitleSearchTask = nil
-            row?.setTitle("Search for Subtitles")
+            row?.setTitle(String(localized: "Search for Subtitles"))
             guard let vm, let origin, self.activeRailPanel === origin else { return }
             let found = results ?? []
             let rows = found.isEmpty
-                ? [CardTrackListView.Row(title: results == nil ? "Search Failed" : "No Subtitles Found",
+                ? [CardTrackListView.Row(title: results == nil ? String(localized: "Search Failed") : String(localized: "No Subtitles Found"),
                                          subtitle: nil, trackId: nil, isSelected: false)]
                 : found.enumerated().map { index, result in
                     CardTrackListView.Row(
-                        title: result.title ?? result.displayTitle ?? "Subtitle",
+                        title: result.title ?? result.displayTitle ?? String(localized: "Subtitle"),
                         subtitle: [result.language, result.codec?.uppercased(),
                                    result.hearingImpaired == true ? "SDH" : nil,
-                                   result.forced == true ? "Forced" : nil]
+                                   result.forced == true ? String(localized: "Forced") : nil]
                             .compactMap { $0 }.joined(separator: " • "),
                         trackId: index, isSelected: false)
                 }
             _ = self.presentRailPanel(
-                content: CardTrackListView(header: "Search Results", rows: rows, onSelect: { [weak vm, weak self] index in
+                content: CardTrackListView(header: String(localized: "Search Results"), rows: rows, onSelect: { [weak vm, weak self] index in
                     self?.activeRailPanel?.dismissPanel()
                     guard let index, let vm else { return }
                     Task { await vm.installSubtitle(found[index]) }
@@ -1692,8 +1692,8 @@ class PlayerContainerViewController: UIViewController {
                 return PlayerCardRowView.Card(
                     imageURL: vm.chapterThumbnailURL(chapter),
                     stillLoader: { [weak vm] in await vm?.chapterStill(at: start) },
-                    eyebrow: watching ? "Watching" : nil,
-                    title: chapter.tag ?? "Chapter \(index + 1)",
+                    eyebrow: watching ? String(localized: "Watching") : nil,
+                    title: chapter.tag ?? String(localized: "Chapter \(index + 1)"),
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
@@ -1712,10 +1712,10 @@ class PlayerContainerViewController: UIViewController {
                 let state = UpNextRowState.state(for: episode, in: episodes, currentRatingKey: currentKey)
                 let isCurrent = state == .nowPlaying
                 let eyebrow: String? = switch state {
-                case .nowPlaying: "Watching"
-                case .upNext: "Up Next"
-                case .watched: "Watched"
-                case .future: episode.index.map { "Episode \($0)" }
+                case .nowPlaying: String(localized: "Watching")
+                case .upNext: String(localized: "Up Next")
+                case .watched: String(localized: "Watched")
+                case .future: episode.index.map { String(localized: "Episode \($0)") }
                 }
                 let thumb = vm.providerThumbnailURL(for: episode) ?? episode.thumb.flatMap {
                     PlexNetworkManager.shared.buildThumbnailURL(
@@ -1724,7 +1724,7 @@ class PlayerContainerViewController: UIViewController {
                 return PlayerCardRowView.Card(
                     imageURL: thumb,
                     eyebrow: eyebrow,
-                    title: episode.title ?? "Episode",
+                    title: episode.title ?? String(localized: "Episode"),
                     isCurrent: isCurrent,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
@@ -1764,11 +1764,11 @@ class PlayerContainerViewController: UIViewController {
             let item = queue.entries[index].item
             let isCurrent = UpNextRowState.queueState(at: index, currentIndex: queue.index) == .nowPlaying
             let eyebrow: String? = if isCurrent {
-                "Watching"
+                String(localized: "Watching")
             } else if item.kind == .movie {
-                "Movie"
+                String(localized: "Movie")
             } else if item.kind == .episode, let season = item.seasonNumber, let episode = item.episodeNumber {
-                "S\(season) E\(episode)"
+                String(localized: "S\(season) E\(episode)")
             } else {
                 nil
             }

@@ -39,16 +39,16 @@ final class LiveMultiviewViewController: UIViewController {
     private var tiles: [UUID: LiveMultiviewTileView] = [:]
     private var placeholderViews: [UIView] = []
 
-    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: "Swipe up to watch")
+    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
     private let editHint = LiveMultiviewHintView(pointsUp: false, text: nil)
 
     private let layoutButtons = UIStackView()
     private let focusLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Focus Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Focus Layout"), diameter: 62)
     private let gridLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Grid Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Grid Layout"), diameter: 62)
     private let scoresLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Scores Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Scores Layout"), diameter: 62)
     /// The scores layout's right column; exists only while that layout shows.
     private var scoresList: LiveScoresPaneView?
 
@@ -149,7 +149,7 @@ final class LiveMultiviewViewController: UIViewController {
         gridLayoutButton.onPress = { [weak self] in self?.viewModel.resetLayout() }
         scoresLayoutButton.onPress = { [weak self] in self?.viewModel.useScoresLayout() }
 
-        addMoreLabel.text = "Add More"
+        addMoreLabel.text = String(localized: "Add More")
         addMoreLabel.font = .systemFont(ofSize: 32, weight: .semibold)
         addMoreLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         addMoreLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -349,9 +349,9 @@ final class LiveMultiviewViewController: UIViewController {
     }
 
     private func confirmExit() {
-        let alert = UIAlertController(title: "Do you want to exit Multiview?", message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Exit", style: .default) { [weak self] _ in
+        let alert = UIAlertController(title: String(localized: "Do you want to exit Multiview?"), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Exit"), style: .default) { [weak self] _ in
             self?.exitMultiview(handingOff: nil)
         })
         present(alert, animated: true)
@@ -637,7 +637,7 @@ final class LiveMultiviewViewController: UIViewController {
             let rows = choices.streams.map { stream in
                 let isCurrent = stream.id == choices.currentStreamID
                 let title = [stream.name, choices.detail(for: stream)].compactMap { $0 }.joined(separator: " • ")
-                return TileMenuAction(title: title, systemImage: isCurrent ? "checkmark" : "") { [weak self] in
+                return TileMenuAction(verbatim: title, systemImage: isCurrent ? "checkmark" : "") { [weak self] in
                     guard !isCurrent else { return }
                     Task { @MainActor [weak self] in
                         do {
@@ -649,14 +649,14 @@ final class LiveMultiviewViewController: UIViewController {
                 }
             }
             self.present(TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
-                                                     header: TileMenuHeader(title: "Stream")), animated: false)
+                                                     header: TileMenuHeader(title: String(localized: "Stream"))), animated: false)
         }
     }
 
     private func showStreamSwitchFailed() {
         guard !isExiting, presentedViewController == nil else { return }
-        let alert = UIAlertController(title: "Couldn't switch streams.", message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+        let alert = UIAlertController(title: String(localized: "Couldn't switch streams."), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -1059,7 +1059,7 @@ final class LiveMultiviewViewController: UIViewController {
         guard let row = addMoreSource.snapshot().indexOfSection(id), row != addMoreRow else { return }
         addMoreRow = row
         UIView.transition(with: addMoreLabel, duration: 0.2, options: .transitionCrossDissolve) {
-            self.addMoreLabel.text = self.addMoreRows[id]?.title ?? "Add More"
+            self.addMoreLabel.text = self.addMoreRows[id]?.title ?? String(localized: "Add More")
         }
     }
 
@@ -1096,7 +1096,7 @@ final class LiveMultiviewViewController: UIViewController {
         // Recordings and Starting Soon are not channels to add now.
         let shelves = LiveBrowseViewController.buildShelves(sourceIdFilter: sourceIdFilter)
             .filter { $0.id != "recordings" && $0.id != "soon" }
-        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: "Recommended", items: recommended())]
+        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Recommended"), items: recommended())]
                     + shelves)
             .map { LiveBrowseViewController.Shelf(id: $0.id, title: $0.title,
                                                   items: $0.items.filter(notPlaying).uniquedById()) }
@@ -1105,7 +1105,7 @@ final class LiveMultiviewViewController: UIViewController {
         let existing = Set(addMoreSource.snapshot().itemIdentifiers)
         addMoreRows = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         addMoreRow = min(addMoreRow, max(rows.count - 1, 0))
-        addMoreLabel.text = rows[safe: addMoreRow]?.title ?? "Add More"
+        addMoreLabel.text = rows[safe: addMoreRow]?.title ?? String(localized: "Add More")
 
         // One item per row; a row's identity never changes, so reconfiguring
         // is what hands an existing row its new cards.
@@ -1244,7 +1244,7 @@ final class LiveMultiviewTileView: UIView {
         spinner.color = .white
         spinner.hidesWhenStopped = true
         pausedIcon.tintColor = .white
-        unavailableLabel.text = "Channel Unavailable"
+        unavailableLabel.text = String(localized: "Channel Unavailable")
         unavailableLabel.font = .systemFont(ofSize: 26, weight: .semibold)
         unavailableLabel.textColor = UIColor.white.withAlphaComponent(0.7)
         unavailableLabel.isHidden = true

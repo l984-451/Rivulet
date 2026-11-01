@@ -23,7 +23,7 @@ enum VersionPicker {
         let base = sources.map(rowLabel)
         return zip(sources, base).map { source, label in
             guard base.filter({ $0 == label }).count > 1, let stem = fileStem(source.fileName) else { return label }
-            return "\(label) · \(stem)"
+            return String(localized: "\(label) · \(stem)")
         }
     }
 
@@ -31,10 +31,10 @@ enum VersionPicker {
                         sourceFrame: CGRect?, onPick: @escaping (String) -> Void) {
         guard versions.count >= 2 else { return }
         let rows = zip(versions, labels(for: versions)).map { source, label in
-            TileMenuAction(title: label, systemImage: "play.fill") { onPick(source.id) }
+            TileMenuAction(verbatim: label, systemImage: "play.fill") { onPick(source.id) }
         }
         let popup = TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
-                                                header: TileMenuHeader(title: "Play Version"))
+                                                header: TileMenuHeader(title: String(localized: "Play Version")))
         // The popup runs its own entrance from `sourceFrame`.
         host.topmostPresented.present(popup, animated: false)
     }

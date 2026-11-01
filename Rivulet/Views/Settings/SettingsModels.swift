@@ -23,7 +23,7 @@ enum CrossfadeOption: String, CaseIterable, Hashable, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .off: return "Off"
+        case .off: return String(localized: "Off")
         case .threeSeconds: return "3s"
         case .fiveSeconds: return "5s"
         case .eightSeconds: return "8s"
@@ -59,44 +59,44 @@ enum SettingsPage: Hashable, CaseIterable {
 
     var title: String {
         switch self {
-        case .root: return "Settings"
-        case .appearance: return "Appearance"
-        case .playback: return "Playback"
-        case .music: return "Music"
-        case .liveTV: return "Live TV"
-        case .servers: return "Servers"
-        case .about: return "About"
-        case .plex: return "Plex"
-        case .plexServerDetail: return "Server"
-        case .jellyfin: return "Jellyfin Server"
-        case .iptv: return "Live TV Sources"
-        case .liveTVSourceDetail: return "Source Details"
-        case .liveTVFavorites: return "Favorites"
-        case .addLiveTVSource: return "Add a Source"
-        case .addXtream: return "Xtream Codes"
-        case .addDispatcharr: return "Dispatcharr"
-        case .addTvheadend: return "Tvheadend"
-        case .addThreadfin: return "Threadfin"
-        case .addPlaylistURL: return "Playlist URL"
-        case .libraries: return "Sidebar"
-        case .homeRows: return "Home Rows"
-        case .cache: return "Cache & Storage"
-        case .appIconPicker: return "App Icon"
-        case .homeHeroPicker: return "Hero"
-        case .detailRatingPicker: return "Rating"
-        case .autoplayCountdownPicker: return "Autoplay Countdown"
-        case .skipIntervalPicker: return "Skip Forward Length"
-        case .skipBackIntervalPicker: return "Skip Back Length"
-        case .heightSpeakersPicker: return "Height Speakers"
-        case .subtitleModePicker: return "Subtitles"
-        case .autoplayLimitPicker: return "Autoplay Limit"
-        case .homeQualityPicker: return "Home Streaming"
-        case .awayQualityPicker: return "Away Streaming"
-        case .audioLanguagePicker: return "Audio Language"
-        case .subtitleLanguagePicker: return "Subtitle Language"
-        case .contentFilter: return "Content Filtering"
-        case .contentFilterStrength: return "Profanity"
-        case .contentFilterWords: return "Custom Words"
+        case .root: return String(localized: "Settings")
+        case .appearance: return String(localized: "Appearance")
+        case .playback: return String(localized: "Playback")
+        case .music: return String(localized: "Music")
+        case .liveTV: return String(localized: "Live TV")
+        case .servers: return String(localized: "Servers")
+        case .about: return String(localized: "About")
+        case .plex: return String(localized: "Plex")
+        case .plexServerDetail: return String(localized: "Server")
+        case .jellyfin: return String(localized: "Jellyfin Server")
+        case .iptv: return String(localized: "Live TV Sources")
+        case .liveTVSourceDetail: return String(localized: "Source Details")
+        case .liveTVFavorites: return String(localized: "Favorites")
+        case .addLiveTVSource: return String(localized: "Add a Source")
+        case .addXtream: return String(localized: "Xtream Codes")
+        case .addDispatcharr: return String(localized: "Dispatcharr")
+        case .addTvheadend: return String(localized: "Tvheadend")
+        case .addThreadfin: return String(localized: "Threadfin")
+        case .addPlaylistURL: return String(localized: "Playlist URL")
+        case .libraries: return String(localized: "Sidebar")
+        case .homeRows: return String(localized: "Home Rows")
+        case .cache: return String(localized: "Cache & Storage")
+        case .appIconPicker: return String(localized: "App Icon")
+        case .homeHeroPicker: return String(localized: "Hero")
+        case .detailRatingPicker: return String(localized: "Rating")
+        case .autoplayCountdownPicker: return String(localized: "Autoplay Countdown")
+        case .skipIntervalPicker: return String(localized: "Skip Forward Length")
+        case .skipBackIntervalPicker: return String(localized: "Skip Back Length")
+        case .heightSpeakersPicker: return String(localized: "Height Speakers")
+        case .subtitleModePicker: return String(localized: "Subtitles")
+        case .autoplayLimitPicker: return String(localized: "Autoplay Limit")
+        case .homeQualityPicker: return String(localized: "Home Streaming")
+        case .awayQualityPicker: return String(localized: "Away Streaming")
+        case .audioLanguagePicker: return String(localized: "Audio Language")
+        case .subtitleLanguagePicker: return String(localized: "Subtitle Language")
+        case .contentFilter: return String(localized: "Content Filtering")
+        case .contentFilterStrength: return String(localized: "Profanity")
+        case .contentFilterWords: return String(localized: "Custom Words")
         }
     }
 }
@@ -111,10 +111,10 @@ enum AutoplayCountdown: Int, CaseIterable, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .off: return "Off"
-        case .fiveSeconds: return "5 seconds"
-        case .tenSeconds: return "10 seconds"
-        case .twentySeconds: return "20 seconds"
+        case .off: return String(localized: "Off")
+        case .fiveSeconds: return String(localized: "5 seconds")
+        case .tenSeconds: return String(localized: "10 seconds")
+        case .twentySeconds: return String(localized: "20 seconds")
         }
     }
 }
@@ -135,7 +135,7 @@ enum AutoplayLimit: Int, CaseIterable, CustomStringConvertible {
         AutoplayLimit(rawValue: UserDefaults.standard.integer(forKey: storageKey)) ?? .off
     }
 
-    var description: String { self == .off ? "Off" : "\(rawValue) Episodes" }
+    var description: String { self == .off ? String(localized: "Off") : String(localized: "\(rawValue) Episodes") }
 
     /// Whether Up Next may count down after `count` episodes in a row.
     func allowsAutoplay(afterEpisodesInARow count: Int) -> Bool { self == .off || count < rawValue }
@@ -158,5 +158,5 @@ enum SkipInterval: Int, CaseIterable, CustomStringConvertible {
     static let backStorageKey = "skipBackSeconds"
     static let defaultValue: SkipInterval = .thirtySeconds
 
-    var description: String { "\(rawValue) seconds" }
+    var description: String { String(localized: "\(rawValue) seconds") }
 }

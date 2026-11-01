@@ -22,7 +22,7 @@ enum CrossfadeDuration: Int, CaseIterable, CustomStringConvertible, Sendable {
 
     var description: String {
         switch self {
-        case .off: return "Off"
+        case .off: return String(localized: "Off")
         case .short: return "2s"
         case .medium: return "5s"
         case .long: return "8s"

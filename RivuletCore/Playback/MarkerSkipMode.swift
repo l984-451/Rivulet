@@ -8,9 +8,9 @@ enum MarkerSkipMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .manual: return "Manual"
-        case .automatic: return "Automatic"
-        case .off: return "Off"
+        case .manual: return String(localized: "Manual")
+        case .automatic: return String(localized: "Automatic")
+        case .off: return String(localized: "Off")
         }
     }
 

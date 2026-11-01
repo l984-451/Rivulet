@@ -989,7 +989,7 @@ private final class MediaItemSlideView: UIView {
         if let kindLabel = typeLabel(for: item.kind) { parts.append(kindLabel) }
         if item.kind != .season, item.kind != .episode, let year = item.year { parts.append(String(year)) }
         if item.kind == .episode {
-            if let s = item.seasonNumber, let e = item.episodeNumber { parts.append("S\(s), E\(e)") }
+            if let s = item.seasonNumber, let e = item.episodeNumber { parts.append(String(localized: "S\(s), E\(e)")) }
             if item.seriesTitle != nil { parts.append(item.title) }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -997,8 +997,8 @@ private final class MediaItemSlideView: UIView {
 
     private func typeLabel(for kind: MediaKind) -> String? {
         switch kind {
-        case .movie: return "Movie"
-        case .show, .season, .episode: return "TV Show"
+        case .movie: return String(localized: "Movie")
+        case .show, .season, .episode: return String(localized: "TV Show")
         default: return nil
         }
     }

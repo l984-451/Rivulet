@@ -93,40 +93,40 @@ enum PlayerError: Error, Equatable, Sendable {
     var userFacingDescription: String {
         switch self {
         case .invalidURL:
-            return "This video couldn't be played. The link may be invalid."
+            return String(localized: "This video couldn't be played. The link may be invalid.")
         case .loadFailed(let message):
             if message.contains("HLS transcode session failed") {
-                return "Your Plex server is taking too long to prepare the video. Please try again."
+                return String(localized: "Your Plex server is taking too long to prepare the video. Please try again.")
             } else if message.contains("transcode") {
-                return "Your server couldn't prepare this video for playback. It may be busy with other streams."
+                return String(localized: "Your server couldn't prepare this video for playback. It may be busy with other streams.")
             } else if message.contains("CoreMediaErrorDomain") || message.contains("-16172") {
-                return "The stream from your server couldn't be played. The server may still be preparing the video."
+                return String(localized: "The stream from your server couldn't be played. The server may still be preparing the video.")
             } else if message.contains("loading failed") {
-                return "The stream couldn't be loaded. Check that your server is running and reachable."
+                return String(localized: "The stream couldn't be loaded. Check that your server is running and reachable.")
             }
-            return "This video couldn't be loaded. Please check your connection and try again."
+            return String(localized: "This video couldn't be loaded. Please check your connection and try again.")
         case .networkError:
-            return "Couldn't connect to the server. Please check your network connection."
+            return String(localized: "Couldn't connect to the server. Please check your network connection.")
         case .codecUnsupported:
-            return "This video format isn't supported on this device."
+            return String(localized: "This video format isn't supported on this device.")
         case .unknown(let message):
             if message.contains("CoreMediaErrorDomain") || message.contains("-16172") {
-                return "The stream from your server couldn't be played. The server may still be preparing the video."
+                return String(localized: "The stream from your server couldn't be played. The server may still be preparing the video.")
             }
-            return "Something went wrong during playback. Please try again."
+            return String(localized: "Something went wrong during playback. Please try again.")
         case .engineFailure(let kind, _):
             // Only the kinds that change what the user should DO get their own
             // sentence. Everything else reads the same as any other playback
             // failure, because to the viewer it is one.
             switch kind {
             case EngineFailureKind.sourceRateLimited:
-                return "Your server is refusing new streams right now. Wait a moment and try again."
+                return String(localized: "Your server is refusing new streams right now. Wait a moment and try again.")
             case EngineFailureKind.sourceRefused:
-                return "Your server refused this video. It may have moved, or your access to it may have changed."
+                return String(localized: "Your server refused this video. It may have moved, or your access to it may have changed.")
             case EngineFailureKind.dolbyVisionRequiresHardware:
-                return "This Dolby Vision file has no fallback layer this Apple TV can decode."
+                return String(localized: "This Dolby Vision file has no fallback layer this Apple TV can decode.")
             default:
-                return "This video couldn't be played. Please try again."
+                return String(localized: "This video couldn't be played. Please try again.")
             }
         case .serverTerminated(let reason):
             return reason

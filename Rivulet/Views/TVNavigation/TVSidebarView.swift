@@ -67,7 +67,7 @@ struct TVSidebarView: View {
     }
 
     private var profileName: String {
-        profileManager.selectedUser?.displayName ?? authManager.username ?? "Account"
+        profileManager.selectedUser?.displayName ?? authManager.username ?? String(localized: "Account")
     }
 
     private var isMusicLibrarySelected: Bool {

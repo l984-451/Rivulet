@@ -28,11 +28,12 @@ class ContentProvider: TVTopShelfContentProvider {
 
         if !TopShelfCache.shared.fullScreen {
             // Progress bars only on Continue Watching; a Recently Added tile's bar is noise.
-            let title = TopShelfCache.shared.sectionTitle
-            let lead = TVTopShelfItemCollection(items: items.compactMap { posterItem($0, showsProgress: title != "Recently Added") })
-            lead.title = title
+            // The app writes the English title as an id; the shelf shows it translated.
+            let leadIsRecent = TopShelfCache.shared.sectionTitle == "Recently Added"
+            let lead = TVTopShelfItemCollection(items: items.compactMap { posterItem($0, showsProgress: !leadIsRecent) })
+            lead.title = leadIsRecent ? String(localized: "Recently Added") : String(localized: "Continue Watching")
             let recent = TVTopShelfItemCollection(items: TopShelfCache.shared.readRecentItems().compactMap { posterItem($0, showsProgress: false) })
-            recent.title = "Recently Added"
+            recent.title = String(localized: "Recently Added")
             let sections = [lead, recent].filter { !$0.items.isEmpty }
             returned = sections.reduce(0) { $0 + $1.items.count }
             return sections.isEmpty ? nil : TVTopShelfSectionedContent(sections: sections)

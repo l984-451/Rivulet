@@ -24,7 +24,7 @@ nonisolated struct DownloadManifest: Codable, Sendable, Equatable {
         var copy = self
         for i in copy.records.indices where copy.records[i].state == .completed {
             if let name = copy.records[i].fileName, filesPresent.contains(name) { continue }
-            copy.records[i].state = .failed(reason: "File missing")
+            copy.records[i].state = .failed(reason: String(localized: "File missing"))
         }
         return copy
     }

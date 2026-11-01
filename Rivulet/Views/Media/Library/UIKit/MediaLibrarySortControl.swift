@@ -12,14 +12,14 @@ import UIKit
 extension SortOption {
     var displayName: String {
         switch self {
-        case .titleAsc:        "Title A-Z"
-        case .titleDesc:       "Title Z-A"
-        case .releaseDateDesc: "Release Date"
-        case .addedAtDesc:     "Date Added"
-        case .addedAtAsc:      "Date Added (Oldest)"
-        case .releaseDateAsc:  "Release Date (Oldest)"
-        case .lastContentAddedDesc: "Recently Updated"
-        case .ratingDesc:      "Rating"
+        case .titleAsc:        String(localized: "Title A-Z")
+        case .titleDesc:       String(localized: "Title Z-A")
+        case .releaseDateDesc: String(localized: "Release Date")
+        case .addedAtDesc:     String(localized: "Date Added")
+        case .addedAtAsc:      String(localized: "Date Added (Oldest)")
+        case .releaseDateAsc:  String(localized: "Release Date (Oldest)")
+        case .lastContentAddedDesc: String(localized: "Recently Updated")
+        case .ratingDesc:      String(localized: "Rating")
         }
     }
 }
@@ -30,7 +30,14 @@ extension SortOption {
 enum LibraryViewMode: String {
     case titles, collections, folders
 
-    var title: String { rawValue.capitalized }
+    // Display name; rawValue is persisted.
+    var title: String {
+        switch self {
+        case .titles: String(localized: "Titles")
+        case .collections: String(localized: "Collections")
+        case .folders: String(localized: "Folders")
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -283,7 +290,7 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     func configure(title: String, count: Int, sortName: String, sortMenu: UIMenu,
                    view: LibraryViewMode, viewMenu: UIMenu?) {
         titleLabel.text = title
-        countLabel.text = view == .collections ? "\(count) collections" : "\(count) items"
+        countLabel.text = view == .collections ? String(localized: "\(count) collections") : String(localized: "\(count) items")
         sortButton.configure(sortName: sortName)
         sortButton.menu = sortMenu
         sortButton.showsMenuAsPrimaryAction = true

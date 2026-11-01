@@ -15,6 +15,12 @@ import UIKit
 struct SettingDescriptor {
     let icon: String
     let description: String
+
+    /// A literal `description` is extracted to the string catalog.
+    init(icon: String, description: String.LocalizationValue) {
+        self.icon = icon
+        self.description = String(localized: description)
+    }
 }
 
 // MARK: - Descriptor Store
@@ -551,15 +557,15 @@ enum SettingsDescriptorStore {
     // MARK: - Page Descriptors
 
     /// A group's own panel icon on pages whose icon follows focus between groups,
-    /// keyed by the group's header title. Nil keeps the page icon.
+    /// keyed by the group's header id. Nil keeps the page icon.
     static func sectionIcon(for page: SettingsPage, section: String?) -> String? {
         guard page == .appearance else { return nil }
         switch section {
-        case "Home": return "house.fill"
-        case "Library": return "books.vertical.fill"
-        case "Details": return "star.leadinghalf.filled"
-        case "Live TV": return "tv.fill"
-        case "Extras": return "sparkles"
+        case "hdr_Home": return "house.fill"
+        case "hdr_Library": return "books.vertical.fill"
+        case "hdr_Details": return "star.leadinghalf.filled"
+        case "hdr_Live TV": return "tv.fill"
+        case "hdr_Extras": return "sparkles"
         default: return nil
         }
     }

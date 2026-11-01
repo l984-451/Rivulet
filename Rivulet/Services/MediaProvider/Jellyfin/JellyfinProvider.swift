@@ -311,7 +311,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         var hubs: [MediaHub] = []
         if !continuing.isEmpty {
             hubs.append(MediaHub(id: "\(library.id).continueWatching", providerID: id,
-                                 title: "Continue Watching", style: .shelf, items: map(continuing)))
+                                 title: String(localized: "Continue Watching"), style: .shelf, items: map(continuing)))
         }
         if let recent = recentlyAddedHub(library, added) { hubs.append(recent) }
         return hubs
@@ -326,7 +326,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     private func recentlyAddedHub(_ library: MediaLibrary, _ added: [JFItem]) -> MediaHub? {
         added.isEmpty ? nil : MediaHub(id: "\(library.id).recentlyAdded", providerID: id,
-                                       title: "Recently Added in \(library.title)", style: .shelf, items: map(added))
+                                       title: String(localized: "Recently Added in \(library.title)"), style: .shelf, items: map(added))
     }
 
     /// Two requests: the library's TMDB ids, then the matches. 12.1 ignores
@@ -525,10 +525,10 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     func isOnWatchlist(_ ref: MediaItemRef) async -> Bool { false }
     func addToWatchlist(_ ref: MediaItemRef) async throws {
-        throw MediaProviderError.backendSpecific(underlying: "Jellyfin has no watchlist")
+        throw MediaProviderError.backendSpecific(underlying: String(localized: "Jellyfin has no watchlist"))
     }
     func removeFromWatchlist(_ ref: MediaItemRef) async throws {
-        throw MediaProviderError.backendSpecific(underlying: "Jellyfin has no watchlist")
+        throw MediaProviderError.backendSpecific(underlying: String(localized: "Jellyfin has no watchlist"))
     }
 
     // MARK: - Helpers

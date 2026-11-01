@@ -131,8 +131,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     // MARK: - Quality
 
     var qualityLabel: String {
-        let playing = request.plan.step?.label ?? "Original"
-        return request.quality == .auto ? "Auto · \(playing)" : playing
+        let playing = request.plan.step?.label ?? String(localized: "Original")
+        return request.quality == .auto ? String(localized: "Auto · \(playing)") : playing
     }
 
     func switchQuality(_ quality: StreamingQuality) {
@@ -742,17 +742,18 @@ private struct IOSPlexPlayerScreen: View {
 
     private var failure: IOSPlayerFailure? {
         if let reason = session.serverStopReason {
-            return IOSPlayerFailure(message: reason, canRetry: false, title: "Playback Stopped", systemImage: "stop.circle.fill")
+            return IOSPlayerFailure(message: reason, canRetry: false, title: String(localized: "Playback Stopped"), systemImage: "stop.circle.fill")
         }
         guard case .failed(let message) = player.state else { return nil }
         return IOSPlayerFailure(message: message, canRetry: player.canRetry)
     }
 
     private var contextualAction: IOSPlayerContextualAction? {
-        let next = session.queue == nil ? "Next Episode" : "Next"
+        let isEpisode = session.queue == nil
+        let next = isEpisode ? String(localized: "Next Episode") : String(localized: "Next")
         if let countdown = session.upNextCountdown {
             return IOSPlayerContextualAction(
-                title: "\(next) in \(countdown)",
+                title: isEpisode ? String(localized: "Next Episode in \(countdown)") : String(localized: "Next in \(countdown)"),
                 systemImage: "forward.end.fill",
                 action: session.playNext,
                 cancel: session.cancelUpNext
@@ -763,7 +764,7 @@ private struct IOSPlexPlayerScreen: View {
         }
         if let marker = session.activeMarker, MarkerSkipMode.current(for: marker.type ?? "") != .off {
             return IOSPlayerContextualAction(
-                title: "Skip \(marker.displayName)",
+                title: String(localized: "Skip \(marker.displayName)"),
                 systemImage: marker.isCommunity ? "person.3.fill" : nil,
                 action: { session.skip(marker) }
             )
@@ -850,7 +851,7 @@ private struct IOSPlayerChaptersPane: View {
                                     .frame(width: 96, height: 54)
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(chapter.tag ?? "Chapter \(index + 1)").font(.headline).lineLimit(2)
+                                    Text(chapter.tag ?? String(localized: "Chapter \(index + 1)")).font(.headline).lineLimit(2)
                                     Text(Self.time(chapter.startTimeOffset ?? 0))
                                         .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
                                 }

@@ -475,11 +475,11 @@ enum XMLTVParseError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .httpError(let code):
-            return "HTTP error \(code)"
+            return String(localized: "HTTP error \(code)")
         case .parseFailed:
-            return "Failed to parse XMLTV data"
+            return String(localized: "Failed to parse XMLTV data")
         case .tooLarge:
-            return "The guide is too large"
+            return String(localized: "The guide is too large")
         }
     }
 }

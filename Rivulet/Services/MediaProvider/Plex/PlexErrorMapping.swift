@@ -15,13 +15,13 @@ extension MediaProviderError {
     static func mapping(_ error: Error) -> MediaProviderError {
         if let plexErr = error as? PlexAPIError {
             switch plexErr {
-            case .invalidURL: return .backendSpecific(underlying: "Plex URL malformed")
-            case .invalidResponse: return .backendSpecific(underlying: "Plex returned an invalid response")
+            case .invalidURL: return .backendSpecific(underlying: String(localized: "Plex URL malformed"))
+            case .invalidResponse: return .backendSpecific(underlying: String(localized: "Plex returned an invalid response"))
             case .httpError(let statusCode, _):
                 if statusCode == 401 || statusCode == 403 { return .unauthorized }
                 if statusCode == 404 { return .notFound }
-                return .backendSpecific(underlying: "Plex HTTP \(statusCode)")
-            case .parsingError: return .backendSpecific(underlying: "Plex response unparseable")
+                return .backendSpecific(underlying: String(localized: "Plex HTTP \(statusCode)"))
+            case .parsingError: return .backendSpecific(underlying: String(localized: "Plex response unparseable"))
             case .authenticationFailed: return .unauthorized
             case .notFound: return .notFound
             case .networkError(let inner): return .mapping(inner)

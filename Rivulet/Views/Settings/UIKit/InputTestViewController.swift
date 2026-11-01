@@ -139,14 +139,14 @@ final class InputTestViewController: UIViewController {
     private func refresh() {
         if let step = run.currentStep {
             promptLabel.text = step.prompt
-            progressLabel.text = "Step \(run.index + 1) of \(run.steps.count)   ·   \(max(secondsLeft, 0))s"
-            hintLabel.text = "Perform these steps in order. Pressing Back will close this screen."
+            progressLabel.text = String(localized: "Step \(run.index + 1) of \(run.steps.count)   ·   \(max(secondsLeft, 0))s")
+            hintLabel.text = String(localized: "Perform these steps in order. Pressing Back will close this screen.")
         } else {
-            promptLabel.text = "Done"
+            promptLabel.text = String(localized: "Done")
             progressLabel.text = didCapture
-                ? "Results sent to Rivulet's diagnostics."
-                : "No presses were recorded."
-            hintLabel.text = "Press Back to close this screen."
+                ? String(localized: "Results sent to Rivulet's diagnostics.")
+                : String(localized: "No presses were recorded.")
+            hintLabel.text = String(localized: "Press Back to close this screen.")
         }
         // On screen: the step results only, which is bounded by the script. The
         // unprompted presses are counted rather than listed — they can run to
@@ -155,7 +155,7 @@ final class InputTestViewController: UIViewController {
         var shown = run.lines
         if !run.extras.isEmpty {
             shown.append("")
-            shown.append("\(run.extras.count) unprompted press(es) also recorded")
+            shown.append(String(localized: "\(run.extras.count) unprompted presses also recorded"))
         }
         shown.append("")
         shown.append(Self.header)
@@ -190,7 +190,7 @@ final class InputTestViewController: UIViewController {
         card.addSubview(blur)
 
         let title = UILabel()
-        title.text = "Remote Input Test"
+        title.text = String(localized: "Remote Input Test")
         title.font = .systemFont(ofSize: 40, weight: .bold)
         title.textColor = .white
 

@@ -141,7 +141,7 @@ final class BelowFoldContentLoader {
     private static func formatTrailerDuration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         let m = total / 60, s = total % 60
-        if m == 0 { return "\(s)s" }
-        return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+        if m == 0 { return String(localized: "\(s)s") }
+        return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
     }
 }

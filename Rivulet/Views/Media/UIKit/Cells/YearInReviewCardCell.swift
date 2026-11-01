@@ -49,7 +49,7 @@ final class YearInReviewCardCell: UICollectionViewCell {
         titleLabel.textColor = .white
         subtitleLabel.font = .systemFont(ofSize: 36, weight: .semibold)
         subtitleLabel.textColor = UIColor(white: 1, alpha: 0.85)
-        subtitleLabel.text = "See what you watched this year"
+        subtitleLabel.text = String(localized: "See what you watched this year")
         let text = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         text.axis = .vertical
         text.spacing = 10
@@ -82,7 +82,7 @@ final class YearInReviewCardCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(year: Int) {
-        titleLabel.text = "Your \(year)"
+        titleLabel.text = String(localized: "Your \(year)")
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext,

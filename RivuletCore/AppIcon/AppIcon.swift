@@ -12,10 +12,10 @@ enum AppIcon: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .standard: return "Default"
-        case .simpleColour: return "Simple Colour"
-        case .simpleWhite: return "Simple White"
-        case .pixel: return "Pixel"
+        case .standard: return String(localized: "Default")
+        case .simpleColour: return String(localized: "Simple Colour")
+        case .simpleWhite: return String(localized: "Simple White")
+        case .pixel: return String(localized: "Pixel")
         }
     }
 

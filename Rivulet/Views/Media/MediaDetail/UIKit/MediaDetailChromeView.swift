@@ -582,7 +582,7 @@ final class MediaDetailChromeView: UIView {
            let overview = detail.item.overview, !overview.isEmpty {
             // Episode: bold "S1, E1:" prefix before the synopsis.
             let color = UIColor.white.withAlphaComponent(0.85)
-            let attr = NSMutableAttributedString(string: "S\(s), E\(e): ", attributes: [
+            let attr = NSMutableAttributedString(string: String(localized: "S\(s), E\(e): "), attributes: [
                 .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color])
             attr.append(NSAttributedString(string: overview, attributes: [
                 .font: Self.descriptionFont, .foregroundColor: color]))
@@ -593,7 +593,7 @@ final class MediaDetailChromeView: UIView {
         }
         let topCast = detail.cast.prefix(3).map { $0.name }
         if !topCast.isEmpty {
-            let attr = NSMutableAttributedString(string: "Starring ", attributes: [
+            let attr = NSMutableAttributedString(string: String(localized: "Starring "), attributes: [
                 .foregroundColor: UIColor.white.withAlphaComponent(Self.rolesLabelAlpha)])
             attr.append(NSAttributedString(string: topCast.joined(separator: ", ")))
             castLabel.attributedText = attr
@@ -737,7 +737,7 @@ final class MediaDetailChromeView: UIView {
 
         guard let tmdbID = item.tmdbID else {
             icon.image = UIImage(systemName: "bookmark")
-            label.text = "Watchlist"
+            label.text = String(localized: "Watchlist")
             return pill
         }
         let guid = "tmdb://\(tmdbID)"
@@ -746,7 +746,7 @@ final class MediaDetailChromeView: UIView {
             let isOn = PlexWatchlistService.shared.contains(guid: guid)
                 || PlexWatchlistService.shared.contains(tmdbId: tmdbID)
             icon.image = UIImage(systemName: isOn ? "bookmark.fill" : "bookmark")
-            label.text = "Watchlist"
+            label.text = String(localized: "Watchlist")
         }
         render()
 
@@ -799,7 +799,7 @@ final class MediaDetailChromeView: UIView {
                 self?.setWatched(choice.markWatched, show)
             })
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         host.present(alert, animated: true)
     }
 
@@ -1102,18 +1102,18 @@ final class MediaDetailChromeView: UIView {
         let hours = minutes / 60
         let remaining = minutes % 60
         if hours > 0 {
-            return remaining > 0 ? "\(hours)h \(remaining)m" : "\(hours)h"
+            return remaining > 0 ? String(localized: "\(hours)h \(remaining)m") : String(localized: "\(hours)h")
         }
-        return "\(minutes)m"
+        return String(localized: "\(minutes)m")
     }
 
     private static func kindLabel(_ kind: MediaKind) -> String {
         switch kind {
-        case .movie: return "Movie"
-        case .show, .season, .episode: return "TV Show"
-        case .collection: return "Collection"
-        case .playlist: return "Playlist"
-        case .person: return "Person"
+        case .movie: return String(localized: "Movie")
+        case .show, .season, .episode: return String(localized: "TV Show")
+        case .collection: return String(localized: "Collection")
+        case .playlist: return String(localized: "Playlist")
+        case .person: return String(localized: "Person")
         case .unknown: return ""
         }
     }
@@ -1159,8 +1159,8 @@ struct ShowWatchPrompt: Equatable {
         let markWatched: Bool
     }
 
-    static let markWatched = Choice(title: "Mark All Watched", markWatched: true)
-    static let markUnwatched = Choice(title: "Mark All Unwatched", markWatched: false)
+    static let markWatched = Choice(title: String(localized: "Mark All Watched"), markWatched: true)
+    static let markUnwatched = Choice(title: String(localized: "Mark All Unwatched"), markWatched: false)
 
     let message: String?
     let choices: [Choice]
@@ -1173,7 +1173,7 @@ struct ShowWatchPrompt: Equatable {
         }
         let total = progress.total
         let played = min(max(progress.played, 0), total)
-        message = "\(played) of \(total) episodes watched."
+        message = String(localized: "\(played) of \(total) episodes watched.")
         choices = (played < total ? [Self.markWatched] : []) + (played > 0 ? [Self.markUnwatched] : [])
     }
 }

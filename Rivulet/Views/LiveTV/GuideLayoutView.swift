@@ -126,7 +126,7 @@ struct GuideLayoutView: View {
             programs.append(UnifiedProgram(
                 id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
                 channelId: channelId,
-                title: "No guide data available.",
+                title: String(localized: "No guide data available."),
                 startTime: blockStart,
                 endTime: blockEnd
             ))
@@ -282,7 +282,7 @@ struct GuideLayoutView: View {
                     presentProgramMenu(channel: channel, program: program, frame: frame)
                 },
                 recordingProgramIds: dataStore.recordingProgramIds(in: dataStore.epg),
-                categoryActionTitle: dataStore.hasRecordingSources ? "Recordings" : nil,
+                categoryActionTitle: dataStore.hasRecordingSources ? String(localized: "Recordings") : nil,
                 onCategoryAction: { presentRecordings() },
                 miniSession: miniSession,
                 onMiniPlayerSelect: { miniSession.map { selectChannel($0.channel) } }

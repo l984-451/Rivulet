@@ -1145,7 +1145,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         guard let container = try? JSONDecoder().decode(TimelineReply.self, from: data).MediaContainer,
               container.terminationCode != nil || container.terminationText != nil else { return nil }
         let text = container.terminationText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text.isEmpty ? "Your Plex server stopped this stream." : text
+        return text.isEmpty ? String(localized: "Your Plex server stopped this stream.") : text
     }
 
     nonisolated private struct TimelineReply: Decodable {
@@ -2370,7 +2370,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
                 seenChannels.insert(channelId)
 
-                let channelTitle = media.channelTitle ?? "Channel \(channelId)"
+                let channelTitle = media.channelTitle ?? String(localized: "Channel \(channelId)")
                 let channelNumber = media.channelVcn ?? channelId
 
                 let channel = PlexLiveTVChannel(
@@ -2875,7 +2875,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                     key: program.key,
                     guid: program.guid,
                     type: program.type,
-                    title: program.title ?? "Unknown",
+                    title: program.title ?? String(localized: "Unknown"),
                     grandparentTitle: program.grandparentTitle,
                     parentTitle: program.parentTitle,
                     summary: program.summary,
@@ -3296,19 +3296,19 @@ enum PlexAPIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid URL"
+            return String(localized: "Invalid URL")
         case .invalidResponse:
-            return "Invalid server response"
+            return String(localized: "Invalid server response")
         case .httpError(let statusCode, _):
-            return "HTTP error: \(statusCode)"
+            return String(localized: "HTTP error: \(statusCode)")
         case .parsingError:
-            return "Failed to parse response"
+            return String(localized: "Failed to parse response")
         case .authenticationFailed:
-            return "Authentication failed"
+            return String(localized: "Authentication failed")
         case .notFound:
-            return "Item not found"
+            return String(localized: "Item not found")
         case .networkError(let error):
-            return "Network error: \(error.localizedDescription)"
+            return String(localized: "Network error: \(error.localizedDescription)")
         }
     }
 }
@@ -3319,6 +3319,6 @@ enum PlexAPIError: LocalizedError {
 nonisolated struct PlexLiveTuneError: LocalizedError {
     let serverMessage: String
 
-    var errorDescription: String? { "Tune failed: \(serverMessage)" }
+    var errorDescription: String? { String(localized: "Tune failed: \(serverMessage)") }
 }
 

@@ -183,7 +183,7 @@ extension IOSPlexPlaybackRequest {
         (item.Media?.first?.Part?.first?.Stream ?? []).filter { $0.streamType == streamType }.map { stream in
             AetherPlayer.Track(
                 id: stream.id,
-                name: stream.displayTitle ?? stream.extendedDisplayTitle ?? "Track \(stream.id)",
+                name: stream.displayTitle ?? stream.extendedDisplayTitle ?? String(localized: "Track \(stream.id)"),
                 codec: stream.codec ?? "",
                 language: stream.languageCode ?? stream.language,
                 channels: stream.channels ?? 0,

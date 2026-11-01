@@ -76,15 +76,15 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
         let url: URL
         do {
             guard let resolved = try await store.resolveStreamURL(for: channel) else {
-                notice = "This channel has no stream."
+                notice = String(localized: "This channel has no stream.")
                 return
             }
             url = resolved
         } catch {
             guard !isCancellationError(error) else { return }
             notice = error is PlexLiveTuneError
-                ? "Couldn't tune this channel. All tuners may be busy."
-                : (error as? TvheadendError)?.errorDescription ?? "Couldn't tune this channel."
+                ? String(localized: "Couldn't tune this channel. All tuners may be busy.")
+                : (error as? TvheadendError)?.errorDescription ?? String(localized: "Couldn't tune this channel.")
             return
         }
         // A tune that finished after Close or a switch still holds the tuner.
@@ -100,7 +100,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
             guard !Task.isCancelled, !isCancellationError(error) else { return }
             keepalive.stop()
             if channel.sourceType != .plex, await LiveTunerBusy.sourceIsBusy(url, headers: headers) {
-                notice = "All tuners are busy. Stop another stream and try again."
+                notice = String(localized: "All tuners are busy. Stop another stream and try again.")
             }
         }
     }
@@ -251,7 +251,7 @@ private struct IOSLivePlayerScreen: View {
         }
     }
 
-    private func glassButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func glassButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { glassLabel(systemImage: systemImage) }
             .accessibilityLabel(title)
     }

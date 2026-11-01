@@ -27,7 +27,7 @@ struct IOSPlayerContextualAction {
 struct IOSPlayerFailure: Equatable {
     let message: String
     let canRetry: Bool
-    var title = "Couldn't Play"
+    var title = String(localized: "Couldn't Play")
     var systemImage = "exclamationmark.triangle.fill"
 }
 
@@ -376,7 +376,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     scrubValue: $scrubValue,
                     leadingLabel: Self.format(shown),
                     trailingLabel: "-" + Self.format(max(0, duration - shown)),
-                    accessibilityValue: "\(Self.format(shown)) of \(Self.format(duration))",
+                    accessibilityValue: String(localized: "\(Self.format(shown)) of \(Self.format(duration))"),
                     onCommit: commitScrub,
                     onStep: stepFromAccessibility
                 )
@@ -391,7 +391,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     scrubValue: $scrubValue,
                     leadingLabel: behind >= 1 ? "-" + Self.format(behind) : "",
                     trailingLabel: programme.map { $0.upperBound.formatted(date: .omitted, time: .shortened) } ?? "",
-                    accessibilityValue: behind >= 1 ? "\(Self.format(behind)) behind live" : "Live",
+                    accessibilityValue: behind >= 1 ? String(localized: "\(Self.format(behind)) behind live") : String(localized: "Live"),
                     onCommit: commitScrub,
                     onStep: stepFromAccessibility
                 )
@@ -404,7 +404,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                         scrubValue: .constant(nil),
                         leadingLabel: programme.lowerBound.formatted(date: .omitted, time: .shortened),
                         trailingLabel: programme.upperBound.formatted(date: .omitted, time: .shortened),
-                        accessibilityValue: "Programme progress",
+                        accessibilityValue: String(localized: "Programme progress"),
                         isInteractive: false,
                         onCommit: { _ in },
                         onStep: { _ in }
@@ -595,7 +595,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         .id(ripple.id)
     }
 
-    private func glassButton(_ label: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func glassButton(_ label: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
         Button { interact(action) } label: {
             Image(systemName: systemImage)
                 .font(.body.weight(.semibold))

@@ -34,14 +34,14 @@ enum CuratedSection: String, Sendable, CaseIterable, Identifiable, Hashable, Cod
 
     var title: String {
         switch self {
-        case .moviePopular: return "Popular Movies"
-        case .movieNowPlaying: return "Now Playing"
-        case .movieUpcoming: return "Upcoming"
-        case .movieTopRated: return "Top Rated Movies"
-        case .tvPopular: return "Popular TV"
-        case .tvAiringToday: return "Airing Today"
-        case .tvOnTheAir: return "On The Air"
-        case .tvTopRated: return "Top Rated TV"
+        case .moviePopular: return String(localized: "Popular Movies")
+        case .movieNowPlaying: return String(localized: "Now Playing")
+        case .movieUpcoming: return String(localized: "Upcoming")
+        case .movieTopRated: return String(localized: "Top Rated Movies")
+        case .tvPopular: return String(localized: "Popular TV")
+        case .tvAiringToday: return String(localized: "Airing Today")
+        case .tvOnTheAir: return String(localized: "On The Air")
+        case .tvTopRated: return String(localized: "Top Rated TV")
         }
     }
 }

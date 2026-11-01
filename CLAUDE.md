@@ -917,6 +917,30 @@ version** (`"Updated AetherEngine to X.Y.Z"`). Do not list what the engine
 release fixes: engine internals are not the user's mental model, and a long
 engine-fix paragraph crowds out the app's own notes.
 
+### UI text and localization (#457)
+
+Every string a user reads goes through the String Catalog
+(`Rivulet/Localizable.xcstrings`, `RivuletiOS/…`, `TopShelfExtension/…`; English
+is the source, keys are the English text). Xcode extracts a literal only when it
+is passed as a localizable type, so:
+- **Funnels take `String.LocalizationValue`**: `SettingsRowItem(title:)`,
+  `SettingDescriptor`, `EntryStep`, `TileMenuAction`, `MusicMenuItem`,
+  `CardStepperConfig`, `presentConfirm`. Pass a bare literal. Text that isn't
+  ours (server, library, channel, profile names) goes through `verbatim:`.
+  Never add a same-label `String` overload: Swift picks it for literals and
+  nothing is extracted (measured).
+- **Anywhere else, `String(localized: "…")`.** SwiftUI `Text("…")` already is.
+  The `unlocalized_ui_text` lint rule catches literals assigned to UIKit text.
+- **One literal per sentence**, interpolated (`"Resume S\(s), E\(e)"`), never
+  concatenated pieces. Counts use one key (`"\(n) albums"`) with English plural
+  variants in the catalog.
+- **Display text is never an id.** A raw value that is persisted or matched stays
+  English and gets a separate `title` (`LiveGenre`, `SubtitleMode`); a header's id
+  comes from its English key (`LocalizedStringResource.key`).
+- Changelogs, license text, brand names and codec/format tokens stay English.
+- Building in Xcode syncs new keys into the catalogs; from the command line,
+  `xcrun xcstringstool sync <catalog> --stringsdata <target's .stringsdata files>`.
+
 ### Adding Settings
 
 Settings is **UIKit** on tvOS (the iOS app's settings are a SwiftUI Form in the Account sheet, `RivuletiOS/Settings/`). A page is a list of `SettingsRowItem` values built in

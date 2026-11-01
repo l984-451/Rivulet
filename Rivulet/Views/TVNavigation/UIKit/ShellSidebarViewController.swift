@@ -265,7 +265,7 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
         iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 44, weight: .regular)
         nameLabel.font = .preferredFont(forTextStyle: .caption1)
         captionLabel.font = .systemFont(ofSize: 21, weight: .regular)
-        captionLabel.text = "Switch Profile"
+        captionLabel.text = String(localized: "Switch Profile")
         captionLabel.textColor = UIColor.white.withAlphaComponent(0.3)
         clockLabel.font = .preferredFont(forTextStyle: .caption2)
         clockLabel.textColor = UIColor.white.withAlphaComponent(0.3)
@@ -336,7 +336,7 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
         avatarView.url = item.avatarURL
         nameLabel.text = item.title
         canSwitch = item.canSwitchProfile
-        accessibilityLabel = canSwitch ? "\(item.title), Switch Profile" : item.title
+        accessibilityLabel = canSwitch ? String(localized: "\(item.title), Switch Profile") : item.title
         accessibilityTraits = canSwitch ? .button : .staticText
         applyAppearance(focused: isFocused)
     }
@@ -780,7 +780,7 @@ final class ShellSidebarViewController: UIViewController {
         }
         let profileName = PlexUserProfileManager.shared.selectedUser?.displayName
             ?? PlexAuthManager.shared.username
-            ?? "Account"
+            ?? String(localized: "Account")
         return ShellSidebarModel.sections(
             libraries: SidebarLibrary.current(),
             liveTVSources: LiveTVDataStore.shared.sources,
@@ -796,7 +796,7 @@ final class ShellSidebarViewController: UIViewController {
         for section in sections {
             if let match = section.items.first(where: { $0.tab == tab }) { return match }
         }
-        return ShellSidebarItem(tab: .home, title: "Home", icon: "house.fill")
+        return ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: "house.fill")
     }
 
 }
@@ -945,8 +945,8 @@ extension ShellSidebarViewController {
         }
         if SidebarArrangement.isLiveTV(key) {
             let current = LiveTVLayout(rawValue: UserDefaults.standard.string(forKey: "liveTVLayout") ?? "") ?? .fallback
-            let layouts = [LiveTVLayout.browse, .guide].map { layout in
-                TileMenuAction(title: layout.description,
+            let layouts = [LiveTVLayout.browse, .guide].map { layout -> TileMenuAction in
+                TileMenuAction(verbatim: layout.description,
                                systemImage: layout == current ? "checkmark" : (layout == .guide ? "list.bullet.rectangle" : "square.grid.2x2")) {
                     UserDefaults.standard.set(layout.rawValue, forKey: "liveTVLayout")
                 }

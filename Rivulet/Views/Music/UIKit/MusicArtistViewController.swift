@@ -32,8 +32,8 @@ final class MusicArtistViewController: UIViewController, UICollectionViewDelegat
 
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
-    private let playButton = MusicChrome.pill(title: "Play", symbol: "play.fill")
-    private let shuffleButton = MusicChrome.pill(title: "Shuffle", symbol: "shuffle")
+    private let playButton = MusicChrome.pill(title: String(localized: "Play"), symbol: "play.fill")
+    private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
     private let moreButton = MusicChrome.pill(title: nil, symbol: "ellipsis")
     private lazy var failureView = MusicChrome.failureView { [weak self] in self?.load() }
 
@@ -186,7 +186,7 @@ final class MusicArtistViewController: UIViewController, UICollectionViewDelegat
 
     private lazy var headerRegistration = UICollectionView.CellRegistration<MusicHeaderCell, Item> {
         [unowned self] cell, _, _ in
-        let count = albums.isEmpty ? nil : "\(albums.count) \(albums.count == 1 ? "album" : "albums")"
+        let count = albums.isEmpty ? nil : String(localized: "\(albums.count) albums")
         cell.configure(layout: .grid, title: artist.name, line2: count, buttons: [playButton, shuffleButton, moreButton])
     }
 
@@ -282,7 +282,7 @@ final class MusicAboutCell: UICollectionViewCell {
         super.init(frame: frame)
         clipsToBounds = false
         contentView.clipsToBounds = false
-        heading.text = "About"
+        heading.text = String(localized: "About")
         for view in [platter, heading, body] as [UIView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(view)

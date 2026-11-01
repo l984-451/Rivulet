@@ -22,8 +22,8 @@ enum LiveTVLayout: String, CaseIterable, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .guide: return "Guide"
-        case .browse: return "What's On"
+        case .guide: return String(localized: "Guide")
+        case .browse: return String(localized: "What's On")
         }
     }
 

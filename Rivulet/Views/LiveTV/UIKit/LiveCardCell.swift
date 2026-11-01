@@ -191,26 +191,26 @@ final class LiveCardCell: UICollectionViewCell {
         // Text
         switch item.kind {
         case .channel:
-            titleLabel.text = program?.displayTitle ?? channel?.name ?? "Live"
+            titleLabel.text = program?.displayTitle ?? channel?.name ?? String(localized: "Live")
             detailLabel.text = [channel?.channelNumber.map(String.init), channel?.name]
                 .compactMap { $0 }
                 .joined(separator: " · ")
             // On now and set to record means it is recording. LIVE is for
             // live airings only, never replays.
-            setPill(item.setToRecord ? "● REC" : program?.isLiveAiring == true ? "▶ LIVE" : nil, color: .systemRed)
+            setPill(item.setToRecord ? String(localized: "● REC") : program?.isLiveAiring == true ? String(localized: "▶ LIVE") : nil, color: .systemRed)
         case .upcoming:
-            titleLabel.text = program?.displayTitle ?? "Upcoming"
+            titleLabel.text = program?.displayTitle ?? String(localized: "Upcoming")
             detailLabel.text = channel?.name
             setPill(program.map { LiveCardItem.startLabel($0, now: now) }, color: UIColor.white.withAlphaComponent(0.25),
                     recordDot: item.setToRecord)
         case .recording:
             let recording = item.recording
-            titleLabel.text = recording.map { UnifiedProgram.displayTitle($0.title) } ?? "Recording"
+            titleLabel.text = recording.map { UnifiedProgram.displayTitle($0.title) } ?? String(localized: "Recording")
             detailLabel.text = [recording?.subtitle, recording?.channelName]
                 .compactMap { $0 }
                 .joined(separator: " · ")
             if recording?.status == .recording {
-                setPill("● REC", color: .systemRed)
+                setPill(String(localized: "● REC"), color: .systemRed)
             } else {
                 setPill(recording.map { $0.startTime.formatted(Self.timeFormat) },
                         color: UIColor.white.withAlphaComponent(0.25), recordDot: true)

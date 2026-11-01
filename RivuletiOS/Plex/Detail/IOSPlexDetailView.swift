@@ -82,7 +82,7 @@ struct IOSPlexDetailView: View {
         }
         IOSPlexCastRow(item: shown)
         if !related.isEmpty {
-            IOSPlexRail(title: "More Like This", kind: .poster, items: related) {
+            IOSPlexRail(title: String(localized: "More Like This"), kind: .poster, items: related) {
                 IOSPlexPosterCard(item: $0, width: $1)
             }
         }
@@ -142,7 +142,7 @@ struct IOSPlexDetailView: View {
     /// The season menu: switch seasons, or download the one showing.
     @ViewBuilder
     private var seasonPicker: some View {
-        let title = currentSeason.map(seasonLabel) ?? "Episodes"
+        let title = currentSeason.map(seasonLabel) ?? String(localized: "Episodes")
         if seasons.count > 1 || (currentSeason != nil && plex.isConfigured) {
             Menu {
                 if seasons.count > 1 {
@@ -170,7 +170,7 @@ struct IOSPlexDetailView: View {
 
     private func seasonLabel(_ season: PlexMetadata) -> String {
         guard let index = season.index else { return season.displayTitle }
-        return index == 0 ? "Specials" : "Season \(index)"
+        return index == 0 ? String(localized: "Specials") : String(localized: "Season \(index)")
     }
 
     // MARK: - Play target
@@ -422,7 +422,7 @@ private struct IOSPlexDetailHeader: View {
         }
     }
 
-    private func circleButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func circleButton(_ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).frame(width: 22, height: 22)
         }

@@ -380,21 +380,21 @@ enum LiveTVProviderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConnected:
-            return "Source is not connected"
+            return String(localized: "Source is not connected")
         case .authenticationRequired:
-            return "Authentication required"
+            return String(localized: "Authentication required")
         case .sourceNotConfigured:
-            return "Source is not configured"
+            return String(localized: "Source is not configured")
         case .networkError(let error):
-            return "Network error: \(error.localizedDescription)"
+            return String(localized: "Network error: \(error.localizedDescription)")
         case .parseError(let message):
-            return "Parse error: \(message)"
+            return String(localized: "Parse error: \(message)")
         case .noChannelsFound:
-            return "No channels found"
+            return String(localized: "No channels found")
         case .channelNotFound(let id):
-            return "Channel not found: \(id)"
+            return String(localized: "Channel not found: \(id)")
         case .epgNotAvailable:
-            return "EPG data is not available"
+            return String(localized: "EPG data is not available")
         }
     }
 }

@@ -517,7 +517,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         // landed. Without this the caller can't tell a success from a no-op —
         // which is how #269 shipped a button that lied.
         guard await MainActor.run(body: { service.contains(guid: guid) }) else {
-            throw MediaProviderError.backendSpecific(underlying: "Plex rejected the watchlist add")
+            throw MediaProviderError.backendSpecific(underlying: String(localized: "Plex rejected the watchlist add"))
         }
     }
 
@@ -531,7 +531,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         guard let guid = target else { return }   // already off the list
         await service.remove(guid: guid)
         guard await MainActor.run(body: { !guids.contains(where: service.contains) }) else {
-            throw MediaProviderError.backendSpecific(underlying: "Plex rejected the watchlist remove")
+            throw MediaProviderError.backendSpecific(underlying: String(localized: "Plex rejected the watchlist remove"))
         }
     }
 

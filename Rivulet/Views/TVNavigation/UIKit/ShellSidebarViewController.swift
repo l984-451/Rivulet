@@ -441,6 +441,8 @@ final class ShellSidebarViewController: UIViewController {
     private var orderBeforeMove: [String] = []
     /// The row focus follows to once the next sections arrive (a step or a cancel).
     private var pendingFocusKey: String?
+    /// Right swipe closes the open sidebar, the touch twin of the Right press below.
+    private var closeSwipe: DirectionalInputBinding?
 
     var isExpanded: Bool { state == .expanded }
     var focusTarget: UIView { collectionView }
@@ -524,6 +526,14 @@ final class ShellSidebarViewController: UIViewController {
         buildViews()
         configurePill()
         applyState(expanded: true, animated: false)
+        closeSwipe = DirectionalInputBinding(
+            gatedSwipesOn: view, directions: [.right],
+            shouldHandle: { [weak self] _ in self?.state == .expanded && self?.rowMove?.isMoving != true },
+            onSwipe: { [weak self] _ in self?.collapseFromRight() })
+    }
+
+    private func collapseFromRight() {
+        if embedded { onCollapseRequested?() } else { setState(.collapsed) }
     }
 
     override func viewDidLayoutSubviews() {
@@ -546,7 +556,7 @@ final class ShellSidebarViewController: UIViewController {
         for press in presses {
             switch (press.type, state) {
             case (.rightArrow, .expanded):
-                if embedded { onCollapseRequested?() } else { setState(.collapsed) }
+                collapseFromRight()
                 return
             case (.leftArrow, .collapsed) where !embedded:
                 setState(.expanded)

@@ -351,9 +351,15 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   the engine cannot perform, so reuse the press override's own predicate
   (the player's `contentOwnsPress`, the alphabet strip's `containsFocus`).
   Adopters: the Live TV guide (`EPGGuideView`), the player's content anchor,
-  the library alphabet strip (`LibraryAlphabetBarView`) and Music's scrubber. The
+  the library alphabet strip (`LibraryAlphabetBarView`), Music's scrubber and
+  the open sidebar's Right-to-close (#440). The
   player's info panes don't need it: a `UIFocusGuide` between the pills and
   the pane carries Up and Down.
+- **Right past the hero's Next button pages, as the TV app's does** (#440).
+  `HeroButtonRowView` takes the Right the engine declines from Next in
+  `pressesBegan`, plus a gated swipe; focus stays on Next. Not an invisible
+  focus stop past the row: paging rebuilt the row under it, focus stranded on
+  the stop and every arrow key went dead. Left from Play stays the sidebar.
 - **A focusless surface that hands some touches to another recognizer passes
   `swipeGate`.** The focusless binding claims its swipes unconditionally
   unless `swipeGate` is given; then each swipe asks it in

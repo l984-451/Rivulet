@@ -31,6 +31,8 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// searching/error/no-results state, and the grouped result grids.
     static let searchPrompt = HomeSectionID(raw: "search.prompt")
     static let searchState = HomeSectionID(raw: "search.state")
+    /// Home in December and early January: the Year in Review banner.
+    static let yearInReview = HomeSectionID(raw: "yearInReview")
     static func searchGroup(_ key: String) -> HomeSectionID { .init(raw: "search.group:\(key)") }
     static func hub(_ hubID: String) -> HomeSectionID { .init(raw: "hub:\(hubID)") }
 }
@@ -115,6 +117,8 @@ enum HomeSectionKind: Equatable {
     /// Seasons, Music) with a row-style header. Same 6-across poster grid
     /// as the library, no pagination (search caps at 80 results).
     case searchGrid
+    /// Home only — the Year in Review banner, one card.
+    case yearInReview
 }
 
 struct HomeSectionData {
@@ -354,6 +358,21 @@ struct HomeSectionData {
             headerStyle: title == nil ? .swiftUIInfiniteRow : .swiftUIWatchlist,
             totalSize: nil,
             items: items,
+            watchlistItems: [],
+            heroItems: [],
+            hubKey: nil,
+            hubIdentifier: nil
+        )
+    }
+
+    static func yearInReview() -> HomeSectionData {
+        HomeSectionData(
+            id: .yearInReview,
+            kind: .yearInReview,
+            title: "Year in Review",
+            headerStyle: .swiftUIInfiniteRow,
+            totalSize: nil,
+            items: [],
             watchlistItems: [],
             heroItems: [],
             hubKey: nil,
@@ -652,6 +671,8 @@ final class PlexHomeViewController: UIViewController {
     private var recommendationsUserID = UserDefaults.standard.integer(forKey: PlexProfileSession.contentUserIDKey)
     private var isLoadingRecommendations = false
     private var recommendationsError: String?
+    /// Home's Year in Review, once loaded for this profile; nil shows no card.
+    private var yearInReview: YearInReview?
 
     /// Empty-state copy for the current surface; Discover is TMDB-fed, so it never blames the library.
     private var emptyStateMessage: String {
@@ -1936,6 +1957,7 @@ final class PlexHomeViewController: UIViewController {
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
         refreshOnReappearIfNeeded()
+        refreshYearInReview()
         if !isDrillInPage { HalloweenBats.showIfHalloween(in: view) }
         if let window = view.window {
             MenuPressInterceptor.install(in: window)
@@ -2696,6 +2718,7 @@ final class PlexHomeViewController: UIViewController {
         collectionView.register(WatchlistPosterCell.self, forCellWithReuseIdentifier: WatchlistPosterCell.reuseID)
         collectionView.register(PosterSkeletonCell.self, forCellWithReuseIdentifier: PosterSkeletonCell.reuseID)
         collectionView.register(RecommendationsStateCell.self, forCellWithReuseIdentifier: RecommendationsStateCell.reuseID)
+        collectionView.register(YearInReviewCardCell.self, forCellWithReuseIdentifier: YearInReviewCardCell.reuseID)
         // Library-mode sort header (inert registration in home mode — the
         // .sortHeader section only ever exists in library snapshots).
         collectionView.register(MediaLibrarySortControl.self, forCellWithReuseIdentifier: MediaLibrarySortControl.reuseID)
@@ -2780,6 +2803,8 @@ final class PlexHomeViewController: UIViewController {
             return makeGridSectionLayout(section: section)
         case .searchPrompt, .searchState:
             return makeSearchFullWidthLayout()
+        case .yearInReview:
+            return makeHubSectionLayout(section: section, isContinueWatching: false, tile: MediaRowMetrics.yearInReview)
         }
     }
 
@@ -2925,10 +2950,11 @@ final class PlexHomeViewController: UIViewController {
 
     /// One full-width ShelfRowCell per hub section, scrolling itself rather than an orthogonal section
     /// (see ShelfRowCell for why and for the landing math).
-    private func makeHubSectionLayout(section: HomeSectionData, isContinueWatching: Bool) -> NSCollectionLayoutSection {
-        let tile = isContinueWatching
+    private func makeHubSectionLayout(section: HomeSectionData, isContinueWatching: Bool,
+                                      tile override: MediaRowMetrics.Tile? = nil) -> NSCollectionLayoutSection {
+        let tile = override ?? (isContinueWatching
             ? MediaRowMetrics.continueWatching
-            : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster)
+            : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster))
         let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding  // room for focus growth
 
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
@@ -3004,7 +3030,7 @@ final class PlexHomeViewController: UIViewController {
         let loadedCount: Int
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             loadedCount = 0
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -3219,6 +3245,11 @@ final class PlexHomeViewController: UIViewController {
             cell.configure(state: currentSearchState)
             cell.onRetry = { [weak self] in self?.submitSearch() }
             return cell
+
+        case .yearInReview:
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: YearInReviewCardCell.reuseID, for: indexPath) as! YearInReviewCardCell
+            cell.configure(year: yearInReview?.year ?? 0)
+            return cell
         }
     }
 
@@ -3233,6 +3264,7 @@ final class PlexHomeViewController: UIViewController {
             .sink { [weak self] _ in
                 self?.setNeedsSnapshotApply()
                 self?.updateHomeState()
+                self?.refreshYearInReview()
             }
             .store(in: &dataStoreObservers)
 
@@ -3686,6 +3718,8 @@ final class PlexHomeViewController: UIViewController {
                 ids = [HomeItemID(sectionID: section.id, itemID: "search-prompt")]
             case .searchState:
                 ids = [HomeItemID(sectionID: section.id, itemID: "search-state")]
+            case .yearInReview:
+                ids = [HomeItemID(sectionID: section.id, itemID: "year-in-review")]
             }
 
             // Diffable data source crashes on duplicate identifiers.
@@ -3726,7 +3760,7 @@ final class PlexHomeViewController: UIViewController {
         switch kind {
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid: return true
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState: return false
+             .sortHeader, .searchPrompt, .searchState, .yearInReview: return false
         }
     }
 
@@ -3870,7 +3904,7 @@ final class PlexHomeViewController: UIViewController {
             }
             return cell
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return nil
         }
     }
@@ -3915,7 +3949,7 @@ final class PlexHomeViewController: UIViewController {
         case .searchGrid:
             handleSearchTap(section: section, indexPath: IndexPath(item: itemIndex, section: sectionIndex))
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return
         }
     }
@@ -3929,7 +3963,7 @@ final class PlexHomeViewController: UIViewController {
             break
         case .hero, .watchlist, .watchlistGrid, .recommendations, .grid, .discoverList,
              .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .searchGrid:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid:
             return  // No pagination for these (hubKey == nil)
         }
         guard itemIndex >= section.items.count - 5 else { return }
@@ -3964,7 +3998,7 @@ final class PlexHomeViewController: UIViewController {
         case .watchlist:
             presentWatchlistTileMenu(sectionID: sectionID, itemIndex: itemIndex)
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return  // hero / state cells don't get menus
         }
     }
@@ -4116,7 +4150,7 @@ final class PlexHomeViewController: UIViewController {
             }
             return playableItem(section.items[itemIndex])
         case .watchlist, .watchlistGrid, .hero, .grid, .recommendationsLoading,
-             .recommendationsError, .sortHeader, .searchPrompt, .searchState:
+             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return nil
         }
     }
@@ -4386,6 +4420,13 @@ final class PlexHomeViewController: UIViewController {
             section.sourceBadge = labelsServers
                 ? Self.serverName(providerID: hub.items.first?.ref.providerID, kind: kind) : nil
             sections.append(section)
+        }
+
+        if showsYearInReview {
+            // Under Continue Watching, or under the hero when there is none.
+            let anchor = sections.lastIndex { $0.kind == .continueWatching }
+                ?? sections.lastIndex { $0.kind == .hero }
+            sections.insert(.yearInReview(), at: anchor.map { $0 + 1 } ?? 0)
         }
 
         listHeroItems = heroItemsForList(from: sections, rail: rail)
@@ -5330,6 +5371,8 @@ final class PlexHomeViewController: UIViewController {
             presentPreview(forSection: section, indexPath: indexPath)
         case .watchlistGrid:
             Task { await openWatchlistPreview(section: section, tappedIndex: indexPath.item, indexPath: indexPath) }
+        case .yearInReview:
+            presentYearInReview()
         }
     }
 
@@ -6042,7 +6085,7 @@ final class PlexHomeViewController: UIViewController {
         let section = sectionsSnapshot[sectionIndex]
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             return nil
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -6429,7 +6472,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid:
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader, .grid,
-             .watchlistGrid, .searchPrompt, .searchState:
+             .watchlistGrid, .searchPrompt, .searchState, .yearInReview:
             return true
         }
 
@@ -6466,7 +6509,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             previewHiddenRowID != nil && section.id.raw == previewHiddenRowID
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .searchGrid, .watchlistGrid:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid, .watchlistGrid:
             return  // No pagination for these (the watchlist is fetched whole)
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList:
             return  // Shelf rows paginate from their own willDisplay (shelfWillDisplay)
@@ -6501,6 +6544,14 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 self?.removeRecentSearchItem(recent.item)
             }
             present(TileMenuPopupViewController(sections: [[remove]], sourceFrame: recent.frame), animated: false)
+            return
+        }
+        if case .yearInReview = section.kind {
+            guard presentedViewController == nil else { return }
+            let remove = TileMenuAction(title: "Remove from Home", systemImage: "xmark", destructive: true) {
+                [weak self] in self?.removeYearInReview()
+            }
+            present(TileMenuPopupViewController(sections: [[remove]], sourceFrame: focusedTileFrame()), animated: false)
             return
         }
         // Watchlist tiles are Discover entries, not library items: they get the
@@ -7336,7 +7387,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             // (ported from MediaLibraryViewController.updateLeftEdgeGuide).
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             leftEdgeFocusGuide.preferredFocusEnvironments = []
             return
         }
@@ -7496,5 +7547,64 @@ extension PlexHomeViewController: MenuBackHandling {
         }
         snapshot.layer.transform = CATransform3DMakeTranslation(0, distance, 0)
         CATransaction.commit()
+    }
+}
+
+// MARK: - Year in Review
+
+extension PlexHomeViewController {
+    private var yearInReviewProfileID: Int { PlexUserProfileManager.shared.selectedUser?.id ?? 0 }
+
+    /// The year the card shows today, if any. DEBUG builds take `-YearInReviewYear <year>`.
+    private var yearInReviewYear: Int? {
+        #if DEBUG
+        let forced = UserDefaults.standard.integer(forKey: "YearInReviewYear")
+        if forced > 0 { return forced }
+        #endif
+        return YearInReview.year(showingOn: Date())
+    }
+
+    fileprivate var showsYearInReview: Bool {
+        guard case .home = mode, let review = yearInReview, EasterEggs.enabled else { return false }
+        return !YearInReviewStore.isRemoved(year: review.year, profileID: yearInReviewProfileID)
+    }
+
+    /// Loads the selected profile's year once per session; a profile switch changes the token and loads again.
+    fileprivate func refreshYearInReview() {
+        guard case .home = mode else { return }
+        guard let year = yearInReviewYear, EasterEggs.enabled,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else {
+            return setYearInReview(nil)
+        }
+        if let cached = YearInReviewStore.cached(token: token, year: year) { return setYearInReview(cached) }
+        Task { [weak self] in
+            let review = await YearInReviewStore.load(serverURL: serverURL, token: token, year: year)
+            guard let self, self.authManager.selectedServerToken == token else { return }
+            self.setYearInReview(review)
+        }
+    }
+
+    private func setYearInReview(_ review: YearInReview?) {
+        guard review != yearInReview else { return }
+        yearInReview = review
+        setNeedsSnapshotApply()
+        #if DEBUG
+        // `-YearInReviewOpen YES` opens the pages as soon as they load.
+        if review != nil, UserDefaults.standard.bool(forKey: "YearInReviewOpen") { presentYearInReview() }
+        #endif
+    }
+
+    fileprivate func presentYearInReview() {
+        guard let review = yearInReview, presentedViewController == nil,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+        present(YearInReviewViewController(review: review, serverURL: serverURL, token: token), animated: true)
+    }
+
+    fileprivate func removeYearInReview() {
+        guard let review = yearInReview else { return }
+        YearInReviewStore.remove(year: review.year, profileID: yearInReviewProfileID)
+        setNeedsSnapshotApply()
     }
 }

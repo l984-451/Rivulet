@@ -124,6 +124,8 @@ final class MusicNowPlayingBridge {
         center.skipBackwardCommand.isEnabled = false
         center.seekForwardCommand.isEnabled = false
         center.seekBackwardCommand.isEnabled = false
+        center.enableLanguageOptionCommand.isEnabled = false
+        center.disableLanguageOptionCommand.isEnabled = false
     }
 
     // Every handler below stands down while a video owns Now Playing: both

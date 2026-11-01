@@ -37,6 +37,12 @@ final class NowPlayingService: ObservableObject {
     /// Track if we've set Now Playing info with valid duration (> 0)
     /// This prevents the system from ignoring our Now Playing registration
     private var hasValidNowPlayingInfo: Bool = false
+    /// The language option keys, kept so a full info rewrite carries them over.
+    private var languageOptionInfo: [String: Any] = [:]
+    private var publishedAudioTracks: [MediaTrack] = []
+    private var publishedSubtitleTracks: [MediaTrack] = []
+    /// Applies a remote's track pick; a nil id turns subtitles off.
+    private var selectTrack: ((MPNowPlayingInfoLanguageOptionType, Int?) -> Void)?
 
     // MARK: - Initialization
 
@@ -60,7 +66,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     private func setNowPlayingInfoOnAllCenters(_ nowPlayingInfo: [String: Any]?) {
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo?.merging(languageOptionInfo) { _, new in new }
     }
 
     private func withNowPlayingInfoOnAllCenters(_ update: (inout [String: Any]) -> Void) {
@@ -236,6 +242,28 @@ final class NowPlayingService: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Generated subtitles are listed only once the model is on disk: a remote pick never starts its download.
+        Publishers.CombineLatest4(viewModel.$audioTracks, viewModel.$subtitleTracks,
+                                  viewModel.$currentAudioTrackId, viewModel.$currentSubtitleTrackId)
+            .combineLatest(viewModel.$aetherPlayer.map { $0 != nil }.removeDuplicates(),
+                           SpeechModelStore.shared.$state.map { $0 == .ready }.removeDuplicates())
+            .receive(on: RunLoop.main)
+            .sink { [weak self, weak viewModel] _ in
+                guard let self, let viewModel else { return }
+                let subtitles = SpeechModelStore.shared.state == .ready
+                    ? viewModel.subtitleMenuTracks : viewModel.subtitleTracks
+                self.publishTracks(audio: viewModel.audioTracks, subtitles: subtitles,
+                                   audioId: viewModel.currentAudioTrackId,
+                                   subtitleId: viewModel.currentSubtitleTrackId)
+            }
+            .store(in: &cancellables)
+        selectTrack = { [weak viewModel] type, id in
+            if type == .audible {
+                if let id { viewModel?.selectAudioTrack(id: id) }
+            } else {
+                viewModel?.selectSubtitleTrack(id: id)
+            }
+        }
     }
 
     /// Detach from the current view model and clear Now Playing
@@ -249,7 +277,45 @@ final class NowPlayingService: ObservableObject {
         artworkTask = nil
         hasValidNowPlayingInfo = false
         lastHandledPlaybackState = nil
+        selectTrack = nil
+        publishedAudioTracks = []
+        publishedSubtitleTracks = []
+        languageOptionInfo = [:]
         clearNowPlayingInfo()
+    }
+
+    // MARK: - Language Options
+
+    /// Lists the tracks for the system's remotes and marks the selected ones.
+    private func publishTracks(audio: [MediaTrack], subtitles: [MediaTrack], audioId: Int?, subtitleId: Int?) {
+        publishedAudioTracks = audio
+        publishedSubtitleTracks = subtitles
+        languageOptionInfo = [
+            MPNowPlayingInfoPropertyAvailableLanguageOptions:
+                NowPlayingLanguageOptions.groups(audio: audio, subtitles: subtitles),
+            MPNowPlayingInfoPropertyCurrentLanguageOptions:
+                NowPlayingLanguageOptions.current(audio: audio, subtitles: subtitles,
+                                                  audioId: audioId, subtitleId: subtitleId),
+        ]
+        // Before the first info write there is nothing to add to; that write merges these in.
+        guard firstAvailableNowPlayingInfo() != nil else { return }
+        withNowPlayingInfoOnAllCenters { $0.merge(languageOptionInfo) { _, new in new } }
+    }
+
+    private func handleLanguageOption(_ event: MPRemoteCommandEvent, enable: Bool) -> MPRemoteCommandHandlerStatus {
+        guard let selectTrack else { return .noActionableNowPlayingItem }
+        guard let option = (event as? MPChangeLanguageOptionCommandEvent)?.languageOption else { return .commandFailed }
+        let type = option.languageOptionType
+        guard enable else {
+            // Only subtitles can be turned off.
+            guard type == .legible else { return .commandFailed }
+            selectTrack(.legible, nil)
+            return .success
+        }
+        let tracks = type == .audible ? publishedAudioTracks : publishedSubtitleTracks
+        guard let id = NowPlayingLanguageOptions.trackId(for: option, in: tracks) else { return .commandFailed }
+        selectTrack(type, id)
+        return .success
     }
 
     // MARK: - Live TV
@@ -263,6 +329,8 @@ final class NowPlayingService: ObservableObject {
         detach()
         self.inputCoordinator = inputCoordinator
         refreshSkipIntervals()
+        MPRemoteCommandCenter.shared().enableLanguageOptionCommand.isEnabled = true
+        MPRemoteCommandCenter.shared().disableLanguageOptionCommand.isEnabled = true
         ensureAudioSessionActive()
     }
 
@@ -288,6 +356,14 @@ final class NowPlayingService: ObservableObject {
             info[MPMediaItemPropertyArtist] = channelName
         }
         setNowPlayingInfoOnAllCenters(info)
+    }
+
+    /// The live channel's tracks for the system's remotes. `select` applies a pick; a nil id is subtitles off.
+    func updateLiveTracks(audio: [MediaTrack], subtitles: [MediaTrack], audioId: Int?, subtitleId: Int?,
+                          select: @escaping (MPNowPlayingInfoLanguageOptionType, Int?) -> Void) {
+        guard viewModel == nil, inputCoordinator != nil else { return }
+        selectTrack = select
+        publishTracks(audio: audio, subtitles: subtitles, audioId: audioId, subtitleId: subtitleId)
     }
 
     // MARK: - Remote Command Center Setup
@@ -377,6 +453,14 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
+        // Audio and subtitle picks from Control Center and the TV Remote app.
+        commandCenter.enableLanguageOptionCommand.addTarget { [weak self] event in
+            self?.handleLanguageOption(event, enable: true) ?? .noActionableNowPlayingItem
+        }
+        commandCenter.disableLanguageOptionCommand.addTarget { [weak self] event in
+            self?.handleLanguageOption(event, enable: false) ?? .noActionableNowPlayingItem
+        }
+
         // Which commands are ENABLED is set per attach (`claimRemoteCommands`),
         // not here: Music shares this center and flips them for its own layout.
     }
@@ -396,6 +480,8 @@ final class NowPlayingService: ObservableObject {
         commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.seekForwardCommand.isEnabled = true
         commandCenter.seekBackwardCommand.isEnabled = true
+        commandCenter.enableLanguageOptionCommand.isEnabled = true
+        commandCenter.disableLanguageOptionCommand.isEnabled = true
         commandCenter.nextTrackCommand.isEnabled = false
         commandCenter.previousTrackCommand.isEnabled = false
         commandCenter.changeRepeatModeCommand.isEnabled = false

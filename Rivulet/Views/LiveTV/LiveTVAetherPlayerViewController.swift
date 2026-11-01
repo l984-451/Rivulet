@@ -18,6 +18,7 @@
 import AVKit
 import AetherEngine
 import Combine
+import MediaPlayer
 import UIKit
 
 final class LiveTVAetherPlayerViewController: UIViewController {
@@ -447,6 +448,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         aether.$audioTracks
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateRailContent() }
+            .store(in: &cancellables)
+        // The tracks for Control Center and the TV Remote app, engine demux only (as the panels).
+        Publishers.CombineLatest4(aether.$audioTracks, aether.$subtitleTracks,
+                                  aether.$activeAudioTrackId, aether.$activeSubtitleTrackId)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] audio, subtitles, audioId, subtitleId in
+                guard let self else { return }
+                let engineSubtitles = self.isPlayingRemoteHLSDirectly ? [] : subtitles
+                NowPlayingService.shared.updateLiveTracks(
+                    audio: audio, subtitles: engineSubtitles, audioId: audioId, subtitleId: subtitleId
+                ) { [weak self] type, id in
+                    guard let self, let aether = self.aetherPlayer else { return }
+                    if type == .audible {
+                        if let id { aether.selectAudioTrack(id: id) }
+                        self.updateRailContent()
+                    } else {
+                        if self.systemCaptionsOnMute.isActive { self.captionsOnMute.userPicked() }
+                        aether.selectSubtitleTrack(id: id)
+                    }
+                }
+            }
             .store(in: &cancellables)
         // And the Record button, the moment a recording is set or cancelled.
         LiveTVDataStore.shared.$scheduledRecordings

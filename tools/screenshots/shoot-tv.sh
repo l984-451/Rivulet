@@ -27,6 +27,8 @@ want home && shot home 28
 want rows && shot rows 28 RIVULET_FOCUS_MOVES=down,down RIVULET_FOCUS_DELAY=12
 want detail && shot detail 20 RIVULET_OPEN_DETAIL=$DETAIL
 want music && shot music 20 RIVULET_OPEN_LIBRARY=Music RIVULET_MUSIC_OPEN=album:$ALBUM
+want music && shot musiclibrary 18 RIVULET_OPEN_LIBRARY=Music
+want music && shot nowplaying 25 RIVULET_OPEN_LIBRARY=Music RIVULET_MUSIC_OPEN=play:$ALBUM
 want whatson && shot whatson 25 RIVULET_OPEN_LIBRARY="Live TV"
 want multiview && shot multiview 40 RIVULET_OPEN_LIBRARY="Live TV" RIVULET_MULTIVIEW="Arena Sports,Wild Earth"
 # Playback moves the title's resume point; put it back for the next run.
@@ -47,7 +49,8 @@ import os, sys
 from PIL import Image
 raw, root = sys.argv[1:3]
 readme = {"home": "01-home", "detail": "02-detail", "whatson": "03-whats-on", "multiview": "04-multiview",
-          "insights": "05-insights-trivia", "cast": "06-insights-cast", "music": "07-music-album"}
+          "insights": "05-insights-trivia", "cast": "06-insights-cast", "music": "07-music-album",
+          "musiclibrary": "08-music-library", "nowplaying": "09-now-playing"}
 store = ["home", "rows", "detail", "whatson", "multiview", "insights", "music", "setup"]
 for name, out in readme.items():
     if os.path.exists(f"{raw}/{name}.png"):

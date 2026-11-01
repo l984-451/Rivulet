@@ -96,7 +96,7 @@ enum MusicPresenter {
 
     #if DEBUG
     /// Simulator iteration: `RIVULET_MUSIC_OPEN=album:<ratingKey>` (or `artist:`, `playlist:`)
-    /// opens that page at launch.
+    /// opens that page at launch; `play:<album ratingKey>` plays the album.
     static func debugOpenIfRequested() {
         guard let value = ProcessInfo.processInfo.environment["RIVULET_MUSIC_OPEN"],
               let provider = MusicProviderRegistry.shared.primaryProvider else { return }
@@ -105,6 +105,7 @@ enum MusicPresenter {
         let ref = MediaItemRef(providerID: provider.id, itemID: parts[1])
         switch parts[0] {
         case "artist": show(.artist(ref))
+        case "play": MusicMenus.play({ try await provider.tracks(for: ref) })
         case "playlist":
             Task {
                 for library in (try? await provider.musicLibraries()) ?? [] {

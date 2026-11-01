@@ -960,6 +960,10 @@ class PlexAuthManager: ObservableObject {
             DiagLog.notice(.connection, "Current connection verified: \(DiagLog.describe(url: currentURL))")
             isConnected = true
             connectionError = nil
+            // A remote URL won away from home still answers there through the router's slow hairpin.
+            if ServerLocation.classify(currentURL) == .remote {
+                await upgradeConnectionIfBetterExists(from: currentURL)
+            }
 
             // Fetch home users for profile switching (if not already loaded)
             if !PlexUserProfileManager.shared.hasLoadedProfiles {

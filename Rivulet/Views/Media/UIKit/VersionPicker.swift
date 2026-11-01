@@ -82,10 +82,21 @@ enum VersionPicker {
         return .version(option.source.id)
     }
 
-    /// One row label per option, same order: the file's label, then its server when named.
+    /// One row label per option, same order. With copies, a row is the resolution and range, then
+    /// its server (the full file label does not fit beside it); rows that would read the same
+    /// keep the full file label. Without copies, the full file label.
     static func labels(for options: [Option]) -> [String] {
-        zip(labels(for: options.map(\.source)), options).map { label, option in
-            option.server.map { "\(label) · \($0)" } ?? label
+        let full = labels(for: options.map(\.source))
+        guard options.contains(where: { $0.server != nil }) else { return full }
+        let short = options.map { option in
+            let name = option.source.versionName.flatMap { isResolutionName($0) ? nil : $0 }
+            return ([name, option.source.resolutionBadge, option.source.rangeBadge] + [option.server])
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }
+        return zip(options, zip(short, full)).map { option, labels in
+            guard short.filter({ $0 == labels.0 }).count > 1 else { return labels.0 }
+            return option.server.map { "\(labels.1) · \($0)" } ?? labels.1
         }
     }
 

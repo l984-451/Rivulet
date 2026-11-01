@@ -87,6 +87,22 @@ final class VersionPickerTests: XCTestCase {
         XCTAssertTrue(labels[1].hasSuffix(" · Home"), labels[1])
     }
 
+    func test_labels_withCopies_areResolutionRangeAndServer() {
+        let copy = VersionPicker.Copy(item: JellyfinFixtures.mediaItem("m2"), server: "Office",
+                                      sources: [source("b", res: "4k", height: 2160, range: .hdr10)])
+        let options = VersionPicker.options(current: [source("a")], currentServer: "Home", copies: [copy])
+        XCTAssertEqual(VersionPicker.labels(for: options), ["4K · HDR · Office", "1080p · Home"])
+    }
+
+    func test_labels_withCopies_rowsThatReadTheSame_keepTheFullLabel() {
+        let copy = VersionPicker.Copy(item: JellyfinFixtures.mediaItem("m2"), server: "Home",
+                                      sources: [source("b", codec: "h264", size: 2_980_000_000)])
+        let options = VersionPicker.options(current: [source("a")], currentServer: "Home", copies: [copy])
+        let labels = VersionPicker.labels(for: options)
+        XCTAssertEqual(Set(labels).count, 2, "\(labels)")
+        XCTAssertTrue(labels.allSatisfy { $0.contains("AAC 5.1") && $0.hasSuffix(" · Home") }, "\(labels)")
+    }
+
     func test_options_tie_keepsThisServerFirst() {
         let copy = VersionPicker.Copy(item: JellyfinFixtures.mediaItem("m2"), server: "Office", sources: [source("b")])
         let options = VersionPicker.options(current: [source("a")], currentServer: "Home", copies: [copy])

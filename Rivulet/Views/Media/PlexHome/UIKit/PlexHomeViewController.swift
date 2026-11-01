@@ -5686,6 +5686,35 @@ final class PlexHomeViewController: UIViewController {
         }
         lookups.merge(cold) { warm, _ in warm }
 
+        // Titles the selected server lacks, on the account's other Plex servers (#459): one request per
+        // server, the first server in sidebar order wins.
+        var elsewhere: [Int: MediaItem] = [:]
+        let extraPlex = MediaProviderRegistry.shared.secondaryProviders.compactMap { $0 as? PlexProvider }
+        let missingGUIDs = Array(Set(entries.indices.filter { lookups[$0] == nil }.compactMap { entries[$0].plexGUID }))
+        if !extraPlex.isEmpty, !missingGUIDs.isEmpty {
+            let found = await withTaskGroup(of: (String, [PlexMetadata]).self) { group in
+                for provider in extraPlex {
+                    group.addTask {
+                        (provider.id, (try? await PlexNetworkManager.shared.findByGuids(
+                            serverURL: provider.serverURL, authToken: provider.authToken, guids: missingGUIDs)) ?? [])
+                    }
+                }
+                var out: [String: [PlexMetadata]] = [:]
+                for await (id, items) in group { out[id] = items }
+                return out
+            }
+            for provider in extraPlex {
+                for metadata in found[provider.id] ?? [] {
+                    for index in entries.indices
+                    where lookups[index] == nil && elsewhere[index] == nil && entries[index].plexGUID == metadata.guid {
+                        elsewhere[index] = PlexMediaMapper.item(metadata, providerID: provider.id,
+                                                                serverURL: provider.serverURL,
+                                                                authToken: provider.authToken)
+                    }
+                }
+            }
+        }
+
         // The carousel renders artwork as-is, so add the TMDB logo to every item (withLogoIfMissing keeps
         // a real Plex logo) and the TMDB backdrop to un-owned ones. Network runs off the main actor.
         let tmdbSource = MetadataSourceRegistry.shared.source(for: TMDBMediaMapper.providerID)
@@ -5695,7 +5724,7 @@ final class PlexHomeViewController: UIViewController {
             for (index, entry) in entries.enumerated() {
                 guard let tmdbId = entry.tmdbId else { continue }
                 let mediaType: TMDBMediaType = entry.type == .movie ? .movie : .tv
-                let isOwned = lookups[index] != nil && !serverURL.isEmpty
+                let isOwned = (lookups[index] != nil && !serverURL.isEmpty) || elsewhere[index] != nil
                 // Build the ref on the main actor (TMDBMediaMapper is main-actor-isolated); the task
                 // only does the off-actor network work.
                 let ref = MediaItemRef(
@@ -5725,6 +5754,10 @@ final class PlexHomeViewController: UIViewController {
                                                     providerID: providerID,
                                                     serverURL: serverURL,
                                                     authToken: token)
+                result.append((sourceID: entry.id, item: plexItem.withLogoIfMissing(enriched[index]?.logo)))
+                continue
+            }
+            if let plexItem = elsewhere[index] {
                 result.append((sourceID: entry.id, item: plexItem.withLogoIfMissing(enriched[index]?.logo)))
                 continue
             }

@@ -47,6 +47,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Subtitles turned on by tvOS's Show When Muted.
     private var captionsOnMute = CaptionsOnMuteLogic()
     private lazy var systemCaptionsOnMute = SystemCaptionsOnMute { [weak self] in self?.updateCaptionsOnMute() }
+    /// The channel the system's Closed Captions + SDH last turned captions on for.
+    private var systemCaptionsChannelId: String?
 
     /// Last-resort AVPlayer (fallback stage 2) rendered on its own layer.
     private var lastResortPlayer: AVPlayer?
@@ -390,7 +392,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         captionsOnMute = CaptionsOnMuteLogic()
         aether.$subtitleTracks
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateCaptionsOnMute() }
+            .sink { [weak self] _ in
+                self?.applySystemCaptions()
+                self?.updateCaptionsOnMute()
+            }
             .store(in: &cancellables)
         bindNativeLegibleAttachment(aether)
 
@@ -937,7 +942,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         NowPlayingService.shared.updateLive(
             title: current?.title ?? channel.name,
             channelName: channel.name,
-            isPlaying: !isUserPaused
+            isPlaying: !isUserPaused,
+            artworkURL: current?.posterURL ?? current?.landscapeURL ?? current?.iconURL ?? channel.logoURL,
+            onScreenAt: onScreenAt
         )
     }
 
@@ -1265,6 +1272,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             }
             self.presentPanel(content: list, width: 520)
         }
+    }
+
+    /// Closed Captions + SDH turns captions on once per channel, as AVKit does; turning them off sticks.
+    private func applySystemCaptions() {
+        guard SystemMediaAccessibility.captionsAlwaysOn, systemCaptionsChannelId != channel.id,
+              let aether = aetherPlayer, !isPlayingRemoteHLSDirectly, !aether.subtitleTracks.isEmpty else { return }
+        systemCaptionsChannelId = channel.id
+        guard aether.currentSubtitleTrackId == nil,
+              let track = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
+                                                              in: aether.subtitleTracks) else { return }
+        aether.selectSubtitleTrack(id: track.id)
     }
 
     /// AVKit's hold on Subtitles: off if showing, else the first full track. Engine-demuxed channels only.

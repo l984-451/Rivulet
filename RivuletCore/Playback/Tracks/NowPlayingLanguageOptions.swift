@@ -76,10 +76,8 @@ enum NowPlayingLanguageOptions {
             }
             return traits
         }
-        switch track.audioRole {
-        case "Audio Description": return [MPLanguageOptionCharacteristicDescribesVideo]
-        case "Commentary": return [MPLanguageOptionCharacteristicIsAuxiliaryContent]
-        default: return [MPLanguageOptionCharacteristicIsMainProgramContent]
-        }
+        if track.describesVideo { return [MPLanguageOptionCharacteristicDescribesVideo] }
+        return [track.audioRole == nil ? MPLanguageOptionCharacteristicIsMainProgramContent
+                                       : MPLanguageOptionCharacteristicIsAuxiliaryContent]
     }
 }

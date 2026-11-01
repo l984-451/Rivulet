@@ -361,7 +361,17 @@ enum TrackIntentResolver {
     ///   2. Same language, best quality (commentary excluded).
     ///   3. English, best quality (commentary excluded).
     ///   4. File default, else first track (commentary excluded where possible).
-    static func resolveAudio(intent: AudioIntent?, in tracks: [MediaTrack]) -> MediaTrack? {
+    /// With the system's Audio Descriptions on, the result's described twin wins when there is one.
+    static func resolveAudio(intent: AudioIntent?, in tracks: [MediaTrack],
+                             prefersAudioDescription: Bool = SystemMediaAccessibility.prefersAudioDescription) -> MediaTrack? {
+        let pick = resolveAudioIgnoringDescription(intent: intent, in: tracks)
+        guard prefersAudioDescription, let pick, !pick.describesVideo else { return pick }
+        return tracks.first {
+            $0.describesVideo && TrackLanguage.matches($0.languageCode ?? $0.language, pick.languageCode ?? pick.language)
+        } ?? pick
+    }
+
+    private static func resolveAudioIgnoringDescription(intent: AudioIntent?, in tracks: [MediaTrack]) -> MediaTrack? {
         guard !tracks.isEmpty else { return nil }
 
         // Auto-selection tiers never pick commentary / audio description.
@@ -504,7 +514,16 @@ enum TrackIntentStore {
     /// What playback resolves against: Foreign Audio in the device's
     /// language when nothing is stored.
     static var effectiveSubtitleIntent: SubtitleIntent {
-        subtitleIntent ?? .foreignAudio(language: TrackLanguage.device, hearingImpaired: false)
+        effectiveSubtitleIntent(stored: subtitleIntent, captionsAlwaysOn: SystemMediaAccessibility.captionsAlwaysOn)
+    }
+
+    /// The system's Closed Captions + SDH turns full subtitles on, SDH first, in the saved language.
+    static func effectiveSubtitleIntent(stored: SubtitleIntent?, captionsAlwaysOn: Bool) -> SubtitleIntent {
+        guard captionsAlwaysOn else {
+            return stored ?? .foreignAudio(language: TrackLanguage.device, hearingImpaired: false)
+        }
+        return .track(language: stored?.language ?? TrackLanguage.device, forced: false,
+                      hearingImpaired: true, codec: nil)
     }
 
     // MARK: Audio

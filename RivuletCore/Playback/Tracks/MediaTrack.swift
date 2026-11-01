@@ -201,6 +201,8 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
         return described ? "Audio Description" : "Commentary"
     }
 
+    var describesVideo: Bool { audioRole == "Audio Description" }
+
     /// Audio menu row: the language over "TrueHD 7.1 Atmos • Commentary".
     var audioMenuTitle: String { language ?? "Unknown Language" }
     var audioMenuSubtitle: String {

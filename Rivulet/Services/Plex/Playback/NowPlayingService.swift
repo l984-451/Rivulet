@@ -12,6 +12,7 @@
 import Foundation
 import MediaPlayer
 import AVFoundation
+import AppIntents
 import Combine
 import UIKit
 
@@ -31,6 +32,7 @@ final class NowPlayingService: ObservableObject {
     private var artworkTask: Task<Void, Never>?
     private var cachedArtwork: MPMediaItemArtwork?
     private var cachedArtworkURL: String?
+    private var loadingArtworkURL: String?
     private var interruptionObserver: NSObjectProtocol?
     private var inputCoordinator: PlaybackInputCoordinator?
     private var lastHandledPlaybackState: UniversalPlaybackState?
@@ -275,6 +277,7 @@ final class NowPlayingService: ObservableObject {
         inputCoordinator = nil
         artworkTask?.cancel()
         artworkTask = nil
+        loadingArtworkURL = nil
         hasValidNowPlayingInfo = false
         lastHandledPlaybackState = nil
         selectTrack = nil
@@ -343,19 +346,26 @@ final class NowPlayingService: ObservableObject {
 
     /// Now Playing text for the live channel. A live stream publishes no
     /// duration or elapsed time: `IsLiveStream` has the system draw a live
-    /// indicator instead of a scrubber.
-    func updateLive(title: String, channelName: String?, isPlaying: Bool) {
+    /// indicator instead of a scrubber. `onScreenAt` is the wall-clock time of the picture, behind
+    /// now while timeshifted.
+    func updateLive(title: String, channelName: String?, isPlaying: Bool, artworkURL: URL?, onScreenAt: Date) {
         guard viewModel == nil, inputCoordinator != nil else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyCurrentPlaybackDate: onScreenAt,
         ]
         if let channelName, channelName != title {
             info[MPMediaItemPropertyArtist] = channelName
         }
+        // Carried across rewrites; a new URL loads and adds itself.
+        if let artworkURL, artworkURL.absoluteString == cachedArtworkURL, let cachedArtwork {
+            info[MPMediaItemPropertyArtwork] = cachedArtwork
+        }
         setNowPlayingInfoOnAllCenters(info)
+        if artworkURL?.absoluteString != cachedArtworkURL { loadArtwork(from: artworkURL) }
     }
 
     /// The live channel's tracks for the system's remotes. `select` applies a pick; a nil id is subtitles off.
@@ -391,19 +401,19 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
-        // Skip forward. Seek by the live setting, not the event's interval:
-        // the event echoes preferredIntervals, which only tracks the displayed
-        // glyph and is refreshed per playback session (see refreshSkipIntervals).
+        // Skip forward by the live setting (see skipSeconds).
         commandCenter.skipForwardCommand.isEnabled = true
-        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
-            self?.dispatchInputAction(.seekRelative(seconds: InputConfig.tapSeekSeconds))
+        commandCenter.skipForwardCommand.addTarget { [weak self] event in
+            let seconds = Self.skipSeconds(event, setting: InputConfig.tapSeekSeconds)
+            self?.dispatchInputAction(.seekRelative(seconds: seconds))
             return .success
         }
 
         // Skip backward (see note above).
         commandCenter.skipBackwardCommand.isEnabled = true
-        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
-            self?.dispatchInputAction(.seekRelative(seconds: -InputConfig.tapSeekBackSeconds))
+        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
+            let seconds = Self.skipSeconds(event, setting: InputConfig.tapSeekBackSeconds)
+            self?.dispatchInputAction(.seekRelative(seconds: -seconds))
             return .success
         }
 
@@ -501,6 +511,16 @@ final class NowPlayingService: ObservableObject {
         commandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: InputConfig.tapSeekBackSeconds)]
     }
 
+    /// The Skip Length setting, unless the command names another span (Siri's "skip ahead two
+    /// minutes"). The skip buttons echo `preferredIntervals`, which is only the glyph's number and
+    /// is refreshed per session (see refreshSkipIntervals), so an echo of it means the setting.
+    private static func skipSeconds(_ event: MPRemoteCommandEvent, setting: TimeInterval) -> TimeInterval {
+        guard let skip = event as? MPSkipIntervalCommandEvent, skip.interval > 0,
+              let glyph = (skip.command as? MPSkipIntervalCommand)?.preferredIntervals.first?.doubleValue,
+              skip.interval != glyph else { return setting }
+        return skip.interval
+    }
+
     private func dispatchInputAction(_ action: PlaybackInputAction) {
         switch action {
         case .seekAbsolute(let time):
@@ -583,12 +603,33 @@ final class NowPlayingService: ObservableObject {
 
         // Media type
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        nowPlayingInfo.merge(itemInfo(metadata: metadata, duration: duration)) { _, new in new }
 
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
         // Load artwork asynchronously
         loadArtwork(from: artworkURL)
 
+    }
+
+    /// Where the credits start, and the Siri entity for the item.
+    private func itemInfo(metadata: PlexMetadata, duration: TimeInterval) -> [String: Any] {
+        var info: [String: Any] = [:]
+        // The credits the player's Up Next honors: late in the title, or near its end.
+        if duration > 0, let start = metadata.creditsMarkers
+            .filter({ $0.endTimeSeconds > $0.startTimeSeconds })
+            .map(\.startTimeSeconds)
+            .filter({ $0 / duration >= 0.5 || duration - $0 < 300 })
+            .min() {
+            info[MPNowPlayingInfoPropertyCreditsStartTime] = start
+        }
+        // `MediaItemQuery` resolves ratingKeys on the selected Plex server only.
+        if #available(tvOS 27.0, *), case .plex = viewModel?.source, let key = metadata.ratingKey,
+           let entity = MPAppEntityIdentifier(
+               entityIdentifier: EntityIdentifier(for: MediaItemEntity.self, identifier: key)) {
+            info[MPNowPlayingInfoPropertyAppEntityIdentifiers] = [entity]
+        }
+        return info
     }
 
     private func updateElapsedTime(_ time: TimeInterval, duration: TimeInterval) {
@@ -646,6 +687,7 @@ final class NowPlayingService: ObservableObject {
 
         // Media type
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        nowPlayingInfo.merge(itemInfo(metadata: metadata, duration: estimatedDuration)) { _, new in new }
 
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
@@ -693,32 +735,21 @@ final class NowPlayingService: ObservableObject {
             return
         }
 
-        // Cancel any existing artwork load
+        // Live TV asks again on every rail update; let the load in flight finish.
+        guard fullURL != loadingArtworkURL else { return }
+        loadingArtworkURL = fullURL
         artworkTask?.cancel()
 
+        // Through the image cache: its session trusts Plex servers reached by raw IP.
         artworkTask = Task {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-
-                guard !Task.isCancelled else { return }
-
-                guard let image = UIImage(data: data) else { return }
-
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-
-                // Cache the artwork
-                self.cachedArtwork = artwork
-                self.cachedArtworkURL = fullURL
-
-                // Update Now Playing info with artwork
-                self.withNowPlayingInfoOnAllCenters { nowPlayingInfo in
-                    nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-                }
-
-            } catch {
-                if !Task.isCancelled {
-                    playerDebugLog("🎵 NowPlaying: Artwork load failed - \(error.localizedDescription)")
-                }
+            defer { if self.loadingArtworkURL == fullURL { self.loadingArtworkURL = nil } }
+            guard let image = await ImageCacheManager.shared.image(for: url), !Task.isCancelled else { return }
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.cachedArtwork = artwork
+            self.cachedArtworkURL = fullURL
+            guard self.firstAvailableNowPlayingInfo() != nil else { return }
+            self.withNowPlayingInfoOnAllCenters { nowPlayingInfo in
+                nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
             }
         }
     }

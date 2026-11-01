@@ -107,11 +107,11 @@ final class IOSDownloadActivity {
 extension DownloadRecord {
     /// 0 to 1 across the whole download: a conversion's server half, then the transfer.
     var overallFraction: Double {
-        if state.isSettled { return 1 }
         let converted = quality != StreamingQuality.original.rawValue
         switch state {
+        case .completed, .failed: return 1
         case .preparing: return (progress ?? 0) * 0.5
-        case .downloading: return (converted ? 0.5 : 0) + (progress ?? 0) * (converted ? 0.5 : 1)
+        case .downloading, .pausedByUser: return (converted ? 0.5 : 0) + (progress ?? 0) * (converted ? 0.5 : 1)
         default: return 0
         }
     }

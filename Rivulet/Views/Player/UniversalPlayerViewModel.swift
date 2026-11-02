@@ -243,6 +243,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// it runs once per episode even though currentAVPlayer re-emits on every
     /// Aether internal AVPlayer swap. Reset on episode change in playNextEpisode().
     private var nextEpisodeResolvedEarly = false
+    /// A lookup for this item found no next episode. Cleared on item change.
+    @Published private(set) var nextEpisodeMissing = false
     /// Guards the Up Next panel list load so it runs once per item off the
     /// first `.playing` transition. Reset on item change alongside
     /// `nextEpisodeResolvedEarly`.
@@ -6007,11 +6009,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         guard !nextEpisodeResolvedEarly else { return }
         nextEpisodeResolvedEarly = true
 
+        let generation = itemGeneration
         if metadata.parentRatingKey == nil || metadata.index == nil {
             await fetchFullMetadataIfNeeded()
         }
         let next = await fetchNextEpisode()
-        guard let next else { return }
+        guard let next else {
+            if generation == itemGeneration { nextEpisodeMissing = true }
+            return
+        }
         nextEpisode = next
         Task { await preloadNextEpisode() }
         Task { await loadUpNextEpisodes() }
@@ -6108,6 +6114,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // No next episode: Skip PostVideo - just let the video play through
         guard nextEpisode != nil else {
+            nextEpisodeMissing = true
             postVideoState = .hidden
             return
         }
@@ -6825,10 +6832,46 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         await playNextEpisode(queueIndex: index)
     }
 
+    /// Whether something may follow this item: a playlist's next entry, or for an episode the
+    /// next one, assumed until a lookup finds none. Not every route resolves it early (the `hls`
+    /// route never does), so waiting for the resolve would leave Siri's "next episode" off.
+    var hasNextItem: Bool {
+        if let playQueue { return playQueue.next != nil }
+        if nextEpisode != nil { return true }
+        return metadata.type == "episode" && !isPlayingCinemaExtra && !nextEpisodeMissing
+    }
+
+    /// Siri's "next episode" (the system's next-track command), from anywhere in the episode:
+    /// plays what Up Next would, resolving it first when that hasn't happened yet. Before the
+    /// credits the episode it leaves stays resumable, as a playlist pick does.
+    func skipToNextItem() async {
+        guard !isSwappingItem else { return }
+        if let playQueue {
+            // By position: a pick that failed can leave `nextEpisode` on another entry.
+            guard let entry = playQueue.next else { return }
+            nextEpisode = ProviderPlaybackMetadata.listing(item: entry.item)
+        } else if nextEpisode == nil {
+            guard metadata.type == "episode", !isPlayingCinemaExtra else { return }
+            let generation = itemGeneration
+            if metadata.parentRatingKey == nil || metadata.index == nil {
+                await fetchFullMetadataIfNeeded()
+            }
+            let next = await fetchNextEpisode()
+            guard generation == itemGeneration, !isSwappingItem else { return }
+            guard let next else {
+                nextEpisodeMissing = true
+                return
+            }
+            nextEpisode = next
+        }
+        await playNextEpisode(skipped: true)
+    }
+
     /// Play the next episode. `autoplayed` is the countdown running out; any
     /// other start comes from the remote and begins a new run.
-    /// `queueIndex` is a playlist jump; nil moves a playlist on by one.
-    func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
+    /// `queueIndex` is a playlist jump; nil moves a playlist on by one. `skipped` is Siri's
+    /// "next episode": like a jump, it leaves an item it didn't reach the end of resumable.
+    func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil, skipped: Bool = false) async {
         guard let next = nextEpisode else { return }
         if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
             showCompatibilityNotice(PlaybackNotice(title: String(localized: "Only the host can change what's playing."), symbol: "person.2.fill"))
@@ -6873,8 +6916,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         longStallTask?.cancel()
         longStallTask = nil
 
-        // A playlist pick before the credits leaves the item resumable: stopped at the playhead, not watched.
-        let reachedEnd = queueIndex == nil || hasTriggeredPostVideo || postVideoState != .hidden
+        // A playlist pick or a skip before the credits leaves the item resumable: stopped at the playhead, not watched.
+        let reachedEnd = (queueIndex == nil && !skipped) || hasTriggeredPostVideo || postVideoState != .hidden
         if case .provider = source {
             await stopProviderReporter(at: currentTime)
             guard stops == stopCount else { return }
@@ -7002,6 +7045,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // New episode: allow the early next-episode resolve to run again.
         nextEpisodeResolvedEarly = false
+        nextEpisodeMissing = false
         upNextEpisodesLoaded = false
 
         // Ensure next episode has required metadata for subsequent next-up detection

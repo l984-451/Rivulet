@@ -47,6 +47,10 @@ protocol MediaProvider: Sendable, Identifiable {
     // MARK: - Detail
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail
 
+    /// An optional, AVPlayer-compatible backdrop. Providers without theme
+    /// media keep the artwork. The caller owns the returned session's cleanup.
+    func themeVideo(for itemRef: MediaItemRef) async throws -> ThemeVideo?
+
     // MARK: - Home rails
     func continueWatching(limit: Int) async throws -> [MediaItem]
     func recentlyAdded(limit: Int) async throws -> [MediaItem]
@@ -152,6 +156,8 @@ protocol MediaProvider: Sendable, Identifiable {
 }
 
 extension MediaProvider {
+    func themeVideo(for itemRef: MediaItemRef) async throws -> ThemeVideo? { nil }
+
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
         try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: nil)
     }

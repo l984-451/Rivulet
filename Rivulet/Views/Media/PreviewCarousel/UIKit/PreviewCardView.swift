@@ -43,27 +43,15 @@ final class PreviewCardView: UICollectionViewCell {
 
     // MARK: - Subviews
 
-    /// Vignette container: holds the three scrim layers.
+    /// Vignette container: shades the title and controls, leaving the artwork above clear.
     /// Alpha 0 by default; cascade fades to 1.
-    private let vignetteContainer: UIView = {
-        let v = UIView()
+    private let vignetteContainer: ProductPageScrimView = {
+        let v = ProductPageScrimView()
         v.translatesAutoresizingMaskIntoConstraints = false
         v.isUserInteractionEnabled = false
         v.alpha = 0
         return v
     }()
-
-    // The Apple TV app's product-page scrim. Views, not sublayers, so they ride the morph animator.
-    private let scrimLayers: [GradientView] = GradientView.productPageScrim().map { v in
-        v.translatesAutoresizingMaskIntoConstraints = false
-        // Follows the card's top corners, or the scrim shows as dark squares
-        // against the grey surround.
-        v.layer.cornerCurve = .continuous
-        v.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
-        v.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        v.layer.masksToBounds = true
-        return v
-    }
 
     /// Bottom-leading in the card, above the shelf peek. Starts at alpha 0; the cascade fades it in.
     private let chromeView: MediaDetailChromeView = {
@@ -119,7 +107,13 @@ final class PreviewCardView: UICollectionViewCell {
         contentView.backgroundColor = .clear
         contentView.clipsToBounds = false
 
-        scrimLayers.forEach(vignetteContainer.addSubview)
+        vignetteContainer.layer.cornerCurve = .continuous
+        vignetteContainer.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
+        vignetteContainer.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        vignetteContainer.clipsToBounds = true
+        chromeView.onTitleLayout = { [weak self] titleView in
+            self?.vignetteContainer.revealArtwork(above: titleView)
+        }
         contentView.addSubview(vignetteContainer)
         contentView.addSubview(chromeView)
         addSubview(hairlineView)
@@ -155,13 +149,6 @@ final class PreviewCardView: UICollectionViewCell {
             hairlineView.trailingAnchor.constraint(equalTo: trailingAnchor),
             hairlineView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 1)
         ])
-        // Every scrim layer fills the card; the stops do the shaping.
-        NSLayoutConstraint.activate(scrimLayers.flatMap { [
-            $0.topAnchor.constraint(equalTo: vignetteContainer.topAnchor),
-            $0.leadingAnchor.constraint(equalTo: vignetteContainer.leadingAnchor),
-            $0.trailingAnchor.constraint(equalTo: vignetteContainer.trailingAnchor),
-            $0.bottomAnchor.constraint(equalTo: vignetteContainer.bottomAnchor)
-        ] })
     }
 
     // MARK: - Layout
@@ -252,7 +239,7 @@ final class PreviewCardView: UICollectionViewCell {
     /// (display-link tick).
     func setCornerRadius(_ radius: CGFloat) {
         hairlineView.layer.cornerRadius = radius
-        scrimLayers.forEach { $0.layer.cornerRadius = radius }
+        vignetteContainer.layer.cornerRadius = radius
     }
 
     // MARK: - Apply
@@ -333,6 +320,55 @@ final class PreviewCardView: UICollectionViewCell {
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         if let play = chromeView.playFocusable { return [play] }
         return super.preferredFocusEnvironments
+    }
+}
+
+/// Keeps the product-page gradients below the visible title, with a soft fade into
+/// the metadata. A title's actual view avoids shading the unused space in its logo slot.
+final class ProductPageScrimView: UIView {
+    private let titleMask = GradientView(
+        .axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
+        alphas: [0, 1], locations: [0, 1]
+    )
+    private weak var titleView: UIView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        for gradient in GradientView.productPageScrim() {
+            gradient.frame = bounds
+            gradient.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(gradient)
+        }
+        mask = titleMask
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func revealArtwork(above titleView: UIView) {
+        self.titleView = titleView
+        updateTitleMask()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateTitleMask()
+    }
+
+    private func updateTitleMask() {
+        guard bounds.height > 0, let titleView else { return }
+        let titleTop = min(max(0, titleView.convert(titleView.bounds, to: self).minY), bounds.height)
+        // Start clear at the title and reach full contrast over its first line.
+        let fadeEnd = min(titleTop + 80, bounds.height)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        titleMask.frame = bounds
+        titleMask.gradientLayer.locations = [
+            NSNumber(value: Double(titleTop / bounds.height)),
+            NSNumber(value: Double(fadeEnd / bounds.height))
+        ]
+        CATransaction.commit()
     }
 }
 

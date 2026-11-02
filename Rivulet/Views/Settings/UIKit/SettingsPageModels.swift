@@ -441,6 +441,7 @@ enum SettingsContent {
             toggle("recentRows", "Recent Rows", key: "showLibraryRecentRows", default: true),
 
             .header("Details"),
+            toggle("themeVideos", "Theme Videos", key: ThemeVideoBackdropView.enabledKey, default: false),
             SettingsRowItem(id: "detailRating", title: "Rating",
                             kind: .navigationValue(.detailRatingPicker, value: { MediaRating.detailSource.name })),
 

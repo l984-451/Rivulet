@@ -128,6 +128,10 @@ enum SettingsDescriptorStore {
             icon: "rectangle.expand.vertical",
             description: "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row."
         ),
+        "themeVideos": SettingDescriptor(
+            icon: "video.fill",
+            description: "Play Jellyfin theme videos silently behind movie and show details. Titles without a video keep their artwork. Reduce Motion turns these videos off."
+        ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."

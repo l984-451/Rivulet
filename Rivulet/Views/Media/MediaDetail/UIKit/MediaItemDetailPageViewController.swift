@@ -7,22 +7,6 @@
 import Combine
 import UIKit
 
-/// The Apple TV app's product-page scrim, so the title stack stays readable
-/// over any backdrop. Each layer fills the hero page.
-private final class ScrimGradientView: UIView {
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        for layer in GradientView.productPageScrim() {
-            layer.frame = bounds
-            layer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(layer)
-        }
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-}
-
 final class MediaItemDetailPageViewController: UIViewController {
 
     /// Mutable so a post-playback refresh can swap in the re-fetched copy
@@ -31,7 +15,8 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let onPlay: (MediaItem, String?) -> Void
 
     private let backdrop = UIImageView()
-    private let scrim = ScrimGradientView()
+    private let themeVideo = ThemeVideoBackdropView()
+    private let scrim = ProductPageScrimView()
     private let textColumn = UIStackView()
 
     // Scroll: a fixed backdrop behind a transparent scroll view. The scroll
@@ -96,6 +81,10 @@ final class MediaItemDetailPageViewController: UIViewController {
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
         view.addSubview(backdrop)
+        themeVideo.frame = backdrop.bounds
+        themeVideo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        backdrop.addSubview(themeVideo)
+        themeVideo.configure(item: item.ref, host: self)
 
         // Transparent scroll view (driven by Down/Up, not the focus engine).
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -220,10 +209,21 @@ final class MediaItemDetailPageViewController: UIViewController {
         return super.shouldUpdateFocus(in: context)
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scrim.revealArtwork(above: textColumn)
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        themeVideo.setActive(true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        themeVideo.setActive(false)
     }
 
     @objc private func dismissSelf() { dismiss(animated: true) }

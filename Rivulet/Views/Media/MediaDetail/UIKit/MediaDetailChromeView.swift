@@ -65,6 +65,15 @@ final class MediaDetailChromeView: UIView {
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
 
+    /// Lets the backdrop's shading follow the visible title as text and logos load.
+    var onTitleLayout: ((UIView) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        chromeStack.layoutIfNeeded()
+        onTitleLayout?(titleLogoImageView.isHidden ? titleFallbackLabel : titleLogoImageView)
+    }
+
     /// The Play pill (rebuilt per item). Exposed so the host cell can point the
     /// focus engine at Play when the detail expands.
     private(set) var playButton: FocusableActionButton?

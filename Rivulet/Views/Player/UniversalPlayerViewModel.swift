@@ -5555,17 +5555,14 @@ final class UniversalPlayerViewModel: ObservableObject {
         await markCurrentAsWatched()
         guard generation == itemGeneration else { return }
 
-        postVideoState = .loading
-
         // Per-user opt-out of the post-video "Up Next" chooser for TV
         // episodes. When disabled, episodes follow the same path movies
         // already take: credits play uninterrupted at full size.
         // Movies: No PostVideo - just let the video play through to the end.
         // A playlist's next entry follows any type, ahead of both gates.
-        guard playQueue != nil || (isEpisode && showPostVideoUpNext) else {
-            postVideoState = .hidden
-            return
-        }
+        guard playQueue != nil || (isEpisode && showPostVideoUpNext) else { return }
+
+        postVideoState = .loading
 
         // TV Show: Only show PostVideo if there's a next episode
 

@@ -1915,7 +1915,8 @@ class PlayerContainerViewController: UIViewController {
 
     private func refreshPostVideoContent() {
         guard let vm = viewModel, let overlay = postVideoOverlay, overlay.superview != nil else { return }
-        overlay.setLoading(vm.postVideoState == .loading)
+        // Reads the live state, already past `.loading` if the fetch finished: only a real card slides in.
+        overlay.setLoading(vm.postVideoState != .showingEpisodeSummary)
         overlay.configure(
             nextEpisode: vm.nextEpisode,
             serverURL: vm.serverURL,

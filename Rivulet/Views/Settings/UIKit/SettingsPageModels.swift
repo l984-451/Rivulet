@@ -1082,7 +1082,7 @@ enum SettingsContent {
             libraries: SidebarLibrary.current(includeHidden: true),
             liveTVSources: LiveTVDataStore.shared.sources,
             combineLiveTV: SettingsStore.bool("combineLiveTVSources", default: true),
-            showDiscover: true, showWatchlist: true,
+            showDiscover: PlexAuthManager.shared.hasCredentials, showWatchlist: PlexAuthManager.shared.hasCredentials,
             playlistServers: PlaylistServer.current(PlaylistAvailability.shared.providerIDs))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return SidebarArrangement.arrange(rows.map(\.key), order: LibrarySettingsManager.shared.libraryOrder)

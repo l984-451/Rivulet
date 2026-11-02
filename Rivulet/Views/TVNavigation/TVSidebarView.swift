@@ -102,8 +102,9 @@ struct TVSidebarView: View {
             libraries: SidebarLibrary.current(),
             liveTVSources: liveTVDataStore.sources,
             combineLiveTV: combineLiveTVSources,
-            showDiscover: showDiscoverTab,
-            showWatchlist: showWatchlistTab,
+            // Both need a Plex account; a Jellyfin-only setup has neither (#478).
+            showDiscover: showDiscoverTab && authManager.hasCredentials,
+            showWatchlist: showWatchlistTab && authManager.hasCredentials,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
@@ -212,6 +213,11 @@ struct TVSidebarView: View {
         }
         .onChange(of: showWatchlistTab) { _, shown in
             if !shown && selectedTab == .watchlist {
+                selectedTab = .home
+            }
+        }
+        .onChange(of: authManager.hasCredentials) { _, signedIn in
+            if !signedIn && (selectedTab == .discover || selectedTab == .watchlist) {
                 selectedTab = .home
             }
         }

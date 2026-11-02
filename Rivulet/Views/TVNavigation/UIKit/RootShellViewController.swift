@@ -90,6 +90,7 @@ final class RootShellViewController: UIViewController {
     /// The retry budget ran out with nothing focusable on the page. The catcher
     /// is re-armed as an escape hatch so Left and Menu still have a target.
     private var contentFocusGaveUp = false
+    private var sidebarExitGesture: Int?
 
     // MARK: Lifecycle
 
@@ -120,7 +121,11 @@ final class RootShellViewController: UIViewController {
             self.onTabChange?(tab)
             self.collapseSidebar()
         }
-        sidebar.onCollapseRequested = { [weak self] in self?.collapseSidebar() }
+        sidebar.onCollapseRequested = { [weak self] in
+            guard let self else { return }
+            self.sidebarExitGesture = MenuPressInterceptor.remoteGestures.count
+            self.collapseSidebar()
+        }
 
         // Full-height strip at the leading edge: a Left press from any content
         // (hero Play, a shelf's first tile) lands here and opens the sidebar.
@@ -238,6 +243,7 @@ final class RootShellViewController: UIViewController {
 
     private func expandSidebar(aimAt tab: SidebarTab? = nil) {
         guard !sidebar.isExpanded, !interactionBlocked else { return }
+        sidebarExitGesture = nil
         sidebar.setExpanded(true, animated: true, aimAt: tab)
         updateChromeVisibility()
         setNeedsFocusUpdate()
@@ -321,6 +327,18 @@ final class RootShellViewController: UIViewController {
     private func isInsideContent(_ item: UIFocusEnvironment?) -> Bool {
         guard let backing = backingView(of: item) else { return false }
         return backing.isDescendant(of: view) && !backing.isDescendant(of: sidebar.view)
+    }
+
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        // The closing swipe can keep moving focus after touch-up. Let it land in
+        // content, but require a fresh gesture before travelling farther right.
+        if !sidebar.isExpanded,
+           sidebarExitGesture == MenuPressInterceptor.remoteGestures.count,
+           context.focusHeading.contains(.right),
+           isInsideContent(context.previouslyFocusedItem), isInsideContent(context.nextFocusedItem) {
+            return false
+        }
+        return super.shouldUpdateFocus(in: context)
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext,

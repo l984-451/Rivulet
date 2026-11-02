@@ -2058,7 +2058,7 @@ final class PlexHomeViewController: UIViewController {
     /// Last value posted on `.contentFocusBelowTopChanged`, so the SwiftUI
     /// shell only hears about crossings of the top-row boundary, not every
     /// focus move.
-    private var focusBelowTop = false
+    private var focusBelowTop: Bool?
 
     private func postFocusBelowTop(_ below: Bool) {
         guard below != focusBelowTop else { return }
@@ -7335,10 +7335,10 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             stripIdleWork?.cancel()
             setAlphabetBarVisible(false)
             updateLeftEdgeGuide(for: nil)
-            // Focus left the page (sidebar, modal). Chrome must be back
-            // before the sidebar can be interacted with.
-            postFocusBelowTop(false)
-            // ...unless focus is inside the page and only the section lookup failed (a tile in a shelf row's
+            // Preserve the shell's chrome while focus is away, and report the
+            // page's position again on return, even if it has not changed.
+            focusBelowTop = nil
+            // Focus may still be inside the page if the section lookup failed (a tile in a shelf row's
             // nested collection). Nothing else scrolls for us, so reveal it from its own frame.
             if let next = context.nextFocusedView, next.isDescendant(of: collectionView) {
                 revealFocusedView(next)

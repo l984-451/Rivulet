@@ -513,6 +513,7 @@ final class ShellSidebarViewController: UIViewController {
         guard state == .collapsed, transitionAnimator == nil else { return }
         UIView.animate(withDuration: 0.18) {
             self.cardView.alpha = hidden ? 0 : 1
+            self.pillStack.alpha = hidden ? 0 : 1
             self.pillChevron.alpha = hidden ? 0 : 1
         }
     }
@@ -594,15 +595,13 @@ final class ShellSidebarViewController: UIViewController {
         let targetRadius = expanded ? Metrics.panelCornerRadius : Metrics.pillHeight / 2
         collectionView.isHidden = false
         cardView.alpha = 1
-        // The chevron belongs to the collapsed pill only; it never shows while
-        // the panel is open.
-        let chevronTarget: CGFloat = expanded ? 0 : (pillHidden ? 0 : 1)
+        let pillContentAlpha: CGFloat = !expanded && !pillHidden ? 1 : 0
         guard animated else {
             cardView.frame = targetFrame
             cardView.layer.cornerRadius = targetRadius
             collectionView.alpha = expanded ? 1 : 0
-            pillStack.alpha = expanded ? 0 : 1
-            pillChevron.alpha = chevronTarget
+            pillStack.alpha = pillContentAlpha
+            pillChevron.alpha = pillContentAlpha
             collectionView.isHidden = !expanded
             if !expanded, pillHidden { cardView.alpha = 0 }
             view.setNeedsLayout()
@@ -614,9 +613,10 @@ final class ShellSidebarViewController: UIViewController {
                                               dampingRatio: Metrics.morphDamping) {
             self.cardView.frame = targetFrame
             self.cardView.layer.cornerRadius = targetRadius
+            self.cardView.alpha = expanded || !self.pillHidden ? 1 : 0
             self.collectionView.alpha = expanded ? 1 : 0
-            self.pillStack.alpha = expanded ? 0 : 1
-            self.pillChevron.alpha = chevronTarget
+            self.pillStack.alpha = pillContentAlpha
+            self.pillChevron.alpha = pillContentAlpha
         }
         animator.addCompletion { _ in
             self.transitionAnimator = nil
@@ -627,10 +627,11 @@ final class ShellSidebarViewController: UIViewController {
                 self.collectionView.isHidden = true
                 // pillHidden can flip mid-morph: a below-top focus change posts
                 // while this animator is in flight, and setPillHidden bails on a
-                // live transition. Reconcile BOTH the card and its chevron here,
-                // or the chevron is left stranded visible over a hidden pill.
+                // live transition. Reconcile the card, contents and chevron
+                // together so they reflect the latest visibility request.
                 let pillAlpha: CGFloat = self.pillHidden ? 0 : 1
                 self.cardView.alpha = pillAlpha
+                self.pillStack.alpha = pillAlpha
                 self.pillChevron.alpha = pillAlpha
             }
             self.setNeedsFocusUpdate()

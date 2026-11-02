@@ -28,6 +28,33 @@ final class AmbientBackdropView: UIView {
     }
     var imageTransform: (@Sendable (UIImage) -> UIImage)?
 
+    /// A hero dissolves into its lower-edge colors, rather than an unrelated
+    /// part of a second full-screen image. Other surfaces keep their usual wash.
+    var usesHeroEdgeColors = false {
+        didSet {
+            for imageView in [currentImageView, previousImageView] {
+                imageView.contentMode = usesHeroEdgeColors ? .scaleToFill : .scaleAspectFill
+            }
+            guard oldValue != usesHeroEdgeColors, let url = currentURL else { return }
+            currentURL = nil
+            setAmbient(url: url)
+        }
+    }
+
+    nonisolated private static func heroEdgeColors(from image: UIImage) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        // Average the lower third into a few horizontal color samples. Stretching
+        // this one-pixel strip produces a color field without blurred silhouettes.
+        return UIGraphicsImageRenderer(size: CGSize(width: 8, height: 1), format: format).image { context in
+            context.cgContext.interpolationQuality = .high
+            UIColor.black.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 1))
+            image.draw(in: CGRect(x: 0, y: -2, width: 8, height: 3))
+        }
+    }
+
     /// The artwork any page washed last; Settings borrows it for its own background.
     static private(set) var lastURL: URL?
 
@@ -82,8 +109,12 @@ final class AmbientBackdropView: UIView {
         clearPreviousTask?.cancel()
 
         let oldImage = currentImageView.image
+        let usesEdgeColors = usesHeroEdgeColors
         loadTask = Task { [weak self] in
             var image = await ImageCacheManager.shared.image(for: url)
+            if usesEdgeColors, let source = image {
+                image = await Task.detached { Self.heroEdgeColors(from: source) }.value
+            }
             // Off the main actor: Now Playing's transform resamples and redraws the cover.
             if let source = image, let transform = self?.imageTransform {
                 image = await Task.detached { transform(source) }.value

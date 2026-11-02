@@ -110,12 +110,15 @@ final class HeroBackdropView: UIView {
         // Fade the entire hero (art, placeholder and scrims) to transparent,
         // revealing the matching ambient wash underneath. A black overlay
         // would still leave a seam when the backdrop lifts above the shelves.
-        // Keep the lower artwork clearer before easing into the diffused wash.
-        // The final stops still reach zero smoothly, hiding the moving edge.
-        ambientBlendMask.colors = [1, 1, 0.98, 0.82, 0.40, 0.08, 0].map {
-            UIColor.black.withAlphaComponent(CGFloat($0)).cgColor
+        // A continuous smootherstep dissolve has no abrupt changes in slope
+        // that read as a horizontal blur band when the hero scrolls upward.
+        let stops = (0...32).map { CGFloat($0) / 32 }
+        ambientBlendMask.colors = stops.map { position in
+            let progress = min(1, max(0, (position - 0.40) / 0.60))
+            let fade = progress * progress * progress * (progress * (progress * 6 - 15) + 10)
+            return UIColor.black.withAlphaComponent(1 - fade).cgColor
         }
-        ambientBlendMask.locations = [0, 0.52, 0.64, 0.78, 0.90, 0.97, 1]
+        ambientBlendMask.locations = stops.map { NSNumber(value: Double($0)) }
         ambientBlendMask.startPoint = CGPoint(x: 0.5, y: 0)
         ambientBlendMask.endPoint = CGPoint(x: 0.5, y: 1)
         layer.mask = ambientBlendMask

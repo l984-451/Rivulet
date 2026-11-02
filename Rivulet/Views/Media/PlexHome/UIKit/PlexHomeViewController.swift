@@ -2201,9 +2201,10 @@ final class PlexHomeViewController: UIViewController {
     /// image is on screen.
     private func setHeroBackdrop(url: URL?, paging: Bool = false) {
         backdropView.setBackdrop(url: url, paging: paging)
-        // The ambient wash tracks the hero: same artwork, diffused by the
-        // frosted material in front of it. Every hero page change lands here,
-        // so this is the only place the wash needs driving.
+        // Continue the hero's lower-edge palette beneath the shelves. A second
+        // full-screen blurred image creates a visible band of mismatched colors.
+        ambientView.usesHeroEdgeColors = url != nil
+        backgroundBlurView.isHidden = url != nil
         ambientView.setAmbient(url: url)
         if url == nil {
             markHeroReady()

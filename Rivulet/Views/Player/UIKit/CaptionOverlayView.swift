@@ -405,6 +405,20 @@ final class CaptionOverlayView: UIView {
         return 1
     }
 
+    /// Paragraph direction from the cue's dominant script, so a right-to-left cue that
+    /// opens with a Latin name or a digit still ends its sentence on the left (#468).
+    static func baseWritingDirection(for text: String) -> NSWritingDirection {
+        var rtl = 0, ltr = 0
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            switch scalar.value {
+            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rtl += 1
+            default: ltr += 1
+            }
+        }
+        if rtl == 0 && ltr == 0 { return .natural }
+        return rtl > ltr ? .rightToLeft : .leftToRight
+    }
+
     /// Which edge a cue's lines align to, from its column. An unplaced cue centres.
     static func lineAlignment(for placement: AetherSubtitleCue.TextPlacement?) -> NSTextAlignment {
         guard let placement else { return .center }
@@ -656,6 +670,14 @@ private final class CaptionBoxView: UIView {
 
     // MARK: Text
 
+    private var plainText: String {
+        switch body {
+        case .text(let string): return string
+        case .styledText(let runs): return runs.map(\.text).joined()
+        case .image, .assEvents: return ""
+        }
+    }
+
     /// Builds the cue's attributed string, applying each content attribute only
     /// where the matching system Video Override allows it:
     ///  - colour                                          -> `allowsContentColor`
@@ -670,6 +692,7 @@ private final class CaptionBoxView: UIView {
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
+        paragraph.baseWritingDirection = CaptionOverlayView.baseWritingDirection(for: plainText)
         paragraph.lineSpacing = CaptionOverlayView.Metrics.lineSpacing(for: baseFont)
 
         let result = NSMutableAttributedString()

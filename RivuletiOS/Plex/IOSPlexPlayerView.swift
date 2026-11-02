@@ -75,6 +75,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         reloadTask?.cancel()
         longStallTask?.cancel()
         pausedTimelineTask?.cancel()
+        releaseThumbnails()
         let finish = finishItem(at: player.currentTime)
         let plex = plex
         let request = request
@@ -220,6 +221,30 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     // MARK: - Tracks
 
     private var isTranscoding: Bool { request.plan != .original }
+
+    /// The Plex part whose BIF is held, released when the item changes or playback ends.
+    private var thumbnailPartID: Int?
+
+    /// The still for a scrub position: the server's BIF, loaded on the first scrub, else
+    /// a frame decoded from the file. A transcode has no file to decode from.
+    func scrubStill(at time: Double) async -> UIImage? {
+        let parts = request.item.Media.flatMap { $0.indices.contains(request.mediaIndex) ? $0[request.mediaIndex] : nil }?.Part
+        if !request.isLocal, parts?.count == 1, let partID = parts?.first?.id,
+           !PlexThumbnailService.shared.isUnavailable(partId: partID) {
+            if partID != thumbnailPartID { releaseThumbnails() }
+            thumbnailPartID = partID
+            let still = await PlexThumbnailService.shared.getThumbnail(
+                partId: partID, time: time, serverURL: request.serverURL, authToken: request.token)
+            if let still { return still }
+        }
+        guard !isTranscoding, let frame = await player.still(atSeconds: time, maxWidth: 320) else { return nil }
+        return UIImage(cgImage: frame)
+    }
+
+    private func releaseThumbnails() {
+        if let thumbnailPartID { PlexThumbnailService.shared.clearCache(partId: thumbnailPartID) }
+        thumbnailPartID = nil
+    }
 
     /// By language over "TrueHD 7.1 Atmos • Commentary", never the file's own track titles.
     var audioTracks: [AetherPlayer.Track] {
@@ -681,6 +706,7 @@ private struct IOSPlexPlayerScreen: View {
                 playPause: player.togglePlayPause,
                 skip: { seconds in Task { await player.skip(by: seconds) } },
                 seek: { time in Task { await player.seek(to: time) } },
+                scrubStill: session.scrubStill,
                 setRate: player.setRate,
                 selectQuality: session.switchQuality,
                 selectAudio: session.selectAudio,

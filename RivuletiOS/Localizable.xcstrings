@@ -3,10 +3,34 @@
   "strings" : {
     "" : {},
     " " : {},
-    "%@ behind live" : {},
-    "%@ isn’t reachable right now." : {},
+    "%@ behind live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zeitversetzt"
+          }
+        }
+      }
+    },
+    "%@ isn’t reachable right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist gerade nicht erreichbar."
+          }
+        }
+      }
+    },
     "%@ of %@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ von %@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -17,6 +41,12 @@
     },
     "%@ to %@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bis %@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -27,6 +57,12 @@
     },
     "%@%@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -35,10 +71,46 @@
         }
       }
     },
-    "%@, requires PIN" : {},
-    "%lld ch" : {},
+    "%@, requires PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, PIN erforderlich"
+          }
+        }
+      }
+    },
+    "%lld ch" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Kanäle"
+          }
+        }
+      }
+    },
     "%lld channels" : {
       "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sender"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sender"
+                }
+              }
+            }
+          }
+        },
         "en" : {
           "variations" : {
             "plural" : {
@@ -61,6 +133,24 @@
     },
     "%lld episodes" : {
       "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Folge"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Folgen"
+                }
+              }
+            }
+          }
+        },
         "en" : {
           "variations" : {
             "plural" : {
@@ -83,6 +173,12 @@
     },
     "%lld episodes across %lld seasons" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Folgen in %lld Staffeln"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -135,6 +231,12 @@
     },
     "%lld hr %lld min left" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %lld Std. %lld Min."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -145,6 +247,24 @@
     },
     "%lld items" : {
       "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Objekt"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Objekte"
+                }
+              }
+            }
+          }
+        },
         "en" : {
           "variations" : {
             "plural" : {
@@ -165,11 +285,44 @@
         }
       }
     },
-    "%lld min left" : {},
-    "%lld percent watched" : {},
-    "%lld seconds" : {},
+    "%lld min left" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %lld Min."
+          }
+        }
+      }
+    },
+    "%lld percent watched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Prozent gesehen"
+          }
+        }
+      }
+    },
+    "%lld seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Sekunden"
+          }
+        }
+      }
+    },
     "%lldh %lldm" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Std. %lld Min."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -178,149 +331,1424 @@
         }
       }
     },
-    "%lldm" : {},
-    "100%" : {},
-    "4K First" : {},
-    "A channel profile shows only that profile's channels. The name is how this source appears in Live TV." : {},
-    "A server, username and password from your provider" : {},
-    "A-Z" : {},
-    "About" : {},
-    "Account" : {},
-    "Add Show to Watchlist" : {},
-    "Add Source" : {},
-    "Add Source…" : {},
-    "Add a Live TV Source" : {},
-    "Add titles from their menu with Add to Playlist." : {},
-    "Add to Favorites" : {},
-    "Add to Playlist" : {},
-    "Add to Watchlist" : {},
-    "Address" : {},
-    "AetherEngine" : {},
-    "AirPlay" : {},
-    "Airing Today" : {},
-    "All" : {},
-    "All Channels" : {},
-    "All episodes" : {},
-    "All tuners are busy. Stop another stream and try again." : {},
-    "Always" : {},
-    "An M3U link from your provider" : {},
-    "An XMLTV link for what's on. Leave it empty if the playlist names its own guide." : {},
-    "App Icon" : {},
-    "Audio" : {},
-    "Audio %lld" : {},
-    "Audio & Subtitles" : {},
-    "Audio Delay" : {},
-    "Audio Description" : {},
-    "Audio Language" : {},
-    "Audio and Subtitles" : {},
-    "Authentication check failed: %@" : {},
-    "Authentication failed" : {},
-    "Authentication required" : {},
-    "Auto" : {},
-    "Auto · %@" : {},
-    "Automatic" : {},
-    "Away" : {},
-    "Away covers cellular, a personal hotspot, Low Data Mode and connections outside your home network. Auto converts only when the file will not fit your connection." : {},
-    "Back %lld seconds" : {},
-    "Behind the Scenes" : {},
-    "Best Quality" : {},
-    "Button shows a skip button, Automatic skips on its own, and Off shows nothing." : {},
-    "Can't Record" : {},
-    "Cancel" : {},
-    "Cancel Download" : {},
-    "Cancel Recording" : {},
-    "Cancel Series" : {},
-    "Cannot connect to Plex server" : {},
-    "Cast & Crew" : {},
-    "Changelog" : {},
-    "Channel %@" : {},
-    "Channel Profile" : {},
-    "Channel not found: %@" : {},
-    "Channels" : {},
-    "Channels and guide" : {},
-    "Channels, guide and recordings" : {},
-    "Chapter %lld" : {},
-    "Chapters" : {},
-    "Check your connection and try again." : {},
-    "Checking…" : {},
-    "Choose Profile" : {},
-    "Choose a Library" : {},
-    "Choose a Server" : {},
-    "Choose a profile to load your Plex libraries." : {},
-    "Clear" : {},
-    "Close" : {},
-    "College Football" : {},
-    "Commentary" : {},
-    "Commercial" : {},
-    "Community Markers" : {},
-    "Connect Plex Live TV, Dispatcharr, or a playlist from your provider." : {},
-    "Connected" : {},
-    "Connected, but found no channels." : {},
-    "Connected, but that channel profile has no channels. Check the name." : {},
-    "Continue" : {},
-    "Continue Watching" : {},
-    "Continue with “%@”" : {},
-    "Copy Code" : {},
-    "Corresponding Source" : {},
-    "Could not connect to EPG server" : {},
-    "Could not connect to server. Check your network." : {},
-    "Could not decode M3U content as UTF-8" : {},
-    "Couldn't Add Source" : {},
-    "Couldn't Add to Playlist" : {},
-    "Couldn't Create Playlist" : {},
-    "Couldn't Download Season" : {},
-    "Couldn't Load" : {},
-    "Couldn't Load Home" : {},
-    "Couldn't Load Libraries" : {},
-    "Couldn't Load Library" : {},
-    "Couldn't Load Playlist" : {},
-    "Couldn't Play" : {},
-    "Couldn't Update" : {},
-    "Couldn't Update Watchlist" : {},
-    "Couldn't Update the Playlist" : {},
-    "Couldn't reach that server. Check the address and port." : {},
-    "Couldn't save the file: %@" : {},
-    "Couldn't sign in to Dispatcharr. Try again." : {},
-    "Couldn't tune this channel." : {},
-    "Couldn't tune this channel. All tuners may be busy." : {},
-    "Couldn't update Watchlist" : {},
-    "Couldn't update your Watchlist." : {},
-    "Couldn’t Connect" : {},
-    "Couldn’t Load Profiles" : {},
-    "Couldn’t Load Servers" : {},
-    "Couldn’t Search" : {},
-    "Couldn’t Sign In" : {},
-    "Couldn’t Switch Profile" : {},
-    "Create" : {},
-    "Credits" : {},
-    "DNS lookup failed for EPG server" : {},
-    "Date Added" : {},
-    "Default" : {},
-    "Default Layout" : {},
-    "Delete" : {},
-    "Delete All Downloads" : {},
-    "Delete Playlist" : {},
-    "Delete Rule" : {},
-    "Delete all downloads?" : {},
-    "Delete “%@”?" : {},
-    "Deleted Scene" : {},
-    "Details" : {},
-    "Dismiss" : {},
-    "Dispatcharr" : {},
-    "Dispatcharr Sign-In" : {},
-    "Dispatcharr didn't accept that username and password." : {},
-    "Dispatcharr doesn't list this channel, so it can't record it. Refresh the channel list and try again." : {},
-    "Dispatcharr endpoint not found - verify URL" : {},
-    "Dispatcharr server error (%lld)" : {},
-    "Documentaries" : {},
-    "Download" : {},
-    "Download Quality" : {},
-    "Download Season" : {},
-    "Download over Cellular" : {},
-    "Downloaded" : {},
-    "Downloading" : {},
+    "%lldm" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Min."
+          }
+        }
+      }
+    },
+    "100%" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 %"
+          }
+        }
+      }
+    },
+    "4K First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4K zuerst"
+          }
+        }
+      }
+    },
+    "A channel profile shows only that profile's channels. The name is how this source appears in Live TV." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Senderprofil zeigt nur die Sender dieses Profils. Unter dem Namen erscheint diese Quelle in Live-TV."
+          }
+        }
+      }
+    },
+    "A server, username and password from your provider" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server, Benutzername und Passwort von deinem Anbieter"
+          }
+        }
+      }
+    },
+    "A-Z" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A-Z"
+          }
+        }
+      }
+    },
+    "About" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über"
+          }
+        }
+      }
+    },
+    "Account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
+          }
+        }
+      }
+    },
+    "Add Show to Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serie zur Watchlist hinzufügen"
+          }
+        }
+      }
+    },
+    "Add Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle hinzufügen"
+          }
+        }
+      }
+    },
+    "Add Source…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle hinzufügen …"
+          }
+        }
+      }
+    },
+    "Add a Live TV Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live-TV-Quelle hinzufügen"
+          }
+        }
+      }
+    },
+    "Add titles from their menu with Add to Playlist." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge Titel über ihr Menü mit „Zur Playlist hinzufügen“ hinzu."
+          }
+        }
+      }
+    },
+    "Add to Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Favoriten sichern"
+          }
+        }
+      }
+    },
+    "Add to Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Playlist hinzufügen"
+          }
+        }
+      }
+    },
+    "Add to Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Watchlist hinzufügen"
+          }
+        }
+      }
+    },
+    "Address" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adresse"
+          }
+        }
+      }
+    },
+    "AetherEngine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AetherEngine"
+          }
+        }
+      }
+    },
+    "AirPlay" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AirPlay"
+          }
+        }
+      }
+    },
+    "Airing Today" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heute im TV"
+          }
+        }
+      }
+    },
+    "All" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle"
+          }
+        }
+      }
+    },
+    "All Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Sender"
+          }
+        }
+      }
+    },
+    "All episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Folgen"
+          }
+        }
+      }
+    },
+    "All tuners are busy. Stop another stream and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Tuner sind belegt. Beende einen anderen Stream und versuche es erneut."
+          }
+        }
+      }
+    },
+    "Always" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer"
+          }
+        }
+      }
+    },
+    "An M3U link from your provider" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein M3U-Link von deinem Anbieter"
+          }
+        }
+      }
+    },
+    "An XMLTV link for what's on. Leave it empty if the playlist names its own guide." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein XMLTV-Link für das Programm. Lass das Feld leer, wenn die Playlist ihr eigenes Programm angibt."
+          }
+        }
+      }
+    },
+    "App Icon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App-Symbol"
+          }
+        }
+      }
+    },
+    "Audio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio"
+          }
+        }
+      }
+    },
+    "Audio %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio %lld"
+          }
+        }
+      }
+    },
+    "Audio & Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio & Untertitel"
+          }
+        }
+      }
+    },
+    "Audio Delay" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audioverzögerung"
+          }
+        }
+      }
+    },
+    "Audio Description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audiobeschreibung"
+          }
+        }
+      }
+    },
+    "Audio Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audiosprache"
+          }
+        }
+      }
+    },
+    "Audio and Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio und Untertitel"
+          }
+        }
+      }
+    },
+    "Authentication check failed: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentifizierungsprüfung fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Authentication failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentifizierung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Authentication required" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentifizierung erforderlich"
+          }
+        }
+      }
+    },
+    "Auto" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch"
+          }
+        }
+      }
+    },
+    "Auto · %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto · %@"
+          }
+        }
+      }
+    },
+    "Automatic" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch"
+          }
+        }
+      }
+    },
+    "Away" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterwegs"
+          }
+        }
+      }
+    },
+    "Away covers cellular, a personal hotspot, Low Data Mode and connections outside your home network. Auto converts only when the file will not fit your connection." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Unterwegs“ gilt für Mobilfunk, persönlichen Hotspot, Datensparmodus und Verbindungen außerhalb deines Heimnetzes. „Automatisch“ konvertiert nur, wenn die Datei für deine Verbindung zu groß ist."
+          }
+        }
+      }
+    },
+    "Back %lld seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Sekunden zurück"
+          }
+        }
+      }
+    },
+    "Behind the Scenes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinter den Kulissen"
+          }
+        }
+      }
+    },
+    "Best Quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beste Qualität"
+          }
+        }
+      }
+    },
+    "Button shows a skip button, Automatic skips on its own, and Off shows nothing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Manuell“ zeigt eine Schaltfläche zum Überspringen, „Automatisch“ überspringt von selbst und „Aus“ zeigt nichts."
+          }
+        }
+      }
+    },
+    "Can't Record" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme nicht möglich"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Cancel Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download abbrechen"
+          }
+        }
+      }
+    },
+    "Cancel Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme abbrechen"
+          }
+        }
+      }
+    },
+    "Cancel Series" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serienaufnahme abbrechen"
+          }
+        }
+      }
+    },
+    "Cannot connect to Plex server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Verbindung zum Plex-Server möglich"
+          }
+        }
+      }
+    },
+    "Cast & Crew" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Besetzung & Crew"
+          }
+        }
+      }
+    },
+    "Changelog" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Änderungsprotokoll"
+          }
+        }
+      }
+    },
+    "Channel %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender %@"
+          }
+        }
+      }
+    },
+    "Channel Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senderprofil"
+          }
+        }
+      }
+    },
+    "Channel not found: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender nicht gefunden: %@"
+          }
+        }
+      }
+    },
+    "Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender"
+          }
+        }
+      }
+    },
+    "Channels and guide" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender und Programm"
+          }
+        }
+      }
+    },
+    "Channels, guide and recordings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender, Programm und Aufnahmen"
+          }
+        }
+      }
+    },
+    "Chapter %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapitel %lld"
+          }
+        }
+      }
+    },
+    "Chapters" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapitel"
+          }
+        }
+      }
+    },
+    "Check your connection and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überprüfe deine Verbindung und versuche es erneut."
+          }
+        }
+      }
+    },
+    "Checking…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird geprüft …"
+          }
+        }
+      }
+    },
+    "Choose Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil wählen"
+          }
+        }
+      }
+    },
+    "Choose a Library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mediathek wählen"
+          }
+        }
+      }
+    },
+    "Choose a Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server wählen"
+          }
+        }
+      }
+    },
+    "Choose a profile to load your Plex libraries." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle ein Profil, um deine Plex-Mediatheken zu laden."
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen"
+          }
+        }
+      }
+    },
+    "College Football" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "College-Football"
+          }
+        }
+      }
+    },
+    "Commentary" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kommentar"
+          }
+        }
+      }
+    },
+    "Commercial" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werbung"
+          }
+        }
+      }
+    },
+    "Community Markers" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Community-Marker"
+          }
+        }
+      }
+    },
+    "Connect Plex Live TV, Dispatcharr, or a playlist from your provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbinde Plex Live-TV, Dispatcharr oder eine Playlist deines Anbieters."
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden"
+          }
+        }
+      }
+    },
+    "Connected, but found no channels." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden, aber keine Sender gefunden."
+          }
+        }
+      }
+    },
+    "Connected, but that channel profile has no channels. Check the name." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden, aber dieses Senderprofil hat keine Sender. Überprüfe den Namen."
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fortfahren"
+          }
+        }
+      }
+    },
+    "Continue Watching" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter ansehen"
+          }
+        }
+      }
+    },
+    "Continue with “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit „%@“ fortfahren"
+          }
+        }
+      }
+    },
+    "Copy Code" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code kopieren"
+          }
+        }
+      }
+    },
+    "Corresponding Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Korrespondierender Quelltext"
+          }
+        }
+      }
+    },
+    "Could not connect to EPG server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Verbindung zum EPG-Server möglich"
+          }
+        }
+      }
+    },
+    "Could not connect to server. Check your network." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Verbindung zum Server möglich. Überprüfe dein Netzwerk."
+          }
+        }
+      }
+    },
+    "Could not decode M3U content as UTF-8" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M3U-Inhalt konnte nicht als UTF-8 dekodiert werden"
+          }
+        }
+      }
+    },
+    "Couldn't Add Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle konnte nicht hinzugefügt werden"
+          }
+        }
+      }
+    },
+    "Couldn't Add to Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzufügen zur Playlist fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Create Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist konnte nicht erstellt werden"
+          }
+        }
+      }
+    },
+    "Couldn't Download Season" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download der Staffel fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Load Home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startseite konnte nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn't Load Libraries" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mediatheken konnten nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn't Load Library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mediathek konnte nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn't Load Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist konnte nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn't Play" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabe fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Update" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisierung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Update Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watchlist konnte nicht aktualisiert werden"
+          }
+        }
+      }
+    },
+    "Couldn't Update the Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist konnte nicht aktualisiert werden"
+          }
+        }
+      }
+    },
+    "Couldn't reach that server. Check the address and port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server ist nicht erreichbar. Überprüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "Couldn't save the file: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei konnte nicht gespeichert werden: %@"
+          }
+        }
+      }
+    },
+    "Couldn't sign in to Dispatcharr. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung bei Dispatcharr fehlgeschlagen. Versuche es erneut."
+          }
+        }
+      }
+    },
+    "Couldn't tune this channel." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Sender konnte nicht eingestellt werden."
+          }
+        }
+      }
+    },
+    "Couldn't tune this channel. All tuners may be busy." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Sender konnte nicht eingestellt werden. Möglicherweise sind alle Tuner belegt."
+          }
+        }
+      }
+    },
+    "Couldn't update Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watchlist konnte nicht aktualisiert werden"
+          }
+        }
+      }
+    },
+    "Couldn't update your Watchlist." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Watchlist konnte nicht aktualisiert werden."
+          }
+        }
+      }
+    },
+    "Couldn’t Connect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn’t Load Profiles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile konnten nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn’t Load Servers" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server konnten nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Couldn’t Search" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn’t Sign In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn’t Switch Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profilwechsel fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Create" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstellen"
+          }
+        }
+      }
+    },
+    "Credits" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abspann"
+          }
+        }
+      }
+    },
+    "DNS lookup failed for EPG server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS-Abfrage für EPG-Server fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Date Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzugefügt"
+          }
+        }
+      }
+    },
+    "Default" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        }
+      }
+    },
+    "Default Layout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standardlayout"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        }
+      }
+    },
+    "Delete All Downloads" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Downloads löschen"
+          }
+        }
+      }
+    },
+    "Delete Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist löschen"
+          }
+        }
+      }
+    },
+    "Delete Rule" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regel löschen"
+          }
+        }
+      }
+    },
+    "Delete all downloads?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Downloads löschen?"
+          }
+        }
+      }
+    },
+    "Delete “%@”?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ löschen?"
+          }
+        }
+      }
+    },
+    "Deleted Scene" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfallene Szene"
+          }
+        }
+      }
+    },
+    "Details" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        }
+      }
+    },
+    "Dismiss" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen"
+          }
+        }
+      }
+    },
+    "Dispatcharr" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr"
+          }
+        }
+      }
+    },
+    "Dispatcharr Sign-In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr-Anmeldung"
+          }
+        }
+      }
+    },
+    "Dispatcharr didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr hat Benutzername und Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "Dispatcharr doesn't list this channel, so it can't record it. Refresh the channel list and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr führt diesen Sender nicht und kann ihn daher nicht aufnehmen. Aktualisiere die Senderliste und versuche es erneut."
+          }
+        }
+      }
+    },
+    "Dispatcharr endpoint not found - verify URL" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr-Endpunkt nicht gefunden: Prüfe die URL"
+          }
+        }
+      }
+    },
+    "Dispatcharr server error (%lld)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr-Serverfehler (%lld)"
+          }
+        }
+      }
+    },
+    "Documentaries" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dokumentationen"
+          }
+        }
+      }
+    },
+    "Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden"
+          }
+        }
+      }
+    },
+    "Download Quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloadqualität"
+          }
+        }
+      }
+    },
+    "Download Season" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staffel laden"
+          }
+        }
+      }
+    },
+    "Download over Cellular" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über Mobilfunk laden"
+          }
+        }
+      }
+    },
+    "Downloaded" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geladen"
+          }
+        }
+      }
+    },
+    "Downloading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden …"
+          }
+        }
+      }
+    },
     "Downloading %lld of %lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download %lld von %lld"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -329,233 +1757,2264 @@
         }
       }
     },
-    "Downloads" : {},
-    "Downloads need your home network or a direct remote connection" : {},
-    "E%lld" : {},
-    "EPG data could not be parsed" : {},
-    "EPG data is not available" : {},
-    "EPG data is too large" : {},
-    "EPG request cancelled" : {},
-    "EPG server TLS certificate issue" : {},
-    "EPG server didn't respond in time" : {},
-    "EPG server hostname could not be resolved" : {},
-    "EPG server requires a client certificate" : {},
-    "EPG server returned HTTP %lld" : {},
-    "EPG server returned invalid data" : {},
-    "Earlier" : {},
-    "Empty Playlist" : {},
-    "Enter PIN" : {},
-    "Enter both your username and password, or neither." : {},
-    "Enter the username and password from your provider." : {},
-    "Enter your playlist URL first." : {},
-    "Enter your provider's server address first." : {},
-    "Enter your server's address first." : {},
-    "Entertainment" : {},
-    "Episode" : {},
-    "Episodes" : {},
-    "Erase" : {},
-    "Erase What For You Learned?" : {},
-    "Error (%lld)" : {},
-    "Every day" : {},
-    "Every download on this device is removed, for every profile." : {},
-    "Extra" : {},
-    "Extras" : {},
-    "FFmpeg Build Scripts and Sources" : {},
-    "Failed to fetch servers: %@" : {},
-    "Failed to get PIN: %@" : {},
-    "Failed to load profiles" : {},
-    "Failed to parse XMLTV data" : {},
-    "Failed to parse response" : {},
-    "Failed: %@" : {},
-    "Favorite" : {},
-    "Favorites" : {},
-    "Featurette" : {},
-    "File missing" : {},
-    "Fills in intro and credits markers that Plex is missing, from introdb.app. Only the show’s IMDb ID and episode number are sent." : {},
-    "Filter" : {},
-    "Find movies, TV shows, and episodes." : {},
-    "For You" : {},
-    "For You picks channels from what you watch. It learns on this device only." : {},
-    "Forced" : {},
-    "Forced Only" : {},
-    "Foreign Audio" : {},
-    "Foreign Audio shows subtitles when a title's audio is in another language, and only forced subtitles otherwise. Saved for each Plex profile." : {},
-    "Forward %lld seconds" : {},
-    "Genre" : {},
-    "Go Live" : {},
-    "Go to Downloads" : {},
-    "Go to Season" : {},
-    "Go to Show" : {},
-    "Guide" : {},
-    "Guide data unavailable" : {},
-    "HTTP error %lld" : {},
-    "HTTP error: %lld" : {},
-    "Hero" : {},
-    "Highest Rated" : {},
-    "Home" : {},
-    "How this source appears in Live TV." : {},
-    "Incorrect PIN. Try again." : {},
-    "Info" : {},
-    "Information" : {},
-    "Interview" : {},
-    "Intro" : {},
-    "Invalid M3U format: %@" : {},
-    "Invalid URL" : {},
-    "Invalid response from Dispatcharr server" : {},
-    "Invalid server response" : {},
-    "Item not found" : {},
-    "Jump to Now" : {},
-    "Keep" : {},
-    "Kids" : {},
-    "LIVE" : {},
-    "Later" : {},
-    "Layout" : {},
-    "Less" : {},
-    "Library" : {},
-    "Licenses" : {},
-    "Lists each server's video playlists under Library." : {},
-    "Live" : {},
-    "Live TV" : {},
-    "Lowest Quality" : {},
-    "Manual" : {},
-    "Mark as Unwatched" : {},
-    "Mark as Watched" : {},
-    "Mono" : {},
-    "More" : {},
-    "More Like This" : {},
-    "Movie" : {},
-    "Movies" : {},
-    "Movies and episodes you download appear here, ready to watch offline." : {},
-    "Movies, Shows, and Episodes" : {},
-    "Music" : {},
-    "Mute" : {},
-    "Name" : {},
-    "Network connection was lost" : {},
-    "Network error: %@" : {},
-    "New Episodes" : {},
-    "New Playlist" : {},
-    "New episodes" : {},
-    "Newest" : {},
-    "Newest Releases" : {},
-    "News" : {},
-    "Next" : {},
-    "Next Episode" : {},
-    "Next Episode in %lld" : {},
-    "Next in %lld" : {},
-    "No Channels" : {},
-    "No Downloads" : {},
-    "No Favorites Yet" : {},
-    "No Items" : {},
-    "No Libraries" : {},
-    "No Playlists" : {},
-    "No Plex server is connected." : {},
-    "No Plex servers found on your account" : {},
-    "No channels found" : {},
-    "No guide data" : {},
-    "Not connected to the internet" : {},
-    "Not enough free space on this device" : {},
-    "Nothing On Right Now" : {},
-    "Nothing Unwatched" : {},
-    "Nothing is scheduled. Long-press a programme in the guide to record it." : {},
-    "Nothing on Home Yet" : {},
-    "Now" : {},
-    "Now Playing" : {},
-    "OK" : {},
-    "Off" : {},
-    "Offline" : {},
-    "Oldest" : {},
-    "Oldest Added" : {},
-    "Oldest Releases" : {},
-    "On Now" : {},
-    "On The Air" : {},
-    "On now" : {},
-    "Only needed if your server asks for a login, and to record. Leave both empty to just watch." : {},
-    "Only needed to record. Leave both empty to just watch." : {},
-    "Open Source Software" : {},
-    "Open plex.tv/link" : {},
-    "Open plex.tv/link and sign in. If it asks for a code, enter this one." : {},
-    "Optional" : {},
-    "Options" : {},
-    "Original" : {},
-    "Original saves the file as it is on the server. Smaller sizes are converted by the server first, and a size at or above the file's own downloads the Original." : {},
-    "PIN" : {},
-    "PIN expired. Please try again." : {},
-    "PIN for %@" : {},
-    "Parse error: %@" : {},
-    "Password" : {},
-    "Pause" : {},
-    "Paused" : {},
-    "Picture in Picture" : {},
-    "Pin a library to Home in Plex, then pull to refresh." : {},
-    "Pixel" : {},
-    "Play" : {},
-    "Play from Beginning" : {},
-    "Play from Here" : {},
-    "Playback" : {},
-    "Playback Speed" : {},
-    "Playback Stopped" : {},
-    "Playback position" : {},
-    "Playback speed" : {},
-    "Playlist" : {},
-    "Playlist Name" : {},
-    "Playlist URL" : {},
-    "Playlists" : {},
-    "Plays" : {},
-    "Plays the channel" : {},
-    "Plays the episode" : {},
-    "Plays the playlist from here" : {},
-    "Plex Account" : {},
-    "Plex didn't accept the sign-in; sign in again, then retry" : {},
-    "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home" : {},
-    "Popular Movies" : {},
-    "Popular TV" : {},
-    "Preparing on Server" : {},
-    "Programme progress" : {},
-    "Provider" : {},
-    "Quality" : {},
-    "REC" : {},
-    "Rated" : {},
-    "Rating" : {},
-    "Recap" : {},
-    "Recent" : {},
-    "Recent Searches" : {},
-    "Recently Added" : {},
-    "Recently Watched" : {},
-    "Record" : {},
-    "Record %@" : {},
-    "Record Episode" : {},
-    "Record New Episodes" : {},
-    "Record Series" : {},
-    "Recording" : {},
-    "Recording Didn't Change" : {},
-    "Recording now" : {},
-    "Recordings" : {},
-    "Record…" : {},
-    "Refresh Channels" : {},
-    "Release Date" : {},
-    "Released" : {},
-    "Remember PIN" : {},
-    "Remove" : {},
-    "Remove Download" : {},
-    "Remove Source" : {},
-    "Remove Source?" : {},
-    "Remove from Favorites" : {},
-    "Remove from Playlist" : {},
-    "Remove from Watchlist" : {},
-    "Rename" : {},
-    "Rename Playlist" : {},
-    "Repeating Recording" : {},
-    "Required" : {},
-    "Reset audio delay" : {},
-    "Resume" : {},
-    "Resumes the download" : {},
-    "Retries the download" : {},
-    "Retry" : {},
-    "Retry Download" : {},
-    "Rivulet" : {},
-    "Runtime" : {},
+    "Downloads" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads"
+          }
+        }
+      }
+    },
+    "Downloads need your home network or a direct remote connection" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloads sind nur im Heimnetz oder über eine direkte Remote-Verbindung möglich"
+          }
+        }
+      }
+    },
+    "E%lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "F%lld"
+          }
+        }
+      }
+    },
+    "EPG data could not be parsed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten konnten nicht gelesen werden"
+          }
+        }
+      }
+    },
+    "EPG data is not available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten sind nicht verfügbar"
+          }
+        }
+      }
+    },
+    "EPG data is too large" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten sind zu groß"
+          }
+        }
+      }
+    },
+    "EPG request cancelled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Anfrage abgebrochen"
+          }
+        }
+      }
+    },
+    "EPG server TLS certificate issue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Problem mit dem TLS-Zertifikat des EPG-Servers"
+          }
+        }
+      }
+    },
+    "EPG server didn't respond in time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat nicht rechtzeitig geantwortet"
+          }
+        }
+      }
+    },
+    "EPG server hostname could not be resolved" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostname des EPG-Servers konnte nicht aufgelöst werden"
+          }
+        }
+      }
+    },
+    "EPG server requires a client certificate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server verlangt ein Client-Zertifikat"
+          }
+        }
+      }
+    },
+    "EPG server returned HTTP %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat HTTP %lld zurückgegeben"
+          }
+        }
+      }
+    },
+    "EPG server returned invalid data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat ungültige Daten zurückgegeben"
+          }
+        }
+      }
+    },
+    "Earlier" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Früher"
+          }
+        }
+      }
+    },
+    "Empty Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leere Playlist"
+          }
+        }
+      }
+    },
+    "Enter PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN eingeben"
+          }
+        }
+      }
+    },
+    "Enter both your username and password, or neither." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib entweder Benutzername und Passwort ein oder keins von beiden."
+          }
+        }
+      }
+    },
+    "Enter the username and password from your provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib den Benutzernamen und das Passwort deines Anbieters ein."
+          }
+        }
+      }
+    },
+    "Enter your playlist URL first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib zuerst die URL deiner Playlist ein."
+          }
+        }
+      }
+    },
+    "Enter your provider's server address first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib zuerst die Serveradresse deines Anbieters ein."
+          }
+        }
+      }
+    },
+    "Enter your server's address first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib zuerst die Adresse deines Servers ein."
+          }
+        }
+      }
+    },
+    "Entertainment" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterhaltung"
+          }
+        }
+      }
+    },
+    "Episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folge"
+          }
+        }
+      }
+    },
+    "Episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folgen"
+          }
+        }
+      }
+    },
+    "Erase" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        }
+      }
+    },
+    "Erase What For You Learned?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gelerntes von „Für dich“ löschen?"
+          }
+        }
+      }
+    },
+    "Error (%lld)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehler (%lld)"
+          }
+        }
+      }
+    },
+    "Every day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Täglich"
+          }
+        }
+      }
+    },
+    "Every download on this device is removed, for every profile." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Downloads auf diesem Gerät werden für alle Profile entfernt."
+          }
+        }
+      }
+    },
+    "Extra" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra"
+          }
+        }
+      }
+    },
+    "Extras" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extras"
+          }
+        }
+      }
+    },
+    "FFmpeg Build Scripts and Sources" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FFmpeg-Build-Skripte und -Quellen"
+          }
+        }
+      }
+    },
+    "Failed to fetch servers: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server konnten nicht abgerufen werden: %@"
+          }
+        }
+      }
+    },
+    "Failed to get PIN: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN konnte nicht abgerufen werden: %@"
+          }
+        }
+      }
+    },
+    "Failed to load profiles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile konnten nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Failed to parse XMLTV data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XMLTV-Daten konnten nicht gelesen werden"
+          }
+        }
+      }
+    },
+    "Failed to parse response" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antwort konnte nicht gelesen werden"
+          }
+        }
+      }
+    },
+    "Failed: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Favorite" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorit"
+          }
+        }
+      }
+    },
+    "Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favoriten"
+          }
+        }
+      }
+    },
+    "Featurette" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Featurette"
+          }
+        }
+      }
+    },
+    "File missing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datei fehlt"
+          }
+        }
+      }
+    },
+    "Fills in intro and credits markers that Plex is missing, from introdb.app. Only the show’s IMDb ID and episode number are sent." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ergänzt Intro- und Abspannmarker, die in Plex fehlen, über introdb.app. Gesendet werden nur die IMDb-ID der Serie und die Folgennummer."
+          }
+        }
+      }
+    },
+    "Filter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtern"
+          }
+        }
+      }
+    },
+    "Find movies, TV shows, and episodes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finde Filme, TV-Sendungen und Folgen."
+          }
+        }
+      }
+    },
+    "For You" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für dich"
+          }
+        }
+      }
+    },
+    "For You picks channels from what you watch. It learns on this device only." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Für dich“ wählt Sender danach aus, was du ansiehst. Es lernt nur auf diesem Gerät."
+          }
+        }
+      }
+    },
+    "Forced" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erzwungen"
+          }
+        }
+      }
+    },
+    "Forced Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur erzwungene"
+          }
+        }
+      }
+    },
+    "Foreign Audio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Fremdsprache"
+          }
+        }
+      }
+    },
+    "Foreign Audio shows subtitles when a title's audio is in another language, and only forced subtitles otherwise. Saved for each Plex profile." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Bei Fremdsprache“ zeigt Untertitel, wenn der Ton eines Titels in einer anderen Sprache ist, sonst nur erzwungene Untertitel. Wird für jedes Plex-Profil gespeichert."
+          }
+        }
+      }
+    },
+    "Forward %lld seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Sekunden vor"
+          }
+        }
+      }
+    },
+    "Genre" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Genre"
+          }
+        }
+      }
+    },
+    "Go Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live ansehen"
+          }
+        }
+      }
+    },
+    "Go to Downloads" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu den Downloads"
+          }
+        }
+      }
+    },
+    "Go to Season" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Staffel"
+          }
+        }
+      }
+    },
+    "Go to Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Serie"
+          }
+        }
+      }
+    },
+    "Guide" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Programm"
+          }
+        }
+      }
+    },
+    "Guide data unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Programmdaten nicht verfügbar"
+          }
+        }
+      }
+    },
+    "HTTP error %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP-Fehler %lld"
+          }
+        }
+      }
+    },
+    "HTTP error: %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP-Fehler: %lld"
+          }
+        }
+      }
+    },
+    "Hero" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hero-Banner"
+          }
+        }
+      }
+    },
+    "Highest Rated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Am besten bewertet"
+          }
+        }
+      }
+    },
+    "Home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startseite"
+          }
+        }
+      }
+    },
+    "How this source appears in Live TV." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "So erscheint diese Quelle in Live-TV."
+          }
+        }
+      }
+    },
+    "Incorrect PIN. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falsche PIN. Versuche es erneut."
+          }
+        }
+      }
+    },
+    "Info" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Infos"
+          }
+        }
+      }
+    },
+    "Information" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informationen"
+          }
+        }
+      }
+    },
+    "Interview" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interview"
+          }
+        }
+      }
+    },
+    "Intro" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intro"
+          }
+        }
+      }
+    },
+    "Invalid M3U format: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiges M3U-Format: %@"
+          }
+        }
+      }
+    },
+    "Invalid URL" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültige URL"
+          }
+        }
+      }
+    },
+    "Invalid response from Dispatcharr server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültige Antwort vom Dispatcharr-Server"
+          }
+        }
+      }
+    },
+    "Invalid server response" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültige Serverantwort"
+          }
+        }
+      }
+    },
+    "Item not found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objekt nicht gefunden"
+          }
+        }
+      }
+    },
+    "Jump to Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur aktuellen Zeit"
+          }
+        }
+      }
+    },
+    "Keep" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Behalten"
+          }
+        }
+      }
+    },
+    "Kids" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kinder"
+          }
+        }
+      }
+    },
+    "LIVE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LIVE"
+          }
+        }
+      }
+    },
+    "Later" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Später"
+          }
+        }
+      }
+    },
+    "Layout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Layout"
+          }
+        }
+      }
+    },
+    "Less" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weniger"
+          }
+        }
+      }
+    },
+    "Library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mediathek"
+          }
+        }
+      }
+    },
+    "Licenses" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenzen"
+          }
+        }
+      }
+    },
+    "Lists each server's video playlists under Library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt die Video-Playlists jedes Servers unter „Mediathek“ an."
+          }
+        }
+      }
+    },
+    "Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live"
+          }
+        }
+      }
+    },
+    "Live TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live-TV"
+          }
+        }
+      }
+    },
+    "Lowest Quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niedrigste Qualität"
+          }
+        }
+      }
+    },
+    "Manual" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manuell"
+          }
+        }
+      }
+    },
+    "Mark as Unwatched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als ungesehen markieren"
+          }
+        }
+      }
+    },
+    "Mark as Watched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als gesehen markieren"
+          }
+        }
+      }
+    },
+    "Mono" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mono"
+          }
+        }
+      }
+    },
+    "More" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehr"
+          }
+        }
+      }
+    },
+    "More Like This" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehr davon"
+          }
+        }
+      }
+    },
+    "Movie" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Film"
+          }
+        }
+      }
+    },
+    "Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filme"
+          }
+        }
+      }
+    },
+    "Movies and episodes you download appear here, ready to watch offline." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filme und Folgen, die du herunterlädst, werden hier angezeigt und können offline angesehen werden."
+          }
+        }
+      }
+    },
+    "Movies, Shows, and Episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filme, TV-Sendungen und Folgen"
+          }
+        }
+      }
+    },
+    "Music" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Musik"
+          }
+        }
+      }
+    },
+    "Mute" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton aus"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "Network connection was lost" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerkverbindung unterbrochen"
+          }
+        }
+      }
+    },
+    "Network error: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerkfehler: %@"
+          }
+        }
+      }
+    },
+    "New Episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Folgen"
+          }
+        }
+      }
+    },
+    "New Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Playlist"
+          }
+        }
+      }
+    },
+    "New episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Folgen"
+          }
+        }
+      }
+    },
+    "Newest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste"
+          }
+        }
+      }
+    },
+    "Newest Releases" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste zuerst"
+          }
+        }
+      }
+    },
+    "News" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nachrichten"
+          }
+        }
+      }
+    },
+    "Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
+          }
+        }
+      }
+    },
+    "Next Episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächste Folge"
+          }
+        }
+      }
+    },
+    "Next Episode in %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächste Folge in %lld"
+          }
+        }
+      }
+    },
+    "Next in %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter in %lld"
+          }
+        }
+      }
+    },
+    "No Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Sender"
+          }
+        }
+      }
+    },
+    "No Downloads" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Downloads"
+          }
+        }
+      }
+    },
+    "No Favorites Yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Favoriten"
+          }
+        }
+      }
+    },
+    "No Items" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Objekte"
+          }
+        }
+      }
+    },
+    "No Libraries" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Mediatheken"
+          }
+        }
+      }
+    },
+    "No Playlists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Playlists"
+          }
+        }
+      }
+    },
+    "No Plex server is connected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Plex-Server verbunden."
+          }
+        }
+      }
+    },
+    "No Plex servers found on your account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In deinem Account wurden keine Plex-Server gefunden"
+          }
+        }
+      }
+    },
+    "No channels found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Sender gefunden"
+          }
+        }
+      }
+    },
+    "No guide data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Programmdaten"
+          }
+        }
+      }
+    },
+    "Not connected to the internet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Internetverbindung"
+          }
+        }
+      }
+    },
+    "Not enough free space on this device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht genügend freier Speicher auf diesem Gerät"
+          }
+        }
+      }
+    },
+    "Nothing On Right Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade läuft nichts"
+          }
+        }
+      }
+    },
+    "Nothing Unwatched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles gesehen"
+          }
+        }
+      }
+    },
+    "Nothing is scheduled. Long-press a programme in the guide to record it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts geplant. Drücke im Programm lange auf eine Sendung, um sie aufzunehmen."
+          }
+        }
+      }
+    },
+    "Nothing on Home Yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nichts auf der Startseite"
+          }
+        }
+      }
+    },
+    "Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt"
+          }
+        }
+      }
+    },
+    "Now Playing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt läuft"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus"
+          }
+        }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
+          }
+        }
+      }
+    },
+    "Oldest" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Älteste"
+          }
+        }
+      }
+    },
+    "Oldest Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuerst hinzugefügt"
+          }
+        }
+      }
+    },
+    "Oldest Releases" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Älteste zuerst"
+          }
+        }
+      }
+    },
+    "On Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft jetzt"
+          }
+        }
+      }
+    },
+    "On The Air" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuell im TV"
+          }
+        }
+      }
+    },
+    "On now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft jetzt"
+          }
+        }
+      }
+    },
+    "Only needed if your server asks for a login, and to record. Leave both empty to just watch." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur nötig, wenn dein Server eine Anmeldung verlangt, und zum Aufnehmen. Lass beide Felder leer, um nur fernzusehen."
+          }
+        }
+      }
+    },
+    "Only needed to record. Leave both empty to just watch." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur zum Aufnehmen nötig. Lass beide Felder leer, um nur fernzusehen."
+          }
+        }
+      }
+    },
+    "Open Source Software" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open-Source-Software"
+          }
+        }
+      }
+    },
+    "Open plex.tv/link" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "plex.tv/link öffnen"
+          }
+        }
+      }
+    },
+    "Open plex.tv/link and sign in. If it asks for a code, enter this one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne plex.tv/link und melde dich an. Wenn ein Code abgefragt wird, gib diesen ein."
+          }
+        }
+      }
+    },
+    "Optional" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional"
+          }
+        }
+      }
+    },
+    "Options" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optionen"
+          }
+        }
+      }
+    },
+    "Original" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original"
+          }
+        }
+      }
+    },
+    "Original saves the file as it is on the server. Smaller sizes are converted by the server first, and a size at or above the file's own downloads the Original." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Original“ speichert die Datei so, wie sie auf dem Server liegt. Kleinere Größen konvertiert zuerst der Server. Wählst du eine Größe, die mindestens so groß ist wie die Datei, wird das Original geladen."
+          }
+        }
+      }
+    },
+    "PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN"
+          }
+        }
+      }
+    },
+    "PIN expired. Please try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN abgelaufen. Bitte versuche es erneut."
+          }
+        }
+      }
+    },
+    "PIN for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN für %@"
+          }
+        }
+      }
+    },
+    "Parse error: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehler beim Lesen: %@"
+          }
+        }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwort"
+          }
+        }
+      }
+    },
+    "Pause" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        }
+      }
+    },
+    "Paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausiert"
+          }
+        }
+      }
+    },
+    "Picture in Picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild-in-Bild"
+          }
+        }
+      }
+    },
+    "Pin a library to Home in Plex, then pull to refresh." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinne in Plex eine Mediathek an die Startseite an und zieh dann zum Aktualisieren nach unten."
+          }
+        }
+      }
+    },
+    "Pixel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pixel"
+          }
+        }
+      }
+    },
+    "Play" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergeben"
+          }
+        }
+      }
+    },
+    "Play from Beginning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von vorne beginnen"
+          }
+        }
+      }
+    },
+    "Play from Here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab hier wiedergeben"
+          }
+        }
+      }
+    },
+    "Playback" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabe"
+          }
+        }
+      }
+    },
+    "Playback Speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabetempo"
+          }
+        }
+      }
+    },
+    "Playback Stopped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabe gestoppt"
+          }
+        }
+      }
+    },
+    "Playback position" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabeposition"
+          }
+        }
+      }
+    },
+    "Playback speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabetempo"
+          }
+        }
+      }
+    },
+    "Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist"
+          }
+        }
+      }
+    },
+    "Playlist Name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlistname"
+          }
+        }
+      }
+    },
+    "Playlist URL" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist-URL"
+          }
+        }
+      }
+    },
+    "Playlists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlists"
+          }
+        }
+      }
+    },
+    "Plays" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startet die Wiedergabe"
+          }
+        }
+      }
+    },
+    "Plays the channel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gibt den Sender wieder"
+          }
+        }
+      }
+    },
+    "Plays the episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gibt die Folge wieder"
+          }
+        }
+      }
+    },
+    "Plays the playlist from here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gibt die Playlist ab hier wieder"
+          }
+        }
+      }
+    },
+    "Plex Account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex-Account"
+          }
+        }
+      }
+    },
+    "Plex didn't accept the sign-in; sign in again, then retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
+          }
+        }
+      }
+    },
+    "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex erfordert Plex Pass oder Remote Watch Pass für Downloads von unterwegs; lade zu Hause herunter"
+          }
+        }
+      }
+    },
+    "Popular Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beliebte Filme"
+          }
+        }
+      }
+    },
+    "Popular TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beliebte TV-Sendungen"
+          }
+        }
+      }
+    },
+    "Preparing on Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird auf dem Server vorbereitet"
+          }
+        }
+      }
+    },
+    "Programme progress" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sendungsfortschritt"
+          }
+        }
+      }
+    },
+    "Provider" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anbieter"
+          }
+        }
+      }
+    },
+    "Quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualität"
+          }
+        }
+      }
+    },
+    "REC" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REC"
+          }
+        }
+      }
+    },
+    "Rated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freigegeben"
+          }
+        }
+      }
+    },
+    "Rating" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewertung"
+          }
+        }
+      }
+    },
+    "Recap" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rückblick"
+          }
+        }
+      }
+    },
+    "Recent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt"
+          }
+        }
+      }
+    },
+    "Recent Searches" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Sucheinträge"
+          }
+        }
+      }
+    },
+    "Recently Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt hinzugefügt"
+          }
+        }
+      }
+    },
+    "Recently Watched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt gesehen"
+          }
+        }
+      }
+    },
+    "Record" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnehmen"
+          }
+        }
+      }
+    },
+    "Record %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ aufnehmen"
+          }
+        }
+      }
+    },
+    "Record Episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folge aufnehmen"
+          }
+        }
+      }
+    },
+    "Record New Episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Folgen aufnehmen"
+          }
+        }
+      }
+    },
+    "Record Series" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serie aufnehmen"
+          }
+        }
+      }
+    },
+    "Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme"
+          }
+        }
+      }
+    },
+    "Recording Didn't Change" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme konnte nicht geändert werden"
+          }
+        }
+      }
+    },
+    "Recording now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme läuft"
+          }
+        }
+      }
+    },
+    "Recordings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmen"
+          }
+        }
+      }
+    },
+    "Record…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnehmen …"
+          }
+        }
+      }
+    },
+    "Refresh Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender aktualisieren"
+          }
+        }
+      }
+    },
+    "Release Date" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erscheinungsdatum"
+          }
+        }
+      }
+    },
+    "Released" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Veröffentlicht"
+          }
+        }
+      }
+    },
+    "Remember PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN merken"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download entfernen"
+          }
+        }
+      }
+    },
+    "Remove Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle entfernen"
+          }
+        }
+      }
+    },
+    "Remove Source?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle entfernen?"
+          }
+        }
+      }
+    },
+    "Remove from Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Favoriten entfernen"
+          }
+        }
+      }
+    },
+    "Remove from Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Playlist entfernen"
+          }
+        }
+      }
+    },
+    "Remove from Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus der Watchlist entfernen"
+          }
+        }
+      }
+    },
+    "Rename" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbenennen"
+          }
+        }
+      }
+    },
+    "Rename Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist umbenennen"
+          }
+        }
+      }
+    },
+    "Repeating Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederkehrende Aufnahme"
+          }
+        }
+      }
+    },
+    "Required" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erforderlich"
+          }
+        }
+      }
+    },
+    "Reset audio delay" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audioverzögerung zurücksetzen"
+          }
+        }
+      }
+    },
+    "Resume" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fortsetzen"
+          }
+        }
+      }
+    },
+    "Resumes the download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setzt den Download fort"
+          }
+        }
+      }
+    },
+    "Retries the download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versucht den Download erneut"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Retry Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download erneut versuchen"
+          }
+        }
+      }
+    },
+    "Rivulet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet"
+          }
+        }
+      }
+    },
+    "Runtime" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauer"
+          }
+        }
+      }
+    },
     "S%lld, E%lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -564,174 +4023,1686 @@
         }
       }
     },
-    "SD First" : {},
-    "SDH Subtitles" : {},
-    "Scene" : {},
-    "Scheduled" : {},
-    "Search" : {},
-    "Search Your Plex Libraries" : {},
-    "Season" : {},
-    "Season %lld" : {},
-    "Season, %@" : {},
-    "Segment" : {},
-    "Series" : {},
-    "Series and Rules" : {},
-    "Server" : {},
-    "Settings" : {},
-    "Shared by %@" : {},
-    "Sharpens video smaller than your screen with Apple's machine learning upscaler. Uses more power, and stops on its own if the device can't keep up. HDR and Dolby Vision play as before." : {},
-    "Short" : {},
-    "Show" : {},
-    "Shows all" : {},
-    "Shows details" : {},
-    "Shuffle" : {},
-    "Sign In" : {},
-    "Sign In to Plex" : {},
-    "Sign Out" : {},
-    "Sign in to use Watchlist" : {},
-    "Sign in to watch your Plex libraries on iPhone and iPad." : {},
-    "Sign in to watch your Plex libraries." : {},
-    "Sign out of Plex?" : {},
-    "Signed In" : {},
-    "Signed in, but this account has no live channels." : {},
-    "Simple Colour" : {},
-    "Simple White" : {},
-    "Skip %@" : {},
-    "Skip Back" : {},
-    "Skip Buttons" : {},
-    "Skip Forward" : {},
-    "Skip Markers" : {},
-    "Some channels didn't load" : {},
-    "Sort" : {},
-    "Sort By" : {},
-    "Source" : {},
-    "Source is not configured" : {},
-    "Source is not connected" : {},
-    "Sources" : {},
-    "Specials" : {},
-    "Sports" : {},
-    "Starting Soon" : {},
-    "Starts %@" : {},
-    "Status" : {},
-    "Stereo" : {},
-    "Stop" : {},
-    "Stop Recording" : {},
-    "Storage Used" : {},
-    "Stored in this device’s keychain so this profile opens without asking." : {},
-    "Streaming Quality" : {},
-    "Studio" : {},
-    "Subtitle Language" : {},
-    "Subtitles" : {},
-    "Suggestions" : {},
-    "Switch Profile" : {},
-    "TV Show" : {},
-    "TV Shows" : {},
-    "That address doesn't look right. Check it and try again." : {},
-    "That address isn't a Tvheadend server. Check the address and port." : {},
-    "That address isn't an Xtream Codes server. Check the address and port." : {},
-    "That playlist URL doesn't look right. Check it and try again." : {},
-    "That server has no Dispatcharr sign-in. Clear the username and password." : {},
-    "That server refused Rivulet." : {},
-    "The M3U link from your provider." : {},
-    "The download is too large." : {},
-    "The download was cut short" : {},
-    "The downloaded file didn't match the server's copy" : {},
-    "The file is no longer on the server" : {},
-    "The guide doesn't identify this programme well enough to record it." : {},
-    "The guide is too large" : {},
-    "The server" : {},
-    "The server address from your provider, with its port. You can also paste a get.php link: Rivulet fills in the username and password from it." : {},
-    "The server couldn't convert this item" : {},
-    "The server didn't accept that username and password." : {},
-    "The server is refusing new streams right now. Wait a moment and try again." : {},
-    "The server no longer has this conversion" : {},
-    "The server offered no way to record this programme." : {},
-    "The server refused the download (HTTP %lld)" : {},
-    "The server refused this stream. It may have moved, or your access to it may have changed." : {},
-    "The server said: %@" : {},
-    "The server sent a response Rivulet couldn't read" : {},
-    "The server's security certificate was not accepted." : {},
-    "These also set how far a double tap jumps." : {},
-    "This Dolby Vision file has no fallback layer this device can decode." : {},
-    "This Tvheadend server needs a username and password." : {},
-    "This Tvheadend user can't record." : {},
-    "This account has expired. Contact your provider to renew it." : {},
-    "This account is turned off. Contact your provider." : {},
-    "This channel has no stream." : {},
-    "This channel is not responding right now." : {},
-    "This item has no downloadable file" : {},
-    "This item has no playable file." : {},
-    "This programme has already ended." : {},
-    "This removes the playlist from your server. The titles stay in your library." : {},
-    "This source can't record." : {},
-    "This version is split into parts; choose a converted quality" : {},
-    "This video couldn't be played. Check your connection and try again." : {},
-    "This will remove \"%@\" and all its channels from Live TV." : {},
-    "Threadfin" : {},
-    "Title" : {},
-    "Title A-Z" : {},
-    "Title Z-A" : {},
-    "Today" : {},
-    "Too many sign-in attempts. Wait a minute and try again." : {},
-    "Top Rated Movies" : {},
-    "Top Rated TV" : {},
-    "Touch and hold a channel in Live TV to add it." : {},
-    "Track %@" : {},
-    "Track %lld" : {},
-    "Trailer" : {},
-    "Trending" : {},
-    "Trending Movies" : {},
-    "Trending TV" : {},
-    "Try Again" : {},
-    "Try the Guide to see what's coming up." : {},
-    "Tune failed: %@" : {},
-    "Tvheadend" : {},
-    "Tvheadend Sign-In" : {},
-    "Tvheadend didn't accept that username and password." : {},
-    "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend." : {},
-    "Tvheadend refused this user. Check its password and rights in Tvheadend." : {},
-    "Unable to reach Plex. Check your network connection." : {},
-    "Unauthorized - check Dispatcharr authentication" : {},
-    "Unknown" : {},
-    "Unknown Language" : {},
-    "Unmute" : {},
-    "Untitled" : {},
-    "Unwatched" : {},
-    "Up Next" : {},
-    "Upcoming" : {},
-    "Upscale SD and 720p" : {},
-    "Username" : {},
-    "Version" : {},
-    "Version %@" : {},
-    "Waiting for Server" : {},
-    "Waiting for Wi-Fi" : {},
-    "Waiting for you to sign in" : {},
-    "Watch" : {},
-    "Watch %@" : {},
-    "Watch %@ Live" : {},
-    "Watched" : {},
-    "Watchlist" : {},
-    "Weekdays" : {},
-    "Weekends" : {},
-    "What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending." : {},
-    "What's New" : {},
-    "What's On" : {},
-    "When off, downloads wait for Wi-Fi on cellular, a personal hotspot or Low Data Mode." : {},
-    "Who’s Watching?" : {},
-    "Xtream Codes" : {},
-    "You can sign back in at any time." : {},
-    "Your Dispatcharr server's address on your network, with its port." : {},
-    "Your Live TV sources returned no channels." : {},
-    "Your Plex server stopped this stream." : {},
-    "Your Server" : {},
-    "Your Threadfin server's address on your network, with its port." : {},
-    "Your Tvheadend server's address on your network, with its port." : {},
-    "Your provider has blocked this account." : {},
-    "Your saved PIN no longer works. Enter it again." : {},
-    "Z-A" : {},
-    "http://provider.example/playlist.m3u" : {},
-    "http://provider.example:8080" : {},
-    "•" : {}
+    "SD First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SD zuerst"
+          }
+        }
+      }
+    },
+    "SDH Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SDH-Untertitel"
+          }
+        }
+      }
+    },
+    "Scene" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Szene"
+          }
+        }
+      }
+    },
+    "Scheduled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geplant"
+          }
+        }
+      }
+    },
+    "Search" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchen"
+          }
+        }
+      }
+    },
+    "Search Your Plex Libraries" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Plex-Mediatheken durchsuchen"
+          }
+        }
+      }
+    },
+    "Season" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staffel"
+          }
+        }
+      }
+    },
+    "Season %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staffel %lld"
+          }
+        }
+      }
+    },
+    "Season, %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staffel, %@"
+          }
+        }
+      }
+    },
+    "Segment" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segment"
+          }
+        }
+      }
+    },
+    "Series" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serie"
+          }
+        }
+      }
+    },
+    "Series and Rules" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serien und Regeln"
+          }
+        }
+      }
+    },
+    "Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen"
+          }
+        }
+      }
+    },
+    "Shared by %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geteilt von %@"
+          }
+        }
+      }
+    },
+    "Sharpens video smaller than your screen with Apple's machine learning upscaler. Uses more power, and stops on its own if the device can't keep up. HDR and Dolby Vision play as before." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schärft Videos, die kleiner als dein Bildschirm sind, mit Apples Upscaler auf Basis von maschinellem Lernen. Verbraucht mehr Energie und stoppt von selbst, wenn das Gerät nicht mithalten kann. HDR und Dolby Vision werden wie bisher wiedergegeben."
+          }
+        }
+      }
+    },
+    "Short" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurzfilm"
+          }
+        }
+      }
+    },
+    "Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anzeigen"
+          }
+        }
+      }
+    },
+    "Shows all" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt alle an"
+          }
+        }
+      }
+    },
+    "Shows details" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt Details an"
+          }
+        }
+      }
+    },
+    "Shuffle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zufällige Wiedergabe"
+          }
+        }
+      }
+    },
+    "Sign In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmelden"
+          }
+        }
+      }
+    },
+    "Sign In to Plex" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Plex anmelden"
+          }
+        }
+      }
+    },
+    "Sign Out" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abmelden"
+          }
+        }
+      }
+    },
+    "Sign in to use Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich an, um die Watchlist zu nutzen"
+          }
+        }
+      }
+    },
+    "Sign in to watch your Plex libraries on iPhone and iPad." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich an, um deine Plex-Mediatheken auf dem iPhone und iPad anzusehen."
+          }
+        }
+      }
+    },
+    "Sign in to watch your Plex libraries." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich an, um deine Plex-Mediatheken anzusehen."
+          }
+        }
+      }
+    },
+    "Sign out of Plex?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von Plex abmelden?"
+          }
+        }
+      }
+    },
+    "Signed In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angemeldet"
+          }
+        }
+      }
+    },
+    "Signed in, but this account has no live channels." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angemeldet, aber dieser Account hat keine Live-Sender."
+          }
+        }
+      }
+    },
+    "Simple Colour" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlicht farbig"
+          }
+        }
+      }
+    },
+    "Simple White" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlicht weiß"
+          }
+        }
+      }
+    },
+    "Skip %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ überspringen"
+          }
+        }
+      }
+    },
+    "Skip Back" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zurückspringen"
+          }
+        }
+      }
+    },
+    "Skip Buttons" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen"
+          }
+        }
+      }
+    },
+    "Skip Forward" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorspringen"
+          }
+        }
+      }
+    },
+    "Skip Markers" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marker überspringen"
+          }
+        }
+      }
+    },
+    "Some channels didn't load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einige Sender wurden nicht geladen"
+          }
+        }
+      }
+    },
+    "Sort" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortieren"
+          }
+        }
+      }
+    },
+    "Sort By" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortieren nach"
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle"
+          }
+        }
+      }
+    },
+    "Source is not configured" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle ist nicht konfiguriert"
+          }
+        }
+      }
+    },
+    "Source is not connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle ist nicht verbunden"
+          }
+        }
+      }
+    },
+    "Sources" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quellen"
+          }
+        }
+      }
+    },
+    "Specials" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Specials"
+          }
+        }
+      }
+    },
+    "Sports" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sport"
+          }
+        }
+      }
+    },
+    "Starting Soon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start in Kürze"
+          }
+        }
+      }
+    },
+    "Starts %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beginn: %@"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+    "Stereo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stereo"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopp"
+          }
+        }
+      }
+    },
+    "Stop Recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme stoppen"
+          }
+        }
+      }
+    },
+    "Storage Used" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belegter Speicher"
+          }
+        }
+      }
+    },
+    "Stored in this device’s keychain so this profile opens without asking." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Schlüsselbund dieses Geräts gespeichert, damit sich dieses Profil ohne Nachfrage öffnet."
+          }
+        }
+      }
+    },
+    "Streaming Quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Streamingqualität"
+          }
+        }
+      }
+    },
+    "Studio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Studio"
+          }
+        }
+      }
+    },
+    "Subtitle Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitelsprache"
+          }
+        }
+      }
+    },
+    "Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel"
+          }
+        }
+      }
+    },
+    "Suggestions" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschläge"
+          }
+        }
+      }
+    },
+    "Switch Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil wechseln"
+          }
+        }
+      }
+    },
+    "TV Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV-Sendung"
+          }
+        }
+      }
+    },
+    "TV Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV-Sendungen"
+          }
+        }
+      }
+    },
+    "That address doesn't look right. Check it and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Adresse scheint nicht zu stimmen. Prüfe sie und versuche es erneut."
+          }
+        }
+      }
+    },
+    "That address isn't a Tvheadend server. Check the address and port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dieser Adresse läuft kein Tvheadend-Server. Prüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "That address isn't an Xtream Codes server. Check the address and port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dieser Adresse läuft kein Xtream-Codes-Server. Prüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "That playlist URL doesn't look right. Check it and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Playlist-URL scheint nicht zu stimmen. Prüfe sie und versuche es erneut."
+          }
+        }
+      }
+    },
+    "That server has no Dispatcharr sign-in. Clear the username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Server hat keine Dispatcharr-Anmeldung. Lass Benutzername und Passwort leer."
+          }
+        }
+      }
+    },
+    "That server refused Rivulet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat Rivulet abgewiesen."
+          }
+        }
+      }
+    },
+    "The M3U link from your provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der M3U-Link deines Anbieters."
+          }
+        }
+      }
+    },
+    "The download is too large." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Download ist zu groß."
+          }
+        }
+      }
+    },
+    "The download was cut short" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Download wurde abgebrochen"
+          }
+        }
+      }
+    },
+    "The downloaded file didn't match the server's copy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die heruntergeladene Datei stimmt nicht mit der Kopie auf dem Server überein"
+          }
+        }
+      }
+    },
+    "The file is no longer on the server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei ist nicht mehr auf dem Server"
+          }
+        }
+      }
+    },
+    "The guide doesn't identify this programme well enough to record it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Programmdaten beschreiben diese Sendung nicht genau genug, um sie aufzunehmen."
+          }
+        }
+      }
+    },
+    "The guide is too large" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Programmdaten sind zu groß"
+          }
+        }
+      }
+    },
+    "The server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server"
+          }
+        }
+      }
+    },
+    "The server address from your provider, with its port. You can also paste a get.php link: Rivulet fills in the username and password from it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Serveradresse deines Anbieters mit Port. Du kannst auch einen get.php-Link einfügen: Rivulet übernimmt daraus Benutzername und Passwort."
+          }
+        }
+      }
+    },
+    "The server couldn't convert this item" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server konnte dieses Objekt nicht konvertieren"
+          }
+        }
+      }
+    },
+    "The server didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat Benutzername und Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server is refusing new streams right now. Wait a moment and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server nimmt gerade keine neuen Streams an. Warte einen Moment und versuche es erneut."
+          }
+        }
+      }
+    },
+    "The server no longer has this conversion" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat diese Konvertierung nicht mehr"
+          }
+        }
+      }
+    },
+    "The server offered no way to record this programme." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server bietet keine Möglichkeit, diese Sendung aufzunehmen."
+          }
+        }
+      }
+    },
+    "The server refused the download (HTTP %lld)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat den Download abgelehnt (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "The server refused this stream. It may have moved, or your access to it may have changed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat diesen Stream abgelehnt. Vielleicht wurde er verschoben oder dein Zugriff hat sich geändert."
+          }
+        }
+      }
+    },
+    "The server said: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antwort des Servers: %@"
+          }
+        }
+      }
+    },
+    "The server sent a response Rivulet couldn't read" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat eine Antwort gesendet, die Rivulet nicht lesen konnte"
+          }
+        }
+      }
+    },
+    "The server's security certificate was not accepted." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Sicherheitszertifikat des Servers wurde nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "These also set how far a double tap jumps." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Werte legen auch fest, wie weit ein Doppeltippen springt."
+          }
+        }
+      }
+    },
+    "This Dolby Vision file has no fallback layer this device can decode." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Dolby-Vision-Datei hat keine Ersatzebene, die dieses Gerät decodieren kann."
+          }
+        }
+      }
+    },
+    "This Tvheadend server needs a username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Tvheadend-Server benötigt Benutzername und Passwort."
+          }
+        }
+      }
+    },
+    "This Tvheadend user can't record." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Tvheadend-Benutzer darf nicht aufnehmen."
+          }
+        }
+      }
+    },
+    "This account has expired. Contact your provider to renew it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Account ist abgelaufen. Wende dich an deinen Anbieter, um ihn zu verlängern."
+          }
+        }
+      }
+    },
+    "This account is turned off. Contact your provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Account ist deaktiviert. Wende dich an deinen Anbieter."
+          }
+        }
+      }
+    },
+    "This channel has no stream." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Sender hat keinen Stream."
+          }
+        }
+      }
+    },
+    "This channel is not responding right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Sender antwortet gerade nicht."
+          }
+        }
+      }
+    },
+    "This item has no downloadable file" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Objekt hat keine herunterladbare Datei"
+          }
+        }
+      }
+    },
+    "This item has no playable file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Objekt hat keine abspielbare Datei."
+          }
+        }
+      }
+    },
+    "This programme has already ended." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Sendung ist bereits vorbei."
+          }
+        }
+      }
+    },
+    "This removes the playlist from your server. The titles stay in your library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Damit wird die Playlist von deinem Server entfernt. Die Titel bleiben in deiner Mediathek."
+          }
+        }
+      }
+    },
+    "This source can't record." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Quelle kann nicht aufnehmen."
+          }
+        }
+      }
+    },
+    "This version is split into parts; choose a converted quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Version ist in Teile aufgeteilt; wähle eine konvertierte Qualität"
+          }
+        }
+      }
+    },
+    "This video couldn't be played. Check your connection and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Video konnte nicht wiedergegeben werden. Prüfe deine Verbindung und versuche es erneut."
+          }
+        }
+      }
+    },
+    "This will remove \"%@\" and all its channels from Live TV." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadurch werden „%@“ und alle zugehörigen Sender aus Live-TV entfernt."
+          }
+        }
+      }
+    },
+    "Threadfin" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Threadfin"
+          }
+        }
+      }
+    },
+    "Title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titel"
+          }
+        }
+      }
+    },
+    "Title A-Z" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titel A-Z"
+          }
+        }
+      }
+    },
+    "Title Z-A" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titel Z-A"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heute"
+          }
+        }
+      }
+    },
+    "Too many sign-in attempts. Wait a minute and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu viele Anmeldeversuche. Warte eine Minute und versuche es erneut."
+          }
+        }
+      }
+    },
+    "Top Rated Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestbewertete Filme"
+          }
+        }
+      }
+    },
+    "Top Rated TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestbewertete TV-Sendungen"
+          }
+        }
+      }
+    },
+    "Touch and hold a channel in Live TV to add it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halte einen Sender in Live-TV gedrückt, um ihn hinzuzufügen."
+          }
+        }
+      }
+    },
+    "Track %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spur %@"
+          }
+        }
+      }
+    },
+    "Track %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spur %lld"
+          }
+        }
+      }
+    },
+    "Trailer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer"
+          }
+        }
+      }
+    },
+    "Trending" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angesagt"
+          }
+        }
+      }
+    },
+    "Trending Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angesagte Filme"
+          }
+        }
+      }
+    },
+    "Trending TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angesagte TV-Sendungen"
+          }
+        }
+      }
+    },
+    "Try Again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Try the Guide to see what's coming up." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sieh im Programm nach, was als Nächstes läuft."
+          }
+        }
+      }
+    },
+    "Tune failed: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tuner-Fehler: %@"
+          }
+        }
+      }
+    },
+    "Tvheadend" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend"
+          }
+        }
+      }
+    },
+    "Tvheadend Sign-In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend-Anmeldung"
+          }
+        }
+      }
+    },
+    "Tvheadend didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend hat Benutzername und Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend hat Rivulet für diesen Benutzer keinen Stream geliefert. Prüfe seine Streaming-Rechte oder aktualisiere Tvheadend."
+          }
+        }
+      }
+    },
+    "Tvheadend refused this user. Check its password and rights in Tvheadend." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend hat diesen Benutzer abgewiesen. Prüfe sein Passwort und seine Rechte in Tvheadend."
+          }
+        }
+      }
+    },
+    "Unable to reach Plex. Check your network connection." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex ist nicht erreichbar. Prüfe deine Netzwerkverbindung."
+          }
+        }
+      }
+    },
+    "Unauthorized - check Dispatcharr authentication" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht autorisiert: Prüfe die Dispatcharr-Anmeldung"
+          }
+        }
+      }
+    },
+    "Unknown" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbekannt"
+          }
+        }
+      }
+    },
+    "Unknown Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbekannte Sprache"
+          }
+        }
+      }
+    },
+    "Unmute" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ton an"
+          }
+        }
+      }
+    },
+    "Untitled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Titel"
+          }
+        }
+      }
+    },
+    "Unwatched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungesehen"
+          }
+        }
+      }
+    },
+    "Up Next" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Nächstes"
+          }
+        }
+      }
+    },
+    "Upcoming" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demnächst"
+          }
+        }
+      }
+    },
+    "Upscale SD and 720p" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SD und 720p hochskalieren"
+          }
+        }
+      }
+    },
+    "Username" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzername"
+          }
+        }
+      }
+    },
+    "Version" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version"
+          }
+        }
+      }
+    },
+    "Version %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@"
+          }
+        }
+      }
+    },
+    "Waiting for Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf Server"
+          }
+        }
+      }
+    },
+    "Waiting for Wi-Fi" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf WLAN"
+          }
+        }
+      }
+    },
+    "Waiting for you to sign in" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf deine Anmeldung"
+          }
+        }
+      }
+    },
+    "Watch" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ansehen"
+          }
+        }
+      }
+    },
+    "Watch %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ansehen"
+          }
+        }
+      }
+    },
+    "Watch %@ Live" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ live ansehen"
+          }
+        }
+      }
+    },
+    "Watched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesehen"
+          }
+        }
+      }
+    },
+    "Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watchlist"
+          }
+        }
+      }
+    },
+    "Weekdays" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wochentags"
+          }
+        }
+      }
+    },
+    "Weekends" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Am Wochenende"
+          }
+        }
+      }
+    },
+    "What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Was oben auf der Startseite gezeigt wird. „Angesagt“ zeigt, was diese Woche beliebt und in deiner Mediathek ist. Eine leere Liste zeigt „Angesagt“."
+          }
+        }
+      }
+    },
+    "What's New" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neuigkeiten"
+          }
+        }
+      }
+    },
+    "What's On" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt im TV"
+          }
+        }
+      }
+    },
+    "When off, downloads wait for Wi-Fi on cellular, a personal hotspot or Low Data Mode." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn diese Option deaktiviert ist, warten Downloads bei Mobilfunk, einem persönlichen Hotspot oder im Datensparmodus auf WLAN."
+          }
+        }
+      }
+    },
+    "Who’s Watching?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wer schaut zu?"
+          }
+        }
+      }
+    },
+    "Xtream Codes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xtream Codes"
+          }
+        }
+      }
+    },
+    "You can sign back in at any time." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du kannst dich jederzeit wieder anmelden."
+          }
+        }
+      }
+    },
+    "Your Dispatcharr server's address on your network, with its port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse deines Dispatcharr-Servers in deinem Netzwerk, mit Port."
+          }
+        }
+      }
+    },
+    "Your Live TV sources returned no channels." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Live-TV-Quellen haben keine Sender geliefert."
+          }
+        }
+      }
+    },
+    "Your Plex server stopped this stream." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Plex-Server hat diesen Stream beendet."
+          }
+        }
+      }
+    },
+    "Your Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Server"
+          }
+        }
+      }
+    },
+    "Your Threadfin server's address on your network, with its port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse deines Threadfin-Servers in deinem Netzwerk, mit Port."
+          }
+        }
+      }
+    },
+    "Your Tvheadend server's address on your network, with its port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse deines Tvheadend-Servers in deinem Netzwerk, mit Port."
+          }
+        }
+      }
+    },
+    "Your provider has blocked this account." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Anbieter hat diesen Account gesperrt."
+          }
+        }
+      }
+    },
+    "Your saved PIN no longer works. Enter it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine gespeicherte PIN funktioniert nicht mehr. Gib sie erneut ein."
+          }
+        }
+      }
+    },
+    "Z-A" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Z-A"
+          }
+        }
+      }
+    },
+    "http://provider.example/playlist.m3u" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example/playlist.m3u"
+          }
+        }
+      }
+    },
+    "http://provider.example:8080" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example:8080"
+          }
+        }
+      }
+    },
+    "•" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "•"
+          }
+        }
+      }
+    }
   },
   "version" : "1.0"
 }

@@ -25,6 +25,8 @@ extension SettingsContent {
             ] + (hasLiveTV ? [jellyfinLiveTVToggle(id: "jellyfinLiveTV")] : []) + [
                 SettingsRowItem(id: "jellyfinUserInfo", title: "User",
                                 kind: .info(value: { account.userName })),
+                SettingsRowItem(id: "jellyfinRefresh", title: "Refresh",
+                                kind: .action(destructive: false, handler: { _ in ServerDataStore.shared.reload() })),
                 SettingsRowItem(id: "jellyfinSignOut", title: "Sign Out",
                                 kind: .action(destructive: true, handler: { vc in
                     Task { @MainActor in
@@ -42,6 +44,10 @@ extension SettingsContent {
                             title: draft.status == .checking ? "Signing In…" : "Sign In",
                             kind: .action(destructive: false, handler: { vc in
                                 signInJellyfin(draft, on: vc)
+                            })),
+            SettingsRowItem(id: "jellyfinQuickConnect", title: "Quick Connect",
+                            kind: .action(destructive: false, handler: { vc in
+                                quickConnectJellyfin(draft, on: vc)
                             }))
         ]
     }
@@ -85,6 +91,59 @@ extension SettingsContent {
             } catch {
                 fail(draft, page: page, title: String(localized: "Couldn't Sign In"), message: jellyfinFailureCopy(for: error))
             }
+        }
+    }
+
+    /// Shows the code in a popup while the session polls; leaving the popup cancels the sign-in.
+    private static func quickConnectJellyfin(_ draft: AddSourceDraft, on vc: UIViewController) {
+        guard draft.status != .checking else { return }
+        let page = vc as? SettingsPageViewController
+        guard let url = URL(string: sanitizeURL(draft.serverURL)) else {
+            fail(draft, page: page, title: String(localized: "Couldn't Sign In"),
+                 message: String(localized: "Enter your server's address."))
+            return
+        }
+        draft.status = .checking
+        page?.reloadRows()
+
+        let attempt = QuickConnectAttempt()
+        attempt.task = Task { @MainActor in
+            var popup: UIViewController?
+            do {
+                _ = try await JellyfinSession.signInWithQuickConnect(serverURL: url) { code in
+                    let codePopup = ConfirmationPopupViewController(
+                        title: code,
+                        message: String(localized: "On a device signed in to Jellyfin, open Settings, choose Quick Connect and enter this code."),
+                        confirmTitle: String(localized: "Cancel"), cancelTitle: nil,
+                        onConfirm: { attempt.task?.cancel() }, onCancel: { attempt.task?.cancel() })
+                    popup = codePopup
+                    vc.present(codePopup, animated: true)
+                }
+                popup?.dismiss(animated: true)
+                finish(page, draft: draft)
+            } catch where isCancellationError(error) {
+                draft.status = .idle
+                page?.reloadRows()
+            } catch {
+                popup?.dismiss(animated: true)
+                fail(draft, page: page, title: String(localized: "Couldn't Sign In"), message: jellyfinQuickConnectFailureCopy(for: error))
+            }
+        }
+    }
+
+    /// Lets the code popup cancel the task that presented it.
+    @MainActor private final class QuickConnectAttempt {
+        var task: Task<Void, Never>?
+    }
+
+    private static func jellyfinQuickConnectFailureCopy(for error: Error) -> String {
+        switch error {
+        case MediaProviderError.unauthorized:
+            String(localized: "Quick Connect is off on this server. Turn it on in the Jellyfin dashboard, under General.")
+        case MediaProviderError.notFound:
+            String(localized: "That code expired. Try again.")
+        default:
+            jellyfinFailureCopy(for: error)
         }
     }
 

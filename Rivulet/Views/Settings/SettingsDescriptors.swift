@@ -351,6 +351,14 @@ enum SettingsDescriptorStore {
             icon: "link",
             description: "Check the server and sign in."
         ),
+        "jellyfinQuickConnect": SettingDescriptor(
+            icon: "qrcode",
+            description: "Sign in without typing a password: Rivulet shows a code to approve from a device already signed in to Jellyfin. Quick Connect has to be on in the server's dashboard."
+        ),
+        "jellyfinRefresh": SettingDescriptor(
+            icon: "arrow.clockwise",
+            description: "Reload this server's libraries and Home rows now."
+        ),
         "jellyfinSignOut": SettingDescriptor(
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of this Jellyfin server and remove its saved credentials."

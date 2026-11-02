@@ -74,7 +74,7 @@ final class HeroBackdropView: UIView {
             Self.gradient(.axial, from: CGPoint(x: 0, y: 0.6), to: CGPoint(x: 0.41, y: 0.5),
                           alphas: [0.14, 0], locations: nil),
             Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
-                          alphas: [0, 0, 0.02, 0.09, 0.18, 0.27, 0.36, 0.45],
+                          alphas: [0, 0, 0.02, 0.07, 0.14, 0.21, 0.28, 0.34],
                           locations: [0, 0.64, 0.71, 0.78, 0.84, 0.91, 0.95, 1.0]),
             Self.gradient(.radial, from: CGPoint(x: 0.6671875, y: 0), to: CGPoint(x: 1.7270833, y: 1.8842593),
                           alphas: [0, 0.04, 0.15, 0.30, 0.33, 0.49, 0.67, 0.85, 1.0],
@@ -84,7 +84,7 @@ final class HeroBackdropView: UIView {
             Self.gradient(.axial, from: CGPoint(x: 0, y: 0.5), to: CGPoint(x: 1, y: 0.5),
                           alphas: [0.86, 0.64, 0.16, 0], locations: [0, 0.26, 0.55, 0.85]),
             Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
-                          alphas: [0, 0.05, 0.65], locations: [0, 0.5, 1])
+                          alphas: [0, 0.04, 0.40], locations: [0, 0.5, 1])
         ] : standardScrims
         super.init(frame: frame)
         setUp()
@@ -110,10 +110,12 @@ final class HeroBackdropView: UIView {
         // Fade the entire hero (art, placeholder and scrims) to transparent,
         // revealing the matching ambient wash underneath. A black overlay
         // would still leave a seam when the backdrop lifts above the shelves.
-        ambientBlendMask.colors = [1, 1, 0.94, 0.65, 0.24, 0, 0].map {
+        // Keep the lower artwork clearer before easing into the diffused wash.
+        // The final stops still reach zero smoothly, hiding the moving edge.
+        ambientBlendMask.colors = [1, 1, 0.98, 0.82, 0.40, 0.08, 0].map {
             UIColor.black.withAlphaComponent(CGFloat($0)).cgColor
         }
-        ambientBlendMask.locations = [0, 0.48, 0.60, 0.75, 0.90, 0.99, 1]
+        ambientBlendMask.locations = [0, 0.52, 0.64, 0.78, 0.90, 0.97, 1]
         ambientBlendMask.startPoint = CGPoint(x: 0.5, y: 0)
         ambientBlendMask.endPoint = CGPoint(x: 0.5, y: 1)
         layer.mask = ambientBlendMask

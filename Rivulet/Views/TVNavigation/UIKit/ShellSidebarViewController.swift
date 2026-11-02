@@ -509,12 +509,45 @@ final class ShellSidebarViewController: UIViewController {
 
     /// Collapsed-state pill visibility, driven by the below-top focus signal.
     func setPillHidden(_ hidden: Bool) {
+        guard hidden != pillHidden else { return }
         pillHidden = hidden
         guard state == .collapsed, transitionAnimator == nil else { return }
-        UIView.animate(withDuration: 0.18) {
-            self.cardView.alpha = hidden ? 0 : 1
-            self.pillStack.alpha = hidden ? 0 : 1
-            self.pillChevron.alpha = hidden ? 0 : 1
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let duration = hidden || reduceMotion ? 0.18 : 0.5
+        let startTime = CACurrentMediaTime()
+        pillStack.alpha = 1
+        for part in [cardView, pillChevron] {
+            let layer = part.layer
+            let visibleOpacity = layer.presentation()?.opacity ?? layer.opacity
+            var start = layer.presentation()?.transform ?? CATransform3DIdentity
+            let revealing = !hidden && visibleOpacity < 0.01
+            if revealing, !reduceMotion {
+                let scale: CGFloat = 0.65
+                start = CATransform3DMakeScale(scale, scale, 1)
+                // Scale the capsule and chevron around the same centre while rising into place.
+                start.m41 = (cardView.center.x - part.center.x) * (1 - scale)
+                start.m42 = (cardView.center.y - part.center.y) * (1 - scale) + 6
+            }
+            let motion = CABasicAnimation(keyPath: "transform")
+            motion.fromValue = start
+            motion.toValue = CATransform3DIdentity
+            motion.duration = duration
+            motion.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = visibleOpacity
+            fade.toValue = hidden ? 0 : 1
+            fade.duration = 0.18
+            fade.fillMode = .forwards
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+            let visibility = CAAnimationGroup()
+            visibility.animations = reduceMotion ? [fade] : [motion, fade]
+            visibility.duration = duration
+            visibility.beginTime = layer.convertTime(startTime, from: nil) + (revealing && !reduceMotion ? 0.4 : 0)
+            visibility.fillMode = .backwards
+            part.alpha = hidden ? 0 : 1
+            layer.add(visibility, forKey: "pillVisibility")
         }
     }
 
@@ -591,6 +624,8 @@ final class ShellSidebarViewController: UIViewController {
     }
 
     private func applyState(expanded: Bool, animated: Bool) {
+        cardView.layer.removeAnimation(forKey: "pillVisibility")
+        pillChevron.layer.removeAnimation(forKey: "pillVisibility")
         let targetFrame = expanded ? panelFrame : pillFrame
         let targetRadius = expanded ? Metrics.panelCornerRadius : Metrics.pillHeight / 2
         collectionView.isHidden = false

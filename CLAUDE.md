@@ -1006,6 +1006,12 @@ CachedAsyncImage(url: imageURL) { phase in
 }
 ```
 
+**SVG goes through `SVGRasterizer`** (`RivuletCore/Images/`), reached from both image caches
+when ImageIO declines the bytes (ImageIO and `UIImage` have no SVG decoder, measured on tvOS and
+iOS 27). That file is the only importer of SwiftDraw, which crashes or hangs on hostile files, and
+a logo URL comes from the IPTV provider. So `SVGSafetyCheck` runs first, and `SVGRasterizerTests`
+pins each case. Fuzz again when bumping SwiftDraw: 24,000 mutated files found the last two.
+
 ## Build & Run
 
 One-time setup: `RivuletCore/Config/Secrets.swift` is gitignored and required for **both** app targets to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):

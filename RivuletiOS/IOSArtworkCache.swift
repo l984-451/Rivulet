@@ -40,6 +40,7 @@ actor IOSArtworkCache {
             }
             // Decode here, off the main thread, instead of at first draw.
             let image = UIImage(data: data)
+                ?? SVGRasterizer.cgImage(from: data, maxPixelSize: 512).map { UIImage(cgImage: $0) }
             return image?.preparingForDisplay() ?? image
         }
         downloads[url] = task

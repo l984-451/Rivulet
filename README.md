@@ -124,6 +124,7 @@ This is a fun one. Open insights from the bottom row buttons while playing media
 
 </div>
 <br></br>
+
 ## Video player
 
 Playback runs on [AetherEngine](https://github.com/superuser404notfound/AetherEngine).
@@ -137,12 +138,21 @@ Playback runs on [AetherEngine](https://github.com/superuser404notfound/AetherEn
 - **Content filtering** (work in progress): mute language and skip scenes on your device, from the title's subtitles or an imported EDL list. The file is never touched.
 
 <br></br>
+
 ## Music
 
 - Album, artist, and playlist browsing, modeled on Apple's Music app for tvOS. I think its beautiful.
 - Lyrics, synced when the source provides timestamps.
 - System Now Playing controls. HomePod, AirPods, Siri Remote, and Control Center all work.
+
+<div align="center">
+
+<img src="Screenshots/tvOS/08-music-library.jpg" alt="Music library" width="49%">
+<img src="Screenshots/tvOS/09-now-playing.jpg" alt="Now Playing" width="49%">
+
+</div>
 <br></br>
+
 ## iPhone and iPad
 
 The iOS app follows the Apple TV app and should have all the features one needs. It shares the same Core code as the tvOS app.
@@ -167,6 +177,7 @@ The iOS app follows the Apple TV app and should have all the features one needs.
 
 ---
 <br></br>
+
 ## Building
 
 Requires Xcode 27. Copy the secrets template once (placeholder values are fine), then open the project:
@@ -178,6 +189,7 @@ open Rivulet.xcodeproj
 
 `Rivulet` is the tvOS scheme and `Rivulet iOS` is the iPhone and iPad scheme. `Rivulet/` holds the tvOS app, `RivuletiOS/` the iOS app, and `RivuletCore/` the code both share. See `CLAUDE.md` for the architecture.
 <br></br>
+
 ## Contributing
 
 Found a bug? [Open an issue](../../issues/new/choose) and pick the platform (tvOS or iOS). If the same bug shows up on both, open one issue per platform so each fix is tracked on its own.
@@ -188,6 +200,7 @@ I welcome all contributions from any level of developer. I welcome contributions
 
 By submitting a pull request, you agree to license your contribution under the same terms as Rivulet (PolyForm Noncommercial 1.0.0, see [LICENSE](LICENSE)).
 <br></br>
+
 ## License
 
 Rivulet is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
@@ -200,6 +213,7 @@ This restriction is not decorative. If you ship Rivulet's code (in whole or in p
 
 Third-party components retain their original licenses. FFmpeg is included under LGPL-2.1+; libdovi under MIT. See [LICENSE](LICENSE) for details.
 <br></br>
+
 ## Acknowledgments
 
 - [AetherEngine](https://github.com/superuser404notfound/AetherEngine): the playback engine
@@ -220,5 +234,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 <div align="center">
 
 Rivulet is not affiliated with or endorsed by Plex, Inc., the Jellyfin project, or Silo.
+
+Media used in the README is AI generated for copyright reasons.
 
 </div>

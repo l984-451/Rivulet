@@ -12,11 +12,19 @@
 import Foundation
 
 extension URLSession {
-    /// Signs a request with App Attest, sends it, and retries once on 401. Only
-    /// `unknown_key` discards the key and re-enrolls (a fresh deploy or reinstall);
-    /// other rejections just re-sign, since re-enrolling costs a trip to Apple.
+    /// Signs a request with App Attest, sends it, and retries once on a 401 the
+    /// Worker might accept the second time. Only `unknown_key` discards the key and
+    /// re-enrolls (a fresh deploy or reinstall); `replay` and `stale_timestamp` just
+    /// re-sign, since re-enrolling costs a trip to Apple.
+    ///
+    /// On real hardware an unsigned request fails here instead of going out: both
+    /// Workers enforce attestation, so it could only come back 401.
     func attestedData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        let signed = await AppAttestClient.shared.attest(request)
+        let client = AppAttestClient.shared
+        let signed = await client.attest(request)
+        if client.isSupported && !AppAttestClient.isSigned(signed) {
+            throw URLError(.userAuthenticationRequired)
+        }
         let (data, response) = try await self.data(for: signed)
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 401 else {
@@ -24,15 +32,19 @@ extension URLSession {
         }
 
         let reason = String(decoding: data.prefix(80), as: UTF8.self)
-        await AppAttestClient.shared.reportRejection(
+        await client.reportRejection(
             reason: reason, path: request.url?.path ?? "?",
-            signed: signed.value(forHTTPHeaderField: "X-Rivulet-Assertion") != nil)
+            signed: AppAttestClient.isSigned(signed))
         if reason.contains("unknown_key") {
-            await AppAttestClient.shared.invalidateKey(
+            await client.invalidateKey(
                 ifCurrent: signed.value(forHTTPHeaderField: "X-Rivulet-Key-Id")
             )
         }
-        let retried = await AppAttestClient.shared.attest(request)
+        // Anything else (bad_signature, attestation_required) fails the same way again.
+        let retryable = ["unknown_key", "replay", "stale_timestamp"].contains { reason.contains($0) }
+        guard retryable else { return (data, response) }
+        let retried = await client.attest(request)
+        guard AppAttestClient.isSigned(retried) else { return (data, response) }
         return try await self.data(for: retried)
     }
 }

@@ -12,6 +12,8 @@ nonisolated enum DownloadState: Codable, Sendable, Equatable {
     case downloading
     /// Stopped by a force quit; resumes when the app opens.
     case paused
+    /// Paused from the list; waits for Resume.
+    case pausedByUser
     case failed(reason: String)
     case completed
 }

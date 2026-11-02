@@ -241,9 +241,9 @@ nonisolated enum ContentFilterSources {
         // A forced-only track on screen carries almost no dialogue when a full one exists.
         let hasFull = tracks.contains { isReadable($0) && !$0.isForced }
         if hasLanguageSource || shown.map({ isReadable($0) && !($0.isForced && hasFull) }) ?? false { return nil }
-        guard tracks.contains(where: isReadable) else { return "No Readable Subtitles" }
+        guard tracks.contains(where: isReadable) else { return String(localized: "No Readable Subtitles") }
         // Off, a track is read unseen; only another track on screen blocks that.
-        return shown == nil ? nil : "Use English Subtitles"
+        return shown == nil ? nil : String(localized: "Use English Subtitles")
     }
 
     /// Fetch and scan a title's subtitle file. nil when it can't be read.

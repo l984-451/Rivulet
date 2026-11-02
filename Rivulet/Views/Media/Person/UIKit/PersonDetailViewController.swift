@@ -324,15 +324,15 @@ final class PersonDetailViewController: UIViewController {
             return cell
         case .movies:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .movies, title: "Movies", entries: movies)
+            configureShelf(cell, section: .movies, title: String(localized: "Movies"), entries: movies)
             return cell
         case .shows:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .shows, title: "Shows", entries: shows)
+            configureShelf(cell, section: .shows, title: String(localized: "Shows"), entries: shows)
             return cell
         case .knownFor:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .knownFor, title: "Known For", entries: knownFor)
+            configureShelf(cell, section: .knownFor, title: String(localized: "Known For"), entries: knownFor)
             return cell
         }
     }
@@ -458,15 +458,15 @@ final class PersonDetailViewController: UIViewController {
                     onMore: { [weak self] in self?.presentBiography() })
             case .movies:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .movies, title: "Movies", entries: movies)
+                    configureShelf(row, section: .movies, title: String(localized: "Movies"), entries: movies)
                 }
             case .shows:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .shows, title: "Shows", entries: shows)
+                    configureShelf(row, section: .shows, title: String(localized: "Shows"), entries: shows)
                 }
             case .knownFor:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .knownFor, title: "Known For", entries: knownFor)
+                    configureShelf(row, section: .knownFor, title: String(localized: "Known For"), entries: knownFor)
                 }
             }
         }

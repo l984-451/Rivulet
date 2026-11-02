@@ -96,12 +96,39 @@ struct SettingsRowItem {
     /// True = this "row" is really a group caption (see `header(_:)`).
     var isHeader = false
 
+    /// A literal `title` is extracted to the string catalog; text that is not ours
+    /// (server, library, channel names) goes through `verbatim:`.
+    init(id: String, title: String.LocalizationValue, kind: Kind, onReorder: ((_ up: Bool) -> Void)? = nil,
+         reorderGroup: String? = nil, isEnabled: @escaping () -> Bool = { true },
+         isBusy: @escaping () -> Bool = { false }, isHeader: Bool = false) {
+        self.init(id: id, verbatim: String(localized: title), kind: kind, onReorder: onReorder,
+                  reorderGroup: reorderGroup, isEnabled: isEnabled, isBusy: isBusy, isHeader: isHeader)
+    }
+
+    init(id: String, verbatim title: String, kind: Kind, onReorder: ((_ up: Bool) -> Void)? = nil,
+         reorderGroup: String? = nil, isEnabled: @escaping () -> Bool = { true },
+         isBusy: @escaping () -> Bool = { false }, isHeader: Bool = false) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.onReorder = onReorder
+        self.reorderGroup = reorderGroup
+        self.isEnabled = isEnabled
+        self.isBusy = isBusy
+        self.isHeader = isHeader
+    }
+
     /// A group caption between row runs, Apple TV Settings style: small
     /// uppercase gray text, no capsule, never focusable. Deliberately NOT a
     /// `Kind` case — it reuses `.info`, which is already unfocusable and
     /// chevron-less, so every existing `switch kind` keeps working untouched.
-    static func header(_ title: String) -> SettingsRowItem {
-        SettingsRowItem(id: "hdr_\(title)", title: title, kind: .info(value: { "" }), isHeader: true)
+    /// The id keeps the English key, so it holds in every language.
+    static func header(_ title: LocalizedStringResource) -> SettingsRowItem {
+        SettingsRowItem(id: "hdr_\(title.key)", verbatim: String(localized: title), kind: .info(value: { "" }), isHeader: true)
+    }
+
+    static func header(verbatim title: String) -> SettingsRowItem {
+        SettingsRowItem(id: "hdr_\(title)", verbatim: title, kind: .info(value: { "" }), isHeader: true)
     }
 
     var isFocusable: Bool {
@@ -135,7 +162,7 @@ struct SettingsRowItem {
         switch kind {
         case .navigationValue(_, let value): return value()
         case .navigationAction(_, let value, _): return value?()
-        case .toggle(let get, _, _): return get() ? "On" : "Off"
+        case .toggle(let get, _, _): return get() ? String(localized: "On") : String(localized: "Off")
         case .cycle(let value, _): return value()
         case .info(let value): return value()
         case .selectable(_, let value, _): return value()
@@ -143,8 +170,8 @@ struct SettingsRowItem {
         // when empty.
         case .textEntry(let value, let placeholder, _, _, _, let isSecure, _, _):
             let current = value()
-            if current.isEmpty { return placeholder.isEmpty ? "Not set" : placeholder }
-            return isSecure ? "Set" : current
+            if current.isEmpty { return placeholder.isEmpty ? String(localized: "Not set") : placeholder }
+            return isSecure ? String(localized: "Set") : current
         case .navigation, .action, .option: return nil
         }
     }
@@ -235,21 +262,22 @@ enum SettingsContent {
 
     private static var appIconPicker: [SettingsRowItem] {
         AppIcon.allCases.map { icon in
-            SettingsRowItem(id: "ai_\(icon.rawValue)", title: icon.title, kind: .option(
+            SettingsRowItem(id: "ai_\(icon.rawValue)", verbatim: icon.title, kind: .option(
                 isSelected: { AppIcon.current == icon },
                 select: { icon.apply() }))
         }
     }
 
     private static let homeHeroOptions: [(id: String, title: String)] = [
-        ("off", "Off"), ("trending", "Trending"), ("continueWatching", "Continue Watching"),
-        ("recentlyAdded", "Recently Added"), ("watchlist", "Watchlist"),
+        ("off", String(localized: "Off")), ("trending", String(localized: "Trending")),
+        ("continueWatching", String(localized: "Continue Watching")),
+        ("recentlyAdded", String(localized: "Recently Added")), ("watchlist", String(localized: "Watchlist")),
     ]
 
     /// Off, or the hero on with what it shows: `showHomeHero` plus `homeHeroContent`.
     private static var homeHeroPicker: [SettingsRowItem] {
         homeHeroOptions.map { option in
-            SettingsRowItem(id: "hh_\(option.id)", title: option.title, kind: .option(
+            SettingsRowItem(id: "hh_\(option.id)", verbatim: option.title, kind: .option(
                 isSelected: { homeHeroChoice == option.id },
                 select: {
                     SettingsStore.setBool("showHomeHero", option.id != "off")
@@ -264,12 +292,12 @@ enum SettingsContent {
     }
 
     private static var homeHeroTitle: String {
-        homeHeroOptions.first { $0.id == homeHeroChoice }?.title ?? "Trending"
+        homeHeroOptions.first { $0.id == homeHeroChoice }?.title ?? String(localized: "Trending")
     }
 
     private static var detailRatingPicker: [SettingsRowItem] {
         MediaRating.Source.allCases.filter { $0 != .unknown }.map { source in
-            SettingsRowItem(id: "dr_\(source.rawValue)", title: source.name, kind: .option(
+            SettingsRowItem(id: "dr_\(source.rawValue)", verbatim: source.name, kind: .option(
                 isSelected: { MediaRating.detailSource == source },
                 select: { UserDefaults.standard.set(source.rawValue, forKey: MediaRating.detailSourceKey) }))
         }
@@ -277,7 +305,7 @@ enum SettingsContent {
 
     private static var autoplayCountdownPicker: [SettingsRowItem] {
         AutoplayCountdown.allCases.map { opt in
-            SettingsRowItem(id: "ac_\(opt.rawValue)", title: opt.description, kind: .option(
+            SettingsRowItem(id: "ac_\(opt.rawValue)", verbatim: opt.description, kind: .option(
                 isSelected: { SettingsStore.int("autoplayCountdown", default: AutoplayCountdown.fiveSeconds.rawValue) == opt.rawValue },
                 select: { SettingsStore.setInt("autoplayCountdown", opt.rawValue) }))
         }
@@ -285,7 +313,7 @@ enum SettingsContent {
 
     private static var skipIntervalPicker: [SettingsRowItem] {
         SkipInterval.allCases.map { opt in
-            SettingsRowItem(id: "si_\(opt.rawValue)", title: opt.description, kind: .option(
+            SettingsRowItem(id: "si_\(opt.rawValue)", verbatim: opt.description, kind: .option(
                 isSelected: { SettingsStore.int(SkipInterval.storageKey, default: SkipInterval.defaultValue.rawValue) == opt.rawValue },
                 select: { SettingsStore.setInt(SkipInterval.storageKey, opt.rawValue) }))
         }
@@ -293,7 +321,7 @@ enum SettingsContent {
 
     private static var skipBackIntervalPicker: [SettingsRowItem] {
         SkipInterval.allCases.map { opt in
-            SettingsRowItem(id: "sbi_\(opt.rawValue)", title: opt.description, kind: .option(
+            SettingsRowItem(id: "sbi_\(opt.rawValue)", verbatim: opt.description, kind: .option(
                 isSelected: { Int(InputConfig.tapSeekBackSeconds) == opt.rawValue },
                 select: { SettingsStore.setInt(SkipInterval.backStorageKey, opt.rawValue) }))
         }
@@ -301,18 +329,16 @@ enum SettingsContent {
 
     /// Forced Only is set only by a player pick, so it is listed only while it is current.
     private static var subtitleModePicker: [SettingsRowItem] {
-        let current = SubtitleMode(TrackIntentStore.effectiveSubtitleIntent)
-        let modes: [SubtitleMode] = [.off, .foreignAudio, .always] + (current == .forcedOnly ? [.forcedOnly] : [])
-        return modes.map { mode in
-            SettingsRowItem(id: "sm_\(mode)", title: mode.rawValue, kind: .option(
-                isSelected: { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) == mode },
-                select: { setSubtitles(mode: mode) }))
+        SubtitleMode.choices.map { mode in
+            SettingsRowItem(id: "sm_\(mode)", verbatim: mode.title, kind: .option(
+                isSelected: { SubtitleMode.current == mode },
+                select: { TrackIntentStore.setSubtitles(mode: mode) }))
         }
     }
 
     private static var autoplayLimitPicker: [SettingsRowItem] {
         AutoplayLimit.allCases.map { opt in
-            SettingsRowItem(id: "alim_\(opt.rawValue)", title: opt.description, kind: .option(
+            SettingsRowItem(id: "alim_\(opt.rawValue)", verbatim: opt.description, kind: .option(
                 isSelected: { AutoplayLimit.current == opt },
                 select: { SettingsStore.setInt(AutoplayLimit.storageKey, opt.rawValue) }))
         }
@@ -321,7 +347,7 @@ enum SettingsContent {
     /// "" is Off; the rest are the layouts the engine renders heights into.
     private static var heightSpeakersPicker: [SettingsRowItem] {
         ["", "5.1.2", "5.1.4", "7.1.2", "7.1.4", "9.1.6"].map { layout in
-            SettingsRowItem(id: "hs_\(layout.isEmpty ? "off" : layout)", title: layout.isEmpty ? "Off" : layout,
+            SettingsRowItem(id: "hs_\(layout.isEmpty ? "off" : layout)", verbatim: layout.isEmpty ? String(localized: "Off") : layout,
                             kind: .selectable(isSelected: { heightSpeakers == layout }, value: { nil }, handler: { vc in
                 SettingsStore.setString(AetherPlayer.heightSpeakersKey, layout)
                 (vc as? SettingsPageViewController)?.onPop?()
@@ -333,81 +359,37 @@ enum SettingsContent {
     private static func qualityPicker(home: Bool) -> [SettingsRowItem] {
         let key = home ? StreamingQuality.homeKey : StreamingQuality.awayKey
         return StreamingQuality.allChoices.map { choice in
-            SettingsRowItem(id: "sq_\(choice.rawValue)", title: choice.label, kind: .option(
+            SettingsRowItem(id: "sq_\(choice.rawValue)", verbatim: choice.label, kind: .option(
                 isSelected: { StreamingQuality.setting(home: home) == choice },
                 select: { SettingsStore.setString(key, choice.rawValue) }))
         }
     }
 
     private static var audioLanguagePicker: [SettingsRowItem] {
-        let languages = TrackLanguage.choices.sorted { TrackLanguage.displayName($0) < TrackLanguage.displayName($1) }
+        let languages = TrackLanguage.sortedChoices
         // No stored intent follows the Plex account's audio language (#382).
-        let account = SettingsRowItem(id: "al_account", title: audioLanguageName(nil), kind: .option(
+        let account = SettingsRowItem(id: "al_account", verbatim: TrackLanguage.audioSettingName(nil), kind: .option(
             isSelected: { TrackIntentStore.audioIntent == nil },
             select: { TrackIntentStore.audioIntent = nil }))
         return [account] + ([TrackLanguage.original] + languages).map { code in
-            SettingsRowItem(id: "al_\(code)", title: audioLanguageName(code), kind: .option(
+            SettingsRowItem(id: "al_\(code)", verbatim: TrackLanguage.audioSettingName(code), kind: .option(
                 isSelected: { TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) } == code },
                 select: { TrackIntentStore.audioIntent = AudioIntent(language: code) }))
         }
     }
 
     private static var subtitleLanguagePicker: [SettingsRowItem] {
-        TrackLanguage.choices.sorted { TrackLanguage.displayName($0) < TrackLanguage.displayName($1) }.map { code in
-            SettingsRowItem(id: "sl_\(code)", title: TrackLanguage.displayName(code), kind: .option(
-                isSelected: { TrackLanguage.normalize(subtitleLanguage) == code },
-                select: { setSubtitles(mode: SubtitleMode(TrackIntentStore.effectiveSubtitleIntent), language: code) }))
+        TrackLanguage.sortedChoices.map { code in
+            SettingsRowItem(id: "sl_\(code)", verbatim: TrackLanguage.displayName(code), kind: .option(
+                isSelected: { TrackLanguage.normalize(TrackIntentStore.subtitleLanguage) == code },
+                select: { TrackIntentStore.setSubtitles(language: code) }))
         }
     }
 
     // MARK: Audio and subtitles (read and written through TrackIntentStore)
 
-    private static func audioLanguageName(_ code: String?) -> String {
-        guard let code else { return "Plex Account" }
-        if code == TrackLanguage.original { return "Original" }
-        // An untagged or unknown pick resolves to English (see resolveAudio).
-        return TrackLanguage.isKnown(code) ? TrackLanguage.displayName(code) : TrackLanguage.displayName(TrackLanguage.english)
-    }
-
-    private enum SubtitleMode: String {
-        case foreignAudio = "Foreign Audio", always = "Always", off = "Off", forcedOnly = "Forced Only"
-
-        init(_ intent: SubtitleIntent) {
-            switch intent {
-            case .off: self = .off
-            case .foreignAudio: self = .foreignAudio
-            case .track(_, let forced, _, _): self = forced ? .forcedOnly : .always
-            }
-        }
-    }
-
-    private static var subtitleLanguage: String {
-        TrackIntentStore.effectiveSubtitleIntent.language ?? TrackLanguage.device
-    }
-
     private static var heightSpeakers: String {
         SettingsStore.string(AetherPlayer.heightSpeakersKey, default: "")
-    }
-
-    private static var subtitleSDH: Bool {
-        switch TrackIntentStore.effectiveSubtitleIntent {
-        case .off: return false
-        case .track(_, _, let hi, _), .foreignAudio(_, let hi): return hi
-        }
-    }
-
-    private static func setSubtitles(mode: SubtitleMode, language: String? = nil, sdh: Bool? = nil) {
-        let language = language ?? subtitleLanguage
-        let sdh = sdh ?? subtitleSDH
-        switch mode {
-        case .off:
-            TrackIntentStore.subtitleIntent = .off
-        case .foreignAudio:
-            TrackIntentStore.subtitleIntent = .foreignAudio(language: language, hearingImpaired: sdh)
-        case .always, .forcedOnly:
-            TrackIntentStore.subtitleIntent = .track(language: language, forced: mode == .forcedOnly,
-                                                     hearingImpaired: sdh, codec: nil)
-        }
     }
 
     // MARK: Root
@@ -443,7 +425,7 @@ enum SettingsContent {
                                 get: { PlexUserProfileManager.shared.showProfilePickerOnLaunch },
                                 set: { PlexUserProfileManager.shared.showProfilePickerOnLaunch = $0 })),
             SettingsRowItem(id: "topShelfStyle", title: "Top Shelf",
-                            kind: .cycle(value: { TopShelfCache.shared.fullScreen ? "Full Screen" : "Posters" },
+                            kind: .cycle(value: { TopShelfCache.shared.fullScreen ? String(localized: "Full Screen") : String(localized: "Posters") },
                                          next: { TopShelfCache.shared.fullScreen.toggle() })),
             toggle("skipPreview", "Skip Preview", key: "skipPreviewCarousel", default: false),
 
@@ -467,7 +449,10 @@ enum SettingsContent {
                             kind: .navigationValue(.detailRatingPicker, value: { MediaRating.detailSource.name })),
 
             .header("Live TV"),
-        ] + liveTVLookRows
+        ] + liveTVLookRows + [
+            .header("Extras"),
+            toggle("easterEggs", "Easter Eggs", key: EasterEggs.key, default: true)
+        ]
         return rows
     }
 
@@ -485,23 +470,23 @@ enum SettingsContent {
     // MARK: Playback
 
     private static var playback: [SettingsRowItem] {
-        let subtitlesOn = { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent) != .off }
+        let subtitlesOn = { SubtitleMode.current != .off }
         // Grouped under headers whose titles the rows then drop ("Intro" under AUTO-SKIP).
         return [
             .header("Audio & Subtitles"),
             SettingsRowItem(id: "audioLanguage", title: "Audio Language",
                             kind: .navigationValue(.audioLanguagePicker, value: {
-                                audioLanguageName(TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) })
+                                TrackLanguage.audioSettingName(TrackIntentStore.audioIntent.map { TrackLanguage.normalize($0.language) })
                             })),
             SettingsRowItem(id: "subtitleMode", title: "Subtitles",
-                            kind: .navigationValue(.subtitleModePicker, value: { SubtitleMode(TrackIntentStore.effectiveSubtitleIntent).rawValue })),
+                            kind: .navigationValue(.subtitleModePicker, value: { SubtitleMode.current.title })),
             SettingsRowItem(id: "subtitleLanguage", title: "Subtitle Language",
                             kind: .navigationValue(.subtitleLanguagePicker, value: {
-                                TrackLanguage.displayName(TrackLanguage.normalize(subtitleLanguage))
+                                TrackLanguage.displayName(TrackLanguage.normalize(TrackIntentStore.subtitleLanguage))
                             }), isEnabled: subtitlesOn),
             SettingsRowItem(id: "subtitleSDH", title: "SDH Subtitles",
-                            kind: .toggle(get: { subtitleSDH },
-                                          set: { setSubtitles(mode: SubtitleMode(TrackIntentStore.effectiveSubtitleIntent), sdh: $0) }),
+                            kind: .toggle(get: { TrackIntentStore.subtitleSDH },
+                                          set: { TrackIntentStore.setSubtitles(sdh: $0) }),
                             isEnabled: subtitlesOn),
             // Turning it on fetches the speech model that writes them; the value shows its download.
             SettingsRowItem(id: "generatedSubtitles", title: "Generated Subtitles (English)", kind: .selectable(
@@ -553,19 +538,20 @@ enum SettingsContent {
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
             toggle("showPostVideoUpNext", "Up Next Panel", key: "showPostVideoUpNext", default: true),
             .header("Home Theater"),
+            toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: false),
             SettingsRowItem(id: "heightSpeakers", title: "Height Speakers",
-                            kind: .navigationValue(.heightSpeakersPicker, value: { heightSpeakers.isEmpty ? "Off" : heightSpeakers })),
+                            kind: .navigationValue(.heightSpeakersPicker, value: { heightSpeakers.isEmpty ? String(localized: "Off") : heightSpeakers })),
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
                             kind: .navigationValue(.contentFilter, value: {
-                                SettingsStore.bool(ContentFilterManager.Keys.enabled, default: false) ? "On" : "Off"
+                                SettingsStore.bool(ContentFilterManager.Keys.enabled, default: false) ? String(localized: "On") : String(localized: "Off")
                             })),
         ]
     }
 
     private static var generatedSubtitlesValue: String {
-        guard SettingsStore.bool(UniversalPlayerViewModel.generatedSubtitlesFallbackKey, default: false) else { return "Off" }
+        guard SettingsStore.bool(UniversalPlayerViewModel.generatedSubtitlesFallbackKey, default: false) else { return String(localized: "Off") }
         return SpeechModelStore.shared.statusText
     }
 
@@ -591,7 +577,7 @@ enum SettingsContent {
         rows.append(.header("Audio"))
         rows.append(SettingsRowItem(id: "cf_profanity", title: "Profanity",
                                     kind: .navigationValue(.contentFilterStrength, value: {
-                                        profanityOn ? strengthLabel(currentProfanityStrength()) : "Off"
+                                        profanityOn ? strengthLabel(currentProfanityStrength()) : String(localized: "Off")
                                     })))
         rows.append(categoryToggle(.blasphemy, id: "cf_blasphemy"))
         rows.append(categoryToggle(.slur, id: "cf_slur"))
@@ -599,7 +585,7 @@ enum SettingsContent {
         rows.append(SettingsRowItem(id: "cf_customWords", title: "Custom Words",
                                     kind: .navigationValue(.contentFilterWords, value: {
                                         let count = ContentFilterManager.customWords.count
-                                        return count == 0 ? "None" : "\(count)"
+                                        return count == 0 ? String(localized: "None") : "\(count)"
                                     })))
 
         // Scene categories (require an imported filter list)
@@ -613,8 +599,8 @@ enum SettingsContent {
         rows.append(SettingsRowItem(id: "cf_sourceURL", title: "Filter List URL",
                                     kind: .textEntry(
                                         value: { SettingsStore.string(ContentFilterManager.Keys.listSourceURL, default: "") },
-                                        placeholder: "Optional",
-                                        hint: "A folder or URL with per-title MCF or EDL files. A folder is searched by video file name, IMDb id, then Plex rating key. A URL can use {file}, {imdb}, {tmdb}, {tvdb} or {id}.",
+                                        placeholder: String(localized: "Optional"),
+                                        hint: String(localized: "A folder or URL with per-title MCF or EDL files. A folder is searched by video file name, IMDb id, then Plex rating key. A URL can use {file}, {imdb}, {tmdb}, {tvdb} or {id}."),
                                         suggestions: [],
                                         keyboardType: .URL,
                                         set: { SettingsStore.setString(ContentFilterManager.Keys.listSourceURL, $0) })))
@@ -629,13 +615,13 @@ enum SettingsContent {
     private static var contentFilterWords: [SettingsRowItem] {
         var rows = [SettingsRowItem(id: "cfw_add", title: "Add Word", kind: .textEntry(
             value: { "" },
-            placeholder: "Word or Phrase",
+            placeholder: String(localized: "Word or Phrase"),
             hint: nil,
             suggestions: [],
             keyboardType: .default,
             set: { ContentFilterManager.addCustomWord($0) }))]
         rows += ContentFilterManager.customWords.map { word in
-            SettingsRowItem(id: "cfw_\(word)", title: word, kind: .action(destructive: false, handler: { vc in
+            SettingsRowItem(id: "cfw_\(word)", verbatim: word, kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Remove \"\(word)\"?",
                                message: "The filter will stop muting this word.",
                                confirmTitle: "Remove", destructive: true) {
@@ -654,7 +640,7 @@ enum SettingsContent {
             isSelected: { !profanityOn },
             select: { SettingsStore.setBool(key, false) }))
         return [off] + FilterSeverity.allCases.map { severity in
-            SettingsRowItem(id: "cfs_\(severity.rawValue)", title: strengthLabel(severity),
+            SettingsRowItem(id: "cfs_\(severity.rawValue)", verbatim: strengthLabel(severity),
                             kind: .option(
                                 isSelected: { profanityOn && currentProfanityStrength() == severity },
                                 select: {
@@ -676,14 +662,14 @@ enum SettingsContent {
     /// The stored value is the *minimum* severity that gets muted.
     private static func strengthLabel(_ severity: FilterSeverity) -> String {
         switch severity {
-        case .mild: return "Mild and up"
-        case .moderate: return "Moderate and up"
-        case .strong: return "Strong only"
+        case .mild: return String(localized: "Mild and up")
+        case .moderate: return String(localized: "Moderate and up")
+        case .strong: return String(localized: "Strong only")
         }
     }
 
     private static func categoryToggle(_ category: FilterCategory, id: String) -> SettingsRowItem {
-        SettingsRowItem(id: id, title: category.displayName, kind: .toggle(
+        SettingsRowItem(id: id, verbatim: category.displayName, kind: .toggle(
             get: { SettingsStore.bool(category.enabledDefaultsKey, default: category.defaultEnabled) },
             set: { SettingsStore.setBool(category.enabledDefaultsKey, $0) }))
     }
@@ -705,9 +691,9 @@ enum SettingsContent {
                 didChange: { isOn, vc in
                     guard !isOn else { return }
                     vc.present(ConfirmationPopupViewController(
-                        title: "Erase What For You Learned?",
-                        message: "Suggestions are off. Erase what Rivulet learned from what you watch, or keep it for if you turn them back on.",
-                        confirmTitle: "Erase", cancelTitle: "Keep", destructive: true,
+                        title: String(localized: "Erase What For You Learned?"),
+                        message: String(localized: "Suggestions are off. Erase what Rivulet learned from what you watch, or keep it for if you turn them back on."),
+                        confirmTitle: String(localized: "Erase"), cancelTitle: String(localized: "Keep"), destructive: true,
                         onConfirm: { LiveTVDataStore.shared.forgetViewings() }), animated: true)
                 })),
             toggle("confirmExitMultiview", "Confirm Exit Multiview", key: "confirmExitMultiview", default: true)
@@ -734,7 +720,7 @@ enum SettingsContent {
             let title = [channel.channelNumber.map(String.init), channel.name, sourceNames[channel.sourceId].map { "· \($0)" }]
                 .compactMap { $0 }
                 .joined(separator: " ")
-            return SettingsRowItem(id: "fav_\(channel.id)", title: title,
+            return SettingsRowItem(id: "fav_\(channel.id)", verbatim: title,
                                    kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Remove \"\(channel.name)\"?",
                                message: "This removes the channel from your favorites. You can add it again by holding Select on it in What's On or the guide.",
@@ -833,9 +819,9 @@ enum SettingsContent {
                                     kind: .action(destructive: false, handler: { _ in }))]
         }
         return servers.map { server in
-            SettingsRowItem(id: "plexServer_\(server.clientIdentifier)", title: server.name,
+            SettingsRowItem(id: "plexServer_\(server.clientIdentifier)", verbatim: server.name,
                             kind: .navigationAction(.plexServerDetail,
-                                                    value: { isPlexServerEnabled(server) ? (server.owned == false ? server.sourceTitle ?? "" : "") : "Off" },
+                                                    value: { isPlexServerEnabled(server) ? (server.owned == false ? server.sourceTitle ?? "" : "") : String(localized: "Off") },
                                                     prepare: { pendingPlexServer = server }))
         }
     }
@@ -850,19 +836,19 @@ enum SettingsContent {
         var rows: [SettingsRowItem] = [
             SettingsRowItem(id: "plexServerEnabled", title: "Use This Server", kind: .selectable(
                 isSelected: { false },
-                value: { isPlexServerEnabled(server) ? "On" : "Off" },
+                value: { isPlexServerEnabled(server) ? String(localized: "On") : String(localized: "Off") },
                 handler: { vc in togglePlexServer(server, on: vc) }),
                 isBusy: { busyPlexServerID == server.clientIdentifier }),
-            info("plexServerStatus", "Status", server.presence == false ? "Offline" : "Online"),
-            info("plexServerOwner", "Owner", server.owned == false ? (server.sourceTitle ?? "Shared") : "You"),
+            info("plexServerStatus", "Status", server.presence == false ? String(localized: "Offline") : String(localized: "Online")),
+            info("plexServerOwner", "Owner", server.owned == false ? (server.sourceTitle ?? String(localized: "Shared")) : String(localized: "You")),
             info("plexServerVersion", "Version", server.productVersion)
         ]
         if let platform = server.platform {
             rows.append(info("plexServerPlatform", "Platform", [platform, server.platformVersion].compactMap { $0 }.joined(separator: " ")))
         }
         if let connection {
-            let kind = connection.relay ? "Relay" : connection.local ? "Local" : "Remote"
-            rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? "\(kind), Secure" : kind))
+            let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "Remote")
+            rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? String(localized: "\(kind), Secure") : kind))
         }
         if let machineID = server.machineIdentifier {
             rows.insert(serverLibrariesToggle(id: "plexServerLibraries", providerID: "plex:\(machineID)"), at: 1)
@@ -872,7 +858,7 @@ enum SettingsContent {
             rows.insert(plexLiveTVToggle(id: "plexServerLiveTV", machineID: id), at: 1)
             if let liveTV { rows.append(info("plexServerChannels", "Channels", "\(liveTV.channelCount)")) }
         } else {
-            rows.append(info("plexServerLiveTV", "Live TV", "No DVR"))
+            rows.append(info("plexServerLiveTV", "Live TV", String(localized: "No DVR")))
         }
         if let created = ISO8601DateFormatter().date(from: server.createdAt) {
             rows.append(info("plexServerCreated", "On Plex Since", created.formatted(date: .abbreviated, time: .omitted)))
@@ -940,9 +926,9 @@ enum SettingsContent {
         let isSelected = PlexAuthManager.shared.isCurrentServer(server)
         if turningOff, isSelected, others.isEmpty {
             vc.present(ConfirmationPopupViewController(
-                title: "Only Server in Use",
-                message: "Turn on another server first, or sign out of Plex.",
-                confirmTitle: "OK", cancelTitle: nil, onConfirm: {}), animated: true)
+                title: String(localized: "Only Server in Use"),
+                message: String(localized: "Turn on another server first, or sign out of Plex."),
+                confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
             return
         }
         busyPlexServerID = server.clientIdentifier
@@ -967,14 +953,14 @@ enum SettingsContent {
             page.reloadRows()
             if !changed {
                 page.present(ConfirmationPopupViewController(
-                    title: "Couldn’t Turn Off",
-                    message: "No other server is reachable right now, so \(server.name) stays on.",
-                    confirmTitle: "OK", cancelTitle: nil, onConfirm: {}), animated: true)
+                    title: String(localized: "Couldn’t Turn Off"),
+                    message: String(localized: "No other server is reachable right now, so \(server.name) stays on."),
+                    confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
             }
         }
     }
 
-    private static func info(_ id: String, _ title: String, _ value: String) -> SettingsRowItem {
+    private static func info(_ id: String, _ title: String.LocalizationValue, _ value: String) -> SettingsRowItem {
         SettingsRowItem(id: id, title: title, kind: .info(value: { value }))
     }
 
@@ -1065,9 +1051,9 @@ enum SettingsContent {
         var seen = Set<String>()
         let headers = serverRunHeaders(runs.map { ($0.name, $0.kind) })
         for (header, entries) in zip(headers, entriesByRun) where !entries.isEmpty {
-            if labelsRuns { rows.append(.header(header)) }
+            if labelsRuns { rows.append(.header(verbatim: header)) }
             for entry in entries where seen.insert(entry.id).inserted {
-                rows.append(SettingsRowItem(id: "homeRow_\(entry.id)", title: entry.title, kind: .toggle(
+                rows.append(SettingsRowItem(id: "homeRow_\(entry.id)", verbatim: entry.title, kind: .toggle(
                     get: { !HomeRowSettings.isHidden(entry.id) },
                     set: { shown in HomeRowSettings.setHidden(!shown, for: entry.id) })))
             }
@@ -1089,10 +1075,12 @@ enum SettingsContent {
         for pin in pins {
             // Same as the sidebar libraries: hold Select to reorder, Select
             // asks before unpinning.
-            rows.append(SettingsRowItem(id: "pinnedCollection_\(destination)_\(pin.id)", title: pin.title,
+            rows.append(SettingsRowItem(id: "pinnedCollection_\(destination)_\(pin.id)", verbatim: pin.title,
                                         kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Unpin \"\(pin.title)\"?",
-                               message: "This removes the row from \(destination == .home ? "Home" : "its library"). You can pin it again from the collection in its library.",
+                               message: destination == .home
+                                ? "This removes the row from Home. You can pin it again from the collection in its library."
+                                : "This removes the row from its library. You can pin it again from the collection in its library.",
                                confirmTitle: "Unpin", destructive: true) {
                     HomeCollectionPins.unpin(ratingKey: pin.ratingKey, libraryUUID: pin.libraryUUID, in: destination)
                     (vc as? SettingsPageViewController)?.reloadRows()
@@ -1176,7 +1164,7 @@ enum SettingsContent {
             }
             // Hold Select to grab + reorder (Apple-Home style). The page VC
             // animates the slot change; this persists it, over the list as it is now.
-            return SettingsRowItem(id: SidebarArrangement.isAppRow(key) ? "sb_\(key)" : "lib_\(key)", title: title, kind: kind,
+            return SettingsRowItem(id: SidebarArrangement.isAppRow(key) ? "sb_\(key)" : "lib_\(key)", verbatim: title, kind: kind,
                                    onReorder: { up in
                                        mgr.moveSidebarRow(key: key, up: up, visible: sidebarSettingsRows().map(\.key))
                                    }, reorderGroup: "sidebar")
@@ -1211,6 +1199,7 @@ enum SettingsContent {
                     Task {
                         await ImageCacheManager.shared.clearAll()
                         ContinueWatchingCardCompositor.clearDisk()
+                        ArtworkTitleCheck.clearDisk()
                         await CacheManager.shared.clearAllCache()
                         await reloadFromServer()
                     }
@@ -1230,11 +1219,13 @@ enum SettingsContent {
     /// Canonical confirm/cancel prompt: the Liquid-Glass card
     /// (`ConfirmationPopupViewController`) shared with the rest of the app, not a
     /// system `UIAlertController`. Use this for every Settings confirmation.
-    private static func presentConfirm(on vc: UIViewController, title: String, message: String,
-                                       confirmTitle: String, destructive: Bool, action: @escaping () -> Void) {
+    private static func presentConfirm(on vc: UIViewController, title: String.LocalizationValue,
+                                       message: String.LocalizationValue,
+                                       confirmTitle: String.LocalizationValue, destructive: Bool, action: @escaping () -> Void) {
         let popup = ConfirmationPopupViewController(
-            title: title, message: message, confirmTitle: confirmTitle,
-            cancelTitle: "Cancel", destructive: destructive, onConfirm: action)
+            title: String(localized: title), message: String(localized: message),
+            confirmTitle: String(localized: confirmTitle),
+            cancelTitle: String(localized: "Cancel"), destructive: destructive, onConfirm: action)
         vc.present(popup, animated: true)
     }
 
@@ -1250,9 +1241,9 @@ enum SettingsContent {
         let hiddenSources = ds.hiddenPlexSources + [JellyfinLiveTVProvider.hiddenSource].compactMap { $0 }
         let hidden = Set(hiddenSources.map(\.id))
         var rows: [SettingsRowItem] = (ds.sources + hiddenSources).sorted { $0.displayName < $1.displayName }.map { source in
-            SettingsRowItem(id: "src_\(source.id)", title: source.displayName,
+            SettingsRowItem(id: "src_\(source.id)", verbatim: source.displayName,
                             kind: .navigationAction(.liveTVSourceDetail,
-                                                    value: { hidden.contains(source.id) ? "Off" : source.isConnected ? "\(source.channelCount) ch" : "Offline" },
+                                                    value: { hidden.contains(source.id) ? String(localized: "Off") : source.isConnected ? String(localized: "\(source.channelCount) ch") : String(localized: "Offline") },
                                                     prepare: { pendingSourceDetail = source }))
         }
         rows.append(SettingsRowItem(id: "addLiveTVSource", title: "Add Live TV Source",
@@ -1280,7 +1271,7 @@ enum SettingsContent {
             ?? (source.sourceType == .jellyfin ? [jellyfinLiveTVToggle(id: "src_showInLiveTV")] : [])
         rows += [
             SettingsRowItem(id: "src_status", title: "Status",
-                            kind: .info(value: { source.isConnected ? "Connected" : "Disconnected" })),
+                            kind: .info(value: { source.isConnected ? String(localized: "Connected") : String(localized: "Disconnected") })),
             SettingsRowItem(id: "src_channels", title: "Channels",
                             kind: .info(value: { "\(source.channelCount)" }))
         ]
@@ -1382,13 +1373,13 @@ enum SettingsContent {
                     page?.reloadRows()
                     let popup = code.map {
                         ConfirmationPopupViewController(
-                            title: "Diagnostics Sent",
-                            message: "Your code is \($0). Include it in your GitHub issue or message so the report can be found.",
-                            confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                            title: String(localized: "Diagnostics Sent"),
+                            message: String(localized: "Your code is \($0). Include it in your GitHub issue or message so the report can be found."),
+                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
                     } ?? ConfirmationPopupViewController(
-                        title: "Couldn't Send Diagnostics",
-                        message: "Diagnostics are not available in this build.",
-                        confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                        title: String(localized: "Couldn't Send Diagnostics"),
+                        message: String(localized: "Diagnostics are not available in this build."),
+                        confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
                     vc.present(popup, animated: true)
                 }
             }), isBusy: { DiagnosticsReport.isSending })
@@ -1434,7 +1425,7 @@ enum SettingsContent {
     /// `enabledWhen` marks the row as depending on another setting: while it
     /// returns false the row renders dimmed and cannot be focused or toggled.
     /// Cycles one marker kind through Button, Automatic and Off (#381).
-    private static func skipModeRow(_ id: String, _ title: String, marker: String) -> SettingsRowItem {
+    private static func skipModeRow(_ id: String, _ title: String.LocalizationValue, marker: String) -> SettingsRowItem {
         SettingsRowItem(id: id, title: title, kind: .cycle(
             value: { MarkerSkipMode.current(for: marker).label },
             next: {
@@ -1444,7 +1435,7 @@ enum SettingsContent {
             }))
     }
 
-    private static func toggle(_ id: String, _ title: String, key: String, default def: Bool,
+    private static func toggle(_ id: String, _ title: String.LocalizationValue, key: String, default def: Bool,
                                enabledWhen: (() -> Bool)? = nil) -> SettingsRowItem {
         SettingsRowItem(id: id, title: title, kind: .toggle(
             get: { SettingsStore.bool(key, default: def) },

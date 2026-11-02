@@ -149,6 +149,19 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.1.1 (120)", [
+            "Silo audio and subtitle tracks are available to system remotes and follow accessibility preferences.",
+            "Episode and season pages now show their extras.",
+            "The player's info panels stay open while you're reading them.",
+            "Continue Watching no longer adds a title to artwork that already shows one.",
+            "Live TV shows film release years and marks new airings from Plex guides.",
+            "Music's Now Playing remembers lyrics and opens when you return mid-song.",
+            "Subtitle tracks list language first and stay set on autoplayed episodes.",
+            "Your Watchlist now finds titles on your account's other Plex servers.",
+            "At home, Rivulet now prefers your Plex server's local connection.",
+            "Change audio and subtitle tracks from Control Center on iPhone and iPad.",
+            "Rivulet now follows the Apple TV's caption and Audio Description settings.",
+        ]),
         ("1.1.1 (119)", [
             "Subtitle and audio language settings are now saved for each Plex profile.",
             "Choose a subtitle search language even when the title has no matching subtitles yet.",
@@ -160,6 +173,10 @@ struct WhatsNewView: View {
             "The player's Details panel shows your Enhance Dialogue setting under Audio.",
             "Top Shelf now leaves out rows you've hidden from Home.",
             "Recently Added items in Top Shelf no longer show progress bars.",
+            "New Delay control in the player's audio menu moves sound earlier or later.",
+            "Fixed smart playlists showing up empty.",
+            "Library grids now follow each Plex library's Collections setting.",
+            "Updated AetherEngine to 7.53.0 with SD and 720p upscaling. Enable in Settings → Playback.",
         ]),
         ("1.1.1 (118)", [
             "Updated AetherEngine to 7.52.0.",

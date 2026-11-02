@@ -39,16 +39,16 @@ final class LiveMultiviewViewController: UIViewController {
     private var tiles: [UUID: LiveMultiviewTileView] = [:]
     private var placeholderViews: [UIView] = []
 
-    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: "Swipe up to watch")
+    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
     private let editHint = LiveMultiviewHintView(pointsUp: false, text: nil)
 
     private let layoutButtons = UIStackView()
     private let focusLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Focus Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Focus Layout"), diameter: 62)
     private let gridLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Grid Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Grid Layout"), diameter: 62)
     private let scoresLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: "Scores Layout", diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Scores Layout"), diameter: 62)
     /// The scores layout's right column; exists only while that layout shows.
     private var scoresList: LiveScoresPaneView?
 
@@ -73,6 +73,9 @@ final class LiveMultiviewViewController: UIViewController {
     private var focusOnAddedChannelId: String?
     /// A re-rank was held back while focus was in the row.
     private var addMoreNeedsRank = false
+    /// Channel id → whether Dispatcharr lists more than one stream for it (#369).
+    /// Present while checking, so each channel is asked once.
+    private var streamChoices: [String: Bool] = [:]
 
     private var cancellables = Set<AnyCancellable>()
     /// Where focus goes on the next update, consumed once it lands.
@@ -146,7 +149,7 @@ final class LiveMultiviewViewController: UIViewController {
         gridLayoutButton.onPress = { [weak self] in self?.viewModel.resetLayout() }
         scoresLayoutButton.onPress = { [weak self] in self?.viewModel.useScoresLayout() }
 
-        addMoreLabel.text = "Add More"
+        addMoreLabel.text = String(localized: "Add More")
         addMoreLabel.font = .systemFont(ofSize: 32, weight: .semibold)
         addMoreLabel.textColor = UIColor.white.withAlphaComponent(0.85)
         addMoreLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -346,9 +349,9 @@ final class LiveMultiviewViewController: UIViewController {
     }
 
     private func confirmExit() {
-        let alert = UIAlertController(title: "Do you want to exit Multiview?", message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Exit", style: .default) { [weak self] _ in
+        let alert = UIAlertController(title: String(localized: "Do you want to exit Multiview?"), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Exit"), style: .default) { [weak self] _ in
             self?.exitMultiview(handingOff: nil)
         })
         present(alert, animated: true)
@@ -532,6 +535,7 @@ final class LiveMultiviewViewController: UIViewController {
                 tiles[slot.id] = tile
             }
             tile.show(slot)
+            checkStreamChoices(for: slot.channel)
         }
 
         if mode == .edit {
@@ -584,6 +588,11 @@ final class LiveMultiviewViewController: UIViewController {
                 })
             }
         }
+        if streamChoices[slot.channel.id] == true {
+            actions.append(TileMenuAction(title: "Stream", systemImage: "dial.medium") { [weak self] in
+                self?.presentStreamMenu(for: slot.channel, sourceFrame: tile.convert(tile.bounds, to: nil))
+            })
+        }
         let remove = TileMenuAction(title: "Remove", systemImage: "xmark", destructive: true) { [weak self] in
             guard let self, let index = self.viewModel.streams.firstIndex(where: { $0.id == slot.id }) else { return }
             if self.viewModel.streamCount <= 1 {
@@ -604,6 +613,51 @@ final class LiveMultiviewViewController: UIViewController {
             header: header
         )
         present(popup, animated: false)
+    }
+
+    /// Asks Dispatcharr once per channel whether the tile menu offers Stream
+    /// (more than one stream, and an admin key: anyone else gets 403).
+    private func checkStreamChoices(for channel: UnifiedChannel) {
+        guard streamChoices[channel.id] == nil,
+              let target = LiveTVDataStore.shared.dispatcharrChannel(for: channel) else { return }
+        streamChoices[channel.id] = false
+        Task { @MainActor [weak self] in
+            guard let choices = try? await target.service.channelStreams(channelUUID: target.uuid) else { return }
+            self?.streamChoices[channel.id] = choices.streams.count > 1
+        }
+    }
+
+    /// The channel's streams, fetched fresh. A switch moves everyone watching
+    /// this channel on the server, and the tile keeps its connection.
+    private func presentStreamMenu(for channel: UnifiedChannel, sourceFrame: CGRect) {
+        guard let target = LiveTVDataStore.shared.dispatcharrChannel(for: channel) else { return }
+        Task { @MainActor [weak self] in
+            guard let choices = try? await target.service.channelStreams(channelUUID: target.uuid),
+                  let self, !self.isExiting, self.presentedViewController == nil else { return }
+            let rows = choices.streams.map { stream in
+                let isCurrent = stream.id == choices.currentStreamID
+                let title = [stream.name, choices.detail(for: stream)].compactMap { $0 }.joined(separator: " • ")
+                return TileMenuAction(verbatim: title, systemImage: isCurrent ? "checkmark" : "") { [weak self] in
+                    guard !isCurrent else { return }
+                    Task { @MainActor [weak self] in
+                        do {
+                            try await target.service.switchStream(channelUUID: target.uuid, to: stream.id)
+                        } catch {
+                            self?.showStreamSwitchFailed()
+                        }
+                    }
+                }
+            }
+            self.present(TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
+                                                     header: TileMenuHeader(title: String(localized: "Stream"))), animated: false)
+        }
+    }
+
+    private func showStreamSwitchFailed() {
+        guard !isExiting, presentedViewController == nil else { return }
+        let alert = UIAlertController(title: String(localized: "Couldn't switch streams."), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .cancel))
+        present(alert, animated: true)
     }
 
     /// The tile grows to fill the screen while the rest fades, then multiview
@@ -1005,7 +1059,7 @@ final class LiveMultiviewViewController: UIViewController {
         guard let row = addMoreSource.snapshot().indexOfSection(id), row != addMoreRow else { return }
         addMoreRow = row
         UIView.transition(with: addMoreLabel, duration: 0.2, options: .transitionCrossDissolve) {
-            self.addMoreLabel.text = self.addMoreRows[id]?.title ?? "Add More"
+            self.addMoreLabel.text = self.addMoreRows[id]?.title ?? String(localized: "Add More")
         }
     }
 
@@ -1042,7 +1096,7 @@ final class LiveMultiviewViewController: UIViewController {
         // Recordings and Starting Soon are not channels to add now.
         let shelves = LiveBrowseViewController.buildShelves(sourceIdFilter: sourceIdFilter)
             .filter { $0.id != "recordings" && $0.id != "soon" }
-        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: "Recommended", items: recommended())]
+        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Recommended"), items: recommended())]
                     + shelves)
             .map { LiveBrowseViewController.Shelf(id: $0.id, title: $0.title,
                                                   items: $0.items.filter(notPlaying).uniquedById()) }
@@ -1051,7 +1105,7 @@ final class LiveMultiviewViewController: UIViewController {
         let existing = Set(addMoreSource.snapshot().itemIdentifiers)
         addMoreRows = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         addMoreRow = min(addMoreRow, max(rows.count - 1, 0))
-        addMoreLabel.text = rows[safe: addMoreRow]?.title ?? "Add More"
+        addMoreLabel.text = rows[safe: addMoreRow]?.title ?? String(localized: "Add More")
 
         // One item per row; a row's identity never changes, so reconfiguring
         // is what hands an existing row its new cards.
@@ -1190,7 +1244,7 @@ final class LiveMultiviewTileView: UIView {
         spinner.color = .white
         spinner.hidesWhenStopped = true
         pausedIcon.tintColor = .white
-        unavailableLabel.text = "Channel Unavailable"
+        unavailableLabel.text = String(localized: "Channel Unavailable")
         unavailableLabel.font = .systemFont(ofSize: 26, weight: .semibold)
         unavailableLabel.textColor = UIColor.white.withAlphaComponent(0.7)
         unavailableLabel.isHidden = true
@@ -1338,3 +1392,23 @@ final class LiveMultiviewHintView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
+
+#if DEBUG
+extension LiveMultiviewViewController {
+    /// `RIVULET_MULTIVIEW=<name>,<name>,…`: open multiview on these channels once Live TV loads.
+    static func debugOpenIfRequested() async {
+        guard let names = ProcessInfo.processInfo.environment["RIVULET_MULTIVIEW"]?.split(separator: ",") else { return }
+        let store = LiveTVDataStore.shared
+        for _ in 0..<60 where store.channels.isEmpty { try? await Task.sleep(for: .milliseconds(500)) }
+        try? await Task.sleep(for: .seconds(3))
+        let channels = names.compactMap { name in store.channels.first { $0.name == String(name) } }
+        guard let first = channels.first,
+              let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              var top = scene.windows.first?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let multiview = LiveMultiviewViewController(adopting: nil, adding: first, sourceIdFilter: nil)
+        top.present(multiview, animated: false)
+        for channel in channels.dropFirst() { await multiview.viewModel.addChannel(channel) }
+    }
+}
+#endif

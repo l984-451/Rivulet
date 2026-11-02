@@ -64,7 +64,7 @@ final class PhotoCell: UICollectionViewCell {
     func configure(_ item: PhotoItem) {
         clipBadge.isHidden = item.kind != .clip
         poster.title = item.kind == .folder ? item.title : nil
-        poster.subtitle = item.kind == .folder ? item.childCount.map { $0 == 1 ? "1 item" : "\($0) items" } : nil
+        poster.subtitle = item.kind == .folder ? item.childCount.map { String(localized: "\($0) items") } : nil
         applyFocusAppearance(isFocused)
         guard item.thumbnail == nil || item.thumbnail != imageURL else { return }
         imageURL = item.thumbnail

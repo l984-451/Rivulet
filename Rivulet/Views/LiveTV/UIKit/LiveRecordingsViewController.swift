@@ -44,7 +44,7 @@ final class LiveRecordingsViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = UIColor(white: 0.06, alpha: 1)
 
-        titleLabel.text = "Recordings"
+        titleLabel.text = String(localized: "Recordings")
         titleLabel.font = .systemFont(ofSize: 48, weight: .bold)
         titleLabel.textColor = .white
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -94,13 +94,13 @@ final class LiveRecordingsViewController: UIViewController {
             let active = store.scheduledRecordings.filter { $0.status == .scheduled || $0.status == .recording }
             var sections: [Section] = []
             sections.append(Section(
-                title: "Upcoming",
+                title: String(localized: "Upcoming"),
                 rows: active.isEmpty
-                    ? [.message("Nothing is scheduled. Long-press a programme in the guide to record it.")]
+                    ? [.message(String(localized: "Nothing is scheduled. Long-press a programme in the guide to record it."))]
                     : active.map { .recording($0) }
             ))
             if !rules.isEmpty {
-                sections.append(Section(title: "Series and Rules", rows: rules.map { .rule($0) }))
+                sections.append(Section(title: String(localized: "Series and Rules"), rows: rules.map { .rule($0) }))
             }
             self.sections = sections
             self.tableView.reloadData()
@@ -157,10 +157,10 @@ final class LiveRecordingsViewController: UIViewController {
                 try await change()
                 self?.reload()
             } catch {
-                let alert = UIAlertController(title: "Recording Didn't Change",
+                let alert = UIAlertController(title: String(localized: "Recording Didn't Change"),
                                               message: error.localizedDescription,
                                               preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .default))
                 self?.present(alert, animated: true)
             }
         }

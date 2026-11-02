@@ -326,9 +326,9 @@ struct DispatcharrStatus: Sendable {
 
     var statusDescription: String {
         if isAvailable {
-            return "Connected"
+            return String(localized: "Connected")
         } else {
-            return "Error (\(statusCode))"
+            return String(localized: "Error (\(statusCode))")
         }
     }
 }
@@ -375,15 +375,15 @@ enum DispatcharrError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Invalid response from Dispatcharr server"
+            return String(localized: "Invalid response from Dispatcharr server")
         case .unauthorized:
-            return "Unauthorized - check Dispatcharr authentication"
+            return String(localized: "Unauthorized - check Dispatcharr authentication")
         case .notFound:
-            return "Dispatcharr endpoint not found - verify URL"
+            return String(localized: "Dispatcharr endpoint not found - verify URL")
         case .serverError(let code):
-            return "Dispatcharr server error (\(code))"
+            return String(localized: "Dispatcharr server error (\(code))")
         case .httpError(let code):
-            return "HTTP error \(code)"
+            return String(localized: "HTTP error \(code)")
         }
     }
 }

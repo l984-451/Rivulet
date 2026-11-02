@@ -53,7 +53,7 @@ final class TextEntryViewController: UIViewController {
          keyboardType: UIKeyboardType = .default,
          isSecure: Bool = false,
          contentType: UITextContentType? = nil,
-         submitTitle: String = "Done",
+         submitTitle: String = String(localized: "Done"),
          allowsEmpty: Bool = true,
          onCommit: @escaping (String) -> Void,
          onCancel: (() -> Void)? = nil) {
@@ -119,7 +119,7 @@ final class TextEntryViewController: UIViewController {
         textField.isSecureTextEntry = isSecure
         textField.textContentType = contentType
         textField.clearButtonMode = .whileEditing
-        textField.returnKeyType = submitTitle == "Done" ? .done : .continue
+        textField.returnKeyType = submitTitle == String(localized: "Done") ? .done : .continue
         textField.delegate = self
         textField.addTarget(self, action: #selector(textChanged), for: .editingChanged)
         // The keyboard's return button. tvOS sends this, not `textFieldShouldReturn`.

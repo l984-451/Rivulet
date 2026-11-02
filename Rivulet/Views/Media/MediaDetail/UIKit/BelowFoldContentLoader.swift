@@ -70,21 +70,9 @@ final class BelowFoldContentLoader {
         // Native local extras and remote provider videos share the existing rows.
         // Their distinct playback destinations survive the detail-to-tile mapping.
         let fallbackArt = item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster
-        func makeTrailer(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
-            BelowFoldTrailer(
-                id: extra.id,
-                title: extra.title,
-                artworkURL: extra.thumbnailURL ?? fallbackArt,
-                durationFormatted: extra.duration.map(Self.formatTrailerDuration),
-                subtype: extra.subtype,
-                playbackKey: extra.playbackKey,
-                providerID: extra.providerID,
-                externalURL: extra.externalURL
-            )
-        }
-        let allExtras = resolvedDetail?.extras ?? []
-        content.trailers = allExtras.filter { $0.isTrailer }.map(makeTrailer)
-        content.extras = allExtras.filter { !$0.isTrailer }.map(makeTrailer)
+        let tiles = Self.extraTiles(from: resolvedDetail?.extras ?? [], fallbackArt: fallbackArt)
+        content.trailers = tiles.trailers
+        content.extras = tiles.extras
 
         // Seasons and episodes, by item kind.
         switch item.kind {
@@ -133,11 +121,29 @@ final class BelowFoldContentLoader {
         return (try? await provider.contentAdvisory(for: item.ref)) ?? nil
     }
 
+    /// An item's extras as tiles, trailers split from the rest (behind the scenes, featurettes, ...).
+    static func extraTiles(from extras: [MediaItemDetail.Extra], fallbackArt: URL?)
+        -> (trailers: [BelowFoldTrailer], extras: [BelowFoldTrailer]) {
+        func tile(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
+            BelowFoldTrailer(
+                id: extra.id,
+                title: extra.title,
+                artworkURL: extra.thumbnailURL ?? fallbackArt,
+                durationFormatted: extra.duration.map(formatTrailerDuration),
+                subtype: extra.subtype,
+                playbackKey: extra.playbackKey,
+                providerID: extra.providerID,
+                externalURL: extra.externalURL
+            )
+        }
+        return (extras.filter { $0.isTrailer }.map(tile), extras.filter { !$0.isTrailer }.map(tile))
+    }
+
     /// "1m" / "2m 30s" / "45s" — feeds the on-thumbnail ▶ duration badge.
     private static func formatTrailerDuration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         let m = total / 60, s = total % 60
-        if m == 0 { return "\(s)s" }
-        return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+        if m == 0 { return String(localized: "\(s)s") }
+        return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
     }
 }

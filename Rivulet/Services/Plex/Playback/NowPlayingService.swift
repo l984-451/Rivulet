@@ -12,6 +12,7 @@
 import Foundation
 import MediaPlayer
 import AVFoundation
+import AppIntents
 import Combine
 import UIKit
 
@@ -31,12 +32,19 @@ final class NowPlayingService: ObservableObject {
     private var artworkTask: Task<Void, Never>?
     private var cachedArtwork: MPMediaItemArtwork?
     private var cachedArtworkURL: String?
+    private var loadingArtworkURL: String?
     private var interruptionObserver: NSObjectProtocol?
     private var inputCoordinator: PlaybackInputCoordinator?
     private var lastHandledPlaybackState: UniversalPlaybackState?
     /// Track if we've set Now Playing info with valid duration (> 0)
     /// This prevents the system from ignoring our Now Playing registration
     private var hasValidNowPlayingInfo: Bool = false
+    /// The language option keys, kept so a full info rewrite carries them over.
+    private var languageOptionInfo: [String: Any] = [:]
+    private var publishedAudioTracks: [MediaTrack] = []
+    private var publishedSubtitleTracks: [MediaTrack] = []
+    /// Applies a remote's track pick; a nil id turns subtitles off.
+    private var selectTrack: ((MPNowPlayingInfoLanguageOptionType, Int?) -> Void)?
 
     // MARK: - Initialization
 
@@ -60,7 +68,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     private func setNowPlayingInfoOnAllCenters(_ nowPlayingInfo: [String: Any]?) {
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo?.merging(languageOptionInfo) { _, new in new }
     }
 
     private func withNowPlayingInfoOnAllCenters(_ update: (inout [String: Any]) -> Void) {
@@ -236,6 +244,28 @@ final class NowPlayingService: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Generated subtitles are listed only once the model is on disk: a remote pick never starts its download.
+        Publishers.CombineLatest4(viewModel.$audioTracks, viewModel.$subtitleTracks,
+                                  viewModel.$currentAudioTrackId, viewModel.$currentSubtitleTrackId)
+            .combineLatest(viewModel.$aetherPlayer.map { $0 != nil }.removeDuplicates(),
+                           SpeechModelStore.shared.$state.map { $0 == .ready }.removeDuplicates())
+            .receive(on: RunLoop.main)
+            .sink { [weak self, weak viewModel] _ in
+                guard let self, let viewModel else { return }
+                let subtitles = SpeechModelStore.shared.state == .ready
+                    ? viewModel.subtitleMenuTracks : viewModel.subtitleTracks
+                self.publishTracks(audio: viewModel.audioTracks, subtitles: subtitles,
+                                   audioId: viewModel.currentAudioTrackId,
+                                   subtitleId: viewModel.currentSubtitleTrackId)
+            }
+            .store(in: &cancellables)
+        selectTrack = { [weak viewModel] type, id in
+            if type == .audible {
+                if let id { viewModel?.selectAudioTrack(id: id) }
+            } else {
+                viewModel?.selectSubtitleTrack(id: id)
+            }
+        }
     }
 
     /// Detach from the current view model and clear Now Playing
@@ -247,9 +277,45 @@ final class NowPlayingService: ObservableObject {
         inputCoordinator = nil
         artworkTask?.cancel()
         artworkTask = nil
+        loadingArtworkURL = nil
         hasValidNowPlayingInfo = false
         lastHandledPlaybackState = nil
+        selectTrack = nil
+        publishedAudioTracks = []
+        publishedSubtitleTracks = []
+        languageOptionInfo = [:]
         clearNowPlayingInfo()
+    }
+
+    // MARK: - Language Options
+
+    /// Lists the tracks for the system's remotes and marks the selected ones.
+    private func publishTracks(audio: [MediaTrack], subtitles: [MediaTrack], audioId: Int?, subtitleId: Int?) {
+        publishedAudioTracks = audio
+        publishedSubtitleTracks = subtitles
+        languageOptionInfo = [
+            MPNowPlayingInfoPropertyAvailableLanguageOptions:
+                NowPlayingLanguageOptions.groups(audio: audio, subtitles: subtitles),
+            MPNowPlayingInfoPropertyCurrentLanguageOptions:
+                NowPlayingLanguageOptions.current(audio: audio, subtitles: subtitles,
+                                                  audioId: audioId, subtitleId: subtitleId),
+        ]
+        // Before the first info write there is nothing to add to; that write merges these in.
+        guard firstAvailableNowPlayingInfo() != nil else { return }
+        withNowPlayingInfoOnAllCenters { $0.merge(languageOptionInfo) { _, new in new } }
+    }
+
+    private func handleLanguageOption(_ event: MPRemoteCommandEvent, enable: Bool) -> MPRemoteCommandHandlerStatus {
+        guard let selectTrack else { return .noActionableNowPlayingItem }
+        guard let option = (event as? MPChangeLanguageOptionCommandEvent)?.languageOption else { return .commandFailed }
+        guard let selection = NowPlayingLanguageOptions.selection(
+            for: option, enable: enable, audio: publishedAudioTracks, subtitles: publishedSubtitleTracks
+        ) else { return .commandFailed }
+        switch selection {
+        case .audio(let id): selectTrack(.audible, id)
+        case .subtitle(let id): selectTrack(.legible, id)
+        }
+        return .success
     }
 
     // MARK: - Live TV
@@ -263,6 +329,8 @@ final class NowPlayingService: ObservableObject {
         detach()
         self.inputCoordinator = inputCoordinator
         refreshSkipIntervals()
+        MPRemoteCommandCenter.shared().enableLanguageOptionCommand.isEnabled = true
+        MPRemoteCommandCenter.shared().disableLanguageOptionCommand.isEnabled = true
         ensureAudioSessionActive()
     }
 
@@ -275,19 +343,34 @@ final class NowPlayingService: ObservableObject {
 
     /// Now Playing text for the live channel. A live stream publishes no
     /// duration or elapsed time: `IsLiveStream` has the system draw a live
-    /// indicator instead of a scrubber.
-    func updateLive(title: String, channelName: String?, isPlaying: Bool) {
+    /// indicator instead of a scrubber. `onScreenAt` is the wall-clock time of the picture, behind
+    /// now while timeshifted.
+    func updateLive(title: String, channelName: String?, isPlaying: Bool, artworkURL: URL?, onScreenAt: Date) {
         guard viewModel == nil, inputCoordinator != nil else { return }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyCurrentPlaybackDate: onScreenAt,
         ]
         if let channelName, channelName != title {
             info[MPMediaItemPropertyArtist] = channelName
         }
+        // Carried across rewrites; a new URL loads and adds itself.
+        if let artworkURL, artworkURL.absoluteString == cachedArtworkURL, let cachedArtwork {
+            info[MPMediaItemPropertyArtwork] = cachedArtwork
+        }
         setNowPlayingInfoOnAllCenters(info)
+        if artworkURL?.absoluteString != cachedArtworkURL { loadArtwork(from: artworkURL) }
+    }
+
+    /// The live channel's tracks for the system's remotes. `select` applies a pick; a nil id is subtitles off.
+    func updateLiveTracks(audio: [MediaTrack], subtitles: [MediaTrack], audioId: Int?, subtitleId: Int?,
+                          select: @escaping (MPNowPlayingInfoLanguageOptionType, Int?) -> Void) {
+        guard viewModel == nil, inputCoordinator != nil else { return }
+        selectTrack = select
+        publishTracks(audio: audio, subtitles: subtitles, audioId: audioId, subtitleId: subtitleId)
     }
 
     // MARK: - Remote Command Center Setup
@@ -315,19 +398,19 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
-        // Skip forward. Seek by the live setting, not the event's interval:
-        // the event echoes preferredIntervals, which only tracks the displayed
-        // glyph and is refreshed per playback session (see refreshSkipIntervals).
+        // Skip forward by the live setting (see skipSeconds).
         commandCenter.skipForwardCommand.isEnabled = true
-        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
-            self?.dispatchInputAction(.seekRelative(seconds: InputConfig.tapSeekSeconds))
+        commandCenter.skipForwardCommand.addTarget { [weak self] event in
+            let seconds = Self.skipSeconds(event, setting: InputConfig.tapSeekSeconds)
+            self?.dispatchInputAction(.seekRelative(seconds: seconds))
             return .success
         }
 
         // Skip backward (see note above).
         commandCenter.skipBackwardCommand.isEnabled = true
-        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
-            self?.dispatchInputAction(.seekRelative(seconds: -InputConfig.tapSeekBackSeconds))
+        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
+            let seconds = Self.skipSeconds(event, setting: InputConfig.tapSeekBackSeconds)
+            self?.dispatchInputAction(.seekRelative(seconds: -seconds))
             return .success
         }
 
@@ -377,6 +460,14 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
+        // Audio and subtitle picks from Control Center and the TV Remote app.
+        commandCenter.enableLanguageOptionCommand.addTarget { [weak self] event in
+            self?.handleLanguageOption(event, enable: true) ?? .noActionableNowPlayingItem
+        }
+        commandCenter.disableLanguageOptionCommand.addTarget { [weak self] event in
+            self?.handleLanguageOption(event, enable: false) ?? .noActionableNowPlayingItem
+        }
+
         // Which commands are ENABLED is set per attach (`claimRemoteCommands`),
         // not here: Music shares this center and flips them for its own layout.
     }
@@ -396,6 +487,8 @@ final class NowPlayingService: ObservableObject {
         commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.seekForwardCommand.isEnabled = true
         commandCenter.seekBackwardCommand.isEnabled = true
+        commandCenter.enableLanguageOptionCommand.isEnabled = true
+        commandCenter.disableLanguageOptionCommand.isEnabled = true
         commandCenter.nextTrackCommand.isEnabled = false
         commandCenter.previousTrackCommand.isEnabled = false
         commandCenter.changeRepeatModeCommand.isEnabled = false
@@ -413,6 +506,16 @@ final class NowPlayingService: ObservableObject {
         let commandCenter = MPRemoteCommandCenter.shared()
         commandCenter.skipForwardCommand.preferredIntervals = [NSNumber(value: InputConfig.tapSeekSeconds)]
         commandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: InputConfig.tapSeekBackSeconds)]
+    }
+
+    /// The Skip Length setting, unless the command names another span (Siri's "skip ahead two
+    /// minutes"). The skip buttons echo `preferredIntervals`, which is only the glyph's number and
+    /// is refreshed per session (see refreshSkipIntervals), so an echo of it means the setting.
+    private static func skipSeconds(_ event: MPRemoteCommandEvent, setting: TimeInterval) -> TimeInterval {
+        guard let skip = event as? MPSkipIntervalCommandEvent, skip.interval > 0,
+              let glyph = (skip.command as? MPSkipIntervalCommand)?.preferredIntervals.first?.doubleValue,
+              skip.interval != glyph else { return setting }
+        return skip.interval
     }
 
     private func dispatchInputAction(_ action: PlaybackInputAction) {
@@ -472,7 +575,7 @@ final class NowPlayingService: ObservableObject {
         var nowPlayingInfo = [String: Any]()
 
         // Title
-        nowPlayingInfo[MPMediaItemPropertyTitle] = metadata.title ?? "Unknown"
+        nowPlayingInfo[MPMediaItemPropertyTitle] = metadata.title ?? String(localized: "Unknown")
 
         // For episodes, set artist as show name and album as season
         if metadata.type == "episode" {
@@ -480,7 +583,7 @@ final class NowPlayingService: ObservableObject {
                 nowPlayingInfo[MPMediaItemPropertyArtist] = showName
             }
             if let seasonNum = metadata.parentIndex {
-                nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = "Season \(seasonNum)"
+                nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = String(localized: "Season \(seasonNum)")
             }
         } else if metadata.type == "movie" {
             // For movies, use year as artist if available
@@ -497,12 +600,33 @@ final class NowPlayingService: ObservableObject {
 
         // Media type
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        nowPlayingInfo.merge(itemInfo(metadata: metadata, duration: duration)) { _, new in new }
 
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
         // Load artwork asynchronously
         loadArtwork(from: artworkURL)
 
+    }
+
+    /// Where the credits start, and the Siri entity for the item.
+    private func itemInfo(metadata: PlexMetadata, duration: TimeInterval) -> [String: Any] {
+        var info: [String: Any] = [:]
+        // The credits the player's Up Next honors: late in the title, or near its end.
+        if duration > 0, let start = metadata.creditsMarkers
+            .filter({ $0.endTimeSeconds > $0.startTimeSeconds })
+            .map(\.startTimeSeconds)
+            .filter({ $0 / duration >= 0.5 || duration - $0 < 300 })
+            .min() {
+            info[MPNowPlayingInfoPropertyCreditsStartTime] = start
+        }
+        // `MediaItemQuery` resolves ratingKeys on the selected Plex server only.
+        if #available(tvOS 27.0, *), case .plex = viewModel?.source, let key = metadata.ratingKey,
+           let entity = MPAppEntityIdentifier(
+               entityIdentifier: EntityIdentifier(for: MediaItemEntity.self, identifier: key)) {
+            info[MPNowPlayingInfoPropertyAppEntityIdentifiers] = [entity]
+        }
+        return info
     }
 
     private func updateElapsedTime(_ time: TimeInterval, duration: TimeInterval) {
@@ -533,7 +657,7 @@ final class NowPlayingService: ObservableObject {
         var nowPlayingInfo = [String: Any]()
 
         // Title
-        nowPlayingInfo[MPMediaItemPropertyTitle] = metadata.title ?? "Unknown"
+        nowPlayingInfo[MPMediaItemPropertyTitle] = metadata.title ?? String(localized: "Unknown")
 
         // For episodes, set artist as show name and album as season
         if metadata.type == "episode" {
@@ -541,7 +665,7 @@ final class NowPlayingService: ObservableObject {
                 nowPlayingInfo[MPMediaItemPropertyArtist] = showName
             }
             if let seasonNum = metadata.parentIndex {
-                nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = "Season \(seasonNum)"
+                nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = String(localized: "Season \(seasonNum)")
             }
         } else if metadata.type == "movie" {
             // For movies, use year as artist if available
@@ -560,6 +684,7 @@ final class NowPlayingService: ObservableObject {
 
         // Media type
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
+        nowPlayingInfo.merge(itemInfo(metadata: metadata, duration: estimatedDuration)) { _, new in new }
 
         setNowPlayingInfoOnAllCenters(nowPlayingInfo)
 
@@ -607,32 +732,21 @@ final class NowPlayingService: ObservableObject {
             return
         }
 
-        // Cancel any existing artwork load
+        // Live TV asks again on every rail update; let the load in flight finish.
+        guard fullURL != loadingArtworkURL else { return }
+        loadingArtworkURL = fullURL
         artworkTask?.cancel()
 
+        // Through the image cache: its session trusts Plex servers reached by raw IP.
         artworkTask = Task {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-
-                guard !Task.isCancelled else { return }
-
-                guard let image = UIImage(data: data) else { return }
-
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-
-                // Cache the artwork
-                self.cachedArtwork = artwork
-                self.cachedArtworkURL = fullURL
-
-                // Update Now Playing info with artwork
-                self.withNowPlayingInfoOnAllCenters { nowPlayingInfo in
-                    nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-                }
-
-            } catch {
-                if !Task.isCancelled {
-                    playerDebugLog("🎵 NowPlaying: Artwork load failed - \(error.localizedDescription)")
-                }
+            defer { if self.loadingArtworkURL == fullURL { self.loadingArtworkURL = nil } }
+            guard let image = await ImageCacheManager.shared.image(for: url), !Task.isCancelled else { return }
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.cachedArtwork = artwork
+            self.cachedArtworkURL = fullURL
+            guard self.firstAvailableNowPlayingInfo() != nil else { return }
+            self.withNowPlayingInfoOnAllCenters { nowPlayingInfo in
+                nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
             }
         }
     }

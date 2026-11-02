@@ -57,7 +57,15 @@ extension IOSPlexSession {
             cw = nil
         }
         #if DEBUG
-        if IOSScreenshotMode.isOn { return IOSPlexHome(libraries: libraries, continueWatching: .some(nil), hubsByLibrary: hubsByLibrary.mapValues(IOSScreenshotMode.demoHubs)) }
+        if IOSScreenshotMode.isOn {
+            let demoCW = (cw ?? nil).map { hub -> PlexHub in
+                var hub = hub
+                hub.Metadata = IOSScreenshotMode.demoItems(hub.Metadata ?? [], libraries: libraries)
+                return hub
+            }
+            return IOSPlexHome(libraries: libraries, continueWatching: .some(demoCW?.Metadata?.isEmpty == false ? demoCW : nil),
+                               hubsByLibrary: hubsByLibrary.mapValues(IOSScreenshotMode.demoHubs))
+        }
         #endif
         return IOSPlexHome(libraries: libraries, continueWatching: cw, hubsByLibrary: hubsByLibrary)
     }

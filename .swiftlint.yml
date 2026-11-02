@@ -64,3 +64,15 @@ custom_rules:
     match_kinds: [identifier, typeidentifier]
     message: "Dead on tvOS 26. Use a long-press plus TileMenuPopupViewController."
     severity: error
+
+  unlocalized_ui_text:
+    name: "Unlocalized UI text"
+    # A literal assigned straight to UIKit text never reaches the string
+    # catalog. Wrap it in String(localized:), or pass it to a funnel that takes
+    # String.LocalizationValue (SettingsRowItem, TileMenuAction, ...). Server
+    # text is assigned from variables, so it never matches.
+    included: ".*/Rivulet/Views/.*\\.swift"
+    excluded: ".*/Views/Player/AVKitScrubProbe\\.swift"
+    regex: "(\\.(text|title|placeholder|accessibilityLabel) = |setTitle\\(|UIAlert(Controller|Action)\\(title: )\"[A-Z]"
+    message: "UI text must be localizable: String(localized: \"...\") or a LocalizationValue funnel (issue 457)."
+    severity: error

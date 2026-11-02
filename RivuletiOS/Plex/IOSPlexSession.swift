@@ -37,6 +37,9 @@ final class IOSPlexSession: ObservableObject {
     @Published private(set) var shelves: [PlexHub] = []
     /// One row across every server (#87): the same title on two servers is one card.
     @Published private(set) var continueWatching: PlexHub?
+    /// Home hero slides (#414): trending for an hour, the watchlist's per list of entries.
+    private var trendingHero: (items: [PlexMetadata], at: Date)?
+    private var watchlistHero: (ids: [String], items: [PlexMetadata])?
     @Published private(set) var isLoadingContent = false
     @Published private(set) var contentError: String?
     /// Bumped after a watched-state change so open grids and detail pages reload.
@@ -552,30 +555,36 @@ final class IOSPlexSession: ObservableObject {
             transcodeSessionID: sessionID,
             measuredKbps: measurement?.kbps,
             measuredAt: measurement?.at,
-            startTime: startTime
+            startTime: startTime,
+            directPlaySessionID: sessionID == nil ? UUID().uuidString : nil
         )
     }
 
-    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async {
-        guard let key = request.item.ratingKey else { return }
+    /// Returns the server's reason when it has ended this play session (#403).
+    @discardableResult
+    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
+        guard let key = request.item.ratingKey else { return nil }
         let at = Date()
         let offsetMs = Int(time * 1000)
         if request.isLocal {
             IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
-        guard !request.serverURL.isEmpty else { return }
+        guard !request.serverURL.isEmpty else { return nil }
         do {
-            try await network.reportProgress(
+            let terminated = try await network.reportProgress(
                 serverURL: request.serverURL,
                 authToken: request.token,
                 ratingKey: key,
                 timeMs: offsetMs,
                 state: state,
-                duration: request.item.duration
+                duration: request.item.duration,
+                sessionIdentifier: request.directPlaySessionID
             )
             IOSOfflineProgress.reached(key, at: at)
+            return terminated
         } catch {
             IOSOfflineProgress.failed(key, offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
+            return nil
         }
     }
 
@@ -604,9 +613,35 @@ final class IOSPlexSession: ObservableObject {
         ]
     }
 
+    // MARK: - Home hero
+
+    /// TMDB's trending titles this server owns.
+    func trendingHeroItems() async -> [PlexMetadata] {
+        if let trendingHero, Date.now.timeIntervalSince(trendingHero.at) < 3600 { return trendingHero.items }
+        guard let (serverURL, token) = try? configuration(), let account = auth.authToken else { return [] }
+        let items = await PlexTrendingHero.items(serverURL: serverURL, serverToken: token, accountToken: account)
+        if !items.isEmpty { trendingHero = (items, .now) }
+        return items
+    }
+
+    /// The watchlist's first ten entries that this server owns, in watchlist order.
+    func watchlistHeroItems() async -> [PlexMetadata] {
+        let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
+        let ids = entries.map(\.id)
+        if let watchlistHero, watchlistHero.ids == ids { return watchlistHero.items }
+        let guids = entries.compactMap(\.plexGUID)
+        guard let (serverURL, token) = try? configuration(),
+              let owned = try? await network.findByGuids(serverURL: serverURL, authToken: token, guids: guids) else { return [] }
+        let items = PlexTrendingHero.ordered(owned, by: guids, limit: 10)
+        watchlistHero = (ids, items)
+        return items
+    }
+
     // MARK: - Private
 
     func clearContent() {
+        trendingHero = nil
+        watchlistHero = nil
         libraries = []
         videoPlaylists = [:]
         shelves = []
@@ -687,7 +722,7 @@ final class IOSPlexSession: ObservableObject {
         continueWatchingCopies = Dictionary(cards.filter { !$0.others.isEmpty }.map { ($0.item.id, $0.others) },
                                             uniquingKeysWith: { first, _ in first })
         guard !cards.isEmpty else { return continueWatching = nil }
-        var hub = primaryContinueWatching ?? PlexHub(hubIdentifier: "continueWatching", title: "Continue Watching")
+        var hub = primaryContinueWatching ?? PlexHub(hubIdentifier: "continueWatching", title: String(localized: "Continue Watching"))
         hub.Metadata = cards.map(\.item)
         // A merged row has no one server to page from.
         if contributing > 1 {
@@ -717,6 +752,8 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     var measuredKbps: Int?
     var measuredAt: Date?
     let startTime: TimeInterval?
+    /// The Plex play session a direct-play file's timeline carries, so the dashboard shows it (#423).
+    var directPlaySessionID: String? = nil
     /// Set for a downloaded file: its saved subtitles and poster.
     var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
     var localArtworkURL: URL? = nil
@@ -737,9 +774,9 @@ nonisolated enum IOSPlexSessionError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "No Plex server is connected."
-        case .noPlayableURL: "This item has no playable file."
-        case .watchlistUnavailable: "Couldn't update your Watchlist."
+        case .notConfigured: String(localized: "No Plex server is connected.")
+        case .noPlayableURL: String(localized: "This item has no playable file.")
+        case .watchlistUnavailable: String(localized: "Couldn't update your Watchlist.")
         }
     }
 }

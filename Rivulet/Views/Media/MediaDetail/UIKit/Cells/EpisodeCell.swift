@@ -399,7 +399,7 @@ final class EpisodeCell: UIView {
         splitFocus = true
         descriptionBlock.isFocusEligible = false
         episodeLabel.text = Self.episodeLabel(for: episode, showSeasonPrefix: showSeasonPrefix).uppercased()
-        titleLabel.text = episode.title.isEmpty ? "Episode" : episode.title
+        titleLabel.text = episode.title.isEmpty ? String(localized: "Episode") : episode.title
         summaryLabel.text = episode.overview
         summaryLabel.isHidden = (episode.overview ?? "").isEmpty
         dateLabel.text = Self.displayDate(for: episode)
@@ -577,8 +577,8 @@ final class EpisodeCell: UIView {
     private static func episodeLabel(for episode: MediaItem, showSeasonPrefix: Bool) -> String {
         // ATV+ shows "EPISODE N" (the season is conveyed by the pills + the
         // larger between-season gap), not "S01E01".
-        if let n = episode.episodeNumber { return "Episode \(n)" }
-        return episode.episodeString ?? "Episode"
+        if let n = episode.episodeNumber { return String(localized: "Episode \(n)") }
+        return episode.episodeString ?? String(localized: "Episode")
     }
 
     private static func displayDate(for episode: MediaItem) -> String? {
@@ -601,8 +601,7 @@ final class EpisodeCell: UIView {
 
     private static let displayDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM d, yyyy"
+        formatter.setLocalizedDateFormatFromTemplate("MMMdyyyy")
         return formatter
     }()
 }

@@ -398,7 +398,7 @@ actor IPTVProvider: LiveTVProvider {
                 id: "\(channelId):\(Int(event.start.timeIntervalSince1970))", channelId: channelId,
                 title: event.title, subtitle: event.subtitle, description: event.description,
                 startTime: event.start, endTime: event.stop, iconURL: event.imageURL, landscapeURL: event.imageURL,
-                episodeNumber: event.episode, isNew: event.isNew, sourceGuid: String(event.eventId)))
+                episodeNumber: event.episode, isNew: event.isNew, sourceGuid: String(event.eventId), year: event.year))
         }
         for key in guide.keys { guide[key]?.sort { $0.startTime < $1.startTime } }
         cachedEPG = guide

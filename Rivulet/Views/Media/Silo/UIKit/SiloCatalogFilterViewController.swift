@@ -26,17 +26,17 @@ import UIKit
         super.viewDidLoad()
         view.backgroundColor = .black
         let title = UILabel()
-        title.text = "Filters"
+        title.text = String(localized: "Filters")
         title.font = .systemFont(ofSize: 46, weight: .bold)
         title.textColor = .white
         let reset = UIButton(type: .system)
-        reset.setTitle("Reset", for: .normal)
+        reset.setTitle(String(localized: "Reset"), for: .normal)
         reset.addAction(UIAction { [weak self] _ in
             self?.selection = MediaCatalogFilter(selectedChoices: [:])
             self?.table.reloadData()
         }, for: .primaryActionTriggered)
         let done = UIButton(type: .system)
-        done.setTitle("Apply", for: .normal)
+        done.setTitle(String(localized: "Apply"), for: .normal)
         done.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             self.apply(self.selection)

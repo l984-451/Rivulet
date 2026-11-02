@@ -134,14 +134,14 @@ extension TriviaCategory {
     /// Short display label for the category's row tag and tab pill. Calm, no icons.
     var tabDisplayName: String {
         switch self {
-        case .production: return "Production"
-        case .casting: return "Casting"
-        case .adaptation: return "Adaptation"
-        case .reference: return "Reference"
-        case .lore: return "Lore"
-        case .goof: return "Goof"
-        case .music: return "Music"
-        case .other: return "Trivia"
+        case .production: return String(localized: "Production")
+        case .casting: return String(localized: "Casting")
+        case .adaptation: return String(localized: "Adaptation")
+        case .reference: return String(localized: "Reference")
+        case .lore: return String(localized: "Lore")
+        case .goof: return String(localized: "Goof")
+        case .music: return String(localized: "Music")
+        case .other: return String(localized: "Trivia")
         }
     }
 }

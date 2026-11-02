@@ -31,6 +31,8 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// searching/error/no-results state, and the grouped result grids.
     static let searchPrompt = HomeSectionID(raw: "search.prompt")
     static let searchState = HomeSectionID(raw: "search.state")
+    /// Home in December and early January: the Year in Review banner.
+    static let yearInReview = HomeSectionID(raw: "yearInReview")
     static func searchGroup(_ key: String) -> HomeSectionID { .init(raw: "search.group:\(key)") }
     static func hub(_ hubID: String) -> HomeSectionID { .init(raw: "hub:\(hubID)") }
 }
@@ -61,7 +63,7 @@ enum HomeMode {
     /// One server's video playlists as a poster grid (its sidebar Playlists row).
     case playlists(providerID: String)
     /// Playlist page: a collection-style page of the entries in server order, under Play and Shuffle.
-    case playlist(MediaPlaylist)
+    case playlist(MediaItem)
 }
 
 nonisolated struct HomeItemID: Hashable, Sendable {
@@ -114,6 +116,8 @@ enum HomeSectionKind: Equatable {
     /// Seasons, Music) with a row-style header. Same 6-across poster grid
     /// as the library, no pagination (search caps at 80 results).
     case searchGrid
+    /// Home only — the Year in Review banner, one card.
+    case yearInReview
 }
 
 struct HomeSectionData {
@@ -181,7 +185,7 @@ struct HomeSectionData {
         HomeSectionData(
             id: .watchlist,
             kind: .watchlist,
-            title: "Watchlist",
+            title: String(localized: "Watchlist"),
             headerStyle: .swiftUIWatchlist,
             totalSize: nil,
             items: [],
@@ -212,7 +216,7 @@ struct HomeSectionData {
         HomeSectionData(
             id: .recommendations,
             kind: .recommendations,
-            title: "Personalized Recommendations",
+            title: String(localized: "Personalized Recommendations"),
             headerStyle: .swiftUIInfiniteRow,
             totalSize: nil,
             items: items,
@@ -360,6 +364,21 @@ struct HomeSectionData {
         )
     }
 
+    static func yearInReview() -> HomeSectionData {
+        HomeSectionData(
+            id: .yearInReview,
+            kind: .yearInReview,
+            title: String(localized: "Year in Review"),
+            headerStyle: .swiftUIInfiniteRow,
+            totalSize: nil,
+            items: [],
+            watchlistItems: [],
+            heroItems: [],
+            hubKey: nil,
+            hubIdentifier: nil
+        )
+    }
+
     static func recommendationsError() -> HomeSectionData {
         HomeSectionData(
             id: .recommendations,
@@ -411,7 +430,7 @@ final class PlexHomeViewController: UIViewController {
     var drillInItem: MediaItem? {
         switch mode {
         case .collection(let item): item
-        case .playlist(let playlist): playlist.item
+        case .playlist(let item): item
         default: nil
         }
     }
@@ -420,6 +439,8 @@ final class PlexHomeViewController: UIViewController {
 
     /// The playlist page's rows, in server order; the grid shows their items.
     private(set) var playlistEntries: [PlaylistEntry] = []
+    /// The server's answer, not the opener's: a list opened from search or a carousel was never listed.
+    private var playlistIsSmart = true
     /// The playlist page's Move mode (nil on other pages), and the order it started from.
     private var entryMove: GrabReorderController?
     private var entriesBeforeMove: [PlaylistEntry] = []
@@ -673,30 +694,33 @@ final class PlexHomeViewController: UIViewController {
     private var recommendationsUserID = UserDefaults.standard.integer(forKey: PlexProfileSession.contentUserIDKey)
     private var isLoadingRecommendations = false
     private var recommendationsError: String?
+    /// Home's Year in Review, once loaded for this profile; nil shows no card.
+    private var yearInReview: YearInReview?
 
     /// Empty-state copy for the current surface, without blaming another backend's library.
     private var emptyStateMessage: String {
-        if nativeHubSource != nil || loadedFeedItems != nil { return "This list is empty." }
+        if nativeHubSource != nil || loadedFeedItems != nil { return String(localized: "This list is empty.") }
         switch mode {
         case .discover:
             return discoverModel.nativeSupportedProviders.isEmpty
-                ? "Recommendations aren't available right now."
-                : "Your server hasn't returned any recommendations yet."
+                ? String(localized: "Recommendations aren't available right now.")
+                : String(localized: "Your server hasn't returned any recommendations yet.")
         case .watchlist:
-            return "Nothing in your Watchlist yet."
+            return String(localized: "Nothing in your Watchlist yet.")
         case .collection:
-            return "This collection is empty."
+            return String(localized: "This collection is empty.")
         case .playlists:
-            return "No playlists yet."
+            return String(localized: "No playlists yet.")
         case .playlist:
-            return "This playlist is empty."
+            return String(localized: "This playlist is empty.")
         case .library where providerLibrary != nil:
-            return "This library is empty."
+            return String(localized: "This library is empty.")
         case .home where isJellyfinOnlyHome:
             return ServerDataStore.shared.sources.contains { $0.providerID.hasPrefix("silo:") }
-                ? "Your server libraries appear to be empty." : "Your Jellyfin library appears to be empty."
+                ? String(localized: "Your server libraries appear to be empty.")
+                : String(localized: "Your Jellyfin library appears to be empty.")
         case .home, .library, .search:
-            return "Your Plex library appears to be empty."
+            return String(localized: "Your Plex library appears to be empty.")
         }
     }
 
@@ -1323,7 +1347,7 @@ final class PlexHomeViewController: UIViewController {
             let id = HomeSectionID(raw: "discover.forYou")
             sections.append(.discoverList(
                 id: id,
-                title: "For You",
+                title: String(localized: "For You"),
                 items: discoverModel.forYou.map { TMDBMediaMapper.item($0) }
             ))
             discoverListItems[id] = discoverModel.forYou
@@ -1617,11 +1641,11 @@ final class PlexHomeViewController: UIViewController {
         // Same grouping as PlexSearchView.groupedResults, each group mixing
         // both servers (Jellyfin music is not browsable yet, so Music is Plex's).
         let groups: [(key: String, title: String, metas: [PlexMetadata], jellyfin: [MediaItem])] = [
-            ("titles", "Movies & TV", filtered.filter { $0.type == "movie" || $0.type == "show" },
+            ("titles", String(localized: "Movies & TV"), filtered.filter { $0.type == "movie" || $0.type == "show" },
              jellyfin.filter { $0.kind == .movie || $0.kind == .show }),
-            ("episodes", "Episodes & Seasons", filtered.filter { $0.type == "episode" || $0.type == "season" },
+            ("episodes", String(localized: "Episodes & Seasons"), filtered.filter { $0.type == "episode" || $0.type == "season" },
              jellyfin.filter { $0.kind == .episode || $0.kind == .season }),
-            ("music", "Music", filtered.filter { $0.type == "artist" || $0.type == "album" || $0.type == "track" }, [])
+            ("music", String(localized: "Music"), filtered.filter { $0.type == "artist" || $0.type == "album" || $0.type == "track" }, [])
         ]
 
         var sections: [HomeSectionData] = []
@@ -1935,13 +1959,16 @@ final class PlexHomeViewController: UIViewController {
             }
         } else if case .playlist(let playlist) = mode {
             // Every entry in page 0. Kept whole beside the grid, which has only their items.
-            guard let provider = MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) else { return }
+            guard let provider = MediaProviderRegistry.shared.provider(for: playlist.ref.providerID) else { return }
             let generation = gridGeneration
             fetchPage = { [weak self] start in
                 guard start == 0 else { return ([], nil) }
-                let entries = try await provider.playlistEntries(playlist.item.ref)
-                if let self, self.gridGeneration == generation { self.playlistEntries = entries }
-                return (entries.map(\.item), entries.count)
+                let contents = try await provider.playlistEntries(playlist.ref)
+                if let self, self.gridGeneration == generation {
+                    self.playlistEntries = contents.entries
+                    self.playlistIsSmart = contents.isSmart
+                }
+                return (contents.entries.map(\.item), contents.entries.count)
             }
         } else if case .collection(let item) = mode, !item.ref.isPlex {
             // A provider collection (a Jellyfin box set): members arrive whole, so page 0 is the page.
@@ -1964,7 +1991,8 @@ final class PlexHomeViewController: UIViewController {
                         sectionId: key,
                         start: start,
                         size: pageSize,
-                        sort: sort
+                        sort: sort,
+                        followCollectionMode: true
                     )
                     return (result.items.map(map), result.totalSize)
                 }
@@ -2102,7 +2130,7 @@ final class PlexHomeViewController: UIViewController {
                   let token = authManager.selectedServerToken else { return }
             fetchCounts = {
                 try await PlexNetworkManager.shared.getLibraryFirstCharacters(
-                    serverURL: serverURL, authToken: token, sectionId: key)
+                    serverURL: serverURL, authToken: token, sectionId: key, followCollectionMode: true)
             }
         }
         Task { @MainActor [weak self] in
@@ -2451,14 +2479,12 @@ final class PlexHomeViewController: UIViewController {
         if !hasMarkedFirstFrame {
             hasMarkedFirstFrame = true
             Perf.event(.homeFirstFrameOnScreen, message: "viewDidAppear")
-
-            if PerfAutoScroll.enabled {
-                runAutoScroll()
-            }
         }
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
         refreshOnReappearIfNeeded()
+        refreshYearInReview()
+        if !isDrillInPage { HalloweenBats.showIfHalloween(in: view) }
         if let window = view.window {
             MenuPressInterceptor.install(in: window)
             MenuPressInterceptor.register(self)
@@ -2577,21 +2603,6 @@ final class PlexHomeViewController: UIViewController {
         else { return }
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
-    }
-
-    private func runAutoScroll() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            guard let self else { return }
-            let id = Perf.begin(.homeScroll, message: "auto-scroll vertical")
-            self.collectionView.setContentOffset(
-                CGPoint(x: 0, y: max(0, self.collectionView.contentSize.height - self.collectionView.bounds.height)),
-                animated: true
-            )
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                Perf.end(.homeScroll, id: id)
-                Perf.event(.homeScroll, message: "auto-scroll done")
-            }
-        }
     }
 
     // MARK: - Backdrop
@@ -3022,7 +3033,7 @@ final class PlexHomeViewController: UIViewController {
         case .collection(let item) where !item.ref.isPlex:
             return MediaProviderRegistry.shared.provider(for: item.ref.providerID) != nil
         case .playlist(let playlist):
-            return MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) != nil
+            return MediaProviderRegistry.shared.provider(for: playlist.ref.providerID) != nil
         case .playlists(let providerID):
             return MediaProviderRegistry.shared.provider(for: providerID) != nil
         default:
@@ -3274,6 +3285,7 @@ final class PlexHomeViewController: UIViewController {
         collectionView.register(WatchlistPosterCell.self, forCellWithReuseIdentifier: WatchlistPosterCell.reuseID)
         collectionView.register(PosterSkeletonCell.self, forCellWithReuseIdentifier: PosterSkeletonCell.reuseID)
         collectionView.register(RecommendationsStateCell.self, forCellWithReuseIdentifier: RecommendationsStateCell.reuseID)
+        collectionView.register(YearInReviewCardCell.self, forCellWithReuseIdentifier: YearInReviewCardCell.reuseID)
         // Library-mode sort header (inert registration in home mode — the
         // .sortHeader section only ever exists in library snapshots).
         collectionView.register(MediaLibrarySortControl.self, forCellWithReuseIdentifier: MediaLibrarySortControl.reuseID)
@@ -3370,17 +3382,17 @@ final class PlexHomeViewController: UIViewController {
             return makeGridSectionLayout(section: section)
         case .searchPrompt, .searchState:
             return makeSearchFullWidthLayout()
+        case .yearInReview:
+            return makeHubSectionLayout(section: section, isContinueWatching: false, tile: MediaRowMetrics.yearInReview)
         }
     }
 
     /// Full-width section for `MediaLibrarySortControl` (library mode only).
-    /// Height is estimated at 96pt (34pt title + 4pt gap + ~21pt count +
-    /// 20+20pt vertical padding) — ported from
-    /// MediaLibraryViewController.makeSortHeaderSectionLayout().
+    /// Self-sizing: 48pt title, 29pt count, 20pt padding above and below.
     private func makeSortHeaderSectionLayout() -> NSCollectionLayoutSection {
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(96)
+            heightDimension: .estimated(136)
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: itemSize, subitems: [item])
@@ -3515,10 +3527,11 @@ final class PlexHomeViewController: UIViewController {
 
     /// One full-width ShelfRowCell per hub section, scrolling itself rather than an orthogonal section
     /// (see ShelfRowCell for why and for the landing math).
-    private func makeHubSectionLayout(section: HomeSectionData, isContinueWatching: Bool) -> NSCollectionLayoutSection {
-        let tile = isContinueWatching
+    private func makeHubSectionLayout(section: HomeSectionData, isContinueWatching: Bool,
+                                      tile override: MediaRowMetrics.Tile? = nil) -> NSCollectionLayoutSection {
+        let tile = override ?? (isContinueWatching
             ? MediaRowMetrics.continueWatching
-            : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster)
+            : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster))
         let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding  // room for focus growth
 
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
@@ -3594,7 +3607,7 @@ final class PlexHomeViewController: UIViewController {
         let loadedCount: Int
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             loadedCount = 0
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -3820,7 +3833,7 @@ final class PlexHomeViewController: UIViewController {
                 }
                 return cell
             }
-            cell.configure(state: .error(message: recommendationsError ?? "Unknown error"))
+            cell.configure(state: .error(message: recommendationsError ?? String(localized: "Unknown error")))
             cell.onRetry = { [weak self] in
                 Task { await self?.refreshRecommendations(force: true) }
             }
@@ -3844,6 +3857,11 @@ final class PlexHomeViewController: UIViewController {
                       !self.trimmedSearchQuery.isEmpty else { return }
                 self.present(SiloRequestsViewController(provider: provider, context: .search(self.trimmedSearchQuery)), animated: true)
             }
+            return cell
+
+        case .yearInReview:
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: YearInReviewCardCell.reuseID, for: indexPath) as! YearInReviewCardCell
+            cell.configure(year: yearInReview?.year ?? 0)
             return cell
         }
     }
@@ -3949,6 +3967,7 @@ final class PlexHomeViewController: UIViewController {
             .sink { [weak self] _ in
                 self?.setNeedsSnapshotApply()
                 self?.updateHomeState()
+                self?.refreshYearInReview()
             }
             .store(in: &dataStoreObservers)
 
@@ -4409,6 +4428,8 @@ final class PlexHomeViewController: UIViewController {
                 ids = [HomeItemID(sectionID: section.id, itemID: "search-prompt")]
             case .searchState:
                 ids = [HomeItemID(sectionID: section.id, itemID: "search-state")]
+            case .yearInReview:
+                ids = [HomeItemID(sectionID: section.id, itemID: "year-in-review")]
             }
 
             // Diffable data source crashes on duplicate identifiers.
@@ -4457,7 +4478,7 @@ final class PlexHomeViewController: UIViewController {
         switch kind {
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid: return true
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState: return false
+             .sortHeader, .searchPrompt, .searchState, .yearInReview: return false
         }
     }
 
@@ -4601,7 +4622,7 @@ final class PlexHomeViewController: UIViewController {
             }
             return cell
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return nil
         }
     }
@@ -4646,7 +4667,7 @@ final class PlexHomeViewController: UIViewController {
         case .searchGrid:
             handleSearchTap(section: section, indexPath: IndexPath(item: itemIndex, section: sectionIndex))
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return
         }
     }
@@ -4660,7 +4681,7 @@ final class PlexHomeViewController: UIViewController {
             break
         case .hero, .watchlist, .watchlistGrid, .recommendations, .grid, .discoverList,
              .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .searchGrid:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid:
             return  // No pagination for these (hubKey == nil)
         }
         guard itemIndex >= section.items.count - 5 else { return }
@@ -4701,7 +4722,7 @@ final class PlexHomeViewController: UIViewController {
         case .watchlist:
             presentWatchlistTileMenu(sectionID: sectionID, itemIndex: itemIndex)
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
-             .sortHeader, .searchPrompt, .searchState:
+             .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return  // hero / state cells don't get menus
         }
     }
@@ -4854,7 +4875,7 @@ final class PlexHomeViewController: UIViewController {
             }
             return playableItem(section.items[itemIndex])
         case .watchlist, .watchlistGrid, .hero, .grid, .recommendationsLoading,
-             .recommendationsError, .sortHeader, .searchPrompt, .searchState:
+             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return nil
         }
     }
@@ -4898,24 +4919,24 @@ final class PlexHomeViewController: UIViewController {
 
     private func confirmDelete(_ item: MediaItem, provider: any MediaProvider) {
         let message = item.kind == .show || item.kind == .season
-            ? "Every episode's files will be deleted from \(provider.displayName). This cannot be undone."
-            : "The files will be deleted from \(provider.displayName). This cannot be undone."
-        let alert = UIAlertController(title: "Delete \u{201C}\(item.title)\u{201D}?", message: message,
+            ? String(localized: "Every episode's files will be deleted from \(provider.displayName). This cannot be undone.")
+            : String(localized: "The files will be deleted from \(provider.displayName). This cannot be undone.")
+        let alert = UIAlertController(title: String(localized: "Delete \u{201C}\(item.title)\u{201D}?"), message: message,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) { [weak self] _ in
             Task { @MainActor in
                 do {
                     try await provider.deleteMedia(item.ref)
                     NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
                 } catch {
-                    let failed = UIAlertController(title: "Couldn't Delete", message: error.localizedDescription,
+                    let failed = UIAlertController(title: String(localized: "Couldn't Delete"), message: error.localizedDescription,
                                                    preferredStyle: .alert)
-                    failed.addAction(UIAlertAction(title: "OK", style: .cancel))
+                    failed.addAction(UIAlertAction(title: String(localized: "OK"), style: .cancel))
                     self?.present(failed, animated: true)
                 }
             }
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -5068,7 +5089,7 @@ final class PlexHomeViewController: UIViewController {
         }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
         if case .playlist(let playlist) = mode {
-            return gridItems.isEmpty ? [] : [.sortHeader(title: playlist.item.title), .grid(items: mapGridSlots(gridItems))]
+            return gridItems.isEmpty ? [] : [.sortHeader(title: playlist.title), .grid(items: mapGridSlots(gridItems))]
         }
         if case .search = mode {
             return computeSearchSections()
@@ -5122,7 +5143,7 @@ final class PlexHomeViewController: UIViewController {
                 .filter { card in !card.copies.contains { pendingCWRemovals.contains($0.ref.itemID) } }
             for card in cards where !card.others.isEmpty { cwOthers[card.item.ref] = card.others }
             if !cards.isEmpty {
-                mergedCWSection = .hub(id: Self.mergedContinueWatchingID, title: "Continue Watching",
+                mergedCWSection = .hub(id: Self.mergedContinueWatchingID, title: String(localized: "Continue Watching"),
                                        items: cards.map(\.item), isContinueWatching: true, hubKey: nil,
                                        hubIdentifier: Self.mergedContinueWatchingID.raw)
             }
@@ -5159,6 +5180,13 @@ final class PlexHomeViewController: UIViewController {
             section.sourceBadge = labelsServers
                 ? Self.serverName(providerID: hub.items.first?.ref.providerID, kind: kind) : nil
             sections.append(section)
+        }
+
+        if showsYearInReview {
+            // Under Continue Watching, or under the hero when there is none.
+            let anchor = sections.lastIndex { $0.kind == .continueWatching }
+                ?? sections.lastIndex { $0.kind == .hero }
+            sections.insert(.yearInReview(), at: anchor.map { $0 + 1 } ?? 0)
         }
 
         // Native featured rows keep their server-defined position and slides.
@@ -5380,7 +5408,7 @@ final class PlexHomeViewController: UIViewController {
         if !libraryCollections.isEmpty {
             sections.insert(.hub(
                 id: .libraryCollections,
-                title: "Collections",
+                title: String(localized: "Collections"),
                 items: libraryCollections,
                 isContinueWatching: false,
                 hubKey: nil,
@@ -6009,17 +6037,17 @@ final class PlexHomeViewController: UIViewController {
         let play = onChoice ?? { [weak self] in self?.resolveAndPlay(item, fromBeginning: $0, sourceID: sourceID) }
         let offsetMs = Int(offsetSec * 1000)
         let alert = UIAlertController(
-            title: "Resume Playback?",
+            title: String(localized: "Resume Playback?"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))"), style: .default) { _ in
             play(false)
         })
-        alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Start from Beginning"), style: .default) { _ in
             play(true)
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -6056,17 +6084,17 @@ final class PlexHomeViewController: UIViewController {
 
     private func presentResumeChoice(for item: PlexMetadata, offsetMs: Int, mediaID: String? = nil) {
         let alert = UIAlertController(
-            title: "Resume Playback?",
+            title: String(localized: "Resume Playback?"),
             message: nil,
             preferredStyle: .actionSheet
         )
-        alert.addAction(UIAlertAction(title: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Resume from \(PlexMetadata.formatResumeTime(offsetMs))"), style: .default) { [weak self] _ in
             self?.presentPlayer(for: item, fromBeginning: false, mediaID: mediaID)
         })
-        alert.addAction(UIAlertAction(title: "Start from Beginning", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Start from Beginning"), style: .default) { [weak self] _ in
             self?.presentPlayer(for: item, fromBeginning: true, mediaID: mediaID)
         })
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -6123,6 +6151,8 @@ final class PlexHomeViewController: UIViewController {
             presentPreview(forSection: section, indexPath: indexPath)
         case .watchlistGrid:
             Task { await openWatchlistPreview(section: section, tappedIndex: indexPath.item, indexPath: indexPath) }
+        case .yearInReview:
+            presentYearInReview()
         }
     }
 
@@ -6242,12 +6272,10 @@ final class PlexHomeViewController: UIViewController {
     /// `openCollectionIfNeeded` for a playlist tile.
     @discardableResult
     static func openPlaylistIfNeeded(_ item: MediaItem,
-                                     listed: MediaPlaylist? = nil,
                                      from presenter: UIViewController,
                                      onDismiss: (() -> Void)? = nil) -> Bool {
         guard item.kind == .playlist else { return false }
-        return openDrillIn(item, mode: .playlist(listed ?? PlaylistAvailability.shared.playlist(for: item)),
-                           from: presenter, onDismiss: onDismiss)
+        return openDrillIn(item, mode: .playlist(item), from: presenter, onDismiss: onDismiss)
     }
 
     /// The playlists grid's own copy of a tile's list, which knows `isSmart`.
@@ -6289,15 +6317,15 @@ final class PlexHomeViewController: UIViewController {
             return
         }
         var title = title
-        if title == nil, case .playlist(let playlist) = mode { title = playlist.item.title }
+        if title == nil, case .playlist(let playlist) = mode { title = playlist.title }
         let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
-        for (label, start) in [("Continue with \u{201C}\(entries[resume].item.title)\u{201D}", resume),
-                               ("Play from Beginning", 0)] {
+        for (label, start) in [(String(localized: "Continue with \u{201C}\(entries[resume].item.title)\u{201D}"), resume),
+                               (String(localized: "Play from Beginning"), 0)] {
             alert.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
                 if let queue = PlayQueue(entries: entries, startingAt: start) { self?.playQueue(queue) }
             })
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
         present(alert, animated: true)
     }
 
@@ -6319,8 +6347,7 @@ final class PlexHomeViewController: UIViewController {
         // (handleSearchTap) all come through here. A collection never opens
         // the carousel, whose Play would hand the collection's key to the player.
         if Self.openCollectionIfNeeded(section.items[indexPath.item], from: self)
-            || Self.openPlaylistIfNeeded(section.items[indexPath.item],
-                                         listed: listedPlaylist(for: section.items[indexPath.item]), from: self) {
+            || Self.openPlaylistIfNeeded(section.items[indexPath.item], from: self) {
             return
         }
         // Nor does music: the carousel is a video surface.
@@ -6330,7 +6357,11 @@ final class PlexHomeViewController: UIViewController {
         // its index in that list. Every other section maps 1:1 and keeps its
         // nil index map, which the shelf entry morph reads as "all tiles".
         let allIDs = sourceItemIDs(for: section)
-        let loaded = section.items.indices.filter { !section.items[$0].isGridPlaceholder }
+        // A Titles grid can hold collection tiles (the library's Collections setting); paging onto one
+        // in the carousel would offer to play it.
+        let loaded = section.items.indices.filter {
+            !section.items[$0].isGridPlaceholder && section.items[$0].kind != .collection
+        }
         guard let selected = loaded.firstIndex(of: indexPath.item) else { return }
 
         presentPreviewOverlay(
@@ -6437,6 +6468,35 @@ final class PlexHomeViewController: UIViewController {
         }
         lookups.merge(cold) { warm, _ in warm }
 
+        // Titles the selected server lacks, on the account's other Plex servers (#459): one request per
+        // server, the first server in sidebar order wins.
+        var elsewhere: [Int: MediaItem] = [:]
+        let extraPlex = MediaProviderRegistry.shared.secondaryProviders.compactMap { $0 as? PlexProvider }
+        let missingGUIDs = Array(Set(entries.indices.filter { lookups[$0] == nil }.compactMap { entries[$0].plexGUID }))
+        if !extraPlex.isEmpty, !missingGUIDs.isEmpty {
+            let found = await withTaskGroup(of: (String, [PlexMetadata]).self) { group in
+                for provider in extraPlex {
+                    group.addTask {
+                        (provider.id, (try? await PlexNetworkManager.shared.findByGuids(
+                            serverURL: provider.serverURL, authToken: provider.authToken, guids: missingGUIDs)) ?? [])
+                    }
+                }
+                var out: [String: [PlexMetadata]] = [:]
+                for await (id, items) in group { out[id] = items }
+                return out
+            }
+            for provider in extraPlex {
+                for metadata in found[provider.id] ?? [] {
+                    for index in entries.indices
+                    where lookups[index] == nil && elsewhere[index] == nil && entries[index].plexGUID == metadata.guid {
+                        elsewhere[index] = PlexMediaMapper.item(metadata, providerID: provider.id,
+                                                                serverURL: provider.serverURL,
+                                                                authToken: provider.authToken)
+                    }
+                }
+            }
+        }
+
         // The carousel renders artwork as-is, so add the TMDB logo to every item (withLogoIfMissing keeps
         // a real Plex logo) and the TMDB backdrop to un-owned ones. Network runs off the main actor.
         let tmdbSource = MetadataSourceRegistry.shared.source(for: TMDBMediaMapper.providerID)
@@ -6446,7 +6506,7 @@ final class PlexHomeViewController: UIViewController {
             for (index, entry) in entries.enumerated() {
                 guard let tmdbId = entry.tmdbId else { continue }
                 let mediaType: TMDBMediaType = entry.type == .movie ? .movie : .tv
-                let isOwned = lookups[index] != nil && !serverURL.isEmpty
+                let isOwned = (lookups[index] != nil && !serverURL.isEmpty) || elsewhere[index] != nil
                 // Build the ref on the main actor (TMDBMediaMapper is main-actor-isolated); the task
                 // only does the off-actor network work.
                 let ref = MediaItemRef(
@@ -6476,6 +6536,10 @@ final class PlexHomeViewController: UIViewController {
                                                     providerID: providerID,
                                                     serverURL: serverURL,
                                                     authToken: token)
+                result.append((sourceID: entry.id, item: plexItem.withLogoIfMissing(enriched[index]?.logo)))
+                continue
+            }
+            if let plexItem = elsewhere[index] {
                 result.append((sourceID: entry.id, item: plexItem.withLogoIfMissing(enriched[index]?.logo)))
                 continue
             }
@@ -6741,7 +6805,13 @@ final class PlexHomeViewController: UIViewController {
                     }
                 }
             } else {
-                collectionView.scrollToItem(at: indexPath, at: [.centeredVertically, .centeredHorizontally], animated: false)
+                // Grids rest where focus will hold the cell (`scrollGridCellIntoView`), so the exit
+                // flight lands on the tile focus ends on. Centring did not, near a short grid's edges.
+                if let restY = gridRestingOffsetY(for: indexPath, from: collectionView.contentOffset.y) {
+                    offsetLink?.invalidate()
+                    offsetLink = nil
+                    collectionView.contentOffset.y = restY
+                }
                 collectionView.layoutIfNeeded()
             }
         }
@@ -6834,7 +6904,7 @@ final class PlexHomeViewController: UIViewController {
         let section = sectionsSnapshot[sectionIndex]
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             return nil
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -6904,15 +6974,20 @@ final class PlexHomeViewController: UIViewController {
     /// as the system's focus scroll would: the row stays 180 pt inside the
     /// edges. Measured from the in-flight target so rapid moves add up.
     private func scrollGridCellIntoView(at indexPath: IndexPath) {
-        guard let attrs = collectionView.layoutAttributesForItem(at: indexPath) else { return }
         let from = offsetLink != nil ? offsetTargetY : collectionView.contentOffset.y
+        guard let clamped = gridRestingOffsetY(for: indexPath, from: from),
+              abs(from - clamped) > 1 else { return }
+        animateContentOffset(toY: clamped)
+    }
+
+    /// The offset that keeps a grid cell's row on screen, starting from `from`.
+    private func gridRestingOffsetY(for indexPath: IndexPath, from: CGFloat) -> CGFloat? {
+        guard let attrs = collectionView.layoutAttributesForItem(at: indexPath) else { return nil }
         let target = FocusScrollMotion.minimalOffset(revealing: attrs.frame, from: from,
                                                      height: collectionView.bounds.height)
         let top = -collectionView.adjustedContentInset.top
         let maxOffset = max(top, collectionView.contentSize.height - collectionView.bounds.height)
-        let clamped = max(top, min(target, maxOffset))
-        guard abs(from - clamped) > 1 else { return }
-        animateContentOffset(toY: clamped)
+        return max(top, min(target, maxOffset))
     }
 
     /// Section of the focused item, nil outside this page. Read from the focused view, because shelf
@@ -7230,7 +7305,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid:
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader, .grid,
-             .watchlistGrid, .searchPrompt, .searchState:
+             .watchlistGrid, .searchPrompt, .searchState, .yearInReview:
             return true
         }
 
@@ -7267,7 +7342,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             previewHiddenRowID != nil && section.id.raw == previewHiddenRowID
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .searchGrid, .watchlistGrid:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid, .watchlistGrid:
             return  // No pagination for these (the watchlist is fetched whole)
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList:
             return  // Shelf rows paginate from their own willDisplay (shelfWillDisplay)
@@ -7302,6 +7377,14 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 self?.removeRecentSearchItem(recent.item)
             }
             present(TileMenuPopupViewController(sections: [[remove]], sourceFrame: recent.frame), animated: false)
+            return
+        }
+        if case .yearInReview = section.kind {
+            guard presentedViewController == nil else { return }
+            let remove = TileMenuAction(title: "Remove from Home", systemImage: "xmark", destructive: true) {
+                [weak self] in self?.removeYearInReview()
+            }
+            present(TileMenuPopupViewController(sections: [[remove]], sourceFrame: focusedTileFrame()), animated: false)
             return
         }
         // Watchlist tiles are Discover entries, not library items: they get the
@@ -7371,7 +7454,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 return nil
             }
         }
-        let actions = [action(homeAction, .home, "Home"), action(libraryAction, .library, "Library")].compactMap { $0 }
+        let actions = [action(homeAction, .home, String(localized: "Home")), action(libraryAction, .library, String(localized: "Library"))].compactMap { $0 }
         return actions.isEmpty ? [] : [actions]
     }
 
@@ -7417,7 +7500,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         guard let provider = MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) else { return }
         Task { @MainActor [weak self] in
             do {
-                let entries = try await provider.playlistEntries(playlist.item.ref)
+                let entries = try await provider.playlistEntries(playlist.item.ref).entries
                 self?.startPlaylist(entries, at: 0, shuffled: shuffled, title: playlist.item.title)
             } catch {
                 guard let self else { return }
@@ -7429,7 +7512,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     /// The playlist page's entry rows, by grid position: a title can be in the list twice.
     private func playlistEntryActions(at index: Int, item: MediaItem) -> [TileMenuAction]? {
         guard case .playlist(let playlist) = mode, playlistEntries[safe: index]?.item.ref == item.ref else { return nil }
-        return PlaylistMenus.entryActions(isSmart: playlist.isSmart).compactMap { action in
+        return PlaylistMenus.entryActions(isSmart: playlistIsSmart).compactMap { action in
             switch action {
             case .playFromHere:
                 TileMenuAction(title: "Play from Here", systemImage: "play") { [weak self] in
@@ -7450,10 +7533,10 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     }
 
     /// Optimistic: the tile goes at once. A refusal puts it back where it was and says why.
-    private func removePlaylistEntry(at index: Int, item: MediaItem, from playlist: MediaPlaylist) {
+    private func removePlaylistEntry(at index: Int, item: MediaItem, from playlist: MediaItem) {
         // The list can have reloaded since the menu opened: act only on the tile it was opened on.
         guard playlistEntries[safe: index]?.item.ref == item.ref,
-              let provider = MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) else { return }
+              let provider = MediaProviderRegistry.shared.provider(for: playlist.ref.providerID) else { return }
         var remaining = playlistEntries
         let removed = remaining.remove(at: index)
         // A page-0 fetch already in flight holds the old list: the new generation discards it.
@@ -7463,7 +7546,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let generation = gridGeneration
         Task { @MainActor [weak self] in
             do {
-                try await provider.removeFromPlaylist(playlist.item.ref, entryID: removed.entryID)
+                try await provider.removeFromPlaylist(playlist.ref, entryID: removed.entryID)
                 // The refresh reloads the entries: Jellyfin drops every copy of a duplicate.
                 NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
             } catch {
@@ -7539,7 +7622,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         updateEntryMoveWiggle()
         let before = entriesBeforeMove
         guard original != final, case .playlist(let playlist) = mode, let moved = before[safe: original],
-              let provider = MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) else {
+              let provider = MediaProviderRegistry.shared.provider(for: playlist.ref.providerID) else {
             reloadIfHeldDuringMove()
             return
         }
@@ -7552,7 +7635,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let generation = gridGeneration
         Task { @MainActor [weak self] in
             do {
-                try await provider.movePlaylistEntry(playlist.item.ref, entryID: moved.entryID,
+                try await provider.movePlaylistEntry(playlist.ref, entryID: moved.entryID,
                                                      toIndex: final, in: before)
                 NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
             } catch {
@@ -7616,8 +7699,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         return sections.map { group in
             group.map { action in
                 switch action.title {
-                case "Mark as Watched":
-                    return TileMenuAction(title: action.title, systemImage: action.systemImage,
+                case String(localized: "Mark as Watched"):
+                    return TileMenuAction(verbatim: action.title, systemImage: action.systemImage,
                                           destructive: action.destructive) {
                         action.handler()
                         Self.changeOnServer {
@@ -7626,8 +7709,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                             }
                         }
                     }
-                case "Remove from Continue Watching":
-                    return TileMenuAction(title: action.title, systemImage: action.systemImage,
+                case String(localized: "Remove from Continue Watching"):
+                    return TileMenuAction(verbatim: action.title, systemImage: action.systemImage,
                                           destructive: action.destructive) {
                         action.handler()
                         Self.changeOnServer { for copy in others { await Self.removeFromContinueWatching(copy) } }
@@ -7886,7 +7969,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         }
         if provider is SiloProvider {
             if let dismissal = item.dismissalAction() {
-                let title = dismissal.rail == .nextUp ? "Remove from Next Up" : "Remove from Continue Watching"
+                let title: String.LocalizationValue = dismissal.rail == .nextUp
+                    ? "Remove from Next Up" : "Remove from Continue Watching"
                 middle.append(TileMenuAction(title: title, systemImage: "trash", destructive: true) {
                     changeOnServer { try await provider.dismiss(dismissal) }
                 })
@@ -8175,7 +8259,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             // (ported from MediaLibraryViewController.updateLeftEdgeGuide).
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState:
+             .searchPrompt, .searchState, .yearInReview:
             leftEdgeFocusGuide.preferredFocusEnvironments = []
             return
         }
@@ -8335,5 +8419,64 @@ extension PlexHomeViewController: MenuBackHandling {
         }
         snapshot.layer.transform = CATransform3DMakeTranslation(0, distance, 0)
         CATransaction.commit()
+    }
+}
+
+// MARK: - Year in Review
+
+extension PlexHomeViewController {
+    private var yearInReviewProfileID: Int { PlexUserProfileManager.shared.selectedUser?.id ?? 0 }
+
+    /// The year the card shows today, if any. DEBUG builds take `-YearInReviewYear <year>`.
+    private var yearInReviewYear: Int? {
+        #if DEBUG
+        let forced = UserDefaults.standard.integer(forKey: "YearInReviewYear")
+        if forced > 0 { return forced }
+        #endif
+        return YearInReview.year(showingOn: Date())
+    }
+
+    fileprivate var showsYearInReview: Bool {
+        guard case .home = mode, let review = yearInReview, EasterEggs.enabled else { return false }
+        return !YearInReviewStore.isRemoved(year: review.year, profileID: yearInReviewProfileID)
+    }
+
+    /// Loads the selected profile's year once per session; a profile switch changes the token and loads again.
+    fileprivate func refreshYearInReview() {
+        guard case .home = mode else { return }
+        guard let year = yearInReviewYear, EasterEggs.enabled,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else {
+            return setYearInReview(nil)
+        }
+        if let cached = YearInReviewStore.cached(token: token, year: year) { return setYearInReview(cached) }
+        Task { [weak self] in
+            let review = await YearInReviewStore.load(serverURL: serverURL, token: token, year: year)
+            guard let self, self.authManager.selectedServerToken == token else { return }
+            self.setYearInReview(review)
+        }
+    }
+
+    private func setYearInReview(_ review: YearInReview?) {
+        guard review != yearInReview else { return }
+        yearInReview = review
+        setNeedsSnapshotApply()
+        #if DEBUG
+        // `-YearInReviewOpen YES` opens the pages as soon as they load.
+        if review != nil, UserDefaults.standard.bool(forKey: "YearInReviewOpen") { presentYearInReview() }
+        #endif
+    }
+
+    fileprivate func presentYearInReview() {
+        guard let review = yearInReview, presentedViewController == nil,
+              let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+        present(YearInReviewViewController(review: review, serverURL: serverURL, token: token), animated: true)
+    }
+
+    fileprivate func removeYearInReview() {
+        guard let review = yearInReview else { return }
+        YearInReviewStore.remove(year: review.year, profileID: yearInReviewProfileID)
+        setNeedsSnapshotApply()
     }
 }

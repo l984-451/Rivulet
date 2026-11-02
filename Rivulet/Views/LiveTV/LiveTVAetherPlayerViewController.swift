@@ -18,6 +18,7 @@
 import AVKit
 import AetherEngine
 import Combine
+import MediaPlayer
 import UIKit
 
 final class LiveTVAetherPlayerViewController: UIViewController {
@@ -46,6 +47,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Subtitles turned on by tvOS's Show When Muted.
     private var captionsOnMute = CaptionsOnMuteLogic()
     private lazy var systemCaptionsOnMute = SystemCaptionsOnMute { [weak self] in self?.updateCaptionsOnMute() }
+    /// The channel the system's Closed Captions + SDH last turned captions on for.
+    private var systemCaptionsChannelId: String?
 
     /// Last-resort AVPlayer (fallback stage 2) rendered on its own layer.
     private var lastResortPlayer: AVPlayer?
@@ -389,7 +392,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         captionsOnMute = CaptionsOnMuteLogic()
         aether.$subtitleTracks
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateCaptionsOnMute() }
+            .sink { [weak self] _ in
+                self?.applySystemCaptions()
+                self?.updateCaptionsOnMute()
+            }
             .store(in: &cancellables)
         bindNativeLegibleAttachment(aether)
 
@@ -438,8 +444,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             .sink { [weak self] skipped in
                 guard skipped >= 1 else { return }
                 let minutes = Int((skipped / 60).rounded())
-                let amount = minutes >= 1 ? "\(minutes) min" : "\(Int(skipped.rounded())) sec"
-                self?.noticeView.show("Jumped ahead \(amount). The pause ran past what the rewind buffer holds.")
+                let seconds = Int(skipped.rounded())
+                self?.noticeView.show(minutes >= 1
+                    ? String(localized: "Jumped ahead \(minutes) min. The pause ran past what the rewind buffer holds.")
+                    : String(localized: "Jumped ahead \(seconds) sec. The pause ran past what the rewind buffer holds."))
             }
             .store(in: &cancellables)
 
@@ -447,6 +455,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         aether.$audioTracks
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateRailContent() }
+            .store(in: &cancellables)
+        // The tracks for Control Center and the TV Remote app, engine demux only (as the panels).
+        Publishers.CombineLatest4(aether.$audioTracks, aether.$subtitleTracks,
+                                  aether.$activeAudioTrackId, aether.$activeSubtitleTrackId)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] audio, subtitles, audioId, subtitleId in
+                guard let self else { return }
+                let engineSubtitles = self.isPlayingRemoteHLSDirectly ? [] : subtitles
+                NowPlayingService.shared.updateLiveTracks(
+                    audio: audio, subtitles: engineSubtitles, audioId: audioId, subtitleId: subtitleId
+                ) { [weak self] type, id in
+                    guard let self, let aether = self.aetherPlayer else { return }
+                    if type == .audible {
+                        if let id { aether.selectAudioTrack(id: id) }
+                        self.updateRailContent()
+                    } else {
+                        if self.systemCaptionsOnMute.isActive { self.captionsOnMute.userPicked() }
+                        aether.selectSubtitleTrack(id: id)
+                    }
+                }
+            }
             .store(in: &cancellables)
         // And the Record button, the moment a recording is set or cancelled.
         LiveTVDataStore.shared.$scheduledRecordings
@@ -915,7 +944,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         NowPlayingService.shared.updateLive(
             title: current?.title ?? channel.name,
             channelName: channel.name,
-            isPlaying: !isUserPaused
+            isPlaying: !isUserPaused,
+            artworkURL: current?.posterURL ?? current?.landscapeURL ?? current?.iconURL ?? channel.logoURL,
+            onScreenAt: onScreenAt
         )
     }
 
@@ -980,13 +1011,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Chrome auto-hides after a few idle seconds, same spirit as the VOD
     /// container. Any focus movement inside the rail restarts the clock; an
-    /// open menu suspends it. An untouched info pane closes, as in AVKit (#411).
+    /// open menu suspends it. An untouched info pane closes from the pills (#411).
     private func restartAutoHide() {
         autoHideTimer?.invalidate()
-        // Measured in AVKit: a pane waits 20s while focus is inside its content.
+        autoHideTimer = nil
+        // No timer while focus is inside a pane's content; the pills close it after 8s.
         let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView
         let inPane = activePanel.map { $0.isPane && focused?.isDescendant(of: $0) == true } ?? false
-        autoHideTimer = Timer.scheduledTimer(withTimeInterval: inPane ? 20 : 8, repeats: false) { [weak self] _ in
+        if inPane { return }
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.descriptionOverlay == nil else { return }
                 if let pane = self.activePanel, pane.isPane {
@@ -1243,16 +1276,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
+    /// Closed Captions + SDH turns captions on once per channel, as AVKit does; turning them off sticks.
+    private func applySystemCaptions() {
+        guard SystemMediaAccessibility.captionsAlwaysOn, systemCaptionsChannelId != channel.id,
+              let aether = aetherPlayer, !isPlayingRemoteHLSDirectly, !aether.subtitleTracks.isEmpty else { return }
+        systemCaptionsChannelId = channel.id
+        guard aether.currentSubtitleTrackId == nil,
+              let track = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
+                                                              in: aether.subtitleTracks) else { return }
+        aether.selectSubtitleTrack(id: track.id)
+    }
+
     /// AVKit's hold on Subtitles: off if showing, else the first full track. Engine-demuxed channels only.
     private func toggleSubtitles() {
         guard let aether = aetherPlayer, !aether.subtitleTracks.isEmpty else { return }
         if systemCaptionsOnMute.isActive { captionsOnMute.userPicked() }
         if aether.currentSubtitleTrackId != nil {
             aether.selectSubtitleTrack(id: nil)
-            railView.showNote("Subtitles off")
+            railView.showNote(String(localized: "Subtitles off"))
         } else if let track = aether.subtitleTracks.first(where: { !$0.isForced }) ?? aether.subtitleTracks.first {
             aether.selectSubtitleTrack(id: track.id)
-            railView.showNote("Subtitles on")
+            railView.showNote(String(localized: "Subtitles on"))
         }
     }
 
@@ -1263,7 +1307,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if !aether.audioTracks.isEmpty {
             let list = CardTrackListView.audioMenu(
                 tracks: aether.audioTracks,
-                selectedTrackId: aether.currentAudioTrackId
+                selectedTrackId: aether.currentAudioTrackId,
+                syncing: aether
             ) { [weak self] trackId in
                 if let trackId { self?.aetherPlayer?.selectAudioTrack(id: trackId) }
                 self?.activePanel?.dismissPanel()
@@ -1330,20 +1375,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 CardTrackListView.Row(title: stream.name, subtitle: choices.detail(for: stream),
                                       trackId: stream.id, isSelected: stream.id == choices.currentStreamID)
             }
-            let list = CardTrackListView(header: "Stream", rows: rows) { [weak self] streamID in
+            let list = CardTrackListView(header: String(localized: "Stream"), rows: rows) { [weak self] streamID in
                 self?.activePanel?.dismissPanel()
                 guard let streamID, streamID != choices.currentStreamID,
                       let stream = choices.streams.first(where: { $0.id == streamID }) else { return }
                 // Dispatcharr swaps the source under the open connection: no reload
                 // shows it, and the new picture arrives after a few seconds.
                 let label = choices.detail(for: stream) ?? stream.name
-                self?.noticeView.show("Switching to \(label)…", for: 30)
+                self?.noticeView.show(String(localized: "Switching to \(label)…"), for: 30)
                 Task { @MainActor [weak self] in
                     do {
                         try await target.service.switchStream(channelUUID: target.uuid, to: streamID)
-                        self?.noticeView.show("Switched to \(label).")
+                        self?.noticeView.show(String(localized: "Switched to \(label)."))
                     } catch {
-                        self?.noticeView.show("Couldn't switch streams.")
+                        self?.noticeView.show(String(localized: "Couldn't switch streams."))
                     }
                 }
             }
@@ -1543,7 +1588,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         CardStepperConfig(
             title: "Teletext Page",
             value: { [weak self] in
-                guard let page = self?.aetherPlayer?.teletextPage else { return "Auto" }
+                guard let page = self?.aetherPlayer?.teletextPage else { return String(localized: "Auto") }
                 return String(page)
             },
             onStep: { [weak self] step in
@@ -1734,13 +1779,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let channel = self.channel
 
         if let recording = store.activeRecording(for: program) {
-            var rows = [CardTrackListView.Row(title: "Cancel Recording", subtitle: program.title,
+            var rows = [CardTrackListView.Row(title: String(localized: "Cancel Recording"), subtitle: program.title,
                                               trackId: 0, isSelected: false)]
             if recording.ruleIsSeries {
-                rows.append(CardTrackListView.Row(title: "Cancel Series", subtitle: "Stop recording \(recording.title)",
+                rows.append(CardTrackListView.Row(title: String(localized: "Cancel Series"), subtitle: String(localized: "Stop recording \(recording.title)"),
                                                   trackId: 1, isSelected: false))
             }
-            let list = CardTrackListView(header: "Recording", rows: rows) { [weak self] choice in
+            let list = CardTrackListView(header: String(localized: "Recording"), rows: rows) { [weak self] choice in
                 self?.activePanel?.dismissPanel()
                 Task { @MainActor [weak self] in
                     do {
@@ -1770,7 +1815,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             guard let self, self.channel.id == channel.id else { return }
             guard !options.isEmpty else {
                 self.presentMessagePanel(title: "Can't Record",
-                                         message: "The server offered no way to record this programme.")
+                                         message: String(localized: "The server offered no way to record this programme."))
                 return
             }
             let rows = options.enumerated().map { index, option in
@@ -1793,11 +1838,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     /// A one-row panel that says what went wrong; selecting it closes it.
-    private func presentMessagePanel(title: String, message: String) {
+    private func presentMessagePanel(title: String.LocalizationValue, message: String) {
         guard activePanel == nil else { return }
         let list = CardTrackListView(
-            header: title,
-            rows: [CardTrackListView.Row(title: "OK", subtitle: message, trackId: 0, isSelected: false)]
+            header: String(localized: title),
+            rows: [CardTrackListView.Row(title: String(localized: "OK"), subtitle: message, trackId: 0, isSelected: false)]
         ) { [weak self] _ in
             self?.activePanel?.dismissPanel()
         }
@@ -1815,9 +1860,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         var meta = [channelLine]
         if let current {
             meta.append(Self.airTime(current.startTime, current.endTime))
+            if let year = current.year { meta.append(String(year)) }
         }
         if let next {
-            meta.append("Next: \(next.title) at \(Self.timeFormatter.string(from: next.startTime))")
+            meta.append(String(localized: "Next: \(next.title) at \(Self.timeFormatter.string(from: next.startTime))"))
         }
         let card = PlayerInfoCardView(content: .init(
             posterURL: current?.posterURL ?? channel.logoURL,
@@ -2206,12 +2252,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Plex answers a tune with no free tuner the same way as other tuner
     /// faults, so busy is the likely reason, not a certain one.
     private static func notice(forResolveError error: Error) -> String? {
-        if error is PlexLiveTuneError { return "Couldn't tune this channel. All tuners may be busy." }
+        if error is PlexLiveTuneError { return String(localized: "Couldn't tune this channel. All tuners may be busy.") }
         return (error as? TvheadendError)?.errorDescription
     }
 
-    private static let tunersBusyNotice = "All tuners are busy. Stop another stream and try again."
-    private static let sourceLostNotice = "Lost this channel's signal."
+    private static let tunersBusyNotice = String(localized: "All tuners are busy. Stop another stream and try again.")
+    private static let sourceLostNotice = String(localized: "Lost this channel's signal.")
 
     /// A direct source with no free connection refuses in about 3 s, but the
     /// engine retries for about 50 s before it gives up. So a load that has

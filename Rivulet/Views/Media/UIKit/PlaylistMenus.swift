@@ -53,7 +53,7 @@ enum PlaylistMenus {
                         presentNewPlaylist(seededWith: item, provider: provider, from: presenter)
                     }
                 case .playlist(let playlist):
-                    TileMenuAction(title: playlist.item.title, systemImage: "list.bullet.rectangle") {
+                    TileMenuAction(verbatim: playlist.item.title, systemImage: "list.bullet.rectangle") {
                         change(from: presenter) { try await provider.addToPlaylist(playlist.item.ref, items: [item.ref]) }
                     }
                 }
@@ -82,9 +82,9 @@ enum PlaylistMenus {
     @MainActor static func confirmDelete(_ playlist: MediaPlaylist, from presenter: UIViewController) {
         guard let provider = MediaProviderRegistry.shared.provider(for: playlist.item.ref.providerID) else { return }
         presenter.present(ConfirmationPopupViewController(
-            title: "Delete \u{201C}\(playlist.item.title)\u{201D}?",
-            message: "This removes the playlist from your server. The titles stay in your library.",
-            confirmTitle: "Delete", destructive: true,
+            title: String(localized: "Delete \u{201C}\(playlist.item.title)\u{201D}?"),
+            message: String(localized: "This removes the playlist from your server. The titles stay in your library."),
+            confirmTitle: String(localized: "Delete"), destructive: true,
             onConfirm: {
                 change(from: presenter) { try await provider.deletePlaylist(playlist.item.ref) }
             }), animated: true)
@@ -92,9 +92,9 @@ enum PlaylistMenus {
 
     /// Presents on the next turn, after any closing menu or popup's transition, so the
     /// presentation is not dropped. nil presenter = the key window's top.
-    @MainActor static func presentNameEntry(title: String, initialText: String, from presenter: UIViewController?,
+    @MainActor static func presentNameEntry(title: String.LocalizationValue, initialText: String, from presenter: UIViewController?,
                                             onCommit: @escaping (String) -> Void) {
-        let entry = TextEntryViewController(title: title, fieldName: "Playlist Name", initialText: initialText,
+        let entry = TextEntryViewController(title: String(localized: title), fieldName: String(localized: "Playlist Name"), initialText: initialText,
                                             allowsEmpty: false) { name in
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { onCommit(trimmed) }
@@ -127,15 +127,15 @@ enum PlaylistMenus {
 
     @MainActor static func reportFailure(_ error: Error, from presenter: UIViewController) {
         let reason = switch error as? MediaProviderError {
-        case .unreachable: "Couldn't reach the server."
-        case .unauthorized: "The server didn't accept your sign-in."
-        case .notFound: "The server no longer has this playlist."
+        case .unreachable: String(localized: "Couldn't reach the server.")
+        case .unauthorized: String(localized: "The server didn't accept your sign-in.")
+        case .notFound: String(localized: "The server no longer has this playlist.")
         case .backendSpecific(let underlying): underlying
         default: error.localizedDescription
         }
         MusicPresenter.top(from: presenter)?.present(
-            ConfirmationPopupViewController(title: "Couldn't update the playlist.", message: reason,
-                                            confirmTitle: "OK", cancelTitle: nil, onConfirm: {}),
+            ConfirmationPopupViewController(title: String(localized: "Couldn't update the playlist."), message: reason,
+                                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}),
             animated: true)
     }
 }

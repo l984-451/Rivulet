@@ -3,7 +3,7 @@
 
 // `os_signpost` Points of Interest for the Home perf traces (subsystem `com.rivulet.perf`).
 // Names: AppLaunch, HomeFirstFrameOnScreen (events); HomeDataFetch, HomeFirstRender,
-// HomeScroll, CellPrepare, ImageDecode, FocusUpdate (intervals).
+// CellPrepare, ImageDecode, FocusUpdate (intervals).
 
 import Foundation
 import os.log
@@ -23,7 +23,6 @@ enum PerfSignpost: String {
     case homeDataFetch = "HomeDataFetch"
     case homeFirstRender = "HomeFirstRender"
     case homeFirstFrameOnScreen = "HomeFirstFrameOnScreen"
-    case homeScroll = "HomeScroll"
     case cellPrepare = "CellPrepare"
     case imageDecode = "ImageDecode"
     case focusUpdate = "FocusUpdate"

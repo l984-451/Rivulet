@@ -152,16 +152,16 @@ private final class SiloRequestCell: UITableViewCell {
         title = "Requests"
         view.backgroundColor = .black
         let heading = UILabel()
-        heading.text = "Requests"
+        heading.text = String(localized: "Requests")
         heading.font = .systemFont(ofSize: 57, weight: .bold)
         heading.textColor = .white
         navigationItem.title = ""
         let description = UILabel()
-        description.text = "Silo · Find something new and track your requests."
+        description.text = String(localized: "Silo · Find something new and track your requests.")
         description.font = .systemFont(ofSize: 25)
         description.textColor = UIColor(white: 1, alpha: 0.6)
         description.numberOfLines = 0
-        searchBar.placeholder = "Search movies and series"
+        searchBar.placeholder = String(localized: "Search movies and series")
         searchBar.overrideUserInterfaceStyle = .dark
         searchBar.tintColor = .white
         searchBar.searchBarStyle = .minimal
@@ -259,9 +259,9 @@ private final class SiloRequestCell: UITableViewCell {
     private func updateSection() {
         if modeSearch {
             let query = activeSearchQuery ?? ""
-            sectionLabel.text = "Results for “\(query)” · \(results.count)"
+            sectionLabel.text = String(localized: "Results for “\(query)” · \(results.count)")
         } else {
-            sectionLabel.text = "Your requests · \(records.count)"
+            sectionLabel.text = String(localized: "Your requests · \(records.count)")
         }
         mineButton.isHidden = !modeSearch
     }
@@ -501,17 +501,17 @@ private final class SiloRequestCell: UITableViewCell {
             if let overview = item.overview, !overview.isEmpty { details.append(overview) }
             actions.message = details.joined(separator: "\n\n")
             if item.mediaType != .all && item.request.requestable && item.availability == .missing {
-                actions.addAction(UIAlertAction(title: "Request", style: .default) { [weak self] _ in
+                actions.addAction(UIAlertAction(title: String(localized: "Request"), style: .default) { [weak self] _ in
                     self?.mutate { service in _ = try await service.create(item) }
                 })
             }
             if item.mediaType != .all && capability?.canFollow == true && item.request.canFollow {
-                actions.addAction(UIAlertAction(title: "Follow", style: .default) { [weak self] _ in
+                actions.addAction(UIAlertAction(title: String(localized: "Follow"), style: .default) { [weak self] _ in
                     self?.mutate { service in _ = try await service.follow(item) }
                 })
             }
             if item.mediaType != .all && capability?.canFollow == true && item.request.canUnfollow {
-                actions.addAction(UIAlertAction(title: "Unfollow", style: .default) { [weak self] _ in
+                actions.addAction(UIAlertAction(title: String(localized: "Unfollow"), style: .default) { [weak self] _ in
                     self?.mutate { service in try await service.unfollow(item) }
                 })
             }
@@ -526,12 +526,12 @@ private final class SiloRequestCell: UITableViewCell {
             if let error = item.lastError, !error.isEmpty { details.append(error) }
             actions.message = details.joined(separator: "\n\n")
             if item.canCancel {
-                actions.addAction(UIAlertAction(title: "Cancel request", style: .destructive) { [weak self] _ in
+                actions.addAction(UIAlertAction(title: String(localized: "Cancel request"), style: .destructive) { [weak self] _ in
                     self?.mutate { service in _ = try await service.cancel(item) }
                 })
             }
         }
-        actions.addAction(UIAlertAction(title: "Close", style: .cancel))
+        actions.addAction(UIAlertAction(title: String(localized: "Close"), style: .cancel))
         present(actions, animated: true)
     }
 
@@ -559,7 +559,7 @@ private final class SiloRequestCell: UITableViewCell {
                     : failureMessage(error) + "\n\nThe change will not be sent again automatically. Check the refreshed status before trying again."
                 let alert = UIAlertController(title: unavailable ? "Action unavailable" : "Request status uncertain",
                                               message: explanation, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .default))
                 presentMutationError(alert)
             }
             mutationTask = nil

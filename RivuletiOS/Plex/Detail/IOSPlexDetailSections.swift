@@ -41,7 +41,7 @@ struct IOSPlexEpisodeCell: View {
         .plexContextMenu(episode, showsDetails: true)
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel([isNextUp ? "Up Next" : nil, title, detail].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([isNextUp ? String(localized: "Up Next") : nil, title, detail].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(episode.watchStateDescription)
         .accessibilityHint("Plays the episode")
     }
@@ -137,7 +137,7 @@ struct IOSPlexCastRow: View {
         let people = self.people
         if !people.isEmpty {
             IOSShelfRow(kind: .person, items: people) {
-                IOSPlexShelfHeader(title: "Cast & Crew")
+                IOSPlexShelfHeader(title: String(localized: "Cast & Crew"))
             } tile: { person, width in
                 let pixels = Int((width * displayScale).rounded(.up))
                 VStack(spacing: 6) {
@@ -181,7 +181,7 @@ struct IOSPlexExtrasRow: View {
         let extras = self.extras
         if !extras.isEmpty {
             IOSShelfRow(kind: .landscape, items: extras) {
-                IOSPlexShelfHeader(title: "Extras")
+                IOSPlexShelfHeader(title: String(localized: "Extras"))
             } tile: { extra, width in
                 Button { actions.play(extra) } label: {
                     VStack(alignment: .leading, spacing: 6) {
@@ -208,6 +208,8 @@ struct IOSPlexExtrasRow: View {
 struct IOSPlexInformationSection: View {
     let item: PlexMetadata
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// With iPhone Duo's fold down its middle, four columns instead of three so none sits on it.
+    @State private var crossesFold = false
 
     nonisolated static func formattedDate(_ isoDay: String) -> String? {
         guard let date = try? Date(isoDay, strategy: .iso8601.year().month().day().dateSeparator(.dash)) else { return nil }
@@ -226,13 +228,13 @@ struct IOSPlexInformationSection: View {
 
     private var rows: [(String, String)] {
         [
-            ("Studio", item.studio),
-            ("Genre", item.Genre?.compactMap(\.tag).joined(separator: ", ")),
-            ("Rated", item.displayContentRating),
-            ("Released", item.originallyAvailableAt.flatMap(Self.formattedDate)),
-            ("Runtime", item.runtimeText),
-            ("Audio", languages(streamType: 2)),
-            ("Subtitles", languages(streamType: 3))
+            (String(localized: "Studio"), item.studio),
+            (String(localized: "Genre"), item.Genre?.compactMap(\.tag).joined(separator: ", ")),
+            (String(localized: "Rated"), item.displayContentRating),
+            (String(localized: "Released"), item.originallyAvailableAt.flatMap(Self.formattedDate)),
+            (String(localized: "Runtime"), item.runtimeText),
+            (String(localized: "Audio"), languages(streamType: 2)),
+            (String(localized: "Subtitles"), languages(streamType: 3))
         ].compactMap { label, value in
             guard let value, !value.isEmpty else { return nil }
             return (label, value)
@@ -244,7 +246,10 @@ struct IOSPlexInformationSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), alignment: .topLeading), count: sizeClass == .regular ? 3 : 2),
+                    columns: Array(
+                        repeating: GridItem(.flexible(), alignment: .topLeading),
+                        count: crossesFold ? 4 : sizeClass == .regular ? 3 : 2
+                    ),
                     alignment: .leading,
                     spacing: 14
                 ) {
@@ -256,6 +261,7 @@ struct IOSPlexInformationSection: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
+                .onGeometryChange(for: Bool.self) { $0.duoFoldDividesMiddle() } action: { crossesFold = $0 }
             }
         }
     }

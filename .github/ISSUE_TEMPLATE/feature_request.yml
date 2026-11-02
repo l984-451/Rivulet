@@ -2,6 +2,11 @@ name: Feature Request
 description: Suggest a new feature or improvement
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        **Saw a shiny new [AetherEngine](https://github.com/superuser404notfound/AetherEngine/releases) release?** I probably did too. It'll be in Rivulet within a week. Please give it 7 days before filing a "can we get the new AetherEngine thing" request. Thanks!
+
   - type: checkboxes
     id: search-check
     attributes:

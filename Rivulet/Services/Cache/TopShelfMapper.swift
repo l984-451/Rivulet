@@ -43,7 +43,7 @@ enum TopShelfMapper {
             // Bare episode name for the carousel — the show name rides the line
             // above (contextTitle) Apple-TV+-style, so no "SxxExx - " prefix here
             // (that's what `fullEpisodeTitle` would add).
-            let title = m.title ?? "Unknown"
+            let title = m.title ?? String(localized: "Unknown")
             let subtitle = isEpisode ? m.grandparentTitle : nil
 
             // Tall poster (kept for fallback) — episode prefers show poster.

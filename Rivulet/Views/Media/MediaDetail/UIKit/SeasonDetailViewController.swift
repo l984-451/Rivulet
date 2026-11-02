@@ -40,6 +40,9 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private var pendingFocusEpisodeID: String?
 
     private static let headerID = "header"
+    private static let extrasID = "extras"
+    /// The season's trailers and extras, in a row under the episodes.
+    private let extrasShelf = ExtrasShelfView(leading: MediaRowMetrics.rowLeading)
     private static let posterSize = CGSize(width: 600, height: 900)
     /// The header's top meets the vertically centred poster's.
     private static let headerTop: CGFloat = (1080 - posterSize.height) / 2
@@ -109,6 +112,10 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         menuTap.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         view.addGestureRecognizer(menuTap)
 
+        extrasShelf.onPlay = { [weak self] trailer in
+            guard let self else { return }
+            ExtraPlayer.play(trailer, from: self)
+        }
         applySnapshot()
         loadArtwork()
         load()
@@ -189,7 +196,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         header.addArrangedSubview(overviewLabel)
         applyText()
 
-        let (pill, title, _) = FocusableActionButton.pill(title: "Play", systemImage: "play.fill")
+        let (pill, title, _) = FocusableActionButton.pill(title: String(localized: "Play"), systemImage: "play.fill")
         pill.onPrimaryAction = { [weak self] in
             guard let self else { return }
             self.play(EpisodePicker.firstUnplayed(in: self.episodes) ?? self.season, fromBeginning: false)
@@ -212,16 +219,17 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private func buildCollection() {
         let layout = UICollectionViewCompositionalLayout { index, _ in
             let height: NSCollectionLayoutDimension = index == 0
-                ? .estimated(400) : .absolute(EpisodeCell.thumbHeight)
+                ? .estimated(400) : .absolute(index == 2 ? ExtrasShelfView.height : EpisodeCell.thumbHeight)
             let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: height)
             let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)])
             let section = NSCollectionLayoutSection(group: group)
             // Measured from the screen edge, not tvOS's safe area, so the margin is the app's 80.
             section.contentInsetsReference = .none
             // Each card's focus reserve already puts one grid gap between artworks.
+            // The extras row insets itself, so its cards' focus growth is not clipped.
             section.contentInsets = index == 0
                 ? .init(top: Self.headerTop, leading: MediaRowMetrics.rowLeading, bottom: 40, trailing: 0)
-                : .init(top: 0, leading: MediaRowMetrics.rowLeading, bottom: 80, trailing: 0)
+                : .init(top: 0, leading: index == 2 ? 0 : MediaRowMetrics.rowLeading, bottom: 80, trailing: 0)
             return section
         }
         collectionView = FocusScrollControlledCollectionView(frame: .zero, collectionViewLayout: layout)
@@ -243,6 +251,11 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
             if id == Self.headerID {
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: HostCell.reuseID, for: indexPath) as! HostCell
                 cell.host(self.header)
+                return cell
+            }
+            if id == Self.extrasID {
+                let cell = cv.dequeueReusableCell(withReuseIdentifier: HostCell.reuseID, for: indexPath) as! HostCell
+                cell.host(self.extrasShelf, fillsWidth: true)
                 return cell
             }
             let cell = cv.dequeueReusableCell(withReuseIdentifier: SeasonEpisodeCell.reuseID, for: indexPath) as! SeasonEpisodeCell
@@ -276,6 +289,10 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         snapshot.appendItems([Self.headerID], toSection: 0)
         let ids = episodes.map(\.ref.itemID)
         snapshot.appendItems(ids, toSection: 1)
+        if !extrasShelf.tiles.isEmpty {
+            snapshot.appendSections([2])
+            snapshot.appendItems([Self.extrasID], toSection: 2)
+        }
         // Same ids after a refresh: reconfigure so watched state repaints in place, and the
         // self-sizing header re-measures.
         let existing = Set(dataSource.snapshot().itemIdentifiers)
@@ -296,7 +313,13 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
             if let showRef { show = try? await provider.fullDetail(for: showRef) }
             guard let self, self.loadToken == token else { return }
             if let show { self.showDetail = show; self.showTitle = show.item.title }
-            if let detail { self.seasonDetail = detail; self.season = detail.item }
+            if let detail {
+                self.seasonDetail = detail; self.season = detail.item
+                let split = BelowFoldContentLoader.extraTiles(
+                    from: detail.extras,
+                    fallbackArt: detail.item.artwork.backdrop ?? detail.item.parentArtwork?.backdrop ?? detail.item.artwork.thumbnail)
+                self.extrasShelf.configure(split.trailers + split.extras)
+            }
             self.episodes = EpisodePicker.inPlaybackOrder(children)
             self.episodesByID = Dictionary(self.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
             if !self.episodes.isEmpty { self.isWatched = self.episodes.allSatisfy(\.isWatched) }
@@ -326,12 +349,12 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         overviewLabel.text = season.overview
         overviewLabel.isHidden = (season.overview ?? "").isEmpty
         playTitleLabel?.text = EpisodePicker.firstUnplayed(in: episodes)
-            .map { EpisodePicker.playTitle(for: $0, on: .season) } ?? "Play"
+            .map { EpisodePicker.playTitle(for: $0, on: .season) } ?? String(localized: "Play")
         watchedButton?.setIcon(watchedGlyph)
 
         metaRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let count = episodes.isEmpty ? season.childProgress?.total : episodes.count
-        let parts = [count.map { "\($0) Episode\($0 == 1 ? "" : "s")" }, season.year.map(String.init)].compactMap { $0 }
+        let parts = [count.map { String(localized: "\($0) Episodes") }, season.year.map(String.init)].compactMap { $0 }
         if !parts.isEmpty {
             metaRow.addArrangedSubview(MediaDetailChromeView.makeCaptionLabel(parts.joined(separator: " · "), alpha: 0.75))
         }
@@ -468,14 +491,21 @@ private final class SeasonEpisodeCell: UICollectionViewCell {
 private final class HostCell: UICollectionViewCell {
     static let reuseID = "HostCell"
 
-    func host(_ view: UIView) {
+    /// A recycled cell must not keep the view it hosted, or it shows under the next one.
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        contentView.subviews.forEach { $0.removeFromSuperview() }
+    }
+
+    func host(_ view: UIView, fillsWidth: Bool = false) {
         guard view.superview !== contentView else { return }
         view.removeFromSuperview()
         contentView.addSubview(view)
         NSLayoutConstraint.activate([
             view.topAnchor.constraint(equalTo: contentView.topAnchor),
             view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            view.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor),
+            fillsWidth ? view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+                       : view.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor),
             view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
     }

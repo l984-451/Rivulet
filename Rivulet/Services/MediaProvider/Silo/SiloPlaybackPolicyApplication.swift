@@ -37,4 +37,24 @@ nonisolated struct SiloPlaybackPolicyApplication: Sendable {
                 return lhs < rhs
             }.first
     }
+
+    static func initialAudioIndex(in version: SiloVersion, policy: Self?, explicitIndex: Int?,
+                                  prefersAudioDescription: Bool) -> Int? {
+        if let explicitIndex { return explicitIndex }
+        let preferred = policy?.audioIndex(in: version)
+        guard prefersAudioDescription else { return preferred }
+        let tracks = version.audioTracks ?? []
+        let baseline = preferred ?? version.effectiveAudioTrackIndex
+            ?? tracks.indices.first(where: { tracks[$0].default }) ?? tracks.indices.first
+        guard let baseline, tracks.indices.contains(baseline),
+              let language = tracks[baseline].language else { return preferred }
+        func describesVideo(_ track: SiloAudioTrack) -> Bool {
+            let text = [track.title, track.embeddedTitle].compactMap { $0?.lowercased() }.joined(separator: " ")
+            return ["descri", "narration", "dvs", "impaired"].contains(where: text.contains)
+        }
+        if describesVideo(tracks[baseline]) { return preferred }
+        return tracks.indices.first {
+            describesVideo(tracks[$0]) && SiloInitialSubtitleSelection.languagesMatch(tracks[$0].language, language)
+        } ?? preferred
+    }
 }

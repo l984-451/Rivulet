@@ -42,6 +42,8 @@ actor XMLTVParser {
         let landscapeIcon: String?
         let episodeNum: String?
         let isNew: Bool
+        /// A four-digit `<date>` on a programme with no episode number (a film's year).
+        var year: Int? = nil
     }
 
     // MARK: - Parse Result
@@ -196,6 +198,7 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
     private var currentEpisodeNum: String = ""
     private var currentEpisodeNumIsOnscreen = false
     private var currentIsNew: Bool = false
+    private var currentDate: String = ""
 
     private var parseError: Error?
 
@@ -251,6 +254,7 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
             currentProgramIcons = []
             currentEpisodeNum = ""
             currentIsNew = false
+            currentDate = ""
 
         case "icon":
             let src = attributeDict["src"]
@@ -304,6 +308,8 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
             if !value.isEmpty {
                 currentCategory += currentCategory.isEmpty ? value : ", " + value
             }
+        case "date":
+            if currentDate.isEmpty { currentDate = value }
         case "episode-num":
             // Prefer the human-readable "S01E05" over xmltv_ns / dd_progid codes.
             if !value.isEmpty, currentEpisodeNum.isEmpty || currentEpisodeNumIsOnscreen {
@@ -339,7 +345,8 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
                     posterIcon: Self.posterIcon(from: currentProgramIcons),
                     landscapeIcon: Self.landscapeIcon(from: currentProgramIcons),
                     episodeNum: currentEpisodeNum.isEmpty ? nil : currentEpisodeNum,
-                    isNew: currentIsNew
+                    isNew: currentIsNew,
+                    year: currentEpisodeNum.isEmpty && currentDate.count == 4 ? Int(currentDate) : nil
                 )
 
                 if programs[channelId] == nil {
@@ -468,11 +475,11 @@ enum XMLTVParseError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .httpError(let code):
-            return "HTTP error \(code)"
+            return String(localized: "HTTP error \(code)")
         case .parseFailed:
-            return "Failed to parse XMLTV data"
+            return String(localized: "Failed to parse XMLTV data")
         case .tooLarge:
-            return "The guide is too large"
+            return String(localized: "The guide is too large")
         }
     }
 }

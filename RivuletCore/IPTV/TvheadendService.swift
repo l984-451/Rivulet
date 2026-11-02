@@ -39,12 +39,12 @@ enum TvheadendError: LocalizedError, Equatable {
     /// nil for an HTTP error, which callers describe as unreachable.
     var errorDescription: String? {
         switch self {
-        case .loginRequired: "This Tvheadend server needs a username and password."
-        case .invalidLogin: "Tvheadend didn't accept that username and password."
+        case .loginRequired: String(localized: "This Tvheadend server needs a username and password.")
+        case .invalidLogin: String(localized: "Tvheadend didn't accept that username and password.")
         // Tvheadend also answers a changed password with 403 once signed in.
-        case .forbidden: "Tvheadend refused this user. Check its password and rights in Tvheadend."
-        case .notTvheadend: "That address isn't a Tvheadend server. Check the address and port."
-        case .noTicket: "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend."
+        case .forbidden: String(localized: "Tvheadend refused this user. Check its password and rights in Tvheadend.")
+        case .notTvheadend: String(localized: "That address isn't a Tvheadend server. Check the address and port.")
+        case .noTicket: String(localized: "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend.")
         case .httpError: nil
         }
     }
@@ -71,6 +71,8 @@ struct TvheadendEvent: Sendable, Equatable {
     let seriesLink: String?
     let isNew: Bool
     let imageURL: URL?
+    /// Tvheadend's `copyright_year`; read only when there is no episode text.
+    var year: Int? = nil
 }
 
 actor TvheadendService {
@@ -246,6 +248,10 @@ actor TvheadendService {
                   let start = (entry["start"] as? NSNumber)?.doubleValue,
                   let stop = (entry["stop"] as? NSNumber)?.doubleValue, stop > start,
                   let title = string(entry["title"]) else { return nil }
+            var year: Int?
+            if string(entry["episodeOnscreen"]) == nil, let value = (entry["copyright_year"] as? NSNumber)?.intValue, value > 0 {
+                year = value
+            }
             return TvheadendEvent(eventId: eventId, channelUUID: channel,
                                   start: Date(timeIntervalSince1970: start), stop: Date(timeIntervalSince1970: stop),
                                   title: title, subtitle: string(entry["subtitle"]),
@@ -256,7 +262,8 @@ actor TvheadendService {
                                   // XMLTV-fed guides keep the feed's `&amp;`.
                                   imageURL: string(entry["image"]).flatMap {
                                       URL(string: $0.replacingOccurrences(of: "&amp;", with: "&"))
-                                  })
+                                  },
+                                  year: year)
         }
     }
 

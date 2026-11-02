@@ -25,7 +25,7 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
 
     init(provider: JellyfinProvider, canRecord: Bool) {
         sourceId = provider.id
-        displayName = "\(provider.displayName) Live TV"
+        displayName = String(localized: "\(provider.displayName) Live TV")
         supportsRecording = canRecord
         client = provider.client
         userID = provider.userID
@@ -72,7 +72,7 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
             }
             guard !UserDefaults.standard.bool(forKey: hiddenKey) else {
                 hiddenSource = LiveTVDataStore.LiveTVSourceInfo(
-                    id: provider.id, sourceType: .jellyfin, displayName: "\(provider.displayName) Live TV",
+                    id: provider.id, sourceType: .jellyfin, displayName: String(localized: "\(provider.displayName) Live TV"),
                     channelCount: 0, isConnected: false, lastSync: nil)
                 store.setServerSource(nil, of: .jellyfin)
                 return
@@ -199,11 +199,11 @@ extension JellyfinLiveTVProvider: LiveTVRecordingProvider {
     func recordOptions(for program: UnifiedProgram, on channel: UnifiedChannel) async throws -> [LiveTVRecordOption] {
         guard supportsRecording else { throw LiveTVRecordingError.notSupported }
         guard program.endTime > Date() else { throw LiveTVRecordingError.programEnded }
-        var options = [LiveTVRecordOption(id: "\(program.id)#once", title: "Record", scope: .single, payload: "once")]
+        var options = [LiveTVRecordOption(id: "\(program.id)#once", title: String(localized: "Record"), scope: .single, payload: "once")]
         if !program.isMovie {
-            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: "Record Series",
+            options.append(LiveTVRecordOption(id: "\(program.id)#all", title: String(localized: "Record Series"),
                                               scope: .series, payload: "all"))
-            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: "Record New Episodes",
+            options.append(LiveTVRecordOption(id: "\(program.id)#new", title: String(localized: "Record New Episodes"),
                                               scope: .series, payload: "new"))
         }
         return options
@@ -232,7 +232,7 @@ extension JellyfinLiveTVProvider: LiveTVRecordingProvider {
             var recording = LiveTVScheduledRecording(
                 id: id,
                 sourceId: sourceId,
-                title: timer.name ?? "Recording",
+                title: timer.name ?? String(localized: "Recording"),
                 subtitle: timer.programInfo?.episodeTitle,
                 startTime: start,
                 endTime: end,
@@ -262,9 +262,9 @@ extension JellyfinLiveTVProvider: LiveTVRecordingProvider {
         let result: JFLiveQuery<JFSeriesTimer> = try await client.get("LiveTv/SeriesTimers")
         return (result.items ?? []).compactMap { rule in
             guard let id = rule.id else { return nil }
-            let mode = rule.recordNewOnly == true ? "New episodes" : "All episodes"
+            let mode = rule.recordNewOnly == true ? String(localized: "New episodes") : String(localized: "All episodes")
             let channel = rule.recordAnyChannel == true ? nil : rule.channelName
-            return LiveTVRecordingRule(id: id, sourceId: sourceId, title: rule.name ?? "Series",
+            return LiveTVRecordingRule(id: id, sourceId: sourceId, title: rule.name ?? String(localized: "Series"),
                                        detail: [mode, channel].compactMap { $0 }.joined(separator: " · "))
         }
     }

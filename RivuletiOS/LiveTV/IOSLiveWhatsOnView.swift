@@ -134,7 +134,7 @@ struct IOSLiveCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([title, detail].joined(separator: ", "))
         .accessibilityValue(accessibilityState)
-        .accessibilityHint(item.kind == .channel ? "Plays the channel" : "")
+        .accessibilityHint(item.kind == .channel ? String(localized: "Plays the channel") : "")
     }
 
     private var title: String {
@@ -150,12 +150,12 @@ struct IOSLiveCard: View {
         var parts: [String] = []
         if let program = item.program {
             if item.kind == .upcoming {
-                parts.append("Starts \(LiveCardItem.startLabel(program, now: now))")
+                parts.append(String(localized: "Starts \(LiveCardItem.startLabel(program, now: now))"))
             } else if program.isLiveAiring {
-                parts.append("Live")
+                parts.append(String(localized: "Live"))
             }
         }
-        if item.setToRecord || item.recording?.status == .recording { parts.append("Recording") }
+        if item.setToRecord || item.recording?.status == .recording { parts.append(String(localized: "Recording")) }
         return parts.joined(separator: ", ")
     }
 }
@@ -219,9 +219,9 @@ private struct IOSLiveCardArt: View {
         switch item.kind {
         case .channel:
             if item.setToRecord {
-                IOSLivePill(text: "REC", dot: true, style: .red)
+                IOSLivePill(text: String(localized: "REC"), dot: true, style: .red)
             } else if program?.isLiveAiring == true {
-                IOSLivePill(text: "LIVE", dot: false, style: .red)
+                IOSLivePill(text: String(localized: "LIVE"), dot: false, style: .red)
             }
         case .upcoming:
             if let program {
@@ -230,7 +230,7 @@ private struct IOSLiveCardArt: View {
         case .recording:
             if let recording = item.recording {
                 if recording.status == .recording {
-                    IOSLivePill(text: "REC", dot: true, style: .red)
+                    IOSLivePill(text: String(localized: "REC"), dot: true, style: .red)
                 } else {
                     IOSLivePill(text: recording.startTime.formatted(.dateTime.weekday().hour().minute()),
                                 dot: true, style: .glass)

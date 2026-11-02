@@ -110,6 +110,22 @@ nonisolated extension ContinueWatchingCardCompositor {
         return await task.value
     }
 
+    // MARK: - Title check
+
+    /// A finished `ArtworkTitleCheck`, from memory or disk; nil when it has not run.
+    static func knownTitleCheck(still: URL, title: String) -> Bool? {
+        ArtworkTitleCheck.known(ArtworkTitleCheck.key(still: still, title: title))
+    }
+
+    static func titleCheck(still: URL, logo: URL?, title: String) async -> Bool {
+        await ArtworkTitleCheck.answer(ArtworkTitleCheck.key(still: still, title: title), title: title) {
+            guard let source = await ImageCacheManager.shared.image(for: still)?.cgImage else { return nil }
+            guard let logo else { return (source, nil) }
+            guard let image = await ImageCacheManager.shared.image(for: logo)?.cgImage else { return nil }
+            return (source, image)
+        }
+    }
+
     // MARK: - Disk
 
     /// Bump when `render`, `renderTitle` or `analyse` changes, so old files are not shown.

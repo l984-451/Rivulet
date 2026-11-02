@@ -32,13 +32,13 @@ enum HomeComposer {
         if !cwItems.isEmpty {
             hubs.append(MediaHub(
                 id: "synth.continueWatching", providerID: provider.id,
-                title: "Continue Watching", style: .shelf, items: cwItems
+                title: String(localized: "Continue Watching"), style: .shelf, items: cwItems
             ))
         }
         if !raItems.isEmpty {
             hubs.append(MediaHub(
                 id: "synth.recentlyAdded", providerID: provider.id,
-                title: "Recently Added", style: .shelf, items: raItems
+                title: String(localized: "Recently Added"), style: .shelf, items: raItems
             ))
         }
         return hubs

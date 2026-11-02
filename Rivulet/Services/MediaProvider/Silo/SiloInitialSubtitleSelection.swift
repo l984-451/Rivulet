@@ -11,7 +11,9 @@ nonisolated enum SiloInitialSubtitleSelection: Sendable, Equatable {
     case track(SiloTrackIdentity)
 
     static func resolve(watch: SiloItem, version: SiloVersion, plan: SiloPlaybackPlan,
-                        explicitIndex: Int?, policy: SiloPlaybackPolicyApplication? = nil) throws -> Self {
+                        explicitIndex: Int?, policy: SiloPlaybackPolicyApplication? = nil,
+                        captionsAlwaysOn: Bool = false,
+                        deviceLanguage: String = Locale.current.language.languageCode?.identifier ?? "en") throws -> Self {
         if let explicitIndex {
             if explicitIndex < 0 { return .off }
             guard let track = plan.subtitle.inventory.first(where: { $0.combinedIndex == explicitIndex }) else {
@@ -32,6 +34,18 @@ nonisolated enum SiloInitialSubtitleSelection: Sendable, Equatable {
         case .some(.value(let value)): language = value.trimmingCharacters(in: .whitespacesAndNewlines)
         case .some(.clear): language = nil
         case .some(.unavailable), .none: language = watch.effectiveSubtitleLanguage?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if captionsAlwaysOn {
+            let preferredLanguage = language.flatMap { $0.isEmpty ? nil : $0 } ?? deviceLanguage
+            let matching = tracks.filter { !$0.forced && languagesMatch($0.language, preferredLanguage) }
+            if let selected = best(in: matching, language: nil, allowFallback: true, preferSDH: true) {
+                return choice(selected)
+            }
+            let forced = tracks.filter { $0.forced && languagesMatch($0.language, preferredLanguage) }
+            if let selected = best(in: forced, language: nil, allowFallback: true, preferSDH: true) {
+                return choice(selected)
+            }
+            return .off
         }
         let audioIndex = plan.selectedTracks.audio?.index ?? version.effectiveAudioTrackIndex
         let audioLanguage = audioIndex.flatMap { (version.audioTracks ?? []).indices.contains($0)
@@ -107,10 +121,11 @@ nonisolated enum SiloInitialSubtitleSelection: Sendable, Equatable {
     }
 
     private static func best(in tracks: [SiloPlanSubtitleTrack], language: String?,
-                             allowFallback: Bool) -> SiloPlanSubtitleTrack? {
+                             allowFallback: Bool, preferSDH: Bool = false) -> SiloPlanSubtitleTrack? {
         let matches = language.map { wanted in tracks.filter { languagesMatch($0.language, wanted) } } ?? tracks
         guard !matches.isEmpty || allowFallback else { return nil }
         return (matches.isEmpty ? tracks : matches).sorted { lhs, rhs in
+            if preferSDH && lhs.hearingImpaired != rhs.hearingImpaired { return lhs.hearingImpaired }
             if lhs.default != rhs.default { return lhs.default }
             if lhs.hearingImpaired != rhs.hearingImpaired { return !lhs.hearingImpaired }
             if lhs.forced != rhs.forced { return !lhs.forced }

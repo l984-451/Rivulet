@@ -185,7 +185,7 @@ final class MediaCapabilityBadgesView: UIStackView {
         axis = .vertical
         alignment = .fill
         spacing = 7
-        heading.text = "SOURCE FILE"
+        heading.text = String(localized: "SOURCE FILE")
         heading.font = .systemFont(ofSize: 13, weight: .bold)
         heading.textColor = UIColor.white.withAlphaComponent(0.5)
         addArrangedSubview(heading)

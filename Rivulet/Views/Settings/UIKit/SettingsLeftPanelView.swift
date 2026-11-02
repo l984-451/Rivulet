@@ -30,6 +30,8 @@ final class SettingsLeftPanelView: UIView {
     /// libraries page). Collapses to zero height when the page has no hint.
     private let hintLabel = UILabel()
     private var hintHeightZero: NSLayoutConstraint!
+    private var page: SettingsPage = .root
+    private var iconName: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -115,7 +117,7 @@ final class SettingsLeftPanelView: UIView {
     /// Pages that show a page-level instruction under the icon.
     private func hint(for page: SettingsPage) -> String? {
         switch page {
-        case .libraries, .liveTVFavorites: return "Long press to re-arrange items"
+        case .libraries, .liveTVFavorites: return String(localized: "Long press to re-arrange items")
         default:         return nil
         }
     }
@@ -141,13 +143,16 @@ final class SettingsLeftPanelView: UIView {
 
     /// Set the page icon (matching `pageInfo(for:)`). Crossfades when animated
     /// (on a page change), like the SwiftUI panel's symbol-replace transition.
-    func configure(page: SettingsPage, animated: Bool = false) {
+    func configure(page: SettingsPage, section: String? = nil, animated: Bool = false) {
         show(id: nil)
         let info = SettingsDescriptorStore.pageInfo(for: page)
         let color = info.color
+        let icon = SettingsDescriptorStore.sectionIcon(for: page, section: section) ?? info.icon
+        self.page = page
+        iconName = icon
         let apply = {
             self.iconContainer.backgroundColor = color.withAlphaComponent(0.18)
-            self.iconView.image = UIImage(systemName: info.icon)
+            self.iconView.image = UIImage(systemName: icon)
             self.iconView.tintColor = color
         }
         if animated {
@@ -166,6 +171,15 @@ final class SettingsLeftPanelView: UIView {
             hintLabel.isHidden = true
             hintHeightZero.isActive = true
         }
+    }
+
+    /// Morphs the icon to the focused group's own symbol, or back to the page's.
+    func showSection(_ section: String?) {
+        let name = SettingsDescriptorStore.sectionIcon(for: page, section: section)
+            ?? SettingsDescriptorStore.pageInfo(for: page).icon
+        guard name != iconName, let image = UIImage(systemName: name) else { return }
+        iconName = name
+        iconView.setSymbolImage(image, contentTransition: .replace)
     }
 
     /// Update the per-row description (crossfade), keyed by `focusedSettingId`.

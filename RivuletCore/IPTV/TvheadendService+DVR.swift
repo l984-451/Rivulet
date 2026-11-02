@@ -35,7 +35,7 @@ nonisolated struct TvheadendRule: Sendable, Equatable {
 nonisolated enum TvheadendDVRError: LocalizedError {
     case cantRecord
 
-    var errorDescription: String? { "This Tvheadend user can't record." }
+    var errorDescription: String? { String(localized: "This Tvheadend user can't record.") }
 }
 
 extension TvheadendService {
@@ -161,7 +161,7 @@ extension TvheadendService {
     /// Rivulet adds.
     nonisolated static func ruleTitle(name: String?, pattern: String?) -> String {
         if let name { return name }
-        guard var text = pattern else { return "Series" }
+        guard var text = pattern else { return String(localized: "Series") }
         if text.hasPrefix("^") { text.removeFirst() }
         if text.hasSuffix("$"), !text.hasSuffix("\\$") { text.removeLast() }
         return text.replacing(/\\(.)/) { String($0.output.1) }

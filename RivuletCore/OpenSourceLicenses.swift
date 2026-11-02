@@ -41,7 +41,7 @@ enum OpenSourceLicenses {
     /// Where the corresponding AetherEngine source for the version linked by this app can be
     /// obtained, as required to satisfy the LGPL v3. Rivulet links the upstream release
     /// unmodified; this URL and the tag cited in the entry below must track the SPM pin.
-    static let aetherSourceURL = "https://github.com/superuser404notfound/AetherEngine/tree/7.52.0"
+    static let aetherSourceURL = "https://github.com/superuser404notfound/AetherEngine/tree/7.53.0"
 
     /// Shown at the top of the Licenses & Legal screen.
     static let appLicense = """
@@ -60,7 +60,7 @@ enum OpenSourceLicenses {
         [
             Entry(
                 name: "AetherEngine",
-                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.52.0, commit db35d50) is available at \(aetherSourceURL).",
+                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.53.0, commit 4a82484) is available at \(aetherSourceURL).",
                 licenseText: aetherLGPLv3
             ),
             Entry(

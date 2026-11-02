@@ -26,7 +26,8 @@ final class SettingsPageViewController: UIViewController {
     /// Pops this page and the one below it (a form opened from a picker).
     var onPopTwo: (() -> Void)?
     /// A row gained focus → container updates the left description panel.
-    var onFocusRow: ((String?) -> Void)?
+    /// `section` is the caption of the row's group, nil in the unheaded leading block.
+    var onFocusRow: ((_ id: String?, _ section: String?) -> Void)?
 
     private(set) var collectionView: UICollectionView!
     private var rows: [SettingsRowItem] = []
@@ -152,13 +153,22 @@ final class SettingsPageViewController: UIViewController {
 
 
 
+    /// The group of the row that last held focus, for a page returned to by a pop.
+    /// Kept when focus leaves the page, unlike `focusedIndexPath`.
+    private(set) var focusedSection: String?
+
+    private func section(of id: String) -> String? {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return nil }
+        return rows[..<index].last(where: \.isHeader)?.id
+    }
+
     /// Rebuild the row models for this page from current manager/UserDefaults
     /// state. Falls back to a single focusable placeholder for empty pages so
     /// focus always has a target (never a focusless page).
     private func rebuildRows() {
         rows = SettingsContent.rows(for: page)
         if rows.isEmpty {
-            rows = [SettingsRowItem(id: "placeholder_\(page.title)",
+            rows = [SettingsRowItem(id: "placeholder_\(page)",
                                     title: "\(page.title) — coming soon",
                                     kind: .action(destructive: false, handler: { _ in }))]
         }
@@ -222,7 +232,11 @@ extension SettingsPageViewController: UICollectionViewDataSource, UICollectionVi
         cell.configure(title: item.title, value: item.valueText, showsChevron: item.showsChevron,
                        destructive: item.isDestructive, showsCheckmark: item.showsCheckmark,
                        dimmed: !item.isEnabled(), busy: item.isBusy())
-        cell.onFocusGained = { [weak self] in self?.onFocusRow?(item.id) }
+        cell.onFocusGained = { [weak self] in
+            guard let self else { return }
+            focusedSection = section(of: item.id)
+            onFocusRow?(item.id, focusedSection)
+        }
         return cell
     }
 
@@ -243,7 +257,7 @@ extension SettingsPageViewController: UICollectionViewDataSource, UICollectionVi
             onPush?(target)
         case .toggle(let get, let set, let didChange):
             set(!get())
-            (collectionView.cellForItem(at: indexPath) as? SettingsCell)?.updateValue(get() ? "On" : "Off")
+            (collectionView.cellForItem(at: indexPath) as? SettingsCell)?.updateValue(get() ? String(localized: "On") : String(localized: "Off"))
             refreshDimmedRows()
             didChange?(get(), self)
         case .cycle(let value, let next):

@@ -43,6 +43,11 @@ final class SiloExtrasTests: XCTestCase {
         XCTAssertEqual(content.trailers[1].externalURL?.host, "www.youtube.com")
         XCTAssertEqual(content.trailers[2].externalURL?.host, "vimeo.com")
         XCTAssertNil(detail.trailerURL, "A watch page is not a playable media URL")
+        let episodeTiles = BelowFoldContentLoader.extraTiles(from: detail.extras, fallbackArt: nil)
+        XCTAssertNil(episodeTiles.trailers.first?.externalURL)
+        XCTAssertEqual(episodeTiles.trailers[1].externalURL?.host, "www.youtube.com")
+        XCTAssertEqual(episodeTiles.extras[1].externalURL?.host, "www.youtube.com")
+        XCTAssertEqual(episodeTiles.extras.first?.playbackKey, "extra-making-of")
 
         let selected = try XCTUnwrap(content.extras.first)
         let playbackRef = MediaItemRef(providerID: selected.providerID, itemID: try XCTUnwrap(selected.playbackKey))

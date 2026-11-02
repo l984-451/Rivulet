@@ -14,6 +14,18 @@ struct TileMenuAction {
     let systemImage: String
     var destructive: Bool = false
     let handler: () -> Void
+
+    /// A literal `title` is extracted to the string catalog; a server's text goes through `verbatim:`.
+    init(title: String.LocalizationValue, systemImage: String, destructive: Bool = false, handler: @escaping () -> Void) {
+        self.init(verbatim: String(localized: title), systemImage: systemImage, destructive: destructive, handler: handler)
+    }
+
+    init(verbatim title: String, systemImage: String, destructive: Bool = false, handler: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.destructive = destructive
+        self.handler = handler
+    }
 }
 
 /// What a menu is about, shown above its actions: the programme a Live TV

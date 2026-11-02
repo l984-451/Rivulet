@@ -151,7 +151,7 @@ final class IOSDownloadCenter: ObservableObject {
         guard record.state == .completed, let name = record.fileName else { return nil }
         let url = Self.directory.appending(path: name)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            fail(record.id, "File missing")
+            fail(record.id, String(localized: "File missing"))
             return nil
         }
 
@@ -257,6 +257,27 @@ final class IOSDownloadCenter: ObservableObject {
             $0.fileName = nil
             $0.completedAt = nil
         }
+        ensureTicking()
+    }
+
+    /// Stops a download, keeping resume data, until `resume`.
+    func pause(recordID id: String) {
+        guard let record = record(id), !record.state.isSettled else { return }
+        activeTasks[id] = nil
+        set(id, .pausedByUser)
+        Task {
+            for task in await transfer.allTasks() where task.taskDescription == id {
+                retiredTasks.insert(task.taskIdentifier)
+                transfer.pause(task)
+            }
+        }
+    }
+
+    func resume(recordID id: String) {
+        guard let index = records.firstIndex(where: { $0.id == id }), records[index].state == .pausedByUser else { return }
+        // Written directly: `update` keeps a user pause against every other writer.
+        records[index].state = .waitingForServer
+        save()
         ensureTicking()
     }
 
@@ -397,7 +418,7 @@ final class IOSDownloadCenter: ObservableObject {
             if status == 404 { forgetConversion(id) }
             if let reason = DownloadRules.failureReason(httpStatus: status) { fail(id, reason) } else { set(id, .waitingForServer) }
         } catch PlexAPIError.parsingError {
-            fail(id, "The server sent a response Rivulet couldn't read")
+            fail(id, String(localized: "The server sent a response Rivulet couldn't read"))
         } catch {
             set(id, .waitingForServer)
         }
@@ -730,6 +751,8 @@ final class IOSDownloadCenter: ObservableObject {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         var record = records[index]
         change(&record)
+        // Work still in flight when the user paused must not restart it.
+        if records[index].state == .pausedByUser { record.state = .pausedByUser }
         guard record != records[index] else { return }
         records[index] = record
         if shouldSave { save() }

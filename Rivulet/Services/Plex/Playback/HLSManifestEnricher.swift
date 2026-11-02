@@ -252,12 +252,12 @@ final class HLSManifestEnricher: NSObject, AVAssetResourceLoaderDelegate, @unche
         switch ch {
         case 8: channelDesc = "7.1"
         case 6: channelDesc = "5.1"
-        case 2: channelDesc = "Stereo"
-        case 1: channelDesc = "Mono"
+        case 2: channelDesc = String(localized: "Stereo")
+        case 1: channelDesc = String(localized: "Mono")
         default: channelDesc = ch > 0 ? "\(ch)ch" : ""
         }
 
-        if codecName.isEmpty && channelDesc.isEmpty { return "Audio" }
+        if codecName.isEmpty && channelDesc.isEmpty { return String(localized: "Audio") }
         if codecName.isEmpty { return channelDesc }
         if channelDesc.isEmpty { return codecName }
         return "\(codecName) \(channelDesc)"

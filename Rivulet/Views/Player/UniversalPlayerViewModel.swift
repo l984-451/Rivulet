@@ -350,7 +350,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var generatedSubtitlesPickedOn: String?
     /// The subtitle menu: the title's tracks, plus generated ones on the aether route.
     var subtitleMenuTracks: [MediaTrack] {
-        let generated = MediaTrack(id: Self.generatedSubtitleId, name: "English (On Device)", language: Self.generatedSubtitleStatus)
+        let generated = MediaTrack(id: Self.generatedSubtitleId, name: "English", language: "English",
+                                   title: Self.generatedSubtitleStatus)
         return subtitleTracks + (offersGeneratedSubtitles ? [generated] : [])
     }
     var offersGeneratedSubtitles: Bool { aetherPlayer != nil }
@@ -366,10 +367,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// The generated row's second line: the model's download until it is on disk.
     static var generatedSubtitleStatus: String {
         switch SpeechModelStore.shared.state {
-        case .ready: return "Generated on device"
-        case .absent: return "On device · downloads 230 MB"
-        case .downloading(let fraction): return "Downloading \(Int(fraction * 100))%"
-        case .failed: return "Download failed, select to retry"
+        case .ready: return String(localized: "Generated")
+        case .absent: return String(localized: "Generated, downloads 230 MB")
+        case .downloading(let fraction): return String(localized: "Downloading \(Int(fraction * 100))%")
+        case .failed: return String(localized: "Download failed, select to retry")
         }
     }
     /// Why the filter can't mute language on this title right now; nil when it can.
@@ -439,7 +440,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
     @Published private(set) var itemGeneration = 0
-    var title: String { metadata.title ?? "Unknown" }
+    var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
         if metadata.type == "episode" {
             let show = metadata.grandparentTitle ?? ""
@@ -828,6 +829,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// session. A new stream is a new play session, so the reporter follows it.
     private func setProviderStream(_ playback: ProviderPlayback, startPosition: TimeInterval? = nil,
                                    preservingReporter: Bool = false) {
+        let keepGeneratedSubtitles: Bool
+        if case .provider(let previous) = source {
+            keepGeneratedSubtitles = previous.item.ref == playback.item.ref && showsGeneratedSubtitles
+        } else {
+            keepGeneratedSubtitles = false
+        }
         siloSessionEventTask?.cancel()
         siloSessionEventTask = nil
         siloStallTask?.cancel()
@@ -886,8 +893,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         if playback.provider is SiloProvider, let selection = playback.stream.authoritativeSubtitleSelection {
             switch selection {
             case .off:
-                currentSubtitleTrackId = nil
-                subtitlesPickedOff = true
+                currentSubtitleTrackId = keepGeneratedSubtitles ? Self.generatedSubtitleId : nil
+                subtitlesPickedOff = !keepGeneratedSubtitles
             case .track(let id, _):
                 let ordinal = playback.stream.source.subtitleTracks.firstIndex { $0.id == id }
                 currentSubtitleTrackId = ordinal.flatMap { plexSubtitleTracksFromMetadata()[safe: $0]?.id }
@@ -2045,7 +2052,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard !Task.isCancelled, stops == stopCount else { return }
 
         guard let url = streamURL else {
-            errorMessage = "No stream URL available"
+            errorMessage = String(localized: "No stream URL available")
             playbackState = .failed(.invalidURL)
             return
         }
@@ -2109,7 +2116,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             if let playerError = error as? PlayerError {
                 errorMessage = playerError.userFacingDescription
             } else {
-                errorMessage = "Something went wrong during playback. Please try again."
+                errorMessage = String(localized: "Something went wrong during playback. Please try again.")
             }
             playbackState = .failed(.loadFailed(technicalError))
 
@@ -2961,7 +2968,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             let seasonNum = metadata.parentIndex ?? 0
             let episodeNum = metadata.index ?? 0
             let epTitle = metadata.title ?? ""
-            displayTitle = "S\(seasonNum) E\(episodeNum) · \(epTitle)"
+            displayTitle = String(localized: "S\(seasonNum) E\(episodeNum) · \(epTitle)")
         } else {
             displayTitle = metadata.title ?? ""
         }
@@ -3137,8 +3144,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         switch channels {
         case 8: channelDesc = "7.1"
         case 6: channelDesc = "5.1"
-        case 2: channelDesc = "Stereo"
-        case 1: channelDesc = "Mono"
+        case 2: channelDesc = String(localized: "Stereo")
+        case 1: channelDesc = String(localized: "Mono")
         default: channelDesc = channels > 0 ? "\(channels)ch" : ""
         }
 
@@ -3240,7 +3247,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 let end = CMTime(value: CMTimeValue(endMs), timescale: 1000)
                 let range = CMTimeRange(start: start, end: end)
 
-                let title = chapter.tag ?? "Chapter \(chapter.index ?? 0)"
+                let title = chapter.tag ?? String(localized: "Chapter \(chapter.index ?? 0)")
                 var items = [makeMetadataItem(.commonIdentifierTitle, value: title)]
 
                 if let index = chapter.index, let imageData = chapterThumbnails[index] {
@@ -3265,7 +3272,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             let end = CMTime(value: CMTimeValue(endMs), timescale: 1000)
             let range = CMTimeRange(start: start, end: end)
 
-            let titleItem = makeMetadataItem(.commonIdentifierTitle, value: marker.type?.capitalized ?? "Marker")
+            let titleItem = makeMetadataItem(.commonIdentifierTitle, value: marker.type?.capitalized ?? String(localized: "Marker"))
             return AVTimedMetadataGroup(items: [titleItem], timeRange: range)
         }
 
@@ -4243,39 +4250,17 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// What `applyAudioPreference` and `applySubtitlePreference` will pick on the Plex list, so a
     /// transcode starts on those tracks instead of restarting once they load. nil leaves the server's choice.
     private var startingTrackSelection: PlexTrackIDs {
-        let streams = metadata.Media?.first?.Part?.first?.Stream ?? []
-        let audio = plexAudioTracksFromMetadata()
-        let subs = plexSubtitleTracksFromMetadata()
-        var ids = PlexTrackIDs()
-        if let id = initialAudioTrackId, audio.contains(where: { $0.id == id }) {
-            ids.audio = id
-        } else if let selectedAudio = plexChosenAudioStreamId,
-                  audio.contains(where: { $0.id == selectedAudio }) {
-            ids.audio = selectedAudio
-        } else {
-            ids.audio = TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
-        }
+        let override = initialAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
+        let start = TrackIntentResolver.startingPlexSelection(streams: metadata.Media?.first?.Part?.first?.Stream ?? [],
+                                                              audioOverride: override)
         switch initialSubtitleSelection {
         case .off:
-            ids.subtitle = 0
-            return ids
-        case .track(let id) where subs.contains(where: { $0.id == id }):
-            ids.subtitle = id
-            return ids
+            return PlexTrackIDs(audio: start.audio, subtitle: 0)
+        case .track(let id) where plexSubtitleTracksFromMetadata().contains(where: { $0.id == id }):
+            return PlexTrackIDs(audio: start.audio, subtitle: id)
         default:
-            break
+            return PlexTrackIDs(audio: start.audio, subtitle: start.subtitle)
         }
-        let intent = TrackIntentStore.effectiveSubtitleIntent
-        if let selected = streams.first(where: { $0.isSubtitle && $0.selected == true })?.id,
-           let track = subs.first(where: { $0.id == selected }), !track.isDefault, !track.isForced,
-           TrackIntentResolver.plexSelectedSubtitleMayOverride(track, intent: intent) {
-            ids.subtitle = selected
-        } else {
-            let playing = audio.first { $0.id == ids.audio }
-            ids.subtitle = TrackIntentResolver.resolveSubtitle(
-                intent: intent, in: subs, audioLanguage: playing?.languageCode ?? playing?.language)?.id ?? 0
-        }
-        return ids
     }
 
     /// The playing audio and subtitle tracks; a nil subtitle is off.
@@ -5469,7 +5454,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         let generation = itemGeneration
         let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         var tracks = currentPlexTrackIDs()
-        showCompatibilityNotice("Downloading Subtitles…")
+        showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
         do {
             try await network.downloadSubtitle(
                 serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, resultKey: resultKey)
@@ -5494,10 +5479,10 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
                 return
             }
-            showCompatibilityNotice("Subtitles Didn't Arrive")
+            showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive"))
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
-            showCompatibilityNotice("Couldn't Download Subtitles")
+            showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
         }
     }
 
@@ -5860,7 +5845,13 @@ final class UniversalPlayerViewModel: ObservableObject {
         let plexSubs = plexStreams.filter { $0.isSubtitle }.map { MediaTrack(from: $0) }
 
         if providerTracksRequireReplan {
-            audioTracks = plexAudio
+            if case .provider(let playback) = source, playback.provider is SiloProvider,
+               playback.stream.negotiatedStatus?.delivery == .original, aetherLoadReturned,
+               let engineAudio = aetherPlayer?.audioTracks {
+                audioTracks = Self.projectNativeAudioRoles(provider: plexAudio, engine: engineAudio)
+            } else {
+                audioTracks = plexAudio
+            }
             subtitleTracks = plexSubs
             if !hasAppliedAudioPreference {
                 currentAudioTrackId = plexStreams.first { $0.isAudio && $0.selected == true }?.id
@@ -5932,11 +5923,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// per-item pick (selected but not the file default), or, with no audio
     /// language set in Rivulet, the server's pick from the account's language (#382).
     private var plexChosenAudioStreamId: Int? {
-        let streams = (metadata.Media?.first?.Part?.first?.Stream ?? []).filter { $0.isAudio }
-        guard let selectedId = streams.first(where: { $0.selected == true })?.id else { return nil }
-        if TrackIntentStore.audioIntent == nil { return selectedId }
-        guard let defaultId = streams.first(where: { $0.default == true })?.id else { return nil }
-        return selectedId != defaultId ? selectedId : nil
+        TrackIntentResolver.plexChosenAudioStreamID(in: metadata.Media?.first?.Part?.first?.Stream ?? [],
+                                                    hasAudioIntent: TrackIntentStore.audioIntent != nil)
     }
 
     /// Apply saved audio preference, in the numbered priority below. Every tier
@@ -6014,6 +6002,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             break
         }
 
+        // Generated subtitles carry on to the next item; preferRealSubtitlesOverGenerated decides.
+        guard !showsGeneratedSubtitles else { return }
+
         // 2. Plex's per-item explicit selection. A `selected: true` stream
         //    that's neither the default nor the forced one is a deliberate
         //    user pick (here, or in Plex Web / mobile) — honor it over the
@@ -6086,6 +6077,23 @@ final class UniversalPlayerViewModel: ObservableObject {
             stopTranscodeSubtitleReader()
             clearTranscodeSubtitles()
             reloadTranscodeForTrackChange()
+        }
+    }
+
+    /// Silo's original-file audio inventory uses audio ordinals, not container
+    /// indices. Only pair complete inventories; a partial probe cannot safely
+    /// identify a disposition. The provider's IDs remain the selection keys.
+    nonisolated static func projectNativeAudioRoles(provider: [MediaTrack], engine: [MediaTrack]) -> [MediaTrack] {
+        guard !provider.isEmpty, provider.count == engine.count else { return provider }
+        return zip(provider, engine).map { track, native in
+            MediaTrack(id: track.id, name: track.name, language: track.language, languageCode: track.languageCode,
+                       codec: track.codec, isDefault: track.isDefault, isForced: track.isForced,
+                       isHearingImpaired: track.isHearingImpaired,
+                       isCommentary: track.isCommentary || native.isCommentary,
+                       isAudioDescription: track.isAudioDescription || native.isAudioDescription,
+                       extendedDisplayTitle: track.extendedDisplayTitle, title: track.title,
+                       channels: track.channels, profile: track.profile, hasAtmos: track.hasAtmos,
+                       subtitleKey: track.subtitleKey, streamIndex: track.streamIndex, isExternal: track.isExternal)
         }
     }
 
@@ -6647,17 +6655,17 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Label for current skip button
     var skipButtonLabel: String {
-        guard let marker = activeMarker else { return "Skip" }
+        guard let marker = activeMarker else { return String(localized: "Skip") }
         if marker.isIntro {
-            return "Skip Intro"
+            return String(localized: "Skip Intro")
         } else if marker.isCredits {
-            return "Skip Credits"
+            return String(localized: "Skip Credits")
         } else if marker.isCommercial {
-            return "Skip Ad"
+            return String(localized: "Skip Ad")
         } else if marker.isRecap {
-            return "Skip Recap"
+            return String(localized: "Skip Recap")
         }
-        return "Skip"
+        return String(localized: "Skip")
     }
 
     /// Pill title. The auto-skip countdown is shown as a left-to-right fill
@@ -7594,7 +7602,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Stops the countdown and says why. The post-video page shows it; with
     /// no page up (a pick from the Up Next panel) it shows as a notice.
     private func showNextEpisodeError() {
-        let message = playQueue == nil ? "Couldn't load the next episode." : "Couldn't load the next item."
+        let message = playQueue == nil ? String(localized: "Couldn't load the next episode.") : String(localized: "Couldn't load the next item.")
         nextEpisodeError = message
         cancelCountdown()
         if postVideoState == .hidden { showCompatibilityNotice(message) }
@@ -7723,7 +7731,6 @@ final class UniversalPlayerViewModel: ObservableObject {
                 source: nextProviderPlayback.stream.source,
                 extras: nextProviderPlayback.extras
             )
-            setProviderStream(nextProviderPlayback)
         } else {
             // Preloaded metadata has markers. Choose before the swap: the choice may read the outgoing file.
             let version = upNextVersionChoice()
@@ -7738,9 +7745,14 @@ final class UniversalPlayerViewModel: ObservableObject {
         // signal), so bump this explicitly for anything that caches
         // per-item state and needs to reset across the swap.
         itemGeneration += 1
+        if let nextProviderPlayback {
+            setProviderStream(nextProviderPlayback)
+        }
         resetSiloSubtitleActions()
-        // An Off picked on the last title does not carry over (#432).
-        subtitlesPickedOff = false
+        // The new provider plan may explicitly select Off; do not overwrite it.
+        if nextProviderPlayback?.stream.authoritativeSubtitleSelection == nil {
+            subtitlesPickedOff = false
+        }
         if let queueIndex { playQueue?.jump(to: queueIndex) } else { playQueue?.advance() }
         providerTargetSourceID = nil
         // Work queued for the outgoing item never runs, so nothing else clears this.
@@ -7824,6 +7836,15 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // Clear preloaded data
         clearPreloadedData()
+
+        // The provider plan has already seeded its authoritative selection.
+        // Local/Plex routes re-resolve saved intents for the new episode.
+        if !providerTracksRequireReplan {
+            hasAppliedAudioPreference = false
+            hasAppliedSubtitlePreference = false
+            audioTracks = []
+            subtitleTracks = []
+        }
 
         // The swap reuses this AetherPlayer, so the engine replaces the item on
         // a layer that is already on screen. Without this the outgoing item is

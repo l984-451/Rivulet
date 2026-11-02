@@ -1,0 +1,572 @@
+{
+ "movies": [
+  {
+   "slug": "neon-meridian",
+   "title": "Neon Meridian",
+   "year": 2026,
+   "genres": [
+    "Science Fiction",
+    "Thriller"
+   ],
+   "rating": "PG-13",
+   "minutes": 128,
+   "tagline": "The city never forgets.",
+   "font": "/System/Library/Fonts/Supplemental/Futura.ttc",
+   "fontIndex": 4,
+   "tracking": 0.18,
+   "upper": true,
+   "summary": "A courier who erases memories for a living takes one job too many and wakes up carrying the only copy of a secret the whole city wants buried.",
+   "backdrop": "cinematic film still, wide shot, a lone woman in a long dark coat standing on a rain soaked rooftop above a vast futuristic megacity at night, glowing magenta and cyan neon, light rain, volumetric haze, anamorphic lens, shallow depth of field, moody, high detail",
+   "poster": "movie poster key art, a woman in a dark coat seen from behind looking over a futuristic neon city at night, magenta and cyan glow, rain, vertical composition, dramatic, cinematic lighting",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 1
+   }
+  },
+  {
+   "slug": "saltwater-hours",
+   "title": "The Saltwater Hours",
+   "year": 2025,
+   "genres": [
+    "Drama"
+   ],
+   "rating": "PG-13",
+   "minutes": 117,
+   "tagline": "Some storms you wait out together.",
+   "font": "/System/Library/Fonts/Supplemental/Didot.ttc",
+   "fontIndex": 0,
+   "tracking": 0.06,
+   "upper": false,
+   "summary": "When a winter storm cuts off a remote island, a lighthouse keeper and her estranged son have three days to say what twenty years of silence could not.",
+   "backdrop": "cinematic film still, wide shot, a tall white lighthouse on black rocks during a storm at dusk, huge waves crashing, warm light in the lighthouse window, teal and orange color grade, a small figure in a yellow raincoat on the path, dramatic sky, anamorphic",
+   "poster": "movie poster key art, a lighthouse on a rocky island in a storm at dusk, giant waves, warm glowing window, teal and amber color palette, vertical composition, painterly cinematic",
+   "seeds": {
+    "backdrop": 1,
+    "poster": 1
+   }
+  },
+  {
+   "slug": "emberfall",
+   "title": "Emberfall",
+   "year": 2025,
+   "genres": [
+    "Fantasy",
+    "Adventure"
+   ],
+   "rating": "PG-13",
+   "minutes": 141,
+   "tagline": "Every kingdom burns once.",
+   "font": "/System/Library/Fonts/Supplemental/Trattatello.ttf",
+   "fontIndex": 0,
+   "tracking": 0.04,
+   "upper": false,
+   "summary": "A blacksmith's daughter forges a blade from a fallen star and is hunted across a burning continent by the queen who wants its fire for herself.",
+   "backdrop": "cinematic film still, epic wide shot, a young woman warrior with a glowing sword standing on a cliff edge overlooking a valley of glowing lava rivers and ash clouds, embers floating in the air, a giant dragon silhouette in the smoke, orange and deep red, fantasy epic",
+   "poster": "fantasy movie poster key art, a young woman warrior holding a glowing sword, embers swirling around her, volcanic sky, dragon silhouette behind, orange and crimson palette, vertical composition, epic",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 1
+   }
+  },
+  {
+   "slug": "paper-kites",
+   "title": "Paper Kites",
+   "year": 2024,
+   "genres": [
+    "Family",
+    "Animation"
+   ],
+   "rating": "PG",
+   "minutes": 96,
+   "tagline": "Hold on tight.",
+   "font": "/System/Library/Fonts/Supplemental/Chalkduster.ttf",
+   "fontIndex": 0,
+   "tracking": 0.02,
+   "upper": false,
+   "summary": "Two kids build a kite big enough to carry a letter to their grandfather across the sea, and a summer wind takes them much farther than they planned.",
+   "backdrop": "3d animated film still, pixar style, two cheerful kids running across a golden wheat field at sunset holding the string of a huge colorful patchwork kite, fluffy clouds, warm golden light, joyful, vibrant colors",
+   "poster": "3d animated movie poster, pixar style, two happy kids each with exactly two arms flying a giant colorful patchwork kite high in a bright blue sky over golden fields, the kite string held by one child, vibrant, joyful, vertical composition",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 3
+   }
+  },
+  {
+   "slug": "cold-harbor-line",
+   "title": "Cold Harbor Line",
+   "year": 2025,
+   "genres": [
+    "Thriller",
+    "Crime"
+   ],
+   "rating": "R",
+   "minutes": 112,
+   "tagline": "Nine stops. One killer.",
+   "font": "/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf",
+   "fontIndex": 0,
+   "tracking": 0.12,
+   "upper": true,
+   "summary": "A night train stalls on a frozen bridge, and the off-duty detective aboard has until morning to find out which passenger has done this before.",
+   "backdrop": "cinematic film still, a long passenger train crossing a high steel bridge over a frozen gorge at night in heavy snow, warm lit windows, red signal lights, blue cold tones, mist, tense atmosphere, wide shot, anamorphic",
+   "poster": "thriller movie poster key art, a night train on a snowy steel bridge, red signal light glowing, cold blue tones, falling snow, suspenseful, vertical composition",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 1
+   }
+  },
+  {
+   "slug": "atlas-drift",
+   "title": "Atlas Drift",
+   "year": 2026,
+   "genres": [
+    "Science Fiction",
+    "Adventure"
+   ],
+   "rating": "PG-13",
+   "minutes": 133,
+   "tagline": "Four hundred kilometers from home.",
+   "font": "/System/Library/Fonts/Supplemental/Phosphate.ttc",
+   "fontIndex": 0,
+   "tracking": 0.1,
+   "upper": true,
+   "summary": "After debris shreds their station, the last engineer aboard has one damaged capsule, ninety minutes of air, and a plan nobody on the ground believes in.",
+   "backdrop": "cinematic film still, an astronaut in a white spacesuit floating above earth during sunrise, the curve of the planet glowing blue and gold, a damaged space station in the background, lens flare, epic, realistic",
+   "poster": "sci-fi movie poster key art, an astronaut floating above earth at sunrise, glowing atmosphere, debris drifting, deep blue and gold, vertical composition, epic",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 2
+   }
+  },
+  {
+   "slug": "the-last-orchard",
+   "title": "The Last Orchard",
+   "year": 2023,
+   "genres": [
+    "Drama",
+    "Romance"
+   ],
+   "rating": "PG",
+   "minutes": 104,
+   "tagline": "One more harvest.",
+   "font": "/System/Library/Fonts/Supplemental/Baskerville.ttc",
+   "fontIndex": 0,
+   "tracking": 0.08,
+   "upper": false,
+   "summary": "An aging farmer and the young woman sent to buy his land spend one autumn bringing in a harvest neither of them expected to finish.",
+   "backdrop": "cinematic film still, an old man and a young woman walking between rows of apple trees in autumn, golden afternoon light, red apples, falling leaves, warm nostalgic tones, shallow depth of field",
+   "poster": "romantic drama movie poster key art, an old farmer and a young woman in an apple orchard in autumn, warm golden light, falling leaves, vertical composition, gentle",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 2
+   }
+  },
+  {
+   "slug": "wild-signal",
+   "title": "Wild Signal",
+   "year": 2025,
+   "genres": [
+    "Adventure",
+    "Comedy"
+   ],
+   "rating": "PG-13",
+   "minutes": 109,
+   "tagline": "No map. No plan. No reception.",
+   "font": "/System/Library/Fonts/Supplemental/Rockwell.ttc",
+   "fontIndex": 1,
+   "tracking": 0.06,
+   "upper": true,
+   "summary": "Two rival radio hosts are stranded in the desert with a broken van, one working microphone, and an audience that is starting to listen.",
+   "backdrop": "cinematic film still, a vintage turquoise van parked on an empty desert highway at sunset, two people sitting on the roof laughing, red rock mesas, warm orange and pink sky, wide shot, vibrant, joyful",
+   "poster": "adventure comedy movie poster, a vintage turquoise van on an empty desert road at sunset, two friends on the roof, red rock mesas, vibrant orange pink sky, vertical composition",
+   "seeds": {
+    "backdrop": 2,
+    "poster": 2
+   }
+  }
+ ],
+ "shows": [
+  {
+   "slug": "harbor-lights",
+   "title": "Harbor Lights",
+   "year": 2025,
+   "genres": [
+    "Drama"
+   ],
+   "rating": "TV-14",
+   "font": "/System/Library/Fonts/Supplemental/Didot.ttc",
+   "fontIndex": 0,
+   "tracking": 0.14,
+   "upper": true,
+   "summary": "In a fishing town on the edge of the North Atlantic, four families bound by one boat and one bad winter try to keep their harbor alive.",
+   "backdrop": "cinematic tv drama still, a small fishing town harbor at golden hour, colorful wooden houses on a hill, fishing boats, four adults standing together on the dock, warm light, ocean, wide shot",
+   "poster": "tv drama poster key art, four adults standing on a wooden dock in a colorful fishing harbor at sunset, boats behind them, warm golden light, vertical composition",
+   "episodes": [
+    [
+     "Low Tide",
+     "The fleet comes home one boat short, and Nora has to decide who tells the family.",
+     "a fishing boat returning to harbor in morning fog, worried people waiting on the dock"
+    ],
+    [
+     "The Auction",
+     "The cannery goes up for sale, and the whole town shows up to bid with money it does not have.",
+     "a crowded town hall auction in a small fishing town, people raising paddles, warm interior light"
+    ],
+    [
+     "Squall",
+     "A storm pins three crews at sea while the radio goes quiet.",
+     "a small fishing boat in a violent storm at night, huge waves, spotlight, rain"
+    ],
+    [
+     "Salt and Iron",
+     "Eli takes the old boat out alone to prove it still works.",
+     "a young man repairing an old fishing boat in a shed, sparks from welding, warm light"
+    ],
+    [
+     "Harvest Moon",
+     "The festival goes ahead, and so does an engagement nobody saw coming.",
+     "a harbor festival at night with string lights, people dancing on the pier, full moon over the water"
+    ],
+    [
+     "Open Water",
+     "The season ends with the harbor under new ownership and one last run.",
+     "a fishing boat sailing out of the harbor at sunrise, seagulls, calm golden sea"
+    ]
+   ],
+   "seeds": {
+    "backdrop": 1,
+    "poster": 1,
+    "episodes": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "slug": "night-shift-diner",
+   "title": "The Night Shift Diner",
+   "year": 2024,
+   "genres": [
+    "Comedy"
+   ],
+   "rating": "TV-PG",
+   "font": "/System/Library/Fonts/Supplemental/Rockwell.ttc",
+   "fontIndex": 0,
+   "tracking": 0.05,
+   "upper": true,
+   "summary": "The staff of a twenty four hour roadside diner keep the coffee hot and the regulars stranger than fiction from midnight to six.",
+   "backdrop": "cinematic sitcom still, interior of a retro 1950s roadside restaurant at night, chrome counter, red vinyl stools, lit by pink and teal neon light strips on the ceiling, plain walls with no signs and no writing, a waitress and a cook laughing behind the counter, warm, vibrant",
+   "poster": "comedy tv poster, five cheerful restaurant staff in retro uniforms posing in a row behind a chrome counter, pink and teal light, plain background with no signs, vibrant, vertical composition",
+   "episodes": [
+    [
+     "Bottomless",
+     "A trucker claims the free refill sign is a legal contract.",
+     "a waitress pouring coffee for a grinning trucker at a chrome counter, interior of a retro 1950s roadside restaurant at night, chrome counter, red vinyl stools, lit by pink and teal neon light strips on the ceiling, plain walls with no signs and no writing"
+    ],
+    [
+     "The Critic",
+     "A food critic arrives at 3 a.m., and the cook has never made anything but pancakes.",
+     "a nervous cook flipping pancakes on a griddle in a small restaurant kitchen, steam, warm light, comedic"
+    ],
+    [
+     "Blackout",
+     "The power goes out and the diner runs on candles and a waffle iron plugged into a car.",
+     "staff and customers gathered around a booth table lit by candles at night in a retro restaurant, laughing"
+    ],
+    [
+     "Pie Night",
+     "A pie contest gets competitive enough to need a referee.",
+     "colorful pies lined up on a chrome counter, staff judging with clipboards, pink and teal light, no signs"
+    ],
+    [
+     "Snowed In",
+     "A blizzard traps six strangers and one jukebox until morning.",
+     "a small retro roadside restaurant building glowing warm in a heavy snowstorm at night, cars buried in snow, no signs"
+    ],
+    [
+     "Sunrise Special",
+     "The night crew finally sees a sunrise together.",
+     "two restaurant workers in retro uniforms sitting on the hood of an old car in a parking lot watching the sunrise, holding coffee mugs"
+    ]
+   ],
+   "seeds": {
+    "backdrop": 2,
+    "poster": 3,
+    "episodes": [
+     2,
+     1,
+     1,
+     1,
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "slug": "moss-and-pebble",
+   "title": "Moss & Pebble",
+   "year": 2025,
+   "genres": [
+    "Kids",
+    "Animation"
+   ],
+   "rating": "TV-Y",
+   "font": "/System/Library/Fonts/Supplemental/Chalkduster.ttf",
+   "fontIndex": 0,
+   "tracking": 0.02,
+   "upper": false,
+   "summary": "A shy hedgehog and a fearless pebble explore the forest beyond the garden wall, one small adventure at a time.",
+   "backdrop": "3d animated film still, pixar style, a cute small hedgehog and a smiling round grey pebble character with big eyes in a lush sunlit forest clearing with giant mushrooms and fireflies, vibrant, joyful",
+   "poster": "3d animated kids tv poster, pixar style, a cute hedgehog and a smiling pebble character on a mossy log in a magical sunlit forest, vibrant colors, vertical composition",
+   "episodes": [
+    [
+     "The Big Puddle",
+     "Pebble wants to cross the biggest puddle in the forest.",
+     "3d animated pixar style, a cute hedgehog and a pebble character on a leaf boat crossing a sparkling puddle, sunny forest"
+    ],
+    [
+     "Firefly Night",
+     "Moss is afraid of the dark until the fireflies come out.",
+     "3d animated pixar style, a cute hedgehog surrounded by glowing fireflies in a forest at night, magical blue light"
+    ],
+    [
+     "Acorn Day",
+     "The friends gather acorns before the first frost.",
+     "3d animated pixar style, a cute hedgehog and pebble character collecting acorns among autumn leaves, warm colors"
+    ],
+    [
+     "Rainy Day Fort",
+     "A rainstorm becomes the best day ever.",
+     "3d animated pixar style, a cute hedgehog and pebble character in a cozy fort under a big leaf in the rain"
+    ],
+    [
+     "The Tall Tree",
+     "Pebble rolls up a hill to see the top of the tallest tree.",
+     "3d animated pixar style, a smiling pebble character on a grassy hill looking up at a giant tree, blue sky"
+    ],
+    [
+     "Snowflake",
+     "Their first snow, and a snowflake that will not melt.",
+     "3d animated pixar style, a cute hedgehog catching a snowflake in a snowy forest, soft light"
+    ]
+   ],
+   "seeds": {
+    "backdrop": 2,
+    "poster": 2,
+    "episodes": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   }
+  }
+ ],
+ "live": [
+  {
+   "number": 101,
+   "channel": "Meridian News",
+   "program": "Meridian Morning",
+   "genre": "News",
+   "prompt": "two news anchors, a man and a woman, at a modern glass news desk in a bright tv studio with blue screens behind them, broadcast lighting"
+  },
+  {
+   "number": 102,
+   "channel": "Coastline 24",
+   "program": "World Report",
+   "genre": "News",
+   "prompt": "a female news reporter with a microphone standing on a city street at dusk, broadcast news shot, shallow depth of field"
+  },
+  {
+   "number": 201,
+   "channel": "Arena Sports",
+   "program": "Premier Football Live",
+   "genre": "Sports",
+   "prompt": "a professional soccer match at night in a packed stadium, players in plain red kits and plain white kits chasing the ball, floodlights, broadcast camera angle, no logos"
+  },
+  {
+   "number": 202,
+   "channel": "Arena Sports 2",
+   "program": "Hoops Tonight",
+   "genre": "Sports",
+   "prompt": "a professional basketball player in a plain blue jersey dunking during a game, packed arena, broadcast angle, no logos"
+  },
+  {
+   "number": 203,
+   "channel": "Fairway",
+   "program": "Coastal Open, Round 3",
+   "genre": "Sports",
+   "prompt": "a professional golfer swinging on a coastal golf course with ocean cliffs, sunny day, broadcast shot"
+  },
+  {
+   "number": 301,
+   "channel": "Wild Earth",
+   "program": "Into the Highlands",
+   "genre": "Documentary",
+   "prompt": "a snow leopard walking on a rocky mountain ridge at sunrise, wildlife documentary, telephoto"
+  },
+  {
+   "number": 302,
+   "channel": "Blue Planet One",
+   "program": "Ocean Giants",
+   "genre": "Documentary",
+   "prompt": "a humpback whale swimming with a diver in clear blue ocean water, sun rays, underwater documentary"
+  },
+  {
+   "number": 401,
+   "channel": "Open Flame",
+   "program": "Fire and Salt",
+   "genre": "Cooking",
+   "prompt": "a cheerful chef cooking with flames in a pan in a bright modern tv kitchen studio, colorful vegetables, broadcast lighting"
+  },
+  {
+   "number": 402,
+   "channel": "Wander",
+   "program": "Coastal Villages",
+   "genre": "Travel",
+   "prompt": "a colorful mediterranean village on cliffs above turquoise sea, sunny, travel show"
+  },
+  {
+   "number": 501,
+   "channel": "Late Show Live",
+   "program": "The Late Hour",
+   "genre": "Talk",
+   "prompt": "a late night talk show set with a host at a desk and a guest on a couch, city skyline backdrop at night, studio lights, audience"
+  }
+ ],
+ "actors": [
+  {
+   "name": "Mara Quill",
+   "prompt": "portrait headshot photo of a woman in her late twenties with dark wavy hair, soft studio light, neutral background, professional actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Dorian Vale",
+   "prompt": "portrait headshot photo of a man in his forties with a short grey beard, soft studio light, neutral background, professional actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Imani Brooks",
+   "prompt": "portrait headshot photo of a black woman in her thirties with short natural hair, warm smile, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Theo Lindqvist",
+   "prompt": "portrait headshot photo of a young man with blond hair and freckles, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Rosa Ibarra",
+   "prompt": "portrait headshot photo of a latina woman in her fifties with silver streaked hair, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Kenji Arata",
+   "prompt": "portrait headshot photo of a japanese man in his thirties, clean shaven, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Ada Okafor",
+   "prompt": "portrait headshot photo of a nigerian woman in her twenties with braids, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  },
+  {
+   "name": "Silas Hart",
+   "prompt": "portrait headshot photo of an older man in his seventies with white hair and kind eyes, soft studio light, neutral background, actor headshot",
+   "seed": 1
+  }
+ ],
+ "albums": [
+  {
+   "slug": "paper-moon-radio",
+   "title": "Paper Moon Radio",
+   "artist": "Juniper Vale",
+   "year": 2025,
+   "genre": "Indie Folk",
+   "prompt": "album cover art, a vintage radio glowing on a windowsill under a huge paper moon in a deep blue night sky, painterly, warm and cool tones",
+   "tracks": [
+    "Static Hearts",
+    "Paper Moon Radio",
+    "Northbound",
+    "Kettle Song",
+    "The Long Way Round",
+    "Lantern Field",
+    "Honey and Rust",
+    "Postcards",
+    "Low Light",
+    "Quiet Hour",
+    "Coming Home Slow",
+    "Goodnight, Halifax"
+   ],
+   "seed": 1
+  },
+  {
+   "slug": "neon-tides",
+   "title": "Neon Tides",
+   "artist": "Polar Coast",
+   "year": 2024,
+   "genre": "Synthpop",
+   "prompt": "album cover art, a palm tree silhouette against a neon pink and purple synthwave ocean sunset, retro grid, vibrant",
+   "seed": 1
+  },
+  {
+   "slug": "slow-bloom",
+   "title": "Slow Bloom",
+   "artist": "Ivy Marsh",
+   "year": 2023,
+   "genre": "R&B",
+   "prompt": "album cover art, close up of a single pink flower blooming with water droplets on a dark background, elegant, soft light",
+   "seed": 1
+  },
+  {
+   "slug": "concrete-gardens",
+   "title": "Concrete Gardens",
+   "artist": "The Late Arrivals",
+   "year": 2025,
+   "genre": "Alternative",
+   "prompt": "album cover art, wildflowers growing through cracked concrete in an abandoned city at golden hour, cinematic",
+   "seed": 1
+  },
+  {
+   "slug": "after-the-rain",
+   "title": "After the Rain",
+   "artist": "Elena Sol",
+   "year": 2022,
+   "genre": "Jazz",
+   "prompt": "album cover art, a rainy city street at night reflecting warm lights, a lone umbrella, moody blue and amber, painterly",
+   "seed": 2
+  },
+  {
+   "slug": "high-desert",
+   "title": "High Desert",
+   "artist": "Coyote Hymnal",
+   "year": 2024,
+   "genre": "Americana",
+   "prompt": "album cover art, a lone pickup truck on a desert highway under a giant starry sky with the milky way, cinematic",
+   "seed": 1
+  },
+  {
+   "slug": "glass-hours",
+   "title": "Glass Hours",
+   "artist": "Oslo Static",
+   "year": 2025,
+   "genre": "Electronic",
+   "prompt": "album cover art, abstract iridescent glass shapes floating in soft light, holographic colors, minimal",
+   "seed": 1
+  },
+  {
+   "slug": "wildfire-season",
+   "title": "Wildfire Season",
+   "artist": "Red Hollow",
+   "year": 2023,
+   "genre": "Rock",
+   "prompt": "album cover art, a silhouetted rock band on a hill in front of a dramatic orange sky with smoke, bold, cinematic",
+   "seed": 1
+  }
+ ]
+}

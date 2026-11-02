@@ -264,18 +264,18 @@ enum ProviderPlayer {
     /// What the error popup says for a failed start.
     static func errorMessage(for error: Error) -> String {
         switch error as? MediaProviderError {
-        case .transcodeRequired: "This server can't stream this title to Apple TV."
-        case .unreachable: "Couldn't reach the server."
-        case .unauthorized: "The server didn't accept your sign-in."
-        default: "Something went wrong starting playback."
+        case .transcodeRequired: String(localized: "This server can't stream this title to Apple TV.")
+        case .unreachable: String(localized: "Couldn't reach the server.")
+        case .unauthorized: String(localized: "The server didn't accept your sign-in.")
+        default: String(localized: "Something went wrong starting playback.")
         }
     }
 
     @MainActor
     private static func presentError(_ error: Error, from presenter: UIViewController) {
         let popup = ConfirmationPopupViewController(
-            title: "Couldn't Play", message: errorMessage(for: error),
-            confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+            title: String(localized: "Couldn't Play"), message: errorMessage(for: error),
+            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
         presenter.topmostPresented.present(popup, animated: true)
     }
 }

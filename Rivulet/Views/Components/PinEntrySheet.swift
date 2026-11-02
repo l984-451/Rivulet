@@ -185,7 +185,7 @@ private struct RememberPinToggle: View {
 
                 Spacer()
 
-                Text(isOn ? "On" : "Off")
+                Text(isOn ? String(localized: "On") : String(localized: "Off"))
                     .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(isOn ? .green : Color.primary.opacity(0.5))
             }

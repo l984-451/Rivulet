@@ -576,7 +576,7 @@ private final class IOSLiveGuideProgramCell: UICollectionViewCell {
     func configure(program: UnifiedProgram?, isRecording: Bool) {
         self.program = program
         self.isRecording = isRecording
-        titleLabel.text = program?.displayTitle ?? "No guide data"
+        titleLabel.text = program?.displayTitle ?? String(localized: "No guide data")
         let subtitle = [program?.guideDetail, program?.guideTag].compactMap { $0 }.joined(separator: " · ")
         subtitleLabel.text = subtitle.isEmpty ? nil : subtitle
         subtitleLabel.isHidden = subtitle.isEmpty
@@ -585,10 +585,10 @@ private final class IOSLiveGuideProgramCell: UICollectionViewCell {
         let airing = program?.isCurrentlyAiring ?? true
         accessibilityLabel = titleLabel.text
         var value = program.map { [$0.timeRange] } ?? []
-        if program?.isCurrentlyAiring == true { value.append("On now") }
-        if isRecording { value.append("Recording") }
+        if program?.isCurrentlyAiring == true { value.append(String(localized: "On now")) }
+        if isRecording { value.append(String(localized: "Recording")) }
         accessibilityValue = value.joined(separator: ", ")
-        accessibilityHint = airing ? "Plays the channel" : "Shows details"
+        accessibilityHint = airing ? String(localized: "Plays the channel") : String(localized: "Shows details")
     }
 
     override func apply(_ layoutAttributes: UICollectionViewLayoutAttributes) {
@@ -668,7 +668,7 @@ private final class IOSLiveGuideChannelView: UICollectionReusableView {
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         isAccessibilityElement = true
         accessibilityTraits = .button
-        accessibilityHint = "Plays the channel"
+        accessibilityHint = String(localized: "Plays the channel")
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -771,7 +771,7 @@ private final class IOSLiveGuideCornerView: UICollectionReusableView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(date: Date) {
-        label.text = Calendar.current.isDateInToday(date) ? "Today" : date.formatted(.dateTime.weekday(.abbreviated))
+        label.text = Calendar.current.isDateInToday(date) ? String(localized: "Today") : date.formatted(.dateTime.weekday(.abbreviated))
     }
 }
 

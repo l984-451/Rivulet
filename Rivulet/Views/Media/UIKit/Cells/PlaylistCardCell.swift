@@ -44,7 +44,7 @@ final class PlaylistCardCell: UICollectionViewCell {
         titleLabel.numberOfLines = 2
         subtitleLabel.font = .systemFont(ofSize: 24, weight: .medium)
         subtitleLabel.textColor = UIColor(white: 1, alpha: 0.7)
-        subtitleLabel.text = "Smart Playlist"
+        subtitleLabel.text = String(localized: "Smart Playlist")
 
         let text = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         text.axis = .vertical

@@ -35,6 +35,44 @@ final class SiloPlaybackPreferenceApplicationTests: XCTestCase {
         XCTAssertNil(try SiloPlaybackPolicyApplication(policy: policy(audio: .clear)).audioIndex(in: version))
     }
 
+    func testAccessibilityAudioUsesDescribedTwinAndPreservesExplicitAndFallback() throws {
+        let version = try XCTUnwrap(watch().versions?.first)
+        let english = try SiloPlaybackPolicyApplication(policy: policy(audio: .value("eng")))
+        let japanese = try SiloPlaybackPolicyApplication(policy: policy(audio: .value("ja")))
+        XCTAssertEqual(SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: version, policy: english, explicitIndex: nil, prefersAudioDescription: true), 2)
+        XCTAssertEqual(SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: version, policy: english, explicitIndex: nil, prefersAudioDescription: false), 1)
+        XCTAssertEqual(SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: version, policy: english, explicitIndex: 1, prefersAudioDescription: true), 1)
+        XCTAssertEqual(SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: version, policy: japanese, explicitIndex: nil, prefersAudioDescription: true), 0)
+        XCTAssertNil(SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: version, policy: nil, explicitIndex: nil, prefersAudioDescription: true))
+    }
+
+    func testSystemCaptionsOverrideOffAndSavedSignatureButNotSessionSelection() throws {
+        let item = try watch(mode: "off")
+        let version = try XCTUnwrap(item.versions?.first)
+        let playbackPlan = try plan()
+        let localOff = try SiloPlaybackPolicyApplication(policy: policy(mode: .value(.off)))
+        XCTAssertEqual(try SiloInitialSubtitleSelection.resolve(watch: item, version: version, plan: playbackPlan,
+            explicitIndex: nil, policy: localOff, captionsAlwaysOn: true, deviceLanguage: "en"),
+            .track(.init(id: "track:sdh", index: 10)))
+        XCTAssertEqual(try SiloInitialSubtitleSelection.resolve(watch: item, version: version, plan: playbackPlan,
+            explicitIndex: -1, policy: localOff, captionsAlwaysOn: true, deviceLanguage: "en"), .off)
+        XCTAssertEqual(try SiloInitialSubtitleSelection.resolve(watch: item, version: version, plan: playbackPlan,
+            explicitIndex: 7, policy: localOff, captionsAlwaysOn: true, deviceLanguage: "en"),
+            .track(.init(id: "track:english", index: 7)))
+        let french = try SiloPlaybackPolicyApplication(policy: policy(language: .value("fr"), mode: .value(.off)))
+        XCTAssertEqual(try SiloInitialSubtitleSelection.resolve(watch: item, version: version, plan: playbackPlan,
+            explicitIndex: nil, policy: french, captionsAlwaysOn: true, deviceLanguage: "en"),
+            .track(.init(id: "track:french", index: 9)))
+        let unavailable = try SiloPlaybackPolicyApplication(policy: policy(language: .value("de")))
+        XCTAssertEqual(try SiloInitialSubtitleSelection.resolve(watch: item, version: version, plan: playbackPlan,
+            explicitIndex: nil, policy: unavailable, captionsAlwaysOn: true, deviceLanguage: "en"), .off)
+    }
+
     func testExplicitOffAndLocalLanguageBeatFollowedAlwaysAndSignature() throws {
         let item = try watch()
         let version = try XCTUnwrap(item.versions?.first)
@@ -75,7 +113,8 @@ final class SiloPlaybackPreferenceApplicationTests: XCTestCase {
          "effective_subtitle_language":"eng","effective_show_forced_subtitles":false\(saved),
          "versions":[{"file_id":"file-a","resolution":"1080p","codec_video":"hevc",
            "codec_audio":"aac","hdr":false,"container":"mkv","file_size":1000,"bitrate":4000,
-           "audio_tracks":[{"language":"ja","default":true},{"language":"en","default":false}]}]}
+           "audio_tracks":[{"language":"ja","default":true},{"language":"en","default":false},
+             {"language":"eng","title":"Audio Description","default":false}]}]}
         """
         return try SiloJSON.decoder().decode(SiloItem.self, from: Data(json.utf8))
     }
@@ -95,7 +134,10 @@ final class SiloPlaybackPreferenceApplicationTests: XCTestCase {
             "hearing_impaired":false,"delivery":"sidecar","url":"/api/v2/subtitles/7.ass"},
            {"track_id":"track:french","combined_index":9,"source":"embedded","codec":"ass",
             "language":"fr","label":"French","forced":false,"default":true,
-            "hearing_impaired":false,"delivery":"sidecar","url":"/api/v2/subtitles/9.ass"}]}}
+            "hearing_impaired":false,"delivery":"sidecar","url":"/api/v2/subtitles/9.ass"},
+           {"track_id":"track:sdh","combined_index":10,"source":"embedded","codec":"ass",
+            "language":"en","label":"English SDH","forced":false,"default":false,
+            "hearing_impaired":true,"delivery":"sidecar","url":"/api/v2/subtitles/10.ass"}]}}
         """
         return try SiloJSON.decoder().decode(SiloPlaybackPlan.self, from: Data(json.utf8))
     }

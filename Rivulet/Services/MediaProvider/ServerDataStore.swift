@@ -434,7 +434,7 @@ final class ServerDataStore: ObservableObject {
             if !continuing.isEmpty {
                 let id = Self.rowID(provider.id, "continueWatching")
                 continuingRow = [CachedHomeHub(
-                    id: id, title: "Continue Watching", isContinueWatching: true, hubKey: nil,
+                    id: id, title: String(localized: "Continue Watching"), isContinueWatching: true, hubKey: nil,
                     hubIdentifier: id, totalSize: nil, items: continuing)]
             }
         } else {

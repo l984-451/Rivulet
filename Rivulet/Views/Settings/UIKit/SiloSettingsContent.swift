@@ -75,9 +75,9 @@ extension SettingsContent {
 
     static var siloProfiles: [SettingsRowItem] {
         var rows = siloProfileList.map { profile in
-            SettingsRowItem(id: "siloProfile_\(profile.id)", title: profile.name,
+            SettingsRowItem(id: "siloProfile_\(profile.id)", verbatim: profile.name,
                             kind: .selectable(isSelected: { SiloSession.account?.profileID == profile.id },
-                                              value: { profile.hasPIN ? "PIN Required" : nil }, handler: { vc in
+                                              value: { profile.hasPIN ? String(localized: "PIN Required") : nil }, handler: { vc in
                 guard !siloBusy else { return }
                 if profile.hasPIN {
                     siloPendingProfile = profile
@@ -270,16 +270,19 @@ extension SettingsContent {
 
     static func siloFailureCopy(for error: Error) -> String {
         if let localized = error as? LocalizedError, let message = localized.errorDescription { return message }
-        if case MediaProviderError.unreachable = error { return "Couldn't reach Silo. Check the web address and your network connection." }
-        return "Silo could not complete this request. Try again."
+        if case MediaProviderError.unreachable = error {
+            return String(localized: "Couldn't reach Silo. Check the web address and your network connection.")
+        }
+        return String(localized: "Silo could not complete this request. Try again.")
     }
 
-    private static func siloFailure(on vc: UIViewController, title: String, error: Error) {
-        siloFailure(on: vc, title: title, message: siloFailureCopy(for: error))
-    }
-
-    private static func siloFailure(on vc: UIViewController, title: String, message: String) {
+    private static func siloFailure(on vc: UIViewController, title: String.LocalizationValue, error: Error) {
         let page = vc as? SettingsPageViewController
-        fail(siloDraft, page: page, title: title, message: message)
+        fail(siloDraft, page: page, title: String(localized: title), message: siloFailureCopy(for: error))
+    }
+
+    private static func siloFailure(on vc: UIViewController, title: String.LocalizationValue, message: String.LocalizationValue) {
+        let page = vc as? SettingsPageViewController
+        fail(siloDraft, page: page, title: String(localized: title), message: String(localized: message))
     }
 }

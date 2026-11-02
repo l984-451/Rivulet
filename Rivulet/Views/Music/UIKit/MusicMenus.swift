@@ -19,6 +19,21 @@ struct MusicMenuItem {
     var subtitle: String? = nil
     var children: [MusicMenuItem] = []
     var handler: () -> Void = {}
+
+    /// A literal `title` is extracted to the string catalog; a server's text goes through `verbatim:`.
+    init(title: String.LocalizationValue, symbol: String, subtitle: String? = nil,
+         children: [MusicMenuItem] = [], handler: @escaping () -> Void = {}) {
+        self.init(verbatim: String(localized: title), symbol: symbol, subtitle: subtitle, children: children, handler: handler)
+    }
+
+    init(verbatim title: String, symbol: String, subtitle: String? = nil,
+         children: [MusicMenuItem] = [], handler: @escaping () -> Void = {}) {
+        self.title = title
+        self.symbol = symbol
+        self.subtitle = subtitle
+        self.children = children
+        self.handler = handler
+    }
 }
 
 @MainActor
@@ -44,7 +59,7 @@ enum MusicMenus {
                              header: TileMenuHeader? = nil) {
         guard !items.isEmpty, presenter.presentedViewController == nil else { return }
         let actions = items.map { item in
-            TileMenuAction(title: item.title, systemImage: item.symbol) {
+            TileMenuAction(verbatim: item.title, systemImage: item.symbol) {
                 if item.children.isEmpty {
                     item.handler()
                 } else {
@@ -150,7 +165,7 @@ enum MusicMenus {
             }
         }
         let children = [newPlaylist] + playlists.map { playlist in
-            MusicMenuItem(title: playlist.title, symbol: "music.note.list") {
+            MusicMenuItem(verbatim: playlist.title, symbol: "music.note.list") {
                 run(tracks) { tracks in
                     Task {
                         do {

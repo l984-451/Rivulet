@@ -58,7 +58,7 @@ final class InsightsCastListView: UIView {
         attribution.font = .systemFont(ofSize: 15, weight: .regular)
         attribution.textColor = UIColor.white.withAlphaComponent(0.6)
         applyChromeTextShadow([attribution])
-        attribution.text = trivia.map { "Info from " + $0.attribution.map(\.name).joined(separator: " · ") }
+        attribution.text = trivia.map { String(localized: "Info from \($0.attribution.map(\.name).joined(separator: " · "))") }
         attribution.isHidden = true
 
         [scrollView, stack, attribution].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }

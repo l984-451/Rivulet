@@ -31,11 +31,11 @@ final class SiloDeviceSignInViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         let title = UILabel()
-        title.text = "Sign In with Your Phone"
+        title.text = String(localized: "Sign In with Your Phone")
         title.font = .preferredFont(forTextStyle: .title1)
         title.textAlignment = .center
         title.numberOfLines = 0
-        status.text = "Requesting a sign in code…"
+        status.text = String(localized: "Requesting a sign in code…")
         status.textAlignment = .center
         status.numberOfLines = 0
         code.font = .monospacedDigitSystemFont(ofSize: 38, weight: .bold)
@@ -49,14 +49,14 @@ final class SiloDeviceSignInViewController: UIViewController {
         qr.contentMode = .scaleAspectFit
         qr.backgroundColor = .white
         qr.layer.magnificationFilter = .nearest
-        restart.setTitle("Request New Code", for: .normal)
+        restart.setTitle(String(localized: "Request New Code"), for: .normal)
         restart.addTarget(self, action: #selector(start), for: .primaryActionTriggered)
         restart.isHidden = true
         let password = UIButton(type: .system)
-        password.setTitle("Use Password Instead", for: .normal)
+        password.setTitle(String(localized: "Use Password Instead"), for: .normal)
         password.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
         let cancel = UIButton(type: .system)
-        cancel.setTitle("Cancel", for: .normal)
+        cancel.setTitle(String(localized: "Cancel"), for: .normal)
         cancel.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
         let actions = UIStackView(arrangedSubviews: [restart, password, cancel])
         actions.axis = .horizontal
@@ -123,14 +123,14 @@ final class SiloDeviceSignInViewController: UIViewController {
         qr.image = nil
         code.text = nil
         address.text = nil
-        status.text = "Requesting a sign in code…"
+        status.text = String(localized: "Requesting a sign in code…")
         task = Task { [weak self] in
             guard let self else { return }
             do {
                 let started = try await SiloSession.startDeviceSignIn(serverURL: serverURL)
                 try Task.checkCancellation()
                 code.text = started.userCode.replacingOccurrences(of: "-", with: " ")
-                address.text = "On your phone, visit \(started.verificationUri) and enter the code."
+                address.text = String(localized: "On your phone, visit \(started.verificationUri) and enter the code.")
                 deadline = Date().addingTimeInterval(TimeInterval(started.expiresIn))
                 updateExpiry()
                 expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -145,13 +145,13 @@ final class SiloDeviceSignInViewController: UIViewController {
                         qr.isHidden = false
                     }
                 }
-                status.text = "Waiting for approval on your phone…"
+                status.text = String(localized: "Waiting for approval on your phone…")
                 let profiles = try await SiloSession.awaitDeviceSignIn(started)
                 try Task.checkCancellation()
                 expiryTimer?.invalidate()
                 expiryTimer = nil
                 completed = true
-                status.text = "Approved. Choose a profile to finish signing in."
+                status.text = String(localized: "Approved. Choose a profile to finish signing in.")
                 dismiss(animated: true) { [weak self] in self?.onApproved?(profiles) }
             } catch is CancellationError {
                 return

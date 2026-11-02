@@ -143,8 +143,8 @@ struct IOSPlexConnectionSheet: View {
     }
 
     private var title: String {
-        if choosingProfile { return "Who’s Watching?" }
-        return plex.state == .selectingServer ? "Choose a Server" : "Sign In"
+        if choosingProfile { return String(localized: "Who’s Watching?") }
+        return plex.state == .selectingServer ? String(localized: "Choose a Server") : String(localized: "Sign In")
     }
 
     @ViewBuilder
@@ -340,7 +340,7 @@ struct IOSProfilePicker: View {
                 .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(user.requiresPin ? "\(user.displayName), requires PIN" : user.displayName)
+        .accessibilityLabel(user.requiresPin ? String(localized: "\(user.displayName), requires PIN") : user.displayName)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -378,7 +378,7 @@ struct IOSProfilePicker: View {
             if result.success {
                 dismiss()
             } else {
-                pinError = result.pinWasInvalid ? "Your saved PIN no longer works. Enter it again." : nil
+                pinError = result.pinWasInvalid ? String(localized: "Your saved PIN no longer works. Enter it again.") : nil
                 pinUser = user
             }
         }
@@ -460,7 +460,7 @@ private struct IOSProfilePINEntry: View {
             if ok {
                 dismiss()
             } else {
-                error = "Incorrect PIN. Try again."
+                error = String(localized: "Incorrect PIN. Try again.")
                 pin = ""
                 focused = true
             }

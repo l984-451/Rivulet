@@ -55,7 +55,7 @@ final class ProgressReportThrottleTests: XCTestCase {
 
 final class TimelineTerminationTests: XCTestCase {
     private func text(_ json: String) -> String? {
-        PlexProgressReporter.terminationText(in: Data(json.utf8))
+        PlexNetworkManager.timelineTermination(in: Data(json.utf8))
     }
 
     func testPlainReplyIsNotATermination() {

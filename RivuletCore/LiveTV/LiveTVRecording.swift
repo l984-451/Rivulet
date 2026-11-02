@@ -111,11 +111,11 @@ nonisolated enum LiveTVRecordingError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSupported:
-            return "This source can't record."
+            return String(localized: "This source can't record.")
         case .programEnded:
-            return "This programme has already ended."
+            return String(localized: "This programme has already ended.")
         case .noGuideIdentity:
-            return "The guide doesn't identify this programme well enough to record it."
+            return String(localized: "The guide doesn't identify this programme well enough to record it.")
         }
     }
 }

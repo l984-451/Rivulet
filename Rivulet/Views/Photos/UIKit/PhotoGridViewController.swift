@@ -132,9 +132,9 @@ final class PhotoGridViewController: UIViewController {
         } else if listing.isLoading {
             kind = .loading
         } else if listing.error != nil {
-            kind = .error(message: "This library could not be loaded.")
+            kind = .error(message: String(localized: "This library could not be loaded."))
         } else {
-            kind = .empty(message: "No photos here.")
+            kind = .empty(message: String(localized: "No photos here."))
         }
         if let kind { stateView.configure(kind: kind) }
         stateView.isHidden = kind == nil

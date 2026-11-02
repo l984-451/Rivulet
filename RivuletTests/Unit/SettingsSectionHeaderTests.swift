@@ -28,6 +28,17 @@ final class SettingsSectionHeaderTests: XCTestCase {
         }
     }
 
+    func test_appearance_groupsLibraryRowsUnderLibraryHeader() {
+        let titles = appearance.map(\.title)
+        guard let library = titles.firstIndex(of: "Library"),
+              let details = titles.firstIndex(of: "Details") else {
+            return XCTFail("missing Library / Details captions in \(titles)")
+        }
+        // "Hero", not "Library Hero" — the caption already says Library.
+        XCTAssertEqual(Array(titles[(library + 1)..<details]),
+                       ["Hero", "Discovery Rows", "Recent Rows"])
+    }
+
     /// Two rows are now both titled "Hero" (under HOME and under LIBRARY). They
     /// must stay distinct underneath: same key on both would silently make one
     /// of them control the other's surface.

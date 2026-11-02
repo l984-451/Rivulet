@@ -21,8 +21,8 @@ enum InsightsTab: Hashable {
 
     var title: String {
         switch self {
-        case .topTen: return "Top 10"
-        case .cast: return "Cast"
+        case .topTen: return String(localized: "Top 10")
+        case .cast: return String(localized: "Cast")
         case .category(let category): return category.tabDisplayName
         }
     }

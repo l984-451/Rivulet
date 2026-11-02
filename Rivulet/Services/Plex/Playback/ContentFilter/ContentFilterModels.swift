@@ -98,15 +98,15 @@ nonisolated enum FilterCategory: String, Codable, Sendable, CaseIterable, Identi
 
     var displayName: String {
         switch self {
-        case .profanity: return "Profanity"
-        case .blasphemy: return "Blasphemy"
-        case .slur: return "Slurs"
-        case .sexualLanguage: return "Crude & Sexual Language"
-        case .violence: return "Violence & Gore"
-        case .sexNudity: return "Sex & Nudity"
-        case .frightening: return "Frightening & Intense"
-        case .substances: return "Drugs, Alcohol & Smoking"
-        case .other: return "Other"
+        case .profanity: return String(localized: "Profanity")
+        case .blasphemy: return String(localized: "Blasphemy")
+        case .slur: return String(localized: "Slurs")
+        case .sexualLanguage: return String(localized: "Crude & Sexual Language")
+        case .violence: return String(localized: "Violence & Gore")
+        case .sexNudity: return String(localized: "Sex & Nudity")
+        case .frightening: return String(localized: "Frightening & Intense")
+        case .substances: return String(localized: "Drugs, Alcohol & Smoking")
+        case .other: return String(localized: "Other")
         }
     }
 

@@ -75,9 +75,9 @@ final class LiveTimeshiftBadgeView: UIView {
         glyph.isHidden = !isPaused
         dot.isHidden = !isLive || isPaused
         if isLive && !isPaused {
-            label.text = "LIVE"
+            label.text = String(localized: "LIVE")
         } else if isLive {
-            label.text = "Paused"
+            label.text = String(localized: "Paused")
         } else {
             label.text = "−" + Self.clock(behindLiveSeconds)
         }

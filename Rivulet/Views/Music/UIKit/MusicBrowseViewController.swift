@@ -60,8 +60,8 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
     /// drop a remembered path, so a fresh list aims its entry instead (`aimEntry`).
     private lazy var collectionView = SidebarCollectionView(frame: .zero, collectionViewLayout: makeLayout())
     private var dataSource: UICollectionViewDiffableDataSource<Int, Item>!
-    private let playButton = MusicChrome.pill(title: "Play", symbol: "play.fill")
-    private let shuffleButton = MusicChrome.pill(title: "Shuffle", symbol: "shuffle")
+    private let playButton = MusicChrome.pill(title: String(localized: "Play"), symbol: "play.fill")
+    private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
     private let filterButton = MusicChrome.pill(title: nil, symbol: "line.3.horizontal.decrease")
     private let sortButton = MusicChrome.pill(title: nil, symbol: "arrow.up.arrow.down")
     private lazy var failureView = MusicChrome.failureView { [weak self] in self?.reload() }
@@ -379,13 +379,12 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
 
     private var countText: String? {
         guard let total else { return nil }
-        let noun = switch destination {
-        case .playlists: "playlist"
-        case .artists: "artist"
-        case .songs: "song"
-        case .recentlyAdded, .albums, .genre: "album"
+        return switch destination {
+        case .playlists: String(localized: "\(total) playlists")
+        case .artists: String(localized: "\(total) artists")
+        case .songs: String(localized: "\(total) songs")
+        case .recentlyAdded, .albums, .genre: String(localized: "\(total) albums")
         }
-        return "\(total.formatted()) \(noun)\(total == 1 ? "" : "s")"
     }
 
     private lazy var lockupRegistration = UICollectionView.CellRegistration<MusicLockupCell, Item> {
@@ -526,10 +525,12 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
     private var sortOptions: [(title: String, sort: MusicSort)] {
         switch destination {
         case .recentlyAdded: []
-        case .playlists: [("Title", .title), ("Recently Added", .recentlyAdded)]
-        case .artists: [("Name", .title), ("Recently Added", .recentlyAdded)]
-        case .albums, .genre: [("Title", .title), ("Artist", .artist), ("Year", .year), ("Recently Added", .recentlyAdded)]
-        case .songs: [("Title", .title), ("Artist", .artist), ("Album", .album), ("Recently Added", .recentlyAdded)]
+        case .playlists: [(String(localized: "Title"), .title), (String(localized: "Recently Added"), .recentlyAdded)]
+        case .artists: [(String(localized: "Name"), .title), (String(localized: "Recently Added"), .recentlyAdded)]
+        case .albums, .genre: [(String(localized: "Title"), .title), (String(localized: "Artist"), .artist),
+                               (String(localized: "Year"), .year), (String(localized: "Recently Added"), .recentlyAdded)]
+        case .songs: [(String(localized: "Title"), .title), (String(localized: "Artist"), .artist),
+                      (String(localized: "Album"), .album), (String(localized: "Recently Added"), .recentlyAdded)]
         }
     }
 
@@ -542,7 +543,7 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
             }
         })
         let favorites = favoritesOnly.contains(destination)
-        filterButton.menu = UIMenu(children: [("All", false), ("Favorites", true)].map { title, value in
+        filterButton.menu = UIMenu(children: [(String(localized: "All"), false), (String(localized: "Favorites"), true)].map { title, value in
             UIAction(title: title, state: value == favorites ? .on : .off) { [weak self] _ in
                 if value { self?.favoritesOnly.insert(destination) } else { self?.favoritesOnly.remove(destination) }
                 self?.reload()

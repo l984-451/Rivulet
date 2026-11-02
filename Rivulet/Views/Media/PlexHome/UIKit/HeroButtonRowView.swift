@@ -23,6 +23,9 @@ final class HeroButtonRowView: UIView {
 
     private let stack = UIStackView()
 
+    /// Right past Next pages, as in the TV app: the touch twin of `pressesBegan`.
+    private var pageSwipe: DirectionalInputBinding?
+
     // MARK: - State
 
     var canAdvance: Bool = false {
@@ -57,14 +60,14 @@ final class HeroButtonRowView: UIView {
     private func renderPrimaryAction() {
         switch primaryAction {
         case .play:
-            playButton.title = "Play"
+            playButton.title = String(localized: "Play")
             playButton.iconImage = UIImage(systemName: "play.fill")
-            playButton.accessibilityLabel = "Play"
+            playButton.accessibilityLabel = String(localized: "Play")
             watchlistButton.isHidden = false
         case .watchlist:
-            playButton.title = "Watchlist"
+            playButton.title = String(localized: "Watchlist")
             playButton.iconImage = UIImage(systemName: isOnWatchlist ? "bookmark.fill" : "bookmark")
-            playButton.accessibilityLabel = "Toggle Watchlist"
+            playButton.accessibilityLabel = String(localized: "Toggle Watchlist")
             watchlistButton.isHidden = true
         }
     }
@@ -82,16 +85,16 @@ final class HeroButtonRowView: UIView {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
 
-        playButton.title = "Play"
+        playButton.title = String(localized: "Play")
         playButton.iconImage = UIImage(systemName: "play.fill")
         watchlistButton.setImage(UIImage(systemName: "plus"), for: .normal)
         infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal)
         nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
 
-        playButton.accessibilityLabel = "Play"
-        watchlistButton.accessibilityLabel = "Toggle Watchlist"
-        infoButton.accessibilityLabel = "More info"
-        nextButton.accessibilityLabel = "Next featured item"
+        playButton.accessibilityLabel = String(localized: "Play")
+        watchlistButton.accessibilityLabel = String(localized: "Toggle Watchlist")
+        infoButton.accessibilityLabel = String(localized: "More info")
+        nextButton.accessibilityLabel = String(localized: "Next featured item")
 
         playButton.addTarget(self, action: #selector(playTapped), for: .primaryActionTriggered)
         watchlistButton.addTarget(self, action: #selector(watchlistTapped), for: .primaryActionTriggered)
@@ -118,6 +121,10 @@ final class HeroButtonRowView: UIView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+        pageSwipe = DirectionalInputBinding(
+            gatedSwipesOn: self, directions: [.right],
+            shouldHandle: { [weak self] _ in self?.pagesOnRight == true },
+            onSwipe: { [weak self] _ in self?.onNext?() })
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -140,6 +147,18 @@ final class HeroButtonRowView: UIView {
         watchlistButton.isFocusEnabled = on
         infoButton.isFocusEnabled = on
         nextButton.isFocusEnabled = on
+    }
+
+    /// Next is the last button, so the engine has no Right move from it to make.
+    private var pagesOnRight: Bool { nextButton.isFocused && !nextButton.isHidden }
+
+    // A Right the engine declined (nothing past Next) reaches here; focus stays on Next.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if pagesOnRight, presses.contains(where: { $0.type == .rightArrow }) {
+            onNext?()
+            return
+        }
+        super.pressesBegan(presses, with: event)
     }
 
     // MARK: - Targets

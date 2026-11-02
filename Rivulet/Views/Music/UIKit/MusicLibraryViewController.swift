@@ -22,11 +22,11 @@ nonisolated enum MusicLibraryDestination: Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .recentlyAdded: "Recently Added"
-        case .playlists: "Playlists"
-        case .artists: "Artists"
-        case .albums: "Albums"
-        case .songs: "Songs"
+        case .recentlyAdded: String(localized: "Recently Added")
+        case .playlists: String(localized: "Playlists")
+        case .artists: String(localized: "Artists")
+        case .albums: String(localized: "Albums")
+        case .songs: String(localized: "Songs")
         case .genre(let genre): genre.title
         }
     }

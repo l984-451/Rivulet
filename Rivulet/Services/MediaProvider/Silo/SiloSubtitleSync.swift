@@ -3,12 +3,6 @@
 
 import Foundation
 
-/// A server-published identity, never reconstructed from a label, ordinal or sidecar URL.
-nonisolated struct SiloSubtitleSyncTarget: Hashable, Sendable {
-    let fileID: String
-    let key: String
-}
-
 nonisolated struct SiloSubtitleTiming: Codable, Equatable, Sendable {
     let offsetMs: Int
     let scale: Double

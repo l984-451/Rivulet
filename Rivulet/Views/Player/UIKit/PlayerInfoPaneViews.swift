@@ -112,7 +112,7 @@ final class PlayerInfoCardView: UIView {
         meta.axis = .horizontal
         meta.spacing = 6
         meta.alignment = .center
-        let words = content.metaLine ?? [content.genre, content.runtimeMinutes.map { "\($0) min" }].compactMap { $0 }
+        let words = content.metaLine ?? [content.genre, content.runtimeMinutes.map { String(localized: "\($0) min") }].compactMap { $0 }
         if !words.isEmpty {
             let label = UILabel()
             label.text = words.joined(separator: " • ")
@@ -125,7 +125,7 @@ final class PlayerInfoCardView: UIView {
             meta.addArrangedSubview(PlayerInfoBadgeView(text: badge))
         }
 
-        let action = PlayerPaneActionButton(title: "From Beginning", symbol: "play.fill")
+        let action = PlayerPaneActionButton(title: String(localized: "From Beginning"), symbol: "play.fill")
         action.isHidden = !content.showsFromBeginning
         action.onPress = { [weak self] in self?.onFromBeginning?() }
 
@@ -699,22 +699,39 @@ private final class CardBandGradientView: UIView {
 enum DolbyVisionPlayback: String, Equatable {
     case dualLayer = "Dual Layer (FEL)"
     case convertedTo81 = "Profile 8.1 (converted)"
+    case convertedTo81Unconfirmed = "Profile 8.1 (converted), TV not confirmed"
     case dolbyVision = "Dolby Vision"
+    case dolbyVisionUnconfirmed = "Dolby Vision, TV not confirmed"
     case hdr10BaseLayer = "HDR10 Base Layer"
     case sdr = "SDR"
+
+    /// Display text; rawValue stays the stable English.
+    var title: String {
+        switch self {
+        case .dualLayer: String(localized: "Dual Layer (FEL)")
+        case .convertedTo81: String(localized: "Profile 8.1 (converted)")
+        case .convertedTo81Unconfirmed: String(localized: "Profile 8.1 (converted), TV not confirmed")
+        case .dolbyVision: "Dolby Vision"
+        case .dolbyVisionUnconfirmed: String(localized: "Dolby Vision, TV not confirmed")
+        case .hdr10BaseLayer: String(localized: "HDR10 Base Layer")
+        case .sdr: "SDR"
+        }
+    }
 
     /// A Profile 7 source shown as Dolby Vision without the 8.1 rewrite is on
     /// the engine's dual-layer route, which only FEL takes.
     /// videoFormat read SDR on the dual-layer route in #362; an unconverted P7 on the software route is it.
+    /// The engine reads SDR until it proves the panel is in HDR, which a TV already in HDR may never
+    /// prove (#438), so Dolby Vision sent to a Dolby Vision TV is "not confirmed", never SDR.
     init?(sourceProfile: Int?, convertedTo81: Bool, onSoftwareRoute: Bool = false,
-          presentsDolbyVision: Bool, presentsHDR: Bool) {
+          presentsDolbyVision: Bool, presentsHDR: Bool, panelSupportsDolbyVision: Bool = false) {
         guard let sourceProfile else { return nil }
-        if convertedTo81 {
-            self = .convertedTo81
-        } else if sourceProfile == 7, onSoftwareRoute {
+        if sourceProfile == 7, !convertedTo81, onSoftwareRoute {
             self = .dualLayer
         } else if presentsDolbyVision {
-            self = sourceProfile == 7 ? .dualLayer : .dolbyVision
+            self = convertedTo81 ? .convertedTo81 : sourceProfile == 7 ? .dualLayer : .dolbyVision
+        } else if panelSupportsDolbyVision {
+            self = convertedTo81 ? .convertedTo81Unconfirmed : .dolbyVisionUnconfirmed
         } else {
             self = presentsHDR ? .hdr10BaseLayer : .sdr
         }
@@ -726,6 +743,14 @@ enum DolbyVisionPlayback: String, Equatable {
 enum DolbyVisionEnhancementLayer: String, Equatable {
     case full = "Full (FEL)"
     case minimal = "Minimal (MEL)"
+
+    /// Display text; rawValue stays the stable English.
+    var title: String {
+        switch self {
+        case .full: String(localized: "Full (FEL)")
+        case .minimal: String(localized: "Minimal (MEL)")
+        }
+    }
 
     init?(routeLine: String) {
         if routeLine.contains("el_type=FEL") || routeLine.contains("over the real-time budget") {
@@ -744,6 +769,16 @@ struct StreamingModeInfo {
         case directPlay = "Direct Play"
         case directStream = "Direct Stream"
         case transcode = "Transcode"
+
+        /// Display text; rawValue stays the stable English.
+        var title: String {
+            switch self {
+            case .unknown: String(localized: "Unknown")
+            case .directPlay: String(localized: "Direct Play")
+            case .directStream: String(localized: "Direct Stream")
+            case .transcode: String(localized: "Transcode")
+            }
+        }
     }
     let video: Mode
     let audio: Mode
@@ -969,58 +1004,60 @@ final class PlayerDetailsPaneView: UIView {
     static func mediaSections(metadata: PlexMetadata, modes: StreamingModeInfo,
                               dolbyVision: DolbyVisionPlayback? = nil,
                               enhancementLayer: DolbyVisionEnhancementLayer? = nil,
-                              enhanceDialogue: String? = nil) -> [Section] {
+                              enhanceDialogue: String? = nil,
+                              upscale: String? = nil) -> [Section] {
         let media = metadata.Media?.first
         let streams = media?.Part?.first?.Stream ?? []
         var sections: [Section] = []
 
-        var video = [Row(label: "Mode", value: modes.video.rawValue)]
+        var video = [Row(label: String(localized: "Mode"), value: modes.video.title)]
         if let stream = streams.first(where: { $0.isVideo }) {
             if let title = stream.displayTitle ?? stream.extendedDisplayTitle {
-                video.append(Row(label: "Format", value: title))
+                video.append(Row(label: String(localized: "Format"), value: title))
             }
             if stream.isDolbyVision {
-                var profile = "Profile \(stream.DOVIProfile ?? 0)"
+                var profile = String(localized: "Profile \(stream.DOVIProfile ?? 0)")
                 if let compat = stream.DOVIBLCompatID { profile += " (CompatID \(compat))" }
                 video.append(Row(label: "Dolby Vision", value: profile))
-                if let enhancementLayer { video.append(Row(label: "Enhancement Layer", value: enhancementLayer.rawValue)) }
-                if let dolbyVision { video.append(Row(label: "Playing As", value: dolbyVision.rawValue)) }
+                if let enhancementLayer { video.append(Row(label: String(localized: "Enhancement Layer"), value: enhancementLayer.title)) }
+                if let dolbyVision { video.append(Row(label: String(localized: "Playing As"), value: dolbyVision.title)) }
             } else if stream.isHDR {
                 video.append(Row(label: "HDR", value: "HDR10"))
             }
             let color = [stream.bitDepth.map { "\($0)-bit" }, stream.colorSpace].compactMap { $0 }
-            if !color.isEmpty { video.append(Row(label: "Color", value: color.joined(separator: " · "))) }
+            if !color.isEmpty { video.append(Row(label: String(localized: "Color"), value: color.joined(separator: " · "))) }
         } else if let media {
-            if let codec = media.videoCodec { video.append(Row(label: "Codec", value: codec.uppercased())) }
-            if let resolution = media.videoResolution { video.append(Row(label: "Resolution", value: resolution)) }
+            if let codec = media.videoCodec { video.append(Row(label: String(localized: "Codec"), value: codec.uppercased())) }
+            if let resolution = media.videoResolution { video.append(Row(label: String(localized: "Resolution"), value: resolution)) }
         }
         if let media {
             if let width = media.width, let height = media.height {
-                video.append(Row(label: "Dimensions", value: "\(width) × \(height)"))
+                video.append(Row(label: String(localized: "Dimensions"), value: "\(width) × \(height)"))
             }
-            if let frameRate = media.videoFrameRate { video.append(Row(label: "Frame Rate", value: frameRate)) }
+            if let frameRate = media.videoFrameRate { video.append(Row(label: String(localized: "Frame Rate"), value: frameRate)) }
+            if let upscale { video.append(Row(label: String(localized: "Upscaling"), value: upscale)) }
             // Plex reports kbps; the formatter takes bits/sec.
             if let bitrate = media.bitrate {
-                video.append(Row(label: "Bitrate", value: PlayerInfoSheetStyle.bitrate(bitrate * 1000)))
+                video.append(Row(label: String(localized: "Bitrate"), value: PlayerInfoSheetStyle.bitrate(bitrate * 1000)))
             }
         }
         sections.append(Section(title: "VIDEO", rows: video))
 
         let audio = streams.filter { $0.isAudio }
         if !audio.isEmpty {
-            var rows = [Row(label: "Mode", value: modes.audio.rawValue)]
-            if let enhanceDialogue { rows.append(Row(label: "Enhance Dialogue", value: enhanceDialogue)) }
+            var rows = [Row(label: String(localized: "Mode"), value: modes.audio.title)]
+            if let enhanceDialogue { rows.append(Row(label: String(localized: "Enhance Dialogue"), value: enhanceDialogue)) }
             for (index, stream) in audio.enumerated() { rows.append(audioRow(stream, index: index)) }
             sections.append(Section(title: "AUDIO", rows: rows))
         }
 
         if let part = media?.Part?.first {
             var rows: [Row] = []
-            if let path = part.file { rows.append(Row(label: "Name", value: (path as NSString).lastPathComponent)) }
-            if let container = part.container ?? media?.container { rows.append(Row(label: "Container", value: container.uppercased())) }
-            if let size = part.size { rows.append(Row(label: "Size", value: PlayerInfoSheetStyle.fileSize(Int64(size)))) }
+            if let path = part.file { rows.append(Row(label: String(localized: "Name"), value: (path as NSString).lastPathComponent)) }
+            if let container = part.container ?? media?.container { rows.append(Row(label: String(localized: "Container"), value: container.uppercased())) }
+            if let size = part.size { rows.append(Row(label: String(localized: "Size"), value: PlayerInfoSheetStyle.fileSize(Int64(size)))) }
             if let duration = metadata.duration ?? part.duration {
-                rows.append(Row(label: "Duration", value: PlayerInfoSheetStyle.duration(duration)))
+                rows.append(Row(label: String(localized: "Duration"), value: PlayerInfoSheetStyle.duration(duration)))
             }
             if !rows.isEmpty { sections.append(Section(title: "FILE", rows: rows)) }
         }
@@ -1033,8 +1070,8 @@ final class PlayerDetailsPaneView: UIView {
         var parts = [stream.codec == nil ? nil : track.audioFormat, track.audioRole]
         if let bitrate = stream.bitrate, bitrate > 0 { parts.append(PlayerInfoSheetStyle.bitrate(bitrate * 1000)) }
         let value = parts.compactMap { $0 }.joined(separator: " · ")
-        return Row(label: stream.language ?? "Track \(index + 1)",
-                   value: value.isEmpty ? "Unknown" : value)
+        return Row(label: stream.language ?? String(localized: "Track \(index + 1)"),
+                   value: value.isEmpty ? String(localized: "Unknown") : value)
     }
 
     private typealias StatRow = (title: String, value: (AetherAdvancedStats) -> String?)

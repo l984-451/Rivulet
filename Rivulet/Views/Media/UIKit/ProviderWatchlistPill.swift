@@ -11,7 +11,7 @@ enum ProviderWatchlistPill {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID),
               provider.supportsWatchlist else { return false }
         let ref = item.ref
-        title?.text = "Watchlist"
+        title?.text = String(localized: "Watchlist")
         icon.image = UIImage(systemName: "bookmark")
         var onList = false
         var inFlight = true

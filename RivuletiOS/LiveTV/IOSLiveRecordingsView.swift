@@ -92,19 +92,19 @@ struct IOSLiveRecordingsView: View {
             }
             Spacer(minLength: 0)
             if recording.status == .recording {
-                IOSLivePill(text: "REC", dot: true, style: .red)
+                IOSLivePill(text: String(localized: "REC"), dot: true, style: .red)
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityValue(recording.status == .recording ? "Recording now" : "")
+        .accessibilityValue(recording.status == .recording ? String(localized: "Recording now") : "")
     }
 
     private func detail(_ recording: LiveTVScheduledRecording) -> String {
         let day = Calendar.current.isDateInToday(recording.startTime)
-            ? "Today"
+            ? String(localized: "Today")
             : recording.startTime.formatted(.dateTime.weekday(.wide).month().day())
         let time = Date.FormatStyle.dateTime.hour().minute()
-        let range = "\(recording.startTime.formatted(time)) to \(recording.endTime.formatted(time))"
+        let range = String(localized: "\(recording.startTime.formatted(time)) to \(recording.endTime.formatted(time))")
         return [day, range, recording.channelName].compactMap { $0 }.joined(separator: " · ")
     }
 }

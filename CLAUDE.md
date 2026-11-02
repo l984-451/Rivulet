@@ -37,7 +37,7 @@ Silo's negotiated file and server-HLS deliveries stay on the **Aether host**, in
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.52.0), with the `DualLayerDolbyVision` (P7 FEL), `DolbyVisionStillReshaping` (P5 stills), `TrueHDObjectAudio` and `DTSXObjectAudio` package traits set in `project.pbxproj`; object audio stays off until Settings → Playback → Height Speakers names a layout. A bump must keep the traits. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.53.0), with the `DualLayerDolbyVision` (P7 FEL), `DolbyVisionStillReshaping` (P5 stills), `TrueHDObjectAudio` and `DTSXObjectAudio` package traits set in `project.pbxproj`; object audio stays off until Settings → Playback → Height Speakers names a layout. A bump must keep the traits. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
@@ -358,9 +358,15 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   the engine cannot perform, so reuse the press override's own predicate
   (the player's `contentOwnsPress`, the alphabet strip's `containsFocus`).
   Adopters: the Live TV guide (`EPGGuideView`), the player's content anchor,
-  the library alphabet strip (`LibraryAlphabetBarView`) and Music's scrubber. The
+  the library alphabet strip (`LibraryAlphabetBarView`), Music's scrubber and
+  the open sidebar's Right-to-close (#440). The
   player's info panes don't need it: a `UIFocusGuide` between the pills and
   the pane carries Up and Down.
+- **Right past the hero's Next button pages, as the TV app's does** (#440).
+  `HeroButtonRowView` takes the Right the engine declines from Next in
+  `pressesBegan`, plus a gated swipe; focus stays on Next. Not an invisible
+  focus stop past the row: paging rebuilt the row under it, focus stranded on
+  the stop and every arrow key went dead. Left from Play stays the sidebar.
 - **A focusless surface that hands some touches to another recognizer passes
   `swipeGate`.** The focusless binding claims its swipes unconditionally
   unless `swipeGate` is given; then each swipe asks it in
@@ -838,6 +844,11 @@ protocol v3, never compatibility endpoints or Plex Discover substitutions.
   the current item, source and session; cancelled waits cannot lower a new plan.
 - Native track menus use provider shim ids. Engine active-track publishers must
   not overwrite these picks with engine indices.
+  Publish those same identities to system remotes; reject stale numeric options
+  rather than selecting another track by language. Preserve audio-description
+  metadata only where an engine track can be matched to the provider track.
+  System caption/SDH and audio-description preferences are resolved before
+  native negotiation; an explicit session selection continues to take precedence.
   Keep Silo actions in the shared On/Off, Language and Style subtitle menu;
   refresh capabilities before presentation and preserve disabled operation rows,
   selection and progress when submenus rebuild.
@@ -1023,6 +1034,30 @@ Every AetherEngine bump gets a changelog line, and it states **only the
 version** (`"Updated AetherEngine to X.Y.Z"`). Do not list what the engine
 release fixes: engine internals are not the user's mental model, and a long
 engine-fix paragraph crowds out the app's own notes.
+
+### UI text and localization (#457)
+
+Every string a user reads goes through the String Catalog
+(`Rivulet/Localizable.xcstrings`, `RivuletiOS/…`, `TopShelfExtension/…`; English
+is the source, keys are the English text). Xcode extracts a literal only when it
+is passed as a localizable type, so:
+- **Funnels take `String.LocalizationValue`**: `SettingsRowItem(title:)`,
+  `SettingDescriptor`, `EntryStep`, `TileMenuAction`, `MusicMenuItem`,
+  `CardStepperConfig`, `presentConfirm`. Pass a bare literal. Text that isn't
+  ours (server, library, channel, profile names) goes through `verbatim:`.
+  Never add a same-label `String` overload: Swift picks it for literals and
+  nothing is extracted (measured).
+- **Anywhere else, `String(localized: "…")`.** SwiftUI `Text("…")` already is.
+  The `unlocalized_ui_text` lint rule catches literals assigned to UIKit text.
+- **One literal per sentence**, interpolated (`"Resume S\(s), E\(e)"`), never
+  concatenated pieces. Counts use one key (`"\(n) albums"`) with English plural
+  variants in the catalog.
+- **Display text is never an id.** A raw value that is persisted or matched stays
+  English and gets a separate `title` (`LiveGenre`, `SubtitleMode`); a header's id
+  comes from its English key (`LocalizedStringResource.key`).
+- Changelogs, license text, brand names and codec/format tokens stay English.
+- Building in Xcode syncs new keys into the catalogs; from the command line,
+  `xcrun xcstringstool sync <catalog> --stringsdata <target's .stringsdata files>`.
 
 ### Adding Settings
 

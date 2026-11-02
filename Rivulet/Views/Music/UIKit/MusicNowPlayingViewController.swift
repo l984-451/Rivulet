@@ -46,6 +46,7 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
     // MARK: - Presentation
 
     private static var presenter: AnyCancellable?
+    private static var foregroundReturn: AnyCancellable?
     private static weak var current: MusicNowPlayingViewController?
 
     /// Now Playing follows `MusicQueue.showNowPlaying`, on top of whatever is presented.
@@ -64,12 +65,24 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
                 current = page
                 top.present(page, animated: true)
             }
+        // tvOS tells an app nothing when the system Now Playing opens it, so coming back
+        // while music plays stands in for it (#442).
+        foregroundReturn = NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                let queue = MusicQueue.shared
+                if queue.currentTrack != nil, queue.playbackState == .playing { queue.showNowPlaying = true }
+            }
     }
 
     // MARK: - State
 
     private let queue = MusicQueue.shared
-    private var mode = Mode.plain
+    /// Opens on lyrics when they were last left on (#443).
+    private var mode = UserDefaults.standard.bool(forKey: lyricsChosenKey) ? Mode.lyrics : Mode.plain {
+        didSet { UserDefaults.standard.set(mode == .lyrics, forKey: Self.lyricsChosenKey) }
+    }
+    private static let lyricsChosenKey = "musicNowPlayingLyricsChosen"
     private var controlsHidden = false
     private var observers = Set<AnyCancellable>()
     private var artworkTask: Task<Void, Never>?
@@ -121,7 +134,7 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
     private let repeatButton = MusicChrome.pill(title: nil, symbol: "repeat", height: Metrics.button)
     private let favoriteButton = MusicChrome.pill(title: nil, symbol: "star", height: Metrics.button)
     private let moreButton = MusicChrome.pill(title: nil, symbol: "ellipsis", height: Metrics.button)
-    private let infoButton = MusicChrome.pill(title: "Info", symbol: nil, height: Metrics.button)
+    private let infoButton = MusicChrome.pill(title: String(localized: "Info"), symbol: nil, height: Metrics.button)
     private let modeSwitch = MusicModeSwitchView()
     private let progressBar = PlayerProgressBarView()
     private let scrubberProxy = ScrubberFocusProxyView()

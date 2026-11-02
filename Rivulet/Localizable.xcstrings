@@ -1,0 +1,1606 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@" : {},
+    "%@ Live TV" : {},
+    "%@ at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "%@ hours" : {},
+    "%@ hours, mostly %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ hours, mostly %2$@"
+          }
+        }
+      }
+    },
+    "%@ left" : {},
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ — coming soon" : {},
+    "%@, Secure" : {},
+    "%@, Switch Profile" : {},
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%lld Episodes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Episodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld Servers" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Server"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Servers"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld Songs" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Song"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Songs"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld Sources" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Source"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Sources"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld albums" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld album"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld albums"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld artists" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld artist"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld artists"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld ch" : {},
+    "%lld collections" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld collection"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld collections"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episodes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episodes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld episodes across %lld seasons" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@episodes@ across %#@seasons@"
+          },
+          "substitutions" : {
+            "episodes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episode"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episodes"
+                    }
+                  }
+                }
+              }
+            },
+            "seasons" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg season"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg seasons"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld hr" : {},
+    "%lld hr %lld min" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hr %2$lld min"
+          }
+        }
+      }
+    },
+    "%lld items" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld min" : {},
+    "%lld movies" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld movie"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld movies"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld of %lld episodes watched." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld episodes watched."
+          }
+        }
+      }
+    },
+    "%lld playlists" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld playlist"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld playlists"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld plays" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld play"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld plays"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld seconds" : {},
+    "%lld songs" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld song"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld songs"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld songs, %@" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld song, %@"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld songs, %@"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld unprompted presses also recorded" : {},
+    "%lldh" : {},
+    "%lldh %lldm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm"
+          }
+        }
+      }
+    },
+    "%lldh %lldm remaining" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm remaining"
+          }
+        }
+      }
+    },
+    "%lldm" : {},
+    "%lldm %llds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldm %2$llds"
+          }
+        }
+      }
+    },
+    "%lldm remaining" : {},
+    "%llds" : {},
+    "10 seconds" : {},
+    "20 seconds" : {},
+    "4K First" : {},
+    "5 seconds" : {},
+    "A For You row in What's On, suggesting what is on now like what you watch. It learns on this Apple TV only. Off hides the row." : {},
+    "A Tvheadend user. Needed if your server asks for a login, and to record. Leave it empty to watch without one." : {},
+    "A collection you pinned from its tile menu. Hold Select to reorder, or Select to unpin it." : {},
+    "A folder or URL with per-title MCF or EDL files. A folder is searched by video file name, IMDb id, then Plex rating key. A URL can use {file}, {imdb}, {tmdb}, {tvdb} or {id}." : {},
+    "A look back at what you watched" : {},
+    "A-Z" : {},
+    "About" : {},
+    "Accessibility" : {},
+    "Account" : {},
+    "Adaptation" : {},
+    "Add All" : {},
+    "Add Live TV Source" : {},
+    "Add More" : {},
+    "Add Source" : {},
+    "Add Word" : {},
+    "Add a Source" : {},
+    "Add to Favorites" : {},
+    "Add to Playlist" : {},
+    "Add to Watchlist" : {},
+    "Add your own Live TV sources: your Plex server's Live TV or an IPTV playlist from your provider. Rivulet provides no channels of its own." : {},
+    "Adds discovery rows like Top Rated, Rediscover, and Similar Items to help you find things to watch." : {},
+    "Ads" : {},
+    "After this many episodes play in a row, the next one waits for you instead of starting on its own." : {},
+    "Airing Today" : {},
+    "Album" : {},
+    "Albums" : {},
+    "All" : {},
+    "All Channels" : {},
+    "All episodes" : {},
+    "All tuners are busy. Stop another stream and try again." : {},
+    "Always" : {},
+    "An M3U playlist link from an IPTV provider you subscribe to, with an optional guide link. Rivulet supplies no channels of its own." : {},
+    "App Icon" : {},
+    "App version, changelog, and other information about Rivulet." : {},
+    "Appearance" : {},
+    "Artist" : {},
+    "Artists" : {},
+    "Ask Plex for this server's latest status." : {},
+    "Asks you to press a few buttons and records what your remote sent, for Rivulet's diagnostics. Nothing about what you watch is included." : {},
+    "Audio" : {},
+    "Audio & Subtitles" : {},
+    "Audio Adjustments" : {},
+    "Audio Description" : {},
+    "Audio Language" : {},
+    "Audio Track" : {},
+    "Audio descriptions (AD) refer to a narration track describing what is happening on screen, to provide context for those who are blind or have low vision." : {},
+    "Audio descriptions are available." : {},
+    "Authentication check failed: %@" : {},
+    "Authentication failed" : {},
+    "Authentication required" : {},
+    "Auto" : {},
+    "Automatic" : {},
+    "Autoplay" : {},
+    "Autoplay Countdown" : {},
+    "Autoplay Limit" : {},
+    "Average rating" : {},
+    "Away" : {},
+    "Away Streaming" : {},
+    "Behind the Scenes" : {},
+    "Best Quality" : {},
+    "Bitrate" : {},
+    "Blasphemy" : {},
+    "Bridged" : {},
+    "Building Personalized Recommendations" : {},
+    "CHAPTER %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "CHAPTER %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "Cache & Storage" : {},
+    "Can't Reach Your Server" : {},
+    "Can't Record" : {},
+    "Cancel" : {},
+    "Cancel Recording" : {},
+    "Cancel Series" : {},
+    "Cannot connect to Plex server" : {},
+    "Cast" : {},
+    "Cast & Crew" : {},
+    "Casting" : {},
+    "Changelog" : {},
+    "Channel %@" : {},
+    "Channel Profile" : {},
+    "Channel Unavailable" : {},
+    "Channel not found: %@" : {},
+    "Channel unavailable" : {},
+    "Channels" : {},
+    "Chapter %lld" : {},
+    "Chapters" : {},
+    "Check the connection to your server and try again." : {},
+    "Check the server and sign in." : {},
+    "Checking…" : {},
+    "Checks the connection and adds the source if it works. If it does not, Rivulet tells you why." : {},
+    "Choose the Rivulet icon on the Apple TV Home Screen." : {},
+    "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead." : {},
+    "Choose what appears in the sidebar and in what order. Home follows it: a library turned off here loses its Home rows." : {},
+    "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {},
+    "Clear All Cache" : {},
+    "Clear All Cache?" : {},
+    "Clear Cache" : {},
+    "Clear metadata cache and reload all library content from your Plex server. Images will be kept." : {},
+    "Click to show or hide this library in the sidebar and on Home. Press and hold to move it up or down." : {},
+    "Click to show or hide this row in the sidebar. Press and hold to move it up or down." : {},
+    "Codec" : {},
+    "Collection" : {},
+    "Collections" : {},
+    "College Football" : {},
+    "Color" : {},
+    "Combine Sources" : {},
+    "Commentary" : {},
+    "Community Marker Database" : {},
+    "Configure audio, subtitles, skip behavior, and autoplay." : {},
+    "Confirm Exit Multiview" : {},
+    "Connect a Live TV source you already have access to: your Plex server's tuners, a login or playlist from an IPTV provider, or a server you run yourself." : {},
+    "Connect a server to manage Home rows" : {},
+    "Connect a server to manage the sidebar" : {},
+    "Connect to Plex" : {},
+    "Connect to your Plex server in Settings." : {},
+    "Connect to your Plex server to browse and stream your media library." : {},
+    "Connect your media and Live TV to get started." : {},
+    "Connected" : {},
+    "Connected to %@" : {},
+    "Connected, but found no channels." : {},
+    "Connected, but that channel profile has no channels. Check the name." : {},
+    "Connecting to %@…" : {},
+    "Connecting to Plex…" : {},
+    "Connection" : {},
+    "Connection Failed" : {},
+    "Connection Problem" : {},
+    "Container" : {},
+    "Content Filter" : {},
+    "Content Filtering" : {},
+    "Continue" : {},
+    "Continue Watching" : {},
+    "Continue with “%@”" : {},
+    "Could not connect to EPG server" : {},
+    "Could not connect to server. Check your network." : {},
+    "Could not decode M3U content as UTF-8" : {},
+    "Couldn't Add Source" : {},
+    "Couldn't Cancel" : {},
+    "Couldn't Delete" : {},
+    "Couldn't Download Subtitles" : {},
+    "Couldn't Load" : {},
+    "Couldn't Load Video" : {},
+    "Couldn't Play" : {},
+    "Couldn't Record" : {},
+    "Couldn't Send Diagnostics" : {},
+    "Couldn't Sign In" : {},
+    "Couldn't connect to the server. Please check your network connection." : {},
+    "Couldn't load the next episode." : {},
+    "Couldn't load the next item." : {},
+    "Couldn't load this folder" : {},
+    "Couldn't reach that server. Check the address and port." : {},
+    "Couldn't reach the server." : {},
+    "Couldn't reach your Plex server" : {},
+    "Couldn't sign in to Dispatcharr. Try again." : {},
+    "Couldn't switch streams." : {},
+    "Couldn't tune this channel. All tuners may be busy." : {},
+    "Couldn't update Watchlist" : {},
+    "Couldn't update the playlist." : {},
+    "Couldn’t Load Servers" : {},
+    "Couldn’t Turn Off" : {},
+    "Countdown" : {},
+    "Credits" : {},
+    "Crude & Sexual Language" : {},
+    "Custom Words" : {},
+    "Customize how Rivulet looks — display size, hero banners, sidebar libraries, and content discovery rows." : {},
+    "DNS lookup failed for EPG server" : {},
+    "Date Added" : {},
+    "Date Added (Oldest)" : {},
+    "Decoded" : {},
+    "Default" : {},
+    "Default Layout" : {},
+    "Delay" : {},
+    "Delete" : {},
+    "Delete Rule" : {},
+    "Delete “%@”?" : {},
+    "Deleted Scene" : {},
+    "Details" : {},
+    "Diagnostics Sent" : {},
+    "Diagnostics are not available in this build." : {},
+    "Dimensions" : {},
+    "Direct Play" : {},
+    "Direct Stream" : {},
+    "Director" : {},
+    "Disc %lld" : {},
+    "Disconnected" : {},
+    "Discover" : {},
+    "Discovery Rows" : {},
+    "Dismiss" : {},
+    "Dispatcharr" : {},
+    "Dispatcharr didn't accept that username and password." : {},
+    "Dispatcharr doesn't list this channel, so it can't record it. Refresh the channel list and try again." : {},
+    "Dispatcharr endpoint not found - verify URL" : {},
+    "Dispatcharr only. Sign in with your Dispatcharr user so Rivulet can schedule recordings and series from the guide. Leave it empty to just watch." : {},
+    "Dispatcharr only. The name of a channel profile, to load just that set of channels. Leave it empty and you get every channel on the server." : {},
+    "Dispatcharr server error (%lld)" : {},
+    "Dispatcharr source providing managed IPTV channels. Tap to view details or remove." : {},
+    "Do you want to exit Multiview?" : {},
+    "Documentaries" : {},
+    "Dolby Vision FEL" : {},
+    "Dolby Vision, TV not confirmed" : {},
+    "Done" : {},
+    "Download failed, select to retry" : {},
+    "Downloading %lld%%" : {},
+    "Downloading Subtitles…" : {},
+    "Downloads need your home network or a direct remote connection" : {},
+    "Drugs, Alcohol & Smoking" : {},
+    "Dual Layer (FEL)" : {},
+    "Duration" : {},
+    "EPG data could not be parsed" : {},
+    "EPG data is not available" : {},
+    "EPG data is too large" : {},
+    "EPG request cancelled" : {},
+    "EPG server TLS certificate issue" : {},
+    "EPG server didn't respond in time" : {},
+    "EPG server hostname could not be resolved" : {},
+    "EPG server requires a client certificate" : {},
+    "EPG server returned HTTP %lld" : {},
+    "EPG server returned invalid data" : {},
+    "Easter Eggs" : {},
+    "End of Series" : {},
+    "English only for now. With Subtitles set to Always, a title with no subtitles in your language gets them written from its dialogue. Downloads 230 MB." : {},
+    "Enhance" : {},
+    "Enhance Dialogue" : {},
+    "Enhance More" : {},
+    "Enhancement Layer" : {},
+    "Enter PIN to switch profile" : {},
+    "Enter both your username and password, or neither." : {},
+    "Enter the M3U playlist link from your provider, for example http://provider.example/playlist.m3u." : {},
+    "Enter the password for this Jellyfin user. Leave it empty if the user has none." : {},
+    "Enter the password your provider gave you for this server." : {},
+    "Enter the server address from your provider, with its port, for example http://provider.example:8080. You can also paste a link that includes your username and password." : {},
+    "Enter the username and password from your provider." : {},
+    "Enter the username your provider gave you for this server." : {},
+    "Enter your Dispatcharr server's address, with its port." : {},
+    "Enter your Jellyfin server's address, with its port, for example http://192.168.1.100:8096." : {},
+    "Enter your Jellyfin username." : {},
+    "Enter your Threadfin server's address, with its port." : {},
+    "Enter your Tvheadend server's address, with its port." : {},
+    "Enter your playlist URL first." : {},
+    "Enter your provider's server address first." : {},
+    "Enter your server's address and your username." : {},
+    "Enter your server's address first." : {},
+    "Entertainment" : {},
+    "Episode" : {},
+    "Episode %lld" : {},
+    "Episodes" : {},
+    "Episodes & Seasons" : {},
+    "Erase" : {},
+    "Erase What For You Learned?" : {},
+    "Error (%lld)" : {},
+    "Every Plex server on your account. Select one to see its details." : {},
+    "Every day" : {},
+    "Every episode's files will be deleted from %@. This cannot be undone." : {},
+    "Every row comes back in the original order. Home follows the library order." : {},
+    "Exit" : {},
+    "Extra" : {},
+    "Extras" : {},
+    "Failed" : {},
+    "Failed to fetch servers: %@" : {},
+    "Failed to get PIN: %@" : {},
+    "Failed to load profiles" : {},
+    "Failed to parse XMLTV data" : {},
+    "Failed to parse response" : {},
+    "Failed to write credential to Keychain" : {},
+    "Favorite" : {},
+    "Favorites" : {},
+    "Featurette" : {},
+    "File missing" : {},
+    "Fills in missing intro, recap and credits markers from introdb.app, sending only the show ID and episode number. Your server's markers come first." : {},
+    "Filter List URL" : {},
+    "Filtering" : {},
+    "Filtering On" : {},
+    "Finding the servers on your Plex account." : {},
+    "Focus Layout" : {},
+    "Folders" : {},
+    "For You" : {},
+    "Force Refresh Libraries" : {},
+    "Force Refresh Libraries?" : {},
+    "Forced" : {},
+    "Forced Only" : {},
+    "Foreign Audio" : {},
+    "Foreign Audio shows subtitles when the audio is not in your language, otherwise forced ones only. Always shows them on every title." : {},
+    "Format" : {},
+    "Format Not Supported" : {},
+    "Found %lld %@ for \"%@\"" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Found %1$lld %2$@ for \"%3$@\""
+          }
+        }
+      }
+    },
+    "Frame Rate" : {},
+    "Frightening & Intense" : {},
+    "From Beginning" : {},
+    "Full (FEL)" : {},
+    "Full Screen" : {},
+    "Generated" : {},
+    "Generated Subtitles (English)" : {},
+    "Generated, downloads 230 MB" : {},
+    "Genres" : {},
+    "Go to Album" : {},
+    "Go to Artist" : {},
+    "Go to Episode" : {},
+    "Go to Live" : {},
+    "Go to Show" : {},
+    "Goof" : {},
+    "Grid Layout" : {},
+    "Guide" : {},
+    "Guide URL" : {},
+    "Guide data unavailable" : {},
+    "Guide data unavailable (%lld sources)" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Guide data unavailable (%lld source)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Guide data unavailable (%lld sources)"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "HDR10 Base Layer" : {},
+    "HTTP error %lld" : {},
+    "HTTP error: %lld" : {},
+    "Height" : {},
+    "Height Speakers" : {},
+    "Hero" : {},
+    "Hide from Sidebar" : {},
+    "Highest Rated" : {},
+    "Hold Down for 2 seconds" : {},
+    "Hold Left for 2 seconds" : {},
+    "Hold Right for 2 seconds" : {},
+    "Hold Select on a channel in What's On or the guide and choose Add to Favorites. Favorites from every source share one list." : {},
+    "Hold Select to move this channel, then press Select to drop it. Select to remove it. Favorites you set in Plex come after these, in Plex's order." : {},
+    "Hold Up for 2 seconds" : {},
+    "Home" : {},
+    "Home Rows" : {},
+    "Home Streaming" : {},
+    "Home Theater" : {},
+    "How far a single Left press skips back during playback." : {},
+    "How far a single Right press skips ahead during playback." : {},
+    "How long to wait before automatically playing the next episode. Set to Off to disable autoplay." : {},
+    "How this source appears in Live TV. Leave it empty to use “%@”." : {},
+    "IMDb users" : {},
+    "If your provider gave you a guide link (XMLTV), enter it. Otherwise leave this empty: Rivulet uses the guide the playlist names, if it has one." : {},
+    "In %lld you watched" : {},
+    "In-progress items show a Resume / Start from Beginning prompt before playing, like Apple TV." : {},
+    "Incorrect PIN. Please try again." : {},
+    "Info" : {},
+    "Info from %@" : {},
+    "Information" : {},
+    "Input Diagnostics" : {},
+    "Insights" : {},
+    "Instant Resume" : {},
+    "Interview" : {},
+    "Intro" : {},
+    "Invalid M3U format: %@" : {},
+    "Invalid Stream" : {},
+    "Invalid URL" : {},
+    "Invalid response from Dispatcharr server" : {},
+    "Invalid server response" : {},
+    "Isolate" : {},
+    "Item not found" : {},
+    "Jellyfin Server" : {},
+    "Jellyfin didn't accept that username and password." : {},
+    "Jellyfin has no watchlist" : {},
+    "Jumped ahead %lld min. The pause ran past what the rewind buffer holds." : {},
+    "Jumped ahead %lld sec. The pause ran past what the rewind buffer holds." : {},
+    "Keep" : {},
+    "Keep Playing in Guide" : {},
+    "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6." : {},
+    "Kids" : {},
+    "Known For" : {},
+    "LIVE" : {},
+    "Language" : {},
+    "Languages" : {},
+    "Last Synced" : {},
+    "Letterboxd members" : {},
+    "Library" : {},
+    "Licenses & Legal" : {},
+    "Limit" : {},
+    "Live" : {},
+    "Live TV" : {},
+    "Live TV Sources" : {},
+    "Loading" : {},
+    "Loading Servers…" : {},
+    "Loading…" : {},
+    "Local" : {},
+    "Long press to re-arrange items" : {},
+    "Lore" : {},
+    "Lost this channel's signal." : {},
+    "Lowest Quality" : {},
+    "M3U link" : {},
+    "M3U playlist source for IPTV channels. Tap to view details or remove." : {},
+    "Make Main" : {},
+    "Manage Live TV sources, layout preferences, multiview settings, and channel display options." : {},
+    "Manage your Plex server connection and user profiles." : {},
+    "Manual" : {},
+    "Mark All Unwatched" : {},
+    "Mark All Watched" : {},
+    "Mark as Unwatched" : {},
+    "Mark as Watched" : {},
+    "Marker" : {},
+    "Media" : {},
+    "Metascore, critics" : {},
+    "Mild and up" : {},
+    "Minimal (MEL)" : {},
+    "Mode" : {},
+    "Moderate and up" : {},
+    "Mono" : {},
+    "More Info" : {},
+    "More info" : {},
+    "Move" : {},
+    "Movie" : {},
+    "Movies" : {},
+    "Movies & TV" : {},
+    "Multiview" : {},
+    "Music" : {},
+    "Mute language and skip scenes during playback without changing the file. Language comes from English subtitles; skips from a filter list." : {},
+    "Mutes crude and sexual language in the dialogue." : {},
+    "Mutes profane words: mild and up, moderate and up, or strong only. Also applies to profanity in imported filter lists." : {},
+    "Mutes racial, homophobic and other slurs in the dialogue." : {},
+    "Mutes religious names used as exclamations, such as \"oh my god\". The word god on its own is never muted." : {},
+    "Name" : {},
+    "Network connection was lost" : {},
+    "Network error: %@" : {},
+    "New Episodes" : {},
+    "New Playlist" : {},
+    "New episodes" : {},
+    "Newest" : {},
+    "Newest Releases" : {},
+    "News" : {},
+    "Next featured item" : {},
+    "Next: %@ at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Next: %1$@ at %2$@"
+          }
+        }
+      }
+    },
+    "No Content" : {},
+    "No DVR" : {},
+    "No Favorites Yet" : {},
+    "No Plex servers found on your account" : {},
+    "No Readable Subtitles" : {},
+    "No Results" : {},
+    "No Servers Found" : {},
+    "No Subtitles Found" : {},
+    "No accessibility features detected." : {},
+    "No audio in source" : {},
+    "No biography available." : {},
+    "No channels found" : {},
+    "No channels yet. Add a Live TV source in Settings." : {},
+    "No details available." : {},
+    "No guide data" : {},
+    "No guide data available." : {},
+    "No information found on Plex." : {},
+    "No other server is reachable right now, so %@ stays on." : {},
+    "No photos here." : {},
+    "No playlists yet." : {},
+    "No presses were recorded." : {},
+    "No results found for \"%@\"" : {},
+    "No stream URL available" : {},
+    "None" : {},
+    "Not Connected" : {},
+    "Not connected to the internet" : {},
+    "Not enough free space on this device" : {},
+    "Not set" : {},
+    "Nothing in your Watchlist yet." : {},
+    "Nothing is scheduled. Long-press a programme in the guide to record it." : {},
+    "Now Playing" : {},
+    "OK" : {},
+    "ON NOW" : {},
+    "Off" : {},
+    "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay." : {},
+    "Offline" : {},
+    "Oldest" : {},
+    "Oldest Added" : {},
+    "Oldest Releases" : {},
+    "On" : {},
+    "On Now" : {},
+    "On Plex Since" : {},
+    "On The Air" : {},
+    "Online" : {},
+    "Only Server in Use" : {},
+    "Only needed if your server asks for a login, and to record. Leave both empty to just watch." : {},
+    "Optional" : {},
+    "Optional. A folder or address with per-title MCF or EDL filter files. From moviecontentfilter.com, download the EDL with your copy's times." : {},
+    "Optional. An XMLTV guide link from the same provider, so channels show what is on. Leave it empty if the playlist names its own guide." : {},
+    "Original" : {},
+    "Original Audio" : {},
+    "Original plays the file as is. Auto converts only when your connection needs it. A fixed rate converts anything above it, dropping HDR and Atmos." : {},
+    "Other" : {},
+    "Owner" : {},
+    "PIN expired. Please try again." : {},
+    "Parse error: %@" : {},
+    "Password" : {},
+    "Pause for This Title" : {},
+    "Paused" : {},
+    "Perform these steps in order. Pressing Back will close this screen." : {},
+    "Person" : {},
+    "Personalized Recommendations" : {},
+    "Personalized Recommendations Unavailable" : {},
+    "Pin to %@" : {},
+    "Pinned Collections" : {},
+    "Pixel" : {},
+    "Platform" : {},
+    "Play" : {},
+    "Play After" : {},
+    "Play Again" : {},
+    "Play First Episode" : {},
+    "Play Media" : {},
+    "Play Next" : {},
+    "Play Now" : {},
+    "Play S%lld, E%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Play S%1$lld, E%2$lld"
+          }
+        }
+      }
+    },
+    "Play Version" : {},
+    "Play a movie or TV show on Rivulet" : {},
+    "Play from Beginning" : {},
+    "Play from Here" : {},
+    "Playback" : {},
+    "Playback Error" : {},
+    "Playback Stopped" : {},
+    "Playing %@" : {},
+    "Playing As" : {},
+    "Playlist" : {},
+    "Playlist Name" : {},
+    "Playlist URL" : {},
+    "Playlists" : {},
+    "Plays the full Dolby Vision Profile 7 layer on a Dolby Vision TV, without AirPlay or Picture in Picture. Off plays it as 8.1." : {},
+    "Please sign in to Rivulet first" : {},
+    "Plex" : {},
+    "Plex Account" : {},
+    "Plex HTTP %lld" : {},
+    "Plex Live TV source using your server's DVR tuners. Tap to view details or remove." : {},
+    "Plex URL malformed" : {},
+    "Plex didn't accept the sign-in; sign in again, then retry" : {},
+    "Plex didn't return your servers. Check your network, then select to try again." : {},
+    "Plex rejected the watchlist add" : {},
+    "Plex rejected the watchlist remove" : {},
+    "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home" : {},
+    "Plex response unparseable" : {},
+    "Plex returned an invalid response" : {},
+    "Popcornmeter, audience" : {},
+    "Popular Movies" : {},
+    "Popular TV" : {},
+    "Posters" : {},
+    "Prefers subtitles for the deaf and hard of hearing, which also describe sounds and name who is speaking." : {},
+    "Press Back to close this screen." : {},
+    "Press Down" : {},
+    "Press Left" : {},
+    "Press Play/Pause" : {},
+    "Press Right" : {},
+    "Press Up" : {},
+    "Press and hold to move Live TV up or down. It leaves the sidebar when its sources are removed." : {},
+    "Production" : {},
+    "Profanity" : {},
+    "Profile %lld" : {},
+    "Profile 8.1 (converted)" : {},
+    "Profile 8.1 (converted), TV not confirmed" : {},
+    "Profile Picker on Launch" : {},
+    "Provider" : {},
+    "Provider login" : {},
+    "Put every sidebar row back in its original order and show the ones you hid. Home's rows follow the library order." : {},
+    "Quality" : {},
+    "Quality on cellular, a hotspot, Low Data Mode or a remote connection. Auto measures your connection and converts only when the file will not fit." : {},
+    "Quality when the server is on your home network. Original plays the file untouched, with HDR, Dolby Vision and Atmos." : {},
+    "Query" : {},
+    "RECORDING" : {},
+    "RT Audience" : {},
+    "Rated" : {},
+    "Rating" : {},
+    "Ratings" : {},
+    "Recap" : {},
+    "Recent" : {},
+    "Recent Rows" : {},
+    "Recently Added" : {},
+    "Recently Added in %@" : {},
+    "Recently Searched" : {},
+    "Recently Updated" : {},
+    "Recently Watched" : {},
+    "Recommendations aren't available right now." : {},
+    "Recommended" : {},
+    "Record" : {},
+    "Record %@" : {},
+    "Record Episode" : {},
+    "Record New Episodes" : {},
+    "Record Series" : {},
+    "Recording" : {},
+    "Recording Didn't Change" : {},
+    "Recordings" : {},
+    "Reduce Loud Sounds" : {},
+    "Reference" : {},
+    "Refresh" : {},
+    "Refresh Channels" : {},
+    "Refresh Metadata" : {},
+    "Refreshing Channels…" : {},
+    "Region of Origin" : {},
+    "Related" : {},
+    "Relay" : {},
+    "Release Date" : {},
+    "Release Date (Oldest)" : {},
+    "Release notes for every version of Rivulet." : {},
+    "Released" : {},
+    "Reload the channel list and EPG data from this source." : {},
+    "Remember PIN" : {},
+    "Remote" : {},
+    "Remote Input Test" : {},
+    "Remove" : {},
+    "Remove \"%@\"?" : {},
+    "Remove All" : {},
+    "Remove Source" : {},
+    "Remove Source?" : {},
+    "Remove all cached images and metadata. Content will be re-downloaded as needed." : {},
+    "Remove from Continue Watching" : {},
+    "Remove from Favorites" : {},
+    "Remove from Home" : {},
+    "Remove from Playlist" : {},
+    "Remove from Recently Searched" : {},
+    "Remove from Watchlist" : {},
+    "Remove this Live TV source and all its channels." : {},
+    "Removes all cached images and metadata. Content will be re-downloaded." : {},
+    "Rename" : {},
+    "Rename Playlist" : {},
+    "Repeating Recording" : {},
+    "Requesting PIN…" : {},
+    "Required" : {},
+    "Reset" : {},
+    "Reset the Sidebar?" : {},
+    "Resolution" : {},
+    "Results sent to Rivulet's diagnostics." : {},
+    "Resume" : {},
+    "Resume Playback?" : {},
+    "Resume S%lld, E%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Resume S%1$lld, E%2$lld"
+          }
+        }
+      }
+    },
+    "Resume from %@" : {},
+    "Resume or Restart Prompt" : {},
+    "Retry" : {},
+    "Rivulet can't connect to %@. Check that the server is running and your network is connected. Recently loaded content is still available to browse." : {},
+    "Rivulet's license and the open-source software it uses, including FFmpeg (LGPL), libdovi, and Sentry." : {},
+    "Rows" : {},
+    "Run Input Test" : {},
+    "Run Time" : {},
+    "S%lld" : {},
+    "S%lld E%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld"
+          }
+        }
+      }
+    },
+    "S%lld E%lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld · %3$@"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld: " : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld: "
+          }
+        }
+      }
+    },
+    "SCHEDULED" : {},
+    "SD First" : {},
+    "SDH Subtitles" : {},
+    "SP" : {},
+    "STARTS %@" : {},
+    "Saved PIN is no longer valid. Please enter your PIN." : {},
+    "Scene" : {},
+    "Scores" : {},
+    "Scores Layout" : {},
+    "Scores paused" : {},
+    "Search" : {},
+    "Search Failed" : {},
+    "Search Media" : {},
+    "Search Not Available" : {},
+    "Search Results" : {},
+    "Search for Subtitles" : {},
+    "Search for movies and TV shows on Rivulet" : {},
+    "Search your libraries" : {},
+    "Searching" : {},
+    "Searching…" : {},
+    "Season" : {},
+    "Season %lld" : {},
+    "See this server's details. A server shared with you shows who owns it." : {},
+    "See what you watched this year" : {},
+    "See you in %lld" : {},
+    "Select Your Servers" : {},
+    "Select a profile to continue" : {},
+    "Select a programme" : {},
+    "Select to stop muting this word." : {},
+    "Selecting a Continue Watching tile resumes it at once. Off opens the preview instead and turns off the Resume or Restart Prompt." : {},
+    "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row." : {},
+    "Send Diagnostics" : {},
+    "Sends a snapshot of Rivulet's setup and recent logs, and gives you a code to quote in a report. No titles, servers, addresses or passwords." : {},
+    "Series" : {},
+    "Series and Rules" : {},
+    "Server" : {},
+    "Server Address" : {},
+    "Servers" : {},
+    "Set" : {},
+    "Set the order of your favorite channels, from every source. To add one, hold Select on a channel in What's On or the guide." : {},
+    "Settings" : {},
+    "Sex & Nudity" : {},
+    "Shared" : {},
+    "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before." : {},
+    "Short" : {},
+    "Show All" : {},
+    "Show every row your Plex account puts on Home again." : {},
+    "Show in Live TV" : {},
+    "Shows" : {},
+    "Shows Recently Added and Recently Released rows in each library." : {},
+    "Shows a confirmation dialog before closing multiview mode to prevent accidentally ending multiple streams." : {},
+    "Shows a featured content banner at the top of each library with highlighted picks." : {},
+    "Shows all Live TV sources together under one sidebar entry, or gives each source its own." : {},
+    "Shows every remote press on screen, how long it was held and which remote sent it. Useful when reporting a remote problem." : {},
+    "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use." : {},
+    "Shuffle" : {},
+    "Sidebar" : {},
+    "Sign In" : {},
+    "Sign Out" : {},
+    "Sign Out of Plex?" : {},
+    "Sign in to use Watchlist" : {},
+    "Sign in to your Jellyfin server." : {},
+    "Sign in with the server, username and password from your IPTV provider (an Xtream Codes login). Rivulet loads the channels and guide." : {},
+    "Sign out of this Jellyfin server and remove its saved credentials." : {},
+    "Sign out of your Plex account. Every Plex server on it leaves Rivulet until you sign in again." : {},
+    "Signed in as %@" : {},
+    "Signed in, but this account has no live channels." : {},
+    "Signing In…" : {},
+    "Simple Colour" : {},
+    "Simple White" : {},
+    "Size" : {},
+    "Skip" : {},
+    "Skip Ad" : {},
+    "Skip Back" : {},
+    "Skip Back Length" : {},
+    "Skip Buttons" : {},
+    "Skip Credits" : {},
+    "Skip Forward" : {},
+    "Skip Forward Length" : {},
+    "Skip Intro" : {},
+    "Skip Preview" : {},
+    "Skip Recap" : {},
+    "Skips frightening or intense scenes. Requires an imported filter list — set the Filter List URL below." : {},
+    "Skips scenes featuring drug, alcohol, or tobacco use. Requires an imported filter list — set the Filter List URL below." : {},
+    "Skips scenes with sex or nudity. Requires an imported filter list — set the Filter List URL below." : {},
+    "Skips violent and gory scenes. Requires an imported filter list — set the Filter List URL below. Dialogue text alone can't detect these scenes." : {},
+    "Slurs" : {},
+    "Smart Playlist" : {},
+    "Something went wrong during playback. Please try again." : {},
+    "Something went wrong starting playback." : {},
+    "Songs" : {},
+    "Source Details" : {},
+    "Source is not configured" : {},
+    "Source is not connected" : {},
+    "Specials" : {},
+    "Sports" : {},
+    "Starring " : {},
+    "Start Watching" : {},
+    "Start from Beginning" : {},
+    "Starting Soon" : {},
+    "Status" : {},
+    "Step %lld of %lld   ·   %llds" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Step %1$lld of %2$lld   ·   %3$llds"
+          }
+        }
+      }
+    },
+    "Stereo" : {},
+    "Stop Recording" : {},
+    "Stop recording %@" : {},
+    "Stopped" : {},
+    "Stream" : {},
+    "Stream copy" : {},
+    "Streaming Quality" : {},
+    "Strong only" : {},
+    "Studio" : {},
+    "Style" : {},
+    "Subtitle" : {},
+    "Subtitle Language" : {},
+    "Subtitles" : {},
+    "Subtitles Didn't Arrive" : {},
+    "Subtitles for the deaf and hard of hearing (SDH) refer to subtitles in the original language with the addition of relevant non-dialogue information." : {},
+    "Subtitles for the deaf and hard of hearing are available." : {},
+    "Subtitles off" : {},
+    "Subtitles on" : {},
+    "Suggestions" : {},
+    "Suggestions are off. Erase what Rivulet learned from what you watch, or keep it for if you turn them back on." : {},
+    "Swipe up to watch" : {},
+    "Switch Profile" : {},
+    "Switched to %@." : {},
+    "Switching to %@…" : {},
+    "TMDB users" : {},
+    "TODAY" : {},
+    "TV Show" : {},
+    "Teletext Page" : {},
+    "That address doesn't look right. Check it and try again." : {},
+    "That address isn't a Jellyfin server. Check the port." : {},
+    "That address isn't a Tvheadend server. Check the address and port." : {},
+    "That address isn't an Xtream Codes server. Check the address and port." : {},
+    "That playlist URL doesn't look right. Check it and try again." : {},
+    "That server has no Dispatcharr sign-in. Clear the username and password." : {},
+    "That server refused Rivulet." : {},
+    "That user's password. Rivulet keeps it in the Keychain." : {},
+    "That was your %lld" : {},
+    "The audio track to play when a title has several. Original keeps the file's main track. Picking a track in the player also changes this." : {},
+    "The download is too large." : {},
+    "The download was cut short" : {},
+    "The downloaded file didn't match the server's copy" : {},
+    "The file is no longer on the server" : {},
+    "The files will be deleted from %@. This cannot be undone." : {},
+    "The filter will stop muting this word." : {},
+    "The guide doesn't identify this programme well enough to record it." : {},
+    "The guide is too large" : {},
+    "The language subtitles are shown in." : {},
+    "The large banner at the top of the Home screen. Trending features popular titles from your library. Or pick one of your Home lists: Continue Watching, Recently Added or your Watchlist." : {},
+    "The name of a Dispatcharr channel profile, to show only its channels. Leave it empty for every channel." : {},
+    "The password your provider gave you. Rivulet keeps it in the Keychain." : {},
+    "The playlist link your IPTV provider gave you, for example http://provider.example/playlist.m3u. It usually ends in .m3u or .m3u8." : {},
+    "The server couldn't convert this item" : {},
+    "The server didn't accept that username and password." : {},
+    "The server didn't accept your sign-in." : {},
+    "The server didn't answer as expected." : {},
+    "The server no longer has this conversion" : {},
+    "The server no longer has this item." : {},
+    "The server no longer has this playlist." : {},
+    "The server offered no way to record this programme." : {},
+    "The server refused the download (HTTP %lld)" : {},
+    "The server said: %@" : {},
+    "The stream couldn't be loaded. Check that your server is running and reachable." : {},
+    "The stream from your server couldn't be played. The server may still be preparing the video." : {},
+    "The top row of the Apple TV Home Screen. Posters shows a row of posters. Full Screen fills it with artwork from what you are watching." : {},
+    "The username your provider gave you." : {},
+    "This Dolby Vision file has no fallback layer this Apple TV can decode." : {},
+    "This Tvheadend server needs a username and password." : {},
+    "This Tvheadend user can't record." : {},
+    "This account has expired. Contact your provider to renew it." : {},
+    "This account is turned off. Contact your provider." : {},
+    "This clears the metadata cache and reloads library content from your Plex server." : {},
+    "This collection is empty." : {},
+    "This folder is empty" : {},
+    "This item has no downloadable file" : {},
+    "This library could not be loaded." : {},
+    "This library is empty." : {},
+    "This may take a moment" : {},
+    "This playlist is empty." : {},
+    "This programme has already ended." : {},
+    "This removes the channel from your favorites. You can add it again by holding Select on it in What's On or the guide." : {},
+    "This removes the playlist from your server. The titles stay in your library." : {},
+    "This removes the row from Home. You can pin it again from the collection in its library." : {},
+    "This removes the row from its library. You can pin it again from the collection in its library." : {},
+    "This request wasn’t completed. Wait a moment and try again." : {},
+    "This server can't stream this title to Apple TV." : {},
+    "This server runs Jellyfin %@. Rivulet needs %lld.%lld or newer." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This server runs Jellyfin %1$@. Rivulet needs %2$lld.%3$lld or newer."
+          }
+        }
+      }
+    },
+    "This server's HTTPS certificate isn't trusted. Try its http:// address." : {},
+    "This signs out of every Plex server on your account." : {},
+    "This source can't record." : {},
+    "This version is split into parts; choose a converted quality" : {},
+    "This video couldn't be loaded. Please check your connection and try again." : {},
+    "This video couldn't be played. Please try again." : {},
+    "This video couldn't be played. The link may be invalid." : {},
+    "This video format isn't supported on this device." : {},
+    "This will remove \"%@\" and all its channels from Live TV." : {},
+    "Threadfin" : {},
+    "Title" : {},
+    "Title A-Z" : {},
+    "Title Z-A" : {},
+    "Titles" : {},
+    "Toggle Watchlist" : {},
+    "Tomatometer, critics" : {},
+    "Too many sign-in attempts. Wait a minute and try again." : {},
+    "Top 10" : {},
+    "Top Rated Movies" : {},
+    "Top Rated TV" : {},
+    "Top Shelf" : {},
+    "Track %@" : {},
+    "Track %lld" : {},
+    "Trailer" : {},
+    "Trailers" : {},
+    "Transcode" : {},
+    "Trending" : {},
+    "Trending Movies" : {},
+    "Trending TV" : {},
+    "Trivia" : {},
+    "Try Again" : {},
+    "Try a different title or check your spelling." : {},
+    "Tune failed: %@" : {},
+    "Turn Home rows off on this Apple TV. Rows come from your Plex account; a library shows here once it is pinned to Home in Plex." : {},
+    "Turn off to remove this server from Rivulet: its libraries, Home rows, Continue Watching and Live TV. Your account stays signed in." : {},
+    "Turn on another server first, or sign out of Plex." : {},
+    "Turn this row off to hide it on this Apple TV. Your Plex account is unchanged, so the row keeps showing in the Plex app and on your other devices." : {},
+    "Turns the content filter on, muting and skipping by the categories below. A player button pauses it for the current title." : {},
+    "Tvheadend" : {},
+    "Tvheadend didn't accept that username and password." : {},
+    "Tvheadend didn't give Rivulet a stream for this user. Check its streaming rights, or update Tvheadend." : {},
+    "Tvheadend refused this user. Check its password and rights in Tvheadend." : {},
+    "Type a word or a short phrase to mute. Capitals and punctuation don't matter." : {},
+    "Unable to Load" : {},
+    "Unable to reach Plex. Check your network connection." : {},
+    "Unauthorized - check Dispatcharr authentication" : {},
+    "Undo Favorite" : {},
+    "Unknown" : {},
+    "Unknown Artist" : {},
+    "Unknown Language" : {},
+    "Unknown error" : {},
+    "Unlink Account" : {},
+    "Unpin" : {},
+    "Unpin \"%@\"?" : {},
+    "Unpin from %@" : {},
+    "Up Next" : {},
+    "Up Next Panel" : {},
+    "Upcoming" : {},
+    "Updated %lld min ago" : {},
+    "Upscale SD and 720p" : {},
+    "Upscaling" : {},
+    "Use English Subtitles" : {},
+    "Use This Server" : {},
+    "Used once, to fetch your Dispatcharr API key. Rivulet keeps the key, not the password." : {},
+    "Used once, to sign in. Rivulet keeps the access token Jellyfin returns, not the password." : {},
+    "User" : {},
+    "Username" : {},
+    "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content." : {},
+    "Version" : {},
+    "Version %@" : {},
+    "Video only (audio dropped)" : {},
+    "View storage usage and manage cached images, metadata, and other temporary data." : {},
+    "Violence & Gore" : {},
+    "Visit" : {},
+    "Visual" : {},
+    "Waiting for you to sign in…" : {},
+    "Watch %@" : {},
+    "Watch Now" : {},
+    "Watch from Beginning" : {},
+    "Watch in Multiview" : {},
+    "Watch with Scores" : {},
+    "Watched" : {},
+    "Watching" : {},
+    "Watchlist" : {},
+    "Weekdays" : {},
+    "Weekends" : {},
+    "Welcome to Rivulet" : {},
+    "What happens when an ad break starts. Manual shows Skip Ad, Automatic skips it after a short countdown, and Off never shows the button." : {},
+    "What happens when an intro starts. Manual shows Skip Intro, Automatic skips it after a short countdown, and Off never shows the button." : {},
+    "What happens when the credits start. Manual shows Skip Credits, Automatic skips straight to the post-play screen, and Off never shows the button." : {},
+    "What this source is called in Live TV. Optional." : {},
+    "What would you like to play?" : {},
+    "What's New" : {},
+    "What's On" : {},
+    "When a recap starts. Manual shows Skip Recap, Automatic skips it, Off shows nothing. Recap markers come from the community database below." : {},
+    "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode." : {},
+    "When you go back from a live channel, it keeps playing with its sound in the corner of the Guide or What's On. Select it again to return to full screen." : {},
+    "When you watch" : {},
+    "Who's Watching?" : {},
+    "Word or Phrase" : {},
+    "Xtream Codes" : {},
+    "Year" : {},
+    "Year in Review" : {},
+    "You" : {},
+    "You watched %@ %lld times" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You watched %@ %#@times@"
+          },
+          "substitutions" : {
+            "times" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg time"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg times"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "You've watched all available episodes" : {},
+    "Your %lld" : {},
+    "Your %lld started with" : {},
+    "Your Dispatcharr password. Only needed to record; leave it empty to just watch." : {},
+    "Your Dispatcharr server's address on your network, with its port. Dispatcharr uses 9191 unless you changed it." : {},
+    "Your Dispatcharr server. Rivulet loads its channels and guide, and records through it if you sign in." : {},
+    "Your Dispatcharr username. Only needed to record; leave it empty to just watch." : {},
+    "Your Jellyfin library appears to be empty." : {},
+    "Your Jellyfin server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {},
+    "Your Jellyfin username." : {},
+    "Your Plex library appears to be empty." : {},
+    "Your Plex server is taking too long to prepare the video. Please try again." : {},
+    "Your Plex server stopped this stream." : {},
+    "Your Server" : {},
+    "Your Threadfin server's address on your network, with its port. Threadfin uses 34400 unless you changed it." : {},
+    "Your Threadfin server. Rivulet loads its playlist and guide from the address." : {},
+    "Your Tvheadend server's address on your network, with its port. Tvheadend uses 9981 unless you changed it." : {},
+    "Your Tvheadend server. Rivulet loads its channels and guide, and records through it if you sign in." : {},
+    "Your biggest day" : {},
+    "Your busiest hour is %@." : {},
+    "Your code is %@. Include it in your GitHub issue or message so the report can be found." : {},
+    "Your favorite was %@" : {},
+    "Your own words to mute, such as \"shut up\". Muted whenever the filter is on. A word matches only on its own, never inside another." : {},
+    "Your provider has blocked this account." : {},
+    "Your provider's server address with its port, like http://provider.example:8080. A single link with your login in it works too." : {},
+    "Your server couldn't prepare this video for playback. It may be busy with other streams." : {},
+    "Your server is refusing new streams right now. Wait a moment and try again." : {},
+    "Your server refused this video. It may have moved, or your access to it may have changed." : {},
+    "Your top artist" : {},
+    "Your top movies" : {},
+    "Your top show" : {},
+    "You’re a late-night watcher" : {},
+    "You’re a morning watcher" : {},
+    "You’re an afternoon watcher" : {},
+    "You’re an evening watcher" : {},
+    "Z-A" : {},
+    "age %@" : {},
+    "and enter this code:" : {},
+    "hours of TV" : {},
+    "hours of movies" : {},
+    "hours of movies and TV" : {},
+    "hours of music" : {},
+    "your Plex server" : {},
+    "“%@”, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "“%1$@”, %2$@"
+          }
+        }
+      }
+    },
+    "▶ LIVE" : {},
+    "● REC" : {}
+  },
+  "version" : "1.0"
+}

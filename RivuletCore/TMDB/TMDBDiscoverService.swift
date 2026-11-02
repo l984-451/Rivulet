@@ -14,8 +14,9 @@ actor TMDBDiscoverService {
     static let shared = TMDBDiscoverService()
 
     private let session: URLSession
-    private let listCacheTTL: TimeInterval = 60 * 60                // 1 hour: prefer fresh
+    private let listCacheTTL: TimeInterval = 60 * 60 * 6            // 6 hours: TMDB's lists move daily at most
     private let listDiskFallbackTTL: TimeInterval = 60 * 60 * 24 * 7 // 1 week: usable cold-launch fallback
+    private let listRetryDelay: TimeInterval = 60 * 10              // a failed list waits before asking again
     private let detailCacheTTL: TimeInterval = 60 * 60 * 24 * 30    // 30 days
 
     private struct ListCacheEntry {
@@ -24,6 +25,8 @@ actor TMDBDiscoverService {
     }
 
     private var listCache: [TMDBDiscoverSection: ListCacheEntry] = [:]
+    private var listFailedAt: [TMDBDiscoverSection: Date] = [:]
+    private var listInFlight: [TMDBDiscoverSection: Task<[TMDBListItem]?, Never>] = [:]
     private let listCacheDirectory: URL
     private let detailCacheDirectory: URL
 
@@ -45,18 +48,35 @@ actor TMDBDiscoverService {
     }
 
     func fetchSection(_ section: TMDBDiscoverSection) async -> [TMDBListItem] {
-        // 1) Hot in-memory cache (1h)
+        // 1) Hot in-memory cache
         if let cached = listCache[section],
            Date().timeIntervalSince(cached.fetchedAt) < listCacheTTL {
             return cached.items
         }
 
-        // 2) Warm disk cache (1h): same TTL but survives launches
+        // 2) Warm disk cache: same TTL but survives launches
         if let cached = loadListFromDisk(section: section, maxAge: listCacheTTL) {
             listCache[section] = ListCacheEntry(fetchedAt: cached.savedAt, items: cached.items)
             return cached.items
         }
 
+        // 3) Network, at most one request per section at a time, and none for a
+        //    while after a failure: the Home hero asks from many places at once.
+        let recentlyFailed = listFailedAt[section].map { Date().timeIntervalSince($0) < listRetryDelay } ?? false
+        if !recentlyFailed {
+            let task = listInFlight[section] ?? Task { await self.download(section) }
+            listInFlight[section] = task
+            let items = await task.value
+            listInFlight[section] = nil
+            if let items { return items }
+        }
+
+        // 4) Cold disk fallback (up to 1 week stale): better than nothing
+        return loadListFromDisk(section: section, maxAge: listDiskFallbackTTL)?.items ?? []
+    }
+
+    /// Fetches and caches one list; nil on failure, which also starts the retry delay.
+    private func download(_ section: TMDBDiscoverSection) async -> [TMDBListItem]? {
         let endpoint = "tmdb/list/\(section.proxyPath)"
         let queryItems = [URLQueryItem(name: "type", value: section.mediaType.rawValue)]
 
@@ -64,41 +84,28 @@ actor TMDBDiscoverService {
             let results: [TMDBListItem]
         }
 
-        let data: Data
-        do {
-            data = try await fetchData(endpoint: endpoint, queryItems: queryItems)
-        } catch {
-            // 3) Cold disk fallback (up to 1 week stale): better than nothing
-            if let cached = loadListFromDisk(section: section, maxAge: listDiskFallbackTTL) {
-                return cached.items
-            }
-            return []
+        guard let data = try? await fetchData(endpoint: endpoint, queryItems: queryItems),
+              let response = try? JSONDecoder().decode(ListResponse.self, from: data) else {
+            listFailedAt[section] = Date()
+            return nil
         }
-
-        do {
-            let response = try JSONDecoder().decode(ListResponse.self, from: data)
-            // Stamp media type from caller (list endpoints don't include media_type).
-            let stamped = response.results.map { item -> TMDBListItem in
-                TMDBListItem(
-                    id: item.id,
-                    title: item.title,
-                    overview: item.overview,
-                    posterPath: item.posterPath,
-                    backdropPath: item.backdropPath,
-                    releaseDate: item.releaseDate,
-                    voteAverage: item.voteAverage,
-                    mediaType: section.mediaType
-                )
-            }
-            listCache[section] = ListCacheEntry(fetchedAt: Date(), items: stamped)
-            saveListToDisk(stamped, section: section)
-            return stamped
-        } catch {
-            if let cached = loadListFromDisk(section: section, maxAge: listDiskFallbackTTL) {
-                return cached.items
-            }
-            return []
+        // Stamp media type from caller (list endpoints don't include media_type).
+        let stamped = response.results.map { item -> TMDBListItem in
+            TMDBListItem(
+                id: item.id,
+                title: item.title,
+                overview: item.overview,
+                posterPath: item.posterPath,
+                backdropPath: item.backdropPath,
+                releaseDate: item.releaseDate,
+                voteAverage: item.voteAverage,
+                mediaType: section.mediaType
+            )
         }
+        listFailedAt[section] = nil
+        listCache[section] = ListCacheEntry(fetchedAt: Date(), items: stamped)
+        saveListToDisk(stamped, section: section)
+        return stamped
     }
 
     func fetchDetail(tmdbId: Int, type: TMDBMediaType) async -> TMDBItemDetail? {

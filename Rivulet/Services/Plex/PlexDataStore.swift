@@ -1143,7 +1143,10 @@ class PlexDataStore: ObservableObject {
     /// Applies one library's hub-fetch outcome. Failure (nil) keeps the last-known hubs.
     /// The disk write lives here because every successful fetch passes through (#315).
     private func noteLibraryHubFetchResult(key: String, hubs: [PlexHub]?) async {
-        guard let hubs else { return }
+        guard var hubs else { return }
+        #if DEBUG
+        hubs = TVScreenshotMode.demoTitles(hubs)
+        #endif
         libraryHubs[key] = hubs
         recordFetch(for: "libraryHubs:\(key)")
         await cacheManager.cacheLibraryHubs(hubs, forLibrary: key)
@@ -1538,17 +1541,27 @@ class PlexDataStore: ObservableObject {
     // MARK: - Off-main fetch helpers
 
     private func fetchHubsOffMain(serverURL: String, token: String, userId: Int?) async throws -> [PlexHub] {
-        try await Task.detached(priority: .userInitiated) {
+        let fetched = try await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
             return try await PlexNetworkManager.shared.getHubs(serverURL: serverURL, authToken: token, userId: userId)
         }.value
+        #if DEBUG
+        return TVScreenshotMode.demoHubs(fetched)
+        #else
+        return fetched
+        #endif
     }
 
     private func fetchContinueWatchingOffMain(serverURL: String, token: String, userId: Int?) async throws -> PlexHub? {
-        try await Task.detached(priority: .userInitiated) {
+        let fetched = try await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
             return try await PlexNetworkManager.shared.getContinueWatching(serverURL: serverURL, authToken: token, userId: userId)
         }.value
+        #if DEBUG
+        return TVScreenshotMode.demoHub(fetched)
+        #else
+        return fetched
+        #endif
     }
 
     private func continueWatchingHubsAreEqual(_ lhs: PlexHub?, _ rhs: PlexHub?) -> Bool {
@@ -1558,10 +1571,15 @@ class PlexDataStore: ObservableObject {
     }
 
     private func fetchLibrariesOffMain(serverURL: String, token: String, userId: Int?) async throws -> [PlexLibrary] {
-        try await Task.detached(priority: .userInitiated) {
+        let fetched = try await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
             return try await PlexNetworkManager.shared.getLibraries(serverURL: serverURL, authToken: token, userId: userId)
         }.value
+        #if DEBUG
+        return TVScreenshotMode.demoLibraries(fetched)
+        #else
+        return fetched
+        #endif
     }
 
     func refreshLibraries() async {

@@ -33,6 +33,20 @@ final class DolbyVisionPlaybackTests: XCTestCase {
         XCTAssertEqual(playback(5, dv: true, hdr: true), .dolbyVision)
         XCTAssertEqual(playback(8), .sdr)
     }
+
+    // #438: an unproven panel reads SDR in the engine; a Dolby Vision TV is "not confirmed" instead.
+    func test_unprovenPanel_onDolbyVisionTV_isNotConfirmed() {
+        func unproven(_ profile: Int, converted: Bool = false, panelDV: Bool) -> DolbyVisionPlayback? {
+            DolbyVisionPlayback(sourceProfile: profile, convertedTo81: converted, presentsDolbyVision: false,
+                                presentsHDR: false, panelSupportsDolbyVision: panelDV)
+        }
+        XCTAssertEqual(unproven(8, panelDV: true), .dolbyVisionUnconfirmed)
+        XCTAssertEqual(unproven(7, converted: true, panelDV: true), .convertedTo81Unconfirmed)
+        XCTAssertEqual(unproven(8, panelDV: false), .sdr)
+        XCTAssertEqual(unproven(7, converted: true, panelDV: false), .sdr)
+        XCTAssertEqual(DolbyVisionPlayback(sourceProfile: 7, convertedTo81: true, presentsDolbyVision: false,
+                                           presentsHDR: true), .hdr10BaseLayer)
+    }
 }
 
 final class DolbyVisionEnhancementLayerTests: XCTestCase {

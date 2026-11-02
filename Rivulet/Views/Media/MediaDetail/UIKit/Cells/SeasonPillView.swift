@@ -126,7 +126,7 @@ final class SeasonPillView: UIControl {
     /// The pill's season label.
     static func seasonLabel(for season: MediaItem) -> String {
         if let n = season.seasonNumber {
-            return n == 0 ? "Specials" : "Season \(n)"
+            return n == 0 ? String(localized: "Specials") : String(localized: "Season \(n)")
         }
         return season.title
     }

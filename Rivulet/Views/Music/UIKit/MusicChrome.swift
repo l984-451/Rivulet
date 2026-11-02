@@ -127,7 +127,7 @@ enum MusicChrome {
     static func failureView(retry: @escaping () -> Void) -> HomeStateView {
         let view = HomeStateView()
         view.backgroundColor = .clear
-        view.configure(kind: .error(message: "Check the connection to your server and try again."))
+        view.configure(kind: .error(message: String(localized: "Check the connection to your server and try again.")))
         view.onAction = retry
         view.isHidden = true
         // Its one button sits under none of the header's, so a guide over the card leads Down to it.
@@ -171,9 +171,9 @@ enum MusicChrome {
         // Apple rounds to the nearest minute and drops the formatter's commas.
         let minutes = ((duration ?? 0) / 60).rounded()
         guard minutes >= 1, let length = formatter.string(from: minutes * 60) else {
-            return "\(count.formatted()) \(count == 1 ? "Song" : "Songs")"
+            return String(localized: "\(count) Songs")
         }
-        return "\(count.formatted()) \(count == 1 ? "song" : "songs"), \(length.replacingOccurrences(of: ",", with: ""))"
+        return String(localized: "\(count) songs, \(length.replacingOccurrences(of: ",", with: ""))")
     }
 }
 

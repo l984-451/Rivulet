@@ -6,6 +6,7 @@
 //  RivuletTests
 //
 
+import MediaPlayer
 import XCTest
 @testable import Rivulet
 
@@ -177,6 +178,32 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertEqual(vm.currentSubtitleTrackId, 11)
         vm.selectSiloQuality(.offered(id: "not-offered"))
         XCTAssertEqual(vm.siloSelectedQuality, .automatic)
+    }
+
+    func test_remoteOptionsPreserveOpaqueSiloSubtitleIdentityAndOff() {
+        let provider = StubMediaProvider()
+        let original = playback(provider: provider, stream: stream())
+        let tracks = [
+            subtitle("embedded:opaque/a", index: 7, codec: "srt", language: "eng", title: "English", external: nil),
+            subtitle("sidecar:opaque/b", index: 21, codec: "srt", language: "eng", title: "English", external: srtURL),
+        ]
+        let source = MediaSource(id: "file-1", container: "mkv", duration: 100, bitrate: nil, fileSize: nil,
+                                 fileName: nil, videoResolution: nil, videoTracks: [], audioTracks: [],
+                                 subtitleTracks: tracks, streamKind: .directPlay, streamURL: directURL)
+        let metadata = ProviderPlaybackMetadata.make(detail: original.detail, source: source, extras: PlaybackExtras())
+        let projected = (metadata.Media?.first?.Part?.first?.Stream ?? [])
+            .filter(\.isSubtitle).map { MediaTrack(from: $0) }
+        XCTAssertEqual(projected.map(\.id), [-10_000_000, -10_000_001])
+        let option = NowPlayingLanguageOptions.option(projected[1], type: .legible)
+        guard case .subtitle(let shimID) = NowPlayingLanguageOptions.selection(
+            for: option, enable: true, audio: [], subtitles: projected
+        ), let shimID, let ordinal = projected.firstIndex(where: { $0.id == shimID }) else {
+            return XCTFail("remote selection did not resolve the provider shim")
+        }
+        XCTAssertEqual(source.subtitleTracks[ordinal].id, "sidecar:opaque/b")
+        XCTAssertEqual(source.subtitleTracks[ordinal].index, 21)
+        XCTAssertEqual(NowPlayingLanguageOptions.selection(for: option, enable: false, audio: [], subtitles: projected),
+                       .subtitle(nil))
     }
 
     func test_plexSource_isDefault() {

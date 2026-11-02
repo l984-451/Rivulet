@@ -95,7 +95,9 @@ extension SiloProvider {
                                                   capKbps: maxBitrate.map { $0 / 1000 }) else { throw MediaProviderError.notPlayable }
             chosen = versions[index]
         }
-        let selectedAudioIndex = audioIndex ?? policy?.audioIndex(in: chosen)
+        let selectedAudioIndex = SiloPlaybackPolicyApplication.initialAudioIndex(
+            in: chosen, policy: policy, explicitIndex: audioIndex,
+            prefersAudioDescription: SystemMediaAccessibility.prefersAudioDescription)
         if let selectedAudioIndex, !(chosen.audioTracks ?? []).indices.contains(selectedAudioIndex) {
             throw MediaProviderError.backendSpecific(underlying: "The chosen Silo audio track is no longer available.")
         }
@@ -142,7 +144,8 @@ extension SiloProvider {
                 initialVersion = known
             }
             let subtitleChoice = try SiloInitialSubtitleSelection.resolve(
-                watch: watch, version: initialVersion, plan: plan, explicitIndex: subtitleIndex, policy: policy)
+                watch: watch, version: initialVersion, plan: plan, explicitIndex: subtitleIndex, policy: policy,
+                captionsAlwaysOn: SystemMediaAccessibility.captionsAlwaysOn)
             if subtitleChoice.differs(from: plan) {
                 let replan = SiloPlaybackReplan(installationId: installation, playbackAttemptId: body.playbackAttemptId,
                     replanRequestId: UUID().uuidString, failedPlanId: plan.planId,

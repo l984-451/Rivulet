@@ -459,7 +459,7 @@ enum PlexMediaMapper {
         let extras: [MediaItemDetail.Extra] = allExtras.enumerated().map { idx, ex in
             MediaItemDetail.Extra(
                 id: ex.ratingKey ?? ex.key ?? "extra-\(idx)",
-                title: ex.title ?? "Extra",
+                title: ex.title ?? String(localized: "Extra"),
                 thumbnailURL: artworkURL(ex.thumb, serverURL: serverURL, authToken: authToken),
                 duration: ex.duration.map { TimeInterval($0) / 1000 },
                 playbackKey: ex.key ?? ex.ratingKey,

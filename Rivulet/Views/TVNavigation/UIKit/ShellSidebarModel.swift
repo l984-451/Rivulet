@@ -39,7 +39,7 @@ struct PlaylistServer: Hashable {
         if let plexID, providerIDs.contains(plexID),
            LibrarySettingsManager.shared.areServerLibrariesVisible(plexID) {
             servers.append(PlaylistServer(providerID: plexID,
-                                          name: PlexAuthManager.shared.savedServerName ?? "Library", serverID: ""))
+                                          name: PlexAuthManager.shared.savedServerName ?? String(localized: "Library"), serverID: ""))
         }
         for source in ServerDataStore.shared.sources
         where source.providerID != plexID && providerIDs.contains(source.providerID)
@@ -73,7 +73,7 @@ struct SidebarLibrary: Hashable {
     }
     /// Every server's visible libraries (or all of them) in the user's order across servers.
     @MainActor static func current(includeHidden: Bool = false) -> [SidebarLibrary] {
-        let plexName = PlexAuthManager.shared.savedServerName ?? "Library"
+        let plexName = PlexAuthManager.shared.savedServerName ?? String(localized: "Library")
         let store = ServerDataStore.shared
         let names = Dictionary(store.sources.map { ($0.providerID, $0.name) }, uniquingKeysWith: { first, _ in first })
         let plex = includeHidden
@@ -130,10 +130,10 @@ enum ShellSidebarModel {
         // Home is only the welcome screen, kept while there is no Live TV instead.
         var top: [ShellSidebarItem] = []
         if hasMediaServer {
-            top.append(ShellSidebarItem(tab: .search, title: "Search", icon: "magnifyingglass"))
+            top.append(ShellSidebarItem(tab: .search, title: String(localized: "Search"), icon: "magnifyingglass"))
         }
         if !opensToLiveTV(hasMediaServer: hasMediaServer, liveTVSources: liveTVSources) {
-            top.append(ShellSidebarItem(tab: .home, title: "Home", icon: "house.fill"))
+            top.append(ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: "house.fill"))
         }
 
         let rows = arrangeableRows(libraries: libraries, liveTVSources: liveTVSources, combineLiveTV: combineLiveTV,
@@ -179,7 +179,7 @@ enum ShellSidebarModel {
         }
         sections.append(ShellSidebarSection(
             title: nil,
-            items: [ShellSidebarItem(tab: .settings, title: "Settings", icon: "gearshape.fill")]))
+            items: [ShellSidebarItem(tab: .settings, title: String(localized: "Settings"), icon: "gearshape.fill")]))
         return sections
     }
 
@@ -206,12 +206,12 @@ enum ShellSidebarModel {
         var rows: [Row] = []
         if showDiscover {
             rows.append(Row(key: SidebarArrangement.discover,
-                            item: ShellSidebarItem(tab: .discover, title: "Discover", icon: "sparkles"), serverName: nil))
+                            item: ShellSidebarItem(tab: .discover, title: String(localized: "Discover"), icon: "sparkles"), serverName: nil))
         }
         // The watchlist is account-level, not a library: no server.
         if showWatchlist {
             rows.append(Row(key: SidebarArrangement.watchlist,
-                            item: ShellSidebarItem(tab: .watchlist, title: "Watchlist", icon: "bookmark.fill"), serverName: nil))
+                            item: ShellSidebarItem(tab: .watchlist, title: String(localized: "Watchlist"), icon: "bookmark.fill"), serverName: nil))
         }
         rows += libraries.map { Row(key: $0.key, item: $0.item, serverName: $0.serverName) }
         for server in playlistServers {
@@ -221,7 +221,7 @@ enum ShellSidebarModel {
         }
         if !liveTVSources.isEmpty, combineLiveTV {
             rows.append(Row(key: SidebarArrangement.liveTV,
-                            item: ShellSidebarItem(tab: .liveTV(sourceId: nil), title: "Live TV", icon: "play.rectangle.fill"),
+                            item: ShellSidebarItem(tab: .liveTV(sourceId: nil), title: String(localized: "Live TV"), icon: "play.rectangle.fill"),
                             serverName: nil))
         } else if !combineLiveTV {
             // Split sources: the source names the row, the badge says it is Live TV.
@@ -229,7 +229,7 @@ enum ShellSidebarModel {
                 Row(key: SidebarArrangement.liveTV(source: source.id),
                     item: ShellSidebarItem(tab: .liveTV(sourceId: source.id),
                                            title: source.displayName.replacingOccurrences(of: " Live TV", with: ""),
-                                           icon: icon(forSource: source), badge: "Live TV"),
+                                           icon: icon(forSource: source), badge: String(localized: "Live TV")),
                     serverName: nil)
             }
         }
@@ -237,7 +237,7 @@ enum ShellSidebarModel {
     }
 
     private static func playlistsItem(_ server: PlaylistServer) -> ShellSidebarItem {
-        ShellSidebarItem(tab: .playlists(providerID: server.providerID), title: "Playlists",
+        ShellSidebarItem(tab: .playlists(providerID: server.providerID), title: String(localized: "Playlists"),
                          icon: "list.bullet.rectangle")
     }
 

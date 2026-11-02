@@ -53,7 +53,7 @@ final class MusicNowPlayingBridge {
 
         // Track metadata
         info[MPMediaItemPropertyTitle] = track.title
-        info[MPMediaItemPropertyArtist] = track.artistName ?? "Unknown Artist"
+        info[MPMediaItemPropertyArtist] = track.artistName ?? String(localized: "Unknown Artist")
         info[MPMediaItemPropertyAlbumTitle] = track.albumTitle ?? ""
         info[MPMediaItemPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
 
@@ -124,6 +124,8 @@ final class MusicNowPlayingBridge {
         center.skipBackwardCommand.isEnabled = false
         center.seekForwardCommand.isEnabled = false
         center.seekBackwardCommand.isEnabled = false
+        center.enableLanguageOptionCommand.isEnabled = false
+        center.disableLanguageOptionCommand.isEnabled = false
     }
 
     // Every handler below stands down while a video owns Now Playing: both

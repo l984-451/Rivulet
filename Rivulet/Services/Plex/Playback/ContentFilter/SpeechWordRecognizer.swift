@@ -73,10 +73,10 @@ final class SpeechModelStore: ObservableObject {
 
     var statusText: String {
         switch state {
-        case .absent: return "Off"
+        case .absent: return String(localized: "Off")
         case .downloading(let fraction): return "\(Int(fraction * 100))%"
-        case .ready: return "On"
-        case .failed: return "Failed"
+        case .ready: return String(localized: "On")
+        case .failed: return String(localized: "Failed")
         }
     }
 

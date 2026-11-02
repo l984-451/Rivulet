@@ -12,7 +12,7 @@ enum IOSLiveLayout: String, CaseIterable {
 
     static let storageKey = "liveTVLayout"
 
-    var title: String { self == .browse ? "What's On" : "Guide" }
+    var title: String { self == .browse ? String(localized: "What's On") : String(localized: "Guide") }
 }
 
 enum IOSLiveRoute: Hashable {
@@ -36,7 +36,7 @@ extension UnifiedChannel {
 extension UnifiedProgram {
     var timeRange: String {
         let style = Date.FormatStyle.dateTime.hour().minute()
-        return "\(startTime.formatted(style)) to \(endTime.formatted(style))"
+        return String(localized: "\(startTime.formatted(style)) to \(endTime.formatted(style))")
     }
 }
 
@@ -129,12 +129,12 @@ final class IOSLiveRecorder: ObservableObject {
             do {
                 let options = try await store.recordOptions(for: program, on: channel)
                 if options.isEmpty {
-                    failure = Failure(title: "Can't Record", message: "The server offered no way to record this programme.")
+                    failure = Failure(title: String(localized: "Can't Record"), message: String(localized: "The server offered no way to record this programme."))
                 } else {
                     offer = Offer(program: program, channel: channel, options: options)
                 }
             } catch {
-                failure = Failure(title: "Can't Record", message: error.localizedDescription)
+                failure = Failure(title: String(localized: "Can't Record"), message: error.localizedDescription)
             }
         }
     }
@@ -161,7 +161,7 @@ final class IOSLiveRecorder: ObservableObject {
                 try await change()
                 done()
             } catch {
-                failure = Failure(title: "Recording Didn't Change", message: error.localizedDescription)
+                failure = Failure(title: String(localized: "Recording Didn't Change"), message: error.localizedDescription)
             }
         }
     }
@@ -180,7 +180,7 @@ private struct IOSLiveRecorderPresenter: ViewModifier {
     func body(content: Content) -> some View {
         content
             .confirmationDialog(
-                recorder.offer.map { "Record \($0.program.displayTitle)" } ?? "",
+                recorder.offer.map { String(localized: "Record \($0.program.displayTitle)") } ?? "",
                 isPresented: Binding(get: { recorder.offer != nil }, set: { if !$0 { recorder.offer = nil } }),
                 titleVisibility: .visible,
                 presenting: recorder.offer
@@ -226,11 +226,11 @@ enum IOSLiveMenu {
         let airingNow = program?.isCurrentlyAiring ?? true
         var watchGroup = [IOSLiveMenuAction(
             id: "watch",
-            title: airingNow ? "Watch" : "Watch \(channel.name)",
+            title: airingNow ? String(localized: "Watch") : String(localized: "Watch \(channel.name)"),
             systemImage: "play.fill"
         ) { watch(channel) }]
         if let details, program != nil {
-            watchGroup.append(IOSLiveMenuAction(id: "details", title: "Details", systemImage: "info.circle") {
+            watchGroup.append(IOSLiveMenuAction(id: "details", title: String(localized: "Details"), systemImage: "info.circle") {
                 details(IOSLiveProgrammeSelection(channel: channel, program: program))
             })
         }
@@ -240,20 +240,20 @@ enum IOSLiveMenu {
             if let recording = store.activeRecording(for: program) {
                 recordGroup.append(IOSLiveMenuAction(
                     id: "cancel",
-                    title: recording.status == .recording ? "Stop Recording" : "Cancel Recording",
+                    title: recording.status == .recording ? String(localized: "Stop Recording") : String(localized: "Cancel Recording"),
                     systemImage: "stop.circle",
                     isDestructive: true
                 ) { recorder.cancel(recording) })
                 if recording.ruleIsSeries {
                     recordGroup.append(IOSLiveMenuAction(
                         id: "series",
-                        title: "Cancel Series",
+                        title: String(localized: "Cancel Series"),
                         systemImage: "square.stack.3d.up.slash",
                         isDestructive: true
                     ) { recorder.cancelSeries(of: recording) })
                 }
             } else {
-                recordGroup.append(IOSLiveMenuAction(id: "record", title: "Record…", systemImage: "record.circle") {
+                recordGroup.append(IOSLiveMenuAction(id: "record", title: String(localized: "Record…"), systemImage: "record.circle") {
                     recorder.offerRecording(program, on: channel)
                 })
             }
@@ -263,7 +263,7 @@ enum IOSLiveMenu {
         let isFavorite = store.isFavorite(channel)
         favoriteGroup.append(IOSLiveMenuAction(
             id: "favorite",
-            title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+            title: isFavorite ? String(localized: "Remove from Favorites") : String(localized: "Add to Favorites"),
             systemImage: isFavorite ? "star.slash" : "star"
         ) { store.toggleFavorite(channel) })
         return [watchGroup, recordGroup, favoriteGroup].filter { !$0.isEmpty }

@@ -60,9 +60,9 @@ final class WatchProgress {
         if minutes >= 60 {
             let hours = minutes / 60
             let mins = minutes % 60
-            return "\(hours)h \(mins)m remaining"
+            return String(localized: "\(hours)h \(mins)m remaining")
         }
-        return "\(minutes)m remaining"
+        return String(localized: "\(minutes)m remaining")
     }
 
     /// Update progress and mark complete if > 90%

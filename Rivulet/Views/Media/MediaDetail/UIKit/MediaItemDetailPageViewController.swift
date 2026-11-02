@@ -42,7 +42,11 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let belowFold = UIView()
     private let belowFoldTitle = UILabel()
     private let infoColumns = InfoColumnsView()
-    private var scrolledDown = false
+    /// 0 hero, 1 below-fold from the top, 2 scrolled on to the info columns (only with extras).
+    private var scrollStage = 0
+    private let extrasShelf = ExtrasShelfView(leading: PreviewCarouselGeometry.expandedChromeInset)
+    private var hasExtras = false
+    private var infoTopConstraint: NSLayoutConstraint!
 
     // Hero rows (async-filled ones start hidden so the stack doesn't reserve a gap).
     private let showTitleLabel = UILabel()
@@ -197,31 +201,49 @@ final class MediaItemDetailPageViewController: UIViewController {
         guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
             switch press.type {
-            case .downArrow where !scrolledDown:
-                setScrolledDown(true); return
-            case .upArrow where scrolledDown:
-                setScrolledDown(false); return
+            case .downArrow where scrollStage == 0:
+                setScrollStage(1); return
+            case .downArrow where scrollStage == 1 && hasExtras:
+                setScrollStage(2); return
+            case .upArrow where scrollStage > 0:
+                setScrollStage(scrollStage - 1); return
             default: break
             }
         }
         super.pressesBegan(presses, with: event)
     }
 
-    private func setScrolledDown(_ down: Bool) {
-        scrolledDown = down
+    private func setScrollStage(_ stage: Int) {
+        let wasHero = scrollStage == 0
+        scrollStage = stage
         view.layoutIfNeeded()
         let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
-        // Scroll so the below-fold's TOP aligns with the screen top (one
-        // viewport), making the light-top / dark-bottom split fill the screen.
-        let target = down ? min(view.bounds.height, maxY) : 0
+        // Stage 1 aligns the below-fold's TOP with the screen top (one viewport),
+        // making the light-top / dark-bottom split fill the screen.
+        let target = stage == 0 ? 0 : (stage == 1 ? min(view.bounds.height, maxY) : maxY)
+        // The extras row is a focus stop only once the page is scrolled to it.
+        if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
+        }
+        if hasExtras, wasHero != (stage == 0) {
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
         }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if scrollStage > 0, hasExtras, let card = extrasShelf.firstCard { return [card] }
         if let playButton { return [playButton] }
         return super.preferredFocusEnvironments
+    }
+
+    /// Up and Down leave the extras row by scrolling the page, never by focusing the hero above it.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if scrollStage > 0, extrasShelf.contains(context.previouslyFocusedView),
+           context.nextFocusedView?.isDescendant(of: view) == true,
+           !extrasShelf.contains(context.nextFocusedView) { return false }
+        return super.shouldUpdateFocus(in: context)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -378,6 +400,17 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
         belowFold.addSubview(infoColumns)
 
+        // Hidden until the detail says there are extras.
+        extrasShelf.translatesAutoresizingMaskIntoConstraints = false
+        extrasShelf.isHidden = true
+        extrasShelf.alpha = 0
+        extrasShelf.onPlay = { [weak self] trailer in
+            guard let self else { return }
+            ExtraPlayer.play(trailer, from: self)
+        }
+        belowFold.addSubview(extrasShelf)
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56)
+
         let inset = PreviewCarouselGeometry.expandedChromeInset
         NSLayoutConstraint.activate([
             belowFold.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor),
@@ -407,7 +440,10 @@ final class MediaItemDetailPageViewController: UIViewController {
             belowFoldTitle.leadingAnchor.constraint(greaterThanOrEqualTo: belowFold.leadingAnchor, constant: inset),
 
             // Columns in the bottom (dark) half.
-            infoColumns.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 56),
+            infoTopConstraint,
+            extrasShelf.topAnchor.constraint(equalTo: topHalf.bottomAnchor, constant: 24),
+            extrasShelf.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor),
+            extrasShelf.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor),
             infoColumns.leadingAnchor.constraint(equalTo: belowFold.leadingAnchor, constant: inset),
             infoColumns.trailingAnchor.constraint(equalTo: belowFold.trailingAnchor, constant: -inset),
             infoColumns.bottomAnchor.constraint(lessThanOrEqualTo: belowFold.bottomAnchor, constant: -80),
@@ -458,7 +494,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     private func makeMetadataOnlyActionRow() -> UIView {
-        let (pill, title, icon) = FocusableActionButton.pill(title: "Watchlist", systemImage: nil)
+        let (pill, title, icon) = FocusableActionButton.pill(title: String(localized: "Watchlist"), systemImage: nil)
 
         if ProviderWatchlistPill.bind(pill, icon: icon, title: title, item: item,
                                      presenter: { [weak self] in self }) {
@@ -499,7 +535,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         let row = UIStackView(arrangedSubviews: [pill])
         if let silo = provider as? SiloProvider, item.kind == .movie || item.kind == .show {
             let request = FocusableActionButton.circle(systemImage: "plus.app")
-            request.accessibilityLabel = "Request"
+            request.accessibilityLabel = String(localized: "Request")
             request.isHidden = true
             request.onPrimaryAction = { [weak self] in
                 guard let self, self.view.window != nil,
@@ -536,7 +572,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         let body = NSMutableAttributedString()
         let color = UIColor.white.withAlphaComponent(0.9)
         if let s = item.seasonNumber, let e = item.episodeNumber {
-            body.append(NSAttributedString(string: "S\(s), E\(e): ", attributes: [
+            body.append(NSAttributedString(string: String(localized: "S\(s), E\(e): "), attributes: [
                 .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color]))
         }
         body.append(NSAttributedString(string: overview, attributes: [
@@ -593,6 +629,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         refreshDescriptionIndicator()
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
+        showExtras(detail)
         preferredTextColumnWidth?.constant = detail.ratingPresentation == .allAvailable ? 1060 : 860
         capabilityBadges.configure(source: detail.primarySource,
                                    style: detail.showsTechnicalMetadata ? .technical : .standard,
@@ -639,6 +676,21 @@ final class MediaItemDetailPageViewController: UIViewController {
             canTranslate: matches && descriptionTranslation.canTranslate,
             errorMessage: matches ? descriptionTranslation.errorMessage : nil,
             onTranslate: { [weak self] in self?.descriptionTranslation.translate() }, compact: true)
+    }
+
+    /// The Extras row between the title and the info columns, only when the episode has some.
+    private func showExtras(_ detail: MediaItemDetail) {
+        let split = BelowFoldContentLoader.extraTiles(
+            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster)
+        let tiles = split.trailers + split.extras
+        guard !tiles.isEmpty, !hasExtras else { return }
+        hasExtras = true
+        extrasShelf.configure(tiles)
+        extrasShelf.isHidden = false
+        extrasShelf.alpha = scrollStage > 0 ? 1 : 0
+        infoTopConstraint.isActive = false
+        infoTopConstraint = infoColumns.topAnchor.constraint(equalTo: extrasShelf.bottomAnchor, constant: 40)
+        infoTopConstraint.isActive = true
     }
 
     /// Versions button after Watchlist, once the detail shows two or more files.
@@ -796,15 +848,15 @@ final class MediaItemDetailPageViewController: UIViewController {
     private static func formatRuntime(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         let h = total / 3600, m = (total % 3600) / 60
-        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
-        return "\(m) min"
+        if h > 0 { return m > 0 ? String(localized: "\(h)h \(m)m") : String(localized: "\(h)h") }
+        return String(localized: "\(m) min")
     }
 
     private static let dateParser: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withFullDate]; return f
     }()
     private static let dateDisplay: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"; return f
+        let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMdyyyy"); return f
     }()
     private static func displayDate(_ iso: String?) -> String? {
         guard let iso, let date = dateParser.date(from: String(iso.prefix(10))) else { return nil }

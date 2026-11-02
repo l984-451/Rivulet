@@ -124,14 +124,14 @@ nonisolated enum ExtraSubtype: Int, CaseIterable, Sendable, Comparable {
 
     var displayName: String {
         switch self {
-        case .trailer:          return "Trailer"
-        case .featurette:       return "Featurette"
-        case .behindTheScenes:  return "Behind the Scenes"
-        case .deletedScene:     return "Deleted Scene"
-        case .interview:        return "Interview"
-        case .scene:            return "Scene"
-        case .short:            return "Short"
-        case .unknown:          return "Extra"
+        case .trailer:          return String(localized: "Trailer")
+        case .featurette:       return String(localized: "Featurette")
+        case .behindTheScenes:  return String(localized: "Behind the Scenes")
+        case .deletedScene:     return String(localized: "Deleted Scene")
+        case .interview:        return String(localized: "Interview")
+        case .scene:            return String(localized: "Scene")
+        case .short:            return String(localized: "Short")
+        case .unknown:          return String(localized: "Extra")
         }
     }
 
@@ -608,7 +608,7 @@ extension PlexMetadata {
         }
 
         guard let index else { return nil }
-        return index == 0 ? "Specials" : "Season \(index)"
+        return index == 0 ? String(localized: "Specials") : String(localized: "Season \(index)")
     }
 
     /// Extract a TMDB ID from a Plex guid string
@@ -808,11 +808,11 @@ extension PlexMetadata {
     /// Media type for display
     var mediaTypeDisplay: String {
         switch type {
-        case "movie": return "Movie"
-        case "show": return "TV Show"
-        case "season": return "Season"
-        case "episode": return "Episode"
-        default: return type?.capitalized ?? "Unknown"
+        case "movie": return String(localized: "Movie")
+        case "show": return String(localized: "TV Show")
+        case "season": return String(localized: "Season")
+        case "episode": return String(localized: "Episode")
+        default: return type?.capitalized ?? String(localized: "Unknown")
         }
     }
 
@@ -927,9 +927,9 @@ extension PlexMetadata {
             }
             return "5.1"
         } else if channels >= 2 {
-            return "Stereo"
+            return String(localized: "Stereo")
         } else {
-            return "Mono"
+            return String(localized: "Mono")
         }
     }
 

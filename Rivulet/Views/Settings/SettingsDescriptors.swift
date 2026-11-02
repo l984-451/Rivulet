@@ -15,6 +15,12 @@ import UIKit
 struct SettingDescriptor {
     let icon: String
     let description: String
+
+    /// A literal `description` is extracted to the string catalog.
+    init(icon: String, description: String.LocalizationValue) {
+        self.icon = icon
+        self.description = String(localized: description)
+    }
 }
 
 // MARK: - Descriptor Store
@@ -207,6 +213,10 @@ enum SettingsDescriptorStore {
         "heightSpeakers": SettingDescriptor(
             icon: "hifispeaker.2",
             description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
+        ),
+        "upscaleLowResolution": SettingDescriptor(
+            icon: "sparkles.tv",
+            description: "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before."
         ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
@@ -578,6 +588,20 @@ enum SettingsDescriptorStore {
     ]
 
     // MARK: - Page Descriptors
+
+    /// A group's own panel icon on pages whose icon follows focus between groups,
+    /// keyed by the group's header id. Nil keeps the page icon.
+    static func sectionIcon(for page: SettingsPage, section: String?) -> String? {
+        guard page == .appearance else { return nil }
+        switch section {
+        case "hdr_Home": return "house.fill"
+        case "hdr_Library": return "books.vertical.fill"
+        case "hdr_Details": return "star.leadinghalf.filled"
+        case "hdr_Live TV": return "tv.fill"
+        case "hdr_Extras": return "sparkles"
+        default: return nil
+        }
+    }
 
     /// Icon and title for each settings page (shown in left panel header).
     /// `UIColor` rather than SwiftUI `Color`: the only consumer is the UIKit

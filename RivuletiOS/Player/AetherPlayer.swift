@@ -39,16 +39,22 @@ final class AetherPlayer: ObservableObject {
         let isDefault: Bool
         let isForced: Bool
         let isHearingImpaired: Bool
+        var isCommentary = false
+        var isAudioDescription = false
+        var isExternal = false
+        /// The menu's second line when the caller has a better one ("TrueHD 7.1 Atmos").
+        var menuDetail: String?
 
         var detail: String {
+            if let menuDetail { return menuDetail }
             var parts: [String] = []
             if let language, !language.isEmpty {
                 parts.append(Locale.current.localizedString(forLanguageCode: language) ?? language)
             }
             if !codec.isEmpty { parts.append(codec.uppercased()) }
-            if channels > 0 { parts.append(channels == 2 ? "Stereo" : "\(channels) ch") }
+            if channels > 0 { parts.append(channels == 2 ? String(localized: "Stereo") : String(localized: "\(channels) ch")) }
             if isHearingImpaired { parts.append("SDH") }
-            if isForced { parts.append("Forced") }
+            if isForced { parts.append(String(localized: "Forced")) }
             return parts.joined(separator: " · ")
         }
     }
@@ -109,6 +115,8 @@ final class AetherPlayer: ObservableObject {
     private static let nativeAudioTrackIDBase = 300_000
 
     private let engine: AetherEngine
+    /// Opened on the first chapter still and closed with the source.
+    private var frameExtractor: FrameExtractor?
     private var cancellables = Set<AnyCancellable>()
     private var nativeItemObservation: AnyCancellable?
     private var nativeVideoSizeObservation: AnyCancellable?
@@ -417,6 +425,9 @@ final class AetherPlayer: ObservableObject {
     /// through the engine's demux. `forceEngineDemux` is for Plex
     /// `/livetv/sessions/` grants, whose broadcast mp2 and teletext AVPlayer
     /// cannot decode (tvOS AetherPlayer.loadLive).
+    /// Same key as the tvOS Upscale SD and 720p setting; absent = off.
+    static let upscaleKey = "upscaleLowResolution"
+
     func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
         try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
@@ -452,6 +463,10 @@ final class AetherPlayer: ObservableObject {
                 // engine's own SPS check catches mis-signalled H.264 (#150).
                 preferredDecodePath: (!nativeRemoteHLS && Self.needsDeinterlacing(url)) ? .software : .automatic
             )
+            // Join at the newest keyframe instead of the ~18 s holdback (#415). Costs rewind
+            // depth on short-GOP channels: the playlist caps at 900 segments.
+            options.liveJoinProfile = .fastZap
+            options.audioDelaySeconds = AudioSync.seconds()
             if joinsWirelessAudio {
                 options.liveJoinStartsImmediately = false
                 options.autoplay = false
@@ -542,6 +557,9 @@ final class AetherPlayer: ObservableObject {
             teletextPage: Self.regionTeletextPage()
         )
         options.autoplay = userIntendsToPlay
+        options.audioDelaySeconds = AudioSync.seconds()
+        // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
+        options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
@@ -566,6 +584,7 @@ final class AetherPlayer: ObservableObject {
     }
 
     private func beginLoad(keepingTransport: Bool = false) {
+        dropFrameExtractor()
         state = .loading
         canRetry = true
         videoSize = .zero
@@ -624,6 +643,12 @@ final class AetherPlayer: ObservableObject {
     func setRate(_ newRate: Float) {
         rate = newRate
         if state == .playing { engine.setRate(newRate) }
+    }
+
+    /// Steps the saved `AudioSync` offset and pushes it into the running session.
+    func stepAudioDelay(by steps: Int) {
+        AudioSync.step(by: steps)
+        engine.setAudioDelay(AudioSync.seconds())
     }
 
     func setMuted(_ muted: Bool) {
@@ -718,8 +743,27 @@ final class AetherPlayer: ObservableObject {
         liveWindow = .idle
         rate = 1
         engine.pictureInPictureActive = false
+        dropFrameExtractor()
         engine.stop()
         state = .idle
+    }
+
+    /// A still of the loaded file at `seconds`, keyframe-snapped and cached by the engine.
+    /// nil when the source cannot open a second reader.
+    func still(atSeconds seconds: TimeInterval, maxWidth: Int = 480) async -> CGImage? {
+        if frameExtractor == nil { frameExtractor = engine.makeFrameExtractor() }
+        guard let extractor = frameExtractor else { return nil }
+        return await extractor.thumbnail(at: seconds, maxWidth: maxWidth)
+    }
+
+    private func dropFrameExtractor() {
+        guard let extractor = frameExtractor else { return }
+        frameExtractor = nil
+        Task { await extractor.shutdown() }
+    }
+
+    deinit {
+        if let extractor = frameExtractor { Task { await extractor.shutdown() } }
     }
 
     // MARK: - Render surface and Picture in Picture
@@ -851,19 +895,19 @@ final class AetherPlayer: ObservableObject {
 
     /// Only kinds that change what the viewer should do get their own sentence.
     private static func userFacingFailure(_ info: PlaybackErrorInfo?) -> String {
-        let generic = "This video couldn't be played. Check your connection and try again."
+        let generic = String(localized: "This video couldn't be played. Check your connection and try again.")
         guard let kind = info?.kind else { return generic }
         switch kind {
         case .sourceRateLimited:
-            return "The server is refusing new streams right now. Wait a moment and try again."
+            return String(localized: "The server is refusing new streams right now. Wait a moment and try again.")
         case .sourceRefused:
-            return "The server refused this stream. It may have moved, or your access to it may have changed."
+            return String(localized: "The server refused this stream. It may have moved, or your access to it may have changed.")
         case .sourceCertificateRejected:
-            return "The server's security certificate was not accepted."
+            return String(localized: "The server's security certificate was not accepted.")
         case .liveSourceUnavailable:
-            return "This channel is not responding right now."
+            return String(localized: "This channel is not responding right now.")
         case .dolbyVisionRequiresHardware:
-            return "This Dolby Vision file has no fallback layer this device can decode."
+            return String(localized: "This Dolby Vision file has no fallback layer this device can decode.")
         default:
             return generic
         }
@@ -878,7 +922,10 @@ final class AetherPlayer: ObservableObject {
             channels: track.channels,
             isDefault: track.isDefault,
             isForced: track.isForced,
-            isHearingImpaired: track.isHearingImpaired
+            isHearingImpaired: track.isHearingImpaired,
+            isCommentary: track.isCommentary,
+            isAudioDescription: track.isVisualImpaired,
+            isExternal: track.isExternal
         )
     }
 
@@ -886,7 +933,7 @@ final class AetherPlayer: ObservableObject {
         if let language = track.language, !language.isEmpty {
             return Locale.current.localizedString(forLanguageCode: language) ?? language
         }
-        return track.codec.isEmpty ? "Track \(track.id)" : track.codec.uppercased()
+        return track.codec.isEmpty ? String(localized: "Track \(track.id)") : track.codec.uppercased()
     }
 
     // MARK: - Source predicates (shared with tvOS AetherPlayer)
@@ -959,7 +1006,7 @@ final class AetherPlayer: ObservableObject {
             self.audioTracks = group.options.enumerated().map { index, option in
                 Track(
                     id: Self.nativeAudioTrackIDBase + index,
-                    name: option.displayName.isEmpty ? "Audio \(index + 1)" : option.displayName,
+                    name: option.displayName.isEmpty ? String(localized: "Audio \(index + 1)") : option.displayName,
                     codec: "",
                     language: option.extendedLanguageTag,
                     channels: 0,

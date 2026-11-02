@@ -744,4 +744,38 @@ final class TrackPreferenceTests: XCTestCase {
         let tracks = [audio(1, lang: "fra"), audio(2, lang: "eng")]
         XCTAssertEqual(TrackIntentResolver.resolveAudio(intent: AudioIntent(language: TrackLanguage.original), in: tracks)?.id, 1)
     }
+
+    // MARK: - Starting selection
+
+    private func streams(_ json: String) -> [PlexStream] {
+        try! JSONDecoder().decode([PlexStream].self, from: Data(json.utf8))
+    }
+
+    /// Plex's per-item audio pick wins over the intent; the stored intent then picks subtitles.
+    func testStartingSelectionHonorsPerItemAudioPick() {
+        TrackIntentStore.audioIntent = AudioIntent(language: "eng")
+        TrackIntentStore.subtitleIntent = .track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        let start = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","codec":"eac3","default":true},
+             {"id":2,"streamType":2,"index":2,"languageCode":"jpn","codec":"aac","selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"eng","codec":"srt"}]
+            """#))
+        XCTAssertEqual(start.audio, 2)
+        XCTAssertEqual(start.subtitle, 3)
+    }
+
+    /// A deliberate Plex subtitle pick overrides a stored Off; nothing selected resolves to off (0).
+    func testStartingSelectionSubtitleOverrideAndOff() {
+        TrackIntentStore.subtitleIntent = .off
+        let picked = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"spa","selected":true}]
+            """#))
+        XCTAssertEqual(picked.subtitle, 3)
+        let off = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"spa"}]
+            """#))
+        XCTAssertEqual(off.subtitle, 0)
+    }
 }

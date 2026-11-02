@@ -51,8 +51,7 @@ extension SettingsContent {
     static func jellyfinSteps(_ draft: AddSourceDraft) -> [EntryStep] {
         [
             EntryStep(id: "jellyfinURL", title: "Server Address",
-                      message: "Enter your Jellyfin server's address, with its port, "
-                          + "for example http://192.168.1.100:8096.",
+                      message: "Enter your Jellyfin server's address, with its port, for example http://192.168.1.100:8096.",
                       placeholder: "Required", keyboard: .URL, contentType: .URL,
                       value: { draft.serverURL }, set: { draft.serverURL = $0; draft.status = .idle }),
             EntryStep(id: "jellyfinUsername", title: "Username",
@@ -73,7 +72,8 @@ extension SettingsContent {
         let page = vc as? SettingsPageViewController
         let username = draft.username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: sanitizeURL(draft.serverURL)), !username.isEmpty else {
-            fail(draft, page: page, title: "Couldn't Sign In", message: "Enter your server's address and your username.")
+            fail(draft, page: page, title: String(localized: "Couldn't Sign In"),
+                 message: String(localized: "Enter your server's address and your username."))
             return
         }
         draft.status = .checking
@@ -84,7 +84,7 @@ extension SettingsContent {
                 _ = try await JellyfinSession.signIn(serverURL: url, username: username, password: draft.password)
                 finish(page, draft: draft)
             } catch {
-                fail(draft, page: page, title: "Couldn't Sign In", message: jellyfinFailureCopy(for: error))
+                fail(draft, page: page, title: String(localized: "Couldn't Sign In"), message: jellyfinFailureCopy(for: error))
             }
         }
     }
@@ -92,16 +92,15 @@ extension SettingsContent {
     static func jellyfinFailureCopy(for error: Error) -> String {
         switch error {
         case JellyfinSignInError.notJellyfin:
-            "That address isn't a Jellyfin server. Check the port."
+            String(localized: "That address isn't a Jellyfin server. Check the port.")
         case JellyfinSignInError.serverTooOld(let version):
-            "This server runs Jellyfin \(version). Rivulet needs "
-                + "\(JellyfinSession.minimumVersion.major).\(JellyfinSession.minimumVersion.minor) or newer."
+            String(localized: "This server runs Jellyfin \(version). Rivulet needs \(JellyfinSession.minimumVersion.major).\(JellyfinSession.minimumVersion.minor) or newer.")
         case JellyfinSignInError.untrustedCertificate:
-            "This server's HTTPS certificate isn't trusted. Try its http:// address."
+            String(localized: "This server's HTTPS certificate isn't trusted. Try its http:// address.")
         case MediaProviderError.unauthorized:
-            "Jellyfin didn't accept that username and password."
+            String(localized: "Jellyfin didn't accept that username and password.")
         default:
-            "Couldn't reach that server. Check the address and port."
+            String(localized: "Couldn't reach that server. Check the address and port.")
         }
     }
 }

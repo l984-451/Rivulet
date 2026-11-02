@@ -143,7 +143,7 @@ class PlexUserProfileManager: ObservableObject {
             isLoadingUsers = false
         } catch {
             DiagLog.error(.profile, "Home users fetch failed: \(DiagLog.describe(error))")
-            usersError = "Failed to load profiles"
+            usersError = String(localized: "Failed to load profiles")
             isLoadingUsers = false
 
             // Without the list there is no profile switching. Content keeps the

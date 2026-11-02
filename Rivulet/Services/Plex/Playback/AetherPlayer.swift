@@ -504,6 +504,9 @@ final class AetherPlayer: PlayerProtocol {
             isForced: t.isForced,
             isHearingImpaired: t.isHearingImpaired,
             isCommentary: t.isCommentary,
+            isAudioDescription: t.isVisualImpaired,
+            // The engine names an untitled track "ENG (subrip)" or "Track 3 (subrip)".
+            title: t.name.isEmpty || t.name.hasSuffix("(\(t.codec))") ? nil : t.name,
             channels: t.channels > 0 ? t.channels : nil,
             // `TrackInfo.id` IS the container stream index (Demuxer enumerates
             // all streams and passes the loop counter through as `id`). It is
@@ -770,9 +773,19 @@ final class AetherPlayer: PlayerProtocol {
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
                             onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
-                            presentsHDR: engine.videoFormat != .sdr)
+                            presentsHDR: engine.videoFormat != .sdr,
+                            panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
+    /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
+    var upscaleSummary: String? {
+        guard let status = engine.activeUpscale else { return nil }
+        if status.disabledReason != nil { return String(localized: "Stopped") }
+        let size = "\(Int(status.sourceSize.height))p → \(Int(status.targetSize.height))p"
+        guard let ml = status.mlScale else { return "\(size) (MetalFX)" }
+        let mlOnly = status.degraded || abs(status.sourceSize.height * CGFloat(ml) - status.targetSize.height) < 2
+        return mlOnly ? "\(size) (ML)" : "\(size) (ML + MetalFX)"
+    }
     /// FEL or MEL for the current Profile 7 load; nil when the engine didn't classify it (FEL setting off, no DV panel).
     private(set) var dolbyVisionEnhancementLayer: DolbyVisionEnhancementLayer?
 
@@ -867,6 +880,7 @@ final class AetherPlayer: PlayerProtocol {
             // out the standard ~18s holdback (loopback joins measured 8-34s, #415).
             // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
+            options.audioDelaySeconds = AudioSync.seconds()
             if role == .multiviewSlot {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
@@ -994,6 +1008,9 @@ final class AetherPlayer: PlayerProtocol {
 
     /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
     static let heightSpeakersKey = "heightSpeakers"
+
+    /// ML upscaling of SDR below 1080p (#846); absent = off.
+    static let upscaleKey = "upscaleLowResolution"
 
     /// Profile 7 FEL composition; absent = off.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
@@ -1166,6 +1183,9 @@ final class AetherPlayer: PlayerProtocol {
         let panelDV = AetherEngine.displayCapabilities.supportsDolbyVision
         let felOn = UserDefaults.standard.bool(forKey: Self.dolbyVisionFELKey)
         options.preferDualLayerDolbyVision = panelDV && felOn
+        // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
+        options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
+        options.audioDelaySeconds = AudioSync.seconds()
         // #362: catch the engine's one Profile 7 route line for Sentry. Live TV's capture owns the
         // handler while it runs, and VOD never loads then.
         let p7RouteLine = OSAllocatedUnfairLock<String?>(initialState: nil)
@@ -1532,6 +1552,12 @@ final class AetherPlayer: PlayerProtocol {
         engine.setTeletextPage(page)
     }
 
+    /// Pushes the saved `AudioSync` offset into the running session. The engine
+    /// re-cuts at the playhead (a brief held frame on the loopback route).
+    func applyAudioSync() {
+        engine.setAudioDelay(AudioSync.seconds())
+    }
+
     /// True while the software backend is serving the session. Live joins use
     /// it: that backend has no player of its own to ride out a wireless audio
     /// route's start-up latency (see `loadLive`).
@@ -1731,11 +1757,11 @@ final class AetherPlayer: PlayerProtocol {
     private static func audioDeliveryLabel(_ delivery: AudioDelivery) -> String? {
         switch delivery {
         case .none: return nil  // Pre-load or torn down: nothing to report yet.
-        case .noAudioInSource: return "No audio in source"
-        case .streamCopy: return "Stream copy"
-        case .bridged: return "Bridged"
-        case .decoded: return "Decoded"
-        case .droppedNoPipeline: return "Video only (audio dropped)"
+        case .noAudioInSource: return String(localized: "No audio in source")
+        case .streamCopy: return String(localized: "Stream copy")
+        case .bridged: return String(localized: "Bridged")
+        case .decoded: return String(localized: "Decoded")
+        case .droppedNoPipeline: return String(localized: "Video only (audio dropped)")
         case .playerManaged: return "AVFoundation"
         }
     }

@@ -1028,7 +1028,7 @@ final class GuideCategoryBarView: UIView {
         actionTitle: String? = nil,
         onAction: (() -> Void)? = nil
     ) {
-        var nextItems = [Item(title: "All Channels", group: nil)]
+        var nextItems = [Item(title: String(localized: "All Channels"), group: nil)]
             + titles.map { Item(title: $0, group: $0) }
         if let actionTitle {
             nextItems.append(Item(title: actionTitle, group: nil, isAction: true))
@@ -1841,7 +1841,7 @@ final class CornerView: UICollectionReusableView {
     func configure(date d: Date, transparent: Bool = false) {
         box.backgroundColor = transparent ? UIColor(white: 0, alpha: 0.28) : UIColor(EPGTheme.columnFill)
         if Calendar.current.isDateInToday(d) {
-            label.text = "TODAY"
+            label.text = String(localized: "TODAY")
         } else {
             label.text = d.formatted(.dateTime.weekday(.abbreviated)).uppercased()
         }
@@ -1870,12 +1870,12 @@ struct GuideInfoBar: View {
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(EPGTheme.textSecondary)
                 }
-                Text(program?.title ?? "Select a programme")
+                Text(program?.title ?? String(localized: "Select a programme"))
                     .font(.system(size: 44, weight: .bold))
                     .foregroundStyle(EPGTheme.textPrimary)
                     .lineLimit(1)
                 if let program {
-                    Text(timeRange(program))
+                    Text(timeRange(program) + (program.year.map { " · \($0)" } ?? ""))
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(EPGTheme.textSecondary)
                 }

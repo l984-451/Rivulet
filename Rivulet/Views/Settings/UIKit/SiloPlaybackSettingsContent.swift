@@ -68,8 +68,10 @@ enum SiloPlaybackSettingsContent {
         }
         // Local policy applies whether or not the profile's preferences are followed.
         rows.append(cycle("siloBufferingPolicy", "Buffering Quality", value: overrides.bufferingPolicy,
-                          options: [(.inherit, "Ask First"), (.value(.never), "Never"),
-                                    (.value(.ask), "Ask First"), (.value(.automatically), "Automatically"), (.clear, "Clear")],
+                          options: [(.inherit, String(localized: "Ask First")), (.value(.never), String(localized: "Never")),
+                                    (.value(.ask), String(localized: "Ask First")),
+                                    (.value(.automatically), String(localized: "Automatically")),
+                                    (.clear, String(localized: "Clear"))],
                           provider: provider, account: account) { overrides.bufferingPolicy = $0 })
         if schema?.definitions[.preferredQuality] != nil {
             rows.append(text("siloQualityOverride", "Preferred Quality", value: {
@@ -158,7 +160,7 @@ enum SiloPlaybackSettingsContent {
                                           select: { choose(.clear) }))
         ]
         rows += subtitleLanguageOptions.map { tag in
-            SettingsRowItem(id: "siloSL_\(tag)", title: SiloSubtitlePreferenceLabels.languageName(tag),
+            SettingsRowItem(id: "siloSL_\(tag)", verbatim: SiloSubtitlePreferenceLabels.languageName(tag),
                             kind: .option(isSelected: { sameLanguage(selectedSubtitleLanguage, tag) },
                                           select: { choose(.value(tag)) }))
         }
@@ -190,13 +192,13 @@ enum SiloPlaybackSettingsContent {
     }
 
     private static func cycle<Value: Equatable & Codable & Sendable>(
-        _ id: String, _ title: String, value: SiloLocalPolicyValue<Value>,
+        _ id: String, _ title: String.LocalizationValue, value: SiloLocalPolicyValue<Value>,
         options: [(SiloLocalPolicyValue<Value>, String)], provider: SiloProvider, account: SiloSession.Account,
         set: @escaping (SiloLocalPolicyValue<Value>) -> Void
     ) -> SettingsRowItem {
         var current = value
         return SettingsRowItem(id: id, title: title, kind: .cycle(value: {
-            options.first { $0.0 == current }?.1 ?? "Inherit"
+            options.first { $0.0 == current }?.1 ?? String(localized: "Inherit")
         }, next: {
             guard owner(provider, account) else { return }
             let index = options.firstIndex { $0.0 == current } ?? 0
@@ -206,7 +208,8 @@ enum SiloPlaybackSettingsContent {
         }))
     }
 
-    private static func language(_ id: String, _ title: String, provider: SiloProvider, account: SiloSession.Account,
+    private static func language(_ id: String, _ title: String.LocalizationValue,
+                                 provider: SiloProvider, account: SiloSession.Account,
                                  get: @escaping () -> SiloLocalPolicyValue<String>,
                                  set: @escaping (SiloLocalPolicyValue<String>) -> Void) -> SettingsRowItem {
         text(id, title, value: {
@@ -217,11 +220,12 @@ enum SiloPlaybackSettingsContent {
         }, provider: provider, account: account, hint: "Language code, Clear, or empty to inherit.")
     }
 
-    private static func text(_ id: String, _ title: String, value: @escaping () -> String,
+    private static func text(_ id: String, _ title: String.LocalizationValue, value: @escaping () -> String,
                              save change: @escaping (String) -> Void, provider: SiloProvider,
-                             account: SiloSession.Account, hint: String) -> SettingsRowItem {
+                             account: SiloSession.Account, hint: String.LocalizationValue) -> SettingsRowItem {
         SettingsRowItem(id: id, title: title, kind: .textEntry(
-            value: value, placeholder: "Inherit", hint: hint, suggestions: [], keyboardType: .asciiCapable,
+            value: value, placeholder: String(localized: "Inherit"), hint: String(localized: hint),
+            suggestions: [], keyboardType: .asciiCapable,
             set: { raw in
                 guard owner(provider, account) else { return }
                 change(raw)

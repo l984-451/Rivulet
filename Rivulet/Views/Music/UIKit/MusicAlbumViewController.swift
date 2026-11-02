@@ -43,8 +43,8 @@ final class MusicAlbumViewController: UIViewController, UICollectionViewDelegate
     private let artwork = UIImageView()
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
     private var dataSource: UICollectionViewDiffableDataSource<Int, Item>!
-    private let playButton = MusicChrome.pill(title: "Play", symbol: "play.fill")
-    private let shuffleButton = MusicChrome.pill(title: "Shuffle", symbol: "shuffle")
+    private let playButton = MusicChrome.pill(title: String(localized: "Play"), symbol: "play.fill")
+    private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
     private let moreButton = MusicChrome.pill(title: nil, symbol: "ellipsis")
     private lazy var failureView = MusicChrome.failureView { [weak self] in self?.loadTracks() }
 
@@ -223,7 +223,7 @@ final class MusicAlbumViewController: UIViewController, UICollectionViewDelegate
             let meta = [album.genres.first, album.year.map(String.init)].compactMap { $0 }.joined(separator: " · ")
             cell.configure(layout: .album, title: album.title, line2: album.artistName, line3: meta, buttons: buttons)
         case .playlist(let playlist):
-            cell.configure(layout: .playlist, title: playlist.title, line2: playlist.isSmart ? "Smart Playlist" : "Playlist",
+            cell.configure(layout: .playlist, title: playlist.title, line2: playlist.isSmart ? String(localized: "Smart Playlist") : String(localized: "Playlist"),
                            line3: summary(of: playlist), buttons: buttons)
         }
     }
@@ -249,7 +249,7 @@ final class MusicAlbumViewController: UIViewController, UICollectionViewDelegate
         elementKind: UICollectionView.elementKindSectionHeader) { [unowned self] view, _, indexPath in
         guard discRuns.indices.contains(indexPath.section - 1) else { return }
         let font = UIFont.systemFont(ofSize: 38, weight: .bold)
-        view.configure(text: "Disc \(discRuns[indexPath.section - 1].disc)", font: font, color: .white,
+        view.configure(text: String(localized: "Disc \(discRuns[indexPath.section - 1].disc)"), font: font, color: .white,
                        top: (Self.discHeaderHeight - ceil(font.lineHeight)) / 2)
     }
 
@@ -392,7 +392,7 @@ final class MusicAlbumViewController: UIViewController, UICollectionViewDelegate
 
     private func summary(of playlist: MusicPlaylist) -> String {
         let count = playlistTotal ?? playlist.trackCount
-        let songs = "\(count.formatted()) \(count == 1 ? "song" : "songs")"
+        let songs = String(localized: "\(count) songs")
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = .full
         formatter.allowedUnits = playlist.duration >= 3600 ? [.hour, .minute] : [.minute]

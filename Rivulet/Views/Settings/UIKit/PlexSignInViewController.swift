@@ -84,15 +84,15 @@ final class PlexSignInViewController: UIViewController {
 
         switch state {
         case .idle:
-            showLoading("Connecting to Plex…")
+            showLoading(String(localized: "Connecting to Plex…"))
         case .requestingPin:
-            showLoading("Requesting PIN…")
+            showLoading(String(localized: "Requesting PIN…"))
         case .waitingForPIN(let code, _):
             showPIN(code)
         case .selectingServer(let servers):
             showServers(servers)
         case .authenticated where auth.selectedServerURL == nil:
-            showLoading("Loading Servers…")
+            showLoading(String(localized: "Loading Servers…"))
         case .authenticated:
             showConnected()
         case .error(let message):
@@ -118,17 +118,17 @@ final class PlexSignInViewController: UIViewController {
         let spinner = UIActivityIndicatorView(style: .medium)
         spinner.color = .white
         spinner.startAnimating()
-        let waiting = UIStackView(arrangedSubviews: [spinner, label("Waiting for you to sign in…", size: 22, color: .secondaryText)])
+        let waiting = UIStackView(arrangedSubviews: [spinner, label(String(localized: "Waiting for you to sign in…"), size: 22, color: .secondaryText)])
         waiting.spacing = 12
         let waitingRow = UIStackView(arrangedSubviews: [waiting])
         waitingRow.axis = .vertical
         waitingRow.alignment = .center
 
-        let cancel = button("Cancel") { [weak self] in self?.cancel() }
+        let cancel = button(String(localized: "Cancel")) { [weak self] in self?.cancel() }
         setContent([
-            label("Visit", size: 26, color: .secondaryText),
+            label(String(localized: "Visit"), size: 26, color: .secondaryText),
             label("plex.tv/link", size: 40, weight: .bold),
-            label("and enter this code:", size: 26, color: .secondaryText),
+            label(String(localized: "and enter this code:"), size: 26, color: .secondaryText),
             boxRow, waitingRow, cancel,
         ], focus: cancel)
         stack.setCustomSpacing(30, after: stack.arrangedSubviews[2])
@@ -148,7 +148,7 @@ final class PlexSignInViewController: UIViewController {
             let on = server.machineIdentifier.map(chosen.contains) ?? false
             let text = NSMutableAttributedString(attachment: NSTextAttachment(
                 image: UIImage(systemName: on ? "checkmark.circle.fill" : "circle")!))
-            let name = server.owned == false ? "\(server.name) · \(server.sourceTitle ?? "Shared")" : server.name
+            let name = server.owned == false ? "\(server.name) · \(server.sourceTitle ?? String(localized: "Shared"))" : server.name
             text.append(NSAttributedString(string: "  \(name)"))
             return text
         }
@@ -182,8 +182,8 @@ final class PlexSignInViewController: UIViewController {
             scroll.heightAnchor.constraint(equalToConstant: visible * rowHeight + (visible - 1) * list.spacing + inset * 2),
         ] + rows.map { $0.heightAnchor.constraint(equalToConstant: rowHeight) })
 
-        let cancel = button("Cancel") { [weak self] in self?.cancel() }
-        let next = button("Continue") { [weak self] in
+        let cancel = button(String(localized: "Cancel")) { [weak self] in self?.cancel() }
+        let next = button(String(localized: "Continue")) { [weak self] in
             guard let primary = servers.first(where: { $0.machineIdentifier.map(chosen.contains) ?? false }) else { return }
             self?.connect(to: primary) {
                 for id in servers.compactMap(\.machineIdentifier) where extra.isEnabled(machineID: id) != chosen.contains(id) {
@@ -194,28 +194,28 @@ final class PlexSignInViewController: UIViewController {
         let buttons = UIStackView(arrangedSubviews: [cancel, next])
         buttons.distribution = .fillEqually
         buttons.spacing = 24
-        setContent([label("Select Your Servers", size: 34, weight: .bold), scroll, buttons], focus: rows.first)
+        setContent([label(String(localized: "Select Your Servers"), size: 34, weight: .bold), scroll, buttons], focus: rows.first)
         stack.setCustomSpacing(24, after: scroll)
     }
 
     private func showConnected() {
-        var views = [label("Connected", size: 34, weight: .bold)]
+        var views = [label(String(localized: "Connected"), size: 34, weight: .bold)]
         if let name = auth.savedServerName {
-            views.append(label("Connected to \(name)", size: 24, color: .secondaryText))
+            views.append(label(String(localized: "Connected to \(name)"), size: 24, color: .secondaryText))
         }
         if let username = auth.username {
-            views.append(label("Signed in as \(username)", size: 24, color: .secondaryText))
+            views.append(label(String(localized: "Signed in as \(username)"), size: 24, color: .secondaryText))
         }
         setContent(views, focus: nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.close() }
     }
 
     private func showError(_ message: String) {
-        let retry = button("Try Again") { [weak self] in
+        let retry = button(String(localized: "Try Again")) { [weak self] in
             // Skips the PIN step when the account is already linked.
             Task { await self?.auth.retryAfterError() }
         }
-        let unlink = button("Unlink Account") { [weak self] in
+        let unlink = button(String(localized: "Unlink Account")) { [weak self] in
             self?.auth.signOut()
             Task { await self?.auth.startPINAuthentication() }
         }
@@ -223,7 +223,7 @@ final class PlexSignInViewController: UIViewController {
         buttons.distribution = .fillEqually
         buttons.spacing = 24
         buttons.heightAnchor.constraint(equalToConstant: 72).isActive = true
-        setContent([label("Connection Failed", size: 34, weight: .bold),
+        setContent([label(String(localized: "Connection Failed"), size: 34, weight: .bold),
                     label(message, size: 24, color: .secondaryText), buttons], focus: retry)
         stack.setCustomSpacing(36, after: stack.arrangedSubviews[1])
     }
@@ -232,7 +232,7 @@ final class PlexSignInViewController: UIViewController {
 
     private func connect(to server: PlexDevice, onConnected: @escaping () -> Void = {}) {
         shownState = nil
-        showLoading("Connecting to \(server.name)…")
+        showLoading(String(localized: "Connecting to \(server.name)…"))
         Task {
             let connected = await auth.selectServer(server)
             // A failed switch away from a working server leaves the state on the list.

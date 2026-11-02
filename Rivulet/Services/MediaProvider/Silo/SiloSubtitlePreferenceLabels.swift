@@ -44,8 +44,8 @@ nonisolated enum SiloSubtitlePreferenceLabels {
     /// The row's trailing value: the profile's language while inheriting.
     static func languageValue(override: SiloLocalPolicyValue<String>, resolved: String?) -> String {
         switch override {
-        case .inherit: return follow("Follow Silo", resolved.map(languageName))
-        case .clear: return "None"
+        case .inherit: return follow(resolved.map(languageName))
+        case .clear: return String(localized: "None")
         case .value(let tag): return languageName(tag)
         }
     }
@@ -53,30 +53,30 @@ nonisolated enum SiloSubtitlePreferenceLabels {
     /// Silo's contract labels for `playback.subtitle_mode`.
     static func modeName(_ mode: SiloSubtitleMode) -> String {
         switch mode {
-        case .auto: "Auto"
-        case .always: "Always on"
-        case .off: "Off"
+        case .auto: String(localized: "Auto")
+        case .always: String(localized: "Always on")
+        case .off: String(localized: "Off")
         }
     }
 
     static func modeOptions(resolved: SiloSubtitleMode?)
         -> [(SiloLocalPolicyValue<SiloLocalSubtitleMode>, String)] {
-        [(.inherit, follow("Follow Silo", resolved.map(modeName))),
+        [(.inherit, follow(resolved.map(modeName))),
          (.value(.auto), modeName(.auto)),
          (.value(.always), modeName(.always)),
          (.value(.off), modeName(.off)),
-         (.clear, "Clear")]
+         (.clear, String(localized: "Clear"))]
     }
 
     static func forcedOptions(resolved: Bool?) -> [(SiloLocalPolicyValue<Bool>, String)] {
-        [(.inherit, follow("Follow Silo", resolved.map { $0 ? "On" : "Off" })),
-         (.value(true), "On"),
-         (.value(false), "Off"),
-         (.clear, "Clear")]
+        [(.inherit, follow(resolved.map { $0 ? String(localized: "On") : String(localized: "Off") })),
+         (.value(true), String(localized: "On")),
+         (.value(false), String(localized: "Off")),
+         (.clear, String(localized: "Clear"))]
     }
 
-    private static func follow(_ base: String, _ resolved: String?) -> String {
-        guard let resolved else { return base }
-        return "\(base) · \(resolved)"
+    private static func follow(_ resolved: String?) -> String {
+        guard let resolved else { return String(localized: "Follow Silo") }
+        return String(localized: "Follow Silo · \(resolved)")
     }
 }

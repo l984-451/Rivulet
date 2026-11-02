@@ -270,7 +270,7 @@ enum InfoPopupContent {
     /// Every supplied source, using the same branded marks as the title page.
     static func ratings(_ ratings: [MediaRating]) -> UIView {
         let stack = verticalStack(spacing: 22)
-        stack.addArrangedSubview(label("Ratings", size: 30, weight: .semibold, color: .white, lines: 1))
+        stack.addArrangedSubview(label(String(localized: "Ratings"), size: 30, weight: .semibold, color: .white, lines: 1))
         stack.addArrangedSubview(RatingsGridView.row(ratings))
         return stack
     }
@@ -289,7 +289,7 @@ enum InfoPopupContent {
         seal.translatesAutoresizingMaskIntoConstraints = false
         seal.widthAnchor.constraint(equalToConstant: 30).isActive = true
         seal.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        let ageText = advisory.ageRating.map { "age " + $0.replacingOccurrences(of: "+", with: "") } ?? "Common Sense"
+        let ageText = advisory.ageRating.map { String(localized: "age \($0.replacingOccurrences(of: "+", with: ""))") } ?? "Common Sense"
         sealRow.addArrangedSubview(seal)
         sealRow.addArrangedSubview(label(ageText, size: 30, weight: .bold, color: .white, lines: 1))
         stack.addArrangedSubview(sealRow)
@@ -334,7 +334,7 @@ enum InfoPopupContent {
             // Seasons (and some shows) carry no synopsis of their own on Plex,
             // which left the popup showing only the title. Say so rather than
             // render a blank card.
-            let placeholder = label("No information found on Plex.", size: 24, weight: .regular,
+            let placeholder = label(String(localized: "No information found on Plex."), size: 24, weight: .regular,
                                      color: .white.withAlphaComponent(0.5), lines: 0)
             stack.addArrangedSubview(placeholder)
             stack.setCustomSpacing(22, after: placeholder)
@@ -351,17 +351,17 @@ enum InfoPopupContent {
 
         // Information
         var info: [(String, String)] = []
-        if let y = detail.item.year { info.append(("Released", "\(y)")) }
+        if let y = detail.item.year { info.append((String(localized: "Released"), "\(y)")) }
         // Containers have no runtime; surface episode count + watched progress,
         // which is the useful "info" for a season/show.
         if isContainer, let progress = detail.item.childProgress, progress.total > 0 {
-            info.append(("Episodes", "\(progress.total)"))
-            info.append(("Watched", "\(progress.played) of \(progress.total)"))
+            info.append((String(localized: "Episodes"), "\(progress.total)"))
+            info.append((String(localized: "Watched"), String(localized: "\(progress.played) of \(progress.total)")))
         }
-        if let rt = detail.item.runtime, rt > 0 { info.append(("Run Time", runtimeString(rt))) }
-        if let r = detail.contentRating, !r.isEmpty { info.append(("Rated", r)) }
-        if let region = detail.regionOfOrigin, !region.isEmpty { info.append(("Region of Origin", region)) }
-        addSection(title: "Information", rows: info, to: stack)
+        if let rt = detail.item.runtime, rt > 0 { info.append((String(localized: "Run Time"), runtimeString(rt))) }
+        if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
+        if let region = detail.regionOfOrigin, !region.isEmpty { info.append((String(localized: "Region of Origin"), region)) }
+        addSection(title: String(localized: "Information"), rows: info, to: stack)
 
         if detail.showsTechnicalMetadata {
             for (index, source) in detail.mediaSources.enumerated() {
@@ -374,30 +374,30 @@ enum InfoPopupContent {
         // Languages
         var langs: [(String, String)] = []
         if let first = source?.audioTracks.first, let n = InfoColumnsView.languageName(first.language) {
-            langs.append(("Original Audio", n))
+            langs.append((String(localized: "Original Audio"), n))
         }
         if let audio = source?.audioTracks, !audio.isEmpty {
             let summary = audioSummary(audio, detailed: detail.showsTechnicalMetadata)
-            if !summary.isEmpty { langs.append(("Audio", summary)) }
+            if !summary.isEmpty { langs.append((String(localized: "Audio"), summary)) }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {
             let names = uniqueOrdered(subs.compactMap { t -> String? in
                 guard let n = InfoColumnsView.languageName(t.language) else { return nil }
                 return t.isHearingImpaired ? "\(n) (SDH)" : n
             })
-            if !names.isEmpty { langs.append(("Subtitles", names.joined(separator: ", "))) }
+            if !names.isEmpty { langs.append((String(localized: "Subtitles"), names.joined(separator: ", "))) }
         }
-        addSection(title: "Languages", rows: langs, to: stack)
+        addSection(title: String(localized: "Languages"), rows: langs, to: stack)
 
         // Accessibility
         var access: [(String, String)] = []
         if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false {
-            access.append(("SDH", "Subtitles for the deaf and hard of hearing (SDH) refer to subtitles in the original language with the addition of relevant non-dialogue information."))
+            access.append(("SDH", String(localized: "Subtitles for the deaf and hard of hearing (SDH) refer to subtitles in the original language with the addition of relevant non-dialogue information.")))
         }
         if source?.audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) ?? false {
-            access.append(("AD", "Audio descriptions (AD) refer to a narration track describing what is happening on screen, to provide context for those who are blind or have low vision."))
+            access.append(("AD", String(localized: "Audio descriptions (AD) refer to a narration track describing what is happening on screen, to provide context for those who are blind or have low vision.")))
         }
-        if !access.isEmpty { addSection(title: "Accessibility", rows: access, to: stack) }
+        if !access.isEmpty { addSection(title: String(localized: "Accessibility"), rows: access, to: stack) }
         return stack
     }
 
@@ -467,8 +467,8 @@ enum InfoPopupContent {
 
     private static func runtimeString(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded()); let h = total / 3600, m = (total % 3600) / 60
-        if h > 0 { return m > 0 ? "\(h) hr \(m) min" : "\(h) hr" }
-        return "\(m) min"
+        if h > 0 { return m > 0 ? String(localized: "\(h) hr \(m) min") : String(localized: "\(h) hr") }
+        return String(localized: "\(m) min")
     }
 
     private static func uniqueOrdered(_ values: [String]) -> [String] {
@@ -500,8 +500,8 @@ enum InfoPopupContent {
     /// holds focus). Present content-sized.
     static func changelog(version: String, features: [String]) -> UIView {
         let stack = verticalStack(spacing: 8)
-        stack.addArrangedSubview(label("What's New", size: 44, weight: .bold, color: .white, lines: 1))
-        let ver = label("Version \(version)", size: 22, weight: .regular, color: .white.withAlphaComponent(0.5), lines: 1)
+        stack.addArrangedSubview(label(String(localized: "What's New"), size: 44, weight: .bold, color: .white, lines: 1))
+        let ver = label(String(localized: "Version \(version)"), size: 22, weight: .regular, color: .white.withAlphaComponent(0.5), lines: 1)
         stack.addArrangedSubview(ver)
         stack.setCustomSpacing(24, after: ver)
 
@@ -509,7 +509,7 @@ enum InfoPopupContent {
             stack.addArrangedSubview(changelogBullet(feature))
         }
 
-        let done = label("Done", size: 26, weight: .semibold, color: .black, lines: 1)
+        let done = label(String(localized: "Done"), size: 26, weight: .semibold, color: .black, lines: 1)
         done.textAlignment = .center
         done.translatesAutoresizingMaskIntoConstraints = false
         let pill = UIView()
@@ -546,10 +546,10 @@ enum InfoPopupContent {
     /// Present with `scrollable: true` — Up/Down pages, Select/Menu dismiss.
     static func changelogHistory(_ entries: [(version: String, features: [String])]) -> UIView {
         let stack = verticalStack(spacing: 8)
-        stack.addArrangedSubview(label("Changelog", size: 44, weight: .bold, color: .white, lines: 1))
+        stack.addArrangedSubview(label(String(localized: "Changelog"), size: 44, weight: .bold, color: .white, lines: 1))
         for entry in entries {
             if let last = stack.arrangedSubviews.last { stack.setCustomSpacing(40, after: last) }
-            let ver = label("Version \(entry.version)", size: 27, weight: .semibold, color: .white.withAlphaComponent(0.92), lines: 1)
+            let ver = label(String(localized: "Version \(entry.version)"), size: 27, weight: .semibold, color: .white.withAlphaComponent(0.92), lines: 1)
             stack.addArrangedSubview(ver)
             stack.setCustomSpacing(14, after: ver)
             for feature in entry.features {
@@ -595,7 +595,7 @@ enum InfoPopupContent {
     /// license text. Present with `scrollable: true`.
     static func acknowledgements() -> UIView {
         let stack = verticalStack(spacing: 12)
-        stack.addArrangedSubview(label("Licenses & Legal", size: 40, weight: .bold, color: .white, lines: 1))
+        stack.addArrangedSubview(label(String(localized: "Licenses & Legal"), size: 40, weight: .bold, color: .white, lines: 1))
 
         let app = label(OpenSourceLicenses.appLicense, size: 24, weight: .regular, color: .white.withAlphaComponent(0.85), lines: 0)
         stack.setCustomSpacing(18, after: stack.arrangedSubviews[0])

@@ -678,7 +678,7 @@ final class PlayerProgressBarView: UIView {
             let end = chapter.endTimeOffset.map { TimeInterval($0) / 1000.0 } ?? duration
             guard time >= start && time < end else { continue }
             guard let tag = chapter.tag?.trimmingCharacters(in: .whitespacesAndNewlines), !tag.isEmpty else { return nil }
-            return "CHAPTER \(index + 1) · \(tag.uppercased())"
+            return String(localized: "CHAPTER \(index + 1) · \(tag.uppercased())")
         }
         return nil
     }

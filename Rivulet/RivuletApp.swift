@@ -19,6 +19,13 @@ struct RivuletApp: App {
     init() {
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
+        #if DEBUG
+        TVScreenshotMode.seedSession()
+        TVScreenshotMode.runFocusMovesIfRequested()
+        if let key = ProcessInfo.processInfo.environment["RIVULET_OPEN_DETAIL"] {
+            DeepLinkHandler.shared.handleDetail(ratingKey: key)
+        }
+        #endif
         // Default the Home hero ON for fresh installs (and any user who hasn't
         // explicitly toggled it). The home reads this via UserDefaults.bool(),
         // which returns false for an unset key, so register the default here

@@ -21,8 +21,8 @@ enum SystemAudioAdjustment: CaseIterable {
 
     var title: String {
         switch self {
-        case .enhanceDialogue: "Enhance Dialogue"
-        case .reduceLoudSounds: "Reduce Loud Sounds"
+        case .enhanceDialogue: String(localized: "Enhance Dialogue")
+        case .reduceLoudSounds: String(localized: "Reduce Loud Sounds")
         }
     }
 
@@ -76,10 +76,10 @@ enum SystemAudioAdjustment: CaseIterable {
 
         var title: String {
             switch self {
-            case .off: "Off"
-            case .enhance: "Enhance"
-            case .enhanceMore: "Enhance More"
-            case .isolate: "Isolate"
+            case .off: String(localized: "Off")
+            case .enhance: String(localized: "Enhance")
+            case .enhanceMore: String(localized: "Enhance More")
+            case .isolate: String(localized: "Isolate")
             }
         }
     }
@@ -91,7 +91,7 @@ enum SystemAudioAdjustment: CaseIterable {
     }
 
     static func dialogueSummary(levelsAvailable: Bool, level: DialogueLevel) -> String {
-        levelsAvailable ? level.title : (level == .off ? "Off" : "On")
+        levelsAvailable ? level.title : (level == .off ? String(localized: "Off") : String(localized: "On"))
     }
 
     private static var levelsAvailable: Bool {

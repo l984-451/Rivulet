@@ -33,16 +33,16 @@ final class HomeStateView: UIView {
 
         var title: String {
             switch self {
-            case .notConnected: return "Not Connected"
-            case .loading: return "Loading"
-            case .error: return "Unable to Load"
-            case .empty: return "No Content"
+            case .notConnected: return String(localized: "Not Connected")
+            case .loading: return String(localized: "Loading")
+            case .error: return String(localized: "Unable to Load")
+            case .empty: return String(localized: "No Content")
             }
         }
 
         var message: String? {
             switch self {
-            case .notConnected: return "Connect to your Plex server in Settings."
+            case .notConnected: return String(localized: "Connect to your Plex server in Settings.")
             case .loading: return nil
             case .error(let message): return message
             case .empty(let message): return message
@@ -51,8 +51,8 @@ final class HomeStateView: UIView {
 
         var actionTitle: String? {
             switch self {
-            case .error: return "Try Again"
-            case .empty: return "Refresh"
+            case .error: return String(localized: "Try Again")
+            case .empty: return String(localized: "Refresh")
             default: return nil
             }
         }

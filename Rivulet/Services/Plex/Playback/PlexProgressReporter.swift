@@ -118,20 +118,11 @@ actor PlexProgressReporter {
                 method: "GET",
                 headers: ["X-Plex-Token": server.token, "Accept": "application/json"]
             )
-            return Self.terminationText(in: data)
+            return PlexNetworkManager.timelineTermination(in: data)
         } catch {
             playerDebugLog("📊 PlexProgress: Failed to report progress: \(error)")
             return nil
         }
-    }
-
-    /// The timeline reply carries `terminationCode` / `terminationText` once the
-    /// server has ended the session (dashboard Stop, paused too long).
-    static func terminationText(in data: Data) -> String? {
-        guard let container = try? JSONDecoder().decode(TimelineReply.self, from: data).MediaContainer,
-              container.terminationCode != nil || container.terminationText != nil else { return nil }
-        let text = container.terminationText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text.isEmpty ? "Your Plex server stopped this stream." : text
     }
 
     /// Opens a Plex play session for a file the engine plays directly, so the
@@ -207,14 +198,6 @@ actor PlexProgressReporter {
             return PlexServerAddress(address: address, token: token)
         }
     }
-}
-
-nonisolated private struct TimelineReply: Decodable {
-    nonisolated struct Container: Decodable {
-        let terminationCode: Int?
-        let terminationText: String?
-    }
-    let MediaContainer: Container
 }
 
 /// A Plex server's base URL and the token for it.

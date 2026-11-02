@@ -58,7 +58,7 @@ final class CredentialRegistry {
 
     func setToken(_ token: String, for scope: CredentialScope) async throws {
         guard KeychainHelper.set(token, forKey: scope.keychainKey) else {
-            throw MediaProviderError.backendSpecific(underlying: "Failed to write credential to Keychain")
+            throw MediaProviderError.backendSpecific(underlying: String(localized: "Failed to write credential to Keychain"))
         }
     }
 

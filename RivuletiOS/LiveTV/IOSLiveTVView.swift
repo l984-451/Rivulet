@@ -63,7 +63,7 @@ struct IOSLiveTVView: View {
                         ContentUnavailableView {
                             Label("No Channels", systemImage: "antenna.radiowaves.left.and.right.slash")
                         } description: {
-                            Text(store.channelsError ?? "Your Live TV sources returned no channels.")
+                            Text(store.channelsError ?? String(localized: "Your Live TV sources returned no channels."))
                         } actions: {
                             Button("Try Again") { Task { await store.refreshChannels() } }
                                 .buttonStyle(.bordered)

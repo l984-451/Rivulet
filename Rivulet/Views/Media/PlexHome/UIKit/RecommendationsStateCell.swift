@@ -51,7 +51,7 @@ final class RecommendationsStateCell: UICollectionViewCell {
         messageLabel.textColor = UIColor.white.withAlphaComponent(0.6)
         messageLabel.numberOfLines = 2
 
-        retryButton.setTitle("Retry", for: .normal)
+        retryButton.setTitle(String(localized: "Retry"), for: .normal)
         retryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .medium)
         retryButton.addTarget(self, action: #selector(retryTapped), for: .primaryActionTriggered)
         retryButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -103,14 +103,14 @@ final class RecommendationsStateCell: UICollectionViewCell {
             iconView.isHidden = true
             spinner.startAnimating()
             spinner.isHidden = false
-            titleLabel.text = "Building Personalized Recommendations"
-            messageLabel.text = "This may take a moment"
+            titleLabel.text = String(localized: "Building Personalized Recommendations")
+            messageLabel.text = String(localized: "This may take a moment")
             retryButton.isHidden = true
         case .error(let message):
             iconView.isHidden = false
             spinner.stopAnimating()
             spinner.isHidden = true
-            titleLabel.text = "Personalized Recommendations Unavailable"
+            titleLabel.text = String(localized: "Personalized Recommendations Unavailable")
             messageLabel.text = message
             retryButton.isHidden = false
         }

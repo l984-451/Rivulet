@@ -113,7 +113,7 @@ final class PlexWatchlistService: ObservableObject {
 
     func add(guid: String, item: PlexWatchlistItem) async {
         guard let token = tokenProvider() else {
-            surface("Sign in to use Watchlist")
+            surface(String(localized: "Sign in to use Watchlist"))
             return
         }
 
@@ -133,13 +133,13 @@ final class PlexWatchlistService: ObservableObject {
             watchlistGUIDs = snapshotGUIDs
             lastFetchError = error
             watchlistLog.error("add failed for \(guid, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            surface("Couldn't update Watchlist")
+            surface(String(localized: "Couldn't update Watchlist"))
         }
     }
 
     func remove(guid: String) async {
         guard let token = tokenProvider() else {
-            surface("Sign in to use Watchlist")
+            surface(String(localized: "Sign in to use Watchlist"))
             return
         }
 
@@ -165,7 +165,7 @@ final class PlexWatchlistService: ObservableObject {
             watchlistGUIDs = snapshotGUIDs
             lastFetchError = error
             watchlistLog.error("remove failed for \(guid, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            surface("Couldn't update Watchlist")
+            surface(String(localized: "Couldn't update Watchlist"))
         }
     }
 

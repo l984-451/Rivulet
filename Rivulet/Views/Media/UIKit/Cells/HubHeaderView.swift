@@ -49,7 +49,7 @@ final class HubHeaderView: UICollectionReusableView {
         badge.setContentCompressionResistancePriority(.required, for: .horizontal)
         badge.setContentHuggingPriority(.required, for: .horizontal)
         stack.addArrangedSubview(countLabel)
-        seeAllButton.setTitle("See All", for: .normal)
+        seeAllButton.setTitle(String(localized: "See All"), for: .normal)
         seeAllButton.titleLabel?.font = .systemFont(ofSize: 23, weight: .semibold)
         seeAllButton.isHidden = true
         seeAllButton.addAction(UIAction { [weak self] _ in self?.onSeeAll?() }, for: .primaryActionTriggered)

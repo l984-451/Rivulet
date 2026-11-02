@@ -175,7 +175,7 @@ private struct IOSServerPicker: View {
         .alert("Couldn’t Connect", isPresented: Binding(get: { failedServer != nil }, set: { if !$0 { failedServer = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("\(failedServer ?? "The server") isn’t reachable right now.")
+            Text("\(failedServer ?? String(localized: "The server")) isn’t reachable right now.")
         }
     }
 

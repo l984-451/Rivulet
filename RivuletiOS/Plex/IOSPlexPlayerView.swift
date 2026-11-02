@@ -123,6 +123,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             externalSubtitles: request.sidecarSubtitles,
             keepingTransport: keepingTransport
         )
+        if player.audioIsDropped { fallBackToTranscode() }
     }
 
     func retry() {

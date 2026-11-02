@@ -748,6 +748,9 @@ final class AetherPlayer: ObservableObject {
         state = .idle
     }
 
+    /// The source has audio and the engine could not build a way to play it.
+    var audioIsDropped: Bool { engine.audioDelivery == .droppedNoPipeline }
+
     /// A still of the loaded file at `seconds`, keyframe-snapped and cached by the engine.
     /// nil when the source cannot open a second reader.
     func still(atSeconds seconds: TimeInterval, maxWidth: Int = 480) async -> CGImage? {

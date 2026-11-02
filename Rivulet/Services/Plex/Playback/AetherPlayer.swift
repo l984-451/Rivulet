@@ -1563,6 +1563,9 @@ final class AetherPlayer: PlayerProtocol {
 
     // MARK: - Advanced stats (Info popup "stats for nerds" tab)
 
+    /// The source has audio and the engine could not build a way to play it.
+    var audioIsDropped: Bool { engine.audioDelivery == .droppedNoPipeline }
+
     /// Map the engine's `AudioDelivery` to a stats row, or nil to omit the row.
     ///
     /// Switched exhaustively with no `default` on purpose: this file is the only

@@ -2157,6 +2157,14 @@ final class UniversalPlayerViewModel: ObservableObject {
                 )
                 return
             }
+            // Video-only: the engine has no way to carry this audio, and the server does (#464).
+            if aetherPlayer?.audioIsDropped == true, planHasHLSFallback(plan), !isStacked {
+                try await attemptRivuletHLSFallback(
+                    resumeTime: startTime ?? 0,
+                    reason: "aether_audio_dropped",
+                    failureKind: .unsupportedCodec
+                )
+            }
         }
     }
 

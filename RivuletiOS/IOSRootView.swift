@@ -123,10 +123,13 @@ struct IOSRootView: View {
             libraryPath = NavigationPath()
         }
         .onChange(of: plex.libraries) { _, libraries in
-            if !libraries.isEmpty { dropOrphanedLibraryTab() }
+            if !libraries.isEmpty, !plex.isLoadingOtherServers { dropOrphanedLibraryTab() }
             if case .library(let library) = librarySelection, !libraries.contains(library) { librarySelection = nil }
         }
-        .onChange(of: playlistServers) { dropOrphanedLibraryTab() }
+        .onChange(of: plex.isLoadingOtherServers) { _, loading in
+            if !loading, !plex.libraries.isEmpty { dropOrphanedLibraryTab() }
+        }
+        .onChange(of: playlistServers) { if !plex.isLoadingOtherServers { dropOrphanedLibraryTab() } }
     }
 
     /// A sidebar library tab vanishes at compact width or on a server without that library.

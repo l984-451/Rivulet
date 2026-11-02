@@ -41,6 +41,8 @@ final class IOSPlexSession: ObservableObject {
     private var trendingHero: (items: [PlexMetadata], at: Date)?
     private var watchlistHero: (ids: [String], items: [PlexMetadata])?
     @Published private(set) var isLoadingContent = false
+    /// Other servers still to answer; a tab on one of their libraries waits for this.
+    @Published private(set) var isLoadingOtherServers = false
     @Published private(set) var contentError: String?
     /// Bumped after a watched-state change so open grids and detail pages reload.
     @Published private(set) var watchStateRevision = 0
@@ -57,6 +59,9 @@ final class IOSPlexSession: ObservableObject {
     /// Last good hubs per pinned library, kept when a later fetch of one fails.
     private var libraryHubs: [String: [PlexHub]] = [:]
     private var libraryHubsSession: (serverURL: String, token: String)?
+    /// Each server's latest Home, so a server answering re-merges with the others.
+    private var selectedServerHome: IOSPlexHome?
+    private var otherServerHomes: [String: IOSPlexHome] = [:]
     private var cancellables = Set<AnyCancellable>()
     /// Each server's own Continue Watching items, the selected server first, kept
     /// so the row re-merges when show identities arrive.
@@ -188,42 +193,39 @@ final class IOSPlexSession: ObservableObject {
         }
         isLoadingContent = true
         defer { if generation == refreshGeneration { isLoadingContent = false } }
+        if libraryHubsSession.map({ $0 != session }) ?? true {
+            selectedServerHome = nil
+            otherServerHomes = [:]
+            libraryHubs = [:]
+            primaryContinueWatching = nil
+            continueWatchingRows = []
+            libraryHubsSession = session
+        }
+        // The other servers fill in behind: one that can't be reached must not hold back the rest (#474).
+        isLoadingOtherServers = true
+        let otherServers = Task {
+            await loadOtherServers(while: isCurrent)
+            if generation == refreshGeneration { isLoadingOtherServers = false }
+        }
         do {
             // The selected server's failure is the page's; another server's only drops its rows.
-            async let otherHomes = fetchOtherServersHomes()
-            async let playlists = fetchVideoPlaylists()
+            async let playlists = fetchPlaylists(serverID: nil)
             let home = try await fetchHome()
-            let others = await otherHomes
             let lists = await playlists
             guard isCurrent() else { return }
-            if libraryHubsSession.map({ $0 != session }) ?? true {
-                libraryHubs = [:]
-                primaryContinueWatching = nil
-                continueWatchingRows = []
-                libraryHubsSession = session
-            }
             // Before the libraries, which re-check the sidebar tabs these back.
-            videoPlaylists = lists
-            libraries = home.libraries + others.flatMap(\.libraries)
-            if let cw = home.continueWatching { primaryContinueWatching = cw }
-            let pinned = libraries.filter(\.isPinnedToHome)
-            libraryHubs = Dictionary(uniqueKeysWithValues: pinned.compactMap { library in
-                let fetched = home.hubsByLibrary[library.id] ?? others.lazy.compactMap { $0.hubsByLibrary[library.id] }.first
-                return (fetched ?? libraryHubs[library.id]).map { (library.id, $0) }
-            })
-            shelves = pinned.flatMap { libraryHubs[$0.id] ?? [] }.filter {
-                $0.promoted == true && !$0.isContinueWatching && !$0.items.isEmpty
-            }
-            continueWatchingRows = [primaryContinueWatching?.Metadata ?? []]
-                + others.map { ($0.continueWatching ?? nil)?.Metadata ?? [] }
-            mergeContinueWatching()
+            applyPlaylists(lists, serverID: nil)
+            selectedServerHome = home
+            publishHome()
             selectedServerName = auth.selectedServer?.name ?? auth.savedServerName
             contentError = nil
             lastContentRefresh = .now
             state = .connected
         } catch let error where isCancellationError(error) {
+            otherServers.cancel()
             return
         } catch {
+            otherServers.cancel()
             guard isCurrent() else { return }
             contentError = error.localizedDescription
             return await PlexWatchlistService.shared.fetchWatchlist()
@@ -231,6 +233,52 @@ final class IOSPlexSession: ObservableObject {
         await PlexWatchlistService.shared.fetchWatchlist()
         // The server answered: send progress made offline, then repaint with it.
         if await flushOfflineProgress() { Task { await watchStateDidChange() } }
+    }
+
+    /// Fetches each other server, publishing as it answers. A server that fails drops its rows.
+    private func loadOtherServers(while isCurrent: @escaping @MainActor () -> Bool) async {
+        let ids = PlexExtraServers.shared.current.map(\.machineID)
+        videoPlaylists = videoPlaylists.filter { $0.key.isEmpty || ids.contains($0.key) }
+        await withTaskGroup(of: (String, IOSPlexHome?, [PlexPlaylist]?).self) { group in
+            for id in ids {
+                group.addTask {
+                    async let home = try? self.fetchHome(serverID: id)
+                    async let lists = self.fetchPlaylists(serverID: id)
+                    return await (id, home, lists)
+                }
+            }
+            for await (id, home, lists) in group {
+                guard isCurrent() else { return group.cancelAll() }
+                applyPlaylists(lists, serverID: id)
+                otherServerHomes[id] = home
+                publishHome()
+            }
+        }
+    }
+
+    /// Nil keeps the server's last answer.
+    private func applyPlaylists(_ lists: [PlexPlaylist]?, serverID: String?) {
+        guard let lists else { return }
+        videoPlaylists[serverID ?? ""] = lists.isEmpty ? nil : lists
+    }
+
+    /// Home and the libraries from every server's latest answer. Waits for the selected server's first.
+    private func publishHome() {
+        guard let home = selectedServerHome else { return }
+        let others = PlexExtraServers.shared.current.compactMap { otherServerHomes[$0.machineID] }
+        libraries = home.libraries + others.flatMap(\.libraries)
+        if let cw = home.continueWatching { primaryContinueWatching = cw }
+        let pinned = libraries.filter(\.isPinnedToHome)
+        libraryHubs = Dictionary(uniqueKeysWithValues: pinned.compactMap { library in
+            let fetched = home.hubsByLibrary[library.id] ?? others.lazy.compactMap { $0.hubsByLibrary[library.id] }.first
+            return (fetched ?? libraryHubs[library.id]).map { (library.id, $0) }
+        })
+        shelves = pinned.flatMap { libraryHubs[$0.id] ?? [] }.filter {
+            $0.promoted == true && !$0.isContinueWatching && !$0.items.isEmpty
+        }
+        continueWatchingRows = [primaryContinueWatching?.Metadata ?? []]
+            + others.map { ($0.continueWatching ?? nil)?.Metadata ?? [] }
+        mergeContinueWatching()
     }
 
     /// Foreground return: refetch only when Home is more than five minutes old.
@@ -241,7 +289,13 @@ final class IOSPlexSession: ObservableObject {
 
     /// After a playlist edit: the Library rows and sidebar tabs follow the new lists.
     func refreshPlaylists() async {
-        videoPlaylists = await fetchVideoPlaylists()
+        let ids: [String?] = [nil] + PlexExtraServers.shared.current.map(\.machineID)
+        await withTaskGroup(of: (String?, [PlexPlaylist]?).self) { group in
+            for id in ids {
+                group.addTask { await (id, self.fetchPlaylists(serverID: id)) }
+            }
+            for await (id, lists) in group { applyPlaylists(lists, serverID: id) }
+        }
     }
 
     /// A server or profile switch: open pages belong to the old one, so the tab stacks reset.
@@ -651,6 +705,8 @@ final class IOSPlexSession: ObservableObject {
         selectedServerName = nil
         libraryHubs = [:]
         libraryHubsSession = nil
+        selectedServerHome = nil
+        otherServerHomes = [:]
         primaryContinueWatching = nil
         continueWatchingRows = []
         continueWatchingCopies = [:]

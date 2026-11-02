@@ -123,8 +123,6 @@ final class CinematicLibraryCell: UICollectionViewCell {
 final class CinematicLibraryArtworkView: UIView {
     private let artworkView = UIImageView()
     private let placeholder = UIImageView(image: UIImage(systemName: "film"))
-    private let titleLabel = UILabel()
-    private let metadataLabel = UILabel()
     private let overviewLabel = UILabel()
     private let ambientView = AmbientBackdropView()
     private let divider = UIView()
@@ -146,17 +144,11 @@ final class CinematicLibraryArtworkView: UIView {
         addSubview(ambientView)
         addSubview(placeholder)
         addSubview(artworkView)
-        titleLabel.font = CinematicStyle.displayFont(size: 46)
-        titleLabel.numberOfLines = 3
-        titleLabel.textColor = .white
-        metadataLabel.font = .systemFont(ofSize: 22, weight: .medium)
-        metadataLabel.textColor = CinematicStyle.secondaryText
-        metadataLabel.numberOfLines = 2
         overviewLabel.font = .systemFont(ofSize: 23)
         overviewLabel.numberOfLines = 3
         overviewLabel.textColor = CinematicStyle.secondaryText
         divider.backgroundColor = UIColor.white.withAlphaComponent(0.22)
-        for child in [titleLabel, metadataLabel, overviewLabel, divider] { addSubview(child) }
+        for child in [overviewLabel, divider] { addSubview(child) }
         NotificationCenter.default.addObserver(self, selector: #selector(descriptionChanged),
                                               name: .cinematicDescriptionDidChange, object: nil)
     }
@@ -180,20 +172,14 @@ final class CinematicLibraryArtworkView: UIView {
         let overviewHeight = overviewLabel.sizeThatFits(CGSize(width: textWidth, height: 110)).height
         overviewLabel.frame = CGRect(x: margin, y: bounds.height - 72 - overviewHeight, width: textWidth, height: overviewHeight)
         divider.frame = CGRect(x: margin, y: overviewLabel.frame.minY - 26, width: textWidth, height: 1)
-        let metadataHeight = metadataLabel.sizeThatFits(CGSize(width: textWidth, height: 64)).height
-        let metadataBottom = showDescription ? divider.frame.minY - 24 : bounds.height - 72
-        metadataLabel.frame = CGRect(x: margin, y: metadataBottom - metadataHeight, width: textWidth, height: metadataHeight)
-        let titleHeight = titleLabel.sizeThatFits(CGSize(width: textWidth, height: 190)).height
-        titleLabel.frame = CGRect(x: margin, y: metadataLabel.frame.minY - 16 - titleHeight, width: textWidth, height: titleHeight)
-
-        // Reserve space for the text, then fit the entire image above it.
-        // No scrim, mask or text is allowed to cover the artwork itself.
-        let available = CGRect(x: 32, y: 24, width: max(0, panelWidth - 64),
-                               height: max(0, titleLabel.frame.minY - 48))
+        // With descriptions off, the complete poster uses the full panel height.
+        // Optional descriptions get their own space outside the image.
+        let artworkBottom = showDescription ? divider.frame.minY - 24 : bounds.height
+        let available = CGRect(x: 0, y: 0, width: max(0, panelWidth), height: max(0, artworkBottom))
         let imageSize = artworkView.image?.size ?? CGSize(width: 2, height: 3)
         let scale = min(available.width / max(1, imageSize.width), available.height / max(1, imageSize.height))
         let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        artworkView.frame = CGRect(x: available.midX - size.width / 2, y: available.midY - size.height / 2,
+        artworkView.frame = CGRect(x: 0, y: available.midY - size.height / 2,
                                    width: size.width, height: size.height)
         placeholder.frame = CGRect(x: available.midX - 64, y: available.midY - 64, width: 128, height: 128)
     }
@@ -201,8 +187,6 @@ final class CinematicLibraryArtworkView: UIView {
     func configure(item: MediaItem?) {
         guard item != displayedItem else { return }
         displayedItem = item
-        titleLabel.text = item?.title
-        metadataLabel.text = item.map { CinematicStyle.metadata(for: $0) }
         overviewLabel.text = item?.overview
         setNeedsLayout()
         let url = item?.artwork.poster ?? item?.artwork.backdrop ?? item?.artwork.thumbnail

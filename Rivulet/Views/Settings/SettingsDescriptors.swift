@@ -369,7 +369,7 @@ enum SettingsDescriptorStore {
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use."
+            description: "Shows the profile picker each time Rivulet opens, and when you come back to it after more than 30 seconds on the Home screen, in another app or on the screensaver, allowing you to choose which profile to use."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",

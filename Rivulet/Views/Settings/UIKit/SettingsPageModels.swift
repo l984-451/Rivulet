@@ -446,6 +446,9 @@ enum SettingsContent {
         ]
         rows += [
             .header("Library"),
+            SettingsRowItem(id: "cinematicLibraryDescription", title: "Cinematic Poster Description",
+                            kind: .toggle(get: { AppTheme.showsLibraryDescription },
+                                          set: { AppTheme.showsLibraryDescription = $0 })),
             toggle("libraryHero", "Hero", key: "showLibraryHero", default: true),
             toggle("discoveryRows", "Discovery Rows", key: "showLibraryRecommendations", default: true),
             toggle("recentRows", "Recent Rows", key: "showLibraryRecentRows", default: true),

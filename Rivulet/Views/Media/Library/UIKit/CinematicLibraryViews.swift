@@ -27,11 +27,19 @@ final class CinematicLibraryCell: UICollectionViewCell {
     private let durationLabel = UILabel()
     private let watchedImage = UIImageView()
     private let separator = UIView()
+    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         accessibilityIdentifier = Self.reuseID
         isAccessibilityElement = true
+        contentView.layer.cornerRadius = 20
+        contentView.layer.cornerCurve = .continuous
+        contentView.clipsToBounds = true
+        materialBackground.isUserInteractionEnabled = false
+        materialBackground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        materialBackground.frame = contentView.bounds
+        contentView.addSubview(materialBackground)
         titleLabel.font = .systemFont(ofSize: 29, weight: .semibold)
         titleLabel.lineBreakMode = .byTruncatingTail
         metadataLabel.font = .systemFont(ofSize: 21)
@@ -99,7 +107,8 @@ final class CinematicLibraryCell: UICollectionViewCell {
     }
 
     private func applyFocus(_ focused: Bool) {
-        contentView.backgroundColor = focused ? .white : UIColor(white: 0.08, alpha: 0.88)
+        contentView.backgroundColor = focused ? .white : UIColor.white.withAlphaComponent(0.06)
+        materialBackground.alpha = focused ? 0 : 1
         titleLabel.textColor = focused ? .black : .white
         metadataLabel.textColor = focused ? UIColor(white: 0.27, alpha: 1) : CinematicStyle.secondaryText
         durationLabel.textColor = metadataLabel.textColor
@@ -153,12 +162,16 @@ final class CinematicLibraryArtworkView: UIView {
         overviewLabel.textColor = CinematicStyle.secondaryText
         divider.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         for child in [titleLabel, metadataLabel, overviewLabel, divider] { addSubview(child) }
+        NotificationCenter.default.addObserver(self, selector: #selector(descriptionChanged),
+                                              name: .cinematicDescriptionDidChange, object: nil)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     deinit { loadTask?.cancel() }
+
+    @objc private func descriptionChanged() { setNeedsLayout() }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -172,11 +185,15 @@ final class CinematicLibraryArtworkView: UIView {
         shade.frame = artworkView.frame
         edgeShade.frame = CGRect(x: panelWidth - 100, y: 0, width: 100, height: bounds.height)
         CATransaction.commit()
+        let showDescription = AppTheme.showsLibraryDescription && !(overviewLabel.text ?? "").isEmpty
+        overviewLabel.isHidden = !showDescription
+        divider.isHidden = !showDescription
         let overviewHeight = overviewLabel.sizeThatFits(CGSize(width: textWidth, height: 110)).height
         overviewLabel.frame = CGRect(x: margin, y: bounds.height - 72 - overviewHeight, width: textWidth, height: overviewHeight)
         divider.frame = CGRect(x: margin, y: overviewLabel.frame.minY - 26, width: textWidth, height: 1)
         let metadataHeight = metadataLabel.sizeThatFits(CGSize(width: textWidth, height: 64)).height
-        metadataLabel.frame = CGRect(x: margin, y: divider.frame.minY - 24 - metadataHeight, width: textWidth, height: metadataHeight)
+        let metadataBottom = showDescription ? divider.frame.minY - 24 : bounds.height - 72
+        metadataLabel.frame = CGRect(x: margin, y: metadataBottom - metadataHeight, width: textWidth, height: metadataHeight)
         let titleHeight = titleLabel.sizeThatFits(CGSize(width: textWidth, height: 190)).height
         titleLabel.frame = CGRect(x: margin, y: metadataLabel.frame.minY - 16 - titleHeight, width: textWidth, height: titleHeight)
     }

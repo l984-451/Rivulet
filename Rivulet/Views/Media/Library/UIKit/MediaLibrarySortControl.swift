@@ -120,13 +120,6 @@ final class SortButton: UIButton {
 
     private func setup() {
         for v in [bgView, glassView, iconView, sortLabel] as [UIView] { addSubview(v) }
-        if AppTheme.current == .cinematic {
-            glassView.isHidden = true
-            bgView.layer.cornerRadius = 4
-            bgView.layer.borderWidth = 1
-            bgView.layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
-            sortLabel.font = .systemFont(ofSize: 24, weight: .medium)
-        }
         let pad = HeroPillButton.sidePadding
 
         NSLayoutConstraint.activate([

@@ -40,7 +40,6 @@ final class FocusableActionButton: UIControl {
 
         materialBackground.translatesAutoresizingMaskIntoConstraints = false
         materialBackground.isUserInteractionEnabled = false
-        materialBackground.isHidden = AppTheme.current == .cinematic
         insertSubview(materialBackground, at: 0)
         NSLayoutConstraint.activate([
             materialBackground.topAnchor.constraint(equalTo: topAnchor),
@@ -57,11 +56,6 @@ final class FocusableActionButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        if AppTheme.current == .cinematic, focusStyle == .pill {
-            layer.cornerRadius = 4
-            layer.borderWidth = 1
-            layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
-        }
         materialBackground.layer.cornerRadius = layer.cornerRadius
         materialBackground.layer.cornerCurve = .continuous
         materialBackground.clipsToBounds = true

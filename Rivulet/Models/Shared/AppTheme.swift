@@ -8,6 +8,15 @@ enum AppTheme: String, CaseIterable {
     case standard
     case cinematic
 
+    static let descriptionStorageKey = "cinematicLibraryDescription"
+    static var showsLibraryDescription: Bool {
+        get { UserDefaults.standard.bool(forKey: descriptionStorageKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: descriptionStorageKey)
+            NotificationCenter.default.post(name: .cinematicDescriptionDidChange, object: nil)
+        }
+    }
+
     static let storageKey = "appTheme"
     static var current: AppTheme { stored(in: .standard) }
 
@@ -30,5 +39,6 @@ enum AppTheme: String, CaseIterable {
 }
 
 extension Notification.Name {
+    static let cinematicDescriptionDidChange = Notification.Name("cinematicDescriptionDidChange")
     static let appThemeDidChange = Notification.Name("appThemeDidChange")
 }

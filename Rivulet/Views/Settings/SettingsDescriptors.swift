@@ -80,6 +80,10 @@ enum SettingsDescriptorStore {
             icon: "rectangle.on.rectangle",
             description: "Standard keeps Rivulet's familiar layout. Cinematic pairs large artwork with clean title lists in video libraries and a quieter Home and details design. You can switch back at any time."
         ),
+        "cinematicLibraryDescription": SettingDescriptor(
+            icon: "text.alignleft",
+            description: "Show the selected movie or show's description beneath its artwork in Cinematic libraries. Off by default."
+        ),
         "libraries": SettingDescriptor(
             icon: "sidebar.squares.left",
             description: "Choose what appears in the sidebar and in what order. Home follows it: a library turned off here loses its Home rows."

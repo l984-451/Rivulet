@@ -18,4 +18,9 @@ final class PlexContentRatingDisplayTests: XCTestCase {
     func test_emptyRemainderKeepsRaw() {
         XCTAssertEqual(PlexMetadata.displayContentRating("uk/"), "uk/")
     }
+
+    func testGermanAgesReadAsTheTVAppShowsThem() {
+        XCTAssertEqual(PlexMetadata.displayContentRating("de/16"), "ab 16 Jahren")
+        XCTAssertEqual(PlexMetadata.displayContentRating("de/FSK"), "FSK")
+    }
 }

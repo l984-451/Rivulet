@@ -997,7 +997,8 @@ extension PlexMetadata {
 extension PlexMetadata {
     /// `contentRating` for display: Plex stores non-US ratings with an ISO
     /// country prefix ("uk/12A") and its own clients show what follows the
-    /// first slash. The raw value stays in `contentRating`.
+    /// first slash. Germany's read as the Apple TV app shows them, in German
+    /// whatever the app's language (#467). The raw value stays in `contentRating`.
     var displayContentRating: String? {
         Self.displayContentRating(contentRating)
     }
@@ -1006,6 +1007,7 @@ extension PlexMetadata {
         guard let raw else { return nil }
         guard let slash = raw.firstIndex(of: "/") else { return raw }
         let stripped = raw[raw.index(after: slash)...].trimmingCharacters(in: .whitespaces)
+        if raw.lowercased().hasPrefix("de/"), Int(stripped) != nil { return "ab \(stripped) Jahren" }
         return stripped.isEmpty ? raw : stripped
     }
 }

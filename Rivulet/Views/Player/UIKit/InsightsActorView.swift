@@ -29,6 +29,8 @@ final class InsightsActorView: UIView {
     private let person: MediaPerson
     /// Internal for tests: the loaded detail, once one has been applied.
     private(set) var detail: PersonDetail?
+    /// Internal for tests: how many Known For posters were added.
+    private(set) var knownForCount = 0
 
     private let portrait = UIImageView()
     private let bio = PlayerSummaryButton(text: String(localized: "Loading…"), lines: 4)
@@ -109,6 +111,25 @@ final class InsightsActorView: UIView {
         }
     }
 
+    /// Titles off the server, behind a divider.
+    func addKnownFor(_ titles: [FilmographyEntry]) {
+        guard !titles.isEmpty else { return }
+        knownForCount += titles.count
+        if !posterStack.arrangedSubviews.isEmpty {
+            let divider = UIView()
+            divider.backgroundColor = UIColor.white.withAlphaComponent(0.2)
+            divider.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                divider.widthAnchor.constraint(equalToConstant: 1),
+                divider.heightAnchor.constraint(equalToConstant: 120),
+            ])
+            posterStack.addArrangedSubview(divider)
+        }
+        for title in titles {
+            posterStack.addArrangedSubview(InsightsPosterCardView(item: title.item))
+        }
+    }
+
     /// The load failed or found nothing: portrait and name stay, no posters.
     func showDetailsUnavailable() {
         bio.setText(String(localized: "No details available."))
@@ -145,7 +166,7 @@ final class InsightsActorView: UIView {
     override var preferredFocusEnvironments: [UIFocusEnvironment] { [bio] }
 }
 
-/// One filmography title: a poster, display only. Focusable so focus scrolls the row.
+/// One filmography title: a poster. Focusable so focus scrolls the row.
 private final class InsightsPosterCardView: UIView {
 
     private static let size = CGSize(width: 136, height: 204)

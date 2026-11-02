@@ -260,6 +260,16 @@ final class NowPlayingService: ObservableObject {
                                    subtitleId: viewModel.chosenSubtitleTrackId)
             }
             .store(in: &cancellables)
+        // Next track follows whether anything may come after this item; a swap or a lookup can change that.
+        // Delivered a run-loop pass later, so `hasNextItem` reads the values after `@Published`'s willSet.
+        viewModel.$nextEpisode.map { _ in () }
+            .merge(with: viewModel.$itemGeneration.map { _ in () },
+                   viewModel.$nextEpisodeMissing.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak viewModel] in
+                MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = viewModel?.hasNextItem ?? false
+            }
+            .store(in: &cancellables)
         selectTrack = { [weak viewModel] type, id in
             if type == .audible {
                 if let id { viewModel?.selectAudioTrack(id: id) }
@@ -276,6 +286,7 @@ final class NowPlayingService: ObservableObject {
     /// Per WWDC17 guidance, the session should remain active while the app could receive remote commands.
     func detach() {
         cancellables.removeAll()
+        MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = false
         viewModel = nil
         inputCoordinator = nil
         artworkTask?.cancel()
@@ -466,6 +477,14 @@ final class NowPlayingService: ObservableObject {
             return .success
         }
 
+        // Siri's "next episode": what Up Next would play. Enabled only while something may follow
+        // (see attach), so on a movie or a known last episode Siri answers that there is nothing next.
+        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            guard let viewModel = self?.viewModel, viewModel.hasNextItem else { return .noSuchContent }
+            Task { await viewModel.skipToNextItem() }
+            return .success
+        }
+
         // Audio and subtitle picks from Control Center and the TV Remote app.
         commandCenter.enableLanguageOptionCommand.addTarget { [weak self] event in
             self?.handleLanguageOption(event, enable: true) ?? .noActionableNowPlayingItem
@@ -479,7 +498,8 @@ final class NowPlayingService: ObservableObject {
     }
 
     /// The video's half of the one shared command center: skip and seek on,
-    /// Music's next/previous, shuffle and repeat off. Asserted on every attach
+    /// Music's next/previous, shuffle and repeat off (next comes back on while an
+    /// item follows, for Siri's "next episode"). Asserted on every attach
     /// because `MusicNowPlayingBridge.claimRemoteCommands` flips them back
     /// whenever a song starts; set only once at init, a song played between
     /// two films left the second film with no skip buttons.

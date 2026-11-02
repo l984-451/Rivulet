@@ -9,9 +9,9 @@ import CoreGraphics
 ///
 /// The picture fills the canvas here, so picture fractions read straight off
 /// the numbers: `sideSafeFraction` 5% is x=50/950, `bandSideFraction` 10% is
-/// x=100/900, `bandEdgeFraction` 10% is y=100/900, and `placementFloor` is 6%
-/// of 1000 = 60, so the shared floor puts an unplaced bottom-resting box's
-/// maxY at 940.
+/// x=100/900, `bandEdgeFraction` 10% is y=100/900, and `placementFloor` is 5%
+/// of 1000 = 50, so the shared floor puts an unplaced bottom-resting box's
+/// maxY at 950.
 @MainActor
 final class CaptionOverlayPlacementTests: XCTestCase {
 
@@ -68,7 +68,7 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         let frame = captionFrame(
             placement: .init(alignment: 1, position: CGPoint(x: 0.10, y: 0.99)))
 
-        XCTAssertEqual(frame.maxY, 947.4, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 950, accuracy: 0.5)
     }
 
     /// Teletext arrives with a coarse `\an` and no percentage, so the column
@@ -91,7 +91,7 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         XCTAssertEqual(frame.minX, 100, accuracy: 0.5)
         XCTAssertEqual(
             frame.maxY,
-            canvas.height - SubtitleAdjustments.controlsFloor(isSystemDefault: true),
+            canvas.height - SubtitleAdjustments.controlsFloor,
             accuracy: 0.5)
     }
 
@@ -99,16 +99,37 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         let frame = captionFrame(placement: nil)
 
         XCTAssertEqual(frame.midX, canvas.width / 2, accuracy: 0.5)
-        XCTAssertEqual(frame.maxY, 947.4, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 950, accuracy: 0.5)
     }
 
-    /// AVKit rests every style but its built-in Default 3.5pt lower at 1080.
-    func testEditedStyleRestsLowerThanSystemDefault() {
+    /// AVKit rests every style's box on the same floor.
+    func testEditedStyleRestsOnTheSameFloor() {
         var style = CaptionStyle.default
         style.isSystemDefault = false
+        style.box = .edited
+        style.edge = .uniform
         let frame = captionFrame(placement: nil, style: style)
 
-        XCTAssertEqual(frame.maxY, 950.7, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, 950, accuracy: 0.5)
+    }
+
+    /// A background behind each line, no wider than its own text.
+    func testLineBackgroundsFollowEachLine() {
+        var style = CaptionStyle.default
+        style.backgroundOpacity = 1
+        style.windowOpacity = 0
+        let model = SubtitleModel()
+        let overlay = CaptionOverlayView(model: model, style: style, videoSize: canvas)
+        overlay.frame = CGRect(origin: .zero, size: canvas)
+        model.update(cues: [AetherSubtitleCue(id: 1, startTime: 0, endTime: 10, body: .text("A long first line\nB"))])
+        model.sourceTime = 1
+        overlay.layoutIfNeeded()
+        let box = overlay.subviews.first { !($0 is ASSOverlayView) }
+        box?.layoutIfNeeded()
+
+        let lines = box?.subviews.filter { !($0 is UILabel) }.sorted { $0.frame.width > $1.frame.width } ?? []
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertLessThan(lines[1].frame.width, lines[0].frame.width / 2)
     }
 
     // A track the content filter reads unseen: cues keep arriving, nothing is drawn.

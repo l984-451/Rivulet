@@ -27,11 +27,36 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     /// more opaque than the user asked for.
     var foregroundOpacity: Double
 
-    /// Character-cell background color.
+    /// The background drawn behind each line of text.
     var backgroundColor: UIColor
-
-    /// Opacity of the character-cell background (0...1).
     var backgroundOpacity: Double
+
+    /// The window drawn behind the whole cue.
+    var windowColor: UIColor
+    var windowOpacity: Double
+
+    /// The cue box's insets and corner, by caption style.
+    var box: Box
+
+    /// Multiples of the point size. Apple's caption renderer keys these on the
+    /// built-in style's name and ignores the Rounded Corners setting.
+    struct Box: Equatable {
+        var horizontal: CGFloat
+        var vertical: CGFloat
+        var cornerRadius: CGFloat
+
+        static let edited = Box(horizontal: 0.77, vertical: 0.1, cornerRadius: 0.23)
+        static let builtIn = [
+            "MACaptionProfile-Default": Box(horizontal: 0.78, vertical: 0.26, cornerRadius: 0.26),
+            "MACaptionProfile-LargeText": Box(horizontal: 0.55, vertical: 0.09, cornerRadius: 0.15),
+            "MACaptionProfile-Classic": Box(horizontal: 0.32, vertical: 0.04, cornerRadius: 0.16),
+            "MACaptionProfile-OutlineText": Box(horizontal: 0, vertical: 0, cornerRadius: 0)
+        ]
+    }
+
+    /// One box per cue: the window, or the line background where there is no window.
+    var boxColor: UIColor { backgroundOpacity <= 0.01 && windowOpacity > 0.01 ? windowColor : backgroundColor }
+    var boxOpacity: Double { backgroundOpacity <= 0.01 && windowOpacity > 0.01 ? windowOpacity : backgroundOpacity }
 
     /// Font size multiplier derived from the system relative-character-size preference.
     /// Applied on top of the size Apple bases on the presentation (view) height.
@@ -78,13 +103,16 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
         allowsContentColor: true,
         foregroundOpacity: 1.0,
         backgroundColor: .black,
-        backgroundOpacity: 0.75,
+        backgroundOpacity: 0,
+        windowColor: .black,
+        windowOpacity: 0.5,
+        box: Box.builtIn[CaptionAppearance.systemDefaultProfileID] ?? .edited,
         fontScale: 1.0,
         isSystemDefault: true,
         allowsContentFontSize: true,
         fontDescriptor: nil,
         allowsContentFont: true,
-        edge: .dropShadow
+        edge: .none
     )
 
     static func == (lhs: CaptionStyle, rhs: CaptionStyle) -> Bool {
@@ -93,6 +121,9 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
             && lhs.foregroundOpacity == rhs.foregroundOpacity
             && lhs.backgroundColor == rhs.backgroundColor
             && lhs.backgroundOpacity == rhs.backgroundOpacity
+            && lhs.windowColor == rhs.windowColor
+            && lhs.windowOpacity == rhs.windowOpacity
+            && lhs.box == rhs.box
             && lhs.fontScale == rhs.fontScale
             && lhs.isSystemDefault == rhs.isSystemDefault
             && lhs.allowsContentFontSize == rhs.allowsContentFontSize
@@ -161,19 +192,11 @@ enum CaptionAppearance {
         let rawFgOpacity = Double(MACaptionAppearanceGetForegroundOpacity(.user, &behavior))
         let foregroundOpacity = rawFgOpacity > 0 ? min(rawFgOpacity, 1.0) : 1.0
 
-        // Background color + opacity — the box drawn directly behind the glyphs.
         let bgCG = MACaptionAppearanceCopyBackgroundColor(.user, &behavior).takeRetainedValue()
         let bgOpacity = Double(MACaptionAppearanceGetBackgroundOpacity(.user, &behavior))
-
-        // Window color + opacity — the larger region box. Several built-in styles
-        // express their "background" via the window rather than the character
-        // background, so fall back to it when the character background is clear.
         let windowCG = MACaptionAppearanceCopyWindowColor(.user, &behavior).takeRetainedValue()
         let windowOpacity = Double(MACaptionAppearanceGetWindowOpacity(.user, &behavior))
-
-        let useWindow = bgOpacity <= 0.01 && windowOpacity > 0.01
-        let backgroundColor = UIColor(cgColor: useWindow ? windowCG : bgCG)
-        let backgroundOpacity = useWindow ? windowOpacity : bgOpacity
+        let profileID = MACaptionAppearanceCopyActiveProfileID() as String
 
         // Font scale
         let relative = MACaptionAppearanceGetRelativeCharacterSize(.user, &behavior)
@@ -200,10 +223,13 @@ enum CaptionAppearance {
             foreground: foreground,
             allowsContentColor: allowsContentColor,
             foregroundOpacity: foregroundOpacity,
-            backgroundColor: backgroundColor,
-            backgroundOpacity: backgroundOpacity,
+            backgroundColor: UIColor(cgColor: bgCG),
+            backgroundOpacity: bgOpacity,
+            windowColor: UIColor(cgColor: windowCG),
+            windowOpacity: windowOpacity,
+            box: CaptionStyle.Box.builtIn[profileID] ?? .edited,
             fontScale: scale,
-            isSystemDefault: MACaptionAppearanceCopyActiveProfileID() as String == systemDefaultProfileID,
+            isSystemDefault: profileID == systemDefaultProfileID,
             allowsContentFontSize: allowsContentFontSize,
             fontDescriptor: fontDescriptor,
             allowsContentFont: allowsContentFont,

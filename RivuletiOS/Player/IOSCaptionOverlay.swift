@@ -150,7 +150,7 @@ struct IOSAetherSubtitleOverlay: View {
             .background(
                 style.edge == .uniform
                     ? Color.clear
-                    : Color(uiColor: style.backgroundColor).opacity(style.backgroundOpacity),
+                    : Color(uiColor: style.boxColor).opacity(style.boxOpacity),
                 in: RoundedRectangle(cornerRadius: pointSize * 0.25)
             )
             .modifier(IOSCaptionEdgeModifier(style: style.edge, pointSize: pointSize))

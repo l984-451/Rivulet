@@ -91,18 +91,14 @@ enum SubtitleAdjustments {
     /// spans the screen's bottom `PlayerRailView.railHeight` (340) points.
     static let railTopFromScreenBottom: CGFloat = 340
 
-    /// The margin a resting caption keeps off the picture bottom, as a fraction
-    /// of picture height. Measured against AVKit (tvOS 27): its built-in Default
-    /// style sits 3.5pt higher than every other style.
-    static let bottomMarginFraction: CGFloat = 0.0493
-    static let systemDefaultBottomMarginFraction: CGFloat = 0.0526
+    /// The margin a resting cue box keeps off the picture bottom, as a fraction of
+    /// picture height. Measured against AVKit (tvOS 27), the same for every style.
+    static let bottomMarginFraction: CGFloat = 0.05
 
-    /// The margin a caption keeps off the rail top while the rail is up. AVKit's
-    /// lift is a constant, the same for every picture shape and caption size;
-    /// the built-in Default style sits higher, as it does at rest (measured,
-    /// tvOS 27 sim, within 1pt at 1.0, 1.5 and Default; device agrees).
-    static let railMargin: CGFloat = 19
-    static let systemDefaultRailMargin: CGFloat = 26
+    /// The margin a cue box keeps off the rail top while the rail is up. AVKit's
+    /// lift is a constant, the same for every style, picture shape and caption
+    /// size (measured, tvOS 27 sim).
+    static let railMargin: CGFloat = 22
 
     /// The lowest a caption may sit while the rail is showing. Lives here
     /// because BOTH overlays need it and they must agree: captions should not
@@ -111,9 +107,7 @@ enum SubtitleAdjustments {
     /// its risen pills (measured, tvOS 27 sim; the pills rise 334, captions 116).
     static let paneLift: CGFloat = 116
 
-    static func controlsFloor(isSystemDefault: Bool) -> CGFloat {
-        railTopFromScreenBottom + (isSystemDefault ? systemDefaultRailMargin : railMargin)
-    }
+    static let controlsFloor: CGFloat = railTopFromScreenBottom + railMargin
 
     /// "0", "+3", "-2" — the stepper's centre label.
     static func formattedHeight(_ units: Int) -> String {

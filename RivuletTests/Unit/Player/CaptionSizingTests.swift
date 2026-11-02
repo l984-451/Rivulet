@@ -52,6 +52,16 @@ final class CaptionSizingTests: XCTestCase {
         XCTAssertEqual(edited, 51.9, accuracy: 0.6)
     }
 
+    /// Apple's edges (MediaToolbox): the offset and stroke both ease off above 60pt.
+    func test_edgeMetrics_followApplesRenderer() {
+        typealias M = CaptionOverlayView.Metrics
+        XCTAssertEqual(M.edgeOffset(pointSize: 52), 4.59, accuracy: 0.01)
+        XCTAssertEqual(M.edgeOffset(pointSize: 78), 4.59, accuracy: 0.01)
+        XCTAssertEqual(M.strokeWidthPercent(pointSize: 52, edge: .uniform), 19.44, accuracy: 0.01)
+        XCTAssertEqual(M.strokeWidthPercent(pointSize: 78, edge: .uniform), 15.52, accuracy: 0.01)
+        XCTAssertEqual(M.strokeWidthPercent(pointSize: 52, edge: .dropShadow), 5.56, accuracy: 0.01)
+    }
+
     /// A degenerate layout pass must not collapse captions to nothing.
     func test_pointSize_withZeroHeight_fallsBackToTheAssumedPresentation() {
         let size = CaptionOverlayView.Metrics.pointSize(presentationHeight: 0, fontScale: 1.0,

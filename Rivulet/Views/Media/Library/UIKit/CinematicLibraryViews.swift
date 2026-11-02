@@ -126,8 +126,7 @@ final class CinematicLibraryArtworkView: UIView {
     private let titleLabel = UILabel()
     private let metadataLabel = UILabel()
     private let overviewLabel = UILabel()
-    private let shade = CAGradientLayer()
-    private let edgeShade = CAGradientLayer()
+    private let ambientView = AmbientBackdropView()
     private let divider = UIView()
     private var loadTask: Task<Void, Never>?
     private var currentURL: URL?
@@ -138,19 +137,15 @@ final class CinematicLibraryArtworkView: UIView {
         isUserInteractionEnabled = false
         accessibilityElementsHidden = true // The selected row already announces the title.
         backgroundColor = CinematicStyle.background
-        artworkView.contentMode = .scaleAspectFill
+        artworkView.contentMode = .scaleAspectFit
         artworkView.clipsToBounds = true
         placeholder.tintColor = UIColor.white.withAlphaComponent(0.12)
         placeholder.contentMode = .scaleAspectFit
+        ambientView.usesHeroEdgeColors = true
+        ambientView.alpha = 0.35
+        addSubview(ambientView)
         addSubview(placeholder)
         addSubview(artworkView)
-        shade.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.35).cgColor, CinematicStyle.background.cgColor]
-        shade.locations = [0, 0.43, 0.88]
-        edgeShade.colors = [UIColor.clear.cgColor, CinematicStyle.background.cgColor]
-        edgeShade.startPoint = CGPoint(x: 0, y: 0.5)
-        edgeShade.endPoint = CGPoint(x: 1, y: 0.5)
-        layer.addSublayer(shade)
-        layer.addSublayer(edgeShade)
         titleLabel.font = CinematicStyle.displayFont(size: 46)
         titleLabel.numberOfLines = 3
         titleLabel.textColor = .white
@@ -178,13 +173,7 @@ final class CinematicLibraryArtworkView: UIView {
         let panelWidth = CinematicStyle.listLeading(in: bounds.width) - 42
         let margin: CGFloat = 72
         let textWidth = max(0, panelWidth - 2 * margin)
-        artworkView.frame = CGRect(x: 0, y: 0, width: panelWidth, height: bounds.height)
-        placeholder.frame = CGRect(x: panelWidth / 2 - 64, y: bounds.height * 0.3, width: 128, height: 128)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        shade.frame = artworkView.frame
-        edgeShade.frame = CGRect(x: panelWidth - 100, y: 0, width: 100, height: bounds.height)
-        CATransaction.commit()
+        ambientView.frame = bounds
         let showDescription = AppTheme.showsLibraryDescription && !(overviewLabel.text ?? "").isEmpty
         overviewLabel.isHidden = !showDescription
         divider.isHidden = !showDescription
@@ -196,6 +185,17 @@ final class CinematicLibraryArtworkView: UIView {
         metadataLabel.frame = CGRect(x: margin, y: metadataBottom - metadataHeight, width: textWidth, height: metadataHeight)
         let titleHeight = titleLabel.sizeThatFits(CGSize(width: textWidth, height: 190)).height
         titleLabel.frame = CGRect(x: margin, y: metadataLabel.frame.minY - 16 - titleHeight, width: textWidth, height: titleHeight)
+
+        // Reserve space for the text, then fit the entire image above it.
+        // No scrim, mask or text is allowed to cover the artwork itself.
+        let available = CGRect(x: 32, y: 24, width: max(0, panelWidth - 64),
+                               height: max(0, titleLabel.frame.minY - 48))
+        let imageSize = artworkView.image?.size ?? CGSize(width: 2, height: 3)
+        let scale = min(available.width / max(1, imageSize.width), available.height / max(1, imageSize.height))
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        artworkView.frame = CGRect(x: available.midX - size.width / 2, y: available.midY - size.height / 2,
+                                   width: size.width, height: size.height)
+        placeholder.frame = CGRect(x: available.midX - 64, y: available.midY - 64, width: 128, height: 128)
     }
 
     func configure(item: MediaItem?) {
@@ -212,17 +212,22 @@ final class CinematicLibraryArtworkView: UIView {
         artworkView.layer.removeAllAnimations()
         artworkView.alpha = 1
         artworkView.image = nil
+        ambientView.isHidden = url == nil
         guard let url else { return }
         if let cached = ImageCacheManager.shared.cachedImage(for: url, quality: .full) {
+            ambientView.setAmbient(url: url)
             artworkView.image = cached
+            setNeedsLayout()
             return
         }
         loadTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
+            self?.ambientView.setAmbient(url: url)
             let image = await ImageCacheManager.shared.image(for: url, quality: .full)
             guard !Task.isCancelled, let self, self.currentURL == url else { return }
             self.artworkView.image = image
+            self.setNeedsLayout()
             guard image != nil, !UIAccessibility.isReduceMotionEnabled else { return }
             self.artworkView.alpha = 0
             UIView.animate(withDuration: 0.25) { self.artworkView.alpha = 1 }

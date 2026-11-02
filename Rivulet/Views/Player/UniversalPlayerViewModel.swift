@@ -4500,7 +4500,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// The subtitle preference's language, else the device's, as ISO 639-1.
     private var subtitleSearchLanguage: String {
-        let device = Locale.current.language.languageCode?.identifier(.alpha2) ?? "en"
+        let device = Locale.LanguageCode(TrackLanguage.device).identifier(.alpha2) ?? "en"
         guard let preferred = TrackIntentStore.effectiveSubtitleIntent.language else { return device }
         let code = TrackLanguage.normalize(preferred)
         return code.isEmpty ? device : Locale.LanguageCode(code).identifier(.alpha2) ?? device

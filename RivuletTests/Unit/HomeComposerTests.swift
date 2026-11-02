@@ -77,8 +77,14 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         if let librariesError { throw librariesError }
         return libraryList
     }
+    var libraryItems: [MediaItem] = []
+    var libraryItemsError: Error?
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
-        PagedResult(items: [], total: 0, nextPage: nil)
+        if let libraryItemsError { throw libraryItemsError }
+        let items = Array(libraryItems.dropFirst(page.offset).prefix(page.limit))
+        let next = page.offset + items.count
+        return PagedResult(items: items, total: libraryItems.count,
+                           nextPage: next < libraryItems.count ? Page(offset: next, limit: page.limit) : nil)
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     var searchItems: [MediaItem] = []

@@ -120,6 +120,13 @@ final class SortButton: UIButton {
 
     private func setup() {
         for v in [bgView, glassView, iconView, sortLabel] as [UIView] { addSubview(v) }
+        if AppTheme.current == .cinematic {
+            glassView.isHidden = true
+            bgView.layer.cornerRadius = 4
+            bgView.layer.borderWidth = 1
+            bgView.layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
+            sortLabel.font = .systemFont(ofSize: 24, weight: .medium)
+        }
         let pad = HeroPillButton.sidePadding
 
         NSLayoutConstraint.activate([
@@ -249,6 +256,11 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         contentView.addSubview(countLabel)
         contentView.addSubview(sortButton)
         contentView.addSubview(viewButton)
+        if AppTheme.current == .cinematic {
+            titleLabel.font = CinematicStyle.displayFont(size: 36)
+            countLabel.font = .systemFont(ofSize: 22)
+            countLabel.textColor = CinematicStyle.secondaryText
+        }
 
         NSLayoutConstraint.activate([
             // Title: left-aligned, vertically centered on the top text cluster.

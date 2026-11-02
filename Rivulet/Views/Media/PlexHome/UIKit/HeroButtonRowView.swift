@@ -190,7 +190,9 @@ final class HeroPillButton: UIControl {
     static let sidePadding: CGFloat = 39
     static let iconGap: CGFloat = 14
     static let rowGap: CGFloat = 24
-    static let titleFont = UIFont.systemFont(ofSize: 29, weight: .semibold)
+    static var titleFont: UIFont {
+        .systemFont(ofSize: 29, weight: AppTheme.current == .cinematic ? .regular : .semibold)
+    }
     /// Apple grows a focused button by 10 pt of width; on the pill that is 1.045.
     static let focusScale: CGFloat = (pillWidth + 10) / pillWidth
     /// Circles grow 66 -> 76 on focus (measured on device, tvOS 27).
@@ -215,7 +217,7 @@ final class HeroPillButton: UIControl {
     private let iconView = UIImageView()
     private let titleLabel = UILabel()
 
-    private let cornerRadius: CGFloat = 33  // height/2 (height=66)
+    private let cornerRadius: CGFloat = AppTheme.current == .cinematic ? 4 : 33
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -234,6 +236,7 @@ final class HeroPillButton: UIControl {
         materialBackground.layer.cornerCurve = .continuous
         materialBackground.clipsToBounds = true
         materialBackground.isUserInteractionEnabled = false
+        materialBackground.isHidden = AppTheme.current == .cinematic
         addSubview(materialBackground)
 
         strokeLayer.fillColor = UIColor.clear.cgColor
@@ -367,7 +370,7 @@ final class HeroCircleButton: UIControl {
     private let strokeLayer = CAShapeLayer()
     private let iconView = UIImageView()
 
-    private let cornerRadius: CGFloat = 33
+    private let cornerRadius: CGFloat = AppTheme.current == .cinematic ? 4 : 33
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -386,6 +389,7 @@ final class HeroCircleButton: UIControl {
         materialBackground.layer.cornerCurve = .continuous
         materialBackground.clipsToBounds = true
         materialBackground.isUserInteractionEnabled = false
+        materialBackground.isHidden = AppTheme.current == .cinematic
         addSubview(materialBackground)
 
         strokeLayer.fillColor = UIColor.clear.cgColor

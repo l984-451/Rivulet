@@ -70,7 +70,7 @@ final class HeroBackdropView: UIView {
     override init(frame: CGRect) {
         // Apple's home hero scrim (`MediaShowcasingGradientLayout`, stage):
         // constant black, no per-image darkening.
-        scrimLayers = [
+        let standardScrims = [
             Self.gradient(.axial, from: CGPoint(x: 0, y: 0.6), to: CGPoint(x: 0.41, y: 0.5),
                           alphas: [0.14, 0], locations: nil),
             Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
@@ -80,6 +80,12 @@ final class HeroBackdropView: UIView {
                           alphas: [0, 0.04, 0.15, 0.30, 0.33, 0.49, 0.67, 0.85, 1.0],
                           locations: [0, 0.19, 0.36, 0.51, 0.53, 0.65, 0.77, 0.89, 1.0])
         ]
+        scrimLayers = AppTheme.current == .cinematic ? [
+            Self.gradient(.axial, from: CGPoint(x: 0, y: 0.5), to: CGPoint(x: 1, y: 0.5),
+                          alphas: [0.86, 0.64, 0.16, 0], locations: [0, 0.26, 0.55, 0.85]),
+            Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
+                          alphas: [0, 0.05, 0.65], locations: [0, 0.5, 1])
+        ] : standardScrims
         super.init(frame: frame)
         setUp()
     }

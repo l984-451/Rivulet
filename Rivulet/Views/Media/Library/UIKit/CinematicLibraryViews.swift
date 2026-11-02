@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2025-2026 Bain Gurley
+
+import UIKit
+
+/// Shared measurements for the artwork/list composition, in the collection's coordinate space.
+enum CinematicStyle {
+    static let background = UIColor(white: 0.055, alpha: 1)
+    static let secondaryText = UIColor(white: 0.76, alpha: 1)
+    static let rowHeight: CGFloat = 112
+    static func listLeading(in width: CGFloat) -> CGFloat { width * 0.46 }
+    static func displayFont(size: CGFloat) -> UIFont {
+        UIFont(name: "AvenirNext-UltraLight", size: size) ?? .systemFont(ofSize: size, weight: .light)
+    }
+
+    static func metadata(for item: MediaItem) -> String {
+        [item.year.map(String.init), item.contentRating, item.editionTitle]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "  ·  ")
+    }
+}
+
+/// A native focusable row. The library's existing delegate owns selection, long press and paging.
+final class CinematicLibraryCell: UICollectionViewCell {
+    static let reuseID = "library.cinematicRow"
+    private let titleLabel = UILabel()
+    private let metadataLabel = UILabel()
+    private let durationLabel = UILabel()
+    private let watchedImage = UIImageView()
+    private let separator = UIView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        accessibilityIdentifier = Self.reuseID
+        isAccessibilityElement = true
+        titleLabel.font = .systemFont(ofSize: 29, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
+        metadataLabel.font = .systemFont(ofSize: 21)
+        durationLabel.font = .monospacedDigitSystemFont(ofSize: 23, weight: .medium)
+        durationLabel.textAlignment = .right
+        durationLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        watchedImage.contentMode = .scaleAspectFit
+        watchedImage.image = UIImage(systemName: "checkmark.circle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24))
+        for child in [titleLabel, metadataLabel, durationLabel, watchedImage, separator] {
+            child.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(child)
+        }
+        NSLayoutConstraint.activate([
+            watchedImage.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
+            watchedImage.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            watchedImage.widthAnchor.constraint(equalToConstant: 28),
+            watchedImage.heightAnchor.constraint(equalToConstant: 28),
+            titleLabel.leadingAnchor.constraint(equalTo: watchedImage.trailingAnchor, constant: 22),
+            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 23),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: durationLabel.leadingAnchor, constant: -24),
+            metadataLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metadataLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 7),
+            metadataLabel.trailingAnchor.constraint(lessThanOrEqualTo: durationLabel.leadingAnchor, constant: -24),
+            durationLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -28),
+            durationLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            separator.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            separator.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1)
+        ])
+        applyFocus(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(item: MediaItem) {
+        titleLabel.text = item.isGridPlaceholder ? String(localized: "Loading…") : item.title
+        metadataLabel.text = item.isGridPlaceholder ? nil : CinematicStyle.metadata(for: item)
+        durationLabel.text = item.runtime.flatMap { seconds in
+            seconds > 0 ? String(localized: "\(Int(seconds / 60)) min") : nil
+        }
+        watchedImage.alpha = item.userState.isPlayed ? 1 : 0
+        accessibilityLabel = [titleLabel.text, metadataLabel.text, durationLabel.text]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+        accessibilityValue = item.userState.isPlayed ? String(localized: "Watched") : nil
+        applyFocus(isFocused)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        titleLabel.text = nil
+        metadataLabel.text = nil
+        durationLabel.text = nil
+        accessibilityLabel = nil
+        accessibilityValue = nil
+        watchedImage.alpha = 0
+        applyFocus(false)
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        coordinator.addCoordinatedAnimations { self.applyFocus(focused) }
+    }
+
+    private func applyFocus(_ focused: Bool) {
+        contentView.backgroundColor = focused ? .white : UIColor(white: 0.08, alpha: 0.88)
+        titleLabel.textColor = focused ? .black : .white
+        metadataLabel.textColor = focused ? UIColor(white: 0.27, alpha: 1) : CinematicStyle.secondaryText
+        durationLabel.textColor = metadataLabel.textColor
+        watchedImage.tintColor = titleLabel.textColor
+        separator.backgroundColor = focused ? .clear : UIColor.white.withAlphaComponent(0.1)
+    }
+}
+
+/// A fixed artwork panel beside the scrolling list. It never enters the focus graph.
+/// Each selection cancels its predecessor, including the settling delay, so fast scrolling cannot
+/// paint stale artwork or start an image request for every title passed on the way.
+final class CinematicLibraryArtworkView: UIView {
+    private let artworkView = UIImageView()
+    private let placeholder = UIImageView(image: UIImage(systemName: "film"))
+    private let titleLabel = UILabel()
+    private let metadataLabel = UILabel()
+    private let overviewLabel = UILabel()
+    private let shade = CAGradientLayer()
+    private let edgeShade = CAGradientLayer()
+    private let divider = UIView()
+    private var loadTask: Task<Void, Never>?
+    private var currentURL: URL?
+    private(set) var displayedItem: MediaItem?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        accessibilityElementsHidden = true // The selected row already announces the title.
+        backgroundColor = CinematicStyle.background
+        artworkView.contentMode = .scaleAspectFill
+        artworkView.clipsToBounds = true
+        placeholder.tintColor = UIColor.white.withAlphaComponent(0.12)
+        placeholder.contentMode = .scaleAspectFit
+        addSubview(placeholder)
+        addSubview(artworkView)
+        shade.colors = [UIColor.clear.cgColor, UIColor.black.withAlphaComponent(0.35).cgColor, CinematicStyle.background.cgColor]
+        shade.locations = [0, 0.43, 0.88]
+        edgeShade.colors = [UIColor.clear.cgColor, CinematicStyle.background.cgColor]
+        edgeShade.startPoint = CGPoint(x: 0, y: 0.5)
+        edgeShade.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.addSublayer(shade)
+        layer.addSublayer(edgeShade)
+        titleLabel.font = CinematicStyle.displayFont(size: 46)
+        titleLabel.numberOfLines = 3
+        titleLabel.textColor = .white
+        metadataLabel.font = .systemFont(ofSize: 22, weight: .medium)
+        metadataLabel.textColor = CinematicStyle.secondaryText
+        metadataLabel.numberOfLines = 2
+        overviewLabel.font = .systemFont(ofSize: 23)
+        overviewLabel.numberOfLines = 3
+        overviewLabel.textColor = CinematicStyle.secondaryText
+        divider.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        for child in [titleLabel, metadataLabel, overviewLabel, divider] { addSubview(child) }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit { loadTask?.cancel() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let panelWidth = CinematicStyle.listLeading(in: bounds.width) - 42
+        let margin: CGFloat = 72
+        let textWidth = max(0, panelWidth - 2 * margin)
+        artworkView.frame = CGRect(x: 0, y: 0, width: panelWidth, height: bounds.height)
+        placeholder.frame = CGRect(x: panelWidth / 2 - 64, y: bounds.height * 0.3, width: 128, height: 128)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shade.frame = artworkView.frame
+        edgeShade.frame = CGRect(x: panelWidth - 100, y: 0, width: 100, height: bounds.height)
+        CATransaction.commit()
+        let overviewHeight = overviewLabel.sizeThatFits(CGSize(width: textWidth, height: 110)).height
+        overviewLabel.frame = CGRect(x: margin, y: bounds.height - 72 - overviewHeight, width: textWidth, height: overviewHeight)
+        divider.frame = CGRect(x: margin, y: overviewLabel.frame.minY - 26, width: textWidth, height: 1)
+        let metadataHeight = metadataLabel.sizeThatFits(CGSize(width: textWidth, height: 64)).height
+        metadataLabel.frame = CGRect(x: margin, y: divider.frame.minY - 24 - metadataHeight, width: textWidth, height: metadataHeight)
+        let titleHeight = titleLabel.sizeThatFits(CGSize(width: textWidth, height: 190)).height
+        titleLabel.frame = CGRect(x: margin, y: metadataLabel.frame.minY - 16 - titleHeight, width: textWidth, height: titleHeight)
+    }
+
+    func configure(item: MediaItem?) {
+        guard item != displayedItem else { return }
+        displayedItem = item
+        titleLabel.text = item?.title
+        metadataLabel.text = item.map { CinematicStyle.metadata(for: $0) }
+        overviewLabel.text = item?.overview
+        setNeedsLayout()
+        let url = item?.artwork.poster ?? item?.artwork.backdrop ?? item?.artwork.thumbnail
+        guard currentURL != url else { return }
+        currentURL = url
+        loadTask?.cancel()
+        artworkView.layer.removeAllAnimations()
+        artworkView.alpha = 1
+        artworkView.image = nil
+        guard let url else { return }
+        if let cached = ImageCacheManager.shared.cachedImage(for: url, quality: .full) {
+            artworkView.image = cached
+            return
+        }
+        loadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            let image = await ImageCacheManager.shared.image(for: url, quality: .full)
+            guard !Task.isCancelled, let self, self.currentURL == url else { return }
+            self.artworkView.image = image
+            guard image != nil, !UIAccessibility.isReduceMotionEnabled else { return }
+            self.artworkView.alpha = 0
+            UIView.animate(withDuration: 0.25) { self.artworkView.alpha = 1 }
+        }
+    }
+}

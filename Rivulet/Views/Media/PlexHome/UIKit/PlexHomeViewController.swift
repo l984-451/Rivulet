@@ -415,6 +415,7 @@ final class PlexHomeViewController: UIViewController {
     let mode: HomeMode
     private let theme = AppTheme.current
     private var cinematicArtwork: CinematicLibraryArtworkView?
+    private weak var cinematicBrowser: CinematicBrowseViewController?
     private var needsInitialCinematicFocus = true
     private var isCinematicLibrary: Bool {
         if case .library = mode { return theme == .cinematic }
@@ -1611,6 +1612,7 @@ final class PlexHomeViewController: UIViewController {
             } catch {
                 guard gen == self.gridGeneration else { return }
                 self.gridPagesRequested.remove(page)
+                self.cinematicBrowser?.pageLoadFailed(in: start..<(start + pageSize))
                 if page == 0 { self.pageZero = .failed(error.localizedDescription) }
                 // First page: hub rows still render; updateHomeState surfaces
                 // a library-level error only when there are no hubs either.
@@ -1622,6 +1624,7 @@ final class PlexHomeViewController: UIViewController {
     /// Re-vend the cells of a landed page. Slot identifiers never change, so
     /// `applySnapshot` alone leaves the placeholder cards on screen.
     private func reconfigureGridSlots(_ range: Range<Int>) {
+        cinematicBrowser?.update(items: gridItems.map { $0 ?? .gridPlaceholder })
         guard !range.isEmpty else { return }
         var snap = dataSource.snapshot()
         guard snap.sectionIdentifiers.contains(.grid) else { return }
@@ -2178,6 +2181,17 @@ final class PlexHomeViewController: UIViewController {
             ])
             cinematicArtwork = artwork
         }
+    }
+
+    private func presentCinematicBrowse() {
+        let items = sectionsSnapshot.first(where: { $0.kind == .grid })?.items ?? []
+        guard !items.isEmpty else { return }
+        let index = cinematicArtwork?.displayedItem.flatMap { selected in items.firstIndex { $0.ref == selected.ref } } ?? 0
+        let browser = CinematicBrowseViewController(items: items, selectedIndex: index)
+        browser.onRequestItem = { [weak self] in self?.loadGridPage(containing: $0) }
+        browser.onSelectItem = { [weak self] in self?.presentStandaloneExpandedDetail($0) }
+        cinematicBrowser = browser
+        present(browser, animated: true)
     }
 
     /// Top inset: 0 with the hero, otherwise room for the first row.
@@ -3272,10 +3286,17 @@ final class PlexHomeViewController: UIViewController {
             // a changed list calls refreshSortHeaderCount().
             let modes: [LibraryViewMode] = [.titles] + (libraryCollections.isEmpty ? [] : [.collections])
                 + (onSelectViewMode == nil ? [] : [.folders])
-            let viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles) {
+            var viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles) {
                 [weak self] mode in
                 guard let self else { return }
                 if let onSelectViewMode { onSelectViewMode(mode) } else { setGridShowsCollections(mode == .collections) }
+            }
+            if case .library = mode, !gridShowsCollections {
+                let browse = UIAction(title: String(localized: "Cinematic Browse"),
+                                      image: UIImage(systemName: "rectangle.portrait.on.rectangle.portrait")) { [weak self] _ in
+                    self?.presentCinematicBrowse()
+                }
+                viewMenu = UIMenu(children: (viewMenu?.children ?? []) + [browse])
             }
             cell.configure(
                 title: section.title ?? "",
@@ -3805,6 +3826,7 @@ final class PlexHomeViewController: UIViewController {
         // refresh inside a row must be pushed to the visible cells by hand.
         updateVisibleShelfRows()
         updateAmbientIfNeeded()
+        cinematicBrowser?.update(items: sections.first(where: { $0.kind == .grid })?.items ?? [])
         if let cinematicArtwork {
             let items = sections.first(where: { $0.kind == .grid })?.items ?? []
             let selected = cinematicArtwork.displayedItem.flatMap { old in items.first { $0.ref == old.ref } }

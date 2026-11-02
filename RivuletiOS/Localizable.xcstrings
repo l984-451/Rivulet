@@ -3,6 +3,16 @@
   "strings" : {
     "" : {},
     " " : {},
+    "%@ Live TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Live-TV"
+          }
+        }
+      }
+    },
     "%@ behind live" : {
       "localizations" : {
         "de" : {
@@ -84,9 +94,21 @@
     "%lld ch" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Kanäle"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Kanal"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Kanäle"
+                }
+              }
+            }
           }
         }
       }
@@ -1062,6 +1084,16 @@
       }
     },
     "Commercial" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werbung"
+          }
+        }
+      }
+    },
+    "Commercials" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2457,6 +2489,16 @@
         }
       }
     },
+    "Intros" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intros"
+          }
+        }
+      }
+    },
     "Invalid M3U format: %@" : {
       "localizations" : {
         "de" : {
@@ -3637,6 +3679,16 @@
         }
       }
     },
+    "Recaps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rückblicke"
+          }
+        }
+      }
+    },
     "Recent" : {
       "localizations" : {
         "de" : {
@@ -4003,6 +4055,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dauer"
+          }
+        }
+      }
+    },
+    "S%lld E%lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$lld F%2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld"
           }
         }
       }
@@ -5689,6 +5757,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "http://provider.example:8080"
+          }
+        }
+      }
+    },
+    "streaming.home" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heimnetz"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Home"
+          }
+        }
+      }
+    },
+    "tmdb.nowPlaying" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt im Kino"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Now Playing"
           }
         }
       }

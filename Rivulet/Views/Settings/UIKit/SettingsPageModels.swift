@@ -502,7 +502,7 @@ enum SettingsContent {
             toggle("promptResumeOrRestart", "Resume or Restart Prompt", key: "promptResumeOrRestart", default: false,
                    enabledWhen: { SettingsStore.bool("continueWatchingInstantResume", default: true) }),
             .header("Streaming Quality"),
-            SettingsRowItem(id: "homeStreamingQuality", title: "Home",
+            SettingsRowItem(id: "homeStreamingQuality", verbatim: String(localized: "streaming.home", defaultValue: "Home"),
                             kind: .navigationValue(.homeQualityPicker, value: {
                                 StreamingQuality.setting(home: true).label
                             })),
@@ -841,7 +841,7 @@ enum SettingsContent {
             rows.append(info("plexServerPlatform", "Platform", [platform, server.platformVersion].compactMap { $0 }.joined(separator: " ")))
         }
         if let connection {
-            let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "Remote")
+            let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "connection.remote", defaultValue: "Remote")
             rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? String(localized: "\(kind), Secure") : kind))
         }
         let ds = LiveTVDataStore.shared

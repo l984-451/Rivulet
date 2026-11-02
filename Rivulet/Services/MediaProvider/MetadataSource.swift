@@ -35,7 +35,7 @@ enum CuratedSection: String, Sendable, CaseIterable, Identifiable, Hashable, Cod
     var title: String {
         switch self {
         case .moviePopular: return String(localized: "Popular Movies")
-        case .movieNowPlaying: return String(localized: "Now Playing")
+        case .movieNowPlaying: return String(localized: "tmdb.nowPlaying", defaultValue: "Now Playing")
         case .movieUpcoming: return String(localized: "Upcoming")
         case .movieTopRated: return String(localized: "Top Rated Movies")
         case .tvPopular: return String(localized: "Popular TV")

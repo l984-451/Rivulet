@@ -1839,7 +1839,7 @@ class PlayerContainerViewController: UIViewController {
             rail?.setTitle(vm.title, eyebrow: vm.subtitle)
             return
         }
-        let number = [meta.parentIndex.map { "S\($0)" }, meta.index.map { "E\($0)" }]
+        let number = [meta.parentIndex.map { String(localized: "S\($0)") }, meta.index.map { String(localized: "E\($0)") }]
             .compactMap { $0 }.joined(separator: ", ")
         let eyebrow = [number, meta.title ?? ""].filter { !$0.isEmpty }.joined(separator: " • ")
         rail?.setTitle(show, eyebrow: eyebrow.isEmpty ? nil : eyebrow)

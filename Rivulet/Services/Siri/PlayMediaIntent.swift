@@ -23,6 +23,6 @@ struct PlayMediaIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         DeepLinkHandler.shared.handlePlay(ratingKey: media.id)
-        return .result(dialog: "Playing \(media.title)")
+        return .result(dialog: IntentDialog(LocalizedStringResource("siri.playing", defaultValue: "Playing \(media.title)")))
     }
 }

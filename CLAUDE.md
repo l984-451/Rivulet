@@ -931,6 +931,9 @@ is passed as a localizable type, so:
   nothing is extracted (measured).
 - **Anywhere else, `String(localized: "…")`.** SwiftUI `Text("…")` already is.
   The `unlocalized_ui_text` lint rule catches literals assigned to UIKit text.
+- **Two meanings, two keys.** The same English word in two places shares one
+  translation, so give the odd one out its own key:
+  `String(localized: "streaming.home", defaultValue: "Home")`.
 - **One literal per sentence**, interpolated (`"Resume S\(s), E\(e)"`), never
   concatenated pieces. Counts use one key (`"\(n) albums"`) with English plural
   variants in the catalog.

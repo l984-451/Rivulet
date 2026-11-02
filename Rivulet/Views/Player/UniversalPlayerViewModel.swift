@@ -434,8 +434,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     var subtitle: String? {
         if metadata.type == "episode" {
             let show = metadata.grandparentTitle ?? ""
-            let season = metadata.parentIndex.map { "S\($0)" } ?? ""
-            let episode = metadata.index.map { "E\($0)" } ?? ""
+            let season = metadata.parentIndex.map { String(localized: "S\($0)") } ?? ""
+            let episode = metadata.index.map { String(localized: "E\($0)") } ?? ""
             return "\(show) \(season)\(episode)"
         }
         return metadata.year.map { String($0) }

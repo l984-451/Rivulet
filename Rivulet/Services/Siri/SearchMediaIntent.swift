@@ -44,7 +44,7 @@ struct SearchMediaIntent: AppIntent {
             let count = entities.count
             return .result(
                 value: entities,
-                dialog: "Found \(count) \(count == 1 ? "result" : "results") for \"\(query)\""
+                dialog: "Found \(count) results for \"\(query)\""
             )
         } catch {
             return .result(value: [], dialog: "Couldn't reach your Plex server")

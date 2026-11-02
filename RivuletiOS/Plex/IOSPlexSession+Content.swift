@@ -52,7 +52,11 @@ extension IOSPlexSession {
         let cw: PlexHub??
         do {
             let hub = try await continueWatching
-            cw = .some((hub?.Metadata ?? []).isEmpty ? nil : hub.map { Self.onServer($0, serverID) })
+            cw = .some((hub?.Metadata ?? []).isEmpty ? nil : hub.map { hub in
+                var hub = Self.onServer(hub, serverID)
+                hub.title = String(localized: "Continue Watching")
+                return hub
+            })
         } catch {
             cw = nil
         }

@@ -380,7 +380,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld Kanäle"
+            "value" : "%lld Sender"
           }
         }
       }
@@ -421,6 +421,16 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld dropped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld verworfen"
           }
         }
       }
@@ -660,13 +670,57 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld von %lld Folgen gesehen."
+            "value" : "%1$lld von %2$#@total@ gesehen."
+          },
+          "substitutions" : {
+            "total" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Folge"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg Folgen"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld episodes watched."
+            "state" : "translated",
+            "value" : "%1$lld of %2$#@total@ watched."
+          },
+          "substitutions" : {
+            "total" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episode"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episodes"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1039,6 +1093,26 @@
         }
       }
     },
+    "A/V Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A/V-Synchronität"
+          }
+        }
+      }
+    },
+    "AUDIO" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AUDIO"
+          }
+        }
+      }
+    },
     "About" : {
       "localizations" : {
         "de" : {
@@ -1399,6 +1473,46 @@
         }
       }
     },
+    "Audio Bitrate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audiobitrate"
+          }
+        }
+      }
+    },
+    "Audio Bridge" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio-Bridge"
+          }
+        }
+      }
+    },
+    "Audio Bridge Bytes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio-Bridge-Bytes"
+          }
+        }
+      }
+    },
+    "Audio Delivery" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audioausgabe"
+          }
+        }
+      }
+    },
     "Audio Description" : {
       "localizations" : {
         "de" : {
@@ -1539,6 +1653,16 @@
         }
       }
     },
+    "Avg Bitrate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ø Bitrate"
+          }
+        }
+      }
+    },
     "Away" : {
       "localizations" : {
         "de" : {
@@ -1555,6 +1679,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Streaming unterwegs"
+          }
+        }
+      }
+    },
+    "BUFFER / NETWORK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PUFFER / NETZWERK"
+          }
+        }
+      }
+    },
+    "Backend" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backend"
           }
         }
       }
@@ -1609,6 +1753,16 @@
         }
       }
     },
+    "Buffer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puffer"
+          }
+        }
+      }
+    },
     "Building Personalized Recommendations" : {
       "localizations" : {
         "de" : {
@@ -1641,6 +1795,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cache & Speicher"
+          }
+        }
+      }
+    },
+    "Cached" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Cache"
           }
         }
       }
@@ -2605,6 +2769,16 @@
         }
       }
     },
+    "DECODE / STREAM" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DECODIERUNG / STREAM"
+          }
+        }
+      }
+    },
     "DNS lookup failed for EPG server" : {
       "localizations" : {
         "de" : {
@@ -2711,6 +2885,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entfallene Szene"
+          }
+        }
+      }
+    },
+    "Demuxer Fetched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demuxer geladen"
           }
         }
       }
@@ -3035,12 +3219,22 @@
         }
       }
     },
-    "Enter your server's address." : {
+    "E%lld" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gib die Adresse deines Servers ein."
+            "value" : "F%lld"
+          }
+        }
+      }
+    },
+    "ENGINE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ENGINE"
           }
         }
       }
@@ -3385,6 +3579,16 @@
         }
       }
     },
+    "Enter your server's address." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib die Adresse deines Servers ein."
+          }
+        }
+      }
+    },
     "Entertainment" : {
       "localizations" : {
         "de" : {
@@ -3531,6 +3735,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Extras"
+          }
+        }
+      }
+    },
+    "FILE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DATEI"
           }
         }
       }
@@ -3805,18 +4019,42 @@
         }
       }
     },
-    "Found %lld %@ for \"%@\"" : {
+    "Found %lld results for \"%@\"" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld %@ für „%@“ gefunden"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld Ergebnis für „%2$@“ gefunden"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%1$lld Ergebnisse für „%2$@“ gefunden"
+                }
+              }
+            }
           }
         },
         "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Found %1$lld %2$@ for \"%3$@\""
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Found %1$lld result for \"%2$@\""
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Found %1$lld results for \"%2$@\""
+                }
+              }
+            }
           }
         }
       }
@@ -3827,6 +4065,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bildrate"
+          }
+        }
+      }
+    },
+    "Frames" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bilder"
           }
         }
       }
@@ -4881,6 +5129,16 @@
         }
       }
     },
+    "Memory" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speicher"
+          }
+        }
+      }
+    },
     "Metascore, critics" : {
       "localizations" : {
         "de" : {
@@ -4966,7 +5224,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bewegen"
+            "value" : "Verschieben"
           }
         }
       }
@@ -5067,6 +5325,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schaltet religiöse Namen stumm, die als Ausruf verwendet werden, etwa „oh my god“. Das Wort „god“ allein wird nie stummgeschaltet."
+          }
+        }
+      }
+    },
+    "Muxed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemuxt"
           }
         }
       }
@@ -5507,16 +5775,6 @@
         }
       }
     },
-    "On a device signed in to Jellyfin, open Settings, choose Quick Connect and enter this code." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne auf einem bei Jellyfin angemeldeten Gerät die Einstellungen, wähle „Quick Connect“ und gib diesen Code ein."
-          }
-        }
-      }
-    },
     "ON NOW" : {
       "localizations" : {
         "de" : {
@@ -5623,6 +5881,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktuell im TV"
+          }
+        }
+      }
+    },
+    "On a device signed in to Jellyfin, open Settings, choose Quick Connect and enter this code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne auf einem bei Jellyfin angemeldeten Gerät die Einstellungen, wähle „Quick Connect“ und gib diesen Code ein."
           }
         }
       }
@@ -6343,6 +6611,16 @@
         }
       }
     },
+    "Producer Restarts" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Producer-Neustarts"
+          }
+        }
+      }
+    },
     "Production" : {
       "localizations" : {
         "de" : {
@@ -6499,16 +6777,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AUFNAHME"
-          }
-        }
-      }
-    },
-    "Reload this server's libraries and Home rows now." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lädt die Mediatheken und die Reihen der Startseite dieses Servers jetzt neu."
           }
         }
       }
@@ -6873,6 +7141,16 @@
         }
       }
     },
+    "Reload this server's libraries and Home rows now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lädt die Mediatheken und die Reihen der Startseite dieses Servers jetzt neu."
+          }
+        }
+      }
+    },
     "Remember PIN" : {
       "localizations" : {
         "de" : {
@@ -6888,7 +7166,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Remote"
+            "value" : "Fernbedienung"
           }
         }
       }
@@ -7249,6 +7527,22 @@
         }
       }
     },
+    "S%@E%@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$@F%2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$@E%2$@"
+          }
+        }
+      }
+    },
     "S%lld" : {
       "localizations" : {
         "de" : {
@@ -7349,16 +7643,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SDH-Untertitel"
-          }
-        }
-      }
-    },
-    "Sign in without typing a password: Rivulet shows a code to approve from a device already signed in to Jellyfin. Quick Connect has to be on in the server's dashboard." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Melde dich an, ohne ein Passwort einzugeben: Rivulet zeigt einen Code, den du auf einem bereits bei Jellyfin angemeldeten Gerät bestätigst. Quick Connect muss im Dashboard des Servers aktiviert sein."
           }
         }
       }
@@ -7703,6 +7987,26 @@
         }
       }
     },
+    "Server Requests" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serveranfragen"
+          }
+        }
+      }
+    },
+    "Server Sent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vom Server gesendet"
+          }
+        }
+      }
+    },
     "Servers" : {
       "localizations" : {
         "de" : {
@@ -7959,6 +8263,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Melde dich mit Server, Benutzername und Passwort deines IPTV-Anbieters an (ein Login für Xtream Codes). Rivulet lädt die Sender und das Programm."
+          }
+        }
+      }
+    },
+    "Sign in without typing a password: Rivulet shows a code to approve from a device already signed in to Jellyfin. Quick Connect has to be on in the server's dashboard." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich an, ohne ein Passwort einzugeben: Rivulet zeigt einen Code, den du auf einem bereits bei Jellyfin angemeldeten Gerät bestätigst. Quick Connect muss im Dashboard des Servers aktiviert sein."
           }
         }
       }
@@ -8599,16 +8913,6 @@
         }
       }
     },
-    "That code expired. Try again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Code ist abgelaufen. Versuche es erneut."
-          }
-        }
-      }
-    },
     "TMDB users" : {
       "localizations" : {
         "de" : {
@@ -8685,6 +8989,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unter dieser Adresse läuft kein Xtream-Codes-Server. Prüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "That code expired. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Code ist abgelaufen. Versuche es erneut."
           }
         }
       }
@@ -9335,6 +9649,16 @@
         }
       }
     },
+    "Throughput" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durchsatz"
+          }
+        }
+      }
+    },
     "Title" : {
       "localizations" : {
         "de" : {
@@ -9491,6 +9815,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transcodierung"
+          }
+        }
+      }
+    },
+    "Transferred" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übertragen"
           }
         }
       }
@@ -9915,6 +10249,16 @@
         }
       }
     },
+    "VIDEO" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VIDEO"
+          }
+        }
+      }
+    },
     "Version" : {
       "localizations" : {
         "de" : {
@@ -10060,7 +10404,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wird angeschaut"
+            "value" : "Läuft"
           }
         }
       }
@@ -10693,6 +11037,23 @@
         }
       }
     },
+    "connection.remote" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remote"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remote"
+          }
+        }
+      }
+    },
     "hours of TV" : {
       "localizations" : {
         "de" : {
@@ -10729,6 +11090,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stunden Musik"
+          }
+        }
+      }
+    },
+    "postVideo.playNext" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Play Next"
+          }
+        }
+      }
+    },
+    "siri.playing" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wird wiedergegeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Playing %@"
+          }
+        }
+      }
+    },
+    "streaming.home" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heimnetz"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Home"
+          }
+        }
+      }
+    },
+    "tmdb.nowPlaying" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt im Kino"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Now Playing"
           }
         }
       }

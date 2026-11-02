@@ -1387,7 +1387,8 @@ class PlexDataStore: ObservableObject {
         }
         return CachedHomeHub(
             id: id,
-            title: title,
+            // Plex words this row differently from Top Shelf and the merged row.
+            title: isContinueWatching ? String(localized: "Continue Watching") : title,
             isContinueWatching: isContinueWatching,
             hubKey: hubKey,
             hubIdentifier: hubIdentifier,

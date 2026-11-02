@@ -844,8 +844,8 @@ final class PlayerDetailsPaneView: UIView {
         statLabels = [:]
         // Live stats follow AUDIO; FILE and the engine internals come last.
         let stats = currentStats
-        let engine = stats.filter { $0.title == "ENGINE" }
-        let file = media.filter { $0.title == "FILE" }
+        let engine = stats.filter { $0.title == Self.engineTitle }
+        let file = media.filter { $0.title == Self.fileTitle }
         shownSections = media.filter { !file.contains($0) } + stats.filter { !engine.contains($0) } + file + engine
 
         var column = DetailsColumnView()
@@ -977,14 +977,14 @@ final class PlayerDetailsPaneView: UIView {
                 video.append(Row(label: String(localized: "Bitrate"), value: PlayerInfoSheetStyle.bitrate(bitrate * 1000)))
             }
         }
-        sections.append(Section(title: "VIDEO", rows: video))
+        sections.append(Section(title: String(localized: "VIDEO"), rows: video))
 
         let audio = streams.filter { $0.isAudio }
         if !audio.isEmpty {
             var rows = [Row(label: String(localized: "Mode"), value: modes.audio.title)]
             if let enhanceDialogue { rows.append(Row(label: String(localized: "Enhance Dialogue"), value: enhanceDialogue)) }
             for (index, stream) in audio.enumerated() { rows.append(audioRow(stream, index: index)) }
-            sections.append(Section(title: "AUDIO", rows: rows))
+            sections.append(Section(title: String(localized: "AUDIO"), rows: rows))
         }
 
         if let part = media?.Part?.first {
@@ -995,7 +995,7 @@ final class PlayerDetailsPaneView: UIView {
             if let duration = metadata.duration ?? part.duration {
                 rows.append(Row(label: String(localized: "Duration"), value: PlayerInfoSheetStyle.duration(duration)))
             }
-            if !rows.isEmpty { sections.append(Section(title: "FILE", rows: rows)) }
+            if !rows.isEmpty { sections.append(Section(title: Self.fileTitle, rows: rows)) }
         }
         return sections
     }
@@ -1010,38 +1010,42 @@ final class PlayerDetailsPaneView: UIView {
                    value: value.isEmpty ? String(localized: "Unknown") : value)
     }
 
+    /// Headers the pane also orders its columns by.
+    static let fileTitle = String(localized: "FILE")
+    static let engineTitle = String(localized: "ENGINE")
+
     private typealias StatRow = (title: String, value: (AetherAdvancedStats) -> String?)
 
     private static let statSpecs: [(name: String, rows: [StatRow])] = [
         // One column: frame rate and dropped frames share a row to fit.
-        ("DECODE / STREAM", [
-            ("Backend", { $0.backend }),
-            ("Bitrate", { $0.instantBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
-            ("Avg Bitrate", { $0.averageBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
-            ("Frames", { stats in
-                let parts = [stats.observedFps.map(PlayerInfoSheetStyle.fps), stats.droppedFrameCount.map { "\($0) dropped" }]
+        (String(localized: "DECODE / STREAM"), [
+            (String(localized: "Backend"), { $0.backend }),
+            (String(localized: "Bitrate"), { $0.instantBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
+            (String(localized: "Avg Bitrate"), { $0.averageBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
+            (String(localized: "Frames"), { stats in
+                let parts = [stats.observedFps.map(PlayerInfoSheetStyle.fps), stats.droppedFrameCount.map { String(localized: "\($0) dropped") }]
                     .compactMap { $0 }
                 return parts.isEmpty ? nil : parts.joined(separator: " · ")
             }),
-            ("Audio Bridge", { $0.audioBridge }),
-            ("Audio Delivery", { $0.audioDelivery }),
-            ("Audio Bitrate", { $0.audioBridgeBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
+            (String(localized: "Audio Bridge"), { $0.audioBridge }),
+            (String(localized: "Audio Delivery"), { $0.audioDelivery }),
+            (String(localized: "Audio Bitrate"), { $0.audioBridgeBitrateMbps.map(PlayerInfoSheetStyle.mbps) }),
         ]),
-        ("BUFFER / NETWORK", [
-            ("Buffer", { $0.forwardBufferSeconds.map(PlayerInfoSheetStyle.bufferSeconds) }),
-            ("Cached", { $0.cachedBytes.map(PlayerInfoSheetStyle.fileSize) }),
-            ("Throughput", { $0.networkThroughputMbps.map(PlayerInfoSheetStyle.mbps) }),
-            ("Transferred", { $0.networkTransferredBytes.map(PlayerInfoSheetStyle.fileSize) }),
-            ("A/V Sync", { $0.avSyncGapMs.map(PlayerInfoSheetStyle.milliseconds) }),
+        (String(localized: "BUFFER / NETWORK"), [
+            (String(localized: "Buffer"), { $0.forwardBufferSeconds.map(PlayerInfoSheetStyle.bufferSeconds) }),
+            (String(localized: "Cached"), { $0.cachedBytes.map(PlayerInfoSheetStyle.fileSize) }),
+            (String(localized: "Throughput"), { $0.networkThroughputMbps.map(PlayerInfoSheetStyle.mbps) }),
+            (String(localized: "Transferred"), { $0.networkTransferredBytes.map(PlayerInfoSheetStyle.fileSize) }),
+            (String(localized: "A/V Sync"), { $0.avSyncGapMs.map(PlayerInfoSheetStyle.milliseconds) }),
         ]),
-        ("ENGINE", [
-            ("Producer Restarts", { $0.producerRestartCount.map { "\($0)" } }),
-            ("Muxed", { $0.muxedBytesLifetime.map(PlayerInfoSheetStyle.fileSize) }),
-            ("Server Sent", { $0.serverBytesSentLifetime.map(PlayerInfoSheetStyle.fileSize) }),
-            ("Server Requests", { $0.serverRequestCount.map { "\($0)" } }),
-            ("Demuxer Fetched", { $0.demuxerBytesFetched.map(PlayerInfoSheetStyle.fileSize) }),
-            ("Audio Bridge Bytes", { $0.audioBridgeLiveBytes.map { PlayerInfoSheetStyle.fileSize(Int64($0)) } }),
-            ("Memory", { $0.rssMb.map { "\($0) MB" } }),
+        (engineTitle, [
+            (String(localized: "Producer Restarts"), { $0.producerRestartCount.map { "\($0)" } }),
+            (String(localized: "Muxed"), { $0.muxedBytesLifetime.map(PlayerInfoSheetStyle.fileSize) }),
+            (String(localized: "Server Sent"), { $0.serverBytesSentLifetime.map(PlayerInfoSheetStyle.fileSize) }),
+            (String(localized: "Server Requests"), { $0.serverRequestCount.map { "\($0)" } }),
+            (String(localized: "Demuxer Fetched"), { $0.demuxerBytesFetched.map(PlayerInfoSheetStyle.fileSize) }),
+            (String(localized: "Audio Bridge Bytes"), { $0.audioBridgeLiveBytes.map { PlayerInfoSheetStyle.fileSize(Int64($0)) } }),
+            (String(localized: "Memory"), { $0.rssMb.map { "\($0) MB" } }),
         ]),
     ]
 

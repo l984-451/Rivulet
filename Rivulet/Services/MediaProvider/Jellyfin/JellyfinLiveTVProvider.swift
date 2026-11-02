@@ -341,7 +341,7 @@ nonisolated extension JFLiveProgram {
               end > start else { return nil }
         var episode: String?
         if isSeries == true, let indexNumber {
-            episode = parentIndexNumber.map { "S\($0) E\(indexNumber)" } ?? "E\(indexNumber)"
+            episode = parentIndexNumber.map { String(localized: "S\($0) E\(indexNumber)") } ?? String(localized: "E\(indexNumber)")
         }
         let genreList = (genres ?? []).joined(separator: ", ")
         let flagged = isSports == true ? "Sports" : isNews == true ? "News"

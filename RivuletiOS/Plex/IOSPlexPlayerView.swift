@@ -247,12 +247,13 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         thumbnailPartID = nil
     }
 
-    /// By language over "TrueHD 7.1 Atmos • Commentary", never the file's own track titles.
+    /// By language over `MediaTrack.audioMenuSubtitle`.
     var audioTracks: [AetherPlayer.Track] {
-        mediaAudio.map { track in
+        let tracks = mediaAudio
+        return tracks.map { track in
             AetherPlayer.Track(id: track.id, name: track.audioMenuTitle, codec: "", language: nil, channels: 0,
                                isDefault: track.isDefault, isForced: false, isHearingImpaired: false,
-                               menuDetail: track.audioMenuSubtitle)
+                               menuDetail: track.audioMenuSubtitle(among: tracks))
         }
     }
 

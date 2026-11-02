@@ -92,7 +92,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         rows.append(contentsOf: tracks.map { track in
             Row(
                 title: audio ? track.audioMenuTitle : track.subtitleMenuTitle,
-                subtitle: audio ? track.audioMenuSubtitle : track.subtitleMenuSubtitle,
+                subtitle: audio ? track.audioMenuSubtitle(among: tracks) : track.subtitleMenuSubtitle,
                 trackId: track.id,
                 isSelected: track.id == selectedTrackId
             )
@@ -792,6 +792,9 @@ final class CardTrackRowButton: UIControl {
         content.transform = focused ? CGAffineTransform(scaleX: M.focusScale, y: M.focusScale) : .identity
         titleLabel.textColor = focused ? .black : .white
         subtitleLabel.textColor = focused ? UIColor.black.withAlphaComponent(0.6) : M.secondaryColor
+        // A marquee label can only clip, so a long line scrolls while focused and ends in an ellipsis at rest.
+        subtitleLabel.enablesMarqueeWhenAncestorFocused = focused
+        if !focused { subtitleLabel.lineBreakMode = .byTruncatingTail }
         checkmarkView.tintColor = focused ? .black : .white
         chevronView.tintColor = focused ? UIColor.black.withAlphaComponent(0.6) : M.secondaryColor
     }

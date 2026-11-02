@@ -191,8 +191,7 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
                    samplingRate: nil, isDefault: false, isForced: false, isSelected: false).qualityLabel
     }
 
-    /// "Commentary" or "Audio Description", the only thing a track's own title
-    /// adds once language and format are parsed; the title itself is never shown.
+    /// "Commentary" or "Audio Description", from the track's flags and title.
     var audioRole: String? {
         guard TrackCommentary.isCommentaryOrDescription(self) else { return nil }
         let text = [extendedDisplayTitle, name].compactMap { $0?.lowercased() }.joined(separator: " ")
@@ -203,10 +202,24 @@ nonisolated struct MediaTrack: Identifiable, Equatable, Sendable {
 
     var describesVideo: Bool { audioRole == String(localized: "Audio Description") }
 
-    /// Audio menu row: the language over "TrueHD 7.1 Atmos • Commentary".
+    /// Audio menu row: the language over "HDrezka 18+ • AC3 2.0" or "Commentary • TrueHD 7.1 Atmos" (#447).
     var audioMenuTitle: String { language ?? String(localized: "Unknown Language") }
-    var audioMenuSubtitle: String {
-        [codec == nil ? nil : audioFormat, audioRole].compactMap { $0 }.joined(separator: " • ")
+    func audioMenuSubtitle(among tracks: [MediaTrack]) -> String {
+        let described = audioDescription(among: tracks)
+        // "Commentary by Sam Mendes" already says what the role would.
+        let role = described?.lowercased().contains("commentary") == true ? nil : audioRole
+        return [role, described, codec == nil ? nil : audioFormat].compactMap { $0 }.joined(separator: " • ")
+    }
+
+    /// The track's title, when it tells this row from another with the same language above it.
+    /// The rest is the uploader's ("BTM", "pahe.li"), and only a commentary's speakers stand alone.
+    private func audioDescription(among tracks: [MediaTrack]) -> String? {
+        func described(_ track: MediaTrack) -> String? {
+            AudioTrackTitle.description(of: track.title, language: track.language, languageCode: track.languageCode)
+        }
+        guard let own = described(self) else { return nil }
+        if language == nil || own.lowercased().contains("commentary") { return own }
+        return tracks.contains { $0.id != id && $0.language == language && described($0) != own } ? own : nil
     }
 
     /// Subtitle menu row: the language over "Forced • Signs & Songs • ASS" (#447).

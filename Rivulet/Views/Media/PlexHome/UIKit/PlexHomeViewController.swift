@@ -4603,9 +4603,9 @@ final class PlexHomeViewController: UIViewController {
         var hubRowKinds: [(isContinueWatching: Bool, isRecent: Bool)] = []
         let hubRows = providerLibrary == nil ? (dataStore.libraryItemsByKey[key] ?? []) : providerLibraryRows
         for hub in hubRows {
-            if !showRecentRows, isRecentRow(hub) { continue }
+            if !showRecentRows, Self.isRecentRow(hub) { continue }
             if !showDiscoveryRows, !isEssentialRow(hub) { continue }
-            hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: isRecentRow(hub)))
+            hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: Self.isRecentRow(hub)))
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
@@ -4677,12 +4677,13 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// A "recent" library row: Recently Added, Recently Released, Newest
-    /// Releases. Gated by the "Recent Rows" setting.
-    private func isRecentRow(_ hub: CachedHomeHub) -> Bool {
+    /// Releases. Gated by the "Recent Rows" setting. Plex translates titles, so
+    /// identifiers decide; titles only catch a hub whose identifier is unknown.
+    nonisolated static func isRecentRow(_ hub: CachedHomeHub) -> Bool {
         let id = (hub.hubIdentifier ?? "").lowercased()
         let title = hub.title.lowercased()
         return id.contains("recentlyadded") || title.contains("recently added")
-            || id.contains("recentlyreleased") || title.contains("recently released")
+            || id.contains("recentlyreleased") || id.contains("recentlyaired") || title.contains("recently released")
             || id.contains("newestreleases") || title.contains("newest releases")
     }
 
@@ -4700,7 +4701,7 @@ final class PlexHomeViewController: UIViewController {
     /// Continue Watching is not re-detected here — `CachedHomeHub` already
     /// carries the flag the CW cell and metrics run on.
     private func isEssentialRow(_ hub: CachedHomeHub) -> Bool {
-        if hub.isContinueWatching || isRecentRow(hub) { return true }
+        if hub.isContinueWatching || Self.isRecentRow(hub) { return true }
         let id = (hub.hubIdentifier ?? "").lowercased()
         return id.contains("recentlyplayed") || hub.title.lowercased().contains("recently played")
     }
@@ -4766,10 +4767,11 @@ final class PlexHomeViewController: UIViewController {
         return { PlexMediaMapper.item($0, providerID: providerID, serverURL: serverURL, authToken: token) }
     }
 
-    private func isRecentlyAdded(_ hub: PlexHub) -> Bool {
+    /// `/hubs` names these `home.movies.recent`, the library pages `movie.recentlyadded.1`.
+    nonisolated static func isRecentlyAdded(_ hub: PlexHub) -> Bool {
         let id = hub.hubIdentifier?.lowercased() ?? ""
         let title = hub.title?.lowercased() ?? ""
-        return id.contains("recentlyadded") || title.contains("recently added")
+        return id.contains("recentlyadded") || id.hasSuffix(".recent") || title.contains("recently added")
     }
 
     // MARK: - Hero selection
@@ -4928,7 +4930,7 @@ final class PlexHomeViewController: UIViewController {
             if !candidates.isEmpty { return candidates }
         }
 
-        if let firstHub = hubs.first(where: { !isRecentlyAdded($0) && ($0.Metadata?.isEmpty == false) }),
+        if let firstHub = hubs.first(where: { !Self.isRecentlyAdded($0) && ($0.Metadata?.isEmpty == false) }),
            let items = firstHub.Metadata, !items.isEmpty {
             return eligible(items)
         }

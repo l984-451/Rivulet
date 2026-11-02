@@ -14,7 +14,7 @@ nonisolated enum SyncCatalog {
 
     static let exactKeys: Set<String> = [
         // Home and Library
-        "showHomeHero", "homeHeroContent", "showHomeFavoriteMovies", "showHomeFavoriteShows",
+        "showHomeHero", "homeHeroContent", "homeHeroSources", "showHomeFavoriteMovies", "showHomeFavoriteShows",
         "showLibraryHero", "showLibraryRecentRows",
         "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab",
         // Playback
@@ -36,7 +36,7 @@ nonisolated enum SyncCatalog {
 
     /// Keys stored once per Plex Home profile (`_user_<id>`) or non-Plex server (`_provider_<id>`).
     static let profileFamilies: [String] = [
-        "hiddenHomeRowIdentifiers", "homeRowOrder", "homeCollectionPins", "homePlaylistPins", "libraryCollectionPins",
+        "hiddenHomeRowIdentifiers", "homeRowOrder", "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins", "libraryCollectionPins",
         "hiddenLibraryKeys", "libraryOrder", "libraryOrderAllServers", "librarySortOptions", "libraryViewMode",
         "trackIntent.subtitle", "trackIntent.audio",
     ]
@@ -48,7 +48,7 @@ nonisolated enum SyncCatalog {
     /// collection and playlist pins, "skip intro" (skIPINtro), machine ids of servers the user switched off,
     /// and the library order across all servers.
     static let reviewedSecretWordKeys: Set<String> = [
-        "homeCollectionPins", "homePlaylistPins", "libraryCollectionPins", "showSkipIntro", "autoSkipIntro",
+        "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins", "libraryCollectionPins", "showSkipIntro", "autoSkipIntro",
         "liveTVHiddenPlexServers", "plexDisabledServers", "libraryOrderAllServers",
     ]
 

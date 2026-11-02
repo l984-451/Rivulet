@@ -22,6 +22,8 @@ struct IOSHomeSettingsView: View {
                     set: { choice in
                         showHero = choice != "off"
                         if choice != "off" { heroContent = choice }
+                        // tvOS mixes several (`homeHeroSources`); a choice here is that one alone.
+                        UserDefaults.standard.set(choice == "off" ? [] : [choice], forKey: "homeHeroSources")
                     }
                 )) {
                     ForEach(Self.heroChoices, id: \.0) { Text($0.1).tag($0.0) }

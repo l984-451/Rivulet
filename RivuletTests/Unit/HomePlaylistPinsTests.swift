@@ -48,6 +48,7 @@ final class HomePlaylistPinsTests: XCTestCase {
     private func removeTestPins() {
         for profile in [profileA, profileB] {
             UserDefaults.standard.removeObject(forKey: "homePlaylistPins_user_\(profile)")
+            UserDefaults.standard.removeObject(forKey: "heroPlaylistPins_user_\(profile)")
         }
     }
 
@@ -76,6 +77,15 @@ final class HomePlaylistPinsTests: XCTestCase {
         XCTAssertEqual(HomePlaylistPins.pins, [])
         UserDefaults.standard.set(profileA, forKey: userIdKey)
         XCTAssertEqual(HomePlaylistPins.pins, [classics])
+    }
+
+    /// A playlist in the hero is not a Home row, and the other way round.
+    func test_heroPins_areStoredApartFromRowPins() {
+        HomePlaylistPins.pin(classics, in: .hero)
+        XCTAssertEqual(HomePlaylistPins.pins, [])
+        XCTAssertEqual(HomePlaylistPins.pins(in: .hero), [classics])
+        XCTAssertTrue(HomePlaylistPins.isPinned(ref(classics), in: .hero))
+        XCTAssertFalse(HomePlaylistPins.isPinned(ref(classics)))
     }
 
     func test_unpin_ofAnUnpinnedPlaylist_postsNothing() {

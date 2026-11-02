@@ -2080,6 +2080,7 @@
       }
     },
     "Choose what appears on Home and in what order." : {},
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
     "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -5168,6 +5169,7 @@
         }
       }
     },
+    "Mixed" : {},
     "Mode" : {
       "localizations" : {
         "de" : {
@@ -9272,16 +9274,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Sprache, in der Untertitel angezeigt werden."
-          }
-        }
-      }
-    },
-    "The large banner at the top of the Home screen. Trending features popular titles from your library. Or pick one of your Home lists: Continue Watching, Recently Added or your Watchlist." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das große Banner oben auf der Startseite. „Angesagt“ zeigt beliebte Titel aus deiner Mediathek. Oder wähle eine deiner Listen der Startseite: „Weiter ansehen“, „Zuletzt hinzugefügt“ oder deine Watchlist."
           }
         }
       }

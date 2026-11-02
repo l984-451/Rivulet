@@ -172,9 +172,10 @@ enum HomeCollectionPins {
     }
 }
 
-/// Playlists shown on Home, switched on in Settings > Home > Rows.
-/// Any server with playlists, keyed by provider id. Stored as JSON per Plex Home
-/// profile, for the same reason as `HomeRowSettings.hiddenKey`.
+/// Playlists shown on Home: as a row (Settings > Home > Rows) or in the hero
+/// (Settings > Home > Hero), two lists stored apart. Any server with
+/// playlists, keyed by provider id. Stored as JSON per Plex Home profile, for
+/// the same reason as `HomeRowSettings.hiddenKey`. Every function defaults to rows.
 enum HomePlaylistPins {
 
     nonisolated struct Pin: Codable, Hashable, Sendable {
@@ -186,51 +187,110 @@ enum HomePlaylistPins {
         var id: String { "\(providerID)/\(playlistID)" }
     }
 
-    /// Posted after any change. `PersonalHomeRows` refetches on it.
+    nonisolated enum Destination: Sendable, CaseIterable { case home, hero }
+
+    /// Posted after any change to either list. `PersonalHomeRows` refetches on it.
     static let changedNotification = Notification.Name("homePlaylistPinsChanged")
 
     private static var defaults: UserDefaults { .standard }
 
-    static var storageKey: String {
+    static var storageKey: String { storageKey(for: .home) }
+
+    private static func storageKey(for destination: Destination) -> String {
+        let baseKey = destination == .home ? "homePlaylistPins" : "heroPlaylistPins"
         guard let userId = defaults.object(forKey: "selectedPlexUserId") as? Int else {
-            return "homePlaylistPins"
+            return baseKey
         }
-        return "homePlaylistPins_user_\(userId)"
+        return "\(baseKey)_user_\(userId)"
     }
 
-    /// Every pin for the current profile, in the order they were switched on, which Home draws.
-    static var pins: [Pin] {
-        guard let data = defaults.data(forKey: storageKey) else { return [] }
+    /// Every row pin for the current profile, in the order they were switched on.
+    static var pins: [Pin] { pins(in: .home) }
+
+    static func pins(in destination: Destination) -> [Pin] {
+        guard let data = defaults.data(forKey: storageKey(for: destination)) else { return [] }
         return (try? JSONDecoder().decode([Pin].self, from: data)) ?? []
     }
 
-    static func isPinned(_ ref: MediaItemRef) -> Bool {
-        pins.contains { $0.providerID == ref.providerID && $0.playlistID == ref.itemID }
+    static func isPinned(_ ref: MediaItemRef, in destination: Destination = .home) -> Bool {
+        pins(in: destination).contains { $0.providerID == ref.providerID && $0.playlistID == ref.itemID }
     }
 
-    static func pin(_ pin: Pin) {
-        guard !pins.contains(where: { $0.id == pin.id }) else { return }
-        write(pins + [pin])
+    static func pin(_ pin: Pin, in destination: Destination = .home) {
+        let current = pins(in: destination)
+        guard !current.contains(where: { $0.id == pin.id }) else { return }
+        write(current + [pin], to: destination)
     }
 
     /// No-op, and no notification, when the pin is already gone.
-    static func unpin(_ ref: MediaItemRef) {
-        let current = pins
+    static func unpin(_ ref: MediaItemRef, in destination: Destination = .home) {
+        let current = pins(in: destination)
         let kept = current.filter { !($0.providerID == ref.providerID && $0.playlistID == ref.itemID) }
         guard kept.count != current.count else { return }
-        write(kept)
+        write(kept, to: destination)
     }
 
-    /// Takes every playlist off Home. Settings' Reset to Default.
-    static func removeAll() {
-        guard !pins.isEmpty else { return }
-        write([])
+    /// Takes every playlist off Home rows. Settings > Home > Rows' Reset.
+    static func removeAll(in destination: Destination = .home) {
+        guard !pins(in: destination).isEmpty else { return }
+        write([], to: destination)
     }
 
-    private static func write(_ pins: [Pin]) {
+    private static func write(_ pins: [Pin], to destination: Destination) {
         guard let data = try? JSONEncoder().encode(pins) else { return }
-        defaults.set(data, forKey: storageKey)
+        defaults.set(data, forKey: storageKey(for: destination))
         NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+}
+
+/// What Home's hero shows: any mix of trending, Home's lists and favorites,
+/// switched on in Settings > Home > Hero, plus the playlists there
+/// (`HomePlaylistPins`, `.hero`). None at all turns the hero off. Several are
+/// mixed, one title from each in turn. Device-wide, like `showHomeHero`.
+enum HeroSources {
+
+    nonisolated enum Source: String, CaseIterable, Sendable {
+        case trending, continueWatching, recentlyAdded, watchlist, favoriteMovies, favoriteShows
+    }
+
+    /// Posted after any change. Home and `PersonalHomeRows` follow it.
+    static let changedNotification = Notification.Name("heroSourcesChanged")
+
+    private static let key = "homeHeroSources"
+    /// The lists iOS's single Hero choice offers (`homeHeroContent`), in its order.
+    private static let iOSChoices: [Source] = [.trending, .continueWatching, .recentlyAdded, .watchlist]
+
+    /// Before sources could be mixed, the hero showed one list
+    /// (`homeHeroContent`) or was off (`showHomeHero`); that choice carries over.
+    static var sources: Set<Source> {
+        let defaults = UserDefaults.standard
+        if let saved = defaults.stringArray(forKey: key) { return Set(saved.compactMap(Source.init)) }
+        guard defaults.object(forKey: "showHomeHero") == nil || defaults.bool(forKey: "showHomeHero") else { return [] }
+        return [defaults.string(forKey: "homeHeroContent").flatMap(Source.init) ?? .trending]
+    }
+
+    static func isOn(_ source: Source) -> Bool { sources.contains(source) }
+
+    static func set(_ source: Source, on: Bool) {
+        var current = sources
+        if on { current.insert(source) } else { current.remove(source) }
+        UserDefaults.standard.set(Source.allCases.filter(current.contains).map(\.rawValue), forKey: key)
+        // iOS shows one list: the first of these that is on, so its picker follows this one.
+        if let first = iOSChoices.first(where: current.contains) {
+            UserDefaults.standard.set(first.rawValue, forKey: "homeHeroContent")
+        }
+        changed()
+    }
+
+    /// Keeps `showHomeHero`, which the hero's layout reads, in step: no source, no hero.
+    static func changed() {
+        UserDefaults.standard.set(!sources.isEmpty || !HomePlaylistPins.pins(in: .hero).isEmpty, forKey: "showHomeHero")
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    /// Only trending: the hero Home has always had, with no list to build.
+    static var isTrendingOnly: Bool {
+        sources == [.trending] && HomePlaylistPins.pins(in: .hero).isEmpty
     }
 }
 

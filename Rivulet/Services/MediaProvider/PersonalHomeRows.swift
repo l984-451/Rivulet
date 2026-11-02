@@ -20,8 +20,25 @@ import Foundation
 final class PersonalHomeRows: ObservableObject {
     static let shared = PersonalHomeRows()
 
-    /// Favorites rows (with `libraryKey`), then playlist rows in pin order.
+    /// Favorites rows (with `libraryKey`), then playlist rows in pin order:
+    /// those switched on as Home rows and those the hero shows (`HeroSources`).
     @Published private(set) var rows: CachedHomeRail = []
+
+    /// The rows switched on as Home rows; the rest are fetched for the hero only.
+    var homeRows: CachedHomeRail {
+        let pinned = Set(HomePlaylistPins.pins.map { Self.playlistRowID(providerID: $0.providerID, playlistID: $0.playlistID) })
+        return rows.filter { row in
+            if let kind = Self.favoriteKinds.first(where: { Self.favoritesIdentifier($0) == row.hubIdentifier }) {
+                return Self.showsFavorites(kind)
+            }
+            return pinned.contains(row.id)
+        }
+    }
+
+    /// The hero source that shows a favorites kind.
+    nonisolated static func heroSource(_ kind: MediaLibrary.LibraryKind) -> HeroSources.Source {
+        kind == .shows ? .favoriteShows : .favoriteMovies
+    }
 
     /// Tiles per row. None of these rows pages; a playlist's own page lists the rest.
     nonisolated static let rowLimit = 50
@@ -81,6 +98,7 @@ final class PersonalHomeRows: ObservableObject {
         center.publisher(for: .plexDataNeedsRefresh).map { _ in () }
             .merge(with: center.publisher(for: HomePlaylistPins.changedNotification).map { _ in () },
                    center.publisher(for: Self.favoritesChangedNotification).map { _ in () },
+                   center.publisher(for: HeroSources.changedNotification).map { _ in () },
                    PlexDataStore.shared.$libraries.map { _ in () },
                    ServerDataStore.shared.$libraries.map { _ in () },
                    LibrarySettingsManager.shared.objectWillChange.map { _ in () })
@@ -101,7 +119,7 @@ final class PersonalHomeRows: ObservableObject {
         // One row per server and kind, from every library of that kind Home
         // shows, on servers with favorites (`MediaProvider.supportsFavorites`).
         // The selected Plex server's libraries key on the section, the others' on `settingsKey`.
-        let kinds = Self.favoriteKinds.filter(Self.showsFavorites)
+        let kinds = Self.favoriteKinds.filter { Self.showsFavorites($0) || HeroSources.isOn(Self.heroSource($0)) }
         var candidates: [(provider: any MediaProvider, library: MediaLibrary, key: String)] = []
         if let plex {
             candidates += PlexDataStore.shared.librariesPinnedToHome.map { section in
@@ -121,7 +139,9 @@ final class PersonalHomeRows: ObservableObject {
                 favorites.append((provider, library.kind, [library], key))
             }
         }
-        let pins = HomePlaylistPins.pins.filter { shown.contains($0.providerID) }
+        var pins = HomePlaylistPins.pins
+        for pin in HomePlaylistPins.pins(in: .hero) where !pins.contains(where: { $0.id == pin.id }) { pins.append(pin) }
+        pins.removeAll { !shown.contains($0.providerID) }
 
         // A row just switched off leaves Home now, not when the fetch below ends.
         let wanted = Set(pins.map { Self.playlistRowID(providerID: $0.providerID, playlistID: $0.playlistID) }

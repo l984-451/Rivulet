@@ -23,6 +23,8 @@ final class SyncCatalogTests: XCTestCase {
         XCTAssertTrue(SyncCatalog.isSynced("homeRowOrder_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("homePlaylistPins_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("showHomeFavoriteMovies"))
+        XCTAssertTrue(SyncCatalog.isSynced("homeHeroSources"))
+        XCTAssertTrue(SyncCatalog.isSynced("heroPlaylistPins_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("mediaLibrarySort.plex:1"))
         XCTAssertTrue(SyncCatalog.isSynced("contentFilter.violence.enabled"))
     }

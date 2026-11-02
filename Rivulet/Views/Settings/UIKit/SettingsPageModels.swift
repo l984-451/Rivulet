@@ -264,31 +264,64 @@ enum SettingsContent {
         }
     }
 
-    private static let homeHeroOptions: [(id: String, title: String)] = [
-        ("off", String(localized: "Off")), ("trending", String(localized: "Trending")),
-        ("continueWatching", String(localized: "Continue Watching")),
-        ("recentlyAdded", String(localized: "Recently Added")), ("watchlist", String(localized: "Watchlist")),
-    ]
-
-    /// Off, or the hero on with what it shows: `showHomeHero` plus `homeHeroContent`.
-    private static var homeHeroPicker: [SettingsRowItem] {
-        homeHeroOptions.map { option in
-            SettingsRowItem(id: "hh_\(option.id)", verbatim: option.title, kind: .option(
-                isSelected: { homeHeroChoice == option.id },
-                select: {
-                    SettingsStore.setBool("showHomeHero", option.id != "off")
-                    if option.id != "off" { SettingsStore.setString("homeHeroContent", option.id) }
-                }))
+    private static func heroTitle(_ source: HeroSources.Source) -> String {
+        switch source {
+        case .trending: String(localized: "Trending")
+        case .continueWatching: String(localized: "Continue Watching")
+        case .recentlyAdded: String(localized: "Recently Added")
+        case .watchlist: String(localized: "Watchlist")
+        case .favoriteMovies: String(localized: "Favorite Movies")
+        case .favoriteShows: String(localized: "Favorite TV Shows")
         }
     }
 
-    private static var homeHeroChoice: String {
-        guard SettingsStore.bool("showHomeHero", default: true) else { return "off" }
-        return PlexHomeViewController.heroContent.rawValue
+    /// What the hero shows (`HeroSources`): a toggle per list, then per
+    /// playlist. Several are mixed; none turns the hero off.
+    private static var homeHeroPicker: [SettingsRowItem] {
+        let sources = HeroSources.Source.allCases.filter { source in
+            ![.favoriteMovies, .favoriteShows].contains(source) || PersonalHomeRows.offersFavorites
+        }
+        var rows = sources.map { source in
+            SettingsRowItem(id: "hh_\(source.rawValue)", verbatim: heroTitle(source), kind: .toggle(
+                get: { HeroSources.isOn(source) },
+                set: { HeroSources.set(source, on: $0) }))
+        }
+        let playlists = homePlaylists()
+        if !playlists.isEmpty { rows.append(.header("Playlists")) }
+        for entry in playlists {
+            let ref = MediaItemRef(providerID: entry.providerID, itemID: entry.playlistID)
+            rows.append(SettingsRowItem(id: "hh_playlist_\(entry.providerID)/\(entry.playlistID)",
+                                        verbatim: serverLabeled(entry.title, providerID: entry.providerID), kind: .toggle(
+                get: { HomePlaylistPins.isPinned(ref, in: .hero) },
+                set: { shown in
+                    if shown {
+                        HomePlaylistPins.pin(.init(providerID: entry.providerID, playlistID: entry.playlistID,
+                                                   title: entry.title), in: .hero)
+                    } else {
+                        HomePlaylistPins.unpin(ref, in: .hero)
+                    }
+                    HeroSources.changed()
+                })))
+        }
+        return rows
     }
 
+    /// The Home section's value: Off, the one source, or Mixed.
     private static var homeHeroTitle: String {
-        homeHeroOptions.first { $0.id == homeHeroChoice }?.title ?? String(localized: "Trending")
+        let titles = HeroSources.Source.allCases.filter(HeroSources.isOn).map(heroTitle)
+            + HomePlaylistPins.pins(in: .hero).map(\.title)
+        switch titles.count {
+        case 0: return String(localized: "Off")
+        case 1: return titles[0]
+        default: return String(localized: "Mixed")
+        }
+    }
+
+    /// With more than one server, a row names its own.
+    private static func serverLabeled(_ title: String, providerID: String?) -> String {
+        guard ServerDataStore.shared.labelsServers, let providerID else { return title }
+        let kind = MediaProviderRegistry.shared.kind(of: providerID) ?? .plex
+        return "\(title) (\(PlexHomeViewController.serverName(providerID: providerID, kind: kind)))"
     }
 
     private static var detailRatingPicker: [SettingsRowItem] {
@@ -998,7 +1031,7 @@ enum SettingsContent {
         let rail = PlexHomeViewController.homeRail(
             plex: plexHomeRows.filter { !($0.hubIdentifier ?? "").hasPrefix("rivulet.pin.") },
             otherServers: ServerDataStore.shared.homeRowsInSidebarOrder,
-            personal: PersonalHomeRows.shared.rows,
+            personal: PersonalHomeRows.shared.homeRows,
             libraryOrder: PlexHomeViewController.sidebarLibraryOrder(),
             kindOf: { MediaProviderRegistry.shared.kind(of: $0) })
         var seen = Set<String>()
@@ -1031,13 +1064,7 @@ enum SettingsContent {
         let move = { (key: String) -> (Bool) -> Void in
             { up in HomeRowOrder.move(key, up: up, among: shownHomeRowKeys()) }
         }
-        // With more than one server, every row names its own.
         let labelsServers = ServerDataStore.shared.labelsServers
-        let labeled = { (title: String, providerID: String?) -> String in
-            guard labelsServers, let providerID else { return title }
-            let kind = MediaProviderRegistry.shared.kind(of: providerID) ?? .plex
-            return "\(title) (\(PlexHomeViewController.serverName(providerID: providerID, kind: kind)))"
-        }
 
         var on: [SettingsRowItem] = []
         var off: [SettingsRowItem] = []
@@ -1073,7 +1100,7 @@ enum SettingsContent {
                 }) else { continue }
                 listedPlaylists.insert(pin.id)
                 on.append(playlistToggle(providerID: pin.providerID, playlistID: pin.playlistID,
-                                         title: row.title, label: labeled(row.title, pin.providerID),
+                                         title: row.title, label: serverLabeled(row.title, providerID: pin.providerID),
                                          onReorder: move(key)))
             } else if let id = row.hubIdentifier {
                 let server = PlexHomeViewController.serverName(providerID: row.items.first?.ref.providerID, kind: kind)
@@ -1098,7 +1125,7 @@ enum SettingsContent {
         }
         for entry in homePlaylists() where !listedPlaylists.contains("\(entry.providerID)/\(entry.playlistID)") {
             add(playlistToggle(providerID: entry.providerID, playlistID: entry.playlistID,
-                               title: entry.title, label: labeled(entry.title, entry.providerID), onReorder: nil),
+                               title: entry.title, label: serverLabeled(entry.title, providerID: entry.providerID), onReorder: nil),
                 isOn: HomePlaylistPins.isPinned(MediaItemRef(providerID: entry.providerID, itemID: entry.playlistID)))
         }
 

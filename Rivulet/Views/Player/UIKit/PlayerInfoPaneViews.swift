@@ -155,7 +155,7 @@ final class PlayerInfoCardView: UIView {
             posterTask = Task { [weak self] in
                 let image = await ImageCacheManager.shared.image(for: url)
                 guard let self, !Task.isCancelled else { return }
-                self.posterView.image = image
+                self.posterView.image = content.posterFits ? image?.legibleChannelLogo : image
             }
         }
     }

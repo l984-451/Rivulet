@@ -107,3 +107,15 @@ extension IOSPlexSession {
         return try await network.getMachineIdentifier(serverURL: serverURL, authToken: token)
     }
 }
+
+// MARK: - Library pages
+
+extension IOSPlexSession {
+    /// Rating keys of the video playlists holding titles from `library`, in `sort` order.
+    func playlistKeys(in library: PlexLibrary, sort: String) async throws -> [String] {
+        let (serverURL, token) = try configuration(serverID: library.serverID)
+        let lists = try await network.getPlaylists(
+            serverURL: serverURL, authToken: token, type: "video", sectionID: library.key, sort: sort)
+        return lists.map(\.ratingKey)
+    }
+}

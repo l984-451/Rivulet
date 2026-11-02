@@ -307,3 +307,15 @@ extension IOSPlexSession {
         return out
     }
 }
+
+// MARK: - Library pages
+
+extension IOSPlexSession {
+    /// A library's Recommended rows: the hubs its Manage Recommendations shows, in order.
+    func recommendedHubs(_ library: PlexLibrary) async throws -> [PlexHub] {
+        let (serverURL, token) = try configuration(serverID: library.serverID)
+        return try await network.getLibraryHubs(serverURL: serverURL, authToken: token, sectionId: library.key)
+            .map { Self.onServer($0, library.serverID) }
+            .filter { !$0.items.isEmpty }
+    }
+}

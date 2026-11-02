@@ -20,9 +20,14 @@ struct IOSPlexHubGridView: View {
         _items = State(initialValue: route.hub.Metadata ?? [])
     }
 
-    /// Continue Watching follows the session's own cache-busted copy.
+    /// Home's Continue Watching follows the session's own cache-busted copy;
+    /// a library's own in-progress row keeps its items.
+    private var isHomeContinueWatching: Bool {
+        route.hub.isContinueWatching && route.hub.hubIdentifier == plex.continueWatching?.hubIdentifier
+    }
+
     private var shown: [PlexMetadata] {
-        route.hub.isContinueWatching ? (plex.continueWatching?.Metadata ?? items) : items
+        isHomeContinueWatching ? (plex.continueWatching?.Metadata ?? items) : items
     }
 
     var body: some View {
@@ -35,7 +40,7 @@ struct IOSPlexHubGridView: View {
                     if isLoading { ProgressView().padding() }
                 }
                 .refreshable {
-                    if route.hub.isContinueWatching { await plex.refresh() } else { await reload() }
+                    if isHomeContinueWatching { await plex.refresh() } else { await reload() }
                 }
             }
         }

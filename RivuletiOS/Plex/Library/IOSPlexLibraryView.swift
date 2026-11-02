@@ -122,11 +122,228 @@ struct IOSPlexLibrariesView: View {
     }
 }
 
-/// One library as a paged poster grid with Sort and Filter menus.
+/// One library: Recommended (its hubs under a hero, like Home), Browse (every
+/// title) and Playlists (the server's playlists holding its titles).
 struct IOSPlexLibraryView: View {
     let library: PlexLibrary
-    /// Only a tab root shows the avatar; a grid pushed from the Library list does not.
+    /// Only a tab root shows the avatar; a library pushed from the Library list does not.
     var showsAccount = false
+    @EnvironmentObject private var plex: IOSPlexSession
+    @SceneStorage private var page: Page
+    /// Same key as Home's hero, so one setting covers both.
+    @AppStorage("showHomeHero") private var showHero = true
+    @State private var hubs: [PlexHub] = []
+    @State private var heroItems: [PlexMetadata] = []
+
+    enum Page: String, CaseIterable {
+        case recommended, browse, playlists
+
+        var title: String {
+            switch self {
+            case .recommended: String(localized: "Recommended")
+            case .browse: String(localized: "Browse")
+            case .playlists: String(localized: "Playlists")
+            }
+        }
+    }
+
+    init(library: PlexLibrary, showsAccount: Bool = false) {
+        self.library = library
+        self.showsAccount = showsAccount
+        _page = SceneStorage(wrappedValue: .recommended, "iosLibraryPage.\(library.id)")
+    }
+
+    var body: some View {
+        let hero = page == .recommended && showHero && !heroItems.isEmpty
+        Group {
+            switch page {
+            case .recommended: IOSPlexLibraryRecommendedView(library: library, hubs: $hubs, heroItems: showHero ? heroItems : [])
+            case .browse: IOSPlexLibraryBrowseView(library: library)
+            case .playlists: IOSPlexLibraryPlaylistsView(library: library)
+            }
+        }
+        .onChange(of: hubs.map(\.id), initial: true) { heroItems = IOSPlexHeroFeed.heroItems(from: hubs) }
+        .iosPlexHeroChrome(hero: hero, title: plex.displayTitle(library.title, serverID: library.serverID))
+        .toolbar {
+            // A pill beside Back naming the page; it opens the other two.
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Picker("Page", selection: $page) {
+                        ForEach(Page.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(page.title)
+                        Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                    }
+                    .fontWeight(.semibold)
+                }
+                .accessibilityLabel(Text("Page, \(page.title)"))
+            }
+            if showsAccount { IOSAccountToolbarItem() }
+        }
+    }
+}
+
+/// Recommended: the library's hubs, as its Manage Recommendations lists them.
+/// The rows live in the parent, so switching pages and back keeps them.
+private struct IOSPlexLibraryRecommendedView: View {
+    let library: PlexLibrary
+    @Binding var hubs: [PlexHub]
+    let heroItems: [PlexMetadata]
+    @EnvironmentObject private var plex: IOSPlexSession
+    @State private var isLoading = false
+    @State private var error: String?
+    @State private var loadedRevision: Int?
+
+    var body: some View {
+        Group {
+            if !hubs.isEmpty {
+                IOSPlexHeroFeed(rows: hubs, heroItems: heroItems) { await reload() }
+            } else {
+                ScrollView {
+                    placeholder.containerRelativeFrame([.horizontal, .vertical])
+                }
+                .refreshable { await reload() }
+            }
+        }
+        .task(id: plex.watchStateRevision) {
+            guard loadedRevision != plex.watchStateRevision else { return }
+            await reload()
+        }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if let error {
+            IOSPlexErrorView(title: "Couldn't Load Recommended", message: error, offersDownloads: true) { await reload() }
+        } else if isLoading || loadedRevision == nil {
+            ProgressView()
+        } else {
+            ContentUnavailableView(
+                "Nothing Recommended",
+                systemImage: library.icon,
+                description: Text("Turn on rows for this library in Plex under Manage Recommendations.")
+            )
+        }
+    }
+
+    private func reload() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            hubs = try await plex.recommendedHubs(library)
+            error = nil
+            loadedRevision = plex.watchStateRevision
+        } catch let error where isCancellationError(error) {
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// Playlists: the server's video playlists that hold titles from this library,
+/// in the server's order for the chosen sort.
+private struct IOSPlexLibraryPlaylistsView: View {
+    let library: PlexLibrary
+    @EnvironmentObject private var plex: IOSPlexSession
+    @AppStorage private var sortRaw: String
+    @State private var kind = Kind.all
+    @State private var keys: [String]?
+    @State private var error: String?
+
+    enum Kind { case all, regular, smart }
+
+    /// Plex's `/playlists` sort values.
+    private static let sorts: [(String, String)] = [
+        ("titleSort", String(localized: "Title")),
+        ("addedAt:desc", String(localized: "Date Added")),
+        ("lastViewedAt:desc", String(localized: "Recently Played")),
+        ("duration:desc", String(localized: "Duration"))
+    ]
+
+    init(library: PlexLibrary) {
+        self.library = library
+        _sortRaw = AppStorage(wrappedValue: "titleSort", "iosLibraryPlaylistSort.\(library.key)")
+    }
+
+    /// The server's listed copies, so a rename or delete elsewhere shows here at once.
+    private var lists: [PlexPlaylist] {
+        guard let keys else { return [] }
+        let listed = Dictionary(plex.playlists(serverID: library.serverID).map { ($0.ratingKey, $0) },
+                                uniquingKeysWith: { first, _ in first })
+        return keys.compactMap { listed[$0] }.filter {
+            switch kind {
+            case .all: true
+            case .regular: $0.smart != true
+            case .smart: $0.smart == true
+            }
+        }
+    }
+
+    var body: some View {
+        let lists = lists
+        ScrollView {
+            if !lists.isEmpty {
+                IOSPlexPlaylistGrid(lists: lists, serverID: library.serverID)
+            } else if let error {
+                IOSPlexErrorView(title: "Couldn't Load Playlists", message: error) { await reload() }
+                    .containerRelativeFrame([.horizontal, .vertical])
+            } else if keys == nil {
+                ProgressView().containerRelativeFrame([.horizontal, .vertical])
+            } else {
+                ContentUnavailableView(kind == .all ? "No Playlists" : "No Matching Playlists", systemImage: "list.and.film",
+                                       description: Text("Add titles from their menu with Add to Playlist."))
+                    .containerRelativeFrame([.horizontal, .vertical])
+            }
+        }
+        .refreshable {
+            await plex.refreshPlaylists()
+            await reload()
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Sort By", selection: $sortRaw) {
+                        ForEach(Self.sorts, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Show", selection: $kind) {
+                        Text("All").tag(Kind.all)
+                        Text("Playlists").tag(Kind.regular)
+                        Text("Smart Playlists").tag(Kind.smart)
+                    }
+                } label: {
+                    Label("Filter", systemImage: "line.3.horizontal.decrease")
+                }
+                .tint(kind != .all ? .accentColor : nil)
+            }
+        }
+        // A list created or emptied elsewhere changes which lists hold this library's titles.
+        .task(id: [sortRaw] + plex.playlists(serverID: library.serverID).map { "\($0.ratingKey)|\($0.leafCount ?? 0)" }) {
+            await reload()
+        }
+    }
+
+    private func reload() async {
+        do {
+            keys = try await plex.playlistKeys(in: library, sort: sortRaw)
+            error = nil
+        } catch let error where isCancellationError(error) {
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// Browse: the whole library as a paged poster grid with Sort and Filter menus.
+private struct IOSPlexLibraryBrowseView: View {
+    let library: PlexLibrary
     @EnvironmentObject private var plex: IOSPlexSession
     @AppStorage private var sortRaw: String
     @State private var unwatchedOnly = false
@@ -148,9 +365,8 @@ struct IOSPlexLibraryView: View {
         (.ratingDesc, String(localized: "Rating"))
     ]
 
-    init(library: PlexLibrary, showsAccount: Bool = false) {
+    init(library: PlexLibrary) {
         self.library = library
-        self.showsAccount = showsAccount
         _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.key)")
     }
 
@@ -179,8 +395,6 @@ struct IOSPlexLibraryView: View {
                 .refreshable { await refetchLoaded() }
             }
         }
-        .navigationTitle(plex.displayTitle(library.title, serverID: library.serverID))
-        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -202,7 +416,6 @@ struct IOSPlexLibraryView: View {
                 }
                 .tint(unwatchedOnly ? .accentColor : nil)
             }
-            if showsAccount { IOSAccountToolbarItem() }
         }
         .task(id: "\(queryKey)|\(plex.watchStateRevision)") {
             // Nothing claimed and nothing shown: a first page that was cancelled when the view left.

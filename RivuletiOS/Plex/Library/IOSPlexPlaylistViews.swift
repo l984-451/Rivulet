@@ -28,7 +28,9 @@ struct IOSPlexPlaylistsView: View {
                     NavigationLink(value: IOSPlexPlaylistRoute(playlist: playlist, serverID: serverID)) {
                         IOSPlexPlaylistRow(playlist: playlist, serverID: serverID)
                     }
-                    .contextMenu { menu(playlist) }
+                    .contextMenu {
+                        IOSPlaylistMenu(playlist: playlist, serverID: serverID, editing: $editing, pendingStart: $pendingStart)
+                    }
                     .swipeActions {
                         Button("Delete", systemImage: "trash", role: .destructive) { editing.deleting = playlist }
                     }
@@ -45,20 +47,29 @@ struct IOSPlexPlaylistsView: View {
         .playlistEditAlerts($editing, serverID: serverID)
         .playlistContinueDialog($pendingStart, actions: actions)
     }
+}
 
-    @ViewBuilder
-    private func menu(_ playlist: PlexPlaylist) -> some View {
+/// Play, Shuffle, Rename and Delete for one playlist.
+private struct IOSPlaylistMenu: View {
+    let playlist: PlexPlaylist
+    let serverID: String?
+    @Binding var editing: IOSPlaylistEditState
+    @Binding var pendingStart: IOSPlaylistStart?
+    @EnvironmentObject private var plex: IOSPlexSession
+    @Environment(\.plexActions) private var actions
+
+    var body: some View {
         ForEach(PlaylistRules.playlistActions(isSmart: playlist.smart == true), id: \.self) { action in
             switch action {
-            case .play: Button("Play", systemImage: "play.fill") { play(playlist, shuffled: false) }
-            case .shuffle: Button("Shuffle", systemImage: "shuffle") { play(playlist, shuffled: true) }
+            case .play: Button("Play", systemImage: "play.fill") { play(shuffled: false) }
+            case .shuffle: Button("Shuffle", systemImage: "shuffle") { play(shuffled: true) }
             case .rename: Button("Rename", systemImage: "pencil") { editing.beginRename(playlist) }
             case .delete: Button("Delete", systemImage: "trash", role: .destructive) { editing.deleting = playlist }
             }
         }
     }
 
-    private func play(_ playlist: PlexPlaylist, shuffled: Bool) {
+    private func play(shuffled: Bool) {
         Task {
             do {
                 let items = try await plex.playlistItems(playlist, serverID: serverID)
@@ -68,6 +79,64 @@ struct IOSPlexPlaylistsView: View {
                 editing.failure = error.localizedDescription
             }
         }
+    }
+}
+
+/// A library's playlists as a grid of cards, like its Browse grid.
+struct IOSPlexPlaylistGrid: View {
+    let lists: [PlexPlaylist]
+    let serverID: String?
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.plexActions) private var actions
+    @ScaledMetric(relativeTo: .body) private var minimumWidth: CGFloat = 160
+    @State private var editing = IOSPlaylistEditState()
+    @State private var pendingStart: IOSPlaylistStart?
+
+    var body: some View {
+        let minimum = min(minimumWidth * (sizeClass == .regular ? 1.4 : 1), 360)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum), spacing: 12, alignment: .top)], spacing: 18) {
+            ForEach(lists, id: \.ratingKey) { playlist in
+                NavigationLink(value: IOSPlexPlaylistRoute(playlist: playlist, serverID: serverID)) {
+                    IOSPlexPlaylistCard(playlist: playlist, serverID: serverID)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    IOSPlaylistMenu(playlist: playlist, serverID: serverID, editing: $editing, pendingStart: $pendingStart)
+                }
+            }
+        }
+        .padding(.horizontal, IOSShelfGeometry.leading)
+        .playlistEditAlerts($editing, serverID: serverID)
+        .playlistContinueDialog($pendingStart, actions: actions)
+    }
+}
+
+private struct IOSPlexPlaylistCard: View {
+    let playlist: PlexPlaylist
+    let serverID: String?
+    @EnvironmentObject private var plex: IOSPlexSession
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Color.clear
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .overlay {
+                    GeometryReader { proxy in
+                        IOSPlexImage(url: plex.imageURL(
+                            path: playlist.composite, width: Int(proxy.size.width * displayScale),
+                            height: Int(proxy.size.height * displayScale), serverID: serverID))
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                }
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Text(playlist.title ?? "Untitled").font(.subheadline.weight(.semibold)).lineLimit(1)
+            if let info = playlist.info {
+                Text(info).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

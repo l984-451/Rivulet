@@ -12,7 +12,7 @@
 import UIKit
 
 @MainActor
-final class PhotoGridViewController: UIViewController {
+final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private enum Section: Int, CaseIterable { case folders, media }
     private static let headerKind = "PhotoGridHeader"
     private static let columns = MediaRowMetrics.posterFullCount
@@ -151,6 +151,12 @@ final class PhotoGridViewController: UIViewController {
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         if !loadingAnchor.isHidden { return [loadingAnchor] }
         return [stateView.isHidden ? collectionView : stateView]
+    }
+
+    func reselectSidebarTab() {
+        let section = listing.folders.isEmpty ? Section.media.rawValue : Section.folders.rawValue
+        focusTarget = IndexPath(item: 0, section: section)
+        SidebarReselection.returnToTop(in: collectionView, focusing: focusTarget)
     }
 
     // MARK: - Viewer

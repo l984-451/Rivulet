@@ -16,7 +16,7 @@ import Combine
 import UIKit
 
 @MainActor
-final class SettingsPageViewController: UIViewController {
+final class SettingsPageViewController: UIViewController, SidebarTabReselecting {
 
     let page: SettingsPage
     /// A navigation row was selected → container pushes this page.
@@ -208,6 +208,11 @@ final class SettingsPageViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         collectionView == nil ? super.preferredFocusEnvironments : [collectionView]
+    }
+
+    func reselectSidebarTab() {
+        let first = rows.firstIndex(where: \.isFocusable).map { IndexPath(item: $0, section: 0) }
+        SidebarReselection.returnToTop(in: collectionView, focusing: first)
     }
 }
 

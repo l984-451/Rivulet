@@ -115,12 +115,19 @@ final class RootShellViewController: UIViewController {
             guard let self else { return }
             // The profile row opens the switcher; it has no content to mount.
             if tab == .account { self.onTabChange?(tab); return }
+            let reselectedPage = tab == self.currentTab
+                ? self.contentVCs[tab].flatMap { SidebarReselection.target(in: $0.view) } : nil
+            if reselectedPage != nil {
+                self.belowTop = false
+                self.updateChromeVisibility()
+            }
             // Mount before collapsing: `collapseSidebar` resolves focus at once
             // and the SwiftUI round trip is async, so focus would land in the
             // outgoing tab first. The round trip's `applySelection` then no-ops.
             self.applySelection(tab)
             self.onTabChange?(tab)
             self.collapseSidebar()
+            reselectedPage?.reselectSidebarTab()
         }
         sidebar.onCollapseRequested = { [weak self] in
             guard let self else { return }

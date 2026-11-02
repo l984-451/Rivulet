@@ -259,3 +259,9 @@ extension SearchContainerViewController: UISearchBarDelegate {
         results.submitSearch()
     }
 }
+
+extension SearchContainerViewController: SidebarTabReselecting {
+    func reselectSidebarTab() {
+        move(to: .keyboard)
+    }
+}

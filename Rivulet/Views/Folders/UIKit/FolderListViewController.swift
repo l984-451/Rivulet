@@ -13,7 +13,7 @@ import UIKit
 import Combine
 
 @MainActor
-final class FolderListViewController: UIViewController, UICollectionViewDelegate {
+final class FolderListViewController: UIViewController, UICollectionViewDelegate, SidebarTabReselecting {
     private nonisolated enum Item: Hashable, Sendable {
         case entry(MediaItemRef)
         case failure
@@ -206,6 +206,11 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
         guard let path = context.nextFocusedIndexPath, let entry = entry(at: path) else { return }
         focusedRef = entry.id
         showPreview(entry)
+    }
+
+    func reselectSidebarTab() {
+        focusedRef = listing.entries.first?.id
+        SidebarReselection.returnToTop(in: collectionView, focusing: IndexPath(item: 0, section: 0))
     }
 
     /// Scrolls back to the first row and focuses it. False when it already holds focus.

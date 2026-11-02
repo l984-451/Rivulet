@@ -2885,7 +2885,7 @@ final class PlexHomeViewController: UIViewController {
         section.contentInsets = NSDirectionalEdgeInsets(
             top: 0, leading: MediaRowMetrics.rowLeading, bottom: 24, trailing: MediaRowMetrics.rowTrailing)
         if isCinematicLibrary {
-            section.contentInsets.leading = CinematicStyle.listLeading(in: collectionView.bounds.width)
+            section.contentInsets.leading = CinematicStyle.listLeading(in: collectionView.bounds.size)
         }
         return section
     }
@@ -2904,7 +2904,7 @@ final class PlexHomeViewController: UIViewController {
             let section = NSCollectionLayoutSection(group: .horizontal(layoutSize: size, subitems: [item]))
             section.contentInsetsReference = .none
             section.contentInsets = NSDirectionalEdgeInsets(
-                top: 0, leading: CinematicStyle.listLeading(in: collectionView.bounds.width),
+                top: 0, leading: CinematicStyle.listLeading(in: collectionView.bounds.size),
                 bottom: 80, trailing: MediaRowMetrics.rowTrailing)
             return section
         }

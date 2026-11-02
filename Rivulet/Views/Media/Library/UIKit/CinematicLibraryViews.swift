@@ -8,7 +8,14 @@ enum CinematicStyle {
     static let background = UIColor(white: 0.055, alpha: 1)
     static let secondaryText = UIColor(white: 0.76, alpha: 1)
     static let rowHeight: CGFloat = 112
-    static func listLeading(in width: CGFloat) -> CGFloat { width * 0.46 }
+    static func posterPanelWidth(in size: CGSize) -> CGFloat {
+        min(size.height * 2 / 3, size.width * 0.42)
+    }
+    static func listLeading(in size: CGSize) -> CGFloat {
+        // Keep the list beside a full-height 2:3 poster instead of reserving
+        // a percentage of the screen that leaves a wide empty band.
+        posterPanelWidth(in: size) + 32
+    }
     static func displayFont(size: CGFloat) -> UIFont {
         UIFont(name: "AvenirNext-UltraLight", size: size) ?? .systemFont(ofSize: size, weight: .light)
     }
@@ -162,7 +169,7 @@ final class CinematicLibraryArtworkView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let panelWidth = CinematicStyle.listLeading(in: bounds.width) - 42
+        let panelWidth = CinematicStyle.posterPanelWidth(in: bounds.size)
         let margin: CGFloat = 72
         let textWidth = max(0, panelWidth - 2 * margin)
         ambientView.frame = bounds

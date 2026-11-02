@@ -193,6 +193,26 @@ final class DirectionalInputBindingTests: XCTestCase {
         XCTAssertEqual(fired, 0)
     }
 
+    func test_sidebar_horizontalSwipesRequestCollapse_onlyWhileExpanded() throws {
+        let sidebar = ShellSidebarViewController()
+        sidebar.embedded = true
+        sidebar.loadViewIfNeeded()
+        let swipes = recognizers(UISwipeGestureRecognizer.self, on: sidebar.view)
+        XCTAssertEqual(swipes.count, 2)
+        for direction: UISwipeGestureRecognizer.Direction in [.left, .right] {
+            let swipe = try XCTUnwrap(swipes.first { $0.direction == direction })
+            let binding = try XCTUnwrap(swipe.delegate as? DirectionalInputBinding)
+            var closed = 0
+            sidebar.onCollapseRequested = { closed += 1 }
+            sidebar.setExpanded(true, animated: false)
+            XCTAssertTrue(binding.gestureRecognizerShouldBegin(swipe))
+            binding.handleSwipe(swipe)
+            XCTAssertEqual(closed, 1, "Each horizontal swipe must request collapse exactly once")
+            sidebar.setExpanded(false, animated: false)
+            XCTAssertFalse(binding.gestureRecognizerShouldBegin(swipe))
+        }
+    }
+
     // MARK: Library A to Z strip (device-unverified: the simulator cannot swipe)
 
     func test_alphabetStrip_leftSwipeLeavesLikeSelect_andIsDeclinedWithoutFocus() throws {

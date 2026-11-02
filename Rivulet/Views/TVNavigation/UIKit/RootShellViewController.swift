@@ -78,6 +78,7 @@ final class RootShellViewController: UIViewController {
     private var contentVCs: [SidebarTab: UIViewController] = [:]
     private let sidebar = ShellSidebarViewController()
     private let edgeCatcher = EdgeCatcherView()
+    private let topEdgeGuide = UIFocusGuide()
     private var belowTop = false
     /// The edge catcher stays out of the focus system until the mounted content
     /// has held focus, or a focus search on not-yet-focusable content parks on
@@ -133,6 +134,16 @@ final class RootShellViewController: UIViewController {
         edgeCatcher.autoresizingMask = [.flexibleHeight]
         edgeCatcher.isHidden = true
         view.addSubview(edgeCatcher)
+
+        view.addLayoutGuide(topEdgeGuide)
+        topEdgeGuide.preferredFocusEnvironments = [edgeCatcher]
+        NSLayoutConstraint.activate([
+            topEdgeGuide.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topEdgeGuide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topEdgeGuide.topAnchor.constraint(equalTo: view.topAnchor),
+            topEdgeGuide.heightAnchor.constraint(equalToConstant: 2)
+        ])
+        updateChromeVisibility()
 
         MenuPressInterceptor.register(self)
         NotificationCenter.default.addObserver(
@@ -270,6 +281,7 @@ final class RootShellViewController: UIViewController {
         // `UIFocusDebugger` names it as the occluder of every item beneath it.
         sidebar.view.isUserInteractionEnabled = sidebar.isExpanded
         edgeCatcher.isHidden = interactionBlocked || !(contentHasHadFocus || contentFocusGaveUp)
+        topEdgeGuide.isEnabled = !edgeCatcher.isHidden && !sidebar.isExpanded && !belowTop
     }
 
     @objc private func handleBelowTopChanged(_ note: Notification) {
@@ -331,10 +343,10 @@ final class RootShellViewController: UIViewController {
 
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
         // The closing swipe can keep moving focus after touch-up. Let it land in
-        // content, but require a fresh gesture before travelling farther right.
+        // content, but require a fresh gesture before moving horizontally again.
         if !sidebar.isExpanded,
            sidebarExitGesture == MenuPressInterceptor.remoteGestures.count,
-           context.focusHeading.contains(.right),
+           (context.focusHeading.contains(.left) || context.focusHeading.contains(.right)),
            isInsideContent(context.previouslyFocusedItem), isInsideContent(context.nextFocusedItem) {
             return false
         }

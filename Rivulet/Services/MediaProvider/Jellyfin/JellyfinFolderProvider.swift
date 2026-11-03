@@ -22,7 +22,7 @@ enum JellyfinFolderMapper {
         case "Photo":
             return JellyfinPhotoMapper.item(dto, providerID: providerID, baseURL: baseURL)
                 .map { FolderEntry(id: ref, title: title, content: .photo($0)) }
-        case "Video", "Movie", "Episode":
+        case "Video", "Movie", "Episode", "MusicVideo":
             return FolderEntry(id: ref, title: title,
                                content: .video(JellyfinMediaMapper.item(dto, providerID: providerID, baseURL: baseURL)))
         default:

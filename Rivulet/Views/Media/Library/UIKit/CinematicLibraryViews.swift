@@ -20,6 +20,17 @@ enum CinematicStyle {
         UIFont(name: "AvenirNext-UltraLight", size: size) ?? .systemFont(ofSize: size, weight: .light)
     }
 
+    /// Keep titles legible over artwork without darkening the whole backdrop.
+    static func configureArtworkTitle(_ label: UILabel, size: CGFloat) {
+        label.font = UIFont(name: "AvenirNext-Medium", size: size) ?? .systemFont(ofSize: size, weight: .medium)
+        label.textColor = .white
+        label.shadowColor = nil
+        label.layer.shadowColor = UIColor.black.cgColor
+        label.layer.shadowOpacity = 0.8
+        label.layer.shadowRadius = 4
+        label.layer.shadowOffset = CGSize(width: 0, height: 2)
+    }
+
     static func metadata(for item: MediaItem) -> String {
         [item.year.map(String.init), item.contentRating, item.editionTitle]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "  ·  ")

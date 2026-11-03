@@ -823,13 +823,13 @@ private final class MediaItemSlideView: UIView {
         } else {
             fallbackTitleLabel.font = baseFont
         }
-        if AppTheme.current == .cinematic {
-            fallbackTitleLabel.font = CinematicStyle.displayFont(size: 64)
-        }
         fallbackTitleLabel.textColor = .white
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)
         fallbackTitleLabel.shadowOffset = CGSize(width: 0, height: 3)
+        if AppTheme.current == .cinematic {
+            CinematicStyle.configureArtworkTitle(fallbackTitleLabel, size: 64)
+        }
         fallbackTitleLabel.isHidden = true
 
         // Apple's genres row: Caption1 (25) medium at full white, 6 pt to the badge.

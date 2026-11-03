@@ -227,7 +227,7 @@ final class MediaDetailChromeView: UIView {
         backgroundColor = .clear
         isUserInteractionEnabled = false  // host flips this on for .expandedDetail
         if AppTheme.current == .cinematic {
-            titleFallbackLabel.font = CinematicStyle.displayFont(size: 52)
+            CinematicStyle.configureArtworkTitle(titleFallbackLabel, size: 52)
             descriptionLabel.font = .systemFont(ofSize: 23, weight: .regular)
             metadataBlock.spacing = 22
         }

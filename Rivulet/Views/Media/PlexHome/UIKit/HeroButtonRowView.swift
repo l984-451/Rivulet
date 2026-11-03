@@ -166,6 +166,22 @@ final class HeroButtonRowView: UIView {
         nextButton.isFocusEnabled = on
     }
 
+    func setPagingVisible(_ visible: Bool, animated: Bool = true) {
+        guard animated else {
+            stack.layer.removeAnimation(forKey: "heroPagingOpacity")
+            return
+        }
+        // Animate presentation opacity only; UIKit still sees the mounted focus targets at full alpha.
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = stack.layer.presentation()?.opacity ?? 1
+        fade.toValue = visible ? 1 : 0
+        fade.duration = visible ? HeroPageMotion.metadataFade : 0.12
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        fade.fillMode = .forwards
+        fade.isRemovedOnCompletion = false
+        stack.layer.add(fade, forKey: "heroPagingOpacity")
+    }
+
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
         // Decline the sidebar hand-off so the press handler or gated swipe owns paging.
         if context.previouslyFocusedItem === playButton, context.focusHeading == .left,

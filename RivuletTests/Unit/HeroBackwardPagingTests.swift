@@ -7,6 +7,29 @@ import UIKit
 
 @MainActor
 struct HeroBackwardPagingTests {
+    @Test func pagingFadePreservesButtonFocusEligibility() {
+        let row = HeroButtonRowView()
+        row.canAdvance = true
+        row.setSecondaryButtonsFocusable(true)
+        let buttons: [UIControl] = [row.playButton, row.watchlistButton, row.infoButton, row.nextButton]
+
+        for visible in [false, true, false] {
+            row.setPagingVisible(visible)
+            for button in buttons {
+                #expect(button.canBecomeFocused)
+                #expect(button.isHidden == false)
+                var view: UIView? = button
+                while let current = view {
+                    #expect(current.alpha == 1)
+                    #expect(current.isUserInteractionEnabled)
+                    view = current.superview
+                }
+            }
+        }
+        row.setPagingVisible(true, animated: false)
+        #expect(row.subviews.allSatisfy { $0.layer.animation(forKey: "heroPagingOpacity") == nil })
+    }
+
     @Test func leftFromFirstButtonPagesOncePerGesture() {
         let row = HeroButtonRowView()
         row.canRetreat = true

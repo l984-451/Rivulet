@@ -378,17 +378,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// height). Shared by both, so a title carries one identity.
     var subtitleMediaKey: String { "plex:\(metadata.ratingKey ?? "unknown")" }
 
-    /// This item's height adjustment in stepper units. Published so both
-    /// overlays re-render on a step, and reloaded per item like the delay.
+    /// The global subtitle height in stepper units. Published so the overlay
+    /// re-renders on a step.
     @Published private(set) var subtitleHeightUnits: Int = 0
 
-    /// Steps the height and persists it for this ratingKey. Applied to BOTH
-    /// routes, same as the delay stepper, so it survives a mid-playback route
-    /// change.
+    /// Steps the global height and persists it.
     func adjustSubtitleHeight(bySteps steps: Int) {
-        SubtitleAdjustments.setHeightUnits(subtitleHeightUnits + steps,
-                                           forMediaKey: subtitleMediaKey)
-        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+        SubtitleAdjustments.heightUnits = subtitleHeightUnits + steps
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits
     }
 
     /// Current subtitle delay in seconds; positive = subtitles appear later.
@@ -411,7 +408,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func loadStoredSubtitleDelay() {
         let value = SubtitleAdjustments.delay(forKey: subtitleMediaKey)
         aetherSubtitleModel.delaySeconds = value
-        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits
     }
 
     // MARK: - Metadata

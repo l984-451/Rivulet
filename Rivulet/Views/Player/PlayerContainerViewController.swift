@@ -1362,7 +1362,7 @@ class PlayerContainerViewController: UIViewController {
                             title: "Delay",
                             value: { [weak vm] in SubtitleAdjustments.formattedDelay(vm?.subtitleDelaySeconds ?? 0) },
                             onStep: { [weak vm] step in vm?.adjustSubtitleDelay(bySteps: step) }),
-                        // Height: sticky per title, like Delay above.
+                        // Height: one global setting (#461).
                         CardStepperConfig(
                             title: "Height",
                             value: { [weak vm] in

@@ -6,8 +6,8 @@
 //  Rivulet
 //
 //  Subtitle delay and height steppers for the VOD and Live TV Subtitles panels.
-//  Both are sticky per media (ratingKey or channel id) and default to 0. Height
-//  does not move a cue that carries its own placement.
+//  Delay is sticky per media (ratingKey or channel id). Height is one global offset
+//  from AVPlayer's position (#461), and does not move a cue that carries its own placement.
 //
 
 import Foundation
@@ -53,36 +53,20 @@ enum SubtitleAdjustments {
         return String(format: "%+.1fs", value)
     }
 
-    // MARK: - Height (per media)
+    // MARK: - Height (global)
 
     /// Points moved per stepper press.
     static let heightUnitPt: CGFloat = 10
-    /// Stepper range: ±10 units (±100 pt).
-    static let heightUnitMax = 10
+    /// Stepper range: far enough down to reach the screen edge under a wide film's
+    /// letterbox bar, and up to the top of the screen.
+    static let heightUnitRange = -30...80
 
-    /// Defaults key holding the height for one media key. A key per media
-    /// rather than one entry in a map, unlike delay, so a media that was never
-    /// adjusted costs nothing and clearing one is a plain remove.
-    private static func heightKey(forMediaKey mediaKey: String) -> String {
-        "subtitleHeightUnits:\(mediaKey)"
-    }
+    private static let heightKey = "subtitleHeightUnits"
 
-    /// Height offset in UNITS for a media key (positive = subtitles sit
-    /// higher). 0 when never adjusted.
-    static func heightUnits(forMediaKey mediaKey: String) -> Int {
-        clampUnits(UserDefaults.standard.integer(forKey: heightKey(forMediaKey: mediaKey)))
-    }
-
-    /// Persists `units` for `mediaKey`. A value of 0 removes the entry, so
-    /// defaults never accumulate for media the user only watched.
-    static func setHeightUnits(_ units: Int, forMediaKey mediaKey: String) {
-        let key = heightKey(forMediaKey: mediaKey)
-        let clamped = clampUnits(units)
-        if clamped == 0 {
-            UserDefaults.standard.removeObject(forKey: key)
-        } else {
-            UserDefaults.standard.set(clamped, forKey: key)
-        }
+    /// Height offset in UNITS (positive = subtitles sit higher). 0 is AVPlayer's position.
+    static var heightUnits: Int {
+        get { clampUnits(UserDefaults.standard.integer(forKey: heightKey)) }
+        set { UserDefaults.standard.set(clampUnits(newValue), forKey: heightKey) }
     }
 
     // MARK: - Rail clearance
@@ -120,6 +104,6 @@ enum SubtitleAdjustments {
     }
 
     private static func clampUnits(_ units: Int) -> Int {
-        max(-heightUnitMax, min(heightUnitMax, units))
+        min(max(units, heightUnitRange.lowerBound), heightUnitRange.upperBound)
     }
 }

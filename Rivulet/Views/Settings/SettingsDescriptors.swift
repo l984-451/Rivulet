@@ -237,6 +237,10 @@ enum SettingsDescriptorStore {
             icon: "backward.fill",
             description: "How far a single Left press skips back during playback."
         ),
+        "cinemaTrailers": SettingDescriptor(
+            icon: "film.stack",
+            description: "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on."
+        ),
         "showPostVideoUpNext": SettingDescriptor(
             icon: "rectangle.stack",
             description: "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode."

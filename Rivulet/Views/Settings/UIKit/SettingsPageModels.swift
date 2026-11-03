@@ -533,6 +533,13 @@ enum SettingsContent {
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
             toggle("showPostVideoUpNext", "Up Next Panel", key: "showPostVideoUpNext", default: true),
+            SettingsRowItem(id: "cinemaTrailers", title: "Trailers Before Movies",
+                            kind: .cycle(value: { CinemaExtras.count == 0 ? String(localized: "Off") : "\(CinemaExtras.count)" },
+                                         next: {
+                                             SettingsStore.setInt(CinemaExtras.countKey,
+                                                                  CinemaExtras.count == CinemaExtras.countOptions.upperBound
+                                                                      ? 0 : CinemaExtras.count + 1)
+                                         })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: false),

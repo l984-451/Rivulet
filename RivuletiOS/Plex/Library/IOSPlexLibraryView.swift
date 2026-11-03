@@ -22,19 +22,27 @@ struct IOSPlexLibrarySplitView: View {
 
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $column) {
-            IOSPlexLibrariesView(selection: $selection)
+            // A pick in the list starts the detail column over. A selection set from outside
+            // (the sidebar's library tab folding in at compact width) keeps its pushed pages.
+            IOSPlexLibrariesView(selection: Binding(get: { selection }, set: { picked in
+                if picked != selection { path = NavigationPath() }
+                selection = picked
+            }))
         } detail: {
             NavigationStack(path: $path) {
                 // A new selection is a new page: library grids keep their items in view state.
                 detail.id(selection).iosPlexDestinations()
             }
         }
-        .onChange(of: selection) { path = NavigationPath() }
         // Side by side, the detail column is never left empty.
         .onChange(of: [sizeClass == .regular, plex.libraries.isEmpty], initial: true) {
             if sizeClass == .regular, selection == nil, let first = plex.libraries.first {
                 selection = .library(first)
             }
+        }
+        // Narrowed with a library beside the list: it stays in front, the list one step back.
+        .onChange(of: sizeClass) { was, now in
+            if was == .regular, now != .regular, selection != nil { column = .detail }
         }
     }
 

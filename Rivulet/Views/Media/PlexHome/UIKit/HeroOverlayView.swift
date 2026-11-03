@@ -28,6 +28,7 @@ final class HeroOverlayView: UIView {
     /// before the backdrop slide has started.
     private var displayedIndex: Int = 0
     private var displayedSwapWorkItem: DispatchWorkItem?
+    private var configurationGeneration = 0
 
     var onIndexChanged: ((Int, PlexMetadata, HeroPageDirection) -> Void)?
     var onInfo: ((PlexMetadata) -> Void)?
@@ -114,6 +115,9 @@ final class HeroOverlayView: UIView {
                    serverURL: String,
                    authToken: String,
                    initialIndex: Int) {
+        configurationGeneration += 1
+        displayedSwapWorkItem?.cancel()
+        displayedSwapWorkItem = nil
         self.items = items
         self.serverURL = serverURL
         self.authToken = authToken
@@ -303,8 +307,11 @@ final class HeroOverlayView: UIView {
         // animated:false here (the old is already gone); we hold alpha at 0 and
         // drive the fade-in ourselves.
         displayedSwapWorkItem?.cancel()
+        let generation = configurationGeneration
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            guard let self, self.configurationGeneration == generation,
+                  self.currentIndex == newIndex else { return }
+            self.displayedSwapWorkItem = nil
             self.displayedIndex = newIndex
             self.buttonRow.setPagingVisible(true)
             // Hold the slide hidden, set the new content + load its logo, and
@@ -313,7 +320,8 @@ final class HeroOverlayView: UIView {
             // flash that then jumps to the logo mid-fade.
             self.slideView.alpha = 0
             self.renderSlide(animated: false, manageAlpha: false) { [weak self] in
-                guard let self else { return }
+                guard let self, self.configurationGeneration == generation,
+                      self.currentIndex == newIndex else { return }
                 UIView.animate(withDuration: HeroPageMotion.metadataFade, delay: 0, options: [.curveEaseOut]) {
                     self.slideView.alpha = 1
                 }
@@ -461,6 +469,9 @@ final class HeroOverlayView: UIView {
         onToggleWatchlist: ((MediaItem) -> Void)? = nil,
         badge: ((MediaItem) -> String?)? = nil
     ) {
+        configurationGeneration += 1
+        displayedSwapWorkItem?.cancel()
+        displayedSwapWorkItem = nil
         if mediaItemOverlay == nil {
             let v = MediaItemHeroOverlayView()
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -518,6 +529,7 @@ final class MediaItemHeroOverlayView: UIView {
     private(set) var currentIndex: Int = 0
     private var displayedIndex: Int = 0
     private var displayedSwapWorkItem: DispatchWorkItem?
+    private var configurationGeneration = 0
 
     // MARK: - Callbacks
 
@@ -601,6 +613,9 @@ final class MediaItemHeroOverlayView: UIView {
         onPlay: @escaping (MediaItem) -> Void,
         onInfo: @escaping (MediaItem) -> Void
     ) {
+        configurationGeneration += 1
+        displayedSwapWorkItem?.cancel()
+        displayedSwapWorkItem = nil
         self.items = items
         self.onIndexChanged = onIndexChanged
         self.onPlay = onPlay
@@ -611,8 +626,9 @@ final class MediaItemHeroOverlayView: UIView {
         // First render holds the slide hidden until the logo resolves, so
         // the cold-load hero doesn't show text-then-logo.
         slideView.alpha = 0
+        let generation = configurationGeneration
         renderSlide { [weak self] in
-            guard let self else { return }
+            guard let self, self.configurationGeneration == generation else { return }
             UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseOut]) {
                 self.slideView.alpha = 1
             }
@@ -718,8 +734,11 @@ final class MediaItemHeroOverlayView: UIView {
         buttonRow.setPagingVisible(false)
 
         displayedSwapWorkItem?.cancel()
+        let generation = configurationGeneration
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            guard let self, self.configurationGeneration == generation,
+                  self.currentIndex == newIndex else { return }
+            self.displayedSwapWorkItem = nil
             self.displayedIndex = newIndex
             self.buttonRow.setPagingVisible(true)
             // Hold the slide hidden and fade in only once the logo is
@@ -727,7 +746,8 @@ final class MediaItemHeroOverlayView: UIView {
             // hero, so metadata never pops in ahead of its logo.
             self.slideView.alpha = 0
             self.renderSlide { [weak self] in
-                guard let self else { return }
+                guard let self, self.configurationGeneration == generation,
+                      self.currentIndex == newIndex else { return }
                 UIView.animate(withDuration: HeroPageMotion.metadataFade, delay: 0, options: [.curveEaseOut]) {
                     self.slideView.alpha = 1
                 }

@@ -129,6 +129,23 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         XCTAssertEqual(captionFrame(placement: nil, controlsVisible: true, heightUnits: 50).maxY, 450, accuracy: 0.5)
     }
 
+    /// The stepper lives in the open pane: every step shows, either way.
+    func testHeightStepsShowWhileThePaneIsOpen() {
+        func maxY(units: Int) -> CGFloat {
+            let model = SubtitleModel()
+            let overlay = CaptionOverlayView(model: model, style: .default, videoSize: canvas, heightUnits: units)
+            overlay.paneOpen = true
+            overlay.frame = CGRect(origin: .zero, size: canvas)
+            model.update(cues: [AetherSubtitleCue(id: 1, startTime: 0, endTime: 10, body: .text("Caption"))])
+            overlay.layoutIfNeeded()
+            return overlay.subviews.first { !($0 is ASSOverlayView) }?.frame.maxY ?? 0
+        }
+        let rest = maxY(units: 0)
+        XCTAssertEqual(rest, canvas.height - SubtitleAdjustments.controlsFloor - SubtitleAdjustments.paneLift, accuracy: 0.5)
+        XCTAssertEqual(maxY(units: 1), rest - 10, accuracy: 0.5)
+        XCTAssertEqual(maxY(units: -1), rest + 10, accuracy: 0.5)
+    }
+
     /// A cue that placed itself stays where it asked to be.
     func testHeightDoesNotMovePlacedCues() {
         let frame = captionFrame(placement: .init(alignment: 1, position: CGPoint(x: 0.10, y: 0.70)), heightUnits: 20)

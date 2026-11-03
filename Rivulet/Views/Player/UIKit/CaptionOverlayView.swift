@@ -340,10 +340,13 @@ final class CaptionOverlayView: UIView {
     private func bottomPadding(in size: CGSize) -> CGFloat {
         let rect = videoRect(in: size)
         let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
-        let chosen = resting + SubtitleAdjustments.heightOffset(forUnits: heightUnits)
+        let offset = SubtitleAdjustments.heightOffset(forUnits: heightUnits)
         // The cap leaves room for a few lines above the box's bottom edge.
-        let onScreen = min(max(0, chosen), size.height * Metrics.highestBandFraction)
-        return controlsVisible || paneOpen ? max(onScreen, placementFloor(in: size)) : onScreen
+        let highest = size.height * Metrics.highestBandFraction
+        // The Height stepper lives in the open pane, so every step has to show there.
+        if paneOpen { return min(max(0, placementFloor(in: size) + offset), highest) }
+        let onScreen = min(max(0, resting + offset), highest)
+        return controlsVisible ? max(onScreen, placementFloor(in: size)) : onScreen
     }
 
     /// Caption point size for this presentation, before per-cue styling.

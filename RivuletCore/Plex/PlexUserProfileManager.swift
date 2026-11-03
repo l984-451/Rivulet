@@ -404,6 +404,8 @@ class PlexUserProfileManager: ObservableObject {
                 break
             case .keep:
                 selectedUser = savedUser
+                // A managed profile's IPTV was withheld until its content limits were known (#502).
+                LiveTVDataStore.shared.plexContentTokenChanged()
             case .useAccount:
                 let wasWithheld = PlexAuthManager.shared.isContentWithheld
                 selectedUser = savedUser

@@ -30,7 +30,7 @@ final class HeroOverlayView: UIView {
     private var displayedIndex: Int = 0
     private var displayedSwapWorkItem: DispatchWorkItem?
 
-    var onIndexChanged: ((Int, PlexMetadata) -> Void)?
+    var onIndexChanged: ((Int, PlexMetadata, HeroPageDirection) -> Void)?
     var onInfo: ((PlexMetadata) -> Void)?
     var onPlay: ((PlexMetadata) -> Void)?
     var onFocusEntered: (() -> Void)?
@@ -280,14 +280,14 @@ final class HeroOverlayView: UIView {
         setCurrentIndex(next)
     }
 
-    private func setCurrentIndex(_ newIndex: Int) {
+    private func setCurrentIndex(_ newIndex: Int, direction: HeroPageDirection = .forward) {
         guard newIndex != currentIndex else { return }
         currentIndex = newIndex
         // Pass the actual item (not just the index) so the controller drives the
         // backdrop off the SAME array the slide uses. The controller's heroItems
         // can be reordered (TMDB hero upgrade) after this view was configured, so
         // an index alone would point at a different item -> metadata/image drift.
-        if let item = currentItem { onIndexChanged?(newIndex, item) }
+        if let item = currentItem { onIndexChanged?(newIndex, item, direction) }
         updateButtonStateForCurrentItem()
         // Advance the dots NOW, on the press (with the backdrop image), not in
         // the delayed metadata swap below.
@@ -334,10 +334,15 @@ final class HeroOverlayView: UIView {
             self.onInfo?(item)
         }
         buttonRow.onNext = { [weak self] in self?.advance() }
+        buttonRow.onPrevious = { [weak self] in
+            guard let self, self.currentIndex > 0 else { return }
+            self.setCurrentIndex(self.currentIndex - 1, direction: .backward)
+        }
     }
 
     private func updateButtonStateForCurrentItem() {
         buttonRow.canAdvance = items.count > 1
+        buttonRow.canRetreat = currentIndex > 0
         if let item = currentItem {
             let tmdb = resolvedTmdbId(for: item)
             let onList = tmdb.map { PlexWatchlistService.shared.contains(tmdbId: $0) } ?? false
@@ -448,7 +453,7 @@ final class HeroOverlayView: UIView {
     func configure(
         mediaItems: [MediaItem],
         initialIndex: Int,
-        onIndexChanged: @escaping (Int, MediaItem) -> Void,
+        onIndexChanged: @escaping (Int, MediaItem, HeroPageDirection) -> Void,
         onPlay: @escaping (MediaItem) -> Void,
         onInfo: @escaping (MediaItem) -> Void,
         onToggleWatchlist: ((MediaItem) -> Void)? = nil,
@@ -514,7 +519,7 @@ final class MediaItemHeroOverlayView: UIView {
 
     // MARK: - Callbacks
 
-    var onIndexChanged: ((Int, MediaItem) -> Void)?
+    var onIndexChanged: ((Int, MediaItem, HeroPageDirection) -> Void)?
     var onPlay: ((MediaItem) -> Void)?
     var onInfo: ((MediaItem) -> Void)?
     /// nil hides the watchlist circle: only Discover has a watchlist to
@@ -590,7 +595,7 @@ final class MediaItemHeroOverlayView: UIView {
     func configure(
         items: [MediaItem],
         initialIndex: Int,
-        onIndexChanged: @escaping (Int, MediaItem) -> Void,
+        onIndexChanged: @escaping (Int, MediaItem, HeroPageDirection) -> Void,
         onPlay: @escaping (MediaItem) -> Void,
         onInfo: @escaping (MediaItem) -> Void
     ) {
@@ -612,6 +617,7 @@ final class MediaItemHeroOverlayView: UIView {
         renderPagingDots()
         prefetchNextBackdrop()
         buttonRow.canAdvance = items.count > 1
+        buttonRow.canRetreat = currentIndex > 0
     }
 
     // MARK: - Focus
@@ -694,11 +700,12 @@ final class MediaItemHeroOverlayView: UIView {
 
     // MARK: - Paging
 
-    private func setCurrentIndex(_ newIndex: Int) {
+    private func setCurrentIndex(_ newIndex: Int, direction: HeroPageDirection = .forward) {
         guard newIndex != currentIndex else { return }
         currentIndex = newIndex
-        if let item = currentItem { onIndexChanged?(newIndex, item) }
+        if let item = currentItem { onIndexChanged?(newIndex, item, direction) }
         buttonRow.canAdvance = items.count > 1
+        buttonRow.canRetreat = currentIndex > 0
         // Advance the dots NOW, on the press, with the backdrop image.
         renderPagingDots()
         prefetchNextBackdrop()
@@ -750,6 +757,10 @@ final class MediaItemHeroOverlayView: UIView {
             self.onInfo?(item)
         }
         buttonRow.onNext = { [weak self] in self?.advance() }
+        buttonRow.onPrevious = { [weak self] in
+            guard let self, self.currentIndex > 0 else { return }
+            self.setCurrentIndex(self.currentIndex - 1, direction: .backward)
+        }
         buttonRow.onWatchlist = { [weak self] in
             guard let self, let item = self.currentItem else { return }
             self.onToggleWatchlist?(item)

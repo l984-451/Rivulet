@@ -2159,7 +2159,7 @@ final class PlexHomeViewController: UIViewController {
     /// immediately so the startup splash doesn't wait for an image that isn't
     /// coming. The non-nil case is reported by `onFirstImageLoaded` once the
     /// image is on screen.
-    private func setHeroBackdrop(url: URL?, paging: Bool = false) {
+    private func setHeroBackdrop(url: URL?, paging: HeroPageDirection? = nil) {
         backdropView.setBackdrop(url: url, paging: paging)
         // The ambient wash tracks the hero: same artwork, diffused by the
         // frosted material in front of it. Every hero page change lands here,
@@ -2213,7 +2213,7 @@ final class PlexHomeViewController: UIViewController {
     /// `onIndexChanged` so the backdrop matches exactly the slide the overlay is
     /// showing. The index-based path above can disagree once `heroItems` is
     /// reordered by the TMDB upgrade after the overlay was configured.
-    private func updateBackdrop(for item: PlexMetadata, paging: Bool = false) {
+    private func updateBackdrop(for item: PlexMetadata, paging: HeroPageDirection? = nil) {
         guard showHomeHero,
               let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else {
@@ -2227,7 +2227,7 @@ final class PlexHomeViewController: UIViewController {
 
     /// MediaItem-backed backdrop (Discover hero — TMDB CDN URLs are absolute,
     /// no server/token needed).
-    private func updateBackdrop(forMediaItem item: MediaItem, paging: Bool = false) {
+    private func updateBackdrop(forMediaItem item: MediaItem, paging: HeroPageDirection? = nil) {
         guard showHomeHero else {
             setHeroBackdrop(url: nil)
             return
@@ -3086,10 +3086,10 @@ final class PlexHomeViewController: UIViewController {
                 cell.configure(withMediaItems: HeroOverlayCell.MediaItemConfiguration(
                     items: section.heroMediaItems,
                     initialIndex: heroCurrentIndex,
-                    onIndexChanged: { [weak self, weak cell] newIndex, item in
+                    onIndexChanged: { [weak self, weak cell] newIndex, item, direction in
                         guard let self else { return }
                         self.heroCurrentIndex = newIndex
-                        self.updateBackdrop(forMediaItem: item, paging: true)
+                        self.updateBackdrop(forMediaItem: item, paging: direction)
                         self.applyMediaItemHeroState(for: item, on: cell)
                     },
                     onPlay: { [weak self] item in
@@ -3128,13 +3128,13 @@ final class PlexHomeViewController: UIViewController {
                 serverURL: authManager.selectedServerURL ?? "",
                 authToken: authManager.selectedServerToken ?? "",
                 initialIndex: heroCurrentIndex,
-                onIndexChanged: { [weak self] newIndex, item in
+                onIndexChanged: { [weak self] newIndex, item, direction in
                     guard let self else { return }
                     self.heroCurrentIndex = newIndex
                     // Drive the backdrop off the exact item the overlay is
                     // showing, not heroItems[newIndex] (the two arrays diverge
                     // once the TMDB upgrade reorders heroItems).
-                    self.updateBackdrop(for: item, paging: true)
+                    self.updateBackdrop(for: item, paging: direction)
                 },
                 onInfo: { [weak self] item in self?.presentDetailPage(for: item) },
                 onPlay: { [weak self] item in self?.playItemDirectly(item) },

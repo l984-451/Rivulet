@@ -14,6 +14,11 @@
 
 import UIKit
 
+enum HeroPageDirection: CGFloat {
+    case forward = 1
+    case backward = -1
+}
+
 @MainActor
 final class HeroBackdropView: UIView {
 
@@ -132,9 +137,9 @@ final class HeroBackdropView: UIView {
     // MARK: - API
 
     /// Load the backdrop for `url`. `paging` slides the new art in from the
-    /// trailing edge (a hero page change); otherwise it crossfades. Nil shows
+    /// selected edge (a hero page change); otherwise it crossfades. Nil shows
     /// the placeholder.
-    func setBackdrop(url: URL?, paging: Bool = false) {
+    func setBackdrop(url: URL?, paging: HeroPageDirection? = nil) {
         guard url != currentURL else { return }
         loadTask?.cancel()
 
@@ -161,7 +166,7 @@ final class HeroBackdropView: UIView {
         }
     }
 
-    private func show(_ image: UIImage, paging: Bool) {
+    private func show(_ image: UIImage, paging: HeroPageDirection?) {
         finishPageAnimation()
         guard currentPage.imageView.image != nil, currentPage.alpha > 0 else {
             currentPage.imageView.image = image
@@ -175,7 +180,7 @@ final class HeroBackdropView: UIView {
         scrimLayers.forEach { layer.addSublayer($0) }  // keep the scrim on top
         currentPage.imageView.image = image
 
-        guard paging else {
+        guard let paging else {
             currentPage.setOffset(0)
             currentPage.alpha = 0
             UIView.animate(withDuration: crossfadeDuration, delay: 0, options: [.curveEaseInOut]) {
@@ -188,7 +193,7 @@ final class HeroBackdropView: UIView {
             return
         }
 
-        let width = bounds.width
+        let width = bounds.width * paging.rawValue
         currentPage.alpha = 1
         currentPage.setOffset(width)
         let animator = Self.pageAnimator()

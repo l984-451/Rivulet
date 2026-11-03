@@ -656,11 +656,12 @@ final class AetherPlayer: ObservableObject {
         engine.volume = muted ? 0 : 1
     }
 
-    /// VOD seek on the media timeline.
-    func seek(to time: TimeInterval) async {
+    /// VOD seek on the media timeline. `exact` lands on the time itself; without it the engine may
+    /// snap AV1 on its software host to a keyframe, which is wrong for the end of an intro.
+    func seek(to time: TimeInterval, exact: Bool = false) async {
         let upper = duration > 0 ? duration : .greatestFiniteMagnitude
         let target = min(max(0, time), upper)
-        await performSeek(to: target)
+        await performSeek(to: target, exact: exact)
     }
 
     /// Skip relative to where the last skip was headed, so rapid taps stack.
@@ -687,7 +688,7 @@ final class AetherPlayer: ObservableObject {
 
     /// Seek events clear the pending target; the timeout covers a seek the
     /// engine drops without one (no session yet).
-    private func performSeek(to target: Double) async {
+    private func performSeek(to target: Double, exact: Bool = false) async {
         // A user seek owns the pending target from here; its seek event clears it.
         isStarting = false
         pendingSeekTarget = target
@@ -695,7 +696,7 @@ final class AetherPlayer: ObservableObject {
             try? await Task.sleep(for: .seconds(10))
             if self?.pendingSeekTarget == target { self?.pendingSeekTarget = nil }
         }
-        await engine.seek(to: target)
+        await engine.seek(to: target, exact: exact)
     }
 
     func seekToLiveEdge() async {

@@ -551,7 +551,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     func skip(_ marker: PlexMarker) {
         skippedMarkerIDs.insert(marker.stableID)
         objectWillChange.send()
-        Task { await player.seek(to: marker.end) }
+        Task { await player.seek(to: marker.end, exact: true) }
     }
 
     // MARK: - Chapters
@@ -573,7 +573,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     func seekToChapter(_ chapter: PlexChapter) {
         guard let start = chapter.startTimeOffset else { return }
-        Task { await player.seek(to: TimeInterval(start) / 1000) }
+        Task { await player.seek(to: TimeInterval(start) / 1000, exact: true) }
     }
 
     // MARK: - Up Next

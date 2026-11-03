@@ -46,6 +46,19 @@ final class PlexAuthManagerTests: XCTestCase {
         }
     }
 
+    /// #510: 172.16/12 is also a LAN range, so it is probed, ahead of the WAN address.
+    func testDockerRangeRanksBetweenLocalAndRemote() {
+        func score(_ address: String, local: Bool) -> Int {
+            PlexAuthManager.connectionScore(Rivulet.PlexConnection(
+                protocolType: "https", address: address, port: 32400, uri: "https://\(address):32400",
+                local: local, relay: false, IPv6: false))
+        }
+        XCTAssertFalse(PlexAuthManager.isLoopbackAddress("172.18.0.2"))
+        XCTAssertGreaterThan(score("192.168.1.10", local: true), score("172.18.0.2", local: true))
+        XCTAssertGreaterThan(score("172.18.0.2", local: true), score("203.0.113.50", local: false))
+        XCTAssertGreaterThan(score("172.18.0.2", local: true), score("1-2-3-4.abc.plex.direct", local: false))
+    }
+
     func testAllows10xAddresses() {
         // 10.x.x.x is a common home network range and should NOT be filtered
         let validAddresses = [
@@ -264,27 +277,8 @@ final class PlexAuthManagerTests: XCTestCase {
 
     // MARK: - Helper Functions (Mirror PlexAuthManager's private methods for testing)
 
-    /// Test implementation that mirrors PlexAuthManager's private isDockerOrInternalAddress
     private func isDockerOrInternalAddress(_ address: String) -> Bool {
-        let dockerPrefixes = [
-            "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-            "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
-            "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-        ]
-
-        let localhostAddresses = ["127.0.0.1", "localhost", "::1"]
-
-        for prefix in dockerPrefixes {
-            if address.hasPrefix(prefix) {
-                return true
-            }
-        }
-
-        if localhostAddresses.contains(address) {
-            return true
-        }
-
-        return false
+        PlexAuthManager.looksLikeDockerBridge(address) || PlexAuthManager.isLoopbackAddress(address)
     }
 
     /// Test implementation that mirrors PlexAuthManager's private connectionScore

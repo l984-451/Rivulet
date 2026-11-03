@@ -82,7 +82,7 @@ final class HeroBackdropView: UIView {
         ]
         scrimLayers = AppTheme.current == .cinematic ? [
             Self.gradient(.axial, from: CGPoint(x: 0, y: 0.5), to: CGPoint(x: 1, y: 0.5),
-                          alphas: [0.86, 0.64, 0.16, 0], locations: [0, 0.26, 0.55, 0.85]),
+                          alphas: [0.56, 0.38, 0.08, 0], locations: [0, 0.24, 0.48, 0.72]),
             Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
                           alphas: [0, 0.04, 0.40], locations: [0, 0.5, 1])
         ] : standardScrims

@@ -122,9 +122,10 @@ struct IOSRootView: View {
             }
         }
         // Stage Manager and Split View resize the window: at compact width the sidebar's
-        // library tabs vanish, and the one in use folds into the Library tab.
+        // library tabs vanish, and the one in use folds into the Library tab. Back at
+        // regular width the Library tab's library returns to its sidebar tab.
         .onChange(of: showsSidebarLibraries) { _, sidebar in
-            if !sidebar { foldSidebarTab() }
+            if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
         }
         .onChange(of: plex.sessionGeneration) {
             librarySelection = nil
@@ -163,6 +164,18 @@ struct IOSRootView: View {
         libraryColumn = .detail
         libraryPath = sidebarPaths.removeValue(forKey: selectedTab) ?? NavigationPath()
         selectedTab = "library"
+    }
+
+    /// The window widened: the Library tab's library, and the pages pushed over it,
+    /// carry on in that library's sidebar tab.
+    private func unfoldLibraryTab() {
+        guard selectedTab == "library", let selection = librarySelection else { return }
+        let tab = Self.tab(for: selection)
+        guard sidebarTabs.contains(tab) else { return }
+        sidebarPaths[tab] = libraryPath
+        libraryColumn = .sidebar
+        libraryPath = NavigationPath()
+        selectedTab = tab
     }
 
     private static func isSidebarTab(_ tab: String) -> Bool {

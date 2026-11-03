@@ -962,7 +962,8 @@ private struct IOSPlayerInputSurface: UIViewRepresentable {
                 if isFirstResponder { resignFirstResponder() }
                 guard !recheckPending else { return }
                 recheckPending = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(500))
                     self?.recheckPending = false
                     self?.syncKeyboardOwnership()
                 }
@@ -984,6 +985,8 @@ private struct IOSPlayerInputSurface: UIViewRepresentable {
 
         /// Space, Left, Right and Escape; one action per press, however long the key
         /// is held (UIKit repeats a key command by default, which would stack seeks).
+        /// With keyboard navigation on, the system would otherwise take Space and the
+        /// arrows for the focused control; Escape stays the system's.
         override var keyCommands: [UIKeyCommand]? {
             guard let surface, !isCovered else { return nil }
             var inputs = [UIKeyCommand.inputEscape, " "]
@@ -991,6 +994,7 @@ private struct IOSPlayerInputSurface: UIViewRepresentable {
             return inputs.map { input in
                 let command = UIKeyCommand(input: input, modifierFlags: [], action: #selector(handleKey(_:)))
                 command.repeatBehavior = .nonRepeatable
+                command.wantsPriorityOverSystemBehavior = input != UIKeyCommand.inputEscape
                 return command
             }
         }

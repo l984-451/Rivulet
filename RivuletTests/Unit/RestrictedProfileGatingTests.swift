@@ -18,7 +18,31 @@ final class RestrictedProfileGatingTests: XCTestCase {
 
     override func tearDown() async throws {
         manager.selectedUser = savedUser
-        if savedUser == nil { UserDefaults.standard.removeObject(forKey: "selectedPlexUserRestricted") }
+        if savedUser == nil {
+            UserDefaults.standard.removeObject(forKey: "selectedPlexUserRestricted")
+            UserDefaults.standard.removeObject(forKey: "selectedPlexUserContentLimited")
+        }
+    }
+
+    /// #502: managed alone keeps IPTV; only a real restriction profile withholds it.
+    func test_contentLimits_followRestrictionProfile_notManaged() {
+        manager.selectedUser = PlexHomeUser(id: 2, uuid: "tv", title: "TV", restricted: true)
+        XCTAssertTrue(manager.isRestrictedProfile)
+        XCTAssertFalse(manager.isContentLimitedProfile)
+        manager.selectedUser = PlexHomeUser(id: 2, uuid: "tv", title: "TV", restricted: true, restrictionProfile: "")
+        XCTAssertFalse(manager.isContentLimitedProfile, "the XML endpoint sends an empty string for none")
+        manager.selectedUser = PlexHomeUser(id: 3, uuid: "kid", title: "Kid", restricted: true, restrictionProfile: "little_kid")
+        XCTAssertTrue(manager.isContentLimitedProfile)
+        manager.selectedUser = nil
+        XCTAssertTrue(manager.isContentLimitedProfile, "survives a launch before the list loads")
+    }
+
+    /// A build before #502 saved only "managed", so that holds until the profile is known.
+    func test_contentLimits_fallBackToManaged_whenNeverSaved() {
+        manager.selectedUser = nil
+        UserDefaults.standard.removeObject(forKey: "selectedPlexUserContentLimited")
+        UserDefaults.standard.set(true, forKey: "selectedPlexUserRestricted")
+        XCTAssertTrue(manager.isContentLimitedProfile)
     }
 
     private func rowIDs(_ page: SettingsPage) -> Set<String> {

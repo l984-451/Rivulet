@@ -966,10 +966,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         let url: URL?
         switch source {
         case .plex:
-            guard var components = URLComponents(string: "\(serverURL)\(key)") else { return nil }
-            components.queryItems = (components.queryItems ?? [])
-                + [URLQueryItem(name: "X-Plex-Token", value: authToken)]
-            url = components.url
+            url = PlexSidecarURL.url(serverURL: serverURL, key: key, token: authToken, codec: stream.codec)
         case .provider:
             url = URL(string: key)
         }
@@ -2322,10 +2319,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard let streams = (part ?? metadata.Media?.first?.Part?.first)?.Stream else { return [] }
         return streams.filter { $0.isSubtitle && $0.key != nil }.compactMap { stream in
             guard let key = stream.key,
-                  var components = URLComponents(string: "\(serverURL)\(key)") else { return nil }
-            components.queryItems = (components.queryItems ?? [])
-                + [URLQueryItem(name: "X-Plex-Token", value: authToken)]
-            guard let url = components.url else { return nil }
+                  let url = PlexSidecarURL.url(serverURL: serverURL, key: key, token: authToken, codec: stream.codec)
+            else { return nil }
             return AetherPlayer.SidecarSubtitle(
                 url: url,
                 name: stream.displayTitle ?? stream.extendedDisplayTitle,

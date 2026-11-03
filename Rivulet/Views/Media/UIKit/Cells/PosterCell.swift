@@ -234,17 +234,44 @@ final class PosterCell: UICollectionViewCell {
         let artSize = posterView.imageView.bounds.size
         let longSide = max(artSize.width, artSize.height)
         let scale = longSide > 0 ? 1 + tile.growth.height / longSide : 1.1
+        // Before the growth starts, or the tile shows black until the mask is fixed.
+        if nowFocused {
+            recenterFocusMasks()
+            DispatchQueue.main.async { [weak self] in self?.recenterFocusMasks() }
+        }
         coordinator.addCoordinatedAnimations({
+            if nowFocused { self.recenterFocusMasks() }
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
             self.overlayContainer.transform = nowFocused
                 ? CGAffineTransform(scaleX: scale, y: scale)
                 : .identity
         }, completion: { [weak self] in
+            if nowFocused { self?.recenterFocusMasks() }
             guard let self, !nowFocused else { return }
             // TVPosterView's own unfocus sometimes leaves the poster enlarged; enforce the end state.
             self.resetStaleFocusAppearance()
         })
+    }
+
+    /// TVPosterView masks its focused image to the artwork. On a square tile the mask
+    /// can keep the centre of the 1pt stand-in image (`blankArtwork`), so only the
+    /// cover's top-left corner showed, small in the tile's corner: put any such mask
+    /// back over its layer.
+    private func recenterFocusMasks() {
+        func visit(_ layer: CALayer) {
+            let center = CGPoint(x: layer.bounds.midX, y: layer.bounds.midY)
+            if let mask = layer.mask, mask.bounds.width > 1,
+               abs(mask.position.x - center.x) > 2 || abs(mask.position.y - center.y) > 2,
+               abs(mask.bounds.width - layer.bounds.width) < 2, abs(mask.bounds.height - layer.bounds.height) < 2 {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                mask.position = center
+                CATransaction.commit()
+            }
+            layer.sublayers?.forEach(visit)
+        }
+        visit(posterView.layer)
     }
 
     /// Clears a focused look TVPosterView left behind: its unfocus animation sometimes never runs
@@ -380,6 +407,7 @@ final class PosterCell: UICollectionViewCell {
         // exit has artwork to fly to.
         if let cached = ImageCacheManager.shared.cachedImage(for: url) {
             posterView.image = cached
+            recenterFocusMasks()
             hasArtwork = true
             hidePlaceholder()
             return
@@ -397,6 +425,7 @@ final class PosterCell: UICollectionViewCell {
                 guard let self, self.currentURL == url else { return }
                 if let image {
                     self.posterView.image = image
+                    self.recenterFocusMasks()
                     self.hasArtwork = true
                     self.hidePlaceholder()
                 } else {

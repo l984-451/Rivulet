@@ -44,8 +44,8 @@ enum TopShelfFeed {
         let sources = serverStore.sources
         let otherRows = serverStore.visibleHomeRows.filter(\.isContinueWatching).map(\.items)
         var others = otherRows.flatMap { TopShelfMapper.items(from: $0, limit: limit * 2) }
-        // The same title on two servers is one card, as in Home's merged row.
-        if !otherRows.isEmpty, let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
+        // The same title on two servers or in two libraries is one card, as in Home's row.
+        if let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
             let primaryRow = PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []
             let shown = Set(ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
                                                              showKey: \.showKey, watched: \.userState.lastViewedAt)

@@ -42,14 +42,15 @@ final class ContinueWatchingRow: ObservableObject {
     }
 
     /// The merged row from each server's row, in server order (the selected
-    /// Plex server first). One contributing row comes back as it is. Episodes
+    /// Plex server first). One contributing row merges only on the keys its items
+    /// carry, with no lookup and in its own order. Episodes
     /// whose show is not identified yet wait out of the row, so no duplicate
     /// flashes before the lookup lands; a lookup that fails lets them in unmerged.
     /// `showKey` is "<providerID>|<show id>" for an episode or season, else nil.
     func cards<Item>(_ serverRows: [[Item]], identity: (Item) -> [String], showKey: (Item) -> String?,
                      watched: (Item) -> Date?) -> [ContinueWatchingMerge.Card<Item>] {
         let rows = serverRows.filter { !$0.isEmpty }
-        guard rows.count > 1 else { return (rows.first ?? []).map { .init(item: $0, others: []) } }
+        guard rows.count > 1 else { return ContinueWatchingMerge.merge(rows, keys: identity, watched: watched) }
         let missing = Set(rows.flatMap { $0 }.compactMap(showKey).filter { showKeys[$0] == nil && !failed.contains($0) })
         if !missing.isEmpty { resolve(missing) }
         let ready = rows.map { $0.filter { showKey($0).map { !missing.contains($0) } ?? true } }

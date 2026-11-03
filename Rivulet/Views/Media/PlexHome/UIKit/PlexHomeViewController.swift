@@ -4398,13 +4398,16 @@ final class PlexHomeViewController: UIViewController {
                                      hubIdentifier: Self.mergedContinueWatchingID.raw))
             }
         }
-        mergedCWOthers = cwOthers
         for (hub, kind) in rail where !(labelsServers && hub.isContinueWatching) {
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
-            if hub.isContinueWatching, !pendingCWRemovals.isEmpty {
-                items.removeAll { pendingCWRemovals.contains($0.ref.itemID) }
+            if hub.isContinueWatching {
+                // One title in two of this server's libraries is one card (#470).
+                let cards = ContinueWatchingMerge.merge([items], keys: { $0.identity ?? [] }, watched: \.userState.lastViewedAt)
+                    .filter { card in !card.copies.contains { pendingCWRemovals.contains($0.ref.itemID) } }
+                for card in cards where !card.others.isEmpty { cwOthers[card.item.ref] = card.others }
+                items = cards.map(\.item)
             }
             var section = HomeSectionData.hub(
                 id: id,
@@ -4419,6 +4422,7 @@ final class PlexHomeViewController: UIViewController {
                 ? Self.serverName(providerID: hub.items.first?.ref.providerID, kind: kind) : nil
             sections.append(section)
         }
+        mergedCWOthers = cwOthers
 
         if showsYearInReview {
             // Under Continue Watching, or under the hero when there is none.

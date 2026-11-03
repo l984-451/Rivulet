@@ -230,6 +230,39 @@ RivuletCore is compiled into each app target, not built as a module, so
 also means an extension on a shared type inside `RivuletiOS/` is not a
 retroactive conformance.
 
+### Mac (Designed for iPad)
+
+The iOS app runs on Apple silicon Macs as **Designed for iPad** and nothing
+else: the FFmpegBuild, LibDovi and LibTrueHD xcframeworks AetherEngine links
+ship no `maccatalyst` slice, and the engine is upstream-only, so Mac Catalyst
+cannot link. The target sets `SUPPORTS_MACCATALYST = NO` and
+`SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES`; the Mac runs the unmodified
+iphoneos binary, and `ProcessInfo.processInfo.isiOSAppOnMac` is the only
+runtime signal that it is one.
+
+- **The Mac differences are host injection, in `RivuletiOSApp.init`**: on a
+  Mac `PlexAPI.platform` is "macOS" and `PlexAPI.deviceName` "Mac" (plex.tv
+  would otherwise list the Mac as an iPad), and Sentry starts with
+  `platform: .macOS`. RivuletCore never tests `isiOSAppOnMac`, for the same
+  reason it carries no `#if os(...)`.
+- **Build**: the compile is the iphoneos build, so `generic/platform=iOS`
+  proves the same thing; the Mac destination is what runs it:
+
+```bash
+xcodebuild -scheme 'Rivulet iOS' -configuration Debug \
+  -destination 'platform=macOS,arch=arm64,name=My Mac' \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+  Xcode 27 names the destination `variant=Designed for [iPad,iPhone]`, which
+  the command line cannot take (the comma splits the specifier); `arch=arm64`
+  selects it, since the native Mac entry is `arm64e`.
+- **What degrades on a Mac, by design**: App Attest when
+  `DCAppAttestService.isSupported` is false (Worker-backed features go out
+  unsigned and are refused; sign-in never touches them), and the downloads'
+  continued-processing activity (`BGTaskScheduler.submit` refusing is handled;
+  the transfers run without it).
+
 ### The player split
 
 `AetherPlayer` is three pieces in two homes. The engine mapping (state and track

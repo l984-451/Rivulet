@@ -47,11 +47,17 @@ enum TopShelfFeed {
         // The same title on two servers or in two libraries is one card, as in Home's row.
         if let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
             let primaryRow = PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []
-            let shown = Set(ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
-                                                             showKey: \.showKey, watched: \.userState.lastViewedAt)
-                                .map(\.item.ref))
-            plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
-            others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
+            let cards = ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
+                                                         showKey: \.showKey, watched: \.userState.lastViewedAt)
+            if otherRows.isEmpty {
+                // The hub can hold more than Home's row, so one server only drops the merged copies.
+                let copies = Set(cards.flatMap(\.others).map(\.ref))
+                plex.removeAll { copies.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
+            } else {
+                let shown = Set(cards.map(\.item.ref))
+                plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
+                others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
+            }
         }
 
         var row = TopShelfMapper.merge(plex, others, limit: limit)

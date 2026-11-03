@@ -257,6 +257,13 @@ xcodebuild -scheme 'Rivulet iOS' -configuration Debug \
   Xcode 27 names the destination `variant=Designed for [iPad,iPhone]`, which
   the command line cannot take (the comma splits the specifier); `arch=arm64`
   selects it, since the native Mac entry is `arm64e`.
+- **Launching a local build on the Mac**: `open` on the bare `Debug-iphoneos`
+  bundle fails with LaunchServices -10661 ("incorrect executable format"),
+  whichever SDK built it. macOS runs an iOS app only in the layout the App
+  Store installs: an outer `<Name>.app` holding `Wrapper/<Name>.app` plus a
+  `WrappedBundle` symlink to it. Build signed (`DEVELOPMENT_TEAM` and
+  `-allowProvisioningUpdates`), copy the product into that layout, and `open`
+  the outer bundle; the app then runs from the system's protected copy.
 - **What degrades on a Mac, by design**: App Attest when
   `DCAppAttestService.isSupported` is false (Worker-backed features go out
   unsigned and are refused; sign-in never touches them), and the downloads'

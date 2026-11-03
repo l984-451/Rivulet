@@ -1697,7 +1697,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
-                        Task { await vm?.seek(to: start) }
+                        Task { await vm?.seek(to: start, exact: true) }
                     })
             }
             let row = PlayerCardRowView(cards: cards)

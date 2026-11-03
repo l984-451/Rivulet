@@ -894,7 +894,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         // seek beyond EOF; land just short so playback ends normally instead.
         let target = duration > 0 ? min(skipTarget, max(0, duration - 0.25)) : skipTarget
         Task { [weak self] in
-            await self?.seek(to: target, revealsControls: false)
+            // Exact: a keyframe landing would replay the scene being skipped.
+            await self?.seek(to: target, revealsControls: false, exact: true)
         }
     }
 
@@ -4022,14 +4023,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     ///   transport chrome (the normal reveal-the-scrubber affordance). A marker
     ///   skip taken while the chrome is hidden passes `false` so the jump
     ///   doesn't pop the rail open.
-    func seek(to time: TimeInterval, revealsControls: Bool = true) async {
+    func seek(to time: TimeInterval, revealsControls: Bool = true, exact: Bool = false) async {
         // An absolute seek (scrub commit, marker skip) supersedes any relative
         // one still in flight; the next skip starts from where this lands.
         seekGeneration += 1
         inFlightRelativeSeekTarget = nil
         stallTracker.noteSeekOrLoad(at: Date())
         if let ap = aetherPlayer {
-            await ap.seek(to: time)
+            await ap.seek(to: time, exact: exact)
         } else {
             await player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
         }
@@ -5398,7 +5399,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Preserve the chrome state across the skip: if the controls were
             // hidden (the pill owned focus), the jump must NOT pop the rail open;
             // if they were already up, keep them up.
-            await seek(to: target, revealsControls: showControls)
+            await seek(to: target, revealsControls: showControls, exact: true)
 
             // Hide button
             activeMarker = nil

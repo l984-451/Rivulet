@@ -16,6 +16,7 @@ final class ThemeVideoBackdropView: UIView {
     private var readyObservation: NSKeyValueObservation?
     private var itemObservation: NSKeyValueObservation?
     private var statusObservation: NSKeyValueObservation?
+    private var looperObservation: NSKeyValueObservation?
     private var failureObserver: NSObjectProtocol?
     private var startupTask: Task<Void, Never>?
     private var visibilityTask: Task<Void, Never>?
@@ -23,11 +24,12 @@ final class ThemeVideoBackdropView: UIView {
     private weak var host: UIViewController?
     private var item: MediaItemRef?
     private var isActive = false
-    private let session = ThemeVideoSession { ref in
-        try await MediaProviderRegistry.shared.provider(for: ref.providerID)?.themeVideo(for: ref)
-    }
+    private let session: ThemeVideoSession
 
-    override init(frame: CGRect) {
+    init(frame: CGRect = .zero, resolve: @escaping ThemeVideoSession.Resolver = { ref in
+        try await MediaProviderRegistry.shared.provider(for: ref.providerID)?.themeVideo(for: ref)
+    }) {
+        session = ThemeVideoSession(resolve: resolve)
         super.init(frame: frame)
         isUserInteractionEnabled = false
         accessibilityElementsHidden = true
@@ -55,13 +57,14 @@ final class ThemeVideoBackdropView: UIView {
         CATransaction.commit()
     }
 
-    func configure(item: MediaItemRef, host: UIViewController) {
+    func configure(item: MediaItemRef?, host: UIViewController?) {
         self.item = item
         self.host = host
         updateEligibility()
     }
 
     func setActive(_ active: Bool) {
+        guard isActive != active else { return }
         isActive = active
         updateMonitoring()
     }
@@ -89,9 +92,32 @@ final class ThemeVideoBackdropView: UIView {
 
     private func updateEligibility() {
         let eligible = isActive && window?.windowScene?.activationState == .foregroundActive
-            && host != nil && host?.presentedViewController == nil && host?.isBeingDismissed == false
+            && Self.isHostUncovered(host) && hasVisibleAncestors
             && UserDefaults.standard.bool(forKey: Self.enabledKey) && !UIAccessibility.isReduceMotionEnabled
         session.update(for: eligible ? item : nil)
+    }
+
+    /// Home is embedded in the shell, which can present a player or detail on
+    /// behalf of its child. Checking only the child's presentations misses it.
+    private static func isHostUncovered(_ host: UIViewController?) -> Bool {
+        guard let host else { return false }
+        var ancestor: UIViewController? = host
+        while let controller = ancestor {
+            if controller.presentedViewController != nil || controller.isBeingDismissed { return false }
+            ancestor = controller.parent
+        }
+        return true
+    }
+
+    private var hasVisibleAncestors: Bool {
+        guard !isHidden else { return false }
+        // This view's own alpha is zero until the first frame is ready.
+        var ancestor = superview
+        while let view = ancestor {
+            if view.isHidden || view.alpha == 0 { return false }
+            ancestor = view.superview
+        }
+        return true
     }
 
     private func show(_ video: ThemeVideo?) {
@@ -101,6 +127,7 @@ final class ThemeVideoBackdropView: UIView {
         readyObservation = nil
         itemObservation = nil
         statusObservation = nil
+        looperObservation = nil
         if let failureObserver { NotificationCenter.default.removeObserver(failureObserver) }
         failureObserver = nil
         layer.removeAllAnimations()
@@ -155,7 +182,17 @@ final class ThemeVideoBackdropView: UIView {
                 self.session.playbackFailed()
             }
         }
-        looper = AVPlayerLooper(player: player, templateItem: template)
+        let looper = AVPlayerLooper(player: player, templateItem: template)
+        self.looper = looper
+        // A bad template can fail before the looper inserts any currentItem,
+        // so the item-status observer alone cannot release that session.
+        looperObservation = looper.observe(\.status, options: [.initial, .new]) { [weak self] looper, _ in
+            let failed = looper.status == .failed
+            Task { @MainActor [weak self] in
+                guard let self, self.playbackGeneration == generation, failed else { return }
+                self.session.playbackFailed()
+            }
+        }
         player.play()
         startupTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(15)) } catch { return }

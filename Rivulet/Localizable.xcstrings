@@ -6185,6 +6185,7 @@
         }
       }
     },
+    "Play Jellyfin theme videos silently in featured banners and behind movie and show details. Titles without a video keep their artwork. Reduce Motion turns these videos off." : {},
     "Play Next" : {
       "localizations" : {
         "de" : {

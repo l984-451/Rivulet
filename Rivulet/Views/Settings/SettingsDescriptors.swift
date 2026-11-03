@@ -130,7 +130,7 @@ enum SettingsDescriptorStore {
         ),
         "themeVideos": SettingDescriptor(
             icon: "video.fill",
-            description: "Play Jellyfin theme videos silently behind movie and show details. Titles without a video keep their artwork. Reduce Motion turns these videos off."
+            description: "Play Jellyfin theme videos silently in featured banners and behind movie and show details. Titles without a video keep their artwork. Reduce Motion turns these videos off."
         ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",

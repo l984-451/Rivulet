@@ -49,6 +49,15 @@ final class HeroBackdropView: UIView {
     private var currentURL: URL?
     private var loadTask: Task<Void, Never>?
     private var pageAnimator: UIViewPropertyAnimator?
+    private let themeVideo: ThemeVideoBackdropView
+    private let loadImage: @MainActor @Sendable (URL) async -> UIImage?
+    private var isActive = false
+    private var isShowcased = true
+    private var isChangingBackdrop = false
+
+    override var isHidden: Bool {
+        didSet { updateThemeVideoActivity() }
+    }
 
     /// Fired when a real backdrop image is on screen. Used by the home VC to
     /// gate startup/profile-switch loading on the hero so it doesn't pop in
@@ -65,7 +74,12 @@ final class HeroBackdropView: UIView {
     /// Non-paging image swaps (a refreshed URL for the same slide).
     private let crossfadeDuration: TimeInterval = 0.22
 
-    override init(frame: CGRect) {
+    init(frame: CGRect = .zero, themeVideo: ThemeVideoBackdropView? = nil,
+         loadImage: @escaping @MainActor @Sendable (URL) async -> UIImage? = {
+             await ImageCacheManager.shared.imageFullSize(for: $0)
+         }) {
+        self.themeVideo = themeVideo ?? ThemeVideoBackdropView()
+        self.loadImage = loadImage
         // Apple's home hero scrim (`MediaShowcasingGradientLayout`, stage):
         // constant black, no per-image darkening.
         scrimLayers = [
@@ -113,6 +127,8 @@ final class HeroBackdropView: UIView {
             page.alpha = 0
             addSubview(page)
         }
+        currentPage.alpha = 1
+        attachThemeVideo()
         scrimLayers.forEach { layer.addSublayer($0) }
     }
 
@@ -134,7 +150,18 @@ final class HeroBackdropView: UIView {
     /// Load the backdrop for `url`. `paging` slides the new art in from the
     /// trailing edge (a hero page change); otherwise it crossfades. Nil shows
     /// the placeholder.
-    func setBackdrop(url: URL?, paging: Bool = false) {
+    func setBackdrop(url: URL?, item: MediaItemRef? = nil, host: UIViewController? = nil,
+                     paging: Bool = false) {
+        // Identity is independent of artwork: episodes can share an image,
+        // and a refreshed image URL must not switch the theme to another title.
+        if url != currentURL {
+            isChangingBackdrop = true
+            updateThemeVideoActivity()
+            // A previous slide's completion must not reactivate playback
+            // while this page is still waiting for its artwork.
+            finishPageAnimation()
+        }
+        themeVideo.configure(item: item, host: host)
         guard url != currentURL else { return }
         loadTask?.cancel()
 
@@ -145,6 +172,10 @@ final class HeroBackdropView: UIView {
                 page.imageView.image = nil
                 page.alpha = 0
             }
+            currentPage.alpha = 1
+            attachThemeVideo()
+            isChangingBackdrop = false
+            updateThemeVideoActivity()
             return
         }
         currentURL = url
@@ -155,51 +186,75 @@ final class HeroBackdropView: UIView {
             return
         }
         loadTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.imageFullSize(for: url)
-            guard !Task.isCancelled, let self, self.currentURL == url, let image else { return }
+            guard let loadImage = self?.loadImage else { return }
+            let image = await loadImage(url)
+            guard !Task.isCancelled, let self, self.currentURL == url else { return }
             self.show(image, paging: paging)
         }
     }
 
-    private func show(_ image: UIImage, paging: Bool) {
+    func setActive(_ active: Bool) {
+        isActive = active
+        updateThemeVideoActivity()
+    }
+
+    private func updateThemeVideoActivity() {
+        themeVideo.setActive(isActive && isShowcased && !isHidden && !isChangingBackdrop)
+    }
+
+    private func attachThemeVideo() {
+        // The video shares the still's crop and parallax, beneath the hero's
+        // scrims. Only the selected page owns a player.
+        currentPage.imageView.addSubview(themeVideo)
+        themeVideo.frame = currentPage.imageView.bounds
+        themeVideo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    }
+
+    private func show(_ image: UIImage?, paging: Bool) {
         finishPageAnimation()
         guard currentPage.imageView.image != nil, currentPage.alpha > 0 else {
             currentPage.imageView.image = image
             currentPage.setOffset(0)
             currentPage.alpha = 1
-            onFirstImageLoaded?()
+            attachThemeVideo()
+            isChangingBackdrop = false
+            updateThemeVideoActivity()
+            if image != nil { onFirstImageLoaded?() }
             return
         }
         swap(&currentPage, &previousPage)
         bringSubviewToFront(currentPage)
         scrimLayers.forEach { layer.addSublayer($0) }  // keep the scrim on top
         currentPage.imageView.image = image
+        attachThemeVideo()
 
-        guard paging else {
+        let animator: UIViewPropertyAnimator
+        if paging {
+            let width = bounds.width
+            currentPage.alpha = 1
+            currentPage.setOffset(width)
+            animator = Self.pageAnimator()
+            animator.addAnimations {
+                self.currentPage.setOffset(0)
+                self.previousPage.setOffset(-width)
+            }
+        } else {
             currentPage.setOffset(0)
             currentPage.alpha = 0
-            UIView.animate(withDuration: crossfadeDuration, delay: 0, options: [.curveEaseInOut]) {
+            animator = UIViewPropertyAnimator(duration: crossfadeDuration, curve: .easeInOut) {
                 self.currentPage.alpha = 1
-            } completion: { _ in
-                self.previousPage.alpha = 0
-                self.previousPage.imageView.image = nil
             }
-            onFirstImageLoaded?()
-            return
         }
-
-        let width = bounds.width
-        currentPage.alpha = 1
-        currentPage.setOffset(width)
-        let animator = Self.pageAnimator()
-        animator.addAnimations {
-            self.currentPage.setOffset(0)
-            self.previousPage.setOffset(-width)
+        animator.addCompletion { [weak self] _ in
+            guard let self, self.pageAnimator != nil else { return }
+            self.pageAnimator = nil
+            self.settlePages()
+            self.isChangingBackdrop = false
+            self.updateThemeVideoActivity()
         }
-        animator.addCompletion { [weak self] _ in self?.settlePages() }
         pageAnimator = animator
         animator.startAnimation()
-        onFirstImageLoaded?()
+        if image != nil { onFirstImageLoaded?() }
     }
 
     /// Jumps an in-flight page slide to its end so the next one starts clean.
@@ -226,6 +281,8 @@ final class HeroBackdropView: UIView {
     /// rests at offset 0.
     func applyScrollOffset(_ offset: CGFloat, shelfTop: CGFloat) {
         transform = CGAffineTransform(translationX: 0, y: -Self.scrollLift(offset, shelfTop: shelfTop, height: bounds.height))
+        isShowcased = Self.showcasePercentage(offset, shelfTop: shelfTop) > 0
+        updateThemeVideoActivity()
     }
 
     /// Where the backdrop's bottom meets the floor line. Apple ends the catch-up

@@ -142,6 +142,9 @@ final class AetherPlayer: PlayerProtocol {
     /// background timestamp so the teardown-drain wait still applies.
     private var pendingReloadSince: Date?
 
+    /// True while the engine is torn down awaiting Play: no video frame exists.
+    var isParkedForReload: Bool { pendingReloadSince != nil }
+
     /// One file of a stacked title.
     struct PartFile {
         let url: URL

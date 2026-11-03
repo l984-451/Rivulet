@@ -111,6 +111,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Kept for existing call sites; true in either ambient tier.
     var showPausedPoster: Bool { pausePresentation != .frame }
 
+    /// Back from the poster returns to the paused frame, which does not exist
+    /// while the engine is torn down after a sleep: Back must leave instead (#523).
+    var backReturnsToPausedFrame: Bool {
+        showPausedPoster && !(aetherPlayer?.isParkedForReload ?? false)
+    }
+
     /// Full-resolution backdrop for the ambient pause state: raw Plex art
     /// path with token, NOT the `/photo/:/transcode` downscale that
     /// `PlexNetworkManager.buildThumbnailURL` applies (the TV renders it at

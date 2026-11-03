@@ -421,14 +421,14 @@ class PlayerContainerViewController: UIViewController {
             }
             // Ambient pause backdrop: back returns to the paused frame, it
             // does not exit the player.
-            if vm.showPausedPoster {
+            if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
                 return
             }
             // Back from the transport buttons closes the whole chrome in one
             // press (not first de-focusing onto the scrubber). Hiding
             // showControls cascades to clear controlsFocusActive via its didSet.
-            if vm.controlsFocusActive || vm.showControls {
+            if (vm.controlsFocusActive || vm.showControls) && !vm.showPausedPoster {
                 withAnimation(.easeOut(duration: 0.25)) {
                     vm.showControls = false
                 }
@@ -907,8 +907,10 @@ class PlayerContainerViewController: UIViewController {
                 if !panel.contentHandlesMenuPress() {
                     panel.dismissPanel()
                 }
-            } else if vm.showPausedPoster {
+            } else if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
+            } else if vm.showPausedPoster {
+                dismissPlayer()
             } else if vm.controlsFocusActive {
                 vm.exitControlsFocus()
             } else if vm.showControls {
@@ -927,7 +929,7 @@ class PlayerContainerViewController: UIViewController {
         // fires the poster flag is already cleared — without this term the
         // fallback would exit the player anyway.
         let shouldBlockDismiss = vm.postVideoState == .hidden
-            && (vm.isScrubbing || vm.showControls || vm.showPausedPoster)
+            && (vm.isScrubbing || vm.backReturnsToPausedFrame || (vm.showControls && !vm.showPausedPoster))
         if shouldBlockDismiss {
             blockDismissTemporarily()
         }

@@ -36,6 +36,8 @@ final class HeroButtonRowView: UIView {
 
     var canRetreat = false
     private var previousPageGesture: Int?
+    private var nextButtonFocusGesture: Int?
+    private var playButtonFocusGesture: Int?
 
     var isOnWatchlist: Bool = false {
         didSet {
@@ -181,16 +183,29 @@ final class HeroButtonRowView: UIView {
         return true
     }
 
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedItem === nextButton, context.previouslyFocusedItem !== nextButton {
+            nextButtonFocusGesture = MenuPressInterceptor.remoteGestures.count
+        }
+        if context.nextFocusedItem === playButton, context.previouslyFocusedItem !== playButton {
+            playButtonFocusGesture = MenuPressInterceptor.remoteGestures.count
+        }
+    }
+
     /// Next is the last button, so the engine has no Right move from it to make.
     private var pagesOnRight: Bool { nextButton.isFocused && !nextButton.isHidden }
 
     // A Right the engine declined (nothing past Next) reaches here; focus stays on Next.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         if playButton.isFocused,
+           playButtonFocusGesture != MenuPressInterceptor.remoteGestures.count,
            presses.contains(where: { $0.type == .leftArrow }),
            consumeBackwardPaging(from: playButton, heading: .left,
                                  gesture: MenuPressInterceptor.remoteGestures.count) { return }
         if pagesOnRight,
+           nextButtonFocusGesture != MenuPressInterceptor.remoteGestures.count,
            presses.contains(where: { $0.type == .rightArrow }) {
             onNext?()
             return

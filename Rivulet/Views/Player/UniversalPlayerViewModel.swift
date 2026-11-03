@@ -614,6 +614,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// The clips still to play ahead of `cinemaFeature`.
     private var cinemaQueue: [PlexMetadata] = []
     private var cinemaFeatureVersion: VersionChoice?
+    /// The pre-play picks, held for the movie: a clip's first track pass would consume them.
+    private var cinemaFeaturePicks: (audio: Int?, subtitle: InitialSubtitleSelection)?
+    private var cinemaStopped = false
     private var hasCheckedCinemaExtras = false
     /// The item that already moved on, so a skip racing the clip's end advances once.
     private var cinemaAdvancedGeneration: Int?
@@ -637,7 +640,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard let clips = try? await plexCinemaExtras(serverURL, authToken, ratingKey, count),
               stops == stopCount, let first = clips.first else { return }
         cinemaFeature = metadata
+        // Server order, or the version's index into the file list is lost on the way back.
+        cinemaFeature?.Media = serverOrderedMedia
         cinemaFeatureVersion = baseVersionChoice
+        cinemaFeaturePicks = (initialAudioTrackId, initialSubtitleSelection)
+        initialAudioTrackId = nil
+        initialSubtitleSelection = .auto
         cinemaQueue = Array(clips.dropFirst())
         metadata = first
         playingMediaID = nil
@@ -649,7 +657,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// The next clip, or the movie after the last one.
     private func advanceCinemaExtras() async {
-        guard let cinemaFeature, cinemaAdvancedGeneration != itemGeneration else { return }
+        guard let cinemaFeature, !cinemaStopped, cinemaAdvancedGeneration != itemGeneration else { return }
         cinemaAdvancedGeneration = itemGeneration
         activeMarker = nil
         showSkipButton = false
@@ -1338,7 +1346,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // source itself and serves HLS-fMP4 to AVPlayer over loopback.
             streamURL = url
             streamHeaders = headers ?? rivuletDirectPlayHeaders()
-            if let ratingKey = metadata.ratingKey {
+            if let ratingKey = metadata.ratingKey, !isPlayingCinemaExtra {
                 let mediaIndex = playingMediaServerIndex, server = plexServer
                 Task { await PlexProgressReporter.shared.beginDirectPlaySession(
                     ratingKey: ratingKey, mediaIndex: mediaIndex, server: server) }
@@ -3851,6 +3859,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func stopPlayback() {
         stopCount += 1
+        cinemaStopped = true
         pausedTimelineTask?.cancel()
         pausedTimelineTask = nil
         streamPreparationTask?.cancel()
@@ -6462,6 +6471,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             if metadata.ratingKey == cinemaFeature?.ratingKey {
                 cinemaFeature = nil
                 cinemaFeatureVersion = nil
+                if let picks = cinemaFeaturePicks {
+                    initialAudioTrackId = picks.audio
+                    initialSubtitleSelection = picks.subtitle
+                    cinemaFeaturePicks = nil
+                }
             }
             playingMediaID = nil
             playingMediaServerIndex = 0

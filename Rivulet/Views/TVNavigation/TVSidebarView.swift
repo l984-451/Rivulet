@@ -84,9 +84,16 @@ struct TVSidebarView: View {
                                              otherServerUsers: AccountName.otherServerUsers)
     }
 
+    /// A Plex or other server's music library: both open `MusicLibraryViewController`.
     private var isMusicLibrarySelected: Bool {
-        guard case .library(let key) = selectedTab else { return false }
-        return dataStore.libraries.first(where: { $0.key == key })?.isMusicLibrary ?? false
+        switch selectedTab {
+        case .library(let key):
+            return dataStore.libraries.first(where: { $0.key == key })?.isMusicLibrary ?? false
+        case .providerLibrary(let providerID, let libraryID):
+            return serverStore.libraries.first { $0.providerID == providerID && $0.id == libraryID }?.kind == .music
+        default:
+            return false
+        }
     }
 
     /// The collapsed pill sits top-left, over the guide's info bar, which puts

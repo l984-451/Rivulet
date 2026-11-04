@@ -533,7 +533,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             guard self.loadToken == token else { return }
             self.ingest(content)
             self.applySnapshot()
-            self.scrollToInitialEpisode(item: content.initialEpisode ?? item)
+            // The load can finish after the user entered the rail; don't move it under them.
+            if self.collectionView.focusedEpisodeIndexPath == nil {
+                self.scrollToInitialEpisode(item: content.initialEpisode ?? item)
+            }
             self.loadRatings(token: token)
             // Chained after ingest, which would otherwise overwrite it with the partial detail.
             let advisory = await self.loader.loadAdvisory(for: item)
@@ -598,7 +601,11 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // A movie fetches nothing here, so its fade does not wait.
         isLoadingEpisodes = showRef != nil || item.kind == .season
         Task { [weak self] in
-            guard let self else { return }
+            // A standalone page's `configure` has already replaced this load.
+            guard let self, self.loadToken == token else { return }
+            // Fetched together: the rail's fade waits on both.
+            async let target: MediaItem? = item.kind == .show
+                ? EpisodePicker.resolvePlayTarget(for: item, provider: provider) : nil
             let eps: [MediaItem]
             if let showRef {
                 eps = (try? await provider.allEpisodes(of: showRef)) ?? []
@@ -607,8 +614,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             } else {
                 eps = []
             }
-            let playTarget = item.kind == .show
-                ? await EpisodePicker.resolvePlayTarget(for: item, provider: provider) : nil
+            let playTarget = await target
             guard self.loadToken == token else { return }
             self.ingestEpisodesOnly(eps)
             self.applySnapshot()

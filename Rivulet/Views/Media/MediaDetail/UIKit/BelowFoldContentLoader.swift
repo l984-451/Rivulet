@@ -79,12 +79,8 @@ final class BelowFoldContentLoader {
         case .show:
             content.seasons = (try? await provider.children(of: item.ref)) ?? []
             content.episodes = (try? await provider.allEpisodes(of: item.ref)) ?? []
-            let playTarget: MediaItem?
-            if let nextEpisode = resolvedDetail?.nextEpisode {
-                playTarget = nextEpisode
-            } else {
-                playTarget = await EpisodePicker.resolvePlayTarget(for: item, provider: provider)
-            }
+            let playTarget = EpisodePicker.showPlayTarget(
+                nextEpisode: resolvedDetail?.nextEpisode, seasons: content.seasons, episodes: content.episodes)
             content.initialEpisode = content.episodes.first { $0.ref == playTarget?.ref }
                 ?? content.episodes.first
             content.selectedSeason = content.seasons.first { $0.ref == content.initialEpisode?.parentRef }

@@ -15,17 +15,8 @@ final class DolbyVisionPlaybackTests: XCTestCase {
     }
 
     func test_profile7_eachRoute() {
-        XCTAssertEqual(playback(7, dv: true, hdr: true), .dualLayer)
         XCTAssertEqual(playback(7, converted: true, dv: true, hdr: true), .convertedTo81)
         XCTAssertEqual(playback(7, hdr: true), .hdr10BaseLayer)
-    }
-
-    func test_profile7_softwareRoute_isDualLayer() {
-        let p = DolbyVisionPlayback(sourceProfile: 7, convertedTo81: false, onSoftwareRoute: true,
-                                    presentsDolbyVision: false, presentsHDR: false)
-        XCTAssertEqual(p, .dualLayer)
-        XCTAssertEqual(DolbyVisionPlayback(sourceProfile: 8, convertedTo81: false, onSoftwareRoute: true,
-                                           presentsDolbyVision: false, presentsHDR: false), .sdr)
     }
 
     func test_singleLayerProfiles() {
@@ -46,16 +37,5 @@ final class DolbyVisionPlaybackTests: XCTestCase {
         XCTAssertEqual(unproven(7, converted: true, panelDV: false), .sdr)
         XCTAssertEqual(DolbyVisionPlayback(sourceProfile: 7, convertedTo81: true, presentsDolbyVision: false,
                                            presentsHDR: true), .hdr10BaseLayer)
-    }
-}
-
-final class DolbyVisionEnhancementLayerTests: XCTestCase {
-
-    func test_readsTheEngineRouteLine() {
-        let prefix = "[AetherEngine] DV P7 dual-layer route: "
-        XCTAssertEqual(DolbyVisionEnhancementLayer(routeLine: prefix + "taken (el_type=FEL, 3840x2160@23.976, budget 80%)"), .full)
-        XCTAssertEqual(DolbyVisionEnhancementLayer(routeLine: prefix + "not taken (el_type=MEL, nothing to compose), keeps the native route"), .minimal)
-        XCTAssertEqual(DolbyVisionEnhancementLayer(routeLine: prefix + "not taken (over the real-time budget, 3840x2160@60 needs 160% of it), keeps the native route"), .full)
-        XCTAssertNil(DolbyVisionEnhancementLayer(routeLine: prefix + "not taken (preferDualLayerDolbyVision is off), keeps the native route"))
     }
 }

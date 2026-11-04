@@ -39,7 +39,6 @@ struct RivuletApp: App {
             let window = note.object as? UIWindow
             MainActor.assumeIsolated { window?.overrideUserInterfaceStyle = .dark }
         }
-        AetherPlayer.settleFELDefault(existingInstall: PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil)
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
 

@@ -52,8 +52,8 @@ final class ServerDataStoreTests: XCTestCase {
         XCTAssertEqual(store.libraries.map(\.id), ["m", "t", "mu", "p", "x"])
         XCTAssertFalse(store.homeRows.contains { $0.id.hasSuffix("|p.recentlyAdded") },
                        "a photo library has no Home row")
-        XCTAssertFalse(store.homeRows.contains { $0.id.hasSuffix("|mu.recentlyAdded") },
-                       "a music library has no Home row")
+        XCTAssertTrue(store.homeRows.contains { $0.id.hasSuffix("|mu.recentlyAdded") },
+                      "a music library has a Recently Added row, as on Plex")
     }
 
     func test_load_rows_continueWatchingThenEachLibrarysRecentlyAdded() async {

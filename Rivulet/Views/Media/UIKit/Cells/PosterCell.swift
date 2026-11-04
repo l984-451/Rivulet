@@ -71,9 +71,19 @@ final class PosterCell: UICollectionViewCell {
     /// (see `blankArtwork`), so it cannot answer this.
     private var hasArtwork = false
 
-    /// Stand-in for missing artwork. TVPosterView drops its focus-growth
-    /// inset with a nil image, which made a loading tile larger than a loaded one.
-    static let blankArtwork = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
+    /// Stand-in for missing artwork. TVPosterView drops its focus-growth inset with a nil image,
+    /// and keeps the geometry it derived from the stand-in when a cover of the same aspect replaces
+    /// it, so a small square stand-in left square covers focusing as a sliver (#504). Tile-sized.
+    static let blankArtwork = blank(for: MediaRowMetrics.poster)
+    private static let blankMusicArtwork = blank(for: MediaRowMetrics.music)
+
+    static func blank(for tile: MediaRowMetrics.Tile) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: tile.art, format: format).image { _ in }
+    }
+
+    private var tileBlankArtwork: UIImage { tile.art == MediaRowMetrics.music.art ? Self.blankMusicArtwork : Self.blankArtwork }
 
     /// The system image corner on tvOS 26.
     private let cornerRadius: CGFloat = 20
@@ -310,6 +320,7 @@ final class PosterCell: UICollectionViewCell {
             posterWidthConstraint.constant = host.width
             posterHeightConstraint.constant = host.height
         }
+        if !hasArtwork { posterView.image = tileBlankArtwork }
     }
 
     override func prepareForReuse() {
@@ -408,7 +419,7 @@ final class PosterCell: UICollectionViewCell {
     }
 
     private func clearArtwork() {
-        posterView.image = Self.blankArtwork
+        posterView.image = tileBlankArtwork
         hasArtwork = false
     }
 

@@ -7,9 +7,10 @@
 //
 //  Settings > Servers > Jellyfin Server. Signed out: a form built from the
 //  same rows as the Live TV "My Own Server" page, sharing its draft and its
-//  failure popup. Signed in: the server, the user, and Sign Out.
+//  failure popup. Signed in: the server, the user, Refresh and Sign Out.
 //
 
+import Combine
 import Foundation
 import UIKit
 
@@ -26,7 +27,15 @@ extension SettingsContent {
                 SettingsRowItem(id: "jellyfinUserInfo", title: "User",
                                 kind: .info(value: { account.userName })),
                 SettingsRowItem(id: "jellyfinRefresh", title: "Refresh",
-                                kind: .action(destructive: false, handler: { _ in ServerDataStore.shared.reload() })),
+                                kind: .action(destructive: false, handler: { vc in
+                    let page = vc as? SettingsPageViewController
+                    ServerDataStore.shared.reload()
+                    page?.reloadRows()
+                    Task { @MainActor [weak page] in
+                        for await loading in ServerDataStore.shared.$isLoading.values where !loading { break }
+                        page?.reloadRows()
+                    }
+                }), isBusy: { ServerDataStore.shared.isLoading }),
                 SettingsRowItem(id: "jellyfinSignOut", title: "Sign Out",
                                 kind: .action(destructive: true, handler: { vc in
                     Task { @MainActor in

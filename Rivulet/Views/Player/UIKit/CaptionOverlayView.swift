@@ -73,8 +73,7 @@ final class CaptionOverlayView: UIView {
         }
     }
 
-    /// Height adjustment for THIS media, in stepper units. Sticky per title /
-    /// channel like the delay stepper, and applying to the default band only.
+    /// The global Height setting, in stepper units. Applies to the default band only.
     var heightUnits: Int {
         didSet {
             guard heightUnits != oldValue else { return }
@@ -110,6 +109,9 @@ final class CaptionOverlayView: UIView {
             return isSystemDefault ? (height * systemDefaultFraction).rounded(.down)
                                    : (height * fractionPerUnit).rounded(.down) * fontScale
         }
+
+        /// The highest the Height setting may rest the default band's bottom edge.
+        static let highestBandFraction: CGFloat = 0.8
 
         /// Fallback presentation height, for a degenerate zero-height layout pass.
         static let assumedVideoHeight: CGFloat = 1080
@@ -333,11 +335,18 @@ final class CaptionOverlayView: UIView {
         return base
     }
 
-    /// Distance from the bottom of the CONTAINER to an UNPLACED cue: the shared
-    /// floor plus the user's Height stepper, which applies to the default band
-    /// only.
+    /// Distance from the bottom of the CONTAINER to an UNPLACED cue: AVPlayer's
+    /// position plus the Height setting, on screen and clear of the rail.
     private func bottomPadding(in size: CGSize) -> CGFloat {
-        max(0, placementFloor(in: size) + SubtitleAdjustments.heightOffset(forUnits: heightUnits))
+        let rect = videoRect(in: size)
+        let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
+        let offset = SubtitleAdjustments.heightOffset(forUnits: heightUnits)
+        // The cap leaves room for a few lines above the box's bottom edge.
+        let highest = size.height * Metrics.highestBandFraction
+        // The Height stepper lives in the open pane, so every step has to show there.
+        if paneOpen { return min(max(0, placementFloor(in: size) + offset), highest) }
+        let onScreen = min(max(0, resting + offset), highest)
+        return controlsVisible ? max(onScreen, placementFloor(in: size)) : onScreen
     }
 
     /// Caption point size for this presentation, before per-cue styling.

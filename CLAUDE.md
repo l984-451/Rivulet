@@ -35,7 +35,7 @@ The video player is **AetherPlayer** — an adapter around AetherEngine (FFmpeg 
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.53.0), with the `DualLayerDolbyVision` (P7 FEL), `DolbyVisionStillReshaping` (P5 stills), `TrueHDObjectAudio` and `DTSXObjectAudio` package traits set in `project.pbxproj`; object audio stays off until Settings → Playback → Height Speakers names a layout. A bump must keep the traits. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.56.0), with none of its optional package traits enabled. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
@@ -563,7 +563,7 @@ most servers and fails on the ones reached by raw IP (#314, #337).
 
 #### Routing policy (VOD)
 1. `ContentRouter.plan(...)` returns `PlaybackPlan { primary, fallbacks }`. Route cases: `.aether`, `.hls`.
-2. `.aether` — whenever a direct-play URL is available (AetherEngine handles demux + remux + HDR internally; software-decodes AV1 / VP9 / MPEG-2 / VC-1 / MPEG-4p2). DV P7 FEL composes both layers on a DV panel, P7 MEL becomes 8.1 (see "HDR / DV").
+2. `.aether` — whenever a direct-play URL is available (AetherEngine handles demux + remux + HDR internally; software-decodes AV1 / VP9 / MPEG-2 / VC-1 / MPEG-4p2). DV P7 becomes 8.1 on a DV panel (see "HDR / DV").
 3. `.hls` — server-side transcode; primary when no direct-play URL exists, and the fallback after an Aether startup failure. `requiresVideoTranscode` codecs force a video transcode (not just remux) on this route.
 
 #### Live TV
@@ -912,6 +912,8 @@ silently means no panel at all. Before CI took the number from the tag it used
 every build number in git permanently one ahead — five releases shipped with
 the wrong notes or none. Build 73 does not exist for that reason. Write bullets as simple,
 user-facing sentences (what users get, not internal details); no em dashes.
+On tvOS, a line starting `> ` is a note from the maintainer, drawn with no dot at the
+top of the entry, and `## ` is a bold heading.
 Every AetherEngine bump gets a changelog line, and it states **only the
 version** (`"Updated AetherEngine to X.Y.Z"`). Do not list what the engine
 release fixes: engine internals are not the user's mental model, and a long
@@ -1006,6 +1008,12 @@ CachedAsyncImage(url: imageURL) { phase in
 }
 ```
 
+**SVG goes through `SVGRasterizer`** (`RivuletCore/Images/`), reached from both image caches
+when ImageIO declines the bytes (ImageIO and `UIImage` have no SVG decoder, measured on tvOS and
+iOS 27). That file is the only importer of SwiftDraw, which crashes or hangs on hostile files, and
+a logo URL comes from the IPTV provider. So `SVGSafetyCheck` runs first, and `SVGRasterizerTests`
+pins each case. Fuzz again when bumping SwiftDraw: 24,000 mutated files found the last two.
+
 ## Build & Run
 
 One-time setup: `RivuletCore/Config/Secrets.swift` is gitignored and required for **both** app targets to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):
@@ -1059,7 +1067,7 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 
 **Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (`v*` → tvOS, `ios-v*` → iOS), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
 
-**One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.1 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
+**One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.2 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
 
 **No `.metal` files.** Compiling one needs Apple's separate Metal Toolchain download, which the GitHub runners (and likely Codemagic) lack: the tvOS check failed on it once. Ship a shader as source and compile it at runtime with `makeLibrary(source:)`, as `WelcomeGlowShader` does.
 
@@ -1178,7 +1186,7 @@ VOD is served by AetherPlayer (`aether` route, the default) or AVPlayer (`hls` r
 
 ### HDR / DV
 - Aether drives `AVDisplayManager.preferredDisplayCriteria` itself (host `DisplayCriteriaManager` stands down on the aether route).
-- DV is engine-owned; the RPU stays in the samples and Apple's decoder applies it. P5 is a `dvh1` sample entry with `dvcC` and `CODECS="dvh1.05.LL"`. P8.1 / P8.4 are `hvc1` + `dvvC` with `SUPPLEMENTAL-CODECS="dvh1.08.LL/db1p"` (`/db4h` for 8.4), and the HDMI criteria request `dvh1`. The supplemental only rides the master playlist, which is served once the panel is in HDR, so real DV needs a DV TV plus Match Dynamic Range (or HDR/DV output locked). P7 FEL on a DV panel takes the engine's dual-layer route (#345): `AetherPlayer` sets `preferDualLayerDolbyVision` from `AetherEngine.displayCapabilities.supportsDolbyVision`, because the engine does not check the panel itself. That route is the software host: height channels still render there (Height Speakers), but it has no AirPlay picture, and the engine refuses it over its real-time budget (UHD 30 fps plus a 1080p EL). P7 MEL, and FEL over budget, is converted live to single-layer 8.1 (libdovi, EL dropped) on a DV panel. Without DV on the TV, P7 plays the HDR10 base. P8.2 plays its SDR base. Without DV on the TV, 8.x plays its base layer. Rivulet sets neither `dolbyVisionHandling` nor `forceDolbyVisionOnNonDVDisplay`, so the engine defaults apply. Both FEL and P5 stills exist only because of package traits (see Quick Reference), so a bump that drops them silently turns FEL off. Routing lives in the engine's `CodecRoutePolicy.swift`.
+- DV is engine-owned; the RPU stays in the samples and Apple's decoder applies it. P5 is a `dvh1` sample entry with `dvcC` and `CODECS="dvh1.05.LL"`. P8.1 / P8.4 are `hvc1` + `dvvC` with `SUPPLEMENTAL-CODECS="dvh1.08.LL/db1p"` (`/db4h` for 8.4), and the HDMI criteria request `dvh1`. The supplemental only rides the master playlist, which is served once the panel is in HDR, so real DV needs a DV TV plus Match Dynamic Range (or HDR/DV output locked). P7 is converted live to single-layer 8.1 (libdovi, EL dropped) on a DV panel. Without DV on the TV, P7 plays the HDR10 base. P8.2 plays its SDR base. Without DV on the TV, 8.x plays its base layer. Rivulet sets neither `dolbyVisionHandling` nor `forceDolbyVisionOnNonDVDisplay`, so the engine defaults apply. P5 has no engine stills, so its scrub previews come from the server's thumbnails when it has them. Routing lives in the engine's `CodecRoutePolicy.swift`.
 
 ## Plex Discover API
 

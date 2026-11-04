@@ -1699,7 +1699,7 @@ final class ChannelColumnView: UICollectionReusableView {
         guard let url = currentLogoURL else { return }
 
         logoLoadTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: url, quality: .logo)
+            let image = await ImageCacheManager.shared.image(for: url, quality: .logo)?.legibleChannelLogo
             guard let self,
                   !Task.isCancelled,
                   self.currentLogoURL == url
@@ -1850,20 +1850,48 @@ final class CornerView: UICollectionReusableView {
 
 // MARK: - Info bar
 
-/// Guide header: the focused programme's details on the left, scrolling
-/// beneath the grid. No poster slot: the text stays put whatever art a
-/// programme has (#360), and the art itself is the guide backdrop.
+/// Plex-style guide header: a poster + details on the left, scrolling beneath
+/// the grid. Uses the focused programme's icon (from XMLTV) or the channel logo.
 struct GuideInfoBar: View {
     let channel: UnifiedChannel?
     let program: UnifiedProgram?
 
+    /// Programme artwork for the poster, prioritising a 2:3 portrait image.
+    /// Landscape images are NEVER shown in the 2:3 poster slot — they route
+    /// to the guide backdrop instead, while the poster slot falls back to the
+    /// channel logo.
+    private var programImageURL: URL? {
+        if let poster = program?.posterURL {
+            if EPGImageClassifier.shared.isLandscape(poster) {
+                return nil
+            }
+            return poster
+        }
+        if let icon = program?.iconURL {
+            if program?.landscapeURL == icon || EPGImageClassifier.shared.isLandscape(icon) {
+                return nil
+            }
+            return icon
+        }
+        return nil
+    }
+
+    @State private var loadedPoster: (url: URL, image: UIImage)?
+
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .task(id: programImageURL) { await loadPoster(programImageURL) }
     }
+
+    /// Fixed poster height; width follows the image's own aspect ratio so a
+    /// 2:3 poster shows 2:3 and a 16:9 fallback shows 16:9 (never cropped).
+    private let posterHeight: CGFloat = EPGTheme.miniPlayerSize.height
 
     private var content: some View {
         HStack(alignment: .top, spacing: 30) {
+            poster
+
             VStack(alignment: .leading, spacing: 10) {
                 if let channel {
                     Text(channelLine(channel))
@@ -1894,6 +1922,45 @@ struct GuideInfoBar: View {
         .padding(.trailing, 48)
         .padding(.top, EPGTheme.pageMargin)
         .padding(.bottom, 9)
+    }
+
+    /// 2:3 poster box width.
+    private var posterWidth: CGFloat { posterHeight * 2.0 / 3.0 }
+
+    /// The 2:3 poster slot, only when the programme has portrait artwork. No
+    /// channel-logo stand-in: the logo is already in the channel column, and
+    /// squeezed into a poster frame it read as a broken poster. Most IPTV
+    /// guides carry no portrait art, so there the info text starts at the edge.
+    /// Nothing is drawn until the image is loaded AND measured portrait:
+    /// drawing during the load showed an empty frame, or the wide art, that
+    /// then vanished. The previous poster holds the slot while the next one
+    /// loads, so the text does not jump left and back (#360).
+    @ViewBuilder private var poster: some View {
+        if let loaded = loadedPoster {
+            ZStack {
+                EPGTheme.surface
+                Image(uiImage: loaded.image).resizable().aspectRatio(contentMode: .fit)
+                    .id(loaded.url)
+                    .transition(.opacity)
+            }
+            .frame(width: posterWidth, height: posterHeight)
+            .clipShape(RoundedRectangle(cornerRadius: EPGTheme.columnCorner))
+            .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
+            .transition(.opacity)
+        }
+    }
+
+    /// Loads and measures the poster; keeps it only when it is portrait,
+    /// otherwise collapses the slot.
+    private func loadPoster(_ url: URL?) async {
+        var next: (url: URL, image: UIImage)?
+        if let url, !EPGImageClassifier.shared.isLandscape(url),
+           let image = await ImageCacheManager.shared.image(for: url),
+           await EPGImageClassifier.shared.classify(url, loadSize: { image.size }) == .portrait {
+            next = (url, image)
+        }
+        guard !Task.isCancelled, next?.url != loadedPoster?.url else { return }
+        withAnimation(.easeInOut(duration: 0.35)) { loadedPoster = next }
     }
 
     private func channelLine(_ channel: UnifiedChannel) -> String {

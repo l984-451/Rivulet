@@ -156,7 +156,9 @@ final class HeroBackdropView: UIView {
         }
         loadTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.imageFullSize(for: url)
-            guard !Task.isCancelled, let self, self.currentURL == url, let image else { return }
+            guard !Task.isCancelled, let self, self.currentURL == url else { return }
+            // Home waits behind this callback, so an image that fails must fire it too.
+            guard let image else { self.onFirstImageLoaded?(); return }
             self.show(image, paging: paging)
         }
     }

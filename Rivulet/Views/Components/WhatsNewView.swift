@@ -119,6 +119,12 @@ struct WhatsNewView: View {
         line.hasPrefix("## ") ? String(line.dropFirst(3)) : nil
     }
 
+    /// A changelog line starting with `> ` is a personal note: plain text with
+    /// no dot. Returns its text, or nil otherwise.
+    static func note(_ line: String) -> String? {
+        line.hasPrefix("> ") ? String(line.dropFirst(2)) : nil
+    }
+
     private func featureRow(text: String, isFocused: Bool) -> some View {
         let heading = Self.heading(text)
         return HStack(alignment: .top, spacing: 14) {
@@ -149,6 +155,21 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.2.0 (122)", [
+            "> I removed Dolby Vision FEL and Height Speakers because of licensing uncertainty. Profile 7 now plays as 8.1 on a Dolby Vision TV, and TrueHD and DTS-HD play as lossless 7.1. Sorry if this is what brought you to Rivulet.",
+        ]),
+        ("1.2.0 (121)", [
+            "> Thanks for the bugs, support, and PRs! I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",
+            "Trailers options in Playback",
+            "Added Localization. German is available! Welcome PRs for other languages. @JoschaP",
+            "Jellyfin Quick Connect, Music Videos, and Recently Added music row. @DIYtechie",
+            "SVG logos in Live TV",
+            "A title in 2 libraries on one server is now one card in CW",
+            "Plex QR sign in. @priyanshuppal",
+            "Profile Picker shows on return after backgrounding for 30 seconds. @twinkie0101",
+            "Updated AetherEngine to 7.56.0",
+            "Other small changes and fixes",
+        ]),
         ("1.1.1 (120)", [
             "Episode and season pages now show their extras.",
             "The player's info panels stay open while you're reading them.",

@@ -421,14 +421,14 @@ class PlayerContainerViewController: UIViewController {
             }
             // Ambient pause backdrop: back returns to the paused frame, it
             // does not exit the player.
-            if vm.showPausedPoster {
+            if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
                 return
             }
             // Back from the transport buttons closes the whole chrome in one
             // press (not first de-focusing onto the scrubber). Hiding
             // showControls cascades to clear controlsFocusActive via its didSet.
-            if vm.controlsFocusActive || vm.showControls {
+            if (vm.controlsFocusActive || vm.showControls) && !vm.showPausedPoster {
                 withAnimation(.easeOut(duration: 0.25)) {
                     vm.showControls = false
                 }
@@ -907,8 +907,10 @@ class PlayerContainerViewController: UIViewController {
                 if !panel.contentHandlesMenuPress() {
                     panel.dismissPanel()
                 }
-            } else if vm.showPausedPoster {
+            } else if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
+            } else if vm.showPausedPoster {
+                dismissPlayer()
             } else if vm.controlsFocusActive {
                 vm.exitControlsFocus()
             } else if vm.showControls {
@@ -927,7 +929,7 @@ class PlayerContainerViewController: UIViewController {
         // fires the poster flag is already cleared — without this term the
         // fallback would exit the player anyway.
         let shouldBlockDismiss = vm.postVideoState == .hidden
-            && (vm.isScrubbing || vm.showControls || vm.showPausedPoster)
+            && (vm.isScrubbing || vm.backReturnsToPausedFrame || (vm.showControls && !vm.showPausedPoster))
         if shouldBlockDismiss {
             blockDismissTemporarily()
         }
@@ -1362,7 +1364,7 @@ class PlayerContainerViewController: UIViewController {
                             title: "Delay",
                             value: { [weak vm] in SubtitleAdjustments.formattedDelay(vm?.subtitleDelaySeconds ?? 0) },
                             onStep: { [weak vm] step in vm?.adjustSubtitleDelay(bySteps: step) }),
-                        // Height: sticky per title, like Delay above.
+                        // Height: one global setting (#461).
                         CardStepperConfig(
                             title: "Height",
                             value: { [weak vm] in
@@ -1697,7 +1699,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
-                        Task { await vm?.seek(to: start) }
+                        Task { await vm?.seek(to: start, exact: true) }
                     })
             }
             let row = PlayerCardRowView(cards: cards)
@@ -1737,10 +1739,12 @@ class PlayerContainerViewController: UIViewController {
 
         case .insights:
             guard insightsButtonShouldBeAvailable else { return nil }
-            return (InsightsPanelContainerView(
+            let insights = InsightsPanelContainerView(
                 cast: insightsCastCache,
                 trivia: insightsTriviaCache,
-                suppressedTriviaIDs: suppressedTriviaIDsCache), nil)
+                suppressedTriviaIDs: suppressedTriviaIDsCache)
+            insights.onReadBio = { [weak self] in self?.presentDescription($0) }
+            return (insights, nil)
 
         case .details:
             // Live stats exist only on the aether route (an AetherPlayer is present).
@@ -1749,7 +1753,6 @@ class PlayerContainerViewController: UIViewController {
             let details = PlayerDetailsPaneView(
                 media: PlayerDetailsPaneView.mediaSections(metadata: vm.metadata, modes: vm.streamingModeInfo,
                                                            dolbyVision: vm.aetherPlayer?.dolbyVisionPlayback,
-                                                           enhancementLayer: vm.aetherPlayer?.dolbyVisionEnhancementLayer,
                                                            enhanceDialogue: SystemAudioAdjustment.dialogueSummary,
                                                            upscale: vm.aetherPlayer?.upscaleSummary),
                 statsProvider: statsProvider)
@@ -1915,7 +1918,8 @@ class PlayerContainerViewController: UIViewController {
 
     private func refreshPostVideoContent() {
         guard let vm = viewModel, let overlay = postVideoOverlay, overlay.superview != nil else { return }
-        overlay.setLoading(vm.postVideoState == .loading)
+        // Reads the live state, already past `.loading` if the fetch finished: only a real card slides in.
+        overlay.setLoading(vm.postVideoState != .showingEpisodeSummary)
         overlay.configure(
             nextEpisode: vm.nextEpisode,
             serverURL: vm.serverURL,

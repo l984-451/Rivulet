@@ -5,6 +5,7 @@
 //  RivuletTests
 //
 
+import Combine
 import XCTest
 @testable import Rivulet
 
@@ -97,6 +98,33 @@ final class PlaylistPlaybackTests: XCTestCase {
         XCTAssertEqual(vm.postVideoState, .hidden)
         XCTAssertNil(vm.nextEpisode)
         XCTAssertTrue(vm.shouldDismiss)
+    }
+
+    /// An item with no Up Next card never publishes `.loading`: the container mounts the card for it (#497).
+    func test_noUpNextCard_neverPublishesLoading() async {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "showPostVideoUpNext")
+        defaults.set(false, forKey: "showPostVideoUpNext")
+        defer { defaults.set(saved, forKey: "showPostVideoUpNext") }
+
+        for kind in [MediaKind.episode, .movie] {
+            let current = item("e1", kind: kind, season: 1, number: 1)
+            let url = URL(string: "http://media.local/e1")!
+            let playback = ProviderPlayback(
+                provider: StubMediaProvider(id: pid, kind: .jellyfin), item: current, detail: detail(current, url: url),
+                stream: StreamInfo(source: source(url: url), playSessionID: "ps1", trackInfoAvailable: true),
+                extras: PlaybackExtras())
+            let vm = UniversalPlayerViewModel(providerPlayback: playback, startOffset: nil)
+            vm.reportPlaybackState(.playing)
+
+            var states: [PostVideoState] = []
+            let sink = vm.$postVideoState.sink { states.append($0) }
+            await vm.finishPlayback()
+            sink.cancel()
+
+            XCTAssertEqual(states, [.hidden], "\(kind)")
+            XCTAssertTrue(vm.shouldDismiss, "\(kind)")
+        }
     }
 
     /// Movies run the end funnel twice: the credits trigger, then `.ended`.

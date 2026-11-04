@@ -373,7 +373,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Sticky per-channel subtitle delay (OSD stepper). Re-read per channel:
         // the key is derived from the channel id.
         subtitleDelaySeconds = SubtitleAdjustments.delay(forKey: subtitleMediaKey)
-        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits
         subtitleModel.delaySeconds = subtitleDelaySeconds
 
         let adopted = pendingAdoption
@@ -1600,11 +1600,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             })
     }
 
-    /// Steps this channel's subtitle height, applies it live, and persists it.
+    /// Steps the global subtitle height, applies it live, and persists it.
     private func adjustSubtitleHeight(bySteps steps: Int) {
-        SubtitleAdjustments.setHeightUnits(subtitleHeightUnits + steps,
-                                           forMediaKey: subtitleMediaKey)
-        subtitleHeightUnits = SubtitleAdjustments.heightUnits(forMediaKey: subtitleMediaKey)
+        SubtitleAdjustments.heightUnits = subtitleHeightUnits + steps
+        subtitleHeightUnits = SubtitleAdjustments.heightUnits
         syncSubtitleOverlay()
     }
 
@@ -2402,7 +2401,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
             // captions on the picture rather than in the pillar/letterbox.
             videoSize: aetherPlayer?.videoSize ?? .zero,
-            // Height is sticky per channel, like the delay stepper.
             heightUnits: subtitleHeightUnits
         )
         // Added here, below the chrome — see the call site in viewDidLoad.
@@ -2426,7 +2424,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
         // captions on the picture rather than in the pillar/letterbox.
         overlay.videoSize = aetherPlayer?.videoSize ?? .zero
-        // Height is sticky per channel, like the delay stepper.
         overlay.heightUnits = subtitleHeightUnits
         let pane = activePanel?.isPane == true
         if overlay.paneOpen != pane {

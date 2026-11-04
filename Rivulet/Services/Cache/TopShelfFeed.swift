@@ -44,14 +44,20 @@ enum TopShelfFeed {
         let sources = serverStore.sources
         let otherRows = serverStore.visibleHomeRows.filter(\.isContinueWatching).map(\.items)
         var others = otherRows.flatMap { TopShelfMapper.items(from: $0, limit: limit * 2) }
-        // The same title on two servers is one card, as in Home's merged row.
-        if !otherRows.isEmpty, let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
+        // The same title on two servers or in two libraries is one card, as in Home's row.
+        if let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
             let primaryRow = PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []
-            let shown = Set(ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
-                                                             showKey: \.showKey, watched: \.userState.lastViewedAt)
-                                .map(\.item.ref))
-            plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
-            others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
+            let cards = ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
+                                                         showKey: \.showKey, watched: \.userState.lastViewedAt)
+            if otherRows.isEmpty {
+                // The hub can hold more than Home's row, so one server only drops the merged copies.
+                let copies = Set(cards.flatMap(\.others).map(\.ref))
+                plex.removeAll { copies.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
+            } else {
+                let shown = Set(cards.map(\.item.ref))
+                plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
+                others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
+            }
         }
 
         var row = TopShelfMapper.merge(plex, others, limit: limit)
@@ -89,7 +95,9 @@ enum TopShelfFeed {
         }
         let others = ServerDataStore.shared.visibleHomeRows
             .filter { $0.id.hasSuffix(".recentlyAdded") }
-            .flatMap { TopShelfMapper.items(from: $0.items.filter { !$0.userState.isPlayed }, limit: limit * 2) }
+            // A music library's row lists albums, which Top Shelf leaves out as it does Plex's.
+            .flatMap { TopShelfMapper.items(from: $0.items.filter { !$0.userState.isPlayed && $0.isMusic != true },
+                                            limit: limit * 2) }
         return TopShelfMapper.merge(plex, others, limit: limit)
     }
 }

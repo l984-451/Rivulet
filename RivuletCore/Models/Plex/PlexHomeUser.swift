@@ -53,6 +53,10 @@ nonisolated struct PlexHomeUser: Codable, Identifiable, Sendable, Hashable {
 
     // MARK: - Computed Properties
 
+    /// Plex limits what this profile may watch. `restricted` alone only means managed (#502).
+    /// None reads null from the v2 endpoint and "" from the XML one (measured).
+    var hasContentLimits: Bool { restrictionProfile?.isEmpty == false }
+
     /// Best display name to show in UI
     var displayName: String {
         friendlyName ?? title

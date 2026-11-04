@@ -35,13 +35,24 @@ class PlexUserProfileManager: ObservableObject {
     /// Currently selected user profile
     @Published var selectedUser: PlexHomeUser? {
         // Kept across launches: the home-user list loads seconds after launch, or not at all offline.
-        didSet { if let selectedUser { userDefaults.set(selectedUser.restricted, forKey: restrictedKey) } }
+        didSet {
+            guard let selectedUser else { return }
+            userDefaults.set(selectedUser.restricted, forKey: restrictedKey)
+            userDefaults.set(selectedUser.hasContentLimits, forKey: contentLimitedKey)
+        }
     }
 
-    /// A managed (restricted) Plex profile. It sees Plex content only: other
-    /// servers, IPTV, sign-out, server and parental settings are the owner's.
+    /// A managed (restricted) Plex profile. Other servers, sign-out, server
+    /// and parental settings are the owner's.
     var isRestrictedProfile: Bool {
         selectedUser?.restricted ?? userDefaults.bool(forKey: restrictedKey)
+    }
+
+    /// Plex limits this profile's content, so it gets no IPTV, which carries no ratings. Before
+    /// the saved profile is known, a managed profile from an older build counts as limited.
+    var isContentLimitedProfile: Bool {
+        selectedUser?.hasContentLimits
+            ?? (userDefaults.object(forKey: contentLimitedKey) as? Bool ?? userDefaults.bool(forKey: restrictedKey))
     }
 
     /// Loading state for user fetch
@@ -78,6 +89,7 @@ class PlexUserProfileManager: ObservableObject {
     private let selectedUserNameKey = "selectedPlexUserName"
     private let showProfilePickerOnLaunchKey = "showPlexProfilePickerOnLaunch"
     private let restrictedKey = "selectedPlexUserRestricted"
+    private let contentLimitedKey = "selectedPlexUserContentLimited"
 
     // MARK: - Dependencies
 
@@ -287,6 +299,7 @@ class PlexUserProfileManager: ObservableObject {
         homeUsers = []
         selectedUser = nil
         userDefaults.removeObject(forKey: restrictedKey)
+        userDefaults.removeObject(forKey: contentLimitedKey)
         usersError = nil
         usersWithRememberedPins = []
 
@@ -391,6 +404,8 @@ class PlexUserProfileManager: ObservableObject {
                 break
             case .keep:
                 selectedUser = savedUser
+                // A managed profile's IPTV was withheld until its content limits were known (#502).
+                LiveTVDataStore.shared.plexContentTokenChanged()
             case .useAccount:
                 let wasWithheld = PlexAuthManager.shared.isContentWithheld
                 selectedUser = savedUser

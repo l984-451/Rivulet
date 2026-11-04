@@ -37,6 +37,8 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
     /// Backs the actor view only; list cards carry their own glass.
     private let glass = makePaneGlass(cornerRadius: Metrics.radius)
     private var state: State = .list
+    /// Select on an actor's bio, with its whole text.
+    var onReadBio: ((String) -> Void)?
 
     init(
         cast: [MediaPerson],
@@ -92,6 +94,7 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         let token = coordinator.begin()
 
         let actor = InsightsActorView(person: person)
+        actor.onReadBio = { [weak self] in self?.onReadBio?($0) }
         actor.translatesAutoresizingMaskIntoConstraints = false
         actor.alpha = 0
         addSubview(actor)
@@ -165,10 +168,9 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
         }
     }
 
-    /// Menu first closes a reading bio, then the actor, then (declined) the pane.
+    /// Menu first closes the actor, then (declined) the pane.
     func handleMenuPress() -> Bool {
         guard state == .actor else { return false }
-        if actorView?.handleMenuPress() == true { return true }
         reverseCrossfadeToList()
         return true
     }

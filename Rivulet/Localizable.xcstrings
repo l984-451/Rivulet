@@ -4887,22 +4887,6 @@
         }
       }
     },
-    "Dolby Vision FEL": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dolby Vision FEL"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dolby Vision FEL"
-          }
-        }
-      }
-    },
     "Dolby Vision, TV not confirmed": {
       "localizations": {
         "de": {
@@ -5011,22 +4995,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ναρκωτικά, αλκοόλ και κάπνισμα"
-          }
-        }
-      }
-    },
-    "Dual Layer (FEL)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zwei Ebenen (FEL)"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Διπλό επίπεδο (FEL)"
           }
         }
       }
@@ -5331,22 +5299,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Περισσότερη βελτίωση"
-          }
-        }
-      }
-    },
-    "Enhancement Layer": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erweiterungsebene"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Επίπεδο βελτίωσης"
           }
         }
       }
@@ -6449,22 +6401,6 @@
         }
       }
     },
-    "Full (FEL)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vollständig (FEL)"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Πλήρες (FEL)"
-          }
-        }
-      }
-    },
     "Full Screen": {
       "localizations": {
         "de": {
@@ -6823,22 +6759,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ύψος"
-          }
-        }
-      }
-    },
-    "Height Speakers": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Höhenlautsprecher"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ηχεία ύψους"
           }
         }
       }
@@ -7547,22 +7467,6 @@
         }
       }
     },
-    "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Behält die Höhenkanäle objektbasierter Tonspuren bei, verlustfrei über HDMI. Bei „Aus“ wird 7.1 ohne sie wiedergegeben. Manche Tonspuren benötigen 7.1.4 oder 9.1.6."
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Διατηρεί τα κανάλια ύψους του αντικειμενοστρεφούς ήχου χωρίς απώλειες μέσω HDMI. Απενεργοποιημένο, αναπαράγεται 7.1 χωρίς αυτά. Μερικοί τίτλοι χρειάζονται 7.1.4 ή 9.1.6."
-          }
-        }
-      }
-    },
     "Kids": {
       "localizations": {
         "de": {
@@ -8135,22 +8039,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Από ήπια και πάνω"
-          }
-        }
-      }
-    },
-    "Minimal (MEL)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Minimal (MEL)"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ελάχιστο (MEL)"
           }
         }
       }
@@ -10039,18 +9927,18 @@
         }
       }
     },
-    "Plays the full Dolby Vision Profile 7 layer on a Dolby Vision TV, without AirPlay or Picture in Picture. Off plays it as 8.1.": {
+    "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gibt die vollständige Ebene von Dolby Vision Profil 7 auf einem Dolby-Vision-Fernseher wieder, ohne AirPlay oder Bild-in-Bild. Bei „Aus“ wird Profil 7 als 8.1 wiedergegeben."
+            "value": "Spielt auf Plex Trailer und das Pre-Roll-Video deines Servers ab, bevor ein Film von Anfang an startet. Was läuft, legen die Cinema-Trailers-Einstellungen deines Servers fest. Mit „Überspringen“ geht es weiter."
           }
         },
         "el": {
           "stringUnit": {
             "state": "translated",
-            "value": "Παίζει το πλήρες επίπεδο Dolby Vision Profile 7 σε τηλεόραση Dolby Vision, χωρίς AirPlay ή Εικόνα εντός εικόνας. Απενεργοποιημένο παίζει ως 8.1."
+            "value": "Αναπαράγει τρέιλερ και εισαγωγικά βίντεο από τον διακομιστή σας πριν από μια ταινία που ξεκινάτε από την αρχή μέσω Plex. Οι ρυθμίσεις Cinema Trailers του διακομιστή καθορίζουν τι θα αναπαραχθεί. Πατήστε Παράλειψη για να συνεχίσετε."
           }
         }
       }
@@ -12139,6 +12027,22 @@
         }
       }
     },
+    "Scan with your phone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit dem Smartphone scannen"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Σαρώστε με το κινητό σας"
+          }
+        }
+      }
+    },
     "Scene": {
       "localizations": {
         "de": {
@@ -12939,18 +12843,18 @@
         }
       }
     },
-    "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use.": {
+    "Shows the profile picker each time Rivulet opens, and when you come back to it after more than 30 seconds on the Home screen, in another app or on the screensaver, allowing you to choose which profile to use.": {
       "localizations": {
         "de": {
           "stringUnit": {
-            "state": "translated",
-            "value": "Zeigt bei jedem Start von Rivulet die Profilauswahl, damit du wählen kannst, welches Profil du verwendest."
+            "state": "needs_review",
+            "value": "Zeigt die Profilauswahl bei jedem Öffnen von Rivulet und wenn du nach mehr als 30 Sekunden auf dem Home-Bildschirm, in einer anderen App oder im Bildschirmschoner zurückkehrst, damit du wählen kannst, welches Profil du verwendest."
           }
         },
         "el": {
           "stringUnit": {
             "state": "translated",
-            "value": "Εμφανίζει επιλογή προφίλ κάθε φορά που ανοίγει το Rivulet."
+            "value": "Εμφανίζει την επιλογή προφίλ κάθε φορά που ανοίγει το Rivulet, καθώς και όταν επιστρέφετε σε αυτό αφού έχετε παραμείνει για περισσότερα από 30 δευτερόλεπτα στην αρχική οθόνη, σε άλλη εφαρμογή ή στην προφύλαξη οθόνης, επιτρέποντάς σας να επιλέξετε το προφίλ που θέλετε να χρησιμοποιήσετε."
           }
         }
       }
@@ -13399,6 +13303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Παράλειψη ανακεφαλαίωσης"
+          }
+        }
+      }
+    },
+    "Skip Trailer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trailer überspringen"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Παράλειψη τρέιλερ"
           }
         }
       }
@@ -15543,6 +15463,22 @@
         }
       }
     },
+    "Trailers Before Movies": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trailer vor Filmen"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Τρέιλερ πριν από τις ταινίες"
+          }
+        }
+      }
+    },
     "Transcode": {
       "localizations": {
         "de": {
@@ -16339,22 +16275,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Βία και αιματηρές σκηνές"
-          }
-        }
-      }
-    },
-    "Visit": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Öffne"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Επίσκεψη"
           }
         }
       }
@@ -17596,6 +17516,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "ώρες μουσικής"
+          }
+        }
+      }
+    },
+    "or visit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oder öffne"
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ή επισκεφθείτε"
           }
         }
       }

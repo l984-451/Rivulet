@@ -1809,6 +1809,7 @@ enum DebugFocusDriver {
                 (focused as? PlayerSummaryButton)?.onPress?()
                 (focused as? TransportControlButton)?.onPress?()
                 (focused as? CardTrackRowButton)?.onTap?()
+                (focused as? SkipPillButton)?.onSelect?()
                 try? await Task.sleep(for: .milliseconds(800))
                 print("[Moves] \(index + 1) select focus=\(describeFocus(in: window))")
                 state("move-\(index + 1)")

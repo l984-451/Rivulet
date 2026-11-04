@@ -6,7 +6,7 @@
 //  Rivulet
 //
 //  One Continue Watching row across every server (#87), for both apps. The same title on two
-//  servers becomes one card, matched only on ids (never on title: a wrong merge
+//  servers, or in two libraries of one server (#470), becomes one card, matched only on ids (never on title: a wrong merge
 //  hides a show, a duplicate is only untidy). Episodes collapse per SHOW, since
 //  Plex and Jellyfin keep separate watch state and one show can sit at a
 //  different episode on each; the card shows the copy watched last.
@@ -24,12 +24,9 @@ enum ContinueWatchingMerge {
 
     /// Merges each server's row, `rows` in server order (the selected Plex server
     /// first). `keys` gives an item's identity keys, `watched` its last watch.
-    /// With one contributing row nothing moves: that server's own order stands.
+    /// With one contributing row, that server's own order stands.
     static func merge<Item>(_ rows: [[Item]], keys: (Item) -> [String], watched: (Item) -> Date?) -> [Card<Item>] {
         let contributing = rows.filter { !$0.isEmpty }
-        guard contributing.count > 1 else {
-            return (contributing.first ?? []).map { Card(item: $0, others: []) }
-        }
         func date(_ item: Item) -> Date { watched(item) ?? .distantPast }
         // Union by shared key: the first group that holds any key wins.
         var groups: [[(item: Item, rank: Int)]] = []
@@ -62,6 +59,7 @@ enum ContinueWatchingMerge {
             let ordered = group.sorted { (date($0.item), $1.rank) > (date($1.item), $0.rank) }
             return (Card(item: ordered[0].item, others: ordered.dropFirst().map(\.item)), group.map(\.rank).min() ?? 0)
         }
+        if contributing.count == 1 { return cards.sorted { $0.rank < $1.rank }.map(\.card) }
         return cards.sorted { (date($0.card.item), $1.rank) > (date($1.card.item), $0.rank) }.map(\.card)
     }
 

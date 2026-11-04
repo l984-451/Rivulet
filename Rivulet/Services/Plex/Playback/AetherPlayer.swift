@@ -10,7 +10,6 @@
 import AVFoundation
 import Combine
 import Foundation
-import os
 import Sentry
 import SwiftUI
 import UIKit
@@ -141,6 +140,9 @@ final class AetherPlayer: PlayerProtocol {
     /// shows the true position) and play() performs the reload. Holds the
     /// background timestamp so the teardown-drain wait still applies.
     private var pendingReloadSince: Date?
+
+    /// True while the engine is torn down awaiting Play: no video frame exists.
+    var isParkedForReload: Bool { pendingReloadSince != nil }
 
     /// One file of a stacked title.
     struct PartFile {
@@ -757,7 +759,6 @@ final class AetherPlayer: PlayerProtocol {
     var dolbyVisionPlayback: DolbyVisionPlayback? {
         DolbyVisionPlayback(sourceProfile: engine.sourceDVProfile,
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
-                            onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
                             presentsHDR: engine.videoFormat != .sdr,
                             panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
@@ -772,8 +773,6 @@ final class AetherPlayer: PlayerProtocol {
         let mlOnly = status.degraded || abs(status.sourceSize.height * CGFloat(ml) - status.targetSize.height) < 2
         return mlOnly ? "\(size) (ML)" : "\(size) (ML + MetalFX)"
     }
-    /// FEL or MEL for the current Profile 7 load; nil when the engine didn't classify it (FEL setting off, no DV panel).
-    private(set) var dolbyVisionEnhancementLayer: DolbyVisionEnhancementLayer?
 
     /// The start of a fullscreen live join, measured for issue #319. See
     /// LiveAVTelemetry.
@@ -990,25 +989,8 @@ final class AetherPlayer: PlayerProtocol {
         return text.contains(".m3u8") || text.contains("format=hls")
     }
 
-    /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
-    static let heightSpeakersKey = "heightSpeakers"
-
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
-
-    /// Profile 7 FEL composition; absent = off.
-    static let dolbyVisionFELKey = "dolbyVisionFEL"
-    private static let felDefaultSettledKey = "dolbyVisionFELDefaultSettled"
-
-    /// FEL used to default on. Once, pin it on for an install that already had a server,
-    /// so only new installs get the off default.
-    static func settleFELDefault(existingInstall: Bool, defaults: UserDefaults = .standard) {
-        guard !defaults.bool(forKey: felDefaultSettledKey) else { return }
-        defaults.set(true, forKey: felDefaultSettledKey)
-        if existingInstall, defaults.object(forKey: dolbyVisionFELKey) == nil {
-            defaults.set(true, forKey: dolbyVisionFELKey)
-        }
-    }
 
     /// DVB teletext caption page, applied to BOTH live and VOD loads. A
     /// `liveTeletextPage` UserDefaults key overrides everything (0 = force
@@ -1154,29 +1136,9 @@ final class AetherPlayer: PlayerProtocol {
             // way whichever surface plays it (VOD recordings/rips included).
             teletextPage: Self.regionTeletextPage()
         )
-        // Settings → Playback → Height Speakers: TrueHD Atmos and DTS:X keep their heights as a
-        // rendered bed (lossless PCM, APAC on AirPlay) instead of 7.1 without them.
-        let heightLayout = SpatialSpeakerLayout(rawValue: UserDefaults.standard.string(forKey: Self.heightSpeakersKey) ?? "")
-        if let heightLayout { options.objectAudioRendering = .render(heightLayout) }
-        // Profile 7 FEL composes both layers (#345). The engine doesn't check the panel,
-        // so keep the native route (HDR10 base) where the TV can't show Dolby Vision.
-        // The FEL route renders heights too, so both settings apply to one title (#362).
-        let panelDV = AetherEngine.displayCapabilities.supportsDolbyVision
-        let felOn = UserDefaults.standard.bool(forKey: Self.dolbyVisionFELKey)
-        options.preferDualLayerDolbyVision = panelDV && felOn
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
-        // #362: catch the engine's one Profile 7 route line for Sentry. Live TV's capture owns the
-        // handler while it runs, and VOD never loads then.
-        let p7RouteLine = OSAllocatedUnfairLock<String?>(initialState: nil)
-        let ownsLogHandler = EngineLog.handler == nil
-        if ownsLogHandler {
-            EngineLog.handler = { @Sendable line in
-                if line.contains("DV P7 dual-layer route:") { p7RouteLine.withLock { $0 = line } }
-            }
-        }
-        defer { if ownsLogHandler { EngineLog.handler = nil } }
         // New content, so the previous item's aspect ratio describes nothing.
         // Reset HERE rather than when `currentItem` goes nil: the engine also
         // swaps its player for SAME-content reasons (audio track switch,
@@ -1186,7 +1148,6 @@ final class AetherPlayer: PlayerProtocol {
         // against the old episode's picture rect until `presentationSize`
         // arrives.
         videoSize = .zero
-        dolbyVisionEnhancementLayer = nil
         // New file: the previous track's script and fonts describe nothing,
         // even when the next episode repeats the same header and track id.
         assFonts = []
@@ -1205,15 +1166,6 @@ final class AetherPlayer: PlayerProtocol {
             let pe = loadFailure(from: error)
             errorSubject.send(pe)
             throw pe
-        }
-        if let routeLine = p7RouteLine.withLock({ $0 }) {
-            dolbyVisionEnhancementLayer = DolbyVisionEnhancementLayer(routeLine: routeLine)
-            SentryBridge.log(.info, "DV P7 route", attributes: [
-                "engine_route": routeLine,
-                "panel_dv": panelDV,
-                "height_speakers": heightLayout?.rawValue ?? "off",
-                "fel_setting": felOn
-            ])
         }
         assFonts = engine.fontAttachments.map { LibassRenderer.Font(name: $0.filename, data: $0.data) }
         // The track may have been published during the load with no fonts;
@@ -1417,11 +1369,17 @@ final class AetherPlayer: PlayerProtocol {
     }
 
     func seek(to time: TimeInterval) async {
-        guard let stack else { return await engine.seek(to: time) }
+        await seek(to: time, exact: false)
+    }
+
+    /// `exact` lands on the time itself. Without it the engine may snap AV1 on its software host to
+    /// a keyframe, seconds off, which is fine for a scrub and wrong for the end of an intro.
+    func seek(to time: TimeInterval, exact: Bool) async {
+        guard let stack else { return await engine.seek(to: time, exact: exact) }
         let (index, offset) = stack.locate(time)
         // ponytail: a seek during a part swap starts a second load; queue it if that ever misbehaves.
         if index == partIndex {
-            await engine.seek(to: offset)
+            await engine.seek(to: offset, exact: exact)
         } else {
             await switchPart(to: index, at: offset)
         }

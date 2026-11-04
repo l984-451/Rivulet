@@ -198,7 +198,7 @@ private final class LiveChannelCardView: UIView {
         imageTask = Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: url)
             guard let self, !Task.isCancelled else { return }
-            self.art.image = image
+            self.art.image = landscape == nil ? image?.legibleChannelLogo : image
         }
     }
 

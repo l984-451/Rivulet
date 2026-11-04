@@ -520,7 +520,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertEqual(vm.nowPlayingArtworkURL?.absoluteString,
                        "http://plex:32400/library/metadata/1/thumb/3?X-Plex-Token=tok")
         XCTAssertEqual(vm.contentFilterTranscriptURL?.absoluteString,
-                       "http://plex:32400/library/streams/7?X-Plex-Token=tok")
+                       "http://plex:32400/library/streams/7?encoding=utf-8&X-Plex-Token=tok")
     }
 
     func test_providerEpisodeInsights_readTheShowsIDsOnce() async {

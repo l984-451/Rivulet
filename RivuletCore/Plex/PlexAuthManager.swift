@@ -152,18 +152,20 @@ class PlexAuthManager: ObservableObject {
         if authToken != nil {
             state = .authenticated
 
-            // Check if saved URL is a bad Docker/internal address that slipped through
+            // A saved loopback address can never reach the server: clear it for re-selection.
             if let url = selectedServerURL,
                let host = URL(string: url)?.host,
-               isDockerOrInternalAddress(host) {
-                DiagLog.notice(.connection, "Saved URL is a Docker/internal address, cleared for re-selection")
-                // Clear the bad URL - will trigger re-selection
+               Self.isLoopbackAddress(host) {
+                DiagLog.notice(.connection, "Saved URL is a loopback address, cleared for re-selection")
                 selectedServerURL = nil
                 userDefaults.removeObject(forKey: serverURLKey)
             }
 
+            // A remote URL may be one older builds picked because they dropped a reachable
+            // local address (#510), and it costs a LAN user their Home quality.
             if let url = selectedServerURL,
-               !Self.isPlayableDirectURL(url) || (Self.prefersSecureLocalConnections && url.hasPrefix("http://")) {
+               !Self.isPlayableDirectURL(url) || (Self.prefersSecureLocalConnections && url.hasPrefix("http://"))
+                || ServerLocation.classify(url) == .remote {
                 Task { await upgradeConnectionIfBetterExists(from: url) }
             }
         }
@@ -182,6 +184,7 @@ class PlexAuthManager: ObservableObject {
         guard let server,
               let best = await findBestConnection(for: server, reuseLastGood: false),
               Self.isPlayableDirectURL(best),
+              best != url,
               selectedServerURL == url else { return }
         DiagLog.notice(.connection, "Upgrading connection \(DiagLog.describe(url: url)) -> \(DiagLog.describe(url: best))")
         selectedServerURL = best
@@ -314,11 +317,11 @@ class PlexAuthManager: ObservableObject {
         }
 
         let validConnections = (server.connections ?? [])
-            .filter { !isDockerOrInternalAddress($0.address) }
+            .filter { !Self.isLoopbackAddress($0.address) }
 
         // Sort by preference: local non-relay > remote > relay
         let sortedConnections = validConnections.sorted { conn1, conn2 in
-            connectionScore(conn1) > connectionScore(conn2)
+            Self.connectionScore(conn1) > Self.connectionScore(conn2)
         }
 
         // Build the prioritized probe chains. Index order IS the priority order,
@@ -475,7 +478,7 @@ class PlexAuthManager: ObservableObject {
     /// Priority for initial sorting: Local non-relay > Remote > Relay
     /// - Local prefers HTTP (fastest when secure connections not required)
     /// - For httpsRequired servers, plex.direct is tried first (valid TLS for playback)
-    private func connectionScore(_ connection: PlexConnection) -> Int {
+    nonisolated static func connectionScore(_ connection: PlexConnection) -> Int {
         var score = 0
 
         // Prefer non-relay (direct connections)
@@ -486,6 +489,7 @@ class PlexAuthManager: ObservableObject {
             score += 500
             // For local: prefer HTTP (avoids certificate issues), unless the host prefers TLS
             if (connection.protocolType == "http") != Self.prefersSecureLocalConnections { score += 50 }
+            if looksLikeDockerBridge(connection.address) { score -= 100 }
         } else {
             // For remote: prefer HTTPS (required by ATS)
             if connection.protocolType == "https" { score += 100 }
@@ -507,30 +511,15 @@ class PlexAuthManager: ObservableObject {
         return "https://\(ipWithDashes).\(subdomainHash).plex.direct:\(port)"
     }
 
-    /// Check if address is a Docker/internal bridge network
-    private func isDockerOrInternalAddress(_ address: String) -> Bool {
-        // Docker default bridge networks (172.17-31.x.x range)
-        // Note: We intentionally do NOT filter 10.x.x.x as these are common home network ranges
-        let dockerPrefixes = [
-            "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-            "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
-            "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-        ]
+    /// Loopback names the server's own machine, never a path from this device.
+    nonisolated static func isLoopbackAddress(_ address: String) -> Bool {
+        ["127.0.0.1", "localhost", "::1"].contains(address)
+    }
 
-        // Localhost variants (not useful for Apple TV)
-        let localhostAddresses = ["127.0.0.1", "localhost", "::1"]
-
-        for prefix in dockerPrefixes {
-            if address.hasPrefix(prefix) {
-                return true
-            }
-        }
-
-        if localhostAddresses.contains(address) {
-            return true
-        }
-
-        return false
+    /// Docker's default bridge range. It is also a normal LAN range (#510), so such an address is
+    /// probed like any other, only after the server's other local addresses.
+    nonisolated static func looksLikeDockerBridge(_ address: String) -> Bool {
+        (17...31).contains { address.hasPrefix("172.\($0).") }
     }
 
     /// Whether playback can use this URL directly: not relay, and not HTTPS
@@ -1153,16 +1142,23 @@ class PlexAuthManager: ObservableObject {
     }
 }
 
-// MARK: - Auth URL Helper
+// MARK: - Link page URL
 
 extension PlexAuthManager {
-    /// Get the URL for users to authenticate via browser
-    var authURL: URL? {
-        guard case .waitingForPIN(let code, _) = state else { return nil }
+    /// The plex.tv/link page with the PIN filled in, so the user only signs in
+    /// and confirms. It is the URL Plex's own `qr` image for a PIN encodes, and
+    /// the page the developer docs name for a short PIN (`strong` unset, as
+    /// `requestPin` sends); `app.plex.tv/auth#?code=` is the strong-PIN form.
+    nonisolated static func linkURL(code: String) -> URL {
+        var components = URLComponents(string: "https://www.plex.tv/link/")!
+        components.queryItems = [URLQueryItem(name: "pin", value: code)]
+        return components.url!
+    }
 
-        var components = URLComponents(string: "https://app.plex.tv/auth")!
-        components.fragment = "?clientID=\(PlexAPI.clientIdentifier)&code=\(code)&context[device][product]=Rivulet"
-        return components.url
+    /// `linkURL(code:)` for the PIN being waited on.
+    var linkURL: URL? {
+        guard case .waitingForPIN(let code, _) = state else { return nil }
+        return Self.linkURL(code: code)
     }
 }
 

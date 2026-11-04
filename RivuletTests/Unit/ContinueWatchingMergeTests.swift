@@ -113,6 +113,26 @@ final class ContinueWatchingMergeTests: XCTestCase {
         XCTAssertEqual(merge([[a, b], []]).map(\.item.ref.itemID), ["a", "b"])
     }
 
+    /// #470: one title in two libraries of one server, keeping the row's order.
+    func test_oneServer_twoLibraries_isOneCard_inTheRowsOwnOrder() {
+        let older = item("a", on: "plex:main", watched: 10, identity: ["m:imdb:same"])
+        let other = item("b", on: "plex:main", watched: 5, identity: ["m:imdb:b"])
+        let newer = item("c", on: "plex:main", watched: 20, identity: ["m:imdb:same"])
+        let cards = merge([[older, other, newer]])
+        XCTAssertEqual(cards.map(\.item.ref.itemID), ["c", "b"], "the copy watched last shows, where the first copy sat")
+        XCTAssertEqual(cards[0].others.map(\.ref.itemID), ["a"])
+    }
+
+    /// One server needs no show lookup: episodes without keys stay and stay apart.
+    @MainActor
+    func test_rowCards_oneRow_mergesOnCarriedKeysWithoutWaitingForShows() {
+        let a = item("a", on: "jellyfin:x", kind: .episode, identity: [])
+        let b = item("b", on: "jellyfin:x", kind: .episode, identity: [])
+        let cards = ContinueWatchingRow.shared.cards([[a, b]], identity: { $0.identity ?? [] },
+                                                     showKey: { _ in "jellyfin:x|show" }, watched: \.userState.lastViewedAt)
+        XCTAssertEqual(cards.map(\.item.ref.itemID), ["a", "b"])
+    }
+
     func test_anItemBridgingTwoGroups_foldsThemIntoOne() {
         let imdbOnly = item("1", on: "plex:main", identity: ["m:imdb:tt1"])
         let tmdbOnly = item("2", on: "plex:office", identity: ["m:tmdb:7"])

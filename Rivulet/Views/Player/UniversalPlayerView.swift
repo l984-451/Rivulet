@@ -602,11 +602,11 @@ private final class UniversalPlaybackInputTarget: PlaybackInputTarget {
                 )
                 vm.cancelScrub()
                 onResetRemoteInput?()
-            } else if vm.showPausedPoster {
+            } else if vm.backReturnsToPausedFrame {
                 // Back with the ambient pause backdrop up returns to the
                 // paused frame — it does not exit the player.
                 vm.hidePausedPoster()
-            } else if vm.controlsFocusActive || vm.showControls {
+            } else if (vm.controlsFocusActive || vm.showControls) && !vm.showPausedPoster {
                 // Back from the transport buttons (or from any visible chrome)
                 // closes the whole chrome in one press, rather than first
                 // de-focusing the buttons onto the scrubber and leaving the rail

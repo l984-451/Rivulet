@@ -5,6 +5,7 @@
 //  Renders `PlexAuthManager.state`; Menu cancels. `onFinish` runs after it closes.
 
 import Combine
+import CoreImage.CIFilterBuiltins
 import UIKit
 
 final class PlexSignInViewController: UIViewController {
@@ -107,13 +108,38 @@ final class PlexSignInViewController: UIViewController {
         setContent([spinner, label(message, size: 26, color: .secondaryText)], focus: nil)
     }
 
+    /// Two ways in, side by side: a QR code the phone's camera opens on plex.tv/link
+    /// with the code filled in, or the page's address and the code to type there.
     private func showPIN(_ code: String) {
+        let scan = UIStackView(arrangedSubviews: [
+            qrTile(PlexAuthManager.linkURL(code: code).absoluteString),
+            label(String(localized: "Scan with your phone"), size: 22, color: .secondaryText),
+        ])
+        scan.axis = .vertical
+        scan.alignment = .center
+        scan.spacing = 14
+
         let boxes = UIStackView(arrangedSubviews: code.map { codeBox(String($0)) })
         boxes.axis = .horizontal
         boxes.spacing = 14
-        let boxRow = UIStackView(arrangedSubviews: [boxes])
-        boxRow.axis = .vertical
-        boxRow.alignment = .center
+        let typed = UIStackView(arrangedSubviews: [
+            label(String(localized: "or visit"), size: 26, color: .secondaryText),
+            label("plex.tv/link", size: 40, weight: .bold),
+            label(String(localized: "and enter this code:"), size: 26, color: .secondaryText),
+            boxes,
+        ])
+        typed.axis = .vertical
+        typed.alignment = .center
+        typed.spacing = 4
+        typed.setCustomSpacing(20, after: typed.arrangedSubviews[2])
+
+        let ways = UIStackView(arrangedSubviews: [scan, typed])
+        ways.axis = .horizontal
+        ways.alignment = .center
+        ways.spacing = 64
+        let waysRow = UIStackView(arrangedSubviews: [ways])
+        waysRow.axis = .vertical
+        waysRow.alignment = .center
 
         let spinner = UIActivityIndicatorView(style: .medium)
         spinner.color = .white
@@ -125,14 +151,8 @@ final class PlexSignInViewController: UIViewController {
         waitingRow.alignment = .center
 
         let cancel = button(String(localized: "Cancel")) { [weak self] in self?.cancel() }
-        setContent([
-            label(String(localized: "Visit"), size: 26, color: .secondaryText),
-            label("plex.tv/link", size: 40, weight: .bold),
-            label(String(localized: "and enter this code:"), size: 26, color: .secondaryText),
-            boxRow, waitingRow, cancel,
-        ], focus: cancel)
-        stack.setCustomSpacing(30, after: stack.arrangedSubviews[2])
-        stack.setCustomSpacing(30, after: boxRow)
+        setContent([waysRow, waitingRow, cancel], focus: cancel)
+        stack.setCustomSpacing(36, after: waysRow)
         stack.setCustomSpacing(36, after: waitingRow)
     }
 
@@ -277,6 +297,26 @@ final class PlexSignInViewController: UIViewController {
         return label
     }
 
+    /// Black modules on a white tile, the contrast a phone camera reads from a TV.
+    private func qrTile(_ text: String) -> UIView {
+        let tile = UIView()
+        tile.backgroundColor = .white
+        tile.layer.cornerRadius = 16
+        tile.layer.cornerCurve = .continuous
+        tile.translatesAutoresizingMaskIntoConstraints = false
+        let code = UIImageView(image: QRCodeImage.make(text, side: 200, scale: traitCollection.displayScale))
+        code.contentMode = .center
+        code.translatesAutoresizingMaskIntoConstraints = false
+        tile.addSubview(code)
+        NSLayoutConstraint.activate([
+            tile.widthAnchor.constraint(equalToConstant: 232),
+            tile.heightAnchor.constraint(equalToConstant: 232),
+            code.centerXAnchor.constraint(equalTo: tile.centerXAnchor),
+            code.centerYAnchor.constraint(equalTo: tile.centerYAnchor),
+        ])
+        return tile
+    }
+
     private func codeBox(_ character: String) -> UIView {
         let box = UILabel()
         box.text = character
@@ -296,4 +336,20 @@ final class PlexSignInViewController: UIViewController {
 
 private extension UIColor {
     static let secondaryText = UIColor.white.withAlphaComponent(0.7)
+}
+
+/// A QR code from CoreImage's generator, scaled by a whole number with nearest
+/// sampling so every module lands on pixels. The generator's extent includes a
+/// one-module quiet zone, so the image is at most `side` across.
+enum QRCodeImage {
+    static func make(_ text: String, side: CGFloat, scale: CGFloat) -> UIImage? {
+        let generator = CIFilter.qrCodeGenerator()
+        generator.message = Data(text.utf8)
+        generator.correctionLevel = "M"
+        guard let code = generator.outputImage else { return nil }
+        let factor = floor(side * scale / code.extent.width)
+        let scaled = code.samplingNearest().transformed(by: CGAffineTransform(scaleX: factor, y: factor))
+        guard let image = CIContext().createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: image, scale: scale, orientation: .up)
+    }
 }

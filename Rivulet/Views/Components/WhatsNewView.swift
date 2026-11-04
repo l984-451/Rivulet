@@ -160,6 +160,7 @@ struct WhatsNewView: View {
             "At home, Rivulet now prefers your Plex server's local connection.",
             "Change audio and subtitle tracks from Control Center on iPhone and iPad.",
             "Rivulet now follows the Apple TV's caption and Audio Description settings.",
+            "Fixed the Skip Credits button staying up after moving to the next episode.",
         ]),
         ("1.1.1 (119)", [
             "Subtitle and audio language settings are now saved for each Plex profile.",

@@ -6438,6 +6438,13 @@ final class UniversalPlayerViewModel: ObservableObject {
         skippedCreditsIds.removeAll()
         skippedCommercialIds.removeAll()
         skippedRecapIds.removeAll()
+        // The outgoing credits marker is still the active one: checkMarkers stops
+        // while the Up Next card is up, so nothing cleared it. Left in place it
+        // keeps the pill on "Skip Credits" over the new episode (the handlers
+        // only claim an empty slot, so its intro never replaces it), and a
+        // press skips the new episode's credits: marked watched, next episode.
+        activeMarker = nil
+        showSkipButton = false
 
         // Clear any replay window left open from the previous episode — its
         // invokedAt is a timestamp on episode N's timeline, meaningless (and

@@ -136,6 +136,27 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertEqual(hero.count, 10)
     }
 
+    /// A music library's Recently Added row lists albums; the hero leaves them out.
+    func test_heroItems_skipAlbums() {
+        func art(_ id: String, isMusic: Bool) -> MediaItem {
+            let base = JellyfinFixtures.mediaItem(id)
+            return MediaItem(ref: base.ref, kind: .movie, title: id, sortTitle: nil, overview: nil, year: nil,
+                             runtime: nil, isMusic: isMusic, parentRef: nil, grandparentRef: nil, episodeNumber: nil,
+                             seasonNumber: nil, childProgress: nil, userState: base.userState,
+                             artwork: MediaArtwork(poster: nil, backdrop: URL(string: "http://x/\(id)"),
+                                                   thumbnail: nil, logo: nil),
+                             parentArtwork: nil, grandparentArtwork: nil)
+        }
+        let rows: CachedHomeRail = [
+            CachedHomeHub(id: "mu", title: "Recently Added in Music", isContinueWatching: false, hubKey: nil,
+                          hubIdentifier: nil, totalSize: nil, items: [art("album", isMusic: true)]),
+            CachedHomeHub(id: "ra", title: "Recently Added in Movies", isContinueWatching: false, hubKey: nil,
+                          hubIdentifier: nil, totalSize: nil, items: [art("movie", isMusic: false)])
+        ]
+
+        XCTAssertEqual(PlexHomeViewController.heroItems(from: rows).map(\.ref.itemID), ["movie"])
+    }
+
     func test_heroItems_trendingFirst_fallsBackToRecentWhenTooFew() {
         func art(_ id: String) -> MediaItem {
             let base = JellyfinFixtures.mediaItem(id, kind: .movie)

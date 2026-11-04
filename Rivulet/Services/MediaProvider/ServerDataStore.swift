@@ -42,8 +42,12 @@ final class ServerDataStore: ObservableObject {
     /// Video, photo and music libraries.
     static let browsableKinds: Set<MediaLibrary.LibraryKind> = [.movies, .shows, .mixed, .photos, .music]
 
-    /// Libraries with a Recently Added row. Photo and music tiles would open the video detail.
+    /// Video libraries: trending titles for the hero. Photo tiles would open the video detail.
     static let homeRowKinds: Set<MediaLibrary.LibraryKind> = [.movies, .shows, .mixed]
+
+    /// Libraries with a Recently Added row, as on Plex: music too, whose album
+    /// tiles open the album page (`PlexHomeViewController.withMusicItem`).
+    static let recentlyAddedKinds = homeRowKinds.union([.music])
 
     private struct Slice {
         var libraries: [MediaLibrary] = []
@@ -183,7 +187,7 @@ final class ServerDataStore: ObservableObject {
         // Music plays through the selected server only (MusicProviderRegistry).
         if provider.kind == .plex { browsable.removeAll { $0.kind == .music } }
         var recent: [CachedHomeHub] = []
-        for library in browsable where Self.homeRowKinds.contains(library.kind) {
+        for library in browsable where Self.recentlyAddedKinds.contains(library.kind) {
             let id = Self.rowID(provider.id, "\(library.id).recentlyAdded")
             do {
                 if let hub = try await provider.recentlyAddedHub(in: library) {

@@ -95,7 +95,9 @@ enum TopShelfFeed {
         }
         let others = ServerDataStore.shared.visibleHomeRows
             .filter { $0.id.hasSuffix(".recentlyAdded") }
-            .flatMap { TopShelfMapper.items(from: $0.items.filter { !$0.userState.isPlayed }, limit: limit * 2) }
+            // A music library's row lists albums, which Top Shelf leaves out as it does Plex's.
+            .flatMap { TopShelfMapper.items(from: $0.items.filter { !$0.userState.isPlayed && $0.isMusic != true },
+                                            limit: limit * 2) }
         return TopShelfMapper.merge(plex, others, limit: limit)
     }
 }

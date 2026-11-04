@@ -44,10 +44,10 @@ enum PlexPhotoMapper {
                 : nil)
     }
 
-    /// Date taken (`originallyAvailableAt`, a camera-local day), else the file's date.
-    static func date(_ meta: PlexMetadata) -> Date? {
+    /// Date taken (`originallyAvailableAt`, a camera-local day, read in `zone`), else the file's date.
+    static func date(_ meta: PlexMetadata, in zone: TimeZone = .current) -> Date? {
         if let taken = meta.originallyAvailableAt,
-           let date = try? Date(taken, strategy: Date.ISO8601FormatStyle(timeZone: .current).year().month().day()) {
+           let date = try? Date(taken, strategy: Date.ISO8601FormatStyle(timeZone: zone).year().month().day()) {
             return date
         }
         return meta.addedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }

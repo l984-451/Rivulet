@@ -43,12 +43,14 @@ struct LiveCardItem: Hashable, Identifiable {
                      program: program, recording: nil)
     }
 
-    /// An upcoming card's start: the time alone today, with the weekday after.
+    /// An upcoming card's start: the time alone today, with the weekday after. Formatted in
+    /// `calendar`'s zone, the one that decided "today".
     static func startLabel(_ program: UnifiedProgram, now: Date = Date(), calendar: Calendar = .current) -> String {
         let start = program.eventStart
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
         return calendar.isDate(start, inSameDayAs: now)
-            ? start.formatted(.dateTime.hour().minute())
-            : start.formatted(.dateTime.weekday().hour().minute())
+            ? start.formatted(style.hour().minute())
+            : start.formatted(style.weekday().hour().minute())
     }
 
     static func upcoming(_ program: UnifiedProgram, on channel: UnifiedChannel, section: String = "soon") -> LiveCardItem {

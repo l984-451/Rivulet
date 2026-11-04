@@ -6361,6 +6361,16 @@
         }
       }
     },
+    "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spielt auf Plex Trailer und das Pre-Roll-Video deines Servers ab, bevor ein Film von Anfang an startet. Was läuft, legen die Cinema-Trailers-Einstellungen deines Servers fest. Mit „Überspringen“ geht es weiter."
+          }
+        }
+      }
+    },
     "Please sign in to Rivulet first" : {
       "localizations" : {
         "de" : {
@@ -7678,7 +7688,14 @@
       }
     },
     "Scan with your phone" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit dem Smartphone scannen"
+          }
+        }
+      }
     },
     "Scene" : {
       "localizations" : {
@@ -8466,6 +8483,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rückblick überspringen"
+          }
+        }
+      }
+    },
+    "Skip Trailer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer überspringen"
           }
         }
       }
@@ -9812,6 +9839,16 @@
         }
       }
     },
+    "Trailers Before Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer vor Filmen"
+          }
+        }
+      }
+    },
     "Transcode" : {
       "localizations" : {
         "de" : {
@@ -11088,7 +11125,14 @@
       }
     },
     "or visit" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "oder öffne"
+          }
+        }
+      }
     },
     "postVideo.playNext" : {
       "extractionState" : "extracted_with_value",

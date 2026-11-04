@@ -37,6 +37,16 @@
         }
       }
     },
+    "%@ didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat diesen Benutzernamen und dieses Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
     "%@ hours" : {
       "localizations" : {
         "de" : {
@@ -3329,6 +3339,16 @@
         }
       }
     },
+    "Emby Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emby-Server"
+          }
+        }
+      }
+    },
     "End of Series" : {
       "localizations" : {
         "de" : {
@@ -3409,6 +3429,16 @@
         }
       }
     },
+    "Enter the password for this %@ user. Leave it empty if the user has none." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib das Passwort dieses %@-Benutzers ein. Lass das Feld leer, wenn er keins hat."
+          }
+        }
+      }
+    },
     "Enter the password for this Jellyfin user. Leave it empty if the user has none." : {
       "localizations" : {
         "de" : {
@@ -3455,6 +3485,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gib den Benutzernamen ein, den dir dein Anbieter für diesen Server gegeben hat."
+          }
+        }
+      }
+    },
+    "Enter your %@ server's address, with its port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib die Adresse deines %@-Servers mit Port ein."
+          }
+        }
+      }
+    },
+    "Enter your %@ username." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib deinen %@-Benutzernamen ein."
           }
         }
       }
@@ -4989,12 +5039,12 @@
         }
       }
     },
-    "Manage your Plex server connection and user profiles." : {
+    "Manage your Plex, Jellyfin and Emby server connections and user profiles." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verwalte deine Plex-Serververbindung und Benutzerprofile."
+            "value" : "Verwalte deine Plex-, Jellyfin- und Emby-Serververbindungen und Benutzerprofile."
           }
         }
       }
@@ -7417,6 +7467,22 @@
         }
       }
     },
+    "Rivulet needs %@ Server %lld.%lld.%lld or newer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet benötigt %1$@-Server %2$lld.%3$lld.%4$lld oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet needs %1$@ Server %2$lld.%3$lld.%4$lld or newer."
+          }
+        }
+      }
+    },
     "Rivulet's license and the open-source software it uses, including FFmpeg (LGPL), libdovi, and Sentry." : {
       "localizations" : {
         "de" : {
@@ -8187,6 +8253,16 @@
         }
       }
     },
+    "Sign in to your %@ server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich bei deinem %@-Server an."
+          }
+        }
+      }
+    },
     "Sign in to your Jellyfin server." : {
       "localizations" : {
         "de" : {
@@ -8213,6 +8289,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Melde dich an, ohne ein Passwort einzugeben: Rivulet zeigt einen Code, den du auf einem bereits bei Jellyfin angemeldeten Gerät bestätigst. Quick Connect muss im Dashboard des Servers aktiviert sein."
+          }
+        }
+      }
+    },
+    "Sign out of this %@ server and remove its saved credentials." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meldet dich von diesem %@-Server ab und entfernt seine gespeicherten Zugangsdaten."
           }
         }
       }
@@ -8913,12 +8999,12 @@
         }
       }
     },
-    "That address isn't a Jellyfin server. Check the port." : {
+    "That address isn't a Jellyfin server. Check the port. An Emby server signs in under Emby Server." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unter dieser Adresse läuft kein Jellyfin-Server. Prüfe den Port."
+            "value" : "Unter dieser Adresse läuft kein Jellyfin-Server. Prüfe den Port. Ein Emby-Server wird unter „Emby-Server“ angemeldet."
           }
         }
       }
@@ -8929,6 +9015,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unter dieser Adresse läuft kein Tvheadend-Server. Prüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "That address isn't an %@ server. Check the port. A Jellyfin server signs in under Jellyfin Server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dieser Adresse läuft kein %@-Server. Prüfe den Port. Ein Jellyfin-Server wird unter „Jellyfin-Server“ angemeldet."
           }
         }
       }
@@ -9003,6 +9099,26 @@
         }
       }
     },
+    "The %@ server you are signed in to." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der %@-Server, bei dem du angemeldet bist."
+          }
+        }
+      }
+    },
+    "The %@ user you are signed in as." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der %@-Benutzer, als der du angemeldet bist."
+          }
+        }
+      }
+    },
     "The audio track to play when a title has several. Original keeps the file's main track. Picking a track in the player also changes this." : {
       "localizations" : {
         "de" : {
@@ -9069,6 +9185,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Filter schaltet dieses Wort nicht mehr stumm."
+          }
+        }
+      }
+    },
+    "The folder “%@” and everything in it will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Ordner „%1$@“ und alles darin wird von %2$@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The folder “%1$@” and everything in it will be deleted from %2$@. This cannot be undone."
           }
         }
       }
@@ -10169,6 +10301,16 @@
         }
       }
     },
+    "Used once, to sign in. Rivulet keeps the access token %@ returns, not the password. Leave it empty if your user has none." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird nur einmal zum Anmelden verwendet. Rivulet speichert das Zugriffstoken von %@, nicht das Passwort. Lass das Feld leer, wenn dein Benutzer keins hat."
+          }
+        }
+      }
+    },
     "Used once, to sign in. Rivulet keeps the access token Jellyfin returns, not the password." : {
       "localizations" : {
         "de" : {
@@ -10617,6 +10759,26 @@
         }
       }
     },
+    "Your %@ server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse deines %@-Servers mit Port, zum Beispiel http://192.168.1.100:8096. Du kannst die Adresse aus deinem Browser einfügen."
+          }
+        }
+      }
+    },
+    "Your %@ username." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein %@-Benutzername."
+          }
+        }
+      }
+    },
     "Your %lld" : {
       "localizations" : {
         "de" : {
@@ -10693,16 +10855,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Jellyfin-Benutzername."
-          }
-        }
-      }
-    },
-    "Your library appears to be empty." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Mediathek scheint leer zu sein."
           }
         }
       }
@@ -10823,6 +10975,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Favorit war %@"
+          }
+        }
+      }
+    },
+    "Your library appears to be empty." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Mediathek scheint leer zu sein."
           }
         }
       }

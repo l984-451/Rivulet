@@ -423,6 +423,15 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
+    /// Plex's own removal, for any kind of item.
+    func removeFromContinueWatching(_ item: MediaItem) async throws {
+        try await plexCall {
+            try await networkManager.removeFromContinueWatching(
+                serverURL: serverURL, authToken: authToken, ratingKey: item.ref.itemID
+            )
+        }
+    }
+
     // MARK: - Deletion
 
     /// Answered once per provider; a new token builds a new provider.

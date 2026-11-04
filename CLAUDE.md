@@ -1,6 +1,6 @@
 # Rivulet - Claude Context
 
-Rivulet is a tvOS media client for Plex, Jellyfin and IPTV (the iOS app is Plex and IPTV only). The primary surfaces (Home, Library, Search, Discover, Media Detail, the preview carousel, Person detail, Music, and the player chrome) are **UIKit**, as is Settings; SwiftUI remains for thin navigation shells and Live TV slots.
+Rivulet is a tvOS media client for Plex, Jellyfin, Emby and IPTV (the iOS app is Plex and IPTV only). The primary surfaces (Home, Library, Search, Discover, Media Detail, the preview carousel, Person detail, Music, and the player chrome) are **UIKit**, as is Settings; SwiftUI remains for thin navigation shells and Live TV slots.
 
 **UIKit is the default. Do not add SwiftUI to a primary surface.** When you find SwiftUI in one, assume it is a leftover and check reachability before building on it.
 
@@ -78,7 +78,7 @@ Rivulet/                # The tvOS app — everything below.
 ├── Services/
 │   ├── DeepLinkHandler.swift  # Opens a RivuletLink or Siri activity once the shell is ready
 │   ├── MediaProvider/  # The backend seam (MediaProvider, PhotoProvider, registries);
-│   │                   #   Plex/ and Jellyfin/ implement it (see "Media providers")
+│   │                   #   Plex/, Jellyfin/ and Emby/ implement it (see "Media providers")
 │   ├── Plex/
 │   │   ├── (PlexDataStore, …; the Plex client lives in RivuletCore/Plex)
 │   │   └── Playback/   # AetherPlayer + routing/remux (see Docs/RIVULET_PLAYER.md),
@@ -302,11 +302,11 @@ sidebar.
   Closing the panel on the profile it opened on reopens the sidebar on the
   profile row (`profileRowRequest`). Switching to another profile goes to Home
   with the sidebar closed (`collapseRequest`), as the Apple TV app does.
-- **Live TV with no media server opens on Live TV.** With no Plex or Jellyfin
+- **Live TV with no media server opens on Live TV.** With no Plex, Jellyfin or Emby
   signed in, `ShellSidebarModel` hides Search, Home, Discover and Watchlist
   (`opensToLiveTV`) and `TVSidebarView` switches to the Live TV tab.
 - **A new install sees the setup landing instead of the shell.**
-  `SetupLandingViewController` (cards for Plex, Jellyfin and Live TV on
+  `SetupLandingViewController` (cards for Plex, Jellyfin, Emby and Live TV on
   `WelcomeGlowView`, maps from `tools/welcome/flow_map.py`) stands in until Start
   Watching sets `setupComplete`; signing out of everything clears it. Its flows
   are the Settings pages themselves, run standalone
@@ -749,15 +749,15 @@ write either number anywhere else.
 - Music (already at 80), Live TV (`liveLeading`, `EPGTheme.pageMargin`), Settings
   and the sidebar keep margins of their own.
 
-### Media providers (Plex, Jellyfin)
+### Media providers (Plex, Jellyfin, Emby)
 
-Jellyfin is tvOS only. Both backends sit behind one seam,
-`Services/MediaProvider/MediaProvider.swift`, with `Plex/` and `Jellyfin/` below it.
+Jellyfin and Emby are tvOS only. All three backends sit behind one seam,
+`Services/MediaProvider/MediaProvider.swift`, with `Plex/`, `Jellyfin/` and `Emby/` below it.
 Views talk to the protocol. A non-Plex item plays through `ProviderPlayback+Prepare.swift`,
 which never names a backend.
 
-- **One GUI for both servers.** No Jellyfin-only surface. A Plex-only feature
-  is simply absent on a Jellyfin item.
+- **One GUI for every server.** No Jellyfin-only or Emby-only surface. A Plex-only feature
+  is simply absent on a Jellyfin or Emby item.
 - **Never merge across servers, except Continue Watching.** Each server's
   libraries and Home rows show on their own, labelled by server. With more than
   one server signed in, Continue Watching is ONE row (`ContinueWatchingRow`,
@@ -780,6 +780,30 @@ which never names a backend.
   When a decision point names Jellyfin, generalize it onto the seam.
 - Server floor is 10.10 (`JellyfinSession.minimumVersion`), tested on 12.1. No
   per-version code paths.
+- **Emby is a separate `Emby*` stack beside Jellyfin**, copied and diverged, never
+  parameterized: the two share no client, mapper or session. Floor 4.8.11
+  (`EmbySession.minimumVersion`), measured on 4.10.2. Sign-in is username and
+  password only (no Quick Connect), after an unauthenticated `System/Info/Public`
+  probe that must not be Jellyfin. Rules that look wrong until you know them:
+  - **Paths are bare and never `/emby`.** Append `Users/{id}/Views` to the typed
+    base; never add or strip an `/emby` the user typed. Server-relative URLs it
+    returns (`DirectStreamUrl`, `TranscodingUrl`) are joined by concatenation.
+  - **The `MediaBrowser` Authorization header only**, with `Token=` on API calls.
+    Never `X-Emby-Token`, `Bearer`, or `X-Emby-Authorization`.
+  - **Direct-play streams carry `api_key=` in the URL (not `ApiKey`), and images
+    carry no token at all**: a bad key turns an image 200 into a 401.
+  - **Continue Watching is `Items/Resume?MediaTypes=Video` alone.** No NextUp
+    merge: it is already one next-up entry per series.
+  - **A user-data POST always carries `Played` and the position ticks together.**
+  - **A stream's `Index` equals the container stream index**, sidecars after the
+    embedded ones. No Jellyfin-style offset arithmetic.
+  - **`ProviderIds` keys are case-insensitive**: one server writes `Imdb` on a
+    movie and `IMDB` on a series.
+  - **Live TV shows only when `LiveTv/Channels` returns channels.** A free server
+    answers every Live TV read with 200 and an empty list, so there is nothing
+    else to gate on and no error to raise.
+  - The measured facts are in
+    `Docs/superpowers/specs/2026-11-04-emby-measured-decisions.md`.
 
 ### Photos
 
@@ -965,7 +989,7 @@ Every row title renders at one size and weight; there is no per-row-kind
 typography. The SwiftUI settings rows are gone (`SettingsComponents.swift` and
 `UserProfileSettingsView.swift` are deleted) — do not reintroduce them.
 
-**A form that collects several fields** (add-source, Jellyfin sign-in) builds its
+**A form that collects several fields** (add-source, Jellyfin and Emby sign-in) builds its
 rows from `EntryStep`s (`AddLiveTVSourceContent.swift`): one list of its fields.
 Nothing opens on arrival; landing on a form and being made to type first read as
 forced. Selecting any text row opens the system keyboard at once and Menu goes
@@ -1113,8 +1137,9 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 | Watch progress rule | `RivuletCore/Models/Media/WatchProgressPolicy.swift` |
 | Plex star rating / favorite | `RivuletCore/Models/Plex/PlexUserRating.swift` |
 | Plex API | `RivuletCore/Plex/PlexNetworkManager.swift` |
-| Backend seam (Plex, Jellyfin) | `Services/MediaProvider/MediaProvider.swift` |
+| Backend seam (Plex, Jellyfin, Emby) | `Services/MediaProvider/MediaProvider.swift` |
 | Jellyfin provider | `Services/MediaProvider/Jellyfin/JellyfinProvider.swift` |
+| Emby provider | `Services/MediaProvider/Emby/EmbyProvider.swift` |
 | Glass row styling | `Views/Components/GlassRowStyle.swift` |
 | Settings rows / pages | `Views/Settings/UIKit/SettingsPageModels.swift` |
 | Player canon docs | `Docs/RIVULET_PLAYER.md` |

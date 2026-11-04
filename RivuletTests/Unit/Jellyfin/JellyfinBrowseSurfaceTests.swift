@@ -287,7 +287,8 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         defer { registry.unregister(providerID: first.id); registry.unregister(providerID: second.id) }
 
         XCTAssertEqual(PlexHomeViewController.serverName(providerID: nil, kind: .jellyfin), "Jellyfin")
-        XCTAssertEqual(PlexHomeViewController.serverName(providerID: "jellyfin:two", kind: .jellyfin), "Stub")
+        XCTAssertEqual(PlexHomeViewController.serverName(providerID: "jellyfin:two", kind: .jellyfin), "Stub (Jellyfin)",
+                       "two servers with one name say their type")
         XCTAssertEqual(PlexHomeViewController.serverName(providerID: "jellyfin:missing", kind: .jellyfin), "Jellyfin",
                        "a server no longer registered is not swapped for another of its kind")
     }

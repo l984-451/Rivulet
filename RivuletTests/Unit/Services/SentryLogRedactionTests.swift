@@ -52,6 +52,23 @@ final class SentryLogRedactionTests: XCTestCase {
         XCTAssertFalse(SensitiveDataRedactor.isSecretName("Accept"))
     }
 
+    func test_redact_scrubsEmbySignInPassword_asAWholeKey() {
+        let json = SensitiveDataRedactor.redact(#"{"Username":"bain","Pw":"hunter2"}"#)
+        XCTAssertEqual(json, #"{"Username":"bain","Pw":"[redacted]"}"#)
+        XCTAssertEqual(SensitiveDataRedactor.redact("http://h/Users/AuthenticateByName?Pw=hunter2&a=1"),
+                       "http://h/Users/AuthenticateByName?Pw=[redacted]&a=1")
+        // Words that merely end in "pw" are left alone.
+        XCTAssertEqual(SensitiveDataRedactor.redact(#"{"NewPw":"keep"}"#), #"{"NewPw":"keep"}"#)
+        XCTAssertEqual(SensitiveDataRedactor.redact("http://h/x?bypw=keep"), "http://h/x?bypw=keep")
+    }
+
+    func test_isSecretName_coversAnyAuthorizationHeader() {
+        XCTAssertTrue(SensitiveDataRedactor.isSecretName("X-Emby-Authorization"))
+        XCTAssertTrue(SensitiveDataRedactor.isSecretName("Authorization"))
+        XCTAssertTrue(SensitiveDataRedactor.isSecretName("Proxy-Authorization"))
+        XCTAssertFalse(SensitiveDataRedactor.isSecretName("Accept"))
+    }
+
     func test_redactEvent_scrubsErrorContextAndMechanism() {
         let failing = "http://iptv.example/get.php?username=me&password=tok123"
         let event = Event(level: .error)

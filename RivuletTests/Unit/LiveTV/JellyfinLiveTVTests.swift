@@ -320,7 +320,7 @@ final class JellyfinLiveTVTests: XCTestCase {
     }
 
     func test_followsServer_onlyForMediaServers() {
-        XCTAssertEqual(LiveTVSourceType.allCases.filter(\.followsServer), [.plex, .jellyfin])
+        XCTAssertEqual(LiveTVSourceType.allCases.filter(\.followsServer), [.plex, .jellyfin, .emby])
     }
 
     func test_plexSourceKey_needsServerAndToken() {

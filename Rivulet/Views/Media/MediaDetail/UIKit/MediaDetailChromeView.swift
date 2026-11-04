@@ -1166,7 +1166,7 @@ struct ShowWatchPrompt: Equatable {
     let choices: [Choice]
 
     init(progress: ChildProgress?) {
-        guard let progress, progress.total > 0 else {
+        guard let progress, progress.total > 0, progress.unplayedOnly != true else {
             message = nil
             choices = [Self.markWatched, Self.markUnwatched]
             return

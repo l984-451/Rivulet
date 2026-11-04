@@ -24,7 +24,7 @@ struct OtherServerKind {
     /// Puts the server's Live TV in or out of Live TV, given the signed-in provider or nil.
     let syncLiveTV: ((any MediaProvider)?) -> Void
 
-    static let all: [OtherServerKind] = [.jellyfin]
+    static let all: [OtherServerKind] = [.jellyfin, .emby]
 
     static func entry(for kind: MediaProviderKind) -> OtherServerKind? {
         all.first { $0.kind == kind }
@@ -37,5 +37,14 @@ struct OtherServerKind {
         storedMusicProvider: { JellyfinSession.storedProvider().map(JellyfinMusicProvider.init) },
         isSameMusicAccount: { ($0 as? JellyfinMusicProvider)?.client.token == ($1 as? JellyfinMusicProvider)?.client.token },
         syncLiveTV: { JellyfinLiveTVProvider.sync($0 as? JellyfinProvider) }
+    )
+
+    static let emby = OtherServerKind(
+        kind: .emby,
+        account: { EmbySession.account.map { ($0.providerID, $0.serverName) } },
+        storedProvider: { EmbySession.storedProvider() },
+        storedMusicProvider: { EmbySession.storedProvider().map(EmbyMusicProvider.init) },
+        isSameMusicAccount: { ($0 as? EmbyMusicProvider)?.client.token == ($1 as? EmbyMusicProvider)?.client.token },
+        syncLiveTV: { EmbyLiveTVProvider.sync($0 as? EmbyProvider) }
     )
 }

@@ -705,7 +705,7 @@ class LiveTVDataStore: ObservableObject {
                     ))
                 }
 
-            case .plex, .jellyfin:
+            case .plex, .jellyfin, .emby:
                 break  // Follows its server; not saved.
             }
         }
@@ -888,7 +888,8 @@ class LiveTVDataStore: ObservableObject {
             ))
         }
 
-        sources = infos.sorted { $0.displayName < $1.displayName }
+        // A source removed while the probes above were awaited must not come back.
+        sources = infos.filter { providers[$0.id] != nil }.sorted { $0.displayName < $1.displayName }
     }
 
     // MARK: - Channel Loading

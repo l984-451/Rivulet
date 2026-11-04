@@ -4166,9 +4166,10 @@ final class PlexHomeViewController: UIViewController {
         Task { @MainActor [weak self] in
             // Cached per provider after the first menu.
             let canDelete = await provider?.canDeleteMedia() ?? false
+            let canRefresh = await provider?.canRefreshMetadata() ?? true
             guard let self else { return }
             var sections = tileMenuSections(for: item, isContinueWatching: isContinueWatching,
-                                            shelfLocation: shelfLocation)
+                                            shelfLocation: shelfLocation, canRefreshMetadata: canRefresh)
             if let gridIndex, let entryGroup = playlistEntryActions(at: gridIndex, item: item) {
                 sections.insert(entryGroup, at: 0)
             }
@@ -4182,9 +4183,13 @@ final class PlexHomeViewController: UIViewController {
     }
 
     private func confirmDelete(_ item: MediaItem, provider: any MediaProvider) {
-        let message = item.kind == .show || item.kind == .season
-            ? String(localized: "Every episode's files will be deleted from \(provider.displayName). This cannot be undone.")
-            : String(localized: "The files will be deleted from \(provider.displayName). This cannot be undone.")
+        Task { @MainActor [weak self] in
+            let message = await provider.deleteConfirmation(for: item)
+            self?.presentDeleteConfirmation(item, message: message, provider: provider)
+        }
+    }
+
+    private func presentDeleteConfirmation(_ item: MediaItem, message: String, provider: any MediaProvider) {
         let alert = UIAlertController(title: String(localized: "Delete \u{201C}\(item.title)\u{201D}?"), message: message,
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) { [weak self] _ in
@@ -4514,7 +4519,10 @@ final class PlexHomeViewController: UIViewController {
         let ofKind = registry.enabledProviders().filter { $0.kind == kind }
         let provider = providerID.flatMap(registry.provider(for:))
             ?? (kind == .plex ? registry.plexProvider : (providerID == nil && ofKind.count == 1 ? ofKind.first : nil))
-        return provider?.displayName ?? kind.displayName
+        guard let provider else { return kind.displayName }
+        // Two servers with one name also say their type.
+        let twins = registry.enabledProviders().filter { $0.displayName == provider.displayName }.count
+        return twins > 1 ? "\(provider.displayName) (\(provider.kind.displayName))" : provider.displayName
     }
 
     /// A provider surface's hero: the newest additions with a backdrop, up to
@@ -6926,9 +6934,11 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     /// every server's copy (#87), or the copy left behind brings the card back.
     private func tileMenuSections(for item: MediaItem,
                                   isContinueWatching: Bool,
-                                  shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil) -> [[TileMenuAction]] {
+                                  shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil,
+                                  canRefreshMetadata: Bool = true) -> [[TileMenuAction]] {
         let sections = singleServerTileMenuSections(for: item, isContinueWatching: isContinueWatching,
-                                                    shelfLocation: shelfLocation)
+                                                    shelfLocation: shelfLocation,
+                                                    canRefreshMetadata: canRefreshMetadata)
         guard isContinueWatching, let others = mergedCWOthers[item.ref] else { return sections }
         return sections.map { group in
             group.map { action in
@@ -6956,23 +6966,17 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         }
     }
 
-    /// Takes one server's copy out of its Continue Watching: Plex's own removal,
-    /// elsewhere a cleared position (an episode moves to Next Up, so it stays).
+    /// Takes one server's copy out of its Continue Watching, the way its server does it.
     private static func removeFromContinueWatching(_ copy: MediaItem) async {
-        let provider = MediaProviderRegistry.shared.provider(for: copy.ref.providerID)
-        if let plex = provider as? PlexProvider {
-            try? await PlexNetworkManager.shared.removeFromContinueWatching(
-                serverURL: plex.serverURL, authToken: plex.authToken, ratingKey: copy.ref.itemID)
-        } else if copy.kind != .episode {
-            try? await provider?.updateProgress(copy.ref, position: 0)
-        }
+        try? await MediaProviderRegistry.shared.provider(for: copy.ref.providerID)?.removeFromContinueWatching(copy)
     }
 
     /// The canonical long-press menu for home rows and the library grid, one sub-array per divider group.
     /// CW rows swap the watched group for Remove from CW and Go to Show.
     private func singleServerTileMenuSections(for item: MediaItem,
                                               isContinueWatching: Bool,
-                                              shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil)
+                                              shelfLocation: (sectionID: HomeSectionID, itemIndex: Int)? = nil,
+                                              canRefreshMetadata: Bool = true)
         -> [[TileMenuAction]] {
         // A collection opens its page on Select and has nothing to play or
         // mark. In a library its menu is Pin to Home or Unpin from Home.
@@ -6984,6 +6988,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else { return [] }
             return Self.providerTileMenuSections(
                 for: item, provider: provider, isContinueWatching: isContinueWatching,
+                canRefreshMetadata: canRefreshMetadata,
                 onWatchFromBeginning: { [weak self] in self?.playItem(item, fromBeginning: true) },
                 onMoreInfo: { [weak self] in self?.selectMediaItem(item) },
                 onGoToEpisode: { [weak self] in self?.goToEpisode(item) },
@@ -7133,12 +7138,13 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     /// groups, every server call through the item's provider.
     /// [Watch from Beginning, More Info, Go to Episode, Go to Show] | [watched state,
     /// Remove from Continue Watching] | [Refresh Metadata].
-    /// Remove is offered only where the server can do it: clearing an
-    /// episode's position moves it to Next Up, still in Continue Watching.
+    /// Remove is offered only where the provider can do it (`canRemoveFromContinueWatching`),
+    /// Refresh Metadata only where the account may (`canRefreshMetadata`).
     static func providerTileMenuSections(
         for item: MediaItem,
         provider: any MediaProvider,
         isContinueWatching: Bool,
+        canRefreshMetadata: Bool = true,
         onWatchFromBeginning: @escaping () -> Void,
         onMoreInfo: @escaping () -> Void,
         onGoToEpisode: (() -> Void)? = nil,
@@ -7174,15 +7180,15 @@ extension PlexHomeViewController: UICollectionViewDelegate {
                 changeOnServer { try await provider.markUnplayed(ref) }
             })
         }
-        if isContinueWatching, item.kind != .episode {
+        if isContinueWatching, provider.canRemoveFromContinueWatching(item) {
             middle.append(TileMenuAction(title: "Remove from Continue Watching", systemImage: "trash",
                                          destructive: true) {
-                changeOnServer { try await provider.updateProgress(ref, position: 0) }
+                changeOnServer { try await provider.removeFromContinueWatching(item) }
             })
         }
-        let last = [TileMenuAction(title: "Refresh Metadata", systemImage: "arrow.clockwise") {
+        let last = canRefreshMetadata ? [TileMenuAction(title: "Refresh Metadata", systemImage: "arrow.clockwise") {
             changeOnServer { try await provider.refreshMetadata(ref) }
-        }]
+        }] : []
         return [first, middle, last].filter { !$0.isEmpty }
     }
 

@@ -35,15 +35,16 @@ struct PlaylistServer: Hashable {
     /// The servers among `providerIDs`, the selected Plex server first.
     @MainActor static func current(_ providerIDs: Set<String>) -> [PlaylistServer] {
         let plexID = MediaProviderRegistry.shared.plexProvider?.id
+        let labels = SidebarLibrary.serverLabels()
         var servers: [PlaylistServer] = []
         if let plexID, providerIDs.contains(plexID) {
-            servers.append(PlaylistServer(providerID: plexID,
-                                          name: PlexAuthManager.shared.savedServerName ?? String(localized: "Library"), serverID: ""))
+            servers.append(PlaylistServer(providerID: plexID, name: labels.plex, serverID: ""))
         }
         for source in ServerDataStore.shared.sources
         where source.providerID != plexID && providerIDs.contains(source.providerID)
             && !servers.contains(where: { $0.providerID == source.providerID }) {
-            servers.append(PlaylistServer(providerID: source.providerID, name: source.name, serverID: source.providerID))
+            servers.append(PlaylistServer(providerID: source.providerID,
+                                          name: labels.others[source.providerID] ?? source.name, serverID: source.providerID))
         }
         return servers
     }
@@ -69,11 +70,19 @@ struct SidebarLibrary: Hashable {
         item = ShellSidebarItem(tab: .providerLibrary(providerID: library.providerID, libraryID: library.id),
                                 title: library.title, icon: ShellSidebarModel.icon(forLibraryKind: library.kind))
     }
+    /// Each server's name as the sidebar shows it: two servers with one name also say their type.
+    @MainActor static func serverLabels() -> (plex: String, others: [String: String]) {
+        let sources = ServerDataStore.shared.sources
+        let runs = [(name: PlexAuthManager.shared.savedServerName ?? String(localized: "Library"), kind: MediaProviderKind.plex)]
+            + sources.map { (name: $0.name, kind: MediaProviderRegistry.shared.kind(of: $0.providerID) ?? .plex) }
+        let headers = SettingsContent.serverRunHeaders(runs)
+        return (headers[0], Dictionary(zip(sources.map(\.providerID), headers.dropFirst()), uniquingKeysWith: { first, _ in first }))
+    }
+
     /// Every server's visible libraries (or all of them) in the user's order across servers.
     @MainActor static func current(includeHidden: Bool = false) -> [SidebarLibrary] {
-        let plexName = PlexAuthManager.shared.savedServerName ?? String(localized: "Library")
+        let (plexName, names) = serverLabels()
         let store = ServerDataStore.shared
-        let names = Dictionary(store.sources.map { ($0.providerID, $0.name) }, uniquingKeysWith: { first, _ in first })
         let plex = includeHidden
             ? LibrarySettingsManager.shared.sortLibraries(PlexDataStore.shared.libraries.filter(\.hasBrowseSurface))
             : PlexDataStore.shared.visibleSidebarLibraries

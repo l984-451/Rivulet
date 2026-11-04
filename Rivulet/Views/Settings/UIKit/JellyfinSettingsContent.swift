@@ -159,7 +159,7 @@ extension SettingsContent {
     static func jellyfinFailureCopy(for error: Error) -> String {
         switch error {
         case JellyfinSignInError.notJellyfin:
-            String(localized: "That address isn't a Jellyfin server. Check the port.")
+            String(localized: "That address isn't a Jellyfin server. Check the port. An Emby server signs in under Emby Server.")
         case JellyfinSignInError.serverTooOld(let version):
             String(localized: "This server runs Jellyfin \(version). Rivulet needs \(JellyfinSession.minimumVersion.major).\(JellyfinSession.minimumVersion.minor) or newer.")
         case JellyfinSignInError.untrustedCertificate:

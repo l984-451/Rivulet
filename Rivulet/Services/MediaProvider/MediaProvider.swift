@@ -75,6 +75,9 @@ protocol MediaProvider: Sendable, Identifiable {
     func letterCounts(in library: MediaLibrary) async throws -> [PlexFirstCharacter]
     /// Ask the server to re-read the item's metadata. Default: unsupported.
     func refreshMetadata(_ itemRef: MediaItemRef) async throws
+    /// Whether this account may ask for a refresh, for menus that offer it. Default: yes, the
+    /// server answers for itself. Emby accepts a refresh from anyone, so it says no for non-admins.
+    func canRefreshMetadata() async -> Bool
     /// The sorts the library page offers for this kind of library, each one
     /// `items(in:sort:page:)` can apply. Default: Plex's list minus resolution.
     func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption]
@@ -111,6 +114,13 @@ protocol MediaProvider: Sendable, Identifiable {
     func markPlayed(_ itemRef: MediaItemRef) async throws
     func markUnplayed(_ itemRef: MediaItemRef) async throws
     func updateProgress(_ itemRef: MediaItemRef, position: TimeInterval) async throws
+    /// Takes the item off Continue Watching. Default: clears a non-episode's resume position,
+    /// which drops it from the row; an episode would only move to Next Up, so it is left alone.
+    /// Plex has its own call and Emby hides the entry.
+    func removeFromContinueWatching(_ item: MediaItem) async throws
+    /// Whether `removeFromContinueWatching` does something for this item, for menus that offer it.
+    /// Default: not an episode, since clearing an episode's position moves it to Next Up.
+    func canRemoveFromContinueWatching(_ item: MediaItem) -> Bool
 
     // MARK: - Deletion
 
@@ -118,6 +128,9 @@ protocol MediaProvider: Sendable, Identifiable {
     func canDeleteMedia() async -> Bool
     /// Deletes the item and its files from the server.
     func deleteMedia(_ itemRef: MediaItemRef) async throws
+    /// What the delete confirmation says. Default: the files go. A server that removes more than
+    /// the item (Emby deletes a movie's whole folder) says so.
+    func deleteConfirmation(for item: MediaItem) async -> String
 
     // MARK: - Watchlist
     var supportsWatchlist: Bool { get }
@@ -189,7 +202,20 @@ extension MediaProvider {
     func refreshMetadata(_ itemRef: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "refresh not supported")
     }
+    func canRefreshMetadata() async -> Bool { true }
+    func removeFromContinueWatching(_ item: MediaItem) async throws {
+        guard item.kind != .episode else { return }
+        try await updateProgress(item.ref, position: 0)
+    }
+    func canRemoveFromContinueWatching(_ item: MediaItem) -> Bool { item.kind != .episode }
     func canDeleteMedia() async -> Bool { false }
+    func deleteConfirmation(for item: MediaItem) async -> String { standardDeleteConfirmation(for: item) }
+    /// The default text, for an override that has nothing more to say about this item.
+    func standardDeleteConfirmation(for item: MediaItem) -> String {
+        item.kind == .show || item.kind == .season
+            ? String(localized: "Every episode's files will be deleted from \(displayName). This cannot be undone.")
+            : String(localized: "The files will be deleted from \(displayName). This cannot be undone.")
+    }
     func deleteMedia(_ itemRef: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "delete not supported")
     }

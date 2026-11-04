@@ -52,6 +52,10 @@ nonisolated enum SensitiveDataRedactor {
             ("\"(\(secretName))\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"\(redactedValue)\""),
             // XML attribute: accessToken="…" or '…'.
             ("\\b(\(secretName))\\s*=\\s*([\"'])[^\"']*\\2", "$1=$2\(redactedValue)$2"),
+            // Emby sign-in password: "Pw":"…" as a whole JSON key.
+            ("\"(Pw)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"\(redactedValue)\""),
+            // Emby sign-in password as a query key (not a word that ends in pw).
+            ("(?<![A-Za-z0-9_-])(Pw)=[^&\\s\"'<>]+", "$1=\(redactedValue)"),
             // Query string: X-Plex-Token=…
             ("(\(keys))=[^&\\s\"'<>]+", "$1=\(redactedValue)"),
             // Xtream path credentials: /live/<user>/<pass>/<id>.ts
@@ -83,7 +87,8 @@ nonisolated enum SensitiveDataRedactor {
     /// Whether a header or field NAME holds a secret (`X-Plex-Token`, `Authorization`).
     static func isSecretName(_ name: String) -> Bool {
         let lower = name.lowercased()
-        return secretQueryKeys.contains(lower) || ["token", "password", "secret", "api-key"].contains { lower.contains($0) }
+        return secretQueryKeys.contains(lower)
+            || ["token", "password", "secret", "api-key", "authorization"].contains { lower.contains($0) }
     }
 
     /// Optional-preserving variant. Deliberately NOT an overload of `redact`:

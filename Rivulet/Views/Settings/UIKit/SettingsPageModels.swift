@@ -222,6 +222,7 @@ enum SettingsContent {
         case .plex:        return plex
         case .plexServerDetail: return plexServerDetail
         case .jellyfin:    return jellyfin
+        case .emby:        return emby
         case .libraries:   return libraries
         case .homeRows:    return homeRows
         case .cache:       return cache
@@ -739,6 +740,11 @@ enum SettingsContent {
                 id: "jellyfinServer", title: "Jellyfin Server",
                 kind: .navigationAction(.jellyfin,
                                         value: { JellyfinSession.account?.serverName ?? "" },
+                                        prepare: { addSourceDraft = AddSourceDraft() })),
+            SettingsRowItem(
+                id: "embyServer", title: "Emby Server",
+                kind: .navigationAction(.emby,
+                                        value: { EmbySession.account?.serverName ?? "" },
                                         prepare: { addSourceDraft = AddSourceDraft() }))
         ]
     }
@@ -867,10 +873,21 @@ enum SettingsContent {
 
     /// The Jellyfin server's counterpart of `plexLiveTVToggle`.
     static func jellyfinLiveTVToggle(id: String) -> SettingsRowItem {
+        serverLiveTVToggle(id: id, hiddenKey: JellyfinLiveTVProvider.hiddenKey, setHidden: JellyfinLiveTVProvider.setHidden)
+    }
+
+    /// The Emby server's counterpart.
+    static func embyLiveTVToggle(id: String) -> SettingsRowItem {
+        serverLiveTVToggle(id: id, hiddenKey: EmbyLiveTVProvider.hiddenKey, setHidden: EmbyLiveTVProvider.setHidden)
+    }
+
+    private static func serverLiveTVToggle(
+        id: String, hiddenKey: String, setHidden: @escaping @MainActor (Bool) -> Task<Void, Never>?
+    ) -> SettingsRowItem {
         var sync: Task<Void, Never>?
         return SettingsRowItem(id: id, title: "Show in Live TV", kind: .toggle(
-            get: { !UserDefaults.standard.bool(forKey: JellyfinLiveTVProvider.hiddenKey) },
-            set: { sync = JellyfinLiveTVProvider.setHidden(!$0) },
+            get: { !UserDefaults.standard.bool(forKey: hiddenKey) },
+            set: { sync = setHidden(!$0) },
             didChange: { _, vc in
                 Task {
                     await sync?.value
@@ -1208,7 +1225,7 @@ enum SettingsContent {
 
     private static var iptv: [SettingsRowItem] {
         let ds = LiveTVDataStore.shared
-        let hiddenSources = ds.hiddenPlexSources + [JellyfinLiveTVProvider.hiddenSource].compactMap { $0 }
+        let hiddenSources = ds.hiddenPlexSources + [JellyfinLiveTVProvider.hiddenSource, EmbyLiveTVProvider.hiddenSource].compactMap { $0 }
         let hidden = Set(hiddenSources.map(\.id))
         var rows: [SettingsRowItem] = (ds.sources + hiddenSources).sorted { $0.displayName < $1.displayName }.map { source in
             SettingsRowItem(id: "src_\(source.id)", verbatim: source.displayName,
@@ -1234,11 +1251,13 @@ enum SettingsContent {
         if let plexToggle, let machineID, LiveTVDataStore.shared.isPlexLiveTVHidden(machineID: machineID) {
             return [plexToggle]
         }
-        if source.sourceType == .jellyfin {
-            guard JellyfinLiveTVProvider.hiddenSource == nil else { return [jellyfinLiveTVToggle(id: "src_showInLiveTV")] }
+        let serverToggle: (row: SettingsRowItem, isHidden: Bool)? = switch source.sourceType {
+        case .jellyfin: (jellyfinLiveTVToggle(id: "src_showInLiveTV"), JellyfinLiveTVProvider.hiddenSource != nil)
+        case .emby: (embyLiveTVToggle(id: "src_showInLiveTV"), EmbyLiveTVProvider.hiddenSource != nil)
+        default: nil
         }
-        var rows: [SettingsRowItem] = plexToggle.map { [$0] }
-            ?? (source.sourceType == .jellyfin ? [jellyfinLiveTVToggle(id: "src_showInLiveTV")] : [])
+        if let serverToggle, serverToggle.isHidden { return [serverToggle.row] }
+        var rows: [SettingsRowItem] = plexToggle.map { [$0] } ?? serverToggle.map { [$0.row] } ?? []
         rows += [
             SettingsRowItem(id: "src_status", title: "Status",
                             kind: .info(value: { source.isConnected ? String(localized: "Connected") : String(localized: "Disconnected") })),

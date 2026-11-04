@@ -2252,6 +2252,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// faults, so busy is the likely reason, not a certain one.
     private static func notice(forResolveError error: Error) -> String? {
         if error is PlexLiveTuneError { return String(localized: "Couldn't tune this channel. All tuners may be busy.") }
+        if let live = error as? LiveTVProviderError, case .tunersBusy = live { return live.errorDescription }
         return (error as? TvheadendError)?.errorDescription
     }
 

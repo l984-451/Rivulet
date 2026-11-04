@@ -6,7 +6,7 @@
 
 **Built for simplicity.**
 
-A native Apple TV app for Plex, Jellyfin, and Live TV.
+A native Apple TV app for Plex, Jellyfin, Emby, and Live TV.
 
 <a href="https://apps.apple.com/us/app/rivulet-for-plex/id6756892857">
   <img src="https://img.shields.io/badge/Download_on_the-App_Store-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download on the App Store">
@@ -56,7 +56,7 @@ I began this project in Decemeber 2025. At the time there was quite a lack of Pl
 
 ## Live TV
 
-Rivulet works with several kinds of Live TV source. You don't need a Plex or Jellyfin server. Add just a Live TV source and the app opens straight to Live TV.
+Rivulet works with several kinds of Live TV source. You don't need a Plex, Jellyfin, or Emby server. Add just a Live TV source and the app opens straight to Live TV.
 
 - **What's On**: what's airing now, what starts soon, and a For You row that learns what you watch.
 - **Guide**: standard guide layout if you want.
@@ -181,6 +181,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 - [libass](https://github.com/libass/libass): ASS/SSA subtitle rendering
 - [Plex](https://plex.tv/): media server platform
 - [Jellyfin](https://jellyfin.org/): open source media server
+- [Emby](https://emby.media/): media server platform
 - [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr): IPTV management
 - [TMDB](https://www.themoviedb.org/): artwork and metadata for Discover
 
@@ -188,7 +189,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 
 <div align="center">
 
-Rivulet is not affiliated with or endorsed by Plex, Inc. or the Jellyfin project.
+Rivulet is not affiliated with or endorsed by Plex, Inc., the Jellyfin project, or Emby LLC.
 
 Media used in the README is AI generated for copyright reasons.
 

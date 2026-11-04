@@ -183,9 +183,10 @@ final class HeroButtonRowView: UIView {
     }
 
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        // Decline the sidebar hand-off so the press handler or gated swipe owns paging.
+        // A gesture that lands on Play stops there; subsequent gestures can page or open the sidebar.
         if context.previouslyFocusedItem === playButton, context.focusHeading == .left,
-           canRetreat || previousPageGesture == MenuPressInterceptor.remoteGestures.count { return false }
+           canRetreat || previousPageGesture == MenuPressInterceptor.remoteGestures.count
+            || playButtonFocusGesture == MenuPressInterceptor.remoteGestures.count { return false }
         return super.shouldUpdateFocus(in: context)
     }
 

@@ -83,9 +83,11 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             let kids = try await networkManager.getChildren(
                 serverURL: serverURL, authToken: authToken, ratingKey: itemRef.itemID
             )
-            return kids.map {
+            let items = kids.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
             }
+            // A show's seasons: Specials after the last season (#534).
+            return SeasonOrder.specialsLast(items) { $0.kind == .season ? $0.seasonNumber : nil }
         }
     }
 
@@ -243,10 +245,12 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             let episodes = try await networkManager.getAllLeaves(
                 serverURL: serverURL, authToken: authToken, ratingKey: showRef.itemID
             )
-            return episodes.map {
+            let items = episodes.map {
                 PlexMediaMapper.item($0, providerID: id,
                                     serverURL: serverURL, authToken: authToken)
             }
+            // The flat rail follows the pills: the Specials episodes come last (#534).
+            return SeasonOrder.specialsLast(items, seasonNumber: \.seasonNumber)
         }
     }
 

@@ -97,6 +97,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         switch parent.type {
         case "Series":
             result = try await client.get("Shows/\(itemRef.itemID)/Seasons", [Self.listFields])
+            // Specials after the last season (#534).
+            return SeasonOrder.specialsLast(map(result.items), seasonNumber: \.seasonNumber)
         case "Season":
             guard let seriesID = parent.seriesId else { return [] }
             result = try await client.get("Shows/\(seriesID)/Episodes", [
@@ -152,7 +154,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] {
         let result: JFQueryResult = try await client.get("Shows/\(showRef.itemID)/Episodes", [Self.listFields])
-        return map(result.items)
+        // The flat rail follows the pills: the Specials episodes come last (#534).
+        return SeasonOrder.specialsLast(map(result.items), seasonNumber: \.seasonNumber)
     }
 
     // MARK: - Detail

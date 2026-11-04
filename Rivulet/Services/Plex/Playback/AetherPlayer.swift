@@ -174,6 +174,17 @@ final class AetherPlayer: PlayerProtocol {
         }
     }
 
+    /// Leaves the TV's display mode alone on load: for an inline preview (the detail's
+    /// trailer), which must not switch the HDMI mode under the page it plays in.
+    var suppressesDisplayCriteria = false
+
+    /// How the picture sits in the bound surface. `.resizeAspect` (the default) letterboxes;
+    /// the detail's trailer preview fills its card with `.resizeAspectFill`.
+    var videoGravity: AVLayerVideoGravity {
+        get { engine.videoGravity }
+        set { engine.videoGravity = newValue }
+    }
+
     init() {
         do {
             self.engine = try AetherEngine()
@@ -1129,9 +1140,9 @@ final class AetherPlayer: PlayerProtocol {
         // isLive must be declared: the engine does not auto-detect live (broken MKV durations).
         // externalSubtitles: nil httpHeaders inherits the media's Plex auth headers.
         var options = LoadOptions(
-            suppressDisplayCriteria: false,
+            suppressDisplayCriteria: suppressesDisplayCriteria,
             httpHeaders: headers ?? [:],
-            matchContentEnabled: true,
+            matchContentEnabled: !suppressesDisplayCriteria,
             panelIsInHDRMode: Self.panelIsInHDRMode(),
             audioBridgeMode: .lossless,
             isLive: isLive,

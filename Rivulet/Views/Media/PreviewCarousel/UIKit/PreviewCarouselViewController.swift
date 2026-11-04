@@ -95,6 +95,15 @@ final class PreviewCarouselViewController: UIViewController {
     /// Paused animator whose `fractionComplete` is the blur intensity; built on first arm.
     private var blurAnimator: UIViewPropertyAnimator?
 
+    /// The centred card's trailer, played over its artwork once the artwork has been on
+    /// screen for `CarouselTrailerPreview.artworkDwell`. One run per visit to a card.
+    private let trailerPreview = CarouselTrailerPreview()
+    private var trailerDwellTask: Task<Void, Never>?
+    private var trailerArmToken: UInt64 = 0
+    /// The card whose dwell has elapsed, waiting for its detail or for a morph to settle.
+    private var trailerDwellElapsedIndex: Int?
+    private var backgroundObserver: AnyCancellable?
+
     deinit {
         // A property animator released while .active throws. `blurAnimator` stays
         // paused (.active) for the VC's life, so stop it or dismiss aborts the app.
@@ -103,6 +112,7 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     private func teardown() {
+        disarmTrailerPreview()
         onTeardown?()
         onTeardown = nil
     }
@@ -377,6 +387,12 @@ final class PreviewCarouselViewController: UIViewController {
             }
             .store(in: &refreshObservers)
 
+        // The trailer stops with the app; the artwork is what comes back.
+        backgroundObserver = NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.disarmTrailerPreview() }
+        trailerPreview.onFinished = { [weak self] in self?.backdropPlane.removePreview() }
+
         previewCarouselLog.info("[PCV] viewDidLoad items=\(self.items.count, privacy: .public) selected=\(self.selectedIndex, privacy: .public)")
         // Do not force a collection layout here: `view` is still zero-sized, and cells
         // dequeued against it keep collapsed chrome. viewDidLayoutSubviews lays out.
@@ -448,6 +464,7 @@ final class PreviewCarouselViewController: UIViewController {
         morphController.expandInstantly(centeredIndex: selectedIndex, in: view.bounds, cell: cell) { [weak self] in
             guard let self else { return }
             self.state.finishExpand()
+            self.startTrailerPreviewIfReady()
             self.expandedDetail.revealBelowFoldCollection()
             self.setNeedsFocusUpdate()
         }
@@ -557,6 +574,8 @@ final class PreviewCarouselViewController: UIViewController {
             expandedDetail.item = items[selectedIndex]
         }
         expandedDetail.setCurrent(true, animated: animated)
+        // The artwork is on screen from here: the trailer's dwell starts.
+        armTrailerPreview()
     }
 
     // MARK: - Geometry helpers
@@ -723,6 +742,13 @@ final class PreviewCarouselViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         previewCarouselLog.info("[Lifecycle] viewWillDisappear isExpanded=\(self.isExpanded) presentingVC=\(self.presentingViewController != nil)")
+        disarmTrailerPreview()
+    }
+
+    /// Anything presented over the carousel (the player, a page, a prompt) takes the trailer's place.
+    override func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        disarmTrailerPreview()
+        super.present(viewControllerToPresent, animated: flag, completion: completion)
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -1023,6 +1049,49 @@ final class PreviewCarouselViewController: UIViewController {
         ExtraPlayer.play(trailer, server: shownItemServer, from: self)
     }
 
+    // MARK: - Trailer preview
+
+    /// Starts the artwork dwell for the centred card. The trailer plays once it elapses and the
+    /// card's detail, which carries its extras, is in; a page, a modal, the details or a dismiss
+    /// cancel it.
+    private func armTrailerPreview() {
+        disarmTrailerPreview()
+        let token = trailerArmToken
+        let index = selectedIndex
+        trailerDwellTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(CarouselTrailerPreview.artworkDwell))
+            guard let self, !Task.isCancelled, self.trailerArmToken == token else { return }
+            self.trailerDwellElapsedIndex = index
+            self.startTrailerPreviewIfReady()
+        }
+    }
+
+    private func disarmTrailerPreview() {
+        trailerArmToken &+= 1
+        trailerDwellTask?.cancel()
+        trailerDwellTask = nil
+        trailerDwellElapsedIndex = nil
+        if trailerPreview.isActive {
+            trailerPreview.stop()
+            backdropPlane.removePreview()
+        }
+    }
+
+    /// Plays the trailer when the dwell has elapsed on the centred card, its detail is loaded and
+    /// the card is at rest in the carousel or the expanded hero. Re-tried when a detail lands or
+    /// an expand settles, since either may come after the dwell.
+    private func startTrailerPreviewIfReady() {
+        guard let index = trailerDwellElapsedIndex, index == selectedIndex,
+              pagingAnimation == nil, presentedViewController == nil,
+              state.phase == .carouselStable || state.phase == .expandedHero,
+              let cell = collectionView.cellForItem(at: IndexPath(item: index, section: 0)) as? PreviewCardView,
+              let trailer = cell.loadedDetail?.extras.first(where: \.isTrailer)
+        else { return }
+        trailerDwellElapsedIndex = nil
+        guard backdropPlane.showPreview(trailerPreview.surface, at: index) else { return }
+        trailerPreview.start(trailer, server: shownItemServer)
+    }
+
     // Menu belongs to the recognizer alone. Do not also handle it in pressesEnded or
     // pressesCancelled: the two race, the press arrives cancelled and the modal dismisses.
 
@@ -1087,6 +1156,7 @@ final class PreviewCarouselViewController: UIViewController {
     /// Pages over 0.78 s on a display link, so layout invalidates every frame (see `PagingAnimation`).
     /// Called mid-glide, it retargets from the current offset and speed.
     private func animatePage(toIndex newIndex: Int) {
+        disarmTrailerPreview()
         state.beginPaging()
         chromeRevealToken &+= 1
         // Release the expand offset-pin so paging can move the carousel.
@@ -1228,7 +1298,7 @@ final class PreviewCarouselViewController: UIViewController {
         switch action {
         case .dismissOverlay:
             // Standalone: the transitioning delegate blur-fades back to the previous detail.
-            if standaloneDetail { dismiss(animated: true) }
+            if standaloneDetail { disarmTrailerPreview(); dismiss(animated: true) }
             else { performDismissMorph() }
         case .collapseToCarousel:
             // `exitAction` already moved the phase to `.carouselStable`.
@@ -1263,6 +1333,7 @@ final class PreviewCarouselViewController: UIViewController {
         morphController.expand(centeredIndex: selectedIndex, in: view.bounds, cell: cell) { [weak self] in
             guard let self else { return }
             self.state.finishExpand()
+            self.startTrailerPreviewIfReady()
             // Reveal the real focus-driven below-fold (post-morph, §6).
             self.expandedDetail.revealBelowFoldCollection()
             self.setNeedsFocusUpdate()
@@ -1272,6 +1343,8 @@ final class PreviewCarouselViewController: UIViewController {
     /// Down from the expanded hero: slides into the below-fold details, then hands focus in.
     private func enterBelowFold() {
         guard state.phase == .expandedHero else { return }
+        // The details blur the hero; a live video under a scrubbed blur is not worth its decode.
+        disarmTrailerPreview()
         state.markDetailsStable()
         // Always enter on the episodes, never stale on the pills.
         expandedDetail.detailsFocusTarget = .episodes
@@ -1369,6 +1442,7 @@ final class PreviewCarouselViewController: UIViewController {
         guard state.phase != .exiting else { return }
         // The exit flight starts from settled geometry: not mid-page, not mid-collapse.
         guard pagingAnimation == nil, !morphController.isAnimating else { return }
+        disarmTrailerPreview()
         state.beginExit()
         onPrepareDismiss(dismissSourceTarget)
         // Fly only when the centred card has a tile on screen to land on.
@@ -1505,6 +1579,7 @@ extension PreviewCarouselViewController: UICollectionViewDataSource, UICollectio
         cell.onPlay = { [weak self] item in self?.playHeroItem(item) }
         cell.onPlayVersion = { [weak self] item, sourceID in self?.playMediaItem(item, sourceID: sourceID) }
         cell.onShowInfo = { [weak self] detail in self?.presentInfoPopup(detail) }
+        cell.onDetailLoaded = { [weak self] _, _ in self?.startTrailerPreviewIfReady() }
         // Entry or paging completion marks the current cell via updateCurrentCellChrome.
         cell.setIsCurrent(indexPath.item == selectedIndex && hasRunEntryMorph,
                           animated: false)

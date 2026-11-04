@@ -49,6 +49,34 @@ final class BackdropPlaneView: UIView {
     /// controller has exclusive control of the centered panel's frames.
     var isMorphing: Bool = false
 
+    /// The trailer surface over one panel's artwork, framed exactly as that artwork
+    /// so it rides the parallax and the morphs with it.
+    private var previewView: UIView?
+    private var previewIndex: Int?
+
+    /// Places `view` over the artwork of the panel at `index`. False when that card has no panel.
+    @discardableResult
+    func showPreview(_ view: UIView, at index: Int) -> Bool {
+        removePreview()
+        guard let panel = panels[index] else { return false }
+        view.frame = panel.imageView.frame
+        panel.container.insertSubview(view, aboveSubview: panel.imageView)
+        previewView = view
+        previewIndex = index
+        return true
+    }
+
+    func removePreview() {
+        previewView?.removeFromSuperview()
+        previewView = nil
+        previewIndex = nil
+    }
+
+    private func syncPreview(to panel: Panel) {
+        guard panel.index == previewIndex else { return }
+        previewView?.frame = panel.imageView.frame
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         // Apple's surround grey; shows in the top strip and the gaps between cards.
@@ -74,6 +102,7 @@ final class BackdropPlaneView: UIView {
 
         // Recycle panels that scrolled away.
         for (idx, panel) in panels where !visible.contains(idx) {
+            if idx == previewIndex { removePreview() }
             panel.container.removeFromSuperview()
             panels[idx] = nil
         }
@@ -112,6 +141,7 @@ final class BackdropPlaneView: UIView {
                 width: stage.width,
                 height: stage.height
             )
+            syncPreview(to: panel)
         }
         CATransaction.commit()
     }
@@ -172,6 +202,7 @@ final class BackdropPlaneView: UIView {
         panel.container.frame = rect
         panel.imageView.frame = CGRect(origin: .zero, size: rect.size)
         panel.dimView.frame = panel.imageView.frame
+        syncPreview(to: panel)
     }
 
     /// Reverse of expandPanel: shrink the centered panel's container back
@@ -192,6 +223,7 @@ final class BackdropPlaneView: UIView {
             height: stage.height
         )
         panel.dimView.frame = CGRect(origin: .zero, size: window.size)
+        syncPreview(to: panel)
         // Peeks were never alpha-hidden (see expandPanel) — they sit at their
         // carousel frames and are revealed geometrically as the centered card
         // shrinks. Nothing to restore here.

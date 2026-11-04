@@ -64,6 +64,10 @@ final class MediaDetailChromeView: UIView {
     var onPlayVersion: ((String) -> Void)?
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
+    /// The item's detail landed (its extras hold the trailer the carousel previews).
+    var onDetailLoaded: ((MediaItemDetail) -> Void)?
+    /// The detail already loaded for the current item, if any.
+    var loadedDetail: MediaItemDetail? { detail }
 
     /// The Play pill (rebuilt per item). Exposed so the host cell can point the
     /// focus engine at Play when the detail expands.
@@ -536,6 +540,7 @@ final class MediaDetailChromeView: UIView {
                 self.detail = fetched
                 self.resolvedGenres = genres
                 self.applyDetail(item: item, detail: fetched)
+                self.onDetailLoaded?(fetched)
             }
         }
     }

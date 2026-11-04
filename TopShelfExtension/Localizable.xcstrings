@@ -1,38 +1,38 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "Continue Watching": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Weiter ansehen"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Continue Watching" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter ansehen"
           }
         },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Συνέχεια παρακολούθησης"
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια παρακολούθησης"
           }
         }
       }
     },
-    "Recently Added": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zuletzt hinzugefügt"
+    "Recently Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt hinzugefügt"
           }
         },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Προστέθηκαν πρόσφατα"
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προστέθηκαν πρόσφατα"
           }
         }
       }
     }
   },
-  "version": "1.0"
+  "version" : "1.0"
 }

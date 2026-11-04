@@ -538,7 +538,16 @@ final class MediaItemDetailPageViewController: UIViewController {
         for raw in badges {
             let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
+            guard !text.isEmpty else { continue }
+            // The format logos of the carousel's detail; the audio badge keeps its codec text
+            // unless it is object audio, where the Dolby Atmos mark stands in.
+            if ["4K", "DV", "HDR10+", "HDR"].contains(text) {
+                badgeRow.addArrangedSubview(MediaDetailChromeView.makeFormatBadge(text, alpha: 0.75))
+            } else if text.hasSuffix("Atmos") {
+                badgeRow.addArrangedSubview(MediaDetailChromeView.makeFormatBadge("Atmos", alpha: 0.75))
+            } else {
+                badgeRow.addArrangedSubview(Self.badge(text))
+            }
         }
         addVersionsButton(detail)
     }

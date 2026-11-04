@@ -209,4 +209,41 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(MediaDetailChromeView.calmBadges(source(range: .dolbyVision(profile: 8), hdr10Plus: true)), ["4K", "DV", "HDR10+"])
         XCTAssertEqual(MediaDetailChromeView.calmBadges(nil), [])
     }
+
+    /// Next to Dolby Vision, HDR10+ closes the row after the audio, so the two Dolby marks sit together.
+    @MainActor
+    func test_carouselBadges_putHDR10PlusAfterAtmosNextToDolbyVision() {
+        let video = VideoTrack(
+            id: "v1", codec: "hevc", profile: "Main 10", level: nil,
+            width: 3840, height: 2160, frameRate: 24, bitrate: nil,
+            videoRange: .dolbyVision(profile: 8), isDefault: true, scanType: "progressive", hasHDR10Plus: true
+        )
+        let atmos = AudioTrack(
+            id: "a1", index: 0, codec: "truehd", profile: "dolby truehd + dolby atmos",
+            channels: 8, channelLayout: "7.1",
+            language: "en", title: nil, extendedTitle: nil,
+            bitrate: nil, samplingRate: 48_000,
+            isDefault: true, isForced: false, isSelected: true
+        )
+        let source = MediaSource(
+            id: "1", container: "mkv", duration: 7200,
+            bitrate: nil, fileSize: nil, fileName: nil, videoResolution: "4k",
+            videoTracks: [video], audioTracks: [atmos], subtitleTracks: [],
+            streamKind: .directPlay, streamURL: nil
+        )
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source), ["4K", "DV", "Atmos", "HDR10+"])
+
+        // Without Dolby Vision the range keeps its place before the audio.
+        let hdr10PlusOnly = MediaSource(
+            id: "2", container: "mkv", duration: 7200,
+            bitrate: nil, fileSize: nil, fileName: nil, videoResolution: "4k",
+            videoTracks: [VideoTrack(
+                id: "v2", codec: "hevc", profile: "Main 10", level: nil,
+                width: 3840, height: 2160, frameRate: 24, bitrate: nil,
+                videoRange: .hdr10Plus, isDefault: true, scanType: "progressive", hasHDR10Plus: true
+            )], audioTracks: [atmos], subtitleTracks: [],
+            streamKind: .directPlay, streamURL: nil
+        )
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(hdr10PlusOnly), ["4K", "HDR10+", "Atmos"])
+    }
 }

@@ -890,8 +890,35 @@ final class MediaDetailChromeView: UIView {
         }
 
         for badge in Self.calmBadges(detail?.primarySource) {
-            qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha))
+            qualityRow.addArrangedSubview(Self.makeFormatBadge(badge, alpha: Self.qualityRowAlpha))
         }
+    }
+
+    /// The format logos the Apple TV app draws in this row (measured: the 4K box 20 pt tall,
+    /// the Dolby marks 23). A badge with no logo keeps the outlined text.
+    private static let formatBadgeLogos: [String: (asset: String, height: CGFloat)] = [
+        "4K": ("Badge4K", 20),
+        "HDR": ("BadgeHDR", 20),
+        "HDR10+": ("BadgeHDR10Plus", 20),
+        "DV": ("BadgeDolbyVision", 23),
+        "Atmos": ("BadgeDolbyAtmos", 23)
+    ]
+
+    static func makeFormatBadge(_ text: String, alpha: CGFloat) -> UIView {
+        guard let logo = formatBadgeLogos[text], let image = UIImage(named: logo.asset) else {
+            return makeBadge(text, alpha: alpha)
+        }
+        let imageView = UIImageView(image: image.withRenderingMode(.alwaysTemplate))
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.tintColor = UIColor.white.withAlphaComponent(alpha)
+        imageView.contentMode = .scaleAspectFit
+        imageView.accessibilityLabel = text
+        let width = image.size.height > 0 ? logo.height * image.size.width / image.size.height : logo.height
+        NSLayoutConstraint.activate([
+            imageView.heightAnchor.constraint(equalToConstant: logo.height),
+            imageView.widthAnchor.constraint(equalToConstant: width)
+        ])
+        return imageView
     }
 
     /// The score (glyph or source name, then value) and the Common Sense age with its green seal.
@@ -937,14 +964,18 @@ final class MediaDetailChromeView: UIView {
     }
 
     /// The row's quality badges, kept short: 4K only, every range badge (DV, HDR10+ ...), and audio only
-    /// when it is object audio.
+    /// when it is object audio. Next to Dolby Vision, HDR10+ closes the row after the audio, so the
+    /// two Dolby marks sit together; without it, HDR10+ keeps its place before the audio.
     static func calmBadges(_ source: MediaSource?) -> [String] {
         guard let source else { return [] }
         var badges = source.resolutionBadge == "4K" ? ["4K"] : []
-        badges += source.rangeBadges
+        let ranges = source.rangeBadges
+        let hdr10PlusLast = ranges.contains("DV") && ranges.contains("HDR10+")
+        badges += hdr10PlusLast ? ranges.filter { $0 != "HDR10+" } : ranges
         if let audio = source.audioBadge {
             if audio.hasSuffix("Atmos") { badges.append("Atmos") } else if audio.hasPrefix("DTS-X") { badges.append("DTS:X") }
         }
+        if hdr10PlusLast { badges.append("HDR10+") }
         return badges
     }
 

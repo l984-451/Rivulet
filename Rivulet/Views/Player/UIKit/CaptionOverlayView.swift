@@ -73,8 +73,7 @@ final class CaptionOverlayView: UIView {
         }
     }
 
-    /// Height adjustment for THIS media, in stepper units. Sticky per title /
-    /// channel like the delay stepper, and applying to the default band only.
+    /// The global Height setting, in stepper units. Applies to the default band only.
     var heightUnits: Int {
         didSet {
             guard heightUnits != oldValue else { return }
@@ -84,71 +83,83 @@ final class CaptionOverlayView: UIView {
 
     // MARK: Metrics
     //
-    // Tuned against AVPlayer's own caption rendering (screenshot comparison at
-    // the smallest system caption size). Three differences mattered: Apple
-    // sizes type from the VIDEO height rather than a fixed point size, boxes
-    // the text tightly, and draws one background per cue rather than per line.
+    // Apple's caption renderer (MediaToolbox `FigCaptionRendererCaption`), read
+    // and checked by screenshot against AVPlayerViewController on grey.
 
     enum Metrics {
 
-        /// Caption size as a fraction of the presentation height per unit of
-        /// `MACaptionAppearanceGetRelativeCharacterSize`. AVKit scales linearly
-        /// with the reported value for every style but one (measured, tvOS 27.0
-        /// sim, within 2% at 0.35, 0.6, 1.0, 1.5 and 2.0).
+        /// Caption size as a fraction of the presentation height, in whole points,
+        /// then scaled by `MACaptionAppearanceGetRelativeCharacterSize`. AVKit is
+        /// linear for every style but one (52pt at 1.0 and 1080; measured, tvOS 27.0
+        /// sim at 0.35, 0.6, 1.0, 1.5 and 2.0).
         ///
         /// Presentation height, not picture height: AVKit sizes captions from the
         /// view and only positions them against the picture (#299).
-        static let fractionPerUnit: CGFloat = 0.0481
+        static let fractionPerUnit: CGFloat = 0.0482
 
         /// The exception: Apple's built-in Default style draws about 11% smaller
-        /// than its reported 1.0. A copy of it, Classic, or any edited style
-        /// does not (#422).
+        /// than its reported 1.0, keyed on the style's name. A copy of it, Classic,
+        /// or any edited style does not (#422).
         static let systemDefaultFraction: CGFloat = 0.0428
 
         /// Caption point size for a presentation height and reported character size.
         static func pointSize(presentationHeight: CGFloat, fontScale: CGFloat,
                               isSystemDefault: Bool = false) -> CGFloat {
             let height = presentationHeight > 0 ? presentationHeight : assumedVideoHeight
-            return height * (isSystemDefault ? systemDefaultFraction : fontScale * fractionPerUnit)
+            return isSystemDefault ? (height * systemDefaultFraction).rounded(.down)
+                                   : (height * fractionPerUnit).rounded(.down) * fontScale
         }
+
+        /// The highest the Height setting may rest the default band's bottom edge.
+        static let highestBandFraction: CGFloat = 0.8
 
         /// Fallback presentation height, for a degenerate zero-height layout pass.
         static let assumedVideoHeight: CGFloat = 1080
 
-        // Box geometry scales with the point size, as Apple's caption box does.
-        // Radius tuned by eye against AVPlayer; padding is matched separately.
-        static let cornerRadiusRatio: CGFloat = 0.25
-        static let paddingHRatio: CGFloat = 0.30
-        static let paddingVRatio: CGFloat = 0.075
+        /// Blur of every edge style's shadow, in points.
+        static let edgeShadowBlur: CGFloat = 4
 
-        /// Uniform-edge outline weight, a percentage of the point size for
-        /// `NSAttributedString.Key.strokeWidth` (positive: stroke only). The fill
-        /// covers the inner half, so the visible outline is half this.
-        static let outlineStrokePercent: CGFloat = 8
-
-        /// Emboss offset for the raised and depressed edge styles, as a
-        /// fraction of the point size. Proportional for the same reason the
-        /// outline is: a fixed offset is a slab at 20pt type and invisible at
-        /// 57pt.
-        static let embossDepthRatio: CGFloat = 0.04
-
-        /// Line pitch inside one cue as a multiple of the point size. AVKit spaces
-        /// lines wider than the font's own line height (measured, tvOS 27 sim:
-        /// 1.43-1.46 at Default, 1.0 and 1.5).
-        static let linePitchRatio: CGFloat = 1.444
-
-        /// Leading to add under each line so the pitch is `linePitchRatio`.
-        static func lineSpacing(for font: UIFont) -> CGFloat {
-            max(0, font.pointSize * linePitchRatio - font.lineHeight)
+        /// Shadow offset of the raised, depressed and drop shadow edges. Above 60pt
+        /// Apple takes two thirds of it.
+        static func edgeOffset(pointSize: CGFloat) -> CGFloat {
+            let offset = pointSize * 3 / 34
+            return pointSize > 60 ? offset / 1.5 : offset
         }
+
+        /// `strokeWidth` percentage for the uniform and drop shadow edges. Half the
+        /// stroke shows outside the glyph, and above 60pt it grows at an eighth the rate.
+        static func strokeWidthPercent(pointSize: CGFloat, edge: CaptionStyle.Edge) -> CGFloat {
+            let factor: CGFloat = edge == .uniform ? 7 / 72 : 2 / 72
+            let outside = pointSize <= 60 ? pointSize * factor : (60 + (pointSize - 60) / 8) * factor
+            return outside * 2 * 100 / pointSize
+        }
+
+        /// How far a raised, depressed or uniform edge insets the text inside its box.
+        static func edgeInset(for font: UIFont, edge: CaptionStyle.Edge) -> CGFloat {
+            switch edge {
+            case .raised, .depressed: return edgeOffset(pointSize: font.pointSize)
+            case .uniform: return (font.ascender - font.descender) * 0.1
+            case .dropShadow, .none: return 0
+            }
+        }
+
+        /// Leading to add under each line. Apple spaces lines by the font's leading
+        /// or a fifth of its ascent and descent, whichever is larger, in whole points.
+        static func lineSpacing(for font: UIFont) -> CGFloat {
+            let height = font.ascender - font.descender
+            return max(0, ceil(height + max(font.leading, height * 0.2) - 0.1) - font.lineHeight)
+        }
+
+        /// Apple multiplies every caption colour by this while the display is in HDR.
+        static let hdrColorScale: CGFloat = 0.9
 
         /// Gap between separate simultaneous cues (two speakers), which SHOULD
         /// read as distinct blocks.
         static let cueSpacing: CGFloat = 4
 
-        /// Horizontal room the default band leaves itself, in points, so a long
-        /// caption wraps well inside the picture rather than at its edge.
-        static let defaultBandSideInset: CGFloat = 120
+        /// Horizontal room the default band's text leaves itself, in points, so a
+        /// long caption wraps inside the picture rather than at its edge.
+        static let defaultBandSideInset: CGFloat = 90
 
         /// Edge distance for a top or bottom band cue with no fine position
         /// (teletext via engine demux). Near where proxied WebVTT lands (~10%).
@@ -185,6 +196,10 @@ final class CaptionOverlayView: UIView {
     private let assView: ASSOverlayView
 
     private var textCues: [(view: CaptionBoxView, placement: AetherSubtitleCue.TextPlacement?)] = []
+
+    private var displayIsHDR: Bool {
+        (window?.windowScene?.screen.currentEDRHeadroom ?? 1) > 1.001
+    }
     private var bitmapCues: [(view: UIImageView, position: CGRect)] = []
 
     // MARK: Init
@@ -274,14 +289,15 @@ final class CaptionOverlayView: UIView {
                         AetherSubtitleCue.TextPlacement(alignment: $0.alignment, position: $0.position)
                     }
                     let box = CaptionBoxView(body: .text(text), style: style,
-                                             alignment: Self.lineAlignment(for: placement))
+                                             alignment: Self.lineAlignment(for: placement), isHDR: displayIsHDR)
                     addSubview(box)
                     textCues.append((box, placement))
                 }
             case .text, .styledText:
                 let box = CaptionBoxView(body: cue.body,
                                          style: style,
-                                         alignment: Self.lineAlignment(for: cue.placement))
+                                         alignment: Self.lineAlignment(for: cue.placement),
+                                         isHDR: displayIsHDR)
                 addSubview(box)
                 textCues.append((box, cue.placement))
             }
@@ -311,24 +327,26 @@ final class CaptionOverlayView: UIView {
     private func placementFloor(in size: CGSize) -> CGFloat {
         let rect = videoRect(in: size)
         let letterbox = max(0, size.height - rect.maxY)
-        var base = letterbox + rect.height * restingMarginFraction
+        var base = letterbox + rect.height * SubtitleAdjustments.bottomMarginFraction
         if controlsVisible || paneOpen {
-            base = max(base, SubtitleAdjustments.controlsFloor(isSystemDefault: style.isSystemDefault)
+            base = max(base, SubtitleAdjustments.controlsFloor
                 + (paneOpen ? SubtitleAdjustments.paneLift : 0))
         }
         return base
     }
 
-    private var restingMarginFraction: CGFloat {
-        style.isSystemDefault ? SubtitleAdjustments.systemDefaultBottomMarginFraction
-                              : SubtitleAdjustments.bottomMarginFraction
-    }
-
-    /// Distance from the bottom of the CONTAINER to an UNPLACED cue: the shared
-    /// floor plus the user's Height stepper, which applies to the default band
-    /// only.
+    /// Distance from the bottom of the CONTAINER to an UNPLACED cue: AVPlayer's
+    /// position plus the Height setting, on screen and clear of the rail.
     private func bottomPadding(in size: CGSize) -> CGFloat {
-        max(0, placementFloor(in: size) + SubtitleAdjustments.heightOffset(forUnits: heightUnits))
+        let rect = videoRect(in: size)
+        let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
+        let offset = SubtitleAdjustments.heightOffset(forUnits: heightUnits)
+        // The cap leaves room for a few lines above the box's bottom edge.
+        let highest = size.height * Metrics.highestBandFraction
+        // The Height stepper lives in the open pane, so every step has to show there.
+        if paneOpen { return min(max(0, placementFloor(in: size) + offset), highest) }
+        let onScreen = min(max(0, resting + offset), highest)
+        return controlsVisible ? max(onScreen, placementFloor(in: size)) : onScreen
     }
 
     /// Caption point size for this presentation, before per-cue styling.
@@ -381,8 +399,8 @@ final class CaptionOverlayView: UIView {
         var bottom = size.height - bottomPadding(in: size)
         for box in boxes.reversed() {
             box.apply(pointSize: pointSize)
-            let fitted = box.fittingSize(maxWidth: maxWidth)
-            box.frame = CGRect(x: ((size.width - fitted.width) / 2).rounded(),
+            let fitted = box.fittingSize(maxTextWidth: maxWidth)
+            box.frame = CGRect(x: ((size.width - fitted.width) / 2).rounded(.down),
                                y: (bottom - fitted.height).rounded(),
                                width: fitted.width,
                                height: fitted.height)
@@ -403,6 +421,20 @@ final class CaptionOverlayView: UIView {
         if x <= 0.4 { return 0 }
         if x >= 0.6 { return 2 }
         return 1
+    }
+
+    /// Paragraph direction from the cue's dominant script, so a right-to-left cue that
+    /// opens with a Latin name or a digit still ends its sentence on the left (#468).
+    static func baseWritingDirection(for text: String) -> NSWritingDirection {
+        var rtl = 0, ltr = 0
+        for scalar in text.unicodeScalars where scalar.properties.isAlphabetic {
+            switch scalar.value {
+            case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF: rtl += 1
+            default: ltr += 1
+            }
+        }
+        if rtl == 0 && ltr == 0 { return .natural }
+        return rtl > ltr ? .rightToLeft : .leftToRight
     }
 
     /// Which edge a cue's lines align to, from its column. An unplaced cue centres.
@@ -507,7 +539,7 @@ final class CaptionOverlayView: UIView {
     /// ponytail: the lift jumps on the next rendered frame instead of riding the rail's 0.25 s fade; interpolate linePosition in the display link if it reads as a snap on device.
     private func assLinePosition(in size: CGSize, rect: CGRect) -> Double {
         guard rect.height > 0 else { return 0 }
-        let resting = max(0, size.height - rect.maxY) + rect.height * restingMarginFraction
+        let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
         let lift = bottomPadding(in: size) - resting
         return Double(min(max(lift / rect.height * 100, 0), 100))
     }
@@ -530,27 +562,34 @@ final class CaptionOverlayView: UIView {
 
 // MARK: - CaptionBoxView
 
-/// Strokes its text with round joins; the default miter joins spike at sharp
-/// corners (the foot of an N) once the stroke is this wide.
-private final class OutlineLabel: UILabel {
+/// Draws past its text so a stroke or shadow is not cut off at the bounds: `bleed`
+/// is how far its frame reaches beyond the text. Text sits on the top of its rect, whole
+/// points when the frame is, and strokes join round as Apple's do.
+private final class CaptionTextLabel: UILabel {
+    var bleed: CGFloat = 0
+
     override func drawText(in rect: CGRect) {
         UIGraphicsGetCurrentContext()?.setLineJoin(.round)
-        super.drawText(in: rect)
+        var text = rect.insetBy(dx: bleed, dy: bleed)
+        text.size.height = textRect(forBounds: text, limitedToNumberOfLines: 0).height
+        super.drawText(in: text)
     }
 }
 
-/// One cue in ONE rounded box, sized to its longest line.
+/// One cue: the window behind it all, a background behind each line, then the text.
 ///
 /// Keeps the author's line breaks; shorter lines align to `alignment`.
 private final class CaptionBoxView: UIView {
 
-    private let label = UILabel()
-    /// The uniform edge's stroke-only copy of the text, drawn under `label`.
+    private let label = CaptionTextLabel()
+    /// The uniform and drop shadow edges' stroke-only copy of the text, under `label`.
     /// Stroking the fill itself centres the stroke on the glyph edge, which
     /// thins the letters and draws SF's overlapping contours inside them (#422).
-    private var outlineLabel: OutlineLabel?
+    private var strokeLabel: CaptionTextLabel?
+    private var lineBackgrounds: [UIView] = []
     private let body: AetherSubtitleCue.Body
     private let style: CaptionStyle
+    private let colorScale: CGFloat
 
     /// Which edge the lines align to inside the box. A side-anchored cue must not
     /// centre, or its first line slides when a later line runs longer.
@@ -566,28 +605,26 @@ private final class CaptionBoxView: UIView {
     /// style is 16pt, so `\fs32` means "twice normal", not "32 points".
     private static let assNominalFontSize: CGFloat = 16
 
-    init(body: AetherSubtitleCue.Body, style: CaptionStyle, alignment: NSTextAlignment = .center) {
+    init(body: AetherSubtitleCue.Body, style: CaptionStyle, alignment: NSTextAlignment = .center, isHDR: Bool = false) {
         self.body = body
         self.style = style
         self.alignment = alignment
+        self.colorScale = isHDR ? CaptionOverlayView.Metrics.hdrColorScale : 1
         super.init(frame: .zero)
 
         isUserInteractionEnabled = false
-        // The rounded background is the view's own, so there is no mask and no
-        // offscreen pass. `clipsToBounds` stays false: an outline stroke may sit
-        // a fraction outside the text box.
-        layer.cornerCurve = .continuous
+        layer.cornerCurve = .circular
 
         label.numberOfLines = 0
         label.textAlignment = alignment
         label.backgroundColor = .clear
-        if style.edge == .uniform {
-            let outline = OutlineLabel()
-            outline.numberOfLines = 0
-            outline.textAlignment = alignment
-            outline.backgroundColor = .clear
-            addSubview(outline)
-            outlineLabel = outline
+        if style.edge == .uniform || style.edge == .dropShadow {
+            let stroke = CaptionTextLabel()
+            stroke.numberOfLines = 0
+            stroke.textAlignment = alignment
+            stroke.backgroundColor = .clear
+            addSubview(stroke)
+            strokeLabel = stroke
         }
         addSubview(label)
     }
@@ -602,59 +639,129 @@ private final class CaptionBoxView: UIView {
 
         let text = attributedText(pointSize: pointSize)
         label.attributedText = text
-        outlineLabel?.attributedText = Self.outlined(text)
-        layer.cornerRadius = pointSize * CaptionOverlayView.Metrics.cornerRadiusRatio
-
-        // The uniform edge is an outline INSTEAD of a box; every other edge
-        // style draws the system's background behind the glyphs.
-        if style.edge == .uniform {
-            backgroundColor = .clear
-        } else {
-            backgroundColor = style.backgroundColor.withAlphaComponent(style.backgroundOpacity)
-        }
+        strokeLabel?.attributedText = stroked(text, pointSize: pointSize)
+        layer.cornerRadius = (pointSize * style.box.cornerRadius).rounded(.down)
+        backgroundColor = scaled(style.windowColor).withAlphaComponent(style.windowOpacity)
+        lineBackgrounds.forEach { $0.removeFromSuperview() }
+        lineBackgrounds = []
     }
 
-    /// Inset from the box's edge to the text, zero for the box-less uniform edge.
+    /// Inset from the box's edge to the text, whole points as Apple's are.
     private var padding: (h: CGFloat, v: CGFloat) {
-        guard style.edge != .uniform else { return (0, 0) }
-        return (appliedPointSize * CaptionOverlayView.Metrics.paddingHRatio,
-                appliedPointSize * CaptionOverlayView.Metrics.paddingVRatio)
+        let edge = CaptionOverlayView.Metrics.edgeInset(for: style.font(ofSize: appliedPointSize), edge: style.edge)
+        let vertical = appliedPointSize * style.box.vertical / 2 + edge
+        return ((appliedPointSize * style.box.horizontal / 2 + edge).rounded(),
+                edge > 0 ? ceil(vertical) : vertical.rounded())
     }
 
-    /// The box's size for a given wrapping width: the text's own size plus
-    /// padding, never wider than the limit.
+    /// The box's size for a given wrapping width, inside the box.
     func fittingSize(maxWidth: CGFloat) -> CGSize {
+        fittingSize(maxTextWidth: maxWidth - padding.h * 2)
+    }
+
+    /// The box's size around text wrapped at a width: its size plus padding.
+    func fittingSize(maxTextWidth: CGFloat) -> CGSize {
         guard let text = label.attributedText, text.length > 0 else { return .zero }
         let pad = padding
-        let textMax = max(0, maxWidth - pad.h * 2)
         let rect = text.boundingRect(
-            with: CGSize(width: textMax, height: .greatestFiniteMagnitude),
+            with: CGSize(width: max(0, maxTextWidth), height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             context: nil
         )
-        return CGSize(width: min(maxWidth, ceil(rect.width) + pad.h * 2),
-                      height: ceil(rect.height) + pad.v * 2)
+        // CoreText's line box takes whole points of ascent and descent; the slack sits under the text.
+        let font = style.font(ofSize: appliedPointSize)
+        let lineBox = ceil(font.ascender) + ceil(-font.descender) - (font.ascender - font.descender)
+        return CGSize(width: ceil(rect.width) + pad.h * 2,
+                      height: (rect.height + lineBox).rounded() + pad.v * 2)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         let pad = padding
-        label.frame = bounds.insetBy(dx: pad.h, dy: pad.v)
-        outlineLabel?.frame = label.frame
+        let text = bounds.insetBy(dx: pad.h, dy: pad.v)
+        let bleed = (appliedPointSize / 2).rounded(.up)
+        for view in [label, strokeLabel].compactMap({ $0 }) {
+            view.bleed = bleed
+            view.frame = text.insetBy(dx: -bleed, dy: -bleed)
+        }
+        layoutLineBackgrounds(in: text)
+    }
+
+    /// A background behind each line, ascent to descent and as wide as its text. A
+    /// label does not report its lines, so TextKit lays the same string out again.
+    private func layoutLineBackgrounds(in textFrame: CGRect) {
+        lineBackgrounds.forEach { $0.removeFromSuperview() }
+        lineBackgrounds = []
+        guard style.backgroundOpacity > 0.01, let text = label.attributedText, text.length > 0 else { return }
+
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: textFrame.width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        let storage = NSTextStorage(attributedString: text)
+        storage.addLayoutManager(manager)
+        manager.addTextContainer(container)
+
+        let font = style.font(ofSize: appliedPointSize)
+        let color = scaled(style.backgroundColor).withAlphaComponent(style.backgroundOpacity)
+        let string = text.string as NSString
+        manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { rect, _, _, range, _ in
+            var characters = manager.characterRange(forGlyphRange: range, actualGlyphRange: nil)
+            while characters.length > 1,
+                  CharacterSet.whitespacesAndNewlines.contains(UnicodeScalar(string.character(at: NSMaxRange(characters) - 1)) ?? "x") {
+                characters.length -= 1
+            }
+            let ink = manager.boundingRect(forGlyphRange: manager.glyphRange(forCharacterRange: characters, actualCharacterRange: nil), in: container)
+            let baseline = rect.minY + manager.location(forGlyphAt: range.location).y
+            let background = UIView(frame: CGRect(x: textFrame.minX + ink.minX,
+                                                  y: textFrame.minY + baseline - font.ascender,
+                                                  width: ink.width,
+                                                  height: font.ascender - font.descender))
+            background.backgroundColor = color
+            background.isUserInteractionEnabled = false
+            self.insertSubview(background, at: 0)
+            self.lineBackgrounds.append(background)
+        }
     }
 
     /// The text as a black stroke with no fill. Stroke attributes leave glyph
     /// metrics alone, so it lays out exactly under the fill.
-    private static func outlined(_ text: NSAttributedString) -> NSAttributedString {
-        let outline = NSMutableAttributedString(attributedString: text)
-        outline.addAttributes([
+    private func stroked(_ text: NSAttributedString, pointSize: CGFloat) -> NSAttributedString {
+        let stroke = NSMutableAttributedString(attributedString: text)
+        let full = NSRange(location: 0, length: stroke.length)
+        stroke.addAttributes([
             .strokeColor: UIColor.black,
-            .strokeWidth: CaptionOverlayView.Metrics.outlineStrokePercent
-        ], range: NSRange(location: 0, length: outline.length))
-        return outline
+            .strokeWidth: CaptionOverlayView.Metrics.strokeWidthPercent(pointSize: pointSize, edge: style.edge)
+        ], range: full)
+        if style.edge == .dropShadow {
+            stroke.addAttribute(.shadow, value: edgeShadow(CGSize.zero), range: full)
+        }
+        return stroke
+    }
+
+    private func edgeShadow(_ offset: CGSize) -> NSShadow {
+        let shadow = NSShadow()
+        shadow.shadowColor = UIColor.black
+        shadow.shadowBlurRadius = CaptionOverlayView.Metrics.edgeShadowBlur
+        shadow.shadowOffset = offset
+        return shadow
+    }
+
+    private func scaled(_ color: UIColor) -> UIColor {
+        guard colorScale != 1 else { return color }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return UIColor(red: r * colorScale, green: g * colorScale, blue: b * colorScale, alpha: a)
     }
 
     // MARK: Text
+
+    private var plainText: String {
+        switch body {
+        case .text(let string): return string
+        case .styledText(let runs): return runs.map(\.text).joined()
+        case .image, .assEvents: return ""
+        }
+    }
 
     /// Builds the cue's attributed string, applying each content attribute only
     /// where the matching system Video Override allows it:
@@ -665,11 +772,12 @@ private final class CaptionBoxView: UIView {
     /// A gated-off or content-silent attribute renders the system value. The
     /// system foreground opacity applies either way.
     private func attributedText(pointSize: CGFloat) -> NSAttributedString {
-        let userColor = style.foreground.withAlphaComponent(style.foregroundOpacity)
+        let userColor = scaled(style.foreground).withAlphaComponent(style.foregroundOpacity)
         let baseFont = style.font(ofSize: pointSize)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
+        paragraph.baseWritingDirection = CaptionOverlayView.baseWritingDirection(for: plainText)
         paragraph.lineSpacing = CaptionOverlayView.Metrics.lineSpacing(for: baseFont)
 
         let result = NSMutableAttributedString()
@@ -691,7 +799,7 @@ private final class CaptionBoxView: UIView {
                 // A run's own colour only wins where the system allows it.
                 let contentColor = style.allowsContentColor ? run.color : nil
                 attributes[.foregroundColor] =
-                    contentColor?.withAlphaComponent(style.foregroundOpacity) ?? userColor
+                    contentColor.map { scaled($0).withAlphaComponent(style.foregroundOpacity) } ?? userColor
                 if style.allowsContentFont {
                     if run.isUnderlined {
                         attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
@@ -711,52 +819,17 @@ private final class CaptionBoxView: UIView {
         return result
     }
 
-    /// The system text-edge treatment, except uniform, which `outlineLabel`
-    /// draws. `NSShadow` is drawn by the text system rather than by a layer
-    /// shadow (no offscreen pass, no shadowPath).
-    ///
-    /// Raised and depressed are the same zero-blur offset in opposite directions.
+    /// The fill's shadow for the raised, depressed and drop shadow edges.
     private func applyEdge(to text: NSMutableAttributedString, pointSize: CGFloat) {
-        let full = NSRange(location: 0, length: text.length)
-        guard full.length > 0 else { return }
-
-        /// Emboss depth. Proportional so the effect survives a large caption
-        /// size, floored at a point so it does not vanish at the smallest.
-        let depth = max(1, pointSize * CaptionOverlayView.Metrics.embossDepthRatio)
-
-        func shadow(offset: CGSize, blur: CGFloat, alpha: CGFloat) -> NSShadow {
-            let s = NSShadow()
-            s.shadowColor = UIColor.black.withAlphaComponent(alpha)
-            s.shadowBlurRadius = blur
-            s.shadowOffset = offset
-            return s
-        }
-
+        let offset = CaptionOverlayView.Metrics.edgeOffset(pointSize: pointSize)
+        let direction: CGSize
         switch style.edge {
-        case .dropShadow:
-            text.addAttribute(.shadow,
-                              value: shadow(offset: CGSize(width: 0, height: 1),
-                                            blur: 3,
-                                            alpha: 0.85),
-                              range: full)
-
-        case .raised:
-            text.addAttribute(.shadow,
-                              value: shadow(offset: CGSize(width: depth, height: depth),
-                                            blur: 0,
-                                            alpha: 0.9),
-                              range: full)
-
-        case .depressed:
-            text.addAttribute(.shadow,
-                              value: shadow(offset: CGSize(width: -depth, height: -depth),
-                                            blur: 0,
-                                            alpha: 0.9),
-                              range: full)
-
-        case .uniform, .none:
-            break
+        case .raised: direction = CGSize(width: -offset, height: -offset)
+        case .depressed: direction = CGSize(width: offset, height: offset)
+        case .dropShadow: direction = CGSize(width: 0, height: -offset)
+        case .uniform, .none: return
         }
+        text.addAttribute(.shadow, value: edgeShadow(direction), range: NSRange(location: 0, length: text.length))
     }
 
     /// The font for one run, or nil when the content asked for nothing and the

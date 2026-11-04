@@ -162,4 +162,56 @@ final class TopShelfMapperTests: XCTestCase {
         // Never-watched items keep their server's order, after everything watched.
         XCTAssertEqual(merged.map(\.ratingKey), ["p300", "j200", "p100", "jUpNext1"])
     }
+    @MainActor
+    func testSingleServerRemovesOnlyKnownCopiesAndKeepsExtraHubItems() {
+        let first = JellyfinFixtures.mediaItem("first", providerID: "plex:primary")
+        let copy = JellyfinFixtures.mediaItem("copy", providerID: "plex:primary")
+        var plex = TopShelfMapper.items(from: [
+            meta(ratingKey: "first", type: "movie", title: "First"),
+            meta(ratingKey: "copy", type: "movie", title: "Copy"),
+            meta(ratingKey: "extra", type: "movie", title: "Extra")
+        ], serverURL: server, token: token)
+        var others: [TopShelfItem] = []
+        TopShelfFeed.filterCopies(plex: &plex, others: &others,
+                                 cards: [.init(item: first, others: [copy])],
+                                 contributingRows: 1, primaryID: "plex:primary")
+        XCTAssertEqual(plex.map(\.ratingKey), ["first", "extra"])
+    }
+
+    @MainActor
+    func testSoleNativeSourceRetainsEntriesBeyondHomeRow() {
+        let silo = JellyfinFixtures.mediaItem("kept", providerID: "silo:server:profile")
+        let copy = JellyfinFixtures.mediaItem("copy", providerID: "silo:server:profile")
+        let extra = JellyfinFixtures.mediaItem("extra", providerID: "silo:server:profile")
+        var plex: [TopShelfItem] = []
+        var others = TopShelfMapper.items(from: [silo, copy, extra])
+        TopShelfFeed.filterCopies(plex: &plex, others: &others,
+                                 cards: [.init(item: silo, others: [copy])],
+                                 contributingRows: 1, primaryID: nil)
+        XCTAssertEqual(others.map(\.ratingKey), ["kept", "extra"])
+    }
+
+    @MainActor
+    func testNativeSourcesSurviveMissingPlexAndProviderScopedCopies() {
+        let silo = JellyfinFixtures.mediaItem("shared", providerID: "silo:server:profile")
+        let jellyfin = JellyfinFixtures.mediaItem("shared", providerID: "jellyfin:server")
+        let copy = JellyfinFixtures.mediaItem("copy", providerID: "silo:server:profile")
+        var plex: [TopShelfItem] = []
+        var others = TopShelfMapper.items(from: [silo, jellyfin, copy])
+        TopShelfFeed.filterCopies(plex: &plex, others: &others,
+                                 cards: [.init(item: silo, others: [copy]), .init(item: jellyfin, others: [])],
+                                 contributingRows: 2, primaryID: nil)
+        XCTAssertEqual(others.map(\.serverIdentifier), ["silo:server:profile", "jellyfin:server"])
+        XCTAssertEqual(others.map(\.ratingKey), ["shared", "shared"])
+    }
+
+    @MainActor
+    func testRecentlyAddedUsesServerScopedIdentity() {
+        let silo = JellyfinFixtures.mediaItem("shared", providerID: "silo:server:profile")
+        let jellyfin = JellyfinFixtures.mediaItem("shared", providerID: "jellyfin:server")
+        let watched = TopShelfMapper.items(from: [silo])
+        var recent = TopShelfMapper.items(from: [silo, jellyfin])
+        TopShelfFeed.removeRecentlyWatched(&recent, row: watched)
+        XCTAssertEqual(recent.map(\.serverIdentifier), ["jellyfin:server"])
+    }
 }

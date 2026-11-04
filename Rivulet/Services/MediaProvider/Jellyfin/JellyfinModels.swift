@@ -217,6 +217,17 @@ nonisolated struct JFAuthenticateByName: Encodable, Sendable {
     let pw: String
 }
 
+/// POST /QuickConnect/Initiate and GET /QuickConnect/Connect.
+nonisolated struct JFQuickConnect: Decodable, Sendable {
+    let authenticated: Bool?
+    let secret: String?
+    let code: String?
+}
+
+nonisolated struct JFQuickConnectAuthenticate: Encodable, Sendable {
+    let secret: String
+}
+
 /// POST /Items/{id}/PlaybackInfo. Rivulet direct-plays everything through
 /// AetherEngine, so the profile accepts every container and codec: an empty
 /// Container/VideoCodec/AudioCodec matches all (ContainerHelper.ContainsContainer).

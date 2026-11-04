@@ -78,7 +78,7 @@ struct IOSPlaybackSettingsView: View {
             audioAndSubtitles
 
             Section {
-                Picker("Home", selection: $homeQuality) { qualityOptions }
+                Picker(String(localized: "streaming.home", defaultValue: "Home"), selection: $homeQuality) { qualityOptions }
                 Picker("Away", selection: $awayQuality) { qualityOptions }
             } header: {
                 Text("Streaming Quality")
@@ -169,7 +169,7 @@ struct IOSPlaybackSettingsView: View {
         ForEach(StreamingQuality.allChoices, id: \.self) { Text($0.label).tag($0) }
     }
 
-    private func skipPicker(_ title: String, marker: String) -> some View {
+    private func skipPicker(_ title: LocalizedStringKey, marker: String) -> some View {
         Picker(title, selection: Binding(
             get: { MarkerSkipMode.current(for: marker) },
             set: { MarkerSkipMode.set($0, for: marker) }

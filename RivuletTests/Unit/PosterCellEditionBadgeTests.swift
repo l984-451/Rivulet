@@ -15,6 +15,12 @@ final class PosterCellEditionBadgeTests: XCTestCase {
         return meta
     }
 
+    /// #504: TVPosterView keeps geometry derived from a same-aspect stand-in, so it must be tile-sized.
+    func test_blankArtwork_isTileSized() {
+        XCTAssertEqual(PosterCell.blankArtwork.size, MediaRowMetrics.poster.art)
+        XCTAssertEqual(PosterCell.blank(for: MediaRowMetrics.music).size, MediaRowMetrics.music.art)
+    }
+
     func test_edition_showsAndClearsOnReuse() {
         let cell = PosterCell(frame: CGRect(x: 0, y: 0, width: 220, height: 400))
         cell.configure(item: movie(edition: "Extended Edition"))

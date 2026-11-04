@@ -153,6 +153,9 @@ final class AetherPlayer: PlayerProtocol {
     /// background timestamp so the teardown-drain wait still applies.
     private var pendingReloadSince: Date?
 
+    /// True while the engine is torn down awaiting Play: no video frame exists.
+    var isParkedForReload: Bool { pendingReloadSince != nil }
+
     /// One file of a stacked title.
     struct PartFile {
         let url: URL
@@ -1443,11 +1446,17 @@ final class AetherPlayer: PlayerProtocol {
     }
 
     func seek(to time: TimeInterval) async {
-        guard let stack else { return await engine.seek(to: time) }
+        await seek(to: time, exact: false)
+    }
+
+    /// `exact` lands on the time itself. Without it the engine may snap AV1 on its software host to
+    /// a keyframe, seconds off, which is fine for a scrub and wrong for the end of an intro.
+    func seek(to time: TimeInterval, exact: Bool) async {
+        guard let stack else { return await engine.seek(to: time, exact: exact) }
         let (index, offset) = stack.locate(time)
         // ponytail: a seek during a part swap starts a second load; queue it if that ever misbehaves.
         if index == partIndex {
-            await engine.seek(to: offset)
+            await engine.seek(to: offset, exact: exact)
         } else {
             await switchPart(to: index, at: offset)
         }
@@ -1748,6 +1757,9 @@ final class AetherPlayer: PlayerProtocol {
     }
 
     // MARK: - Advanced stats (Info popup "stats for nerds" tab)
+
+    /// The source has audio and the engine could not build a way to play it.
+    var audioIsDropped: Bool { engine.audioDelivery == .droppedNoPipeline }
 
     /// Map the engine's `AudioDelivery` to a stats row, or nil to omit the row.
     ///

@@ -6,6 +6,31 @@ import XCTest
 
 @MainActor
 final class ContinueWatchingRowTests: XCTestCase {
+    func test_singleNativeServerMergesKnownCopiesWithoutLookupAndKeepsOrder() throws {
+        let suite = "ContinueWatchingRowTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let row = ContinueWatchingRow(defaults: defaults)
+        row.fetchIdentityKeys = { _, _ in
+            XCTFail("A single server must not fetch identities")
+            return [:]
+        }
+        var first = JellyfinFixtures.mediaItem("first", providerID: "silo:server:profile")
+        var copy = JellyfinFixtures.mediaItem("copy", providerID: "silo:server:profile")
+        var unrelated = JellyfinFixtures.mediaItem("unrelated", providerID: "silo:server:profile")
+        first.identity = ["m:tmdb:42"]
+        copy.identity = ["m:tmdb:42"]
+        unrelated.identity = ["m:tmdb:43"]
+        first.userState.lastViewedAt = Date(timeIntervalSince1970: 10)
+        copy.userState.lastViewedAt = Date(timeIntervalSince1970: 20)
+        unrelated.userState.lastViewedAt = Date(timeIntervalSince1970: 30)
+
+        let cards = row.cards([[first, unrelated, copy]], identity: { $0.identity ?? [] },
+                              lookupKey: \.lookupKey, watched: \.userState.lastViewedAt)
+        XCTAssertEqual(cards.map(\.item.ref), [copy.ref, unrelated.ref])
+        XCTAssertEqual(cards.first?.others.map(\.ref), [first.ref])
+    }
+
     func test_catalogMovieWithoutIDsMergesAfterIdentityResolution() async throws {
         let suite = "ContinueWatchingRowTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

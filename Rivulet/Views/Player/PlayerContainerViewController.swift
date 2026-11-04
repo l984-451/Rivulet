@@ -439,14 +439,14 @@ class PlayerContainerViewController: UIViewController {
             }
             // Ambient pause backdrop: back returns to the paused frame, it
             // does not exit the player.
-            if vm.showPausedPoster {
+            if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
                 return
             }
             // Back from the transport buttons closes the whole chrome in one
             // press (not first de-focusing onto the scrubber). Hiding
             // showControls cascades to clear controlsFocusActive via its didSet.
-            if vm.controlsFocusActive || vm.showControls {
+            if (vm.controlsFocusActive || vm.showControls) && !vm.showPausedPoster {
                 withAnimation(.easeOut(duration: 0.25)) {
                     vm.showControls = false
                 }
@@ -926,8 +926,10 @@ class PlayerContainerViewController: UIViewController {
                 if !panel.contentHandlesMenuPress() {
                     panel.dismissPanel()
                 }
-            } else if vm.showPausedPoster {
+            } else if vm.backReturnsToPausedFrame {
                 vm.hidePausedPoster()
+            } else if vm.showPausedPoster {
+                dismissPlayer()
             } else if vm.controlsFocusActive {
                 vm.exitControlsFocus()
             } else if vm.showControls {
@@ -946,7 +948,7 @@ class PlayerContainerViewController: UIViewController {
         // fires the poster flag is already cleared — without this term the
         // fallback would exit the player anyway.
         let shouldBlockDismiss = vm.postVideoState == .hidden
-            && (vm.isScrubbing || vm.showControls || vm.showPausedPoster)
+            && (vm.isScrubbing || vm.backReturnsToPausedFrame || (vm.showControls && !vm.showPausedPoster))
         if shouldBlockDismiss {
             blockDismissTemporarily()
         }
@@ -1982,7 +1984,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
-                        Task { await vm?.seek(to: start) }
+                        Task { await vm?.seek(to: start, exact: true) }
                     })
             }
             let row = PlayerCardRowView(cards: cards)
@@ -2126,7 +2128,7 @@ class PlayerContainerViewController: UIViewController {
             rail?.setTitle(vm.title, eyebrow: vm.subtitle)
             return
         }
-        let number = [meta.parentIndex.map { "S\($0)" }, meta.index.map { "E\($0)" }]
+        let number = [meta.parentIndex.map { String(localized: "S\($0)") }, meta.index.map { String(localized: "E\($0)") }]
             .compactMap { $0 }.joined(separator: ", ")
         let eyebrow = [number, meta.title ?? ""].filter { !$0.isEmpty }.joined(separator: " • ")
         rail?.setTitle(show, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
@@ -2202,7 +2204,8 @@ class PlayerContainerViewController: UIViewController {
 
     private func refreshPostVideoContent() {
         guard let vm = viewModel, let overlay = postVideoOverlay, overlay.superview != nil else { return }
-        overlay.setLoading(vm.postVideoState == .loading)
+        // Reads the live state, already past `.loading` if the fetch finished: only a real card slides in.
+        overlay.setLoading(vm.postVideoState != .showingEpisodeSummary)
         overlay.configure(
             nextEpisode: vm.nextEpisode,
             serverURL: vm.serverURL,

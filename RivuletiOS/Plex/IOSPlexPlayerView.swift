@@ -75,6 +75,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         reloadTask?.cancel()
         longStallTask?.cancel()
         pausedTimelineTask?.cancel()
+        releaseThumbnails()
         let finish = finishItem(at: player.currentTime)
         let plex = plex
         let request = request
@@ -122,6 +123,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             externalSubtitles: request.sidecarSubtitles,
             keepingTransport: keepingTransport
         )
+        if player.audioIsDropped { fallBackToTranscode() }
     }
 
     func retry() {
@@ -221,12 +223,37 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     private var isTranscoding: Bool { request.plan != .original }
 
-    /// By language over "TrueHD 7.1 Atmos • Commentary", never the file's own track titles.
+    /// The Plex part whose BIF is held, released when the item changes or playback ends.
+    private var thumbnailPartID: Int?
+
+    /// The still for a scrub position: the server's BIF, loaded on the first scrub, else
+    /// a frame decoded from the file. A transcode has no file to decode from.
+    func scrubStill(at time: Double) async -> UIImage? {
+        let parts = request.item.Media.flatMap { $0.indices.contains(request.mediaIndex) ? $0[request.mediaIndex] : nil }?.Part
+        if !request.isLocal, parts?.count == 1, let partID = parts?.first?.id,
+           !PlexThumbnailService.shared.isUnavailable(partId: partID) {
+            if partID != thumbnailPartID { releaseThumbnails() }
+            thumbnailPartID = partID
+            let still = await PlexThumbnailService.shared.getThumbnail(
+                partId: partID, time: time, serverURL: request.serverURL, authToken: request.token)
+            if let still { return still }
+        }
+        guard !isTranscoding, let frame = await player.still(atSeconds: time, maxWidth: 320) else { return nil }
+        return UIImage(cgImage: frame)
+    }
+
+    private func releaseThumbnails() {
+        if let thumbnailPartID { PlexThumbnailService.shared.clearCache(partId: thumbnailPartID) }
+        thumbnailPartID = nil
+    }
+
+    /// By language over `MediaTrack.audioMenuSubtitle`.
     var audioTracks: [AetherPlayer.Track] {
-        mediaAudio.map { track in
+        let tracks = mediaAudio
+        return tracks.map { track in
             AetherPlayer.Track(id: track.id, name: track.audioMenuTitle, codec: "", language: nil, channels: 0,
                                isDefault: track.isDefault, isForced: false, isHearingImpaired: false,
-                               menuDetail: track.audioMenuSubtitle)
+                               menuDetail: track.audioMenuSubtitle(among: tracks))
         }
     }
 
@@ -524,7 +551,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     func skip(_ marker: PlexMarker) {
         skippedMarkerIDs.insert(marker.stableID)
         objectWillChange.send()
-        Task { await player.seek(to: marker.end) }
+        Task { await player.seek(to: marker.end, exact: true) }
     }
 
     // MARK: - Chapters
@@ -546,7 +573,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     func seekToChapter(_ chapter: PlexChapter) {
         guard let start = chapter.startTimeOffset else { return }
-        Task { await player.seek(to: TimeInterval(start) / 1000) }
+        Task { await player.seek(to: TimeInterval(start) / 1000, exact: true) }
     }
 
     // MARK: - Up Next
@@ -681,6 +708,7 @@ private struct IOSPlexPlayerScreen: View {
                 playPause: player.togglePlayPause,
                 skip: { seconds in Task { await player.skip(by: seconds) } },
                 seek: { time in Task { await player.seek(to: time) } },
+                scrubStill: session.scrubStill,
                 setRate: player.setRate,
                 selectQuality: session.switchQuality,
                 selectAudio: session.selectAudio,

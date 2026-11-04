@@ -44,7 +44,7 @@ actor PlexLiveTVProvider: LiveTVProvider {
         self.serverURL = serverURL
         self.authToken = authToken
         self.sourceId = "plex:\(serverURL)"
-        self.displayName = "\(serverName) Live TV"
+        self.displayName = String(localized: "\(serverName) Live TV")
     }
 
     // MARK: - LiveTVProvider Protocol

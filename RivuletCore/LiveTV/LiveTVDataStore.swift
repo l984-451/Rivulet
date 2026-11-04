@@ -516,10 +516,10 @@ class LiveTVDataStore: ObservableObject {
         if configs.contains(where: { $0.type == "plex" }) { saveSources() }
     }
 
-    /// Moves IPTV sources out of a restricted profile's reach, and back. True when that changed anything.
+    /// Moves IPTV sources out of a content-limited profile's reach, and back. True when that changed anything.
     @discardableResult
     private func applyProfileRestrictions() -> Bool {
-        if PlexUserProfileManager.shared.isRestrictedProfile {
+        if PlexUserProfileManager.shared.isContentLimitedProfile {
             // Jellyfin's source leaves with the Jellyfin server, which such a profile does not see.
             let iptv = providers.filter { !$0.value.sourceType.followsServer }
             guard !iptv.isEmpty else { return false }
@@ -551,7 +551,7 @@ class LiveTVDataStore: ObservableObject {
     /// The Plex content token or the account's servers changed (sign-in,
     /// sign-out, server or profile switch): each server whose `/livetv/dvrs`
     /// lists a DVR is a Plex source, found again under the new tokens. IPTV
-    /// sources hold no Plex token and only move for a restricted profile.
+    /// sources hold no Plex token and only move for a content-limited profile.
     func plexContentTokenChanged() {
         let restrictionsChanged = applyProfileRestrictions()
         let auth = PlexAuthManager.shared

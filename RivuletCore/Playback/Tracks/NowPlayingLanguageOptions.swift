@@ -18,14 +18,14 @@ enum NowPlayingLanguageOptions {
     static func groups(audio: [MediaTrack], subtitles: [MediaTrack]) -> [MPNowPlayingInfoLanguageOptionGroup] {
         var groups: [MPNowPlayingInfoLanguageOptionGroup] = []
         if !audio.isEmpty {
-            let options = audio.map { option($0, type: .audible) }
+            let options = audio.map { option($0, type: .audible, among: audio) }
             let main = audio.firstIndex(where: \.isDefault) ?? 0
             groups.append(MPNowPlayingInfoLanguageOptionGroup(
                 languageOptions: options, defaultLanguageOption: options[main], allowEmptySelection: false))
         }
         if !subtitles.isEmpty {
             groups.append(MPNowPlayingInfoLanguageOptionGroup(
-                languageOptions: subtitles.map { option($0, type: .legible) },
+                languageOptions: subtitles.map { option($0, type: .legible, among: subtitles) },
                 defaultLanguageOption: nil, allowEmptySelection: true))
         }
         return groups
@@ -34,14 +34,15 @@ enum NowPlayingLanguageOptions {
     /// The selected audio track and, unless subtitles are off, the selected subtitle track.
     static func current(audio: [MediaTrack], subtitles: [MediaTrack],
                         audioId: Int?, subtitleId: Int?) -> [MPNowPlayingInfoLanguageOption] {
-        [audio.first { $0.id == audioId }.map { option($0, type: .audible) },
-         subtitles.first { $0.id == subtitleId }.map { option($0, type: .legible) }]
+        [audio.first { $0.id == audioId }.map { option($0, type: .audible, among: audio) },
+         subtitles.first { $0.id == subtitleId }.map { option($0, type: .legible, among: subtitles) }]
             .compactMap { $0 }
     }
 
-    static func option(_ track: MediaTrack, type: MPNowPlayingInfoLanguageOptionType) -> MPNowPlayingInfoLanguageOption {
+    static func option(_ track: MediaTrack, type: MPNowPlayingInfoLanguageOptionType,
+                       among tracks: [MediaTrack]) -> MPNowPlayingInfoLanguageOption {
         let title = type == .audible ? track.audioMenuTitle : track.subtitleMenuTitle
-        let detail = type == .audible ? track.audioMenuSubtitle : track.subtitleMenuSubtitle
+        let detail = type == .audible ? track.audioMenuSubtitle(among: tracks) : track.subtitleMenuSubtitle
         return MPNowPlayingInfoLanguageOption(
             type: type,
             languageTag: languageTag(track),

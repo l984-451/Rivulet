@@ -36,9 +36,63 @@ final class PlayerInfoPopupLayoutTests: XCTestCase {
         let plexStyle = MediaTrack(id: 1, name: "English (TRUEHD 7.1)", language: "English", codec: "truehd",
                                    channels: 8, profile: "dolby truehd + dolby atmos")
         XCTAssertEqual(plexStyle.audioMenuTitle, "English")
-        XCTAssertEqual(plexStyle.audioMenuSubtitle, "TrueHD 7.1 Atmos")
+        XCTAssertEqual(plexStyle.audioMenuSubtitle(among: [plexStyle]), "TrueHD 7.1 Atmos")
         let described = MediaTrack(id: 2, name: "Audio Description", language: "English", codec: "ac3", channels: 2)
-        XCTAssertEqual(described.audioMenuSubtitle, "AC3 2.0 • Audio Description")
+        XCTAssertEqual(described.audioMenuSubtitle(among: [described]), "Audio Description • AC3 2.0")
+    }
+
+    func testAudioMenuKeepsOnlyWhatATitleAdds() {
+        // Beside an untitled track in the same language, so the title has a row to tell apart.
+        func subtitle(_ title: String, language: String = "English", code: String = "eng") -> String {
+            let track = MediaTrack(id: 1, name: title, language: language, languageCode: code, codec: "ac3", title: title,
+                                   channels: 2)
+            let other = MediaTrack(id: 2, name: language, language: language, languageCode: code, codec: "ac3", channels: 2)
+            return track.audioMenuSubtitle(among: [track, other])
+        }
+        // The dubs in #447.
+        XCTAssertEqual(subtitle("HDrezka 18+", language: "Русский", code: "rus"), "HDrezka 18+ • AC3 2.0")
+        XCTAssertEqual(subtitle("LE-production", language: "Русский", code: "rus"), "LE-production • AC3 2.0")
+        // Language and format say nothing new, in any spelling.
+        for title in ["English", "ENG AC3 5.1", "Stereo", "Surround 5.1", "Anglais / English", "英语 DTS-HDMA 5.1",
+                      "DTS-HD Master Audio / English / 5.1 / 48 kHz / 341", "TrueHD7.1.Atmos", "LC AAC 566 kbs, 5,1ch",
+                      "Dolby TrueHD with Atmos / 7.1 / 15 Objects / 48 kHz / 6 401 kbps / 24 bit",
+                      "Baywatch.2017.UNRATED.2160p.BluRay.REMUX.HEVC.TrueHD.7.1.Atmos-FGT", "Main - English 5.1", "https://pahe.li",
+                      "DTS-HD Master Audio / 5.1 / 48 kHz / 3938 kbps / 24-bit (DTS Core: 5.1 / 48 kHz / 1509 kbps / 24-bit"] {
+            XCTAssertEqual(subtitle(title), "AC3 2.0", title)
+        }
+        // What's left once they're gone.
+        XCTAssertEqual(subtitle("DD 2.0 - DirtyHippie"), "DirtyHippie • AC3 2.0")
+        XCTAssertEqual(subtitle("Original | English (United States)"), "Original • AC3 2.0")
+        XCTAssertEqual(subtitle("English DTS-HD MA 5.1 (Original)"), "Original • AC3 2.0")
+        XCTAssertEqual(subtitle("Isolated Score"), "Isolated Score • AC3 2.0")
+        // Commentary keeps its speakers, in place of the role.
+        XCTAssertEqual(subtitle("Commentary"), "Commentary • AC3 2.0")
+        XCTAssertEqual(subtitle("English DTS 2.0 @ 255 kbps  Commentary 2"), "Commentary 2 • AC3 2.0")
+        XCTAssertEqual(subtitle("Audio Commentary by Director Lee Cronin"), "Commentary by Director Lee Cronin • AC3 2.0")
+        XCTAssertEqual(subtitle("Director's Commentary"), "Director's Commentary • AC3 2.0")
+        XCTAssertEqual(subtitle("Descriptive Audio"), "Audio Description • AC3 2.0")
+    }
+
+    func testAudioMenuShowsATitleOnlyWhenItTellsTheRowApart() {
+        func track(_ id: Int, _ language: String?, _ title: String?) -> MediaTrack {
+            MediaTrack(id: id, name: title ?? "", language: language, codec: "ac3", title: title, channels: 2)
+        }
+        // Alone in the file, or alone in its language: the heading already identifies it.
+        let lone = track(1, "English", "YAWNTiC")
+        XCTAssertEqual(lone.audioMenuSubtitle(among: [lone]), "AC3 2.0")
+        let english = track(1, "English", "HiQVE"), hindi = track(2, "Hindi", "HiQVE")
+        XCTAssertEqual(english.audioMenuSubtitle(among: [english, hindi]), "AC3 2.0")
+        // The same word on every row of a language separates nothing.
+        let first = track(1, "English", "BTM"), second = track(2, "English", "BTM")
+        XCTAssertEqual(first.audioMenuSubtitle(among: [first, second]), "AC3 2.0")
+        // Same language, different titles.
+        let dub = track(1, "Русский", "HDrezka"), other = track(2, "Русский", "LE-production")
+        XCTAssertEqual(dub.audioMenuSubtitle(among: [dub, other]), "HDrezka • AC3 2.0")
+        // A commentary's speakers and an untagged track's title stand alone.
+        let commentary = track(1, "English", "Commentary by Sam Mendes"), japanese = track(2, "Japanese", nil)
+        XCTAssertEqual(commentary.audioMenuSubtitle(among: [commentary, japanese]), "Commentary by Sam Mendes • AC3 2.0")
+        let untagged = track(1, nil, "English")
+        XCTAssertEqual(untagged.audioMenuSubtitle(among: [untagged]), "English • AC3 2.0")
     }
 
     func testSubtitleMenuShowsLanguageOverFlagsTitleAndFormat() {

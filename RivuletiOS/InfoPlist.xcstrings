@@ -1,0 +1,23 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSLocalNetworkUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet stellt eine Verbindung zu deinen Plex-Servern und Live-TV-Quellen in deinem lokalen Netzwerk her, um deine Medien wiederzugeben."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet connects to your Plex servers and Live TV sources on your local network to play your media."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

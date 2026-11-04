@@ -127,6 +127,11 @@ final class InsightsPanelContainerView: UIView, RailPanelMenuHandling {
             } else {
                 actor.showDetailsUnavailable()
             }
+            // Second stage, as on the person page: never holds up the library's titles.
+            let onServer = (result?.movies ?? []) + (result?.shows ?? [])
+            let titles = await self.provider.knownFor(person: person)
+            guard self.coordinator.isCurrent(token) else { return }
+            actor.addKnownFor(FilmographyEntry.excluding(onServer, from: titles))
         }
     }
 

@@ -60,7 +60,7 @@ enum OpenSourceLicenses {
         [
             Entry(
                 name: "AetherEngine",
-                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.53.0, commit 4a82484) is available at \(aetherSourceURL).",
+                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.56.0, commit 76ad51a) is available at \(aetherSourceURL).",
                 licenseText: aetherLGPLv3
             ),
             Entry(
@@ -132,6 +132,11 @@ enum OpenSourceLicenses {
                 name: "Parakeet TDT-CTC 110M",
                 summary: "The speech model behind generated subtitles and the content filter. Parakeet TDT-CTC 110M by NVIDIA (https://huggingface.co/nvidia/parakeet-tdt_ctc-110m), converted to Core ML by FluidInference (https://huggingface.co/FluidInference/parakeet-tdt-ctc-110m-coreml). Used unmodified under the Creative Commons Attribution 4.0 International License.",
                 licenseText: parakeetCCBY4
+            ),
+            Entry(
+                name: "SwiftDraw",
+                summary: "Used to draw SVG channel logos. SwiftDraw 0.29.0, statically linked and used under the zlib License. Source: https://github.com/swhitty/SwiftDraw",
+                licenseText: swiftDrawZlib
             ),
             Entry(
                 name: "Sentry (sentry-cocoa)",
@@ -1481,6 +1486,28 @@ necessary.  Here is a sample; alter the names:
   Ty Coon, President of Vice
 
 That's all there is to it!
+"""#
+
+    static let swiftDrawZlib = #"""
+zlib License
+
+Copyright (c) 2019 Simon Whitty
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
 """#
 
     static let libassISC = #"""

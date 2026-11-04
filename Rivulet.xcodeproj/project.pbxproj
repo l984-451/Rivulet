@@ -13,9 +13,11 @@
 		A7F159552F04124A001B2177 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 		B2000001AAAA000000000001 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
 		B2000001AAAA000000000002 /* Libass in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000002 /* Libass */; };
+		B2000001AAAA000000000004 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000004 /* SwiftDraw */; };
 		B2000001AAAA000000000003 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000003 /* FluidAudio */; };
 		B30000190000000000000019 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
 		B30000210000000000000021 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
+		B30000220000000000000022 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000004 /* SwiftDraw */; };
 		C40000010000000000000001 /* AssetPackExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = C40000020000000000000002 /* AssetPackExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -173,6 +175,7 @@
 				B2000001AAAA000000000002 /* Libass in Frameworks */,
 				B2000001AAAA000000000003 /* FluidAudio in Frameworks */,
 				A7F159552F04124A001B2177 /* Sentry in Frameworks */,
+				B2000001AAAA000000000004 /* SwiftDraw in Frameworks */,
 			);
 		};
 		A78483072F062C2000F9E6D0 /* Frameworks */ = {
@@ -185,6 +188,7 @@
 			files = (
 				B30000190000000000000019 /* AetherEngine in Frameworks */,
 				B30000210000000000000021 /* Sentry in Frameworks */,
+				B30000220000000000000022 /* SwiftDraw in Frameworks */,
 			);
 		};
 		C40000080000000000000008 /* Frameworks */ = {
@@ -278,6 +282,7 @@
 				B2000010AAAA000000000001 /* AetherEngine */,
 				B2000010AAAA000000000002 /* Libass */,
 				B2000010AAAA000000000003 /* FluidAudio */,
+				B2000010AAAA000000000004 /* SwiftDraw */,
 			);
 			productName = Rivulet;
 			productReference = A72E03DA2EDA297D003A73DA /* Rivulet.app */;
@@ -322,6 +327,7 @@
 			packageProductDependencies = (
 				B2000010AAAA000000000001 /* AetherEngine */,
 				A7F159542F04124A001B2177 /* Sentry */,
+				B2000010AAAA000000000004 /* SwiftDraw */,
 			);
 			productName = "Rivulet iOS";
 			productReference = B30000010000000000000001 /* Rivulet iOS.app */;
@@ -378,6 +384,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				de,
 				Base,
 			);
 			mainGroup = A72E03D12EDA297D003A73DA;
@@ -387,6 +394,7 @@
 				B2000020AAAA000000000001 /* XCRemoteSwiftPackageReference "AetherEngine" */,
 				B2000020AAAA000000000002 /* XCRemoteSwiftPackageReference "LibassBuild" */,
 				B2000020AAAA000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				B2000020AAAA000000000004 /* XCRemoteSwiftPackageReference "SwiftDraw" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A72E03DB2EDA297D003A73DA /* Products */;
@@ -1036,7 +1044,7 @@
 			repositoryURL = "https://github.com/superuser404notfound/AetherEngine";
 			requirement = {
 				kind = exactVersion;
-				version = 7.53.0;
+				version = 7.56.0;
 			};
 			traits = (
 				DualLayerDolbyVision,
@@ -1063,6 +1071,14 @@
 			traits = (
 			);
 		};
+		B2000020AAAA000000000004 /* XCRemoteSwiftPackageReference "SwiftDraw" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swhitty/SwiftDraw";
+			requirement = {
+				kind = exactVersion;
+				version = 0.29.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1085,6 +1101,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B2000020AAAA000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		B2000010AAAA000000000004 /* SwiftDraw */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B2000020AAAA000000000004 /* XCRemoteSwiftPackageReference "SwiftDraw" */;
+			productName = SwiftDraw;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

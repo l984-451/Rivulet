@@ -52,7 +52,11 @@ extension IOSPlexSession {
         let cw: PlexHub??
         do {
             let hub = try await continueWatching
-            cw = .some((hub?.Metadata ?? []).isEmpty ? nil : hub.map { Self.onServer($0, serverID) })
+            cw = .some((hub?.Metadata ?? []).isEmpty ? nil : hub.map { hub in
+                var hub = Self.onServer(hub, serverID)
+                hub.title = String(localized: "Continue Watching")
+                return hub
+            })
         } catch {
             cw = nil
         }
@@ -68,19 +72,6 @@ extension IOSPlexSession {
         }
         #endif
         return IOSPlexHome(libraries: libraries, continueWatching: cw, hubsByLibrary: hubsByLibrary)
-    }
-
-    /// The other servers' Home content, in the order plex.tv lists them. A server
-    /// that does not answer is left out.
-    func fetchOtherServersHomes() async -> [IOSPlexHome] {
-        let ids = PlexExtraServers.shared.current.map(\.machineID)
-        let homes = await withTaskGroup(of: (Int, IOSPlexHome?).self) { group in
-            for (index, id) in ids.enumerated() {
-                group.addTask { await (index, try? self.fetchHome(serverID: id)) }
-            }
-            return await group.reduce(into: [:]) { $0[$1.0] = $1.1 }
-        }
-        return ids.indices.compactMap { homes[$0] ?? nil }
     }
 
     /// Marks a row and its items as `serverID`'s; Home badges the row with its server.

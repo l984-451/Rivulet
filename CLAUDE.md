@@ -37,7 +37,7 @@ Silo's negotiated file and server-HLS deliveries stay on the **Aether host**, in
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.53.0), with the `DualLayerDolbyVision` (P7 FEL), `DolbyVisionStillReshaping` (P5 stills), `TrueHDObjectAudio` and `DTSXObjectAudio` package traits set in `project.pbxproj`; object audio stays off until Settings → Playback → Height Speakers names a layout. A bump must keep the traits. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.56.0), with the `DualLayerDolbyVision` (P7 FEL), `DolbyVisionStillReshaping` (P5 stills), `TrueHDObjectAudio` and `DTSXObjectAudio` package traits set in `project.pbxproj`; object audio stays off until Settings → Playback → Height Speakers names a layout. A bump must keep the traits. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
@@ -819,6 +819,11 @@ protocol v3, never compatibility endpoints or Plex Discover substitutions.
   continuation exists. Native-only Continue Watching keeps its layout position.
   Native featured rows stay authoritative; Jellyfin's cached TMDB matches must
   not trigger Silo-only fetches or create a second hero over native featured rows.
+  Continue Watching and Top Shelf deduplication compares provider-scoped item
+  identities; keep native rows when no Plex provider is connected, and do not
+  discard distinct items that happen to share opaque item IDs across servers.
+  Discover and Watchlist remain selected while either Plex or Silo supplies them;
+  losing the last supporting provider returns the user to Home.
 - Discover renders `recommendations/discover` inline rows, as Silo Apple's
   For You → Recommendations does. Pin the case-insensitive For You row, omit
   empty rows, and reject incomplete collection continuations. Do not refetch
@@ -1049,6 +1054,9 @@ is passed as a localizable type, so:
   nothing is extracted (measured).
 - **Anywhere else, `String(localized: "…")`.** SwiftUI `Text("…")` already is.
   The `unlocalized_ui_text` lint rule catches literals assigned to UIKit text.
+- **Two meanings, two keys.** The same English word in two places shares one
+  translation, so give the odd one out its own key:
+  `String(localized: "streaming.home", defaultValue: "Home")`.
 - **One literal per sentence**, interpolated (`"Resume S\(s), E\(e)"`), never
   concatenated pieces. Counts use one key (`"\(n) albums"`) with English plural
   variants in the catalog.
@@ -1121,6 +1129,12 @@ CachedAsyncImage(url: imageURL) { phase in
 }
 ```
 
+**SVG goes through `SVGRasterizer`** (`RivuletCore/Images/`), reached from both image caches
+when ImageIO declines the bytes (ImageIO and `UIImage` have no SVG decoder, measured on tvOS and
+iOS 27). That file is the only importer of SwiftDraw, which crashes or hangs on hostile files, and
+a logo URL comes from the IPTV provider. So `SVGSafetyCheck` runs first, and `SVGRasterizerTests`
+pins each case. Fuzz again when bumping SwiftDraw: 24,000 mutated files found the last two.
+
 ## Build & Run
 
 One-time setup: `RivuletCore/Config/Secrets.swift` is gitignored and required for **both** app targets to compile. Copy the template and fill in real values (or leave placeholders for a build that doesn't need Sentry/TMDB/etc. to actually work):
@@ -1174,7 +1188,7 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 
 **Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (`v*` → tvOS, `ios-v*` → iOS), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
 
-**One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.1 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
+**One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.2 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
 
 **No `.metal` files.** Compiling one needs Apple's separate Metal Toolchain download, which the GitHub runners (and likely Codemagic) lack: the tvOS check failed on it once. Ship a shader as source and compile it at runtime with `makeLibrary(source:)`, as `WelcomeGlowShader` does.
 

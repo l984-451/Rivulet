@@ -6,8 +6,8 @@
 //  Rivulet
 //
 //  Subtitle delay and height steppers for the VOD and Live TV Subtitles panels.
-//  Both are sticky per media (ratingKey or channel id) and default to 0. Height
-//  does not move a cue that carries its own placement.
+//  Delay is sticky per media (ratingKey or channel id). Height is one global offset
+//  from AVPlayer's position (#461), and does not move a cue that carries its own placement.
 //
 
 import Foundation
@@ -53,36 +53,20 @@ enum SubtitleAdjustments {
         return String(format: "%+.1fs", value)
     }
 
-    // MARK: - Height (per media)
+    // MARK: - Height (global)
 
     /// Points moved per stepper press.
     static let heightUnitPt: CGFloat = 10
-    /// Stepper range: ±10 units (±100 pt).
-    static let heightUnitMax = 10
+    /// Stepper range: far enough down to reach the screen edge under a wide film's
+    /// letterbox bar, and up to the top of the screen.
+    static let heightUnitRange = -30...80
 
-    /// Defaults key holding the height for one media key. A key per media
-    /// rather than one entry in a map, unlike delay, so a media that was never
-    /// adjusted costs nothing and clearing one is a plain remove.
-    private static func heightKey(forMediaKey mediaKey: String) -> String {
-        "subtitleHeightUnits:\(mediaKey)"
-    }
+    private static let heightKey = "subtitleHeightUnits"
 
-    /// Height offset in UNITS for a media key (positive = subtitles sit
-    /// higher). 0 when never adjusted.
-    static func heightUnits(forMediaKey mediaKey: String) -> Int {
-        clampUnits(UserDefaults.standard.integer(forKey: heightKey(forMediaKey: mediaKey)))
-    }
-
-    /// Persists `units` for `mediaKey`. A value of 0 removes the entry, so
-    /// defaults never accumulate for media the user only watched.
-    static func setHeightUnits(_ units: Int, forMediaKey mediaKey: String) {
-        let key = heightKey(forMediaKey: mediaKey)
-        let clamped = clampUnits(units)
-        if clamped == 0 {
-            UserDefaults.standard.removeObject(forKey: key)
-        } else {
-            UserDefaults.standard.set(clamped, forKey: key)
-        }
+    /// Height offset in UNITS (positive = subtitles sit higher). 0 is AVPlayer's position.
+    static var heightUnits: Int {
+        get { clampUnits(UserDefaults.standard.integer(forKey: heightKey)) }
+        set { UserDefaults.standard.set(clampUnits(newValue), forKey: heightKey) }
     }
 
     // MARK: - Rail clearance
@@ -91,18 +75,14 @@ enum SubtitleAdjustments {
     /// spans the screen's bottom `PlayerRailView.railHeight` (340) points.
     static let railTopFromScreenBottom: CGFloat = 340
 
-    /// The margin a resting caption keeps off the picture bottom, as a fraction
-    /// of picture height. Measured against AVKit (tvOS 27): its built-in Default
-    /// style sits 3.5pt higher than every other style.
-    static let bottomMarginFraction: CGFloat = 0.0493
-    static let systemDefaultBottomMarginFraction: CGFloat = 0.0526
+    /// The margin a resting cue box keeps off the picture bottom, as a fraction of
+    /// picture height. Measured against AVKit (tvOS 27), the same for every style.
+    static let bottomMarginFraction: CGFloat = 0.05
 
-    /// The margin a caption keeps off the rail top while the rail is up. AVKit's
-    /// lift is a constant, the same for every picture shape and caption size;
-    /// the built-in Default style sits higher, as it does at rest (measured,
-    /// tvOS 27 sim, within 1pt at 1.0, 1.5 and Default; device agrees).
-    static let railMargin: CGFloat = 19
-    static let systemDefaultRailMargin: CGFloat = 26
+    /// The margin a cue box keeps off the rail top while the rail is up. AVKit's
+    /// lift is a constant, the same for every style, picture shape and caption
+    /// size (measured, tvOS 27 sim).
+    static let railMargin: CGFloat = 22
 
     /// The lowest a caption may sit while the rail is showing. Lives here
     /// because BOTH overlays need it and they must agree: captions should not
@@ -111,9 +91,7 @@ enum SubtitleAdjustments {
     /// its risen pills (measured, tvOS 27 sim; the pills rise 334, captions 116).
     static let paneLift: CGFloat = 116
 
-    static func controlsFloor(isSystemDefault: Bool) -> CGFloat {
-        railTopFromScreenBottom + (isSystemDefault ? systemDefaultRailMargin : railMargin)
-    }
+    static let controlsFloor: CGFloat = railTopFromScreenBottom + railMargin
 
     /// "0", "+3", "-2" — the stepper's centre label.
     static func formattedHeight(_ units: Int) -> String {
@@ -126,6 +104,6 @@ enum SubtitleAdjustments {
     }
 
     private static func clampUnits(_ units: Int) -> Int {
-        max(-heightUnitMax, min(heightUnitMax, units))
+        min(max(units, heightUnitRange.lowerBound), heightUnitRange.upperBound)
     }
 }

@@ -162,6 +162,32 @@ final class JellyfinSessionTests: XCTestCase {
 
     // MARK: - Round trip
 
+    /// #481, shapes measured on Jellyfin 12.4: the code shows, then the secret buys the token.
+    func test_quickConnect_showsCode_andSignsInOnceApproved() async throws {
+        server.respond("/System/Info/Public", body: JellyfinFixtures.publicInfo(id: "session-test"))
+        server.respond("/QuickConnect/Initiate", body: #"{"Authenticated":false,"Secret":"s3","Code":"949829"}"#)
+        server.respond("/QuickConnect/Connect", query: ["secret": "s3"], body: #"{"Authenticated":true,"Secret":"s3","Code":"949829"}"#)
+        server.respond("/Users/AuthenticateWithQuickConnect",
+                       body: #"{"AccessToken":"tok-qc","ServerId":"session-test","User":{"Id":"user-1","Name":"bain"}}"#)
+        var shown: String?
+        let account = try await JellyfinSession.signInWithQuickConnect(
+            serverURL: base, pollInterval: .milliseconds(1), showCode: { shown = $0 }, transport: server.transport)
+        XCTAssertEqual(shown, "949829")
+        XCTAssertEqual(account.userName, "bain")
+        XCTAssertEqual(CredentialRegistry.shared.token(for: .server(providerID: testProviderID)), "tok-qc")
+        XCTAssertEqual(server.jsonBody(server.requests.count - 1)["Secret"] as? String, "s3")
+    }
+
+    func test_quickConnect_offOnTheServer_isUnauthorized() async {
+        server.respond("/System/Info/Public", body: JellyfinFixtures.publicInfo(id: "session-test"))
+        server.respond("/QuickConnect/Initiate", status: 401)
+        do {
+            _ = try await JellyfinSession.signInWithQuickConnect(serverURL: base, showCode: { _ in }, transport: server.transport)
+            XCTFail("expected a throw")
+        } catch MediaProviderError.unauthorized {
+        } catch { XCTFail("got \(error)") }
+    }
+
     private func respondWithSuccessfulSignIn() {
         server.respond("/System/Info/Public", body: JellyfinFixtures.publicInfo(id: "session-test"))
         server.respond("/Users/AuthenticateByName",

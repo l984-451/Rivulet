@@ -778,15 +778,26 @@ final class ShellSidebarViewController: UIViewController {
         func flag(_ key: String, default fallback: Bool) -> Bool {
             defaults.object(forKey: key) as? Bool ?? fallback
         }
-        let profileName = PlexUserProfileManager.shared.selectedUser?.displayName
-            ?? PlexAuthManager.shared.username
-            ?? String(localized: "Account")
+        let profileName: String
+        if PlexAuthManager.shared.hasCredentials {
+            profileName = PlexUserProfileManager.shared.selectedUser?.displayName
+                ?? PlexAuthManager.shared.username
+                ?? String(localized: "Account")
+        } else if let account = SiloSession.account,
+                  ServerDataStore.shared.sources.contains(where: { $0.providerID == account.providerID }) {
+            profileName = account.profileName
+        } else {
+            profileName = String(localized: "Account")
+        }
+        let hasDiscoverAndWatchlist = ShellSidebarModel.hasDiscoverAndWatchlist(
+            plexSignedIn: PlexAuthManager.shared.hasCredentials,
+            providerIDs: ServerDataStore.shared.sources.map(\.providerID))
         return ShellSidebarModel.sections(
             libraries: SidebarLibrary.current(),
             liveTVSources: LiveTVDataStore.shared.sources,
             combineLiveTV: flag("combineLiveTVSources", default: true),
-            showDiscover: flag("showDiscoverTab", default: true),
-            showWatchlist: flag("showWatchlistTab", default: true),
+            showDiscover: flag("showDiscoverTab", default: true) && hasDiscoverAndWatchlist,
+            showWatchlist: flag("showWatchlistTab", default: true) && hasDiscoverAndWatchlist,
             order: LibrarySettingsManager.shared.libraryOrder,
             hiddenKeys: LibrarySettingsManager.shared.hiddenLibraryKeys,
             profileName: profileName)

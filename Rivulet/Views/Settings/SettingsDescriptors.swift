@@ -238,6 +238,10 @@ enum SettingsDescriptorStore {
             icon: "backward.fill",
             description: "How far a single Left press skips back during playback."
         ),
+        "cinemaTrailers": SettingDescriptor(
+            icon: "film.stack",
+            description: "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on."
+        ),
         "showPostVideoUpNext": SettingDescriptor(
             icon: "rectangle.stack",
             description: "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode."
@@ -352,6 +356,14 @@ enum SettingsDescriptorStore {
             icon: "link",
             description: "Check the server and sign in."
         ),
+        "jellyfinQuickConnect": SettingDescriptor(
+            icon: "qrcode",
+            description: "Sign in without typing a password: Rivulet shows a code to approve from a device already signed in to Jellyfin. Quick Connect has to be on in the server's dashboard."
+        ),
+        "jellyfinRefresh": SettingDescriptor(
+            icon: "arrow.clockwise",
+            description: "Reload this server's libraries and Home rows now."
+        ),
         "jellyfinSignOut": SettingDescriptor(
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of this Jellyfin server and remove its saved credentials."
@@ -394,7 +406,7 @@ enum SettingsDescriptorStore {
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Shows the profile picker each time Rivulet launches, allowing you to choose which profile to use."
+            description: "Shows the profile picker each time Rivulet opens, and when you come back to it after more than 30 seconds on the Home screen, in another app or on the screensaver, allowing you to choose which profile to use."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",

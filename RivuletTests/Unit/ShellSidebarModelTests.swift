@@ -71,6 +71,28 @@ final class ShellSidebarModelTests: XCTestCase {
                         .playlists(providerID: "plex:primary"), .liveTV(sourceId: nil), .settings])
     }
 
+    func test_discoverAndWatchlistAvailabilityIncludesSiloButNotJellyfinAlone() {
+        XCTAssertFalse(ShellSidebarModel.hasDiscoverAndWatchlist(plexSignedIn: false, providerIDs: []))
+        XCTAssertFalse(ShellSidebarModel.hasDiscoverAndWatchlist(plexSignedIn: false, providerIDs: ["jellyfin:server"]))
+        XCTAssertTrue(ShellSidebarModel.hasDiscoverAndWatchlist(plexSignedIn: true, providerIDs: []))
+        XCTAssertTrue(ShellSidebarModel.hasDiscoverAndWatchlist(plexSignedIn: false, providerIDs: ["silo:server:profile"]))
+
+        let available = ShellSidebarModel.hasDiscoverAndWatchlist(
+            plexSignedIn: false, providerIDs: ["silo:server:profile"])
+        let visible = ShellSidebarModel.sections(
+            libraries: [], liveTVSources: [], combineLiveTV: true,
+            showDiscover: available, showWatchlist: available, profileName: "Account", hasMediaServer: true)
+            .flatMap(\.items).map(\.tab)
+        XCTAssertTrue(visible.contains(.discover))
+        XCTAssertTrue(visible.contains(.watchlist))
+        let hidden = ShellSidebarModel.sections(
+            libraries: [], liveTVSources: [], combineLiveTV: true,
+            showDiscover: false, showWatchlist: false, profileName: "Account", hasMediaServer: true)
+            .flatMap(\.items).map(\.tab)
+        XCTAssertFalse(hidden.contains(.discover))
+        XCTAssertFalse(hidden.contains(.watchlist))
+    }
+
     func test_playlistsRow_onlyForServersWithPlaylists() {
         let office = [MediaLibrary(id: "1", providerID: "plex:office", title: "Movies", kind: .movies)]
         let jf = [MediaLibrary(id: "lib-m", providerID: "jellyfin:srv", title: "Movies", kind: .movies)]

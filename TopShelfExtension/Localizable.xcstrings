@@ -2,10 +2,24 @@
   "sourceLanguage" : "en",
   "strings" : {
     "Continue Watching" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter ansehen"
+          }
+        }
+      }
     },
     "Recently Added" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt hinzugefügt"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

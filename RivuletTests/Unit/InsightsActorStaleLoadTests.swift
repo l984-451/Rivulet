@@ -35,8 +35,38 @@ private final class ManuallyResolvableFilmographyProvider: PersonFilmographyProv
     }
 }
 
+private struct KnownForProvider: PersonFilmographyProviding {
+    let onServer: FilmographyEntry
+    let titles: [FilmographyEntry]
+
+    func load(person: MediaPerson) async throws -> PersonDetail {
+        PersonDetail(id: person.id, name: person.name, biography: nil, portraitURL: nil, movies: [onServer], shows: [])
+    }
+
+    func knownFor(person: MediaPerson) async -> [FilmographyEntry] { titles }
+}
+
 @MainActor
 final class InsightsActorStaleLoadTests: XCTestCase {
+
+    /// #462: Known For fills in behind the library's titles, less any on the server.
+    func test_knownFor_addsTitlesNotOnTheServer() async throws {
+        func entry(_ tmdbId: Int, _ isOnServer: Bool) -> FilmographyEntry {
+            let item = PersonItemMapper.metadataOnlyItem(tmdbId: tmdbId, isMovie: true, title: "\(tmdbId)", year: nil,
+                                                         posterURL: nil, overview: nil)
+            return FilmographyEntry(item: item, isOnServer: isOnServer, guid: nil, tmdbId: tmdbId)
+        }
+        let person = makePerson("A")
+        let provider = KnownForProvider(onServer: entry(1, true), titles: [entry(1, false), entry(2, false)])
+        let container = InsightsPanelContainerView(cast: [person], provider: provider)
+
+        container.crossfadeToActor(person)
+        let actor = try XCTUnwrap(container.actorView)
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertNotNil(actor.detail)
+        XCTAssertEqual(actor.knownForCount, 1)
+    }
 
     private func makePerson(_ id: String) -> MediaPerson {
         MediaPerson(id: id, name: "Actor \(id)", role: nil, imageURL: nil)

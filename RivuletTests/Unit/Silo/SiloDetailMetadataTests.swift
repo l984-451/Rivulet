@@ -113,7 +113,9 @@ final class SiloDetailMetadataTests: XCTestCase {
             "TrueHD 7.1", "TrueHD 7.1 Atmos", "TrueHD 7.1 Atmos", "TrueHD 7.1 Atmos",
             "TrueHD 7.1 Atmos", "E-AC3 5.1 Atmos", "TrueHD 7.1", "TrueHD 7.1 Atmos"
         ]
-        XCTAssertEqual(source.audioTracks.map { MediaTrack(from: $0).audioMenuSubtitle }, expected)
+        let projected = source.audioTracks.map { MediaTrack(from: $0) }
+        XCTAssertEqual(projected.map { $0.audioMenuSubtitle(among: projected).components(separatedBy: " • ").last ?? "" },
+                       expected)
 
         let item = try SiloJSON.decoder().decode(SiloItem.self, from: Data("""
         {"content_id":"movie-a","type":"movie","title":"Film"}
@@ -126,8 +128,8 @@ final class SiloDetailMetadataTests: XCTestCase {
                        codec: $0.codec, channels: $0.channels, streamIndex: $0.index)
         }
         let merged = TrackMerge.mergeAudio(engine: engineTracks, plex: streams.map { MediaTrack(from: $0) })
-        XCTAssertEqual(merged.map(\.audioMenuSubtitle), expected,
-                       "The player menu must retain each source track's explicit evidence after merging engine IDs")
+        XCTAssertEqual(merged.map { $0.audioMenuSubtitle(among: merged).components(separatedBy: " • ").last ?? "" },
+                       expected, "The player menu must retain each source track's explicit Atmos evidence")
 
         let sections = PlayerDetailsPaneView.mediaSections(
             metadata: metadata,

@@ -151,6 +151,8 @@ struct WhatsNewView: View {
     static let changelogs: [(version: String, features: [String])] = [
         ("1.1.1 (120)", [
             "Silo audio and subtitle tracks are available to system remotes and follow accessibility preferences.",
+            "Silo Continue Watching and Top Shelf retain provider identities when merging duplicate titles.",
+            "Silo Discover and Watchlist stay available without Plex, and the sidebar shows the active Silo profile.",
             "Episode and season pages now show their extras.",
             "The player's info panels stay open while you're reading them.",
             "Continue Watching no longer adds a title to artwork that already shows one.",

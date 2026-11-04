@@ -5,26 +5,11 @@ import Foundation
 
 /// Video playlists on every server, read only: browse and play in order.
 extension IOSPlexSession {
-    /// Every server's video playlists, by `serverID ?? ""`. A server that fails keeps its last answer.
-    func fetchVideoPlaylists() async -> [String: [PlexPlaylist]] {
-        let ids: [String?] = [nil] + PlexExtraServers.shared.current.map(\.machineID)
-        let servers = ids.map { ($0 ?? "", try? configuration(serverID: $0)) }
-        let previous = videoPlaylists
-        let network = network
-        return await withTaskGroup(of: (String, [PlexPlaylist]?).self) { group in
-            for (key, server) in servers {
-                group.addTask {
-                    guard let server else { return (key, nil) }
-                    return (key, try? await network.getPlaylists(serverURL: server.serverURL, authToken: server.token, type: "video"))
-                }
-            }
-            return await group.reduce(into: [:]) { result, answer in
-                let lists = (answer.1 ?? previous[answer.0])?.sorted {
-                    ($0.title ?? "").localizedCaseInsensitiveCompare($1.title ?? "") == .orderedAscending
-                }
-                if let lists, !lists.isEmpty { result[answer.0] = lists }
-            }
-        }
+    /// One server's video playlists, by title. Nil: the server failed.
+    func fetchPlaylists(serverID: String?) async -> [PlexPlaylist]? {
+        guard let server = try? configuration(serverID: serverID) else { return nil }
+        let lists = try? await network.getPlaylists(serverURL: server.serverURL, authToken: server.token, type: "video")
+        return lists?.sorted { ($0.title ?? "").localizedCaseInsensitiveCompare($1.title ?? "") == .orderedAscending }
     }
 
     func playlists(serverID: String?) -> [PlexPlaylist] { videoPlaylists[serverID ?? ""] ?? [] }

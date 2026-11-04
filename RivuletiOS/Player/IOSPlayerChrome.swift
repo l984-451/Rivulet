@@ -39,6 +39,8 @@ struct IOSPlayerChromeActions {
     var skip: (Double) -> Void
     /// VOD: media seconds. Live: the session axis `IOSPlayerTimeline.live` uses.
     var seek: (Double) -> Void
+    /// The still for a scrub position; nil hides the preview (live).
+    var scrubStill: ((Double) async -> UIImage?)?
     var goLive: () -> Void = {}
     var setRate: (Float) -> Void = { _ in }
     var selectQuality: (StreamingQuality) -> Void = { _ in }
@@ -377,6 +379,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     leadingLabel: Self.format(shown),
                     trailingLabel: "-" + Self.format(max(0, duration - shown)),
                     accessibilityValue: String(localized: "\(Self.format(shown)) of \(Self.format(duration))"),
+                    scrubStill: actions.scrubStill,
                     onCommit: commitScrub,
                     onStep: stepFromAccessibility
                 )
@@ -728,8 +731,14 @@ private struct IOSPlayerScrubber: View {
     let trailingLabel: String
     let accessibilityValue: String
     var isInteractive = true
+    var scrubStill: ((Double) async -> UIImage?)?
     let onCommit: (Double) -> Void
     let onStep: (Double) -> Void
+    @State private var still: UIImage?
+    @State private var stillTime: Double?
+    @State private var stillLoad: Task<Void, Never>?
+
+    private static let stillWidth: CGFloat = 176
 
     private var span: Double { max(range.upperBound - range.lowerBound, 0.001) }
 
@@ -748,6 +757,20 @@ private struct IOSPlayerScrubber: View {
                 .frame(height: scrubValue == nil ? 6 : 12)
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
+                .overlay(alignment: .topLeading) {
+                    if let still, scrubValue != nil {
+                        let half = Self.stillWidth / 2
+                        let height = Self.stillWidth * still.size.height / max(still.size.width, 1)
+                        Image(uiImage: still)
+                            .resizable()
+                            .frame(width: Self.stillWidth, height: height)
+                            .clipShape(.rect(cornerRadius: 10))
+                            .shadow(radius: 8)
+                            .position(x: min(max(geometry.size.width * fraction, half), max(half, geometry.size.width - half)),
+                                      y: -height / 2 - 8)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { drag in
@@ -764,6 +787,10 @@ private struct IOSPlayerScrubber: View {
             }
             .frame(height: 24)
             .animation(.easeOut(duration: 0.15), value: scrubValue == nil)
+            .onChange(of: scrubValue) { _, time in
+                stillTime = time
+                if time == nil { still = nil } else { loadStill() }
+            }
 
             HStack {
                 Text(leadingLabel)
@@ -783,6 +810,19 @@ private struct IOSPlayerScrubber: View {
             case .decrement: onStep(-1)
             @unknown default: break
             }
+        }
+    }
+
+    /// Latest wins: one load at a time, then the newest position the finger reached.
+    private func loadStill() {
+        guard stillLoad == nil, let scrubStill else { return }
+        stillLoad = Task {
+            while let time = stillTime {
+                stillTime = nil
+                let image = await scrubStill(time)
+                if scrubValue != nil, let image { still = image }
+            }
+            stillLoad = nil
         }
     }
 }

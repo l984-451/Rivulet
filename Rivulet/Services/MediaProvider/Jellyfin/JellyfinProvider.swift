@@ -132,7 +132,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         var params = [
             URLQueryItem(name: "searchTerm", value: query),
             URLQueryItem(name: "recursive", value: "true"),
-            URLQueryItem(name: "includeItemTypes", value: "Movie,Series,Episode"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series,Episode,MusicVideo"),
             URLQueryItem(name: "limit", value: "50"),
             Self.listFields
         ]
@@ -273,7 +273,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         // A "Home Videos and Photos" library also answers with photos, which
         // nothing here can open. Leaf types: the server groups episodes itself.
         if library.kind == .mixed {
-            query.append(URLQueryItem(name: "includeItemTypes", value: "Movie,Episode,Video"))
+            query.append(URLQueryItem(name: "includeItemTypes", value: "Movie,Episode,Video,MusicVideo"))
         }
         return try await client.get("Items/Latest", query)
     }
@@ -551,7 +551,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         case .movies: "Movie"
         case .shows: "Series"
         case .music: "MusicAlbum"
-        default: "Movie,Series,Video"
+        default: "Movie,Series,Video,MusicVideo"
         }
     }
 }

@@ -358,7 +358,7 @@ final class JellyfinProviderTests: XCTestCase {
         _ = try await provider().recentlyAddedHub(in: home)
         _ = try await provider().recentlyAddedHub(in: movies)
         let queries = server.requests.map { $0.url?.query ?? "" }
-        XCTAssertTrue(queries[0].contains("includeItemTypes=Movie,Episode,Video"), queries[0])
+        XCTAssertTrue(queries[0].contains("includeItemTypes=Movie,Episode,Video,MusicVideo"), queries[0])
         XCTAssertFalse(queries[1].contains("includeItemTypes"))
     }
 
@@ -478,7 +478,7 @@ final class JellyfinProviderTests: XCTestCase {
         let items = try await provider().search("the")
 
         XCTAssertEqual(items.map(\.kind), [.movie, .episode])
-        XCTAssertTrue(server.query(0).contains(URLQueryItem(name: "includeItemTypes", value: "Movie,Series,Episode")))
+        XCTAssertTrue(server.query(0).contains(URLQueryItem(name: "includeItemTypes", value: "Movie,Series,Episode,MusicVideo")))
     }
 
     func test_search_perLibrary_asksOncePerParent_inOrder() async throws {

@@ -151,9 +151,12 @@ enum TrackLanguage {
         "spa", "swe", "tha", "tur", "ukr", "vie"
     ]
 
-    /// The device's language, the subtitle default.
-    static var device: String {
-        let code = normalize(Locale.current.language.languageCode?.identifier)
+    /// The device's language, the subtitle default. `Locale.current` reports English
+    /// for any language the app has no catalog for, so this reads the system's list.
+    static var device: String { language(fromPreferred: Locale.preferredLanguages) }
+
+    static func language(fromPreferred preferred: [String]) -> String {
+        let code = normalize(preferred.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier })
         return code.isEmpty ? english : code
     }
 

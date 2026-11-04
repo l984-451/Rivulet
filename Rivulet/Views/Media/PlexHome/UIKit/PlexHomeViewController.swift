@@ -4127,7 +4127,7 @@ final class PlexHomeViewController: UIViewController {
         case .recentlyAdded:
             let rows = rail.filter { !$0.row.isContinueWatching && Self.isRecentlyAddedRow($0.row) }
             return Array(Self.roundRobin(rows.map(\.row.items))
-                .filter { ($0.grandparentArtwork?.backdrop ?? $0.artwork.backdrop) != nil }
+                .filter(Self.isHeroCandidate)
                 .prefix(10))
         case .watchlist:
             refreshWatchlistHeroIfNeeded()
@@ -5148,7 +5148,6 @@ final class PlexHomeViewController: UIViewController {
                                        hubIdentifier: Self.mergedContinueWatchingID.raw)
             }
         }
-        mergedCWOthers = cwOthers
         for (hub, kind) in rail {
             if labelsServers && hub.isContinueWatching {
                 if let section = mergedCWSection {
@@ -5165,8 +5164,12 @@ final class PlexHomeViewController: UIViewController {
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
-            if hub.isContinueWatching, !pendingCWRemovals.isEmpty {
-                items.removeAll { pendingCWRemovals.contains($0.ref.itemID) }
+            if hub.isContinueWatching {
+                // One title in two of this server's libraries is one card (#470).
+                let cards = ContinueWatchingMerge.merge([items], keys: { $0.identity ?? [] }, watched: \.userState.lastViewedAt)
+                    .filter { card in !card.copies.contains { pendingCWRemovals.contains($0.ref.itemID) } }
+                for card in cards where !card.others.isEmpty { cwOthers[card.item.ref] = card.others }
+                items = cards.map(\.item)
             }
             var section = HomeSectionData.hub(
                 id: id,
@@ -5181,6 +5184,7 @@ final class PlexHomeViewController: UIViewController {
                 ? Self.serverName(providerID: hub.items.first?.ref.providerID, kind: kind) : nil
             sections.append(section)
         }
+        mergedCWOthers = cwOthers
 
         if showsYearInReview {
             // Under Continue Watching, or under the hero when there is none.
@@ -5280,8 +5284,14 @@ final class PlexHomeViewController: UIViewController {
         let featured = rows.filter { $0.style == .hero }
         return Array((featured.isEmpty ? rows.filter { !$0.isContinueWatching } : featured)
             .flatMap(\.items)
-            .filter { ($0.grandparentArtwork?.backdrop ?? $0.artwork.backdrop) != nil }
+            .filter(isHeroCandidate)
             .prefix(10))
+    }
+
+    /// A title the hero can show from a Recently Added row: one with a
+    /// backdrop, and never an album (a music library's row has those too).
+    static func isHeroCandidate(_ item: MediaItem) -> Bool {
+        item.isMusic != true && (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop) != nil
     }
 
     /// The other servers' Home hero: their trending titles, one library at a
@@ -5373,16 +5383,16 @@ final class PlexHomeViewController: UIViewController {
         var hubRowKinds: [(isContinueWatching: Bool, isRecent: Bool)] = []
         let hubRows = providerLibrary == nil ? (dataStore.libraryItemsByKey[key] ?? []) : providerLibraryRows
         for hub in hubRows {
+            if !showRecentRows, Self.isRecentRow(hub) { continue }
             if hub.nativeProviderID?.hasPrefix("silo:") == true {
-                if !showRecentRows, isRecentRow(hub) { continue }
                 if !showDiscoveryRows, !isEssentialRow(hub) { continue }
                 if hub.style == .hero, !showHomeHero { continue }
+                hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: Self.isRecentRow(hub)))
                 sections.append(nativeSection(hub))
                 continue
             }
-            if !showRecentRows, isRecentRow(hub) { continue }
             if !showDiscoveryRows, !isEssentialRow(hub) { continue }
-            hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: isRecentRow(hub)))
+            hubRowKinds.append((isContinueWatching: hub.isContinueWatching, isRecent: Self.isRecentRow(hub)))
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
@@ -5454,12 +5464,13 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// A "recent" library row: Recently Added, Recently Released, Newest
-    /// Releases. Gated by the "Recent Rows" setting.
-    private func isRecentRow(_ hub: CachedHomeHub) -> Bool {
+    /// Releases. Gated by the "Recent Rows" setting. Plex translates titles, so
+    /// identifiers decide; titles only catch a hub whose identifier is unknown.
+    nonisolated static func isRecentRow(_ hub: CachedHomeHub) -> Bool {
         let id = (hub.hubIdentifier ?? "").lowercased()
         let title = hub.title.lowercased()
         return id.contains("recentlyadded") || title.contains("recently added")
-            || id.contains("recentlyreleased") || title.contains("recently released")
+            || id.contains("recentlyreleased") || id.contains("recentlyaired") || title.contains("recently released")
             || id.contains("newestreleases") || title.contains("newest releases")
     }
 
@@ -5477,7 +5488,7 @@ final class PlexHomeViewController: UIViewController {
     /// Continue Watching is not re-detected here — `CachedHomeHub` already
     /// carries the flag the CW cell and metrics run on.
     private func isEssentialRow(_ hub: CachedHomeHub) -> Bool {
-        if hub.isContinueWatching || isRecentRow(hub) { return true }
+        if hub.isContinueWatching || Self.isRecentRow(hub) { return true }
         let id = (hub.hubIdentifier ?? "").lowercased()
         return id.contains("recentlyplayed") || hub.title.lowercased().contains("recently played")
     }
@@ -5543,10 +5554,11 @@ final class PlexHomeViewController: UIViewController {
         return { PlexMediaMapper.item($0, providerID: providerID, serverURL: serverURL, authToken: token) }
     }
 
-    private func isRecentlyAdded(_ hub: PlexHub) -> Bool {
+    /// `/hubs` names these `home.movies.recent`, the library pages `movie.recentlyadded.1`.
+    nonisolated static func isRecentlyAdded(_ hub: PlexHub) -> Bool {
         let id = hub.hubIdentifier?.lowercased() ?? ""
         let title = hub.title?.lowercased() ?? ""
-        return id.contains("recentlyadded") || title.contains("recently added")
+        return id.contains("recentlyadded") || id.hasSuffix(".recent") || title.contains("recently added")
     }
 
     // MARK: - Hero selection
@@ -5707,7 +5719,7 @@ final class PlexHomeViewController: UIViewController {
             if !candidates.isEmpty { return candidates }
         }
 
-        if let firstHub = hubs.first(where: { !isRecentlyAdded($0) && ($0.Metadata?.isEmpty == false) }),
+        if let firstHub = hubs.first(where: { !Self.isRecentlyAdded($0) && ($0.Metadata?.isEmpty == false) }),
            let items = firstHub.Metadata, !items.isEmpty {
             return eligible(items)
         }
@@ -6199,8 +6211,20 @@ final class PlexHomeViewController: UIViewController {
 
     /// A Plex music tile outside Search (Home's Recently Added in Music). The tile does not
     /// say album, artist or track, so the item is fetched first. False for any other tile.
+    /// Another server's music tile is an album: its Recently Added row lists albums.
     private func withMusicItem(for item: MediaItem,
                                _ then: @escaping @MainActor (MusicItem) async -> Void) -> Bool {
+        if item.isMusic == true, item.ref.providerID != MediaProviderRegistry.shared.plexProvider?.id,
+           let provider = MusicProviderRegistry.shared.provider(for: item.ref) {
+            Task { [weak self] in
+                do {
+                    await then(.album(try await provider.albumDetail(for: item.ref).album))
+                } catch {
+                    MusicPresenter.reportFailure(error, from: self)
+                }
+            }
+            return true
+        }
         guard item.isMusic == true,
               item.ref.providerID == MediaProviderRegistry.shared.plexProvider?.id,
               let serverURL = authManager.selectedServerURL,

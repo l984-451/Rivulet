@@ -146,6 +146,21 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertEqual(ProviderStreamTransition.between(unknown, unknown), .reload)
     }
 
+    func test_droppedAudioFallbackRequiresAnOfferedProviderRoute() {
+        let ordinary = stream()
+        XCTAssertEqual(UniversalPlayerViewModel.initialRoutes(for: ordinary)?.hasTranscodeFallback, true)
+
+        var native = nativeTransitionStream()
+        native.negotiatedStatus = MediaNegotiatedStatus(delivery: .original,
+            availableQualities: [], activeQualityID: nil, effectiveRecipe: nil,
+            decisionReason: nil, degradationWarnings: [], bandwidthLimit: nil, headerRefreshURL: nil)
+        XCTAssertEqual(UniversalPlayerViewModel.initialRoutes(for: native)?.hasTranscodeFallback, false,
+                       "A negotiated Silo plan does not advertise a generic forced-transcode fallback")
+
+        let hls = stream(kind: .hlsTranscode, url: hlsURL)
+        XCTAssertEqual(UniversalPlayerViewModel.initialRoutes(for: hls)?.hasTranscodeFallback, false)
+    }
+
     func test_nativePlanSeedsSubtitleAndRejectsUnadvertisedQuality() {
         let provider = SiloProvider(serverID: "server", displayName: "Silo", profileID: "profile",
             client: SiloClient(baseURL: URL(string: "https://media.invalid")!, profileID: "profile"))
@@ -194,7 +209,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         let projected = (metadata.Media?.first?.Part?.first?.Stream ?? [])
             .filter(\.isSubtitle).map { MediaTrack(from: $0) }
         XCTAssertEqual(projected.map(\.id), [-10_000_000, -10_000_001])
-        let option = NowPlayingLanguageOptions.option(projected[1], type: .legible)
+        let option = NowPlayingLanguageOptions.option(projected[1], type: .legible, among: projected)
         guard case .subtitle(let shimID) = NowPlayingLanguageOptions.selection(
             for: option, enable: true, audio: [], subtitles: projected
         ), let shimID, let ordinal = projected.firstIndex(where: { $0.id == shimID }) else {
@@ -644,7 +659,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertEqual(vm.nowPlayingArtworkURL?.absoluteString,
                        "http://plex:32400/library/metadata/1/thumb/3?X-Plex-Token=tok")
         XCTAssertEqual(vm.contentFilterTranscriptURL?.absoluteString,
-                       "http://plex:32400/library/streams/7?X-Plex-Token=tok")
+                       "http://plex:32400/library/streams/7?encoding=utf-8&X-Plex-Token=tok")
     }
 
     func test_providerEpisodeInsights_readTheShowsIDsOnce() async {

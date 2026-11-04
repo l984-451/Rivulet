@@ -8,8 +8,9 @@ import UIKit
 
 /// DEBUG-only: draws one caption cue through AVKit or through `CaptionOverlayView`, resting
 /// then with the chrome up, for screenshot comparison. State lands in Library/Caches/captionprobe-state.txt.
-/// - RIVULET_SCRUBPROBE=captions: AVPlayerViewController on RIVULET_CAPTIONPROBE_URL (black HLS + WebVTT).
-/// - RIVULET_SCRUBPROBE=rivulet-captions: CaptionOverlayView over black, picture RIVULET_CAPTIONPROBE_VIDEO ("1920x800").
+/// - RIVULET_SCRUBPROBE=captions: AVPlayerViewController on RIVULET_CAPTIONPROBE_URL (grey HLS + WebVTT).
+/// - RIVULET_SCRUBPROBE=rivulet-captions: CaptionOverlayView over the same grey, picture RIVULET_CAPTIONPROBE_VIDEO ("1920x800").
+///   Grey on purpose: black hides edge styles and boxes. RIVULET_CAPTIONPROBE_TEXT is the cue, `|` for a line break.
 /// - RIVULET_CAPTIONPROBE_PROFILE: caption profile id to activate first.
 @MainActor
 enum CaptionLayoutProbe {
@@ -57,7 +58,7 @@ enum CaptionLayoutProbe {
         activateProfile(env)
         let dims = (env["RIVULET_CAPTIONPROBE_VIDEO"] ?? "1920x1080").split(separator: "x").compactMap { Double($0) }
         let vc = UIViewController()
-        vc.view.backgroundColor = .black
+        vc.view.backgroundColor = UIColor(white: 0.502, alpha: 1)
         vc.modalPresentationStyle = .fullScreen
         let model = SubtitleModel()
         let overlay = CaptionOverlayView(model: model, style: CaptionAppearance.current(),
@@ -67,7 +68,9 @@ enum CaptionLayoutProbe {
         vc.view.addSubview(overlay)
         keep = [vc, model]
         await present(vc)
-        model.update(cues: [AetherSubtitleCue(id: 1, startTime: 0, endTime: 1000, body: .text(cueText))])
+        let text = env["RIVULET_CAPTIONPROBE_TEXT"]?.replacingOccurrences(of: "|", with: "\n") ?? cueText
+        model.update(cues: [AetherSubtitleCue(id: 1, startTime: 0, endTime: 1000, body: .text(text),
+                                              placement: placement(env["RIVULET_CAPTIONPROBE_POS"]))])
         model.sourceTime = 1
         try? await Task.sleep(for: .seconds(2))
         setState("rest")
@@ -78,6 +81,16 @@ enum CaptionLayoutProbe {
         setState("chrome")
         try? await Task.sleep(for: .seconds(4))
         setState("done")
+    }
+
+    /// RIVULET_CAPTIONPROBE_POS names the WebVTT cue settings of the AVKit stream it is compared with.
+    private static func placement(_ name: String?) -> AetherSubtitleCue.TextPlacement? {
+        switch name {
+        case "posl": return .init(alignment: 1, position: CGPoint(x: 0.1, y: 0.6))
+        case "posr": return .init(alignment: 3, position: CGPoint(x: 0.9, y: 0.6))
+        case "posb": return .init(alignment: 2, position: CGPoint(x: 0.5, y: 0.9))
+        default: return nil
+        }
     }
 
     private static func activateProfile(_ env: [String: String]) {

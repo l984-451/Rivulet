@@ -188,10 +188,12 @@ actor ImageCacheManager: NSObject {
 
         // 3. Download original bytes (coalesced), then decode to the requested size
         guard let data = await fetchOriginalData(url: url, key: diskKey) else { return nil }
-        let decoded = await decodeDownsampled(data: data, maxPixelSize: quality.maxPixelSize)
-        if let decoded {
-            memoryCache.setObject(decoded, forKey: memKey, cost: Self.byteCost(decoded))
+        guard let decoded = await decodeDownsampled(data: data, maxPixelSize: quality.maxPixelSize) else {
+            // These bytes won't decode on a later try, so don't fetch them again for every cell.
+            markMissing(url)
+            return nil
         }
+        memoryCache.setObject(decoded, forKey: memKey, cost: Self.byteCost(decoded))
         return decoded
     }
 
@@ -357,9 +359,7 @@ actor ImageCacheManager: NSObject {
                     if status == 200 {
                         // Validate image data is complete before caching. Incomplete or
                         // corrupt bytes are treated as a transient failure (retryable).
-                        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                              CGImageSourceGetStatus(imageSource) == .statusComplete,
-                              CGImageSourceGetCount(imageSource) > 0 else {
+                        guard self.isUsableImage(data) else {
                             print("💾 ImageCacheManager: incomplete/corrupt image data from \(url.lastPathComponent) (attempt \(attempt + 1)/\(maxAttempts))")
                             if isLastAttempt { return nil }
                             try? await Task.sleep(nanoseconds: backoff[attempt])
@@ -565,6 +565,16 @@ actor ImageCacheManager: NSObject {
         return image
     }
 
+    /// Complete bytes ImageIO can read, or an SVG, which it can't.
+    nonisolated private func isUsableImage(_ data: Data) -> Bool {
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           CGImageSourceGetStatus(source) == .statusComplete,
+           CGImageSourceGetCount(source) > 0 {
+            return true
+        }
+        return SVGRasterizer.isSVG(data)
+    }
+
     /// Decode original bytes to a display-sized bitmap, off the actor (and off the main thread).
     private func decodeDownsampled(data: Data, maxPixelSize: CGFloat) async -> UIImage? {
         await Task.detached(priority: .userInitiated) { [self] in
@@ -580,10 +590,7 @@ actor ImageCacheManager: NSObject {
             return nil
         }
 
-        // Validate image data is complete using CGImageSource
-        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetStatus(imageSource) == .statusComplete,
-              CGImageSourceGetCount(imageSource) > 0 else {
+        guard isUsableImage(data) else {
             // Data is corrupt or incomplete - delete the cached file
             try? FileManager.default.removeItem(at: fileURL)
             print("💾 ImageCacheManager: Deleted corrupt cached image: \(key)")
@@ -625,7 +632,7 @@ actor ImageCacheManager: NSObject {
         ]
 
         guard let downsampledImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, downsampleOptions as CFDictionary) else {
-            return nil
+            return SVGRasterizer.cgImage(from: data, maxPixelSize: maxPixelSize).map { UIImage(cgImage: $0) }
         }
 
         return UIImage(cgImage: downsampledImage)

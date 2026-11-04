@@ -50,6 +50,6 @@ extension MediaItem {
         guard kind == .episode,
               let s = seasonNumber,
               let e = episodeNumber else { return nil }
-        return "S\(String(format: "%02d", s))E\(String(format: "%02d", e))"
+        return String(localized: "S\(String(format: "%02d", s))E\(String(format: "%02d", e))")
     }
 }

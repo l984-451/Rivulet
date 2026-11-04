@@ -165,7 +165,7 @@ final class PostVideoOverlayView: UIView {
     private func applyButtonState() {
         playNextButton.isHidden = !hasNextEpisode
         playNextButton.configure(
-            title: countdownActive ? String(localized: "Play Now") : String(localized: "Play Next"), systemImage: "play.fill")
+            title: countdownActive ? String(localized: "Play Now") : String(localized: "postVideo.playNext", defaultValue: "Play Next"), systemImage: "play.fill")
         // With a countdown running, Dismiss means "stop the countdown"; with
         // none, it means "close the card".
         dismissButton.configure(

@@ -101,6 +101,11 @@ enum ShellSidebarModel {
     /// The order for a profile with none stored: today's default layout.
     static let defaultOrder = SidebarArrangement.seed(libraryOrder: [], discoverAbove: true, liveTVAbove: false)
 
+    /// Plex supplies curated Discover and watchlist; Silo supplies native equivalents.
+    static func hasDiscoverAndWatchlist(plexSignedIn: Bool, providerIDs: [String]) -> Bool {
+        plexSignedIn || providerIDs.contains { $0.hasPrefix("silo:") }
+    }
+
     // swiftlint:disable:next function_parameter_count
     static func sections(
         libraries: [SidebarLibrary],

@@ -37,7 +37,7 @@ struct GuideLayoutView: View {
     /// own (Plex account favourites). Not a `groupTitle`: a favourite keeps
     /// its tuner group too, and this tab sorts by the order the user arranged
     /// rather than by channel number.
-    static let favouritesTab = "Favorites"
+    static let favouritesTab = String(localized: "Favorites")
 
     /// Tabs that lead the bar regardless of the alphabet, in this order. A list
     /// the user curated outranks a source's own grouping — burying "Favourites"

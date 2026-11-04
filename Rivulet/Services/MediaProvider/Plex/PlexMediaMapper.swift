@@ -180,7 +180,7 @@ enum PlexMediaMapper {
         let isEmbedded = stream.key == nil
         let externalURL: URL? = {
             guard !isEmbedded, let key = stream.key, let serverURL, let authToken else { return nil }
-            return URL(string: "\(serverURL)\(key)?X-Plex-Token=\(authToken)")
+            return PlexSidecarURL.url(serverURL: serverURL, key: key, token: authToken, codec: codec)
         }()
         return SubtitleTrack(
             id: "\(stream.id)",

@@ -32,20 +32,20 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
     }
 
     func test_optionFields() {
-        let main = NowPlayingLanguageOptions.option(audio[0], type: .audible)
+        let main = NowPlayingLanguageOptions.option(audio[0], type: .audible, among: audio)
         XCTAssertEqual(main.languageTag, "en")
         XCTAssertEqual(main.languageOptionCharacteristics, [MPLanguageOptionCharacteristicIsMainProgramContent])
         XCTAssertTrue(main.displayName?.hasPrefix("English (") ?? false)
 
-        let commentary = NowPlayingLanguageOptions.option(audio[1], type: .audible)
+        let commentary = NowPlayingLanguageOptions.option(audio[1], type: .audible, among: audio)
         XCTAssertEqual(commentary.languageOptionCharacteristics, [MPLanguageOptionCharacteristicIsAuxiliaryContent])
 
-        let forced = NowPlayingLanguageOptions.option(subtitles[0], type: .legible)
+        let forced = NowPlayingLanguageOptions.option(subtitles[0], type: .legible, among: subtitles)
         XCTAssertEqual(forced.languageOptionCharacteristics, [MPLanguageOptionCharacteristicContainsOnlyForcedSubtitles])
-        let sdh = NowPlayingLanguageOptions.option(subtitles[1], type: .legible)
+        let sdh = NowPlayingLanguageOptions.option(subtitles[1], type: .legible, among: subtitles)
         XCTAssertEqual(sdh.languageOptionCharacteristics, [MPLanguageOptionCharacteristicTranscribesSpokenDialog,
                                              MPLanguageOptionCharacteristicDescribesMusicAndSound])
-        XCTAssertEqual(NowPlayingLanguageOptions.option(subtitles[2], type: .legible).languageTag, "und")
+        XCTAssertEqual(NowPlayingLanguageOptions.option(subtitles[2], type: .legible, among: subtitles).languageTag, "und")
     }
 
     func test_current_omitsSubtitlesWhenOff() {
@@ -80,7 +80,7 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
         XCTAssertEqual(projected.map(\.id), provider.map(\.id))
         XCTAssertFalse(projected[0].describesVideo)
         XCTAssertTrue(projected[1].describesVideo)
-        let option = NowPlayingLanguageOptions.option(projected[1], type: .audible)
+        let option = NowPlayingLanguageOptions.option(projected[1], type: .audible, among: projected)
         XCTAssertEqual(option.identifier, "-10000002")
         XCTAssertEqual(option.languageOptionCharacteristics, [MPLanguageOptionCharacteristicDescribesVideo])
         XCTAssertTrue(option.displayName?.contains("Audio Description") == true)
@@ -94,7 +94,7 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
             MediaTrack(id: -10_000_003, name: "English", languageCode: "eng"),
             MediaTrack(id: -10_000_004, name: "English", languageCode: "eng"),
         ]
-        let chosen = NowPlayingLanguageOptions.option(tracks[1], type: .legible)
+        let chosen = NowPlayingLanguageOptions.option(tracks[1], type: .legible, among: tracks)
         XCTAssertEqual(NowPlayingLanguageOptions.selection(for: chosen, enable: true, audio: [], subtitles: tracks),
                        .subtitle(-10_000_004))
         XCTAssertEqual(NowPlayingLanguageOptions.selection(for: chosen, enable: false, audio: [], subtitles: tracks),
@@ -106,7 +106,7 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
                                                  displayName: "", identifier: "")
         XCTAssertEqual(NowPlayingLanguageOptions.selection(for: noID, enable: true, audio: [], subtitles: tracks),
                        .subtitle(-10_000_003))
-        let audible = NowPlayingLanguageOptions.option(tracks[0], type: .audible)
+        let audible = NowPlayingLanguageOptions.option(tracks[0], type: .audible, among: tracks)
         XCTAssertNil(NowPlayingLanguageOptions.selection(for: audible, enable: false, audio: tracks, subtitles: []))
     }
 }

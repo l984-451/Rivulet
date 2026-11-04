@@ -15,6 +15,12 @@ import XCTest
 
 final class TrackPreferenceTests: XCTestCase {
 
+    func test_deviceLanguage_followsSystemList() {
+        XCTAssertEqual(TrackLanguage.language(fromPreferred: ["fr-CA", "en"]), "fra")
+        XCTAssertEqual(TrackLanguage.language(fromPreferred: ["de-DE"]), "deu")
+        XCTAssertEqual(TrackLanguage.language(fromPreferred: []), "eng")
+    }
+
     private var suiteName: String!
     private var testDefaults: UserDefaults!
 

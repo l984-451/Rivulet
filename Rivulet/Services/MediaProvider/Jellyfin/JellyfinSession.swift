@@ -76,6 +76,43 @@ enum JellyfinSession {
     ) async throws -> Account {
         let serverURL = normalizedServerURL(serverURL)
         let anonymous = JellyfinClient(baseURL: serverURL, token: nil, transport: transport)
+        let info = try await checkedServer(anonymous)
+        let auth: JFAuthenticationResult = try await anonymous.post(
+            "Users/AuthenticateByName", body: JFAuthenticateByName(username: username, pw: password)
+        )
+        return try await save(auth, info: info, serverURL: serverURL, username: username)
+    }
+
+    /// Sign-in by Quick Connect (#481): hands `showCode` the code to approve on a
+    /// signed-in device, then polls until it is approved or the task is cancelled.
+    /// A server with Quick Connect off answers `unauthorized`; an expired code `notFound`.
+    static func signInWithQuickConnect(
+        serverURL: URL,
+        pollInterval: Duration = .seconds(3),
+        showCode: (String) -> Void,
+        transport: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) }
+    ) async throws -> Account {
+        let serverURL = normalizedServerURL(serverURL)
+        let anonymous = JellyfinClient(baseURL: serverURL, token: nil, transport: transport)
+        let info = try await checkedServer(anonymous)
+        let started: JFQuickConnect = try await anonymous.post("QuickConnect/Initiate")
+        guard let code = started.code, let secret = started.secret else { throw MediaProviderError.notFound }
+        showCode(code)
+        while true {
+            try await Task.sleep(for: pollInterval)
+            let status: JFQuickConnect = try await anonymous.get(
+                "QuickConnect/Connect", [URLQueryItem(name: "secret", value: secret)]
+            )
+            if status.authenticated == true { break }
+        }
+        let auth: JFAuthenticationResult = try await anonymous.post(
+            "Users/AuthenticateWithQuickConnect", body: JFQuickConnectAuthenticate(secret: secret)
+        )
+        return try await save(auth, info: info, serverURL: serverURL, username: "")
+    }
+
+    /// The address answers as a Jellyfin server new enough for Rivulet.
+    private static func checkedServer(_ anonymous: JellyfinClient) async throws -> JFPublicSystemInfo {
         let info: JFPublicSystemInfo
         do {
             info = try await anonymous.get("System/Info/Public")
@@ -93,11 +130,13 @@ enum JellyfinSession {
         guard isSupported(version: info.version) else {
             throw JellyfinSignInError.serverTooOld(version: info.version ?? "unknown")
         }
+        return info
+    }
 
-        let auth: JFAuthenticationResult = try await anonymous.post(
-            "Users/AuthenticateByName", body: JFAuthenticateByName(username: username, pw: password)
-        )
-        guard let token = auth.accessToken, let userID = auth.user?.id else {
+    private static func save(
+        _ auth: JFAuthenticationResult, info: JFPublicSystemInfo, serverURL: URL, username: String
+    ) async throws -> Account {
+        guard let token = auth.accessToken, let userID = auth.user?.id, let serverID = info.id else {
             throw MediaProviderError.unauthorized
         }
 

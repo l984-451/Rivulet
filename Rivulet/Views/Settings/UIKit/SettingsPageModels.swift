@@ -506,7 +506,7 @@ enum SettingsContent {
             toggle("promptResumeOrRestart", "Resume or Restart Prompt", key: "promptResumeOrRestart", default: false,
                    enabledWhen: { SettingsStore.bool("continueWatchingInstantResume", default: true) }),
             .header("Streaming Quality"),
-            SettingsRowItem(id: "homeStreamingQuality", title: "Home",
+            SettingsRowItem(id: "homeStreamingQuality", verbatim: String(localized: "streaming.home", defaultValue: "Home"),
                             kind: .navigationValue(.homeQualityPicker, value: {
                                 StreamingQuality.setting(home: true).label
                             })),
@@ -537,6 +537,13 @@ enum SettingsContent {
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
             toggle("showPostVideoUpNext", "Up Next Panel", key: "showPostVideoUpNext", default: true),
+            SettingsRowItem(id: "cinemaTrailers", title: "Trailers Before Movies",
+                            kind: .cycle(value: { CinemaExtras.count == 0 ? String(localized: "Off") : "\(CinemaExtras.count)" },
+                                         next: {
+                                             SettingsStore.setInt(CinemaExtras.countKey,
+                                                                  CinemaExtras.count == CinemaExtras.countOptions.upperBound
+                                                                      ? 0 : CinemaExtras.count + 1)
+                                         })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: false),
@@ -847,7 +854,7 @@ enum SettingsContent {
             rows.append(info("plexServerPlatform", "Platform", [platform, server.platformVersion].compactMap { $0 }.joined(separator: " ")))
         }
         if let connection {
-            let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "Remote")
+            let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "connection.remote", defaultValue: "Remote")
             rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? String(localized: "\(kind), Secure") : kind))
         }
         if let machineID = server.machineIdentifier {
@@ -1094,11 +1101,14 @@ enum SettingsContent {
 
     /// Every arrangeable sidebar row, hidden ones included, in the sidebar's order.
     private static func sidebarSettingsRows() -> [ShellSidebarModel.Row] {
+        let hasDiscoverAndWatchlist = ShellSidebarModel.hasDiscoverAndWatchlist(
+            plexSignedIn: PlexAuthManager.shared.hasCredentials,
+            providerIDs: ServerDataStore.shared.sources.map(\.providerID))
         let rows = ShellSidebarModel.arrangeableRows(
             libraries: SidebarLibrary.current(includeHidden: true),
             liveTVSources: LiveTVDataStore.shared.sources,
             combineLiveTV: SettingsStore.bool("combineLiveTVSources", default: true),
-            showDiscover: true, showWatchlist: true,
+            showDiscover: hasDiscoverAndWatchlist, showWatchlist: hasDiscoverAndWatchlist,
             playlistServers: PlaylistServer.current(PlaylistAvailability.shared.providerIDs))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return SidebarArrangement.arrange(rows.map(\.key), order: LibrarySettingsManager.shared.libraryOrder)

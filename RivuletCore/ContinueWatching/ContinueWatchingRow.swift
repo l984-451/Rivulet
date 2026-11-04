@@ -12,7 +12,6 @@
 //
 
 import Combine
-import Combine
 import Foundation
 
 @MainActor
@@ -42,14 +41,14 @@ final class ContinueWatchingRow: ObservableObject {
     }
 
     /// The merged row from each server's row, in server order (the selected
-    /// Plex server first). One contributing row comes back as it is. Cards
-    /// needing identity resolution wait out of the row to avoid duplicate flashes;
-    /// a failed lookup lets them in unmerged.
+    /// Plex server first). One contributing row merges using its existing keys
+    /// in server order without a lookup. With multiple rows, cards needing identity
+    /// resolution wait to avoid duplicate flashes; failed lookups remain visible.
     /// `lookupKey` identifies a movie or the owning show of a series card.
     func cards<Item>(_ serverRows: [[Item]], identity: (Item) -> [String], lookupKey: (Item) -> String?,
                      watched: (Item) -> Date?) -> [ContinueWatchingMerge.Card<Item>] {
         let rows = serverRows.filter { !$0.isEmpty }
-        guard rows.count > 1 else { return (rows.first ?? []).map { .init(item: $0, others: []) } }
+        guard rows.count > 1 else { return ContinueWatchingMerge.merge(rows, keys: identity, watched: watched) }
         let missing = missingIdentities(in: rows, lookupKey: lookupKey)
         if !missing.isEmpty { resolve(missing) }
         let waiting = missing.subtracting(failed)

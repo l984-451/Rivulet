@@ -56,4 +56,28 @@ final class LibraryCollectionsRowTests: XCTestCase {
     func test_promotedCollectionHubFirst_stillFollowsRecentRow() {
         XCTAssertEqual(index([other, cw, recent, other]), 3)
     }
+
+    /// Identifiers and German titles measured on PMS 1.43.4.
+    func test_recentRows_matchWhenPlexTranslatesTheTitle() {
+        func isRecent(_ id: String, _ title: String) -> Bool {
+            PlexHomeViewController.isRecentRow(CachedHomeHub(id: id, title: title, isContinueWatching: false, hubIdentifier: id, items: []))
+        }
+        XCTAssertTrue(isRecent("tv.recentlyaired.2", "Kürzlich veröffentlichte Folgen"))
+        XCTAssertTrue(isRecent("tv.recentlyadded.2", "Zuletzt in TV Shows hinzugefügt"))
+        XCTAssertTrue(isRecent("movie.recentlyreleased.1", "Zuletzt veröffentlichte Filme"))
+        XCTAssertFalse(isRecent("tv.recentlyviewed.2", "Kürzlich gesehene Folgen"))
+        XCTAssertFalse(isRecent("movie.topunwatched.1", "Top-Auswahl ungesehener Filme"))
+    }
+
+    func test_heroFallback_recognisesRecentlyAddedInAnyLanguage() {
+        func isAdded(_ id: String, _ title: String) -> Bool {
+            var hub = PlexHub(hubIdentifier: id)
+            hub.title = title
+            return PlexHomeViewController.isRecentlyAdded(hub)
+        }
+        XCTAssertTrue(isAdded("home.movies.recent", "Zuletzt hinzugefügte Filme"))
+        XCTAssertTrue(isAdded("movie.recentlyadded.1", "Zuletzt in Movies hinzugefügt"))
+        XCTAssertFalse(isAdded("home.continue", "Fortsetzen"))
+        XCTAssertFalse(isAdded("music.recent.played.3", "Kürzlich gespielte Musik"))
+    }
 }

@@ -78,6 +78,10 @@ final class HubHeaderView: UICollectionReusableView {
             titleLabel.textColor = .white
         }
         titleLabel.text = title
+        if AppTheme.current == .cinematic {
+            titleLabel.font = CinematicStyle.displayFont(size: 30)
+            titleLabel.textColor = .white
+        }
         // Rests the baseline `headerBaselineInset` above the header's bottom edge.
         stackBottom.constant = -titleLabel.font.descender - MediaRowMetrics.headerBaselineInset
         badge.text = sourceBadge

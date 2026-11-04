@@ -249,6 +249,11 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         contentView.addSubview(countLabel)
         contentView.addSubview(sortButton)
         contentView.addSubview(viewButton)
+        if AppTheme.current == .cinematic {
+            titleLabel.font = CinematicStyle.displayFont(size: 36)
+            countLabel.font = .systemFont(ofSize: 22)
+            countLabel.textColor = CinematicStyle.secondaryText
+        }
 
         NSLayoutConstraint.activate([
             // Title: left-aligned, vertically centered on the top text cluster.

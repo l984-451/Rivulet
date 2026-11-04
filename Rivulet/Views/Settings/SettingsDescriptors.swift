@@ -41,6 +41,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("hs_") { return descriptors["heightSpeakers"] }
         if id.hasPrefix("sm_") { return descriptors["subtitleMode"] }
         if id.hasPrefix("ai_") { return descriptors["appIcon"] }
+        if id.hasPrefix("appTheme_") { return descriptors["appTheme"] }
         if id.hasPrefix("hh_") { return descriptors["homeHero"] }
         if id.hasPrefix("dr_") { return descriptors["detailRating"] }
         if id.hasPrefix("alim_") { return descriptors["autoplayLimit"] }
@@ -75,6 +76,14 @@ enum SettingsDescriptorStore {
         ),
 
         // MARK: Appearance
+        "appTheme": SettingDescriptor(
+            icon: "rectangle.on.rectangle",
+            description: "Standard keeps Rivulet's familiar layout. Cinematic pairs large artwork with clean title lists in video libraries and a quieter Home and details design. You can switch back at any time."
+        ),
+        "cinematicLibraryDescription": SettingDescriptor(
+            icon: "text.alignleft",
+            description: "Show the selected movie or show's description beneath its artwork in Cinematic libraries. Off by default."
+        ),
         "libraries": SettingDescriptor(
             icon: "sidebar.squares.left",
             description: "Choose what appears in the sidebar and in what order. Home follows it: a library turned off here loses its Home rows."
@@ -603,6 +612,7 @@ enum SettingsDescriptorStore {
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)
         case .cache: return ("internaldrive", .systemGray)
         case .appIconPicker: return ("app.badge", .systemPurple)
+        case .themePicker: return ("rectangle.on.rectangle", .systemPurple)
         case .homeHeroPicker: return ("sparkles.rectangle.stack", .systemPurple)
         case .detailRatingPicker: return ("star.leadinghalf.filled", .systemYellow)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)

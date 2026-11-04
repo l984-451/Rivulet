@@ -90,12 +90,14 @@ final class RootShellViewController: UIViewController {
     /// The retry budget ran out with nothing focusable on the page. The catcher
     /// is re-armed as an escape hatch so Left and Menu still have a target.
     private var contentFocusGaveUp = false
+    private var currentTheme = AppTheme.current
 
     // MARK: Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        overrideUserInterfaceStyle = currentTheme == .cinematic ? .dark : .unspecified
 
         mountContent(for: currentTab)
 
@@ -139,6 +141,27 @@ final class RootShellViewController: UIViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleTabContentReplaced(_:)),
             name: .tabContentReplaced, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleThemeChanged),
+            name: .appThemeDidChange, object: nil)
+    }
+
+    /// Settings stays mounted so switching a theme never drops the user out of the picker.
+    /// Other pages are rebuilt on their next visit; their server data remains in the shared stores.
+    @objc private func handleThemeChanged() {
+        guard currentTheme != AppTheme.current else { return }
+        currentTheme = AppTheme.current
+        overrideUserInterfaceStyle = currentTheme == .cinematic ? .dark : .unspecified
+        for (tab, controller) in contentVCs where tab != .settings {
+            controller.willMove(toParent: nil)
+            controller.viewIfLoaded?.removeFromSuperview()
+            controller.removeFromParent()
+            contentVCs[tab] = nil
+        }
+        if currentTab != .settings {
+            contentHasHadFocus = false
+            mountContent(for: currentTab)
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {

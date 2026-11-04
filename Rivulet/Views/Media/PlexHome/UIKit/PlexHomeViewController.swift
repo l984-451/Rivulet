@@ -413,6 +413,14 @@ final class PlexHomeViewController: UIViewController {
     /// library-specific behavior branches off this; home-mode code paths are
     /// byte-identical to before the mode was introduced.
     let mode: HomeMode
+    private let theme = AppTheme.current
+    private var cinematicArtwork: CinematicLibraryArtworkView?
+    private weak var cinematicBrowser: CinematicBrowseViewController?
+    private var needsInitialCinematicFocus = true
+    private var isCinematicLibrary: Bool {
+        if case .library = mode { return theme == .cinematic }
+        return false
+    }
 
     /// Collection mode: runs once the page has been dismissed, never when it
     /// only covers itself with a carousel or detail. The carousel passes one
@@ -699,6 +707,7 @@ final class PlexHomeViewController: UIViewController {
     /// Hero gate for every mode, despite the name: `showHomeHero` on Home, `showLibraryHero` (on when
     /// never set) on a library page.
     private var showHomeHero: Bool {
+        if isCinematicLibrary { return false }
         switch mode {
         case .home:
             return UserDefaults.standard.bool(forKey: "showHomeHero")
@@ -1603,6 +1612,7 @@ final class PlexHomeViewController: UIViewController {
             } catch {
                 guard gen == self.gridGeneration else { return }
                 self.gridPagesRequested.remove(page)
+                self.cinematicBrowser?.pageLoadFailed(in: start..<(start + pageSize))
                 if page == 0 { self.pageZero = .failed(error.localizedDescription) }
                 // First page: hub rows still render; updateHomeState surfaces
                 // a library-level error only when there are no hubs either.
@@ -1614,6 +1624,7 @@ final class PlexHomeViewController: UIViewController {
     /// Re-vend the cells of a landed page. Slot identifiers never change, so
     /// `applySnapshot` alone leaves the placeholder cards on screen.
     private func reconfigureGridSlots(_ range: Range<Int>) {
+        cinematicBrowser?.update(items: gridItems.map { $0 ?? .gridPlaceholder })
         guard !range.isEmpty else { return }
         var snap = dataSource.snapshot()
         guard snap.sectionIdentifiers.contains(.grid) else { return }
@@ -1956,6 +1967,7 @@ final class PlexHomeViewController: UIViewController {
         }
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
+        nudgeInitialCinematicFocusIfNeeded()
         refreshOnReappearIfNeeded()
         refreshYearInReview()
         if !isDrillInPage { HalloweenBats.showIfHalloween(in: view) }
@@ -2079,6 +2091,25 @@ final class PlexHomeViewController: UIViewController {
         updateFocusIfNeeded()
     }
 
+    /// A Cinematic library opens on its first title once page zero arrives. The sort header may
+    /// temporarily hold focus while loading, but must not become the collection's remembered entry.
+    private var initialCinematicIndexPath: IndexPath? {
+        guard isCinematicLibrary, needsInitialCinematicFocus,
+              let section = gridSectionIndex,
+              let item = sectionsSnapshot[section].items.firstIndex(where: { !$0.isGridPlaceholder })
+        else { return nil }
+        let path = IndexPath(item: item, section: section)
+        return collectionView.cellForItem(at: path) != nil ? path : nil
+    }
+
+    private func nudgeInitialCinematicFocusIfNeeded() {
+        guard view.window != nil, presentedViewController == nil, !collectionView.isHidden,
+              initialCinematicIndexPath != nil else { return }
+        collectionView.remembersLastFocusedIndexPath = false
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
     // MARK: - Backdrop
 
     private func configureBackdrop() {
@@ -2088,7 +2119,7 @@ final class PlexHomeViewController: UIViewController {
         // surface doesn't use them.
         ambientView = AmbientBackdropView()
         ambientView.translatesAutoresizingMaskIntoConstraints = false
-        backgroundBlurView = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+        backgroundBlurView = UIVisualEffectView(effect: UIBlurEffect(style: theme == .cinematic ? .dark : .regular))
         backgroundBlurView.translatesAutoresizingMaskIntoConstraints = false
         backgroundBlurView.isUserInteractionEnabled = false
         backdropView = HeroBackdropView()
@@ -2138,6 +2169,29 @@ final class PlexHomeViewController: UIViewController {
             backdropView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
         backdropView.isHidden = !showHomeHero
+        if isCinematicLibrary {
+            let artwork = CinematicLibraryArtworkView()
+            artwork.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(artwork)
+            NSLayoutConstraint.activate([
+                artwork.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                artwork.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                artwork.topAnchor.constraint(equalTo: view.topAnchor),
+                artwork.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            ])
+            cinematicArtwork = artwork
+        }
+    }
+
+    private func presentCinematicBrowse() {
+        let items = sectionsSnapshot.first(where: { $0.kind == .grid })?.items ?? []
+        guard !items.isEmpty else { return }
+        let index = cinematicArtwork?.displayedItem.flatMap { selected in items.firstIndex { $0.ref == selected.ref } } ?? 0
+        let browser = CinematicBrowseViewController(items: items, selectedIndex: index)
+        browser.onRequestItem = { [weak self] in self?.loadGridPage(containing: $0) }
+        browser.onSelectItem = { [weak self] in self?.presentStandaloneExpandedDetail($0) }
+        cinematicBrowser = browser
+        present(browser, animated: true)
     }
 
     /// Top inset: 0 with the hero, otherwise room for the first row.
@@ -2161,9 +2215,10 @@ final class PlexHomeViewController: UIViewController {
     /// image is on screen.
     private func setHeroBackdrop(url: URL?, paging: Bool = false) {
         backdropView.setBackdrop(url: url, paging: paging)
-        // The ambient wash tracks the hero: same artwork, diffused by the
-        // frosted material in front of it. Every hero page change lands here,
-        // so this is the only place the wash needs driving.
+        // Continue the hero's lower-edge palette beneath the shelves. A second
+        // full-screen blurred image creates a visible band of mismatched colors.
+        ambientView.usesHeroEdgeColors = url != nil
+        backgroundBlurView.isHidden = url != nil
         ambientView.setAmbient(url: url)
         if url == nil {
             markHeroReady()
@@ -2421,7 +2476,7 @@ final class PlexHomeViewController: UIViewController {
             // settled empty page 0 is still marked requested, so forget it
             // first.
             let isPlaylists = if case .playlists = self.mode { true } else { false }
-            if self.isDrillInPage || isPlaylists || self.providerLibrary != nil {
+            if self.isDrillInPage || isPlaylists || self.providerLibrary != nil || self.isCinematicLibrary {
                 self.pageZero = .loading
                 self.updateHomeState()
                 self.gridPagesRequested.remove(0)
@@ -2517,7 +2572,13 @@ final class PlexHomeViewController: UIViewController {
             // state, never the content path with nothing in it.
             hubsEmpty = dataStore.homeItems.isEmpty && jellyfin.visibleHomeRows.isEmpty
         case .library(let key, _):
-            if providerLibrary != nil {
+            if isCinematicLibrary {
+                // Cinematic shows the title list, so hub success cannot mask a failed grid load.
+                let state = pageZeroState
+                isLoadingHubs = state.loading
+                hubsError = state.error
+                hubsEmpty = !gridItems.contains(where: { $0 != nil })
+            } else if providerLibrary != nil {
                 // Rows arrive with the provider fetch; until page 0 lands the
                 // page is loading, after that the grid decides empty.
                 let state = pageZeroState
@@ -2710,6 +2771,7 @@ final class PlexHomeViewController: UIViewController {
                                 forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
                                 withReuseIdentifier: HubHeaderView.reuseID)
         collectionView.register(PosterCell.self, forCellWithReuseIdentifier: PosterCell.reuseID)
+        collectionView.register(CinematicLibraryCell.self, forCellWithReuseIdentifier: CinematicLibraryCell.reuseID)
         collectionView.register(ShelfRowCell.self, forCellWithReuseIdentifier: ShelfRowCell.reuseID)
         collectionView.register(ContinueWatchingCell.self, forCellWithReuseIdentifier: ContinueWatchingCell.reuseID)
         collectionView.register(PlaylistCardCell.self, forCellWithReuseIdentifier: PlaylistCardCell.reuseID)
@@ -2822,6 +2884,9 @@ final class PlexHomeViewController: UIViewController {
         section.contentInsetsReference = .none
         section.contentInsets = NSDirectionalEdgeInsets(
             top: 0, leading: MediaRowMetrics.rowLeading, bottom: 24, trailing: MediaRowMetrics.rowTrailing)
+        if isCinematicLibrary {
+            section.contentInsets.leading = CinematicStyle.listLeading(in: collectionView.bounds.size)
+        }
         return section
     }
 
@@ -2832,6 +2897,17 @@ final class PlexHomeViewController: UIViewController {
     /// tile's frame width and rests its artwork on the grid.
     /// Search-mode group grids add a row-style header when titled.
     private func makeGridSectionLayout(section data: HomeSectionData) -> NSCollectionLayoutSection {
+        if isCinematicLibrary {
+            let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
+                                              heightDimension: .absolute(CinematicStyle.rowHeight))
+            let item = NSCollectionLayoutItem(layoutSize: size)
+            let section = NSCollectionLayoutSection(group: .horizontal(layoutSize: size, subitems: [item]))
+            section.contentInsetsReference = .none
+            section.contentInsets = NSDirectionalEdgeInsets(
+                top: 0, leading: CinematicStyle.listLeading(in: collectionView.bounds.size),
+                bottom: 80, trailing: MediaRowMetrics.rowTrailing)
+            return section
+        }
         // Music libraries render 1:1 square tiles, playlists 16:9 cards; everything else 2:3.
         let isPlaylists = if case .playlists = mode { true } else { false }
         let tile = isPlaylists ? MediaRowMetrics.playlist
@@ -3153,6 +3229,15 @@ final class PlexHomeViewController: UIViewController {
             return cell
 
         case .grid:
+            if isCinematicLibrary {
+                let cell = collectionView.dequeueReusableCell(withReuseIdentifier: CinematicLibraryCell.reuseID,
+                                                              for: indexPath) as! CinematicLibraryCell
+                if let item = section.items[safe: indexPath.item] {
+                    cell.configure(item: item)
+                    if cell.isFocused { cinematicArtwork?.configure(item: item.isGridPlaceholder ? nil : item) }
+                }
+                return cell
+            }
             if case .playlists = mode {
                 let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PlaylistCardCell.reuseID, for: indexPath) as! PlaylistCardCell
                 if let item = section.items[safe: indexPath.item], !item.isGridPlaceholder {
@@ -3201,10 +3286,17 @@ final class PlexHomeViewController: UIViewController {
             // a changed list calls refreshSortHeaderCount().
             let modes: [LibraryViewMode] = [.titles] + (libraryCollections.isEmpty ? [] : [.collections])
                 + (onSelectViewMode == nil ? [] : [.folders])
-            let viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles) {
+            var viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles) {
                 [weak self] mode in
                 guard let self else { return }
                 if let onSelectViewMode { onSelectViewMode(mode) } else { setGridShowsCollections(mode == .collections) }
+            }
+            if case .library = mode, !gridShowsCollections {
+                let browse = UIAction(title: String(localized: "Cinematic Browse"),
+                                      image: UIImage(systemName: "rectangle.portrait.on.rectangle.portrait")) { [weak self] _ in
+                    self?.presentCinematicBrowse()
+                }
+                viewMenu = UIMenu(children: (viewMenu?.children ?? []) + [browse])
             }
             cell.configure(
                 title: section.title ?? "",
@@ -3734,11 +3826,18 @@ final class PlexHomeViewController: UIViewController {
         // refresh inside a row must be pushed to the visible cells by hand.
         updateVisibleShelfRows()
         updateAmbientIfNeeded()
+        cinematicBrowser?.update(items: sections.first(where: { $0.kind == .grid })?.items ?? [])
+        if let cinematicArtwork {
+            let items = sections.first(where: { $0.kind == .grid })?.items ?? []
+            let selected = cinematicArtwork.displayedItem.flatMap { old in items.first { $0.ref == old.ref } }
+            cinematicArtwork.configure(item: selected ?? items.first(where: { !$0.isGridPlaceholder }))
+        }
         // Cold launch: the hero cell materializes only after this apply's
         // layout pass — re-assert the launch focus once it exists.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.nudgeInitialHeroFocusIfNeeded()
+            self.nudgeInitialCinematicFocusIfNeeded()
         }
     }
 
@@ -4592,6 +4691,9 @@ final class PlexHomeViewController: UIViewController {
     /// recommendations. Rows reuse the home's hub pipeline verbatim, so they
     /// get `mergedItems` pagination (hubKey) for free.
     private func computeLibrarySections(libraryKey key: String, libraryTitle: String) -> [HomeSectionData] {
+        if isCinematicLibrary {
+            return [.sortHeader(title: libraryTitle), .grid(items: mapGridSlots(gridItems))]
+        }
         var sections: [HomeSectionData] = []
 
         if showHomeHero, providerLibrary != nil {
@@ -5878,7 +5980,7 @@ final class PlexHomeViewController: UIViewController {
     ) {
         // Skip Preview (#416): open the carousel's own expanded detail directly. An
         // episode keeps its hero and Play, with the show's seasons below.
-        if SettingsStore.bool("skipPreviewCarousel", default: false) {
+        if theme == .cinematic || SettingsStore.bool("skipPreviewCarousel", default: false) {
             guard items.indices.contains(selectedIndex) else { return }
             let item = items[selectedIndex]
             if item.kind == .season { selectMediaItem(item) } else { presentStandaloneExpandedDetail(item) }
@@ -6469,6 +6571,9 @@ final class PlexHomeViewController: UIViewController {
             }
         }
         // Launch focus: hero Play (see needsInitialHeroFocus).
+        if let path = initialCinematicIndexPath, let cell = collectionView.cellForItem(at: path) {
+            return [cell]
+        }
         if needsInitialHeroFocus,
            let heroIndex = heroSectionIndex,
            let heroCell = collectionView.cellForItem(at: IndexPath(item: 0, section: heroIndex)) {
@@ -6496,6 +6601,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     /// jump revealed, not on the tile the collection remembers from before
     /// the jump (which would drag the grid straight back).
     func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
+        if let path = initialCinematicIndexPath { return path }
         guard let item = pendingGridFocusItem,
               let gridSection = sectionsSnapshot.firstIndex(where: { $0.kind == .grid })
         else { return nil }
@@ -7376,6 +7482,10 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let kind: HomeSectionKind? = sectionsSnapshot.indices.contains(nextSectionIndex)
             ? sectionsSnapshot[nextSectionIndex].kind
             : nil
+        if isCinematicLibrary, kind == .grid
+            || (context.previouslyFocusedView?.isDescendant(of: collectionView) == true && !context.focusHeading.isEmpty) {
+            needsInitialCinematicFocus = false
+        }
         // The Menu-back landed; stop routing focus to the top. A directional move clears it too, or the flag
         // could latch and yank focus on a later update. Armed only from inside the collection.
         if wantsTopFocus, nextSectionIndex == topSectionIndex || !context.focusHeading.isEmpty {
@@ -7410,6 +7520,10 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             // cell's own row instead. Grid cells are NOT orthogonal, so
             // `nextFocusedIndexPath` resolves at the collection level.
             if let indexPath = context.nextFocusedIndexPath {
+                if isCinematicLibrary {
+                    let item = sectionsSnapshot[indexPath.section].items[safe: indexPath.item]
+                    cinematicArtwork?.configure(item: item?.isGridPlaceholder == false ? item : nil)
+                }
                 scrollGridCellIntoView(at: indexPath)
             }
         case .watchlistGrid:
@@ -7435,6 +7549,12 @@ extension PlexHomeViewController: UICollectionViewDelegate {
     /// cell. See property doc on `leftEdgeFocusGuide` for the bug it
     /// prevents.
     private func updateLeftEdgeGuide(for indexPath: IndexPath?) {
+        // A Cinematic library has one column: Left always returns to navigation,
+        // never to the preceding row as it would in a poster grid.
+        if isCinematicLibrary {
+            leftEdgeFocusGuide.preferredFocusEnvironments = []
+            return
+        }
         guard let indexPath,
               indexPath.section < sectionsSnapshot.count,
               indexPath.item > 0

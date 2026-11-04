@@ -9,7 +9,8 @@
 //  Motion and scrim are the Apple TV app's home hero (VideosUI, read on tvOS
 //  26.5): a page change slides the art over with the image at half the page's
 //  speed, and scrolling down lifts the backdrop until its bottom edge meets the
-//  first shelf, then it rides the content.
+//  first shelf, then it rides the content. Its lower edge dissolves into the
+//  stationary ambient artwork wash behind the shelves.
 //
 
 import UIKit
@@ -45,6 +46,7 @@ final class HeroBackdropView: UIView {
     private var previousPage = Page()
     private let placeholderLayer = CAGradientLayer()
     private let scrimLayers: [CAGradientLayer]
+    private let ambientBlendMask = CAGradientLayer()
 
     private var currentURL: URL?
     private var loadTask: Task<Void, Never>?
@@ -68,16 +70,22 @@ final class HeroBackdropView: UIView {
     override init(frame: CGRect) {
         // Apple's home hero scrim (`MediaShowcasingGradientLayout`, stage):
         // constant black, no per-image darkening.
-        scrimLayers = [
+        let standardScrims = [
             Self.gradient(.axial, from: CGPoint(x: 0, y: 0.6), to: CGPoint(x: 0.41, y: 0.5),
                           alphas: [0.14, 0], locations: nil),
             Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
-                          alphas: [0, 0, 0.02, 0.09, 0.18, 0.27, 0.36, 0.45],
+                          alphas: [0, 0, 0.02, 0.07, 0.14, 0.21, 0.28, 0.34],
                           locations: [0, 0.64, 0.71, 0.78, 0.84, 0.91, 0.95, 1.0]),
             Self.gradient(.radial, from: CGPoint(x: 0.6671875, y: 0), to: CGPoint(x: 1.7270833, y: 1.8842593),
                           alphas: [0, 0.04, 0.15, 0.30, 0.33, 0.49, 0.67, 0.85, 1.0],
                           locations: [0, 0.19, 0.36, 0.51, 0.53, 0.65, 0.77, 0.89, 1.0])
         ]
+        scrimLayers = AppTheme.current == .cinematic ? [
+            Self.gradient(.axial, from: CGPoint(x: 0, y: 0.5), to: CGPoint(x: 1, y: 0.5),
+                          alphas: [0.56, 0.38, 0.08, 0], locations: [0, 0.24, 0.48, 0.72]),
+            Self.gradient(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
+                          alphas: [0, 0.04, 0.40], locations: [0, 0.5, 1])
+        ] : standardScrims
         super.init(frame: frame)
         setUp()
     }
@@ -98,6 +106,22 @@ final class HeroBackdropView: UIView {
     private func setUp() {
         backgroundColor = .black
         isUserInteractionEnabled = false
+
+        // Fade the entire hero (art, placeholder and scrims) to transparent,
+        // revealing the matching ambient wash underneath. A black overlay
+        // would still leave a seam when the backdrop lifts above the shelves.
+        // A continuous smootherstep dissolve has no abrupt changes in slope
+        // that read as a horizontal blur band when the hero scrolls upward.
+        let stops = (0...32).map { CGFloat($0) / 32 }
+        ambientBlendMask.colors = stops.map { position in
+            let progress = min(1, max(0, (position - 0.40) / 0.60))
+            let fade = progress * progress * progress * (progress * (progress * 6 - 15) + 10)
+            return UIColor.black.withAlphaComponent(1 - fade).cgColor
+        }
+        ambientBlendMask.locations = stops.map { NSNumber(value: Double($0)) }
+        ambientBlendMask.startPoint = CGPoint(x: 0.5, y: 0)
+        ambientBlendMask.endPoint = CGPoint(x: 0.5, y: 1)
+        layer.mask = ambientBlendMask
 
         // Placeholder gradient (dark grey -> nearly-black) shows before the
         // first image resolves. Sits beneath both pages.
@@ -122,6 +146,7 @@ final class HeroBackdropView: UIView {
         CATransaction.setDisableActions(true)
         placeholderLayer.frame = bounds
         scrimLayers.forEach { $0.frame = bounds }
+        ambientBlendMask.frame = bounds
         CATransaction.commit()
         for page in [previousPage, currentPage] {
             page.bounds = bounds

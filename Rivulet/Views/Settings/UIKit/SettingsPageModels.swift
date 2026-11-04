@@ -236,6 +236,7 @@ enum SettingsContent {
         case .addPlaylistURL:   return addPlaylistURL
         case .about:       return about
         case .appIconPicker:          return appIconPicker
+        case .themePicker:            return themePicker
         case .homeHeroPicker:         return homeHeroPicker
         case .detailRatingPicker:     return detailRatingPicker
         case .autoplayCountdownPicker: return autoplayCountdownPicker
@@ -255,6 +256,13 @@ enum SettingsContent {
     }
 
     // MARK: Picker pages (checkmark option rows; select-and-pop)
+
+    private static var themePicker: [SettingsRowItem] {
+        AppTheme.allCases.map { theme in
+            SettingsRowItem(id: "appTheme_\(theme.rawValue)", verbatim: theme.title, kind: .option(
+                isSelected: { AppTheme.current == theme }, select: { theme.apply() }))
+        }
+    }
 
     private static var appIconPicker: [SettingsRowItem] {
         AppIcon.allCases.map { icon in
@@ -412,6 +420,8 @@ enum SettingsContent {
         var rows: [SettingsRowItem] = [
             // Leading block is unheaded, like an Apple TV Settings page's first
             // group: it sits directly under the page title.
+            SettingsRowItem(id: "appTheme", title: "Theme",
+                            kind: .navigationValue(.themePicker, value: { AppTheme.current.title })),
             SettingsRowItem(id: "libraries", title: "Sidebar", kind: .navigation(.libraries)),
             // App Icon row withheld on tvOS: App Store Connect rejects the alternate icons (ITMS-90471).
             // Profiles themselves are switched from the sidebar now, so this is
@@ -436,6 +446,9 @@ enum SettingsContent {
         ]
         rows += [
             .header("Library"),
+            SettingsRowItem(id: "cinematicLibraryDescription", title: "Cinematic Poster Description",
+                            kind: .toggle(get: { AppTheme.showsLibraryDescription },
+                                          set: { AppTheme.showsLibraryDescription = $0 })),
             toggle("libraryHero", "Hero", key: "showLibraryHero", default: true),
             toggle("discoveryRows", "Discovery Rows", key: "showLibraryRecommendations", default: true),
             toggle("recentRows", "Recent Rows", key: "showLibraryRecentRows", default: true),

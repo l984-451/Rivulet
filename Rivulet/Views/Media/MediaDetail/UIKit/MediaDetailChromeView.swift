@@ -226,6 +226,11 @@ final class MediaDetailChromeView: UIView {
     private func commonInit() {
         backgroundColor = .clear
         isUserInteractionEnabled = false  // host flips this on for .expandedDetail
+        if AppTheme.current == .cinematic {
+            CinematicStyle.configureArtworkTitle(titleFallbackLabel, size: 52)
+            descriptionLabel.font = .systemFont(ofSize: 23, weight: .regular)
+            metadataBlock.spacing = 22
+        }
 
         logoSlotView.addSubview(titleLogoImageView)
         logoSlotView.addSubview(titleFallbackLabel)
@@ -457,7 +462,12 @@ final class MediaDetailChromeView: UIView {
 
         // A cached logo renders on frame 0 with no fallback-text flash.
         let cachedLogo = item.artwork.logo.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
-        if let cachedLogo {
+        if AppTheme.current == .cinematic {
+            titleFallbackLabel.text = item.title
+            titleFallbackLabel.isHidden = false
+            titleLogoImageView.isHidden = true
+            titleLogoImageView.image = nil
+        } else if let cachedLogo {
             titleLogoImageView.image = cachedLogo
             titleLogoImageView.isHidden = false
             titleFallbackLabel.isHidden = true

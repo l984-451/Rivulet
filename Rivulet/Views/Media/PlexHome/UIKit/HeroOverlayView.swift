@@ -827,6 +827,9 @@ private final class MediaItemSlideView: UIView {
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)
         fallbackTitleLabel.shadowOffset = CGSize(width: 0, height: 3)
+        if AppTheme.current == .cinematic {
+            CinematicStyle.configureArtworkTitle(fallbackTitleLabel, size: 64)
+        }
         fallbackTitleLabel.isHidden = true
 
         // Apple's genres row: Caption1 (25) medium at full white, 6 pt to the badge.
@@ -903,7 +906,11 @@ private final class MediaItemSlideView: UIView {
         // Logo / fallback title. TMDB-mapped items carry no logo URL in
         // their artwork (the list endpoints don't include images) — resolve
         // one from the TMDB images API via the shared cache, then load.
-        if logo == nil, let tmdbID = item.tmdbID {
+        if AppTheme.current == .cinematic {
+            logoResolveTask?.cancel()
+            currentResolveItemID = nil
+            loadLogo(from: nil, fallbackTitle: title, onReady: onReady)
+        } else if logo == nil, let tmdbID = item.tmdbID {
             // Prepare the fallback (hidden behind the caller's alpha hold)
             // but don't signal ready until the resolve completes — the hero
             // fades the whole slide in only once the logo outcome is known.

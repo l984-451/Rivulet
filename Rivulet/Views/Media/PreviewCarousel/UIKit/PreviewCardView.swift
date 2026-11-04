@@ -355,7 +355,15 @@ final class GradientView: UIView {
     /// The Apple TV app's product-page scrim (`ProductGradientLayout`): three
     /// black layers, each meant to fill the page.
     static func productPageScrim() -> [GradientView] {
-        [
+        if AppTheme.current == .cinematic {
+            return [
+                GradientView(.axial, from: CGPoint(x: 0, y: 0.5), to: CGPoint(x: 1, y: 0.5),
+                             alphas: [0.96, 0.84, 0.30, 0], locations: [0, 0.28, 0.53, 0.8]),
+                GradientView(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
+                             alphas: [0, 0.08, 0.82], locations: [0, 0.55, 1])
+            ]
+        }
+        return [
             // Bottom band: clear over the top 64 percent.
             GradientView(.axial, from: CGPoint(x: 0.5, y: 0), to: CGPoint(x: 0.5, y: 1),
                          alphas: [0, 0, 0.03, 0.135, 0.27, 0.405, 0.54, 0.675],

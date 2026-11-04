@@ -57,6 +57,9 @@ final class HeroSlideView: UIView {
         } else {
             fallbackTitleLabel.font = baseFont
         }
+        if AppTheme.current == .cinematic {
+            fallbackTitleLabel.font = CinematicStyle.displayFont(size: 64)
+        }
         fallbackTitleLabel.textColor = .white
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)
@@ -188,6 +191,17 @@ final class HeroSlideView: UIView {
     private func loadLogo(from url: URL?, fallbackTitle: String, animated: Bool,
                           completion: (() -> Void)? = nil) {
         logoLoadTask?.cancel()
+
+        // Cinematic uses a consistent typographic title across the library, hero and details.
+        if AppTheme.current == .cinematic {
+            currentLogoURL = nil
+            logoImageView.image = nil
+            logoImageView.isHidden = true
+            fallbackTitleLabel.text = fallbackTitle
+            fallbackTitleLabel.isHidden = false
+            completion?()
+            return
+        }
 
         if url == currentLogoURL && logoImageView.image != nil {
             // Same logo as before; just refresh fallback label visibility.

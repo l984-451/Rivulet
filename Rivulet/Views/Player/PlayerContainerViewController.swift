@@ -1739,10 +1739,12 @@ class PlayerContainerViewController: UIViewController {
 
         case .insights:
             guard insightsButtonShouldBeAvailable else { return nil }
-            return (InsightsPanelContainerView(
+            let insights = InsightsPanelContainerView(
                 cast: insightsCastCache,
                 trivia: insightsTriviaCache,
-                suppressedTriviaIDs: suppressedTriviaIDsCache), nil)
+                suppressedTriviaIDs: suppressedTriviaIDsCache)
+            insights.onReadBio = { [weak self] in self?.presentDescription($0) }
+            return (insights, nil)
 
         case .details:
             // Live stats exist only on the aether route (an AetherPlayer is present).

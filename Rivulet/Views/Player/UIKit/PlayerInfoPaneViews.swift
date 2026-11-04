@@ -213,12 +213,6 @@ final class PlayerSummaryButton: UIControl {
 
     func setText(_ text: String) { label.text = text }
 
-    /// Reading mode: the text may shrink to show more of itself in the same lines.
-    func setShrinksToFit(_ shrinks: Bool) {
-        label.adjustsFontSizeToFitWidth = shrinks
-        label.minimumScaleFactor = shrinks ? 0.7 : 1
-    }
-
     override var canBecomeFocused: Bool { true }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

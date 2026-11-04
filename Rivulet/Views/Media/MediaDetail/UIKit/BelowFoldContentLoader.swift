@@ -22,6 +22,7 @@ struct BelowFoldContent: Sendable {
     var collection: CollectionRow?
     /// Default season to select in the pill bar.
     var selectedSeason: MediaItem?
+    var initialEpisode: MediaItem?
     /// Full detail for the About + Information/Languages/Accessibility block
     /// (genres, contentRating, rating, studios, mediaSources, synopsis, year).
     var detail: MediaItemDetail?
@@ -77,8 +78,17 @@ final class BelowFoldContentLoader {
         switch item.kind {
         case .show:
             content.seasons = (try? await provider.children(of: item.ref)) ?? []
-            content.selectedSeason = content.seasons.first
             content.episodes = (try? await provider.allEpisodes(of: item.ref)) ?? []
+            let playTarget: MediaItem?
+            if let nextEpisode = resolvedDetail?.nextEpisode {
+                playTarget = nextEpisode
+            } else {
+                playTarget = await EpisodePicker.resolvePlayTarget(for: item, provider: provider)
+            }
+            content.initialEpisode = content.episodes.first { $0.ref == playTarget?.ref }
+                ?? content.episodes.first
+            content.selectedSeason = content.seasons.first { $0.ref == content.initialEpisode?.parentRef }
+                ?? content.seasons.first
 
         case .episode:
             if let showRef = item.grandparentRef {

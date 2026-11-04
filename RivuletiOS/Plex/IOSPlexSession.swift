@@ -172,13 +172,11 @@ final class IOSPlexSession: ObservableObject {
         }
     }
 
-    /// Same link the shared manager's `authURL` builds, computed from the
-    /// emitted PIN code because inside a willSet sink the manager's own
-    /// `state` (which `authURL` reads) has not been assigned yet.
+    /// The shared manager's link page, built from the emitted PIN code because
+    /// inside a willSet sink the manager's own `state` (which its `linkURL`
+    /// reads) has not been assigned yet.
     private static func authenticationURL(code: String) -> URL? {
-        var components = URLComponents(string: "https://app.plex.tv/auth")
-        components?.fragment = "?clientID=\(PlexAPI.clientIdentifier)&code=\(code)&context[device][product]=\(PlexAPI.productName)"
-        return components?.url
+        PlexAuthManager.linkURL(code: code)
     }
 
     // MARK: - Content

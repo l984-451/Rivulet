@@ -1142,16 +1142,23 @@ class PlexAuthManager: ObservableObject {
     }
 }
 
-// MARK: - Auth URL Helper
+// MARK: - Link page URL
 
 extension PlexAuthManager {
-    /// Get the URL for users to authenticate via browser
-    var authURL: URL? {
-        guard case .waitingForPIN(let code, _) = state else { return nil }
+    /// The plex.tv/link page with the PIN filled in, so the user only signs in
+    /// and confirms. It is the URL Plex's own `qr` image for a PIN encodes, and
+    /// the page the developer docs name for a short PIN (`strong` unset, as
+    /// `requestPin` sends); `app.plex.tv/auth#?code=` is the strong-PIN form.
+    nonisolated static func linkURL(code: String) -> URL {
+        var components = URLComponents(string: "https://www.plex.tv/link/")!
+        components.queryItems = [URLQueryItem(name: "pin", value: code)]
+        return components.url!
+    }
 
-        var components = URLComponents(string: "https://app.plex.tv/auth")!
-        components.fragment = "?clientID=\(PlexAPI.clientIdentifier)&code=\(code)&context[device][product]=Rivulet"
-        return components.url
+    /// `linkURL(code:)` for the PIN being waited on.
+    var linkURL: URL? {
+        guard case .waitingForPIN(let code, _) = state else { return nil }
+        return Self.linkURL(code: code)
     }
 }
 

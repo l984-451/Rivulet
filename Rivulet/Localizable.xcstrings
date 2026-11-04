@@ -7677,6 +7677,9 @@
         }
       }
     },
+    "Scan with your phone" : {
+
+    },
     "Scene" : {
       "localizations" : {
         "de" : {
@@ -10309,16 +10312,6 @@
         }
       }
     },
-    "Visit" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne"
-          }
-        }
-      }
-    },
     "Visual" : {
       "localizations" : {
         "de" : {
@@ -11093,6 +11086,9 @@
           }
         }
       }
+    },
+    "or visit" : {
+
     },
     "postVideo.playNext" : {
       "extractionState" : "extracted_with_value",

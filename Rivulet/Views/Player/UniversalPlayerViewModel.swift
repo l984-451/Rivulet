@@ -5420,7 +5420,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Label for current skip button
     var skipButtonLabel: String {
         guard let marker = activeMarker else { return String(localized: "Skip") }
-        if marker.isIntro {
+        if isPlayingCinemaExtra {
+            return String(localized: "Skip Trailer")
+        } else if marker.isIntro {
             return String(localized: "Skip Intro")
         } else if marker.isCredits {
             return String(localized: "Skip Credits")

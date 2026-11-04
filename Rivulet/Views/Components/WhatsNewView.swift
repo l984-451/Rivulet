@@ -155,7 +155,7 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
-        ("1.1.1 (121)", [
+        ("1.2.0 (121)", [
             "> Thanks for the bugs, support, and PRs! I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",
             "Trailers options in Playback",
             "Added Localization. German is available! Welcome PRs for other languages. @JoschaP",

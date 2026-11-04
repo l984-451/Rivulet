@@ -12072,6 +12072,26 @@
         }
       }
     },
+    "Show on Focused Poster" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf ausgewähltem Poster zeigen"
+          }
+        }
+      }
+    },
+    "Shows the rating in the corner of the focused poster only, so rows stay clean. If a title doesn't have the rating you choose, another one is shown with its source." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt die Bewertung nur in der Ecke des ausgewählten Posters, so bleiben die Reihen ruhig. Hat ein Titel die gewählte Bewertung nicht, wird eine andere mit Quelle angezeigt."
+          }
+        }
+      }
+    },
     "SP" : {
       "localizations" : {
         "de" : {

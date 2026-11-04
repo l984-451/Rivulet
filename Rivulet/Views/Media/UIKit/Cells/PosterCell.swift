@@ -3,8 +3,11 @@
 
 // Poster hub cell wrapping `TVPosterView` for native focus motion.
 // Caption stays nil: a set caption reserves bottom space even while hidden and crops 2:3 posters.
-// Overlays sit in a sibling `overlayContainer` that copies the poster's mask and focus scale,
-// because subviews added to `posterView.imageView` do not render.
+// Everything that sits on the artwork (badges, watched pill and glyph, progress row, the focused
+// score) lives in `artOverlay`, inside `posterView.imageView.overlayContentView`: plain subviews of
+// `posterView.imageView` do not render, the overlay content view does, and it moves with the
+// artwork's tilt and parallax. The loading and failure states stay in a sibling `overlayContainer`
+// that copies the poster's mask and focus scale.
 
 import UIKit
 import TVUIKit
@@ -15,8 +18,25 @@ final class PosterCell: UICollectionViewCell {
 
     private let posterView = TVPosterView()
 
-    /// Hosts the overlays; its transform follows the poster's focus zoom in `didUpdateFocus`.
+    /// Hosts the loading and failure states; its transform follows the poster's focus zoom in
+    /// `didUpdateFocus`.
     private let overlayContainer = UIView()
+    /// Hosts what sits on the artwork (badges, watched pill and glyph, progress row) inside the
+    /// image's `overlayContentView`, so it tilts and shifts with the poster.
+    private let artOverlay = UIView()
+    /// How the image stack carries `overlayContentView`, read from its layers on tvOS 27.2: the
+    /// overlay floats `depth` points in front of the picture under the stack's perspective
+    /// (1/`viewer`), and the stack scales everything `overscan` past the visible edge so parallax
+    /// never shows a gap. Tilting turns the stack by asin(`tilt`) per unit of touch, which moves
+    /// the floating overlay `depth * tilt` points across the picture. `artOverlay` undoes both, so
+    /// what sits on it stays glued to the artwork and keeps the size and spot it has at rest.
+    private enum FocusStack {
+        static let depth: CGFloat = 19.0189
+        static let viewer: CGFloat = 900
+        static let overscan: CGFloat = 1.015
+        static let tilt = CGSize(width: 0.070827, height: 0.053559)
+        static var counterScale: CGFloat { (viewer - depth) / viewer / overscan }
+    }
 
     private let watchedBadge = PosterWatchedBadge()
     private let sourceBadge = SourceBadgeView(style: .onArtwork)
@@ -24,6 +44,11 @@ final class PosterCell: UICollectionViewCell {
     private let editionBadge = SourceBadgeView(style: .onArtwork)
     /// Top-leading column: server badge, then edition badge.
     private let topBadges = UIStackView()
+    /// The chosen score, shown only while the poster has focus (Settings > Appearance > Rating).
+    /// Created on the first qualifying focus, like `bottomInfoBlur`.
+    private var ratingBadge: PosterRatingBadge?
+    /// The item's list scores; the chosen source is picked on focus, so a Settings change applies.
+    private var ratings: [MediaRating] = []
     private let failureIcon = UIImageView()
     /// The title on the failure card, so an item with no artwork is still named.
     private let failureTitle = UILabel()
@@ -50,12 +75,12 @@ final class PosterCell: UICollectionViewCell {
         let blur = BottomInfoBlurView()
         blur.translatesAutoresizingMaskIntoConstraints = false
         // Under the info bar in z-order.
-        overlayContainer.insertSubview(blur, belowSubview: progressInfoBar)
+        artOverlay.insertSubview(blur, belowSubview: progressInfoBar)
         NSLayoutConstraint.activate([
-            blur.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor),
-            blur.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor),
-            blur.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor),
-            blur.heightAnchor.constraint(equalTo: overlayContainer.heightAnchor, multiplier: 0.25)
+            blur.leadingAnchor.constraint(equalTo: artOverlay.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: artOverlay.trailingAnchor),
+            blur.bottomAnchor.constraint(equalTo: artOverlay.bottomAnchor),
+            blur.heightAnchor.constraint(equalTo: artOverlay.heightAnchor, multiplier: 0.25)
         ])
         bottomInfoBlur = blur
         return blur
@@ -123,6 +148,17 @@ final class PosterCell: UICollectionViewCell {
         overlayContainer.layer.cornerCurve = .continuous
         contentView.addSubview(overlayContainer)
 
+        artOverlay.translatesAutoresizingMaskIntoConstraints = false
+        artOverlay.isUserInteractionEnabled = false
+        let art = posterView.imageView.overlayContentView
+        art.addSubview(artOverlay)
+        NSLayoutConstraint.activate([
+            artOverlay.topAnchor.constraint(equalTo: art.topAnchor),
+            artOverlay.bottomAnchor.constraint(equalTo: art.bottomAnchor),
+            artOverlay.leadingAnchor.constraint(equalTo: art.leadingAnchor),
+            artOverlay.trailingAnchor.constraint(equalTo: art.trailingAnchor)
+        ])
+
         // Placeholder (backmost): covers TVPosterView's bare gray while artwork loads.
         placeholderPanel.translatesAutoresizingMaskIntoConstraints = false
         placeholderPanel.isUserInteractionEnabled = false
@@ -142,12 +178,12 @@ final class PosterCell: UICollectionViewCell {
         // (The blur band is created lazily — see ensureBottomInfoBlur.)
         progressInfoBar.translatesAutoresizingMaskIntoConstraints = false
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
-        overlayContainer.addSubview(progressInfoBar)
+        artOverlay.addSubview(progressInfoBar)
 
         // Watched badge: top-trailing, 10pt inset.
         watchedBadge.translatesAutoresizingMaskIntoConstraints = false
         watchedBadge.isHidden = true
-        overlayContainer.addSubview(watchedBadge)
+        artOverlay.addSubview(watchedBadge)
 
         // Server badge then edition badge: top-leading, 10pt inset. Hidden badges collapse.
         topBadges.translatesAutoresizingMaskIntoConstraints = false
@@ -156,7 +192,7 @@ final class PosterCell: UICollectionViewCell {
         topBadges.spacing = 6
         topBadges.addArrangedSubview(sourceBadge)
         topBadges.addArrangedSubview(editionBadge)
-        overlayContainer.addSubview(topBadges)
+        artOverlay.addSubview(topBadges)
 
         // Failure icon: centred. Hidden by default; visible only when the
         // image load fails or the source URL is missing.
@@ -176,7 +212,7 @@ final class PosterCell: UICollectionViewCell {
 
         // Watched glyph: bottom-left, same slot as the progress bar / play icon.
         watchedGlyph.isHidden = true
-        overlayContainer.addSubview(watchedGlyph)
+        artOverlay.addSubview(watchedGlyph)
 
         posterWidthConstraint = posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width)
         posterHeightConstraint = posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height)
@@ -195,18 +231,18 @@ final class PosterCell: UICollectionViewCell {
             overlayContainer.trailingAnchor.constraint(equalTo: posterView.imageView.trailingAnchor),
 
             // Same slot as ContinueWatchingCell's status row.
-            progressInfoBar.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor,
+            progressInfoBar.leadingAnchor.constraint(equalTo: artOverlay.leadingAnchor,
                                                      constant: MediaProgressInfoBar.leadingInset),
-            progressInfoBar.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor,
+            progressInfoBar.trailingAnchor.constraint(equalTo: artOverlay.trailingAnchor,
                                                       constant: -MediaProgressInfoBar.leadingInset),
-            progressInfoBar.centerYAnchor.constraint(equalTo: overlayContainer.bottomAnchor,
+            progressInfoBar.centerYAnchor.constraint(equalTo: artOverlay.bottomAnchor,
                                                      constant: -MediaProgressInfoBar.centerFromBottom),
 
-            watchedBadge.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
-            watchedBadge.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor, constant: -10),
-            topBadges.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
-            topBadges.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor, constant: 10),
-            topBadges.trailingAnchor.constraint(lessThanOrEqualTo: overlayContainer.trailingAnchor, constant: -10),
+            watchedBadge.topAnchor.constraint(equalTo: artOverlay.topAnchor, constant: 10),
+            watchedBadge.trailingAnchor.constraint(equalTo: artOverlay.trailingAnchor, constant: -10),
+            topBadges.topAnchor.constraint(equalTo: artOverlay.topAnchor, constant: 10),
+            topBadges.leadingAnchor.constraint(equalTo: artOverlay.leadingAnchor, constant: 10),
+            topBadges.trailingAnchor.constraint(lessThanOrEqualTo: artOverlay.trailingAnchor, constant: -10),
 
             failureIcon.centerXAnchor.constraint(equalTo: overlayContainer.centerXAnchor),
             failureIcon.centerYAnchor.constraint(equalTo: overlayContainer.centerYAnchor),
@@ -225,9 +261,9 @@ final class PosterCell: UICollectionViewCell {
             loadingSpinner.centerYAnchor.constraint(equalTo: overlayContainer.centerYAnchor),
 
             // Watched glyph shares the progress bar's bottom-left anchor.
-            watchedGlyph.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor,
+            watchedGlyph.leadingAnchor.constraint(equalTo: artOverlay.leadingAnchor,
                                                   constant: MediaProgressInfoBar.leadingInset),
-            watchedGlyph.centerYAnchor.constraint(equalTo: overlayContainer.bottomAnchor,
+            watchedGlyph.centerYAnchor.constraint(equalTo: artOverlay.bottomAnchor,
                                                   constant: -MediaProgressInfoBar.centerFromBottom)
         ])
     }
@@ -244,7 +280,21 @@ final class PosterCell: UICollectionViewCell {
         let artSize = posterView.imageView.bounds.size
         let longSide = max(artSize.width, artSize.height)
         let scale = longSide > 0 ? 1 + tile.growth.height / longSide : 1.1
+        let rating = nowFocused ? focusRating : nil
+        if let rating { prepareRatingBadge(rating) }
+        // The score fades in as the poster lifts and out as it settles. It sits on the artwork that
+        // shrinks in place, so the short fade out leaves no ghost behind the move.
+        if let badge = ratingBadge {
+            if rating != nil {
+                coordinator.addCoordinatedFocusingAnimations({ _ in badge.fade(in: true) }, completion: nil)
+            } else if !badge.isHidden {
+                coordinator.addCoordinatedUnfocusingAnimations({ _ in badge.fade(in: false) }, completion: nil)
+            }
+        }
+        setArtOverlayMotion(nowFocused)
         coordinator.addCoordinatedAnimations({
+            self.artOverlay.transform = nowFocused
+                ? CGAffineTransform(scaleX: FocusStack.counterScale, y: FocusStack.counterScale) : .identity
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
             self.overlayContainer.transform = nowFocused
@@ -257,11 +307,31 @@ final class PosterCell: UICollectionViewCell {
         })
     }
 
+    /// Moves `artOverlay` against the stack's tilt on the same touch, cancelling the slide its depth
+    /// would add, so badges stay put on the picture while the poster tilts.
+    private func setArtOverlayMotion(_ focused: Bool) {
+        artOverlay.motionEffects.forEach { artOverlay.removeMotionEffect($0) }
+        guard focused else { return }
+        let across = FocusStack.depth * FocusStack.tilt.width
+        let down = FocusStack.depth * FocusStack.tilt.height
+        let x = UIInterpolatingMotionEffect(keyPath: "center.x", type: .tiltAlongHorizontalAxis)
+        x.minimumRelativeValue = -across
+        x.maximumRelativeValue = across
+        let y = UIInterpolatingMotionEffect(keyPath: "center.y", type: .tiltAlongVerticalAxis)
+        y.minimumRelativeValue = -down
+        y.maximumRelativeValue = down
+        let group = UIMotionEffectGroup()
+        group.motionEffects = [x, y]
+        artOverlay.addMotionEffect(group)
+    }
+
     /// Clears a focused look TVPosterView left behind: its unfocus animation sometimes never runs
     /// (focus left into a presented carousel), stranding the scale and parallax. No-op while focused,
     /// since the completion can fire after focus has returned.
     func resetStaleFocusAppearance() {
         guard !isFocused else { return }
+        // A fade out still running is the normal unfocus; let it finish rather than cut it.
+        if let badge = ratingBadge, !badge.isFading { badge.setMaterialized(false) }
         func clear(_ v: UIView) {
             if !v.transform.isIdentity { v.transform = .identity }
             if !CATransform3DIsIdentity(v.layer.transform) { v.layer.transform = CATransform3DIdentity }
@@ -270,6 +340,7 @@ final class PosterCell: UICollectionViewCell {
         }
         clear(posterView)
         overlayContainer.transform = .identity
+        artOverlay.transform = .identity
     }
 
     // MARK: - Configure
@@ -280,6 +351,7 @@ final class PosterCell: UICollectionViewCell {
         let url = posterURL(for: item)
         failureTitleText = item.title
         setEdition(item.editionTitle)
+        setRatings(["movie", "show"].contains(item.type ?? "") ? PlexMediaMapper.ratings(item) : [])
         loadImage(from: url, item: item)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
@@ -294,6 +366,7 @@ final class PosterCell: UICollectionViewCell {
         let url = item.grandparentArtwork?.poster ?? item.artwork.poster
         failureTitleText = item.title
         setEdition(item.editionTitle)
+        setRatings(item.kind == .movie || item.kind == .show ? item.ratings ?? [] : [])
         loadImage(from: url, failureKind: item.kind)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
@@ -311,6 +384,76 @@ final class PosterCell: UICollectionViewCell {
 
     /// The edition badge's text while it shows (tests).
     var editionBadgeText: String? { editionBadge.isHidden ? nil : editionBadge.text }
+
+    private func setRatings(_ ratings: [MediaRating]) {
+        self.ratings = ratings
+        if isFocused, let rating = focusRating {
+            // Configured while already focused: no focus animation will form it.
+            UIView.performWithoutAnimation {
+                prepareRatingBadge(rating)
+                ratingBadge?.setMaterialized(true)
+            }
+        } else {
+            ratingBadge?.setMaterialized(false)
+        }
+    }
+
+    /// The score the badge shows on focus, or nil when the setting is off or the list carries no
+    /// named score. Both are read here, on each focus change, so Settings applies on the next move.
+    private var focusRating: MediaRating? {
+        guard SettingsStore.bool(MediaRating.posterBadgeKey, default: false) else { return nil }
+        return MediaRating.posterRating(in: ratings)
+    }
+
+    /// The score this poster would show with the setting on (tests).
+    var posterRatingLine: String? { MediaRating.posterRating(in: ratings)?.posterLine }
+
+    /// Text and slot settle outside the focus animation; the coordinator then only fades it in.
+    private func prepareRatingBadge(_ rating: MediaRating) {
+        UIView.performWithoutAnimation {
+            let badge = ensureRatingBadge()
+            badge.configure(rating)
+            artOverlay.layoutIfNeeded()
+            let slot = Self.ratingSlot(pill: watchedBadge.isHidden ? nil : watchedBadge.frame,
+                                       badges: topBadges.arrangedSubviews.contains { !$0.isHidden } ? topBadges.frame : nil,
+                                       typeWidth: badge.typeWidth, overlayWidth: artOverlay.bounds.width)
+            badge.setCorner(slot.corner)
+            badge.setTopClearance(slot.clearance)
+            badge.isHidden = false
+            badge.layoutIfNeeded()
+        }
+    }
+
+    /// Where the score goes beside the watched pill (top trailing) and the server and edition badges
+    /// (top leading): the pill holds the trailing corner, so the score takes the leading one, unless
+    /// the badges hold that too; then it goes below the pill. The badges alone push it down only when
+    /// they would reach it. Frames in `artOverlay`'s space; `clearance` is the top inset it needs.
+    static func ratingSlot(pill: CGRect?, badges: CGRect?, typeWidth: CGFloat,
+                           overlayWidth: CGFloat) -> (corner: PosterRatingBadge.Corner, clearance: CGFloat) {
+        switch (pill, badges) {
+        case (_?, nil): return (.topLeading, 0)
+        case let (pill?, _?): return (.topTrailing, pill.maxY + 6)
+        case let (nil, badges?):
+            let typeLeft = overlayWidth - PosterRatingBadge.inset - typeWidth
+            return (.topTrailing, badges.maxX + 12 > typeLeft ? badges.maxY + 6 : 0)
+        case (nil, nil): return (.topTrailing, 0)
+        }
+    }
+
+    /// On `artOverlay` with the other badges, so it tilts, shifts and catches the sheen with the art.
+    private func ensureRatingBadge() -> PosterRatingBadge {
+        if let existing = ratingBadge { return existing }
+        let badge = PosterRatingBadge()
+        artOverlay.addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.topAnchor.constraint(equalTo: artOverlay.topAnchor),
+            badge.bottomAnchor.constraint(equalTo: artOverlay.bottomAnchor),
+            badge.leadingAnchor.constraint(equalTo: artOverlay.leadingAnchor),
+            badge.trailingAnchor.constraint(equalTo: artOverlay.trailingAnchor)
+        ])
+        ratingBadge = badge
+        return badge
+    }
 
     /// Music tiles are 1:1 square; everything else keeps the 2:3 poster ratio.
     private func setSquare(_ square: Bool) {
@@ -351,6 +494,8 @@ final class PosterCell: UICollectionViewCell {
         watchedBadge.isHidden = true
         sourceBadge.text = nil
         editionBadge.text = nil
+        ratings = []
+        ratingBadge?.setMaterialized(false)
         watchedGlyph.isHidden = true
         failureIcon.isHidden = true
         failureIcon.image = nil

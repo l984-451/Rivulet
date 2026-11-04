@@ -168,8 +168,18 @@ enum JellyfinMediaMapper {
             grandparentArtwork: grandparentArtwork,
             versionCount: dto.mediaSourceCount,
             genres: (dto.genres ?? []).isEmpty ? nil : dto.genres,
-            externalIDs: externalIDs(dto.providerIds).nilIfEmpty
+            externalIDs: externalIDs(dto.providerIds).nilIfEmpty,
+            ratings: ratings(dto)
         )
+    }
+
+    /// Jellyfin's two scores: the critic score (Rotten Tomatoes, 0-100) and the
+    /// community score (0-10, source unnamed).
+    static func ratings(_ dto: JFItem) -> [MediaRating] {
+        MediaRating.ordered([
+            MediaRating(dto.criticRating.map { $0 / 10 }, source: .rottenTomatoes),
+            MediaRating(dto.communityRating, source: .unknown),
+        ])
     }
 
     // MARK: - Tracks
@@ -385,10 +395,7 @@ enum JellyfinMediaMapper {
             trailerURL: YouTubeTrailer.firstLink((dto.remoteTrailers ?? []).map(\.url)),
             contentRating: dto.officialRating,
             regionOfOrigin: dto.productionLocations?.first,
-            ratings: MediaRating.ordered([
-                MediaRating(dto.criticRating.map { $0 / 10 }, source: .rottenTomatoes),
-                MediaRating(dto.communityRating, source: .unknown),
-            ]),
+            ratings: ratings(dto),
             nextEpisode: nextEpisode.map { self.item($0, providerID: providerID, baseURL: baseURL) },
             collections: [],
             extras: trailers.compactMap { extra($0, providerID: providerID, baseURL: baseURL, isTrailer: true) }

@@ -12,9 +12,9 @@
 
 import Foundation
 
-nonisolated struct MediaRating: Sendable, Hashable {
+nonisolated struct MediaRating: Sendable, Hashable, Codable {
     /// Declared in About-card display order.
-    enum Source: Int, Sendable, Hashable, Comparable, CaseIterable {
+    enum Source: Int, Sendable, Hashable, Comparable, CaseIterable, Codable {
         case rottenTomatoes, rottenTomatoesAudience, imdb, metacritic, letterboxd, tmdb, unknown
 
         static func < (a: Source, b: Source) -> Bool { a.rawValue < b.rawValue }
@@ -51,6 +51,37 @@ nonisolated struct MediaRating: Sendable, Hashable {
     }
     static func detailRating(in ratings: [MediaRating]) -> MediaRating? {
         ratings.first { $0.source == detailSource } ?? ratings.first { $0.source == .rottenTomatoes }
+    }
+
+    /// Settings > Appearance > Rating > Show on Focused Poster. Off by default.
+    static let posterBadgeKey = "showRatingOnFocusedPoster"
+
+    /// The focused poster's score: the chosen source, else another named score the list carries,
+    /// as the detail row falls back too. Plex TV libraries only have TMDB, so with IMDb chosen a show
+    /// still shows its score. The poster always names the source, so a mixed row stays honest.
+    static func posterRating(in ratings: [MediaRating]) -> MediaRating? {
+        ratings.first { $0.source == detailSource } ?? ratings.first { posterSources.contains($0.source) }
+    }
+
+    /// The named sources list data can carry (Plex's flat pair, the critic score on Jellyfin and
+    /// Emby). Metacritic and Letterboxd come only from the ratings worker on the detail page, so
+    /// posters never have them; the unnamed community score is left out because the poster could
+    /// not name it.
+    static let posterSources: Set<Source> = [.rottenTomatoes, .rottenTomatoesAudience, .imdb, .tmdb]
+
+    /// What leads the poster badge: the Rotten Tomatoes glyph, otherwise the source name.
+    var posterLead: String { glyph ?? name }
+
+    /// The poster badge as one line: "IMDb 7.6", "🍅 83%".
+    var posterLine: String { "\(posterLead) \(badgeText)" }
+
+    /// The glyph Rotten Tomatoes scores lead with instead of their name; nil for others.
+    var glyph: String? {
+        switch source {
+        case .rottenTomatoes: value >= 6 ? "🍅" : "🤢"
+        case .rottenTomatoesAudience: "🍿"
+        default: nil
+        }
     }
 
     var name: String { source.name }

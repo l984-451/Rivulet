@@ -6025,7 +6025,8 @@ final class PlexHomeViewController: UIViewController {
                     parentArtwork: base.parentArtwork,
                     grandparentArtwork: base.grandparentArtwork,
                     versionCount: base.versionCount,
-                    editionTitle: base.editionTitle
+                    editionTitle: base.editionTitle,
+                    ratings: base.ratings
                 )
             } else {
                 stub = base

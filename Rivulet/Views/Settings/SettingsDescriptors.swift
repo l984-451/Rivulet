@@ -150,6 +150,10 @@ enum SettingsDescriptorStore {
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."
         ),
+        "posterRating": SettingDescriptor(
+            icon: "star.leadinghalf.filled",
+            description: "Shows the rating in the corner of the focused poster only, so rows stay clean. If a title doesn't have the rating you choose, another one is shown with its source."
+        ),
         "libraryHero": SettingDescriptor(
             icon: "rectangle.stack",
             description: "Shows a featured content banner at the top of each library with highlighted picks."

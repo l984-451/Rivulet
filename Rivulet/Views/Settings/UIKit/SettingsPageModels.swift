@@ -336,7 +336,10 @@ enum SettingsContent {
             SettingsRowItem(id: "dr_\(source.rawValue)", verbatim: source.name, kind: .option(
                 isSelected: { MediaRating.detailSource == source },
                 select: { UserDefaults.standard.set(source.rawValue, forKey: MediaRating.detailSourceKey) }))
-        }
+        } + [
+            .header("Posters"),
+            toggle("posterRating", "Show on Focused Poster", key: MediaRating.posterBadgeKey, default: false)
+        ]
     }
 
     private static var autoplayCountdownPicker: [SettingsRowItem] {

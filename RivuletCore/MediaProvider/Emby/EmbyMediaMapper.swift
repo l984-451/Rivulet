@@ -143,8 +143,18 @@ enum EmbyMediaMapper {
             grandparentArtwork: grandparentArtwork,
             versionCount: dto.mediaSources.flatMap { $0.count > 1 ? $0.count : nil },
             genres: (dto.genres ?? []).isEmpty ? nil : dto.genres,
-            externalIDs: externalIDs(dto).nilIfEmpty
+            externalIDs: externalIDs(dto).nilIfEmpty,
+            ratings: ratings(dto)
         )
+    }
+
+    /// Emby's two scores: the critic score (Rotten Tomatoes, 0-100) and the community score
+    /// (0-10, source unnamed). A list carries `CriticRating` only when `Fields` asks for it.
+    static func ratings(_ dto: EmbyItem) -> [MediaRating] {
+        MediaRating.ordered([
+            MediaRating(dto.criticRating.map { $0 / 10 }, source: .rottenTomatoes),
+            MediaRating(dto.communityRating, source: .unknown),
+        ])
     }
 
     /// A season's `RecursiveItemCount` is its episodes, so total minus unplayed is exact.
@@ -233,10 +243,7 @@ enum EmbyMediaMapper {
             trailerURL: YouTubeTrailer.firstLink((dto.remoteTrailers ?? []).map(\.url)),
             contentRating: dto.officialRating,
             regionOfOrigin: dto.productionLocations?.first,
-            ratings: MediaRating.ordered([
-                MediaRating(dto.criticRating.map { $0 / 10 }, source: .rottenTomatoes),
-                MediaRating(dto.communityRating, source: .unknown),
-            ]),
+            ratings: ratings(dto),
             nextEpisode: nextEpisode.map { self.item($0, providerID: providerID, baseURL: baseURL) },
             collections: (dto.collections ?? []).compactMap(\.name),
             extras: trailers.map { extra($0, providerID: providerID, baseURL: baseURL, isTrailer: true) }

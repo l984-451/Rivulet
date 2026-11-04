@@ -945,9 +945,8 @@ final class MediaDetailChromeView: UIView {
         if let rating = MediaRating.detailRating(in: ratings) {
             let label = makeCaptionLabel(rating.badgeText, alpha: alpha)
             let ratingStack: UIStackView
-            if rating.source == .rottenTomatoes || rating.source == .rottenTomatoesAudience {
-                let glyph = UIImageView(image: emojiGlyph(
-                    rating.source == .rottenTomatoes ? (rating.value >= 6 ? "🍅" : "🤢") : "🍿"))
+            if let emoji = rating.glyph {
+                let glyph = UIImageView(image: emojiGlyph(emoji))
                 glyph.translatesAutoresizingMaskIntoConstraints = false
                 NSLayoutConstraint.activate([
                     glyph.widthAnchor.constraint(equalToConstant: 20),

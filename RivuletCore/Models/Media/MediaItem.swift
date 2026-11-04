@@ -62,6 +62,9 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let externalIDs: [String: String]?
     /// The library the item sits in, when the list said (Plex `librarySectionID`).
     let libraryID: String?
+    /// The scores the list already carries (Plex's flat rating pair, Jellyfin's
+    /// critic and community rating). Optional so cached items still decode.
+    let ratings: [MediaRating]?
 
     init(
         ref: MediaItemRef,
@@ -89,7 +92,8 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         identity: [String]? = nil,
         genres: [String]? = nil,
         externalIDs: [String: String]? = nil,
-        libraryID: String? = nil
+        libraryID: String? = nil,
+        ratings: [MediaRating]? = nil
     ) {
         self.ref = ref
         self.kind = kind
@@ -117,6 +121,7 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.genres = genres
         self.externalIDs = externalIDs
         self.libraryID = libraryID
+        self.ratings = ratings
     }
 }
 
@@ -194,7 +199,8 @@ extension MediaItem {
             editionTitle: editionTitle,
             genres: genres,
             externalIDs: externalIDs,
-            libraryID: libraryID
+            libraryID: libraryID,
+            ratings: ratings
         )
     }
 }

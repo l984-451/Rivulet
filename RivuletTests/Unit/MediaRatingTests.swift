@@ -106,4 +106,84 @@ final class MediaRatingTests: XCTestCase {
     func test_worker_decode_garbage_isEmpty() {
         XCTAssertTrue(RatingsClient.decode(Data("nope".utf8)).isEmpty)
     }
+
+    // MARK: - Focused poster badge
+
+    /// Runs `body` with Settings > Appearance > Rating set to `source`, then restores it.
+    private func withDetailSource(_ source: MediaRating.Source, _ body: () -> Void) {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: MediaRating.detailSourceKey)
+        defaults.set(source.rawValue, forKey: MediaRating.detailSourceKey)
+        defer { defaults.set(saved, forKey: MediaRating.detailSourceKey) }
+        body()
+    }
+
+    /// Hub items carry only Plex's flat pair; the badge reads the same list data.
+    func test_posterBadge_chosenSource() {
+        let ratings = plex(rating: 8.3, ratingImage: "rottentomatoes://image.rating.ripe",
+                           audience: 7.6, audienceImage: "imdb://image.rating")
+        withDetailSource(.imdb) {
+            XCTAssertEqual(MediaRating.posterRating(in: ratings)?.posterLine, "IMDb 7.6")
+        }
+    }
+
+    /// Without the chosen source the poster shows the score the list has, named.
+    func test_posterBadge_chosenSourceMissing_fallsBackToANamedScore() {
+        let ratings = plex(rating: 8.3, ratingImage: "rottentomatoes://image.rating.ripe")
+        withDetailSource(.imdb) {
+            XCTAssertEqual(MediaRating.posterRating(in: ratings)?.posterLine, "🍅 83%")
+            XCTAssertEqual(MediaRating.detailRating(in: ratings)?.source, .rottenTomatoes)
+        }
+    }
+
+    /// Jellyfin's community score names no source, so a named choice shows nothing.
+    func test_posterBadge_jellyfinUnnamedScore_showsNothing() {
+        withDetailSource(.imdb) {
+            XCTAssertNil(MediaRating.posterRating(in: jellyfin(#","CommunityRating":7.1"#))?.posterLine)
+        }
+    }
+
+    func test_posterBadge_rottenTomatoesRotten_andAudience() {
+        withDetailSource(.rottenTomatoes) {
+            XCTAssertEqual(MediaRating.posterRating(in: plex(rating: 4.1, ratingImage: "rottentomatoes://image.rating.rotten"))?.posterLine,
+                           "🤢 41%")
+        }
+        withDetailSource(.rottenTomatoesAudience) {
+            XCTAssertEqual(MediaRating.posterRating(in: plex(audience: 9.2, audienceImage: "rottentomatoes://image.rating.upright"))?.posterLine,
+                           "🍿 92%")
+        }
+    }
+
+    /// A Plex TV library carries only TMDB: with IMDb chosen, a show still shows its score.
+    func test_posterBadge_tvLibrary_showsTMDB_noScoreShowsNothing() {
+        withDetailSource(.imdb) {
+            XCTAssertEqual(MediaRating.posterRating(in: plex(audience: 7.6, audienceImage: "themoviedb://image.rating"))?.posterLine,
+                           "TMDB 7.6")
+            XCTAssertNil(MediaRating.posterRating(in: [])?.posterLine)
+        }
+    }
+
+    /// The one home of the glyph rule, shared by the detail row and the poster badge.
+    func test_glyph_rottenTomatoesOnly_freshFromSixUp() {
+        XCTAssertEqual(MediaRating(6.0, source: .rottenTomatoes)?.glyph, "🍅")
+        XCTAssertEqual(MediaRating(5.9, source: .rottenTomatoes)?.glyph, "🤢")
+        XCTAssertEqual(MediaRating(9.2, source: .rottenTomatoesAudience)?.glyph, "🍿")
+        XCTAssertNil(MediaRating(7.6, source: .imdb)?.glyph)
+        XCTAssertNil(MediaRating(7.3, source: .metacritic)?.glyph)
+    }
+
+    /// The chosen source wins; a source lists never carry falls back to the list's first named score.
+    func test_posterRating_chosenFirst_thenTheListsOwn() {
+        let ratings = plex(rating: 8.3, ratingImage: "rottentomatoes://image.rating.ripe",
+                           audience: 7.6, audienceImage: "imdb://image.rating")
+        withDetailSource(.imdb) { XCTAssertEqual(MediaRating.posterRating(in: ratings)?.source, .imdb) }
+        withDetailSource(.metacritic) { XCTAssertEqual(MediaRating.posterRating(in: ratings)?.source, .rottenTomatoes) }
+    }
+
+    /// MediaItem caches to disk: a list item's scores survive the round trip.
+    func test_mediaRating_codableRoundTrip() throws {
+        let ratings = [MediaRating(7.6, source: .imdb)!, MediaRating(8.3, source: .rottenTomatoes)!]
+        let data = try JSONEncoder().encode(ratings)
+        XCTAssertEqual(try JSONDecoder().decode([MediaRating].self, from: data), ratings)
+    }
 }

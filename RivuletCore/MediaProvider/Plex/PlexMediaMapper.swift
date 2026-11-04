@@ -293,7 +293,8 @@ enum PlexMediaMapper {
             editionTitle: meta.editionTitle,
             genres: genres(meta),
             externalIDs: listExternalIDs(meta),
-            libraryID: meta.librarySectionID.map(String.init)
+            libraryID: meta.librarySectionID.map(String.init),
+            ratings: Self.ratings(meta)
         )
     }
 

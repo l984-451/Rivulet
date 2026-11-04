@@ -69,6 +69,16 @@ final class EmbyMediaMapperTests: XCTestCase {
         XCTAssertNil(movie.parentRef, "a movie's ParentId is its folder")
     }
 
+    /// The focused poster reads the list's scores; Emby lists carry `CriticRating` only on request.
+    func test_movie_listCarriesBothScores_andListsAskForTheCriticScore() throws {
+        let page = try items(EmbyBrowseFixtures.moviesPage)
+        let ratings = try XCTUnwrap(page.first?.ratings)
+        XCTAssertEqual(ratings.map(\.source), [.rottenTomatoes, .unknown])
+        XCTAssertEqual(ratings.first?.value ?? 0, 8.8, accuracy: 0.001)
+        XCTAssertEqual(page.last?.ratings, [], "no scores, nothing to show")
+        XCTAssertTrue(EmbyProvider.listFieldNames.split(separator: ",").contains("CriticRating"))
+    }
+
     func test_movie_halfWatched_keepsItsResumePointAndIsNotPlayed() throws {
         let state = try XCTUnwrap(try items(EmbyBrowseFixtures.moviesPage).first).userState
         XCTAssertFalse(state.isPlayed)

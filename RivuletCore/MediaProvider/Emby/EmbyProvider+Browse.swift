@@ -14,9 +14,10 @@ import Foundation
 
 extension EmbyProvider {
     /// What a list asks for beyond the defaults. `UserDataPlayCount` and `UserDataLastPlayedDate`
-    /// make `UserData.PlayCount` and `LastPlayedDate` real; the rest is not on lists by default.
+    /// make `UserData.PlayCount` and `LastPlayedDate` real; the rest is not on lists by default
+    /// (measured on 4.10.2: `CriticRating` too, which the focused poster's score reads).
     nonisolated static let listFieldNames = "PrimaryImageAspectRatio,ProductionYear,PremiereDate,SortName,DateCreated,"
-        + "ParentId,ChildCount,RecursiveItemCount,CommunityRating,OfficialRating,Overview,"
+        + "ParentId,ChildCount,RecursiveItemCount,CommunityRating,CriticRating,OfficialRating,Overview,"
         + "UserDataPlayCount,UserDataLastPlayedDate,Genres,ProviderIds"
     static let listFields = URLQueryItem(name: "Fields", value: listFieldNames)
     /// `ProviderIds` is absent on lists unless asked for (cross-server identity, trending); `listFields` asks for it too.

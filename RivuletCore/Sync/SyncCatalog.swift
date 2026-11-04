@@ -19,7 +19,7 @@ nonisolated enum SyncCatalog {
         // Playback
         "autoplayLimit", "autoplayCountdown", "showPostVideoUpNext", "promptResumeOrRestart",
         "continueWatchingInstantResume", "skipPreviewCarousel", "useIntroDB", "cinemaTrailersCount",
-        "detailRatingSource", "generatedSubtitlesFallback", "playerShowsClockTimes",
+        "detailRatingSource", MediaRating.posterBadgeKey, "generatedSubtitlesFallback", "playerShowsClockTimes",
         "showSkipIntro", "showSkipRecap", "showSkipCredits", "showSkipAds",
         "autoSkipIntro", "autoSkipRecap", "autoSkipCredits", "autoSkipAds",
         SkipLengthKeys.forward, SkipLengthKeys.back,

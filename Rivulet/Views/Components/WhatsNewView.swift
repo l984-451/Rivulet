@@ -149,6 +149,19 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.1.1 (121)", [
+            "Thanks for the bugs, support, and PRs!",
+            "I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",
+            "Trailers options in Playback",
+            "Added Localization. German is available! Welcome PRs for other languages. @JoschaP",
+            "Jellyfin Quick Connect, Music Videos, and Recently Added music row. @DIYtechie",
+            "SVG logos in Live TV",
+            "A title in 2 libraries on one server is now one card in CW",
+            "Plex QR sign in. @priyanshuppal",
+            "Profile Picker shows on return after backgrounding for 30 seconds. @twinkie0101",
+            "Updated AetherEngine to 7.56.0",
+            "Other small changes and fixes",
+        ]),
         ("1.1.1 (120)", [
             "Episode and season pages now show their extras.",
             "The player's info panels stay open while you're reading them.",

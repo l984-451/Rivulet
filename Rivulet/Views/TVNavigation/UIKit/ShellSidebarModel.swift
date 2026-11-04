@@ -23,6 +23,8 @@ struct ShellSidebarItem: Hashable {
     var badge: String?
     /// The row's `SidebarArrangement` key; nil for the fixed rows.
     var arrangeKey: String?
+    /// A title too long for the row scrolls instead of truncating (Now Playing).
+    var scrollsTitle = false
 }
 
 /// A server whose sidebar gets a Playlists row.
@@ -121,7 +123,8 @@ enum ShellSidebarModel {
         profileAvatar: URL? = nil,
         canSwitchProfile: Bool = false,
         hasMediaServer: Bool = true,
-        playlistServers: [PlaylistServer] = []
+        playlistServers: [PlaylistServer] = [],
+        nowPlaying: String? = nil
     ) -> [ShellSidebarSection] {
         var sections: [ShellSidebarSection] = []
 
@@ -131,6 +134,13 @@ enum ShellSidebarModel {
                              icon: "person.crop.circle.fill", avatarURL: profileAvatar,
                              canSwitchProfile: canSwitchProfile),
         ]))
+
+        // What music is playing, under the profile; gone when nothing is.
+        if let nowPlaying {
+            sections.append(ShellSidebarSection(title: String(localized: "Now Playing"), items: [
+                ShellSidebarItem(tab: .nowPlaying, title: nowPlaying, icon: "music.note", scrollsTitle: true),
+            ]))
+        }
 
         // Search, Discover and the watchlist need a media server. Without one,
         // Home is only the welcome screen, kept while there is no Live TV instead.

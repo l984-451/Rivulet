@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import Combine
 import os.log
 import Sentry
 
@@ -55,6 +56,32 @@ struct TVSidebarView: View {
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
     @State private var showWhatsNew = false
     @State private var didApplyDebugLaunch = false
+    /// The playing track as the sidebar names it, nil when nothing plays. Fed by
+    /// track changes only: `MusicQueue` publishes its clock several times a second.
+    @State private var nowPlayingTitle: String?
+
+    /// The playing track's "title · artist", gone 10s after a pause and back on play.
+    /// One instance, so a redraw does not resubscribe and restart the 10s.
+    private static let nowPlayingTitles: AnyPublisher<String?, Never> = {
+        let titles = MusicQueue.shared.$currentTrack
+            .map { track in
+                track.map { [$0.title, $0.artistName].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
+            }
+            .removeDuplicates()
+        let paused = MusicQueue.shared.$playbackState
+            .map { $0 == .paused || $0 == .idle }
+            .removeDuplicates()
+        return titles.combineLatest(paused)
+            .map { title, paused -> AnyPublisher<String?, Never> in
+                guard paused, title != nil else { return Just(title).eraseToAnyPublisher() }
+                return Just(nil).delay(for: .seconds(10), scheduler: DispatchQueue.main).eraseToAnyPublisher()
+            }
+            .switchToLatest()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .share()
+            .eraseToAnyPublisher()
+    }()
 
     @Namespace private var contentNamespace
 
@@ -113,7 +140,8 @@ struct TVSidebarView: View {
             profileAvatar: profileManager.selectedUser?.thumb.flatMap { URL(string: $0) },
             canSwitchProfile: profileManager.hasMultipleProfiles,
             hasMediaServer: isSignedInToAnyServer,
-            playlistServers: PlaylistServer.current(visiblePlaylistProviders))
+            playlistServers: PlaylistServer.current(visiblePlaylistProviders),
+            nowPlaying: nowPlayingTitle)
     }
 
     /// Servers that get a Playlists row: those with playlists, less the rows Settings hides.
@@ -229,6 +257,7 @@ struct TVSidebarView: View {
                 selectedTab = .home
             }
         }
+        .onReceive(Self.nowPlayingTitles) { nowPlayingTitle = $0 }
     }
 
     var body: some View {
@@ -688,7 +717,7 @@ struct TVSidebarView: View {
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear
-            case .watchlist, .playlists:
+            case .watchlist, .playlists, .nowPlaying:
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear

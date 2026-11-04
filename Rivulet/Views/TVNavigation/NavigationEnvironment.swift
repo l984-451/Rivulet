@@ -28,6 +28,8 @@ enum SidebarTab: Hashable {
     case playlists(providerID: String)
     case liveTV(sourceId: String?)
     case settings
+    /// The playing track's row: Select opens Now Playing, never a tab.
+    case nowPlaying
 }
 
 // MARK: - Nested Navigation State

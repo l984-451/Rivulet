@@ -48,6 +48,8 @@ struct TVSidebarView: View {
     @State private var sidebarProfileRowRequest = 0
     @State private var hasCheckedProfilePicker = false
     @State private var isAwaitingProfileSelection = false
+    /// When the app last stopped being active (Home, another app, the screensaver).
+    @State private var inactiveSince: Date?
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
@@ -371,6 +373,21 @@ struct TVSidebarView: View {
                 }
             }
         }
+        // Profile Picker on Launch also covers coming back to the app: tvOS
+        // resumes it far more often than it relaunches it. UIApplication's
+        // notifications, not scenePhase, because scenePhase does not report
+        // the trip while the player is up. A short absence (a stray Home
+        // press, a glance at Control Center) is let through.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            if inactiveSince == nil { inactiveSince = Date() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            guard let since = inactiveSince else { return }
+            inactiveSince = nil
+            if Date().timeIntervalSince(since) >= Self.profilePickerReturnGrace {
+                presentProfilePickerOnReturn()
+            }
+        }
         // Content is withheld until a profile is entered: ask who is watching.
         .onChange(of: profileManager.needsProfileSelection) { _, needed in
             if needed {
@@ -395,6 +412,43 @@ struct TVSidebarView: View {
                 profileManager: profileManager
             )
             .presentationBackground(.clear)
+        }
+    }
+
+    // MARK: - Profile Picker on Return
+
+    /// How long the app may be away before coming back asks who is watching.
+    private static let profilePickerReturnGrace: TimeInterval = 30
+
+    /// Asks who is watching again after the app comes back from the background,
+    /// using the same hard gate as the launch picker: content stays hidden until
+    /// a profile is entered, and backing out re-presents the picker.
+    private func presentProfilePickerOnReturn() {
+        guard profileManager.showProfilePickerOnLaunch,
+              authManager.hasCredentials,
+              hasCheckedProfilePicker,
+              !showProfilePicker,
+              !profileManager.needsProfileSelection else { return }
+
+        Task {
+            // Home users are fetched late at launch; a quick return may beat them.
+            if !profileManager.hasLoadedProfiles {
+                await profileManager.fetchHomeUsers()
+            }
+            guard profileManager.hasMultipleProfiles,
+                  !showProfilePicker,
+                  !profileManager.needsProfileSelection else { return }
+
+            isAwaitingProfileSelection = true
+            deepLinkHandler.isShellReady = false
+            // The picker cannot present over a player, and the last profile's
+            // music should not keep playing under it.
+            MusicQueue.shared.stop()
+            MusicQueue.shared.clear()
+            showProfileSwitcher = false
+            Self.rootViewController()?.dismiss(animated: false)
+            profileChosen = false
+            showProfilePicker = true
         }
     }
 

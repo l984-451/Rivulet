@@ -10677,16 +10677,6 @@
         }
       }
     },
-    "Your Jellyfin library appears to be empty." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Jellyfin-Mediathek scheint leer zu sein."
-          }
-        }
-      }
-    },
     "Your Jellyfin server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {
       "localizations" : {
         "de" : {
@@ -10703,6 +10693,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Jellyfin-Benutzername."
+          }
+        }
+      }
+    },
+    "Your library appears to be empty." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Mediathek scheint leer zu sein."
           }
         }
       }

@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Copyright (C) 2025-2026 Bain Gurley
+
+//
+//  OtherServerKind.swift
+//  Rivulet
+//
+//  What each server kind beside the selected Plex one supplies to the
+//  registries and `ServerDataStore`: one account per kind. A new kind adds one
+//  entry to `all`, in `MediaProviderKind` order.
+//
+
+import Foundation
+
+struct OtherServerKind {
+    let kind: MediaProviderKind
+    /// The signed-in account, read without building a provider (the sidebar's first render).
+    let account: () -> (providerID: String, name: String)?
+    /// The video provider rebuilt from the stored account; nil when signed out.
+    let storedProvider: () -> (any MediaProvider)?
+    let storedMusicProvider: () -> (any MusicProvider)?
+    /// Whether two music providers are one account, so its caches stay.
+    let isSameMusicAccount: (any MusicProvider, any MusicProvider) -> Bool
+    /// Puts the server's Live TV in or out of Live TV, given the signed-in provider or nil.
+    let syncLiveTV: ((any MediaProvider)?) -> Void
+
+    static let all: [OtherServerKind] = [.jellyfin]
+
+    static func entry(for kind: MediaProviderKind) -> OtherServerKind? {
+        all.first { $0.kind == kind }
+    }
+
+    static let jellyfin = OtherServerKind(
+        kind: .jellyfin,
+        account: { JellyfinSession.account.map { ($0.providerID, $0.serverName) } },
+        storedProvider: { JellyfinSession.storedProvider() },
+        storedMusicProvider: { JellyfinSession.storedProvider().map(JellyfinMusicProvider.init) },
+        isSameMusicAccount: { ($0 as? JellyfinMusicProvider)?.client.token == ($1 as? JellyfinMusicProvider)?.client.token },
+        syncLiveTV: { JellyfinLiveTVProvider.sync($0 as? JellyfinProvider) }
+    )
+}

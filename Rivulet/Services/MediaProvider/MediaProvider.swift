@@ -75,6 +75,9 @@ protocol MediaProvider: Sendable, Identifiable {
     func letterCounts(in library: MediaLibrary) async throws -> [PlexFirstCharacter]
     /// Ask the server to re-read the item's metadata. Default: unsupported.
     func refreshMetadata(_ itemRef: MediaItemRef) async throws
+    /// The sorts the library page offers for this kind of library, each one
+    /// `items(in:sort:page:)` can apply. Default: Plex's list minus resolution.
+    func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption]
 
     // MARK: - Playback
     /// A nil `sourceID` plays the best version by `VersionRanking`.
@@ -174,6 +177,9 @@ extension MediaProvider {
         try await search(query)
     }
     func collections(in library: MediaLibrary) async throws -> [MediaItem] { [] }
+    func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption] {
+        LibrarySortOption.expressible(for: kind)
+    }
     var accountID: String? { nil }
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         try await hubs(in: library).first { $0.id == "\(library.id).recentlyAdded" }
@@ -210,6 +216,19 @@ extension MediaProvider {
     }
     func deletePlaylist(_ playlist: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "playlists not supported")
+    }
+}
+
+extension LibrarySortOption {
+    /// Plex's sorts for the library kind, minus resolution: `SortOption` cannot send it,
+    /// and Jellyfin ignores an unknown sortBy.
+    static func expressible(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption] {
+        let plexType: String? = switch kind {
+        case .movies: "movie"
+        case .shows: "show"
+        default: nil
+        }
+        return options(for: plexType).filter { $0 != .resolutionDesc && $0 != .resolutionAsc }
     }
 }
 

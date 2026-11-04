@@ -404,8 +404,8 @@ class LiveTVDataStore: ObservableObject {
     /// Whether a source with this id is in use.
     func hasSource(id: String) -> Bool { providers[id] != nil }
 
-    /// Installs the source that follows a signed-in server (Plex DVR, Jellyfin
-    /// Live TV) in place of any of `type`, or just removes them. Never saved.
+    /// Installs the source that follows a signed-in server (Plex DVR, another
+    /// kind's Live TV) in place of any of `type`, or just removes them. Never saved.
     func setServerSource(_ provider: (any LiveTVProvider)?, of type: LiveTVSourceType) {
         let stale = Set(providers.filter { $0.value.sourceType == type }.keys)
         guard provider != nil || !stale.isEmpty else { return }
@@ -520,7 +520,7 @@ class LiveTVDataStore: ObservableObject {
     @discardableResult
     private func applyProfileRestrictions() -> Bool {
         if PlexUserProfileManager.shared.isContentLimitedProfile {
-            // Jellyfin's source leaves with the Jellyfin server, which such a profile does not see.
+            // A server's source leaves with the server, which such a profile does not see.
             let iptv = providers.filter { !$0.value.sourceType.followsServer }
             guard !iptv.isEmpty else { return false }
             withheldIPTVProviders.merge(iptv) { _, new in new }

@@ -228,6 +228,17 @@ final class ServerDataStoreTests: XCTestCase {
         XCTAssertFalse(ServerDataStore(observesRefresh: false).labelsServers)
     }
 
+    func test_shown_keepsExtraPlexServers_andOtherKindsOnlyForTheirSignedInAccount() {
+        let office = StubMediaProvider(id: "plex:office", kind: .plex)
+        let stale = StubMediaProvider(id: "jellyfin:old", kind: .jellyfin)
+        let all: [any MediaProvider] = [office, jellyfin, stale]
+
+        XCTAssertEqual(ServerDataStore.shown(all, accountIDs: [.jellyfin: "jellyfin:srv"]).map(\.id),
+                       ["plex:office", "jellyfin:srv"])
+        XCTAssertEqual(ServerDataStore.shown(all, accountIDs: [:]).map(\.id), ["plex:office"],
+                       "a restricted profile, or a signed-out kind, shows none of the other kinds")
+    }
+
     func test_displayName() {
         XCTAssertEqual(MediaProviderKind.plex.displayName, "Plex")
         XCTAssertEqual(MediaProviderKind.jellyfin.displayName, "Jellyfin")

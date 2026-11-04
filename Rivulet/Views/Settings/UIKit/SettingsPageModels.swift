@@ -84,8 +84,8 @@ struct SettingsRowItem {
     /// mode). Called with `up` to move it one slot and persist the new order.
     var onReorder: ((_ up: Bool) -> Void)?
     var isReorderable: Bool { onReorder != nil }
-    /// Reorder only slides between rows of the same group (Plex vs Jellyfin
-    /// libraries, each ordered within its own server). nil == nil as before.
+    /// Reorder only slides between rows of the same group (each server's
+    /// libraries, ordered within its own server). nil == nil as before.
     var reorderGroup: String? = nil
     /// A row whose meaning depends on another row's state renders dimmed and
     /// unfocusable while that state is off. Evaluated live (not cached at build
@@ -197,7 +197,7 @@ enum SettingsContent {
     private static var serverRuns: [(name: String, kind: MediaProviderKind, providerID: String?)] {
         [(PlexAuthManager.shared.savedServerName ?? "Plex", .plex, nil)]
             + ServerDataStore.shared.sources.map { source in
-                (source.name, source.providerID.hasPrefix("jellyfin:") ? .jellyfin : .plex, source.providerID)
+                (source.name, MediaProviderRegistry.shared.kind(of: source.providerID) ?? .plex, source.providerID)
             }
     }
 

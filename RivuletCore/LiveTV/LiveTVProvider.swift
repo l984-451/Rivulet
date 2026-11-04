@@ -22,7 +22,12 @@ enum LiveTVSourceType: String, Codable, CaseIterable, Sendable {
     case tvheadend = "tvheadend"
 
     /// Follows a signed-in media server: added and removed with it, never saved.
-    var followsServer: Bool { self == .plex || self == .jellyfin }
+    var followsServer: Bool {
+        switch self {
+        case .plex, .jellyfin: true
+        case .dispatcharr, .genericM3U, .xtream, .tvheadend: false
+        }
+    }
 
     var displayName: String {
         switch self {

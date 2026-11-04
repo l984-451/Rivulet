@@ -54,6 +54,10 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     let connectionState = ConnectionState.connected
     let supportsWatchlist = false
+    var sortOverride: [LibrarySortOption]?
+    func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption] {
+        sortOverride ?? LibrarySortOption.expressible(for: kind)
+    }
 
     var continueWatchingItems: [MediaItem] = []
     var continueWatchingError: Error?

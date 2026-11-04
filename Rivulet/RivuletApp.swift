@@ -57,14 +57,14 @@ struct RivuletApp: App {
             Task { await ImageCacheManager.shared.clearAll() }
         }
         JellyfinSession.onChanged = { ServerDataStore.shared.reload() }
-        PlexLiveTimelineKeepalive.releaseOtherSession = { JellyfinLiveTVProvider.closeLiveStream($0) }
+        PlexLiveTimelineKeepalive.otherSessionClosers[MediaProviderKind.jellyfin.rawValue] = { JellyfinLiveTVProvider.closeLiveStream($0) }
         PlexUserProfileManager.onProfileChanged = {
             // The queue reports progress with whichever token is current.
             MusicQueue.shared.stop()
             MusicQueue.shared.clear()
             await PlexDataStore.shared.onProfileSwitched()
             // The previous profile's other Plex servers go now; a restricted
-            // profile does not see the Jellyfin server.
+            // profile does not see the other kinds' servers.
             MediaProviderRegistry.shared.populateFromCurrentAuth()
             ServerDataStore.shared.reload()
         }

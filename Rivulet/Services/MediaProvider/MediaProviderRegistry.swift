@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// The active MediaProvider instances (the Plex servers and the Jellyfin server), keyed by id.
+// The active MediaProvider instances (the Plex servers and one server per other kind), keyed by id.
 
 import Foundation
 
@@ -17,6 +17,12 @@ final class MediaProviderRegistry {
 
     func enabledProviders() -> [any MediaProvider] {
         Array(providers.values)
+    }
+
+    /// The kind of the server a provider id names: the registered provider's,
+    /// else what the id says (a server signed out under tiles still on screen).
+    func kind(of providerID: String) -> MediaProviderKind? {
+        providers[providerID]?.kind ?? MediaProviderKind(providerID: providerID)
     }
 
     /// The Plex provider registered last. Earlier ones stay registered: a
@@ -41,9 +47,13 @@ final class MediaProviderRegistry {
     }
 
     /// Every server Home and the sidebar show beside the selected Plex server:
-    /// the extra Plex servers by name, then Jellyfin.
+    /// the extra Plex servers in their given order (by name), then each other
+    /// kind in `MediaProviderKind` order, a kind's servers sorted by id.
     var secondaryProviders: [any MediaProvider] {
-        extraPlexIDs.compactMap { providers[$0] } + providers.values.filter { $0.kind == .jellyfin }
+        extraPlexIDs.compactMap { providers[$0] }
+            + MediaProviderKind.otherServerKinds.flatMap { kind in
+                providers.values.filter { $0.kind == kind }.sorted { $0.id < $1.id }
+            }
     }
 
     /// The Plex server an item lives on: an extra server's own address and
@@ -68,10 +78,11 @@ final class MediaProviderRegistry {
     }
 
     /// Brings the registry in line with what is signed in: the Plex server from
-    /// `PlexAuthManager`, the Jellyfin server from `JellyfinSession`. Called at
-    /// launch, after any Plex auth change (ContentView), and after Jellyfin
-    /// sign-in or sign-out. Jellyfin is rebuilt from its stored account each
-    /// time; Plex entries go only when Plex is signed out.
+    /// `PlexAuthManager`, each other kind's server from its stored account
+    /// (`OtherServerKind`). Called at launch, after any Plex auth change
+    /// (ContentView), and after another server's sign-in or sign-out. Those
+    /// are rebuilt from their stored accounts each time; Plex entries go only
+    /// when Plex is signed out.
     func populateFromCurrentAuth() {
         let auth = PlexAuthManager.shared
         let extras = PlexExtraServers.shared
@@ -100,9 +111,11 @@ final class MediaProviderRegistry {
                 .sorted { $0.id < $1.id }
                 .map { .init(providerID: $0.id, accountID: $0.accountID) })
         }
-        providers = providers.filter { $0.value.kind != .jellyfin && !extraPlexIDs.contains($0.key) }
+        providers = providers.filter { $0.value.kind == .plex && !extraPlexIDs.contains($0.key) }
         extraPlexIDs = []
-        if let jellyfin = JellyfinSession.storedProvider() { register(jellyfin) }
+        for other in OtherServerKind.all {
+            if let stored = other.storedProvider() { register(stored) }
+        }
         guard let serverURL = plexServerURL, let token = plexToken else {
             providers = providers.filter { $0.value.kind != .plex }
             currentPlexID = nil

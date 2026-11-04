@@ -507,7 +507,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 return
             }
             if Task.isCancelled {
-                if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+                if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
                 finishJoinTelemetry { $0.abandoned() }
                 return
             }
@@ -2300,7 +2300,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 return
             }
             if Task.isCancelled {
-                if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+                if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
                 return
             }
             guard let freshURL = resolved else { dismissPlayer(); return }
@@ -2382,7 +2382,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     // MARK: - Live session keepalive (Plex tuner grabs)
 
     private func startLiveSessionKeepAlive(for url: URL) {
-        liveKeepalive.start(url: url)
+        liveKeepalive.start(url: url, sourceID: channel.sourceId)
     }
 
     private func stopLiveSessionKeepAlive() {

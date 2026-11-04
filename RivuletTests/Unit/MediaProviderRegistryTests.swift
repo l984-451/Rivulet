@@ -72,6 +72,30 @@ final class MediaProviderRegistryTests: XCTestCase {
                        "an extra server's library settings belong to the profile")
     }
 
+    /// Home and the sidebar list servers in this order, whatever order they registered in.
+    func test_secondaryProviders_extrasFirst_thenEachKindInOrder_sortedByID() {
+        let registry = MediaProviderRegistry()
+        registry.register(StubMediaProvider(id: "jellyfin:b", kind: .jellyfin))
+        registry.register(StubMediaProvider(id: "jellyfin:a", kind: .jellyfin))
+        registry.populate(plexServerURL: "http://a:32400", plexToken: "t", plexMachineID: "main", plexName: "Angel",
+                          extraPlex: [extra("office", "Office"), extra("cabin", "Cabin")])
+        // populate rebuilds the other kinds from their stored accounts; put the stubs back.
+        registry.register(StubMediaProvider(id: "jellyfin:b", kind: .jellyfin))
+        registry.register(StubMediaProvider(id: "jellyfin:a", kind: .jellyfin))
+
+        let ids = registry.secondaryProviders.map(\.id)
+        XCTAssertEqual(Array(ids.prefix(2)), ["plex:office", "plex:cabin"], "extras keep their given order")
+        XCTAssertEqual(ids.dropFirst(2).filter { ["jellyfin:a", "jellyfin:b"].contains($0) }, ["jellyfin:a", "jellyfin:b"])
+    }
+
+    func test_populate_dropsOtherKindsStubsAndKeepsPlex() {
+        let registry = MediaProviderRegistry()
+        registry.register(StubMediaProvider(id: "jellyfin:stale", kind: .jellyfin))
+        registry.populate(plexServerURL: "http://a:32400", plexToken: "t", plexMachineID: "main", plexName: "Angel")
+        XCTAssertNil(registry.provider(for: "jellyfin:stale"), "other kinds are rebuilt from their stored account")
+        XCTAssertEqual(registry.plexProvider?.id, "plex:main")
+    }
+
     func test_extraPlexServers_skipTheSelectedServer_andGoWhenDropped() {
         let registry = MediaProviderRegistry()
         registry.populate(plexServerURL: "http://a:32400", plexToken: "t", plexMachineID: "main", plexName: "Angel",

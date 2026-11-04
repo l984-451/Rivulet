@@ -42,9 +42,13 @@ final class MusicProviderRegistry {
         currentPlexID.flatMap { providers[$0] }
     }
 
-    /// Each signed-in server once, Plex first. Stale Plex ids kept for old refs are left out.
+    /// Each signed-in server once, Plex first, then each other kind in
+    /// `MediaProviderKind` order (a kind's servers sorted by id). Stale Plex ids kept for old refs are left out.
     var signedInProviders: [any MusicProvider] {
-        [primaryProvider].compactMap { $0 } + providers.values.filter { $0.kind != .plex }
+        [primaryProvider].compactMap { $0 }
+            + MediaProviderKind.otherServerKinds.flatMap { kind in
+                providers.values.filter { $0.kind == kind }.sorted { $0.id < $1.id }
+            }
     }
 
     func register(_ provider: any MusicProvider) {
@@ -58,11 +62,11 @@ final class MusicProviderRegistry {
     }
 
     /// Brings the registry in line with what is signed in: the Plex server from
-    /// `PlexAuthManager.shared`, the Jellyfin server from `JellyfinSession`. Called at
-    /// app launch, after Plex auth changes (sign-in, sign-out, server switch), and
-    /// after Jellyfin sign-in or sign-out.
+    /// `PlexAuthManager.shared`, each other kind's server from its stored account
+    /// (`OtherServerKind`). Called at app launch, after Plex auth changes (sign-in,
+    /// sign-out, server switch), and after another server's sign-in or sign-out.
     func populateFromCurrentAuth() {
-        populateJellyfin()
+        OtherServerKind.all.forEach(populateOtherServer)
         let auth = PlexAuthManager.shared
         guard
             let serverURL = auth.selectedServerURL,
@@ -93,12 +97,17 @@ final class MusicProviderRegistry {
     }
 
     /// Rebuilt from the stored account each time, as `MediaProviderRegistry` does.
-    private func populateJellyfin() {
-        let jellyfin = JellyfinSession.storedProvider().map(JellyfinMusicProvider.init)
-        let previous = providers.values.first { $0.kind == .jellyfin } as? JellyfinMusicProvider
-        if previous?.id != jellyfin?.id || previous?.client.token != jellyfin?.client.token { generation += 1 }
-        providers = providers.filter { $0.value.kind != .jellyfin }
-        if let jellyfin { register(jellyfin) }
+    private func populateOtherServer(_ other: OtherServerKind) {
+        let stored = other.storedMusicProvider()
+        let previous = providers.values.first { $0.kind == other.kind }
+        let same = switch (previous, stored) {
+        case (nil, nil): true
+        case let (previous?, stored?): previous.id == stored.id && other.isSameMusicAccount(previous, stored)
+        default: false
+        }
+        if !same { generation += 1 }
+        providers = providers.filter { $0.value.kind != other.kind }
+        if let stored { register(stored) }
     }
 
     /// Process-stable hash. Avoid `String.hashValue` (per-process randomized).

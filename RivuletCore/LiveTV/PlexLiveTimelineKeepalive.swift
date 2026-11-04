@@ -42,11 +42,22 @@ final class PlexLiveTimelineKeepalive {
     /// dropped rather than sent after the stop.
     private var generation = 0
     /// A non-Plex URL `start` was given, handed to `releaseOtherSession` on stop.
-    private var otherSessionURL: URL?
+    private var otherSession: (url: URL, sourceID: String?)?
 
-    /// Host hook for live sessions on other servers (tvOS: Jellyfin's live
-    /// streams). Called once per started URL on stop; ignores URLs not its own.
-    static var releaseOtherSession: (@MainActor (URL) -> Void)?
+    /// Host closers for live sessions on other servers, by server kind (the
+    /// text before the ":" of a provider id). Each ignores URLs not its own.
+    static var otherSessionClosers: [String: @MainActor (URL) -> Void] = [:]
+
+    /// Hands `url` to the closer of `sourceID`'s kind. A URL cannot say which
+    /// kind opened it, so callers pass the channel's source id; nil offers it
+    /// to every closer.
+    static func releaseOtherSession(_ url: URL, sourceID: String?) {
+        if let kind = sourceID?.split(separator: ":").first {
+            otherSessionClosers[String(kind)]?(url)
+        } else {
+            otherSessionClosers.values.forEach { $0(url) }
+        }
+    }
 
     init(transport: @escaping Transport = PlexLiveTimelineKeepalive.send) {
         self.transport = transport
@@ -57,7 +68,7 @@ final class PlexLiveTimelineKeepalive {
     /// Accepts both URL forms: the raw session playlist
     /// (/livetv/sessions/{uuid}/{consumer}/index.m3u8) and the universal
     /// transcoder (start.m3u8?path=/livetv/sessions/{uuid}).
-    func start(url: URL) {
+    func start(url: URL, sourceID: String? = nil) {
         stop()
 
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -66,7 +77,7 @@ final class PlexLiveTimelineKeepalive {
               let token = components.queryItems?
                   .first(where: { $0.name == "X-Plex-Token" })?.value,
               let sessionPath = Self.sessionPath(from: url, components: components) else {
-            otherSessionURL = url
+            otherSession = (url, sourceID)
             return
         }
 
@@ -99,9 +110,9 @@ final class PlexLiveTimelineKeepalive {
 
     /// Releases a session nobody will play: a tune that finished after the
     /// player or tile that asked for it had gone. No-op for any other URL.
-    static func release(_ url: URL) {
+    static func release(_ url: URL, sourceID: String? = nil) {
         let keepalive = PlexLiveTimelineKeepalive()
-        keepalive.start(url: url)
+        keepalive.start(url: url, sourceID: sourceID)
         keepalive.stop()
     }
 
@@ -112,9 +123,9 @@ final class PlexLiveTimelineKeepalive {
         heartbeatTask?.cancel()
         heartbeatTask = nil
         generation += 1
-        if let otherSessionURL {
-            self.otherSessionURL = nil
-            Self.releaseOtherSession?(otherSessionURL)
+        if let otherSession {
+            self.otherSession = nil
+            Self.releaseOtherSession(otherSession.url, sourceID: otherSession.sourceID)
         }
         guard let context else { return }
         self.context = nil

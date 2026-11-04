@@ -7,10 +7,13 @@ import Foundation
 /// Empty MusicProvider for tests. Records favorite writes; can fail them and serve lyrics.
 final class StubMusicProvider: MusicProvider, @unchecked Sendable {
     nonisolated let id: String
-    nonisolated let kind: MediaProviderKind = .plex
+    nonisolated let kind: MediaProviderKind
     nonisolated let displayName: String = "Stub"
     nonisolated var connectionState: ConnectionState { .connected }
-    init(id: String) { self.id = id }
+    init(id: String, kind: MediaProviderKind = .plex) {
+        self.id = id
+        self.kind = kind
+    }
 
     var favoriteWrites: [Bool] = []
     var failFavorite = false

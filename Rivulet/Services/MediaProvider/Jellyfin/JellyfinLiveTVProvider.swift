@@ -151,7 +151,7 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
             try? await client.post("LiveStreams/Close", query: [URLQueryItem(name: "liveStreamId", value: liveStreamId)])
         }
         if Task.isCancelled {
-            await PlexLiveTimelineKeepalive.release(url)
+            await PlexLiveTimelineKeepalive.release(url, sourceID: sourceId)
             return nil
         }
         return url

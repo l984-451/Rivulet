@@ -912,6 +912,8 @@ silently means no panel at all. Before CI took the number from the tag it used
 every build number in git permanently one ahead — five releases shipped with
 the wrong notes or none. Build 73 does not exist for that reason. Write bullets as simple,
 user-facing sentences (what users get, not internal details); no em dashes.
+On tvOS, a line starting `> ` is a note from the maintainer, drawn with no dot at the
+top of the entry, and `## ` is a bold heading.
 Every AetherEngine bump gets a changelog line, and it states **only the
 version** (`"Updated AetherEngine to X.Y.Z"`). Do not list what the engine
 release fixes: engine internals are not the user's mental model, and a long

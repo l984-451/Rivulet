@@ -119,6 +119,12 @@ struct WhatsNewView: View {
         line.hasPrefix("## ") ? String(line.dropFirst(3)) : nil
     }
 
+    /// A changelog line starting with `> ` is a personal note: plain text with
+    /// no dot. Returns its text, or nil otherwise.
+    static func note(_ line: String) -> String? {
+        line.hasPrefix("> ") ? String(line.dropFirst(2)) : nil
+    }
+
     private func featureRow(text: String, isFocused: Bool) -> some View {
         let heading = Self.heading(text)
         return HStack(alignment: .top, spacing: 14) {
@@ -150,8 +156,7 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         ("1.1.1 (121)", [
-            "Thanks for the bugs, support, and PRs!",
-            "I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",
+            "> Thanks for the bugs, support, and PRs! I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",
             "Trailers options in Playback",
             "Added Localization. German is available! Welcome PRs for other languages. @JoschaP",
             "Jellyfin Quick Connect, Music Videos, and Recently Added music row. @DIYtechie",

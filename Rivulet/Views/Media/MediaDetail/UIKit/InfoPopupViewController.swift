@@ -524,9 +524,7 @@ enum InfoPopupContent {
         stack.addArrangedSubview(ver)
         stack.setCustomSpacing(24, after: ver)
 
-        for feature in features {
-            stack.addArrangedSubview(changelogBullet(feature))
-        }
+        addChangelogLines(features, to: stack, after: ver)
 
         let done = label(String(localized: "Done"), size: 26, weight: .semibold, color: .black, lines: 1)
         done.textAlignment = .center
@@ -571,18 +569,28 @@ enum InfoPopupContent {
             let ver = label(String(localized: "Version \(entry.version)"), size: 27, weight: .semibold, color: .white.withAlphaComponent(0.92), lines: 1)
             stack.addArrangedSubview(ver)
             stack.setCustomSpacing(14, after: ver)
-            for feature in entry.features {
-                if let heading = WhatsNewView.heading(feature) {
-                    if let last = stack.arrangedSubviews.last, last !== ver { stack.setCustomSpacing(22, after: last) }
-                    let head = label(heading, size: 25, weight: .bold, color: .white, lines: 0)
-                    stack.addArrangedSubview(head)
-                    stack.setCustomSpacing(10, after: head)
-                } else {
-                    stack.addArrangedSubview(changelogBullet(feature))
-                }
-            }
+            addChangelogLines(entry.features, to: stack, after: ver)
         }
         return stack
+    }
+
+    /// One entry's lines: `## ` headings, `> ` notes, and bullets.
+    private static func addChangelogLines(_ lines: [String], to stack: UIStackView, after version: UIView) {
+        for line in lines {
+            if let heading = WhatsNewView.heading(line) {
+                if let last = stack.arrangedSubviews.last, last !== version { stack.setCustomSpacing(22, after: last) }
+                let head = label(heading, size: 25, weight: .bold, color: .white, lines: 0)
+                stack.addArrangedSubview(head)
+                stack.setCustomSpacing(10, after: head)
+            } else if let note = WhatsNewView.note(line) {
+                let text = label(note, size: 24, weight: .medium, color: .white.withAlphaComponent(0.85), lines: 0)
+                text.attributedText = changelogText(note, font: text.font, color: text.textColor)
+                stack.addArrangedSubview(text)
+                stack.setCustomSpacing(18, after: text)
+            } else {
+                stack.addArrangedSubview(changelogBullet(line))
+            }
+        }
     }
 
     /// One changelog feature: a small dot (top-aligned to the first text line) +
@@ -603,11 +611,39 @@ enum InfoPopupContent {
             dot.topAnchor.constraint(equalTo: dotWrap.topAnchor, constant: 12)
         ])
         let textLabel = label(text, size: 24, weight: .medium, color: .white.withAlphaComponent(0.85), lines: 0)
+        textLabel.attributedText = changelogText(text, font: textLabel.font, color: textLabel.textColor)
         let row = UIStackView(arrangedSubviews: [dotWrap, textLabel])
         row.axis = .horizontal
         row.alignment = .fill
         row.spacing = 14
         return row
+    }
+
+    /// A line's text, with a trailing `@name` drawn as a small tag.
+    private static func changelogText(_ line: String, font: UIFont, color: UIColor) -> NSAttributedString {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        guard let range = line.range(of: #" @[A-Za-z0-9-]+$"#, options: .regularExpression) else {
+            return NSAttributedString(string: line, attributes: attributes)
+        }
+        let result = NSMutableAttributedString(string: String(line[..<range.lowerBound]) + "  ", attributes: attributes)
+        let tag = NSTextAttachment(image: changelogTag(String(line[range].dropFirst())))
+        tag.bounds = CGRect(origin: CGPoint(x: 0, y: (font.capHeight - tag.image!.size.height) / 2), size: tag.image!.size)
+        result.append(NSAttributedString(attachment: tag))
+        return result
+    }
+
+    private static func changelogTag(_ name: String) -> UIImage {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 19, weight: .semibold),
+            .foregroundColor: UIColor.white
+        ]
+        let text = (name as NSString).size(withAttributes: attributes)
+        let size = CGSize(width: ceil(text.width) + 24, height: ceil(text.height) + 8)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            UIColor.white.withAlphaComponent(0.18).setFill()
+            UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2).fill()
+            (name as NSString).draw(at: CGPoint(x: 12, y: 4), withAttributes: attributes)
+        }
     }
 
     /// Licenses: Rivulet's own, the TMDB attribution, then every bundled dependency's full

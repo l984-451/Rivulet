@@ -107,7 +107,7 @@ struct IOSPlaybackSettingsView: View {
             } header: {
                 Text("Skip Markers")
             } footer: {
-                Text("Button shows a skip button, Automatic skips on its own, and Off shows nothing.")
+                Text("Manual shows a skip button, Automatic skips on its own, and Off shows nothing.")
             }
 
             Section {

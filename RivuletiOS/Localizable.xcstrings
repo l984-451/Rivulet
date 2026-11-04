@@ -813,16 +813,6 @@
         }
       }
     },
-    "Button shows a skip button, Automatic skips on its own, and Off shows nothing." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„Manuell“ zeigt eine Schaltfläche zum Überspringen, „Automatisch“ überspringt von selbst und „Aus“ zeigt nichts."
-          }
-        }
-      }
-    },
     "Can't Record" : {
       "localizations" : {
         "de" : {
@@ -2685,6 +2675,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Manuell"
+          }
+        }
+      }
+    },
+    "Manual shows a skip button, Automatic skips on its own, and Off shows nothing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Manuell“ zeigt eine Schaltfläche zum Überspringen, „Automatisch“ überspringt von selbst und „Aus“ zeigt nichts."
           }
         }
       }

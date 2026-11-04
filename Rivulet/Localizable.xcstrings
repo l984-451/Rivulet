@@ -2759,12 +2759,12 @@
         }
       }
     },
-    "Customize how Rivulet looks — display size, hero banners, sidebar libraries, and content discovery rows." : {
+    "Customize how Rivulet looks: the sidebar, Top Shelf, hero banners, Home and library rows, and ratings." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lege fest, wie Rivulet aussieht: Anzeigegröße, Hero-Banner, Mediatheken in der Seitenleiste und Empfehlungsreihen."
+            "value" : "Lege fest, wie Rivulet aussieht: Seitenleiste, Top Shelf, Hero-Banner, Reihen auf der Startseite und in den Mediatheken sowie Bewertungen."
           }
         }
       }

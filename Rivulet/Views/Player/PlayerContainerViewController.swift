@@ -2024,10 +2024,12 @@ class PlayerContainerViewController: UIViewController {
 
         case .insights:
             guard insightsButtonShouldBeAvailable else { return nil }
-            return (InsightsPanelContainerView(
+            let insights = InsightsPanelContainerView(
                 cast: insightsCastCache,
                 trivia: insightsTriviaCache,
-                suppressedTriviaIDs: suppressedTriviaIDsCache), nil)
+                suppressedTriviaIDs: suppressedTriviaIDsCache)
+            insights.onReadBio = { [weak self] in self?.presentDescription($0) }
+            return (insights, nil)
 
         case .details:
             // Live stats exist only on the aether route (an AetherPlayer is present).
@@ -2035,7 +2037,6 @@ class PlayerContainerViewController: UIViewController {
                 vm.aetherPlayer != nil ? { [weak vm] in vm?.aetherPlayer?.advancedStats() } : nil
             var media = PlayerDetailsPaneView.mediaSections(metadata: vm.metadata, modes: vm.streamingModeInfo,
                 dolbyVision: vm.aetherPlayer?.dolbyVisionPlayback,
-                enhancementLayer: vm.aetherPlayer?.dolbyVisionEnhancementLayer,
                 enhanceDialogue: SystemAudioAdjustment.dialogueSummary,
                 upscale: vm.aetherPlayer?.upscaleSummary)
             if let negotiated = vm.siloNegotiatedDetails { media.insert(negotiated, at: 0) }

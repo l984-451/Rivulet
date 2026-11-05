@@ -245,7 +245,6 @@ enum SettingsContent {
         case .autoplayCountdownPicker: return autoplayCountdownPicker
         case .skipIntervalPicker:     return skipIntervalPicker
         case .skipBackIntervalPicker: return skipBackIntervalPicker
-        case .heightSpeakersPicker:   return heightSpeakersPicker
         case .subtitleModePicker:     return subtitleModePicker
         case .autoplayLimitPicker:    return autoplayLimitPicker
         case .homeQualityPicker:      return qualityPicker(home: true)
@@ -344,17 +343,6 @@ enum SettingsContent {
         }
     }
 
-    /// "" is Off; the rest are the layouts the engine renders heights into.
-    private static var heightSpeakersPicker: [SettingsRowItem] {
-        ["", "5.1.2", "5.1.4", "7.1.2", "7.1.4", "9.1.6"].map { layout in
-            SettingsRowItem(id: "hs_\(layout.isEmpty ? "off" : layout)", verbatim: layout.isEmpty ? String(localized: "Off") : layout,
-                            kind: .selectable(isSelected: { heightSpeakers == layout }, value: { nil }, handler: { vc in
-                SettingsStore.setString(AetherPlayer.heightSpeakersKey, layout)
-                (vc as? SettingsPageViewController)?.onPop?()
-            }))
-        }
-    }
-
     /// Read at play time by the player (`StreamingQuality.setting`).
     private static func qualityPicker(home: Bool) -> [SettingsRowItem] {
         let key = home ? StreamingQuality.homeKey : StreamingQuality.awayKey
@@ -384,12 +372,6 @@ enum SettingsContent {
                 isSelected: { TrackLanguage.normalize(TrackIntentStore.subtitleLanguage) == code },
                 select: { TrackIntentStore.setSubtitles(language: code) }))
         }
-    }
-
-    // MARK: Audio and subtitles (read and written through TrackIntentStore)
-
-    private static var heightSpeakers: String {
-        SettingsStore.string(AetherPlayer.heightSpeakersKey, default: "")
     }
 
     // MARK: Root
@@ -546,9 +528,6 @@ enum SettingsContent {
                                          })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
-            toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: false),
-            SettingsRowItem(id: "heightSpeakers", title: "Height Speakers",
-                            kind: .navigationValue(.heightSpeakersPicker, value: { heightSpeakers.isEmpty ? String(localized: "Off") : heightSpeakers })),
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
                             kind: .navigationValue(.contentFilter, value: {

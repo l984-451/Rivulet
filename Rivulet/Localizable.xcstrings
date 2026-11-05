@@ -3119,16 +3119,6 @@
         }
       }
     },
-    "Dolby Vision FEL" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dolby Vision FEL"
-          }
-        }
-      }
-    },
     "Dolby Vision, TV not confirmed" : {
       "localizations" : {
         "de" : {
@@ -3195,16 +3185,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Drogen, Alkohol & Rauchen"
-          }
-        }
-      }
-    },
-    "Dual Layer (FEL)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zwei Ebenen (FEL)"
           }
         }
       }
@@ -3395,16 +3375,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stärker hervorheben"
-          }
-        }
-      }
-    },
-    "Enhancement Layer" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erweiterungsebene"
           }
         }
       }
@@ -4099,16 +4069,6 @@
         }
       }
     },
-    "Full (FEL)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vollständig (FEL)"
-          }
-        }
-      }
-    },
     "Full Screen" : {
       "localizations" : {
         "de" : {
@@ -4335,16 +4295,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Höhe"
-          }
-        }
-      }
-    },
-    "Height Speakers" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Höhenlautsprecher"
           }
         }
       }
@@ -4789,16 +4739,6 @@
         }
       }
     },
-    "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Behält die Höhenkanäle objektbasierter Tonspuren bei, verlustfrei über HDMI. Bei „Aus“ wird 7.1 ohne sie wiedergegeben. Manche Tonspuren benötigen 7.1.4 oder 9.1.6."
-          }
-        }
-      }
-    },
     "Kids" : {
       "localizations" : {
         "de" : {
@@ -5155,16 +5095,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ab leicht"
-          }
-        }
-      }
-    },
-    "Minimal (MEL)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Minimal (MEL)"
           }
         }
       }
@@ -6351,12 +6281,12 @@
         }
       }
     },
-    "Plays the full Dolby Vision Profile 7 layer on a Dolby Vision TV, without AirPlay or Picture in Picture. Off plays it as 8.1." : {
+    "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gibt die vollständige Ebene von Dolby Vision Profil 7 auf einem Dolby-Vision-Fernseher wieder, ohne AirPlay oder Bild-in-Bild. Bei „Aus“ wird Profil 7 als 8.1 wiedergegeben."
+            "value" : "Spielt auf Plex Trailer und das Pre-Roll-Video deines Servers ab, bevor ein Film von Anfang an startet. Was läuft, legen die Cinema-Trailers-Einstellungen deines Servers fest. Mit „Überspringen“ geht es weiter."
           }
         }
       }
@@ -7678,7 +7608,14 @@
       }
     },
     "Scan with your phone" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit dem Smartphone scannen"
+          }
+        }
+      }
     },
     "Scene" : {
       "localizations" : {
@@ -8466,6 +8403,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rückblick überspringen"
+          }
+        }
+      }
+    },
+    "Skip Trailer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer überspringen"
           }
         }
       }
@@ -9812,6 +9759,16 @@
         }
       }
     },
+    "Trailers Before Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer vor Filmen"
+          }
+        }
+      }
+    },
     "Transcode" : {
       "localizations" : {
         "de" : {
@@ -11088,7 +11045,14 @@
       }
     },
     "or visit" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "oder öffne"
+          }
+        }
+      }
     },
     "postVideo.playNext" : {
       "extractionState" : "extracted_with_value",

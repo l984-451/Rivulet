@@ -7,8 +7,8 @@
 //
 //  A cast member inside the Insights box, laid out like the Info card:
 //  portrait, name and a four-line bio on the left, their filmography as a row
-//  of posters on the right. Select on the bio spreads it across the box to
-//  read; Menu folds it back.
+//  of posters on the right. Select on the bio opens the whole text, as the
+//  Info card's summary does.
 //
 
 import UIKit
@@ -21,7 +21,6 @@ final class InsightsActorView: UIView {
         static let nameTop: CGFloat = 33
         static let bioTop: CGFloat = 80
         static let bioWidth: CGFloat = 600
-        static let readingWidth: CGFloat = 1500
         static let postersLeading: CGFloat = 860
         static let posterGap: CGFloat = 20
     }
@@ -36,9 +35,10 @@ final class InsightsActorView: UIView {
     private let bio = PlayerSummaryButton(text: String(localized: "Loading…"), lines: 4)
     private let posterScroll = UIScrollView()
     private let posterStack = UIStackView()
-    private var bioWidth: NSLayoutConstraint?
     private var portraitTask: Task<Void, Never>?
-    private var isReading = false
+    private var biography: String?
+    /// Select on a loaded bio, with its whole text.
+    var onReadBio: ((String) -> Void)?
 
     init(person: MediaPerson) {
         self.person = person
@@ -57,7 +57,10 @@ final class InsightsActorView: UIView {
         name.font = .systemFont(ofSize: 31, weight: .bold)
         name.textColor = .white
 
-        bio.onPress = { [weak self] in self?.setReading(!(self?.isReading ?? false)) }
+        bio.onPress = { [weak self] in
+            guard let self, let biography = self.biography else { return }
+            self.onReadBio?(biography)
+        }
 
         posterScroll.clipsToBounds = true
         posterScroll.showsHorizontalScrollIndicator = false
@@ -70,8 +73,6 @@ final class InsightsActorView: UIView {
 
         [portrait, name, bio, posterScroll, posterStack].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
         [portrait, name, bio, posterScroll].forEach { addSubview($0) }
-        let bioWidth = bio.textWidth.constraint(equalToConstant: Metrics.bioWidth)
-        self.bioWidth = bioWidth
         NSLayoutConstraint.activate([
             portrait.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.portrait.minX),
             portrait.topAnchor.constraint(equalTo: topAnchor, constant: Metrics.portrait.minY),
@@ -82,7 +83,7 @@ final class InsightsActorView: UIView {
             name.trailingAnchor.constraint(lessThanOrEqualTo: posterScroll.leadingAnchor, constant: -20),
             bio.textLeading.constraint(equalTo: leadingAnchor, constant: Metrics.textX),
             bio.textTop.constraint(equalTo: topAnchor, constant: Metrics.bioTop),
-            bioWidth,
+            bio.textWidth.constraint(equalToConstant: Metrics.bioWidth),
             posterScroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.postersLeading),
             posterScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -23),
             posterScroll.topAnchor.constraint(equalTo: topAnchor),
@@ -104,6 +105,7 @@ final class InsightsActorView: UIView {
     func populate(_ detail: PersonDetail) {
         self.detail = detail
         let text = detail.biography?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        biography = text.isEmpty ? nil : text
         bio.setText(text.isEmpty ? String(localized: "No biography available.") : text)
         if let url = detail.portraitURL, url != person.imageURL { loadPortrait(url) }
         for entry in detail.movies + detail.shows {
@@ -133,24 +135,6 @@ final class InsightsActorView: UIView {
     /// The load failed or found nothing: portrait and name stay, no posters.
     func showDetailsUnavailable() {
         bio.setText(String(localized: "No details available."))
-    }
-
-    /// Menu folds a reading bio back first.
-    func handleMenuPress() -> Bool {
-        guard isReading else { return false }
-        setReading(false)
-        return true
-    }
-
-    private func setReading(_ reading: Bool) {
-        isReading = reading
-        bioWidth?.constant = reading ? Metrics.readingWidth : Metrics.bioWidth
-        bio.setShrinksToFit(reading)
-        UIView.animate(withDuration: 0.25) {
-            self.posterScroll.alpha = reading ? 0 : 1
-            self.layoutIfNeeded()
-        }
-        posterScroll.isUserInteractionEnabled = !reading
     }
 
     private func loadPortrait(_ url: URL?) {

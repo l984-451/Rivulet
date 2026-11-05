@@ -8,6 +8,17 @@ import SwiftDraw
 /// Renders SVG, which ImageIO and UIImage cannot decode.
 nonisolated enum SVGRasterizer {
     private static let maxBytes = 4 * 1024 * 1024
+    private static let queue = DispatchQueue(label: "rivulet.svg-rasterizer", qos: .userInitiated)
+
+    /// `cgImage` on its own queue, one file at a time. On Swift's thread pool (about 3 threads on
+    /// an Apple TV) a screen of detailed logos would hold up every other image and request.
+    static func decode(_ data: Data, maxPixelSize: CGFloat) async -> CGImage? {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                continuation.resume(returning: cgImage(from: data, maxPixelSize: maxPixelSize))
+            }
+        }
+    }
 
     /// Judged from the bytes, because a logo URL often has no extension and servers mislabel the type.
     static func isSVG(_ data: Data) -> Bool {

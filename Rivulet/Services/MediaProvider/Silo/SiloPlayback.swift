@@ -676,9 +676,8 @@ extension SiloProvider {
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) { hardware.append("hevc") }
         let modes = AVPlayer.availableHDRModes
         let dv = AetherEngine.displayCapabilities.supportsDolbyVision
-        let fel = UserDefaults.standard.object(forKey: AetherPlayer.dolbyVisionFELKey) as? Bool ?? true
         let hdr = SiloHDRCapabilities(hdr10: modes.contains(.hdr10), hdr10Plus: false, hlg: modes.contains(.hlg),
-                                       dolbyVisionProfiles: dv ? (fel ? [5, 7, 8] : [5, 8]) : [])
+                                       dolbyVisionProfiles: dv ? [5, 7, 8] : [])
         let caps = SiloCodecCapabilities(codecsVideo: video, codecsVideoHardware: hardware, codecsAudio: audio,
                                          containers: containers, hdr: modes.rawValue != 0, hdrDetails: hdr)
         let nativeSubtitleCodecs = ["subrip", "webvtt", "mov_text", "ass", "ssa",
@@ -690,10 +689,9 @@ extension SiloProvider {
                                                  })
         var deliveries: [String: SiloDeliveryCapabilities] = [:]
         if !transcodeOnly, serverDeliveries.contains("original_http") {
-            // Aether inspects the original DV records/layers and owns output
-            // mapping (P7 MEL -> native P8.1; FEL follows the user's setting).
-            // Silo cannot infer that from the panel's supported profile list:
-            // without the scoped claim its P7 planner strips DV on the server.
+            // Aether handles the original Dolby Vision stream and maps Profile 7
+            // to Profile 8.1 on supported displays. Silo needs this scoped claim
+            // to leave dynamic-range handling to the client.
             // Original bytes also retain every audio stream for the plan's
             // selected ordinal to be mapped onto the probed engine inventory.
             deliveries["original_http"] = SiloDeliveryCapabilities(containers: containers, videoCodecs: video,

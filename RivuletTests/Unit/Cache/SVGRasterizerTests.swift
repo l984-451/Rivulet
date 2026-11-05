@@ -25,6 +25,14 @@ final class SVGRasterizerTests: XCTestCase {
         return Array(pixel.prefix(3))
     }
 
+    func test_decode_rendersOffThePool() async {
+        let data = svg(##"<rect width="10" height="10" fill="#fff"/>"##)
+        let decoded = await SVGRasterizer.decode(data, maxPixelSize: 64)
+        XCTAssertEqual(decoded?.width, 64)
+        let rejected = await SVGRasterizer.decode(Data("not svg".utf8), maxPixelSize: 64)
+        XCTAssertNil(rejected)
+    }
+
     // MARK: - Detection
 
     func test_isSVG_acceptsCommonOpenings() {

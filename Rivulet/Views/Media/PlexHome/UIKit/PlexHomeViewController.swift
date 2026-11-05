@@ -4189,14 +4189,18 @@ final class PlexHomeViewController: UIViewController {
         default: false
         }
         let wantsWatchlist = isTitle && provider.supportsWatchlist
-        async let canDelete = provider.canDeleteMedia()
-        async let onWatchlist = wantsWatchlist ? await provider.isOnWatchlist(item.ref) : false
         var sections = sections
         if wantsWatchlist {
-            let action = watchlistAction(for: item, provider: provider, isOn: await onWatchlist)
+            // Asking costs a metadata read, so the row loads in the open menu.
+            let action = TileMenuAction.pending(title: "Watchlist", sizedFor: [
+                String(localized: "Add to Watchlist"), String(localized: "Add Show to Watchlist"),
+                String(localized: "Remove from Watchlist"),
+            ]) {
+                watchlistAction(for: item, provider: provider, isOn: await provider.isOnWatchlist(item.ref))
+            }
             if sections.count > 1 { sections[1].append(action) } else { sections.append([action]) }
         }
-        if await canDelete {
+        if await provider.canDeleteMedia() {
             sections.append([deleteAction(for: item, provider: provider, from: presenter)])
         }
         return sections

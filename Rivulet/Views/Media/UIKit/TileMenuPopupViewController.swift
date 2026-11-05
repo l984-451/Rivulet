@@ -14,6 +14,10 @@ struct TileMenuAction {
     let systemImage: String
     var destructive: Bool = false
     let handler: () -> Void
+    /// Set on a row that waits on the server: it shows a spinner until this answers with the real row.
+    private(set) var resolve: (@MainActor @Sendable () async -> TileMenuAction)?
+    /// Every title the row may end up with, so the panel is wide enough before it knows.
+    private(set) var sizingTitles: [String] = []
 
     /// A literal `title` is extracted to the string catalog; a server's text goes through `verbatim:`.
     init(title: String.LocalizationValue, systemImage: String, destructive: Bool = false, handler: @escaping () -> Void) {
@@ -25,6 +29,15 @@ struct TileMenuAction {
         self.systemImage = systemImage
         self.destructive = destructive
         self.handler = handler
+    }
+
+    /// A row that shows `title` and a spinner until `resolve` returns the real action.
+    static func pending(title: String.LocalizationValue, sizedFor titles: [String],
+                        resolve: @escaping @MainActor @Sendable () async -> TileMenuAction) -> TileMenuAction {
+        var action = TileMenuAction(title: title, systemImage: "", handler: {})
+        action.resolve = resolve
+        action.sizingTitles = titles
+        return action
     }
 }
 
@@ -278,8 +291,8 @@ final class TileMenuPopupViewController: UIViewController {
     private static func widestRowWidth(for sections: [[TileMenuAction]]) -> CGFloat {
         let font = MenuRowButton.titleFont
         var widest: CGFloat = 0
-        for action in sections.joined() {
-            let text = (action.title as NSString).size(withAttributes: [.font: font]).width
+        for title in sections.joined().flatMap({ [$0.title] + $0.sizingTitles }) {
+            let text = (title as NSString).size(withAttributes: [.font: font]).width
             widest = max(widest, MenuRowButton.contentWidth(forTitleWidth: text))
         }
         return ceil(widest)
@@ -368,10 +381,12 @@ private final class MenuRowButton: UIView {
     private static let highlightHeight: CGFloat = 74
     private let highlight = UIView()
     private let iconView = UIImageView()
+    private let spinner = UIActivityIndicatorView(style: .medium)
     private let labelView = UILabel()
-    private let destructive: Bool
+    private var destructive: Bool
     private let onPress: (@escaping () -> Void) -> Void
-    private let handler: () -> Void
+    private var handler: () -> Void
+    private var isPending: Bool
 
     override var canBecomeFocused: Bool { true }
 
@@ -379,6 +394,7 @@ private final class MenuRowButton: UIView {
         self.destructive = action.destructive
         self.onPress = onPress
         self.handler = action.handler
+        self.isPending = action.resolve != nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         // The focus capsule is 74pt tall, taller than the 66pt row pitch.
@@ -393,6 +409,16 @@ private final class MenuRowButton: UIView {
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
+
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(spinner)
+        if let resolve = action.resolve {
+            spinner.startAnimating()
+            Task { [weak self] in
+                let resolved = await resolve()
+                self?.apply(resolved)
+            }
+        }
 
         labelView.text = action.title
         labelView.font = Self.titleFont
@@ -412,6 +438,8 @@ private final class MenuRowButton: UIView {
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.leadingPad),
             iconView.widthAnchor.constraint(equalToConstant: Self.iconWidth),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            spinner.centerXAnchor.constraint(equalTo: iconView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: centerYAnchor),
             labelView.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: Self.iconTitleGap),
             labelView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.trailingPad),
             labelView.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -424,26 +452,43 @@ private final class MenuRowButton: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    @objc private func pressed() { onPress(handler) }
+    @objc private func pressed() {
+        guard !isPending else { return }
+        onPress(handler)
+    }
+
+    /// The pending row becomes the real one in place.
+    private func apply(_ action: TileMenuAction) {
+        isPending = false
+        handler = action.handler
+        destructive = action.destructive
+        spinner.stopAnimating()
+        iconView.image = UIImage(systemName: action.systemImage)
+        labelView.text = action.title
+        isFocused ? applyFocusedAppearance() : applyUnfocusedAppearance()
+    }
 
     private func applyUnfocusedAppearance() {
         highlight.backgroundColor = .clear
         let content: UIColor = destructive ? .systemRed : .white
-        labelView.textColor = content
+        labelView.textColor = content.withAlphaComponent(isPending ? 0.5 : 1)
         iconView.tintColor = content
+        spinner.color = content
+    }
+
+    private func applyFocusedAppearance() {
+        highlight.backgroundColor = destructive ? .systemRed : .white
+        let content: UIColor = destructive ? .white : .black
+        labelView.textColor = content.withAlphaComponent(isPending ? 0.5 : 1)
+        iconView.tintColor = content
+        spinner.color = content
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext,
                                  with coordinator: UIFocusAnimationCoordinator) {
         let focused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: focused) {
-            if focused {
-                self.highlight.backgroundColor = self.destructive ? .systemRed : .white
-                self.labelView.textColor = self.destructive ? .white : .black
-                self.iconView.tintColor = self.destructive ? .white : .black
-            } else {
-                self.applyUnfocusedAppearance()
-            }
+            focused ? self.applyFocusedAppearance() : self.applyUnfocusedAppearance()
         }
     }
 }

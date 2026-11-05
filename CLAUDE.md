@@ -60,7 +60,11 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   LiveTVSourceConnector, LiveShelves), IPTV/ (parsers,
 │                       #   DispatcharrService), Playback/ (CaptionAppearance,
 │                       #   IntroDBClient), Streaming/ (quality decision, throughput,
-│                       #   version ranking), Scores/ (Live TV scoreboard).
+│                       #   version ranking), Scores/ (Live TV scoreboard),
+│                       #   MediaProvider/ (the backend seam: MediaProvider, PhotoProvider,
+│                       #   MusicProvider, registries; Plex/, Jellyfin/ and Emby/ implement
+│                       #   it, see "Media providers"), Models/Media, Models/Music,
+│                       #   Models/Photos (the agnostic item types).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   navigation contract), Plex/ (IOSPlexSession + its
@@ -77,8 +81,8 @@ Rivulet/                # The tvOS app — everything below.
 │   └── SwiftData/      # Persistent models (Channel, EPGProgram, PlexServer)
 ├── Services/
 │   ├── DeepLinkHandler.swift  # Opens a RivuletLink or Siri activity once the shell is ready
-│   ├── MediaProvider/  # The backend seam (MediaProvider, PhotoProvider, registries);
-│   │                   #   Plex/, Jellyfin/ and Emby/ implement it (see "Media providers")
+│   ├── MediaProvider/  # tvOS stores over the seam: ServerDataStore (other servers' Home
+│   │                   #   rows), PlaylistAvailability (sidebar). The seam is in RivuletCore.
 │   ├── Plex/
 │   │   ├── (PlexDataStore, …; the Plex client lives in RivuletCore/Plex)
 │   │   └── Playback/   # AetherPlayer + routing/remux (see Docs/RIVULET_PLAYER.md),
@@ -180,7 +184,7 @@ hosts, account-vs-server token, `includeHttps=1&includeRelay=1`, the transcode
 profile params), `Models/Plex/`, `PlexLiveTVProvider` + `PlexLiveTVModels` + the
 timeline keepalive, `WatchProgressPolicy`, `ContentRouter`, `TrackIntent`,
 `MediaTrack`, `StreamBodyClassifier`, the IPTV parsers, `Services/Security/`,
-`Services/MediaProvider/`, `CacheManager`, `LibraryGUIDIndex`, `PlexAuthManager`,
+`RivuletCore/MediaProvider/`, `CacheManager`, `LibraryGUIDIndex`, `PlexAuthManager`,
 `LiveTVDataStore`.
 
 No, so it stays in `Rivulet/`: all of `Views/` (focus engine, morphs, Siri
@@ -188,7 +192,7 @@ Remote), `Services/Input/`, `Services/Focus/`, the Top Shelf composer and
 extension, `Services/Siri/`, `DisplayCriteriaManager` (`AVDisplayManager` is
 tvOS-only), and `PlexDataStore` — it carries tvOS-home-shaped state (the
 `mergedItems` cache, the Continue Watching merge), so iOS goes through
-`Services/MediaProvider/` instead.
+`RivuletCore/MediaProvider/` instead.
 
 **An import of UIKit or SwiftUI does not make a file tvOS-only.** Both exist on
 iOS, and `ObservableObject` / `@Published` are the only reason most of the
@@ -199,6 +203,11 @@ plus `DisplayCriteriaManager`. Judge by tvOS-only frameworks (`TVServices`,
 
 Move existing files into `RivuletCore/` when a slice actually needs them, not
 speculatively. The list above is the destination, not a migration order.
+
+**The app folders hold GUI; logic lives in `RivuletCore/`.** `Rivulet/` and
+`RivuletiOS/` are for views, input, focus, and stores shaped for one app's
+screens. Everything else (server behavior, rules, mapping, non-UI state) is
+written in `RivuletCore/` from the first commit, so both apps get it at once.
 
 **New business logic starts in `RivuletCore/`, even when only tvOS ships it.**
 Rules, server and API behavior, and non-UI state go there from the first
@@ -766,7 +775,7 @@ write either number anywhere else.
 ### Media providers (Plex, Jellyfin, Emby)
 
 Jellyfin and Emby are tvOS only. All three backends sit behind one seam,
-`Services/MediaProvider/MediaProvider.swift`, with `Plex/`, `Jellyfin/` and `Emby/` below it.
+`RivuletCore/MediaProvider/MediaProvider.swift`, with `Plex/`, `Jellyfin/` and `Emby/` below it.
 Views talk to the protocol. A non-Plex item plays through `ProviderPlayback+Prepare.swift`,
 which never names a backend.
 
@@ -1151,9 +1160,9 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 | Watch progress rule | `RivuletCore/Models/Media/WatchProgressPolicy.swift` |
 | Plex star rating / favorite | `RivuletCore/Models/Plex/PlexUserRating.swift` |
 | Plex API | `RivuletCore/Plex/PlexNetworkManager.swift` |
-| Backend seam (Plex, Jellyfin, Emby) | `Services/MediaProvider/MediaProvider.swift` |
-| Jellyfin provider | `Services/MediaProvider/Jellyfin/JellyfinProvider.swift` |
-| Emby provider | `Services/MediaProvider/Emby/EmbyProvider.swift` |
+| Backend seam (Plex, Jellyfin, Emby) | `RivuletCore/MediaProvider/MediaProvider.swift` |
+| Jellyfin provider | `RivuletCore/MediaProvider/Jellyfin/JellyfinProvider.swift` |
+| Emby provider | `RivuletCore/MediaProvider/Emby/EmbyProvider.swift` |
 | Glass row styling | `Views/Components/GlassRowStyle.swift` |
 | Settings rows / pages | `Views/Settings/UIKit/SettingsPageModels.swift` |
 | Player canon docs | `Docs/RIVULET_PLAYER.md` |

@@ -18,6 +18,7 @@ nonisolated enum DownloadRules {
     static let multiPartReason = String(localized: "This version is split into parts; choose a converted quality")
     static let noFileReason = String(localized: "This item has no downloadable file")
     static let conversionGoneReason = String(localized: "The server no longer has this conversion")
+    static let notAllowedReason = String(localized: "This account isn't allowed to download from the server")
     static let mismatchReason = String(localized: "The downloaded file didn't match the server's copy")
     static let shortFileReason = String(localized: "The download was cut short")
 
@@ -61,10 +62,10 @@ nonisolated enum DownloadRules {
     }
 
     /// The transfer's own non-2xx answer, or 0 when the file came up short. Retryable statuses wait.
-    static func state(afterRejectedStatus status: Int, converted: Bool) -> DownloadState {
+    static func state(afterRejectedStatus status: Int, converted: Bool, kind: MediaProviderKind = .plex) -> DownloadState {
         if status == 0 { return .failed(reason: shortFileReason) }
         if status == 503, converted { return .preparing(progress: 100) }
-        return failureReason(httpStatus: status).map { .failed(reason: $0) } ?? .waitingForServer
+        return failureReason(httpStatus: status, kind: kind).map { .failed(reason: $0) } ?? .waitingForServer
     }
 
     /// What a bound transfer needs on this path, given the setting and the cellular flag its request carries.
@@ -89,9 +90,11 @@ nonisolated enum DownloadRules {
     }
 
     /// The reason to show for an HTTP status, or nil when it is worth retrying later.
-    static func failureReason(httpStatus status: Int) -> String? {
+    static func failureReason(httpStatus status: Int, kind: MediaProviderKind = .plex) -> String? {
         switch status {
+        case 401 where kind != .plex: String(localized: "The server didn't accept the sign-in; sign in again, then retry")
         case 401: String(localized: "Plex didn't accept the sign-in; sign in again, then retry")
+        case 403 where kind != .plex: notAllowedReason
         case 403: remotePassReason
         case 404, 410: String(localized: "The file is no longer on the server")
         case 408, 429: nil
@@ -126,6 +129,55 @@ nonisolated enum DownloadRules {
         guard let taskHost = taskURL?.host?.lowercased(), let current = URL(string: serverURL),
               let currentHost = current.host?.lowercased() else { return false }
         return taskHost != currentHost || taskURL?.port != current.port
+    }
+}
+
+extension DownloadRules {
+    /// UUID-named files in the Downloads folder that no record owns.
+    static func orphanedFiles(_ names: Set<String>, records: [DownloadRecord]) -> [String] {
+        let owned = Set(records.map(\.id))
+        return names.filter { name in
+            let owner = String(name.prefix { $0 != "." })
+            return UUID(uuidString: owner) != nil && !owned.contains(owner)
+        }.sorted()
+    }
+
+    /// The records that need work now: unsettled, visible, and without a transfer.
+    static func pending(_ records: [DownloadRecord], visibleIDs: Set<String>, activeIDs: Set<String>) -> [DownloadRecord] {
+        records.filter { !$0.state.isSettled && visibleIDs.contains($0.id) && !activeIDs.contains($0.id) }
+    }
+
+    /// The downloads this profile may see: its own (or any, with no profiles), none from Jellyfin or Emby
+    /// on a restricted profile, and none from a server whose signed-in account is not the one that made them.
+    static func visible(_ records: [DownloadRecord], profileID: String?, restricted: Bool,
+                        signedInAccounts: [String: String]) -> [DownloadRecord] {
+        records.filter { record in
+            if let profileID, record.profileID != nil, record.profileID != profileID { return false }
+            guard !record.isPlex else { return true }
+            if restricted { return false }
+            if let owner = record.accountID, let current = signedInAccounts[record.providerID], owner != current { return false }
+            return true
+        }
+    }
+
+    /// The whole file's size from a response: a range answer's total, else a full answer's length.
+    static func totalLength(status: Int, contentRange: String?, contentLength: Int64) -> Int64? {
+        if let total = contentRange?.split(separator: "/").last.flatMap({ Int64($0) }) { return total }
+        return status == 200 && contentLength > 0 ? contentLength : nil
+    }
+
+    /// The completed download that follows an episode of the same show on the same server, if any.
+    static func nextDownloaded(afterShow showID: String?, season: Int, episode: Int, providerID: String?,
+                               in records: [DownloadRecord]) -> DownloadRecord? {
+        guard let showID else { return nil }
+        func position(_ record: DownloadRecord) -> (Int, Int) { (record.item.seasonNumber ?? 0, record.item.episodeNumber ?? 0) }
+        return records
+            .filter { record in
+                record.state == .completed && record.item.kind == .episode && record.item.grandparentRef?.itemID == showID
+                    && (providerID.map { DownloadIdentity.matches(record.providerID, $0) } ?? true)
+            }
+            .filter { position($0) > (season, episode) }
+            .min { position($0) < position($1) }
     }
 }
 

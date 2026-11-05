@@ -37,6 +37,7 @@ nonisolated struct JFUserWithPolicy: Decodable, Sendable {
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?
         let enableContentDeletion: Bool?
+        let enableContentDownloading: Bool?
         let enableLiveTvManagement: Bool?
     }
 }

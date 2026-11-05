@@ -53,11 +53,36 @@ extension IOSPlaybackController {
             await plex?.watchStateDidChange()
         })
         backend.register(entries?.items ?? [])
-        let request = try await backend.firstPlayback(of: target, fromBeginning: fromBeginning, sourceID: sourceID)
+        // A downloaded title plays its file, online or not.
+        let request: IOSPlexPlaybackRequest
+        if var local = IOSDownloadCenter.shared.localPlayback(for: target), sourceID == nil {
+            if fromBeginning { local.startTime = nil }
+            request = local
+        } else {
+            request = try await backend.firstPlayback(of: target, fromBeginning: fromBeginning, sourceID: sourceID)
+        }
         let shimQueue = entries.flatMap {
             PlayQueue(entries: $0.items.map(ProviderPlaybackMetadata.listing(item:)), startingAt: $0.queue.index)
         }
         start(IOSPlexPlayback(request: request, plex: backend, queue: shimQueue))
+    }
+
+    /// Plays a finished download from its file, with the reports of the server it came from.
+    func play(download record: DownloadRecord) {
+        guard let request = IOSDownloadCenter.shared.localPlayback(record: record) else { return }
+        if record.isPlex {
+            play(request)
+            return
+        }
+        guard let provider = MediaProviderRegistry.shared.provider(for: record.providerID) else {
+            playbackError = String(localized: "Sign in to the server to play this download.")
+            return
+        }
+        let backend = IOSProviderBackend(provider: provider, onWatchStateChange: { [weak plex] in
+            await plex?.watchStateDidChange()
+        })
+        backend.register([record.item])
+        start(IOSPlexPlayback(request: request, plex: backend, queue: nil))
     }
 
     /// What the alert says for a failed start.

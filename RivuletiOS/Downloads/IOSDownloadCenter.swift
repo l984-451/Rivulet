@@ -22,6 +22,7 @@ final class IOSDownloadCenter: ObservableObject {
     private let transfer = IOSDownloadTransfer.shared
     private let network = PlexNetworkManager.shared
     private let auth = PlexAuthManager.shared
+    private let registry = MediaProviderRegistry.shared
     private let probe = URLSession(configuration: .ephemeral, delegate: PlexCertificateDelegate(), delegateQueue: nil)
     private static let directory = IOSDownloadTransfer.directory
     private static let manifestURL = directory.appending(path: "manifest.json")
@@ -55,17 +56,17 @@ final class IOSDownloadCenter: ObservableObject {
         try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
         IOSDownloadTransfer.excludeFromBackup(Self.directory)
         let present = Set((try? FileManager.default.contentsOfDirectory(atPath: Self.directory.path)) ?? [])
-        let loaded = DownloadManifest.load(from: Self.manifestURL)
+        let launch = DownloadManifest.loadForLaunch(from: Self.manifestURL)
+        let loaded = launch.manifest
         let checked = loaded.reconciled(filesPresent: present)
         records = checked.records
-        if checked != loaded { save() }
+        if checked != loaded || loaded.migratedFrom != nil { save() }
         currentServerID = UserDefaults.standard.string(forKey: Self.serverIDKey)
         pendingRemovals = DownloadsJSONFile.load([PendingRemoval].self, from: Self.removalsURL) ?? []
-        // A delete that raced a finishing transfer leaves a file named for no record.
-        let ids = Set(records.map(\.id))
-        for name in present {
-            let owner = String(name.prefix { $0 != "." })
-            if UUID(uuidString: owner) != nil, !ids.contains(owner) { removeFile(name) }
+        // A delete that raced a finishing transfer leaves a file named for no record. Never behind a
+        // manifest that would not decode: those files are the only copy.
+        if launch.safeToSweep {
+            for name in DownloadRules.orphanedFiles(present, records: records) { removeFile(name) }
         }
 
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
@@ -118,19 +119,26 @@ final class IOSDownloadCenter: ObservableObject {
 
     /// The current profile's downloads; all of them when there are no profiles.
     var visibleRecords: [DownloadRecord] {
-        guard let profile = currentProfileID else { return records }
-        return records.filter { $0.profileID == nil || $0.profileID == profile }
+        let accounts = Dictionary(uniqueKeysWithValues: registry.secondaryProviders.filter { $0.kind != .plex }
+            .compactMap { provider in provider.accountID.map { (provider.id, $0) } })
+        return DownloadRules.visible(records, profileID: currentProfileID,
+                                     restricted: PlexUserProfileManager.shared.isRestrictedProfile, signedInAccounts: accounts)
     }
 
-    /// The download of `ratingKey` on `serverID`, or on the current server.
-    func record(for ratingKey: String, serverID: String? = nil) -> DownloadRecord? {
-        let server = serverID ?? currentServerID
-        return visibleRecords.first {
-            $0.ratingKey == ratingKey && (server == nil || $0.serverID.isEmpty || $0.serverID == server)
-        }
+    /// The download of `ref`'s item, whichever server it is on.
+    func record(for ref: MediaItemRef) -> DownloadRecord? {
+        guard let key = DownloadIdentity.providerID(for: ref, selectedPlexMachineID: currentServerID) else { return nil }
+        return record(providerID: key, itemID: ref.itemID)
     }
 
-    func state(for ratingKey: String) -> DownloadState? { record(for: ratingKey)?.state }
+    /// The download of Plex `ratingKey` on `serverID`, or on the current server.
+    func record(forRatingKey ratingKey: String, serverID: String?) -> DownloadRecord? {
+        record(providerID: DownloadIdentity.plexProviderID(machineID: serverID ?? currentServerID), itemID: ratingKey)
+    }
+
+    private func record(providerID: String, itemID: String) -> DownloadRecord? {
+        visibleRecords.first { $0.itemID == itemID && DownloadIdentity.matches($0.providerID, providerID) }
+    }
 
     /// Bytes on disk for every download, posters and subtitles included.
     var storageUsed: Int64 {
@@ -139,15 +147,22 @@ final class IOSDownloadCenter: ObservableObject {
         return files.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: Set(keys)).totalFileAllocatedSize) ?? 0) }
     }
 
-    /// `item`'s download on `serverID`, or on the current server, as a playback request.
+    /// A Plex `item`'s download on `serverID`, or on the current server, as a playback request.
     func localPlayback(for item: PlexMetadata, serverID: String? = nil) -> IOSPlexPlaybackRequest? {
-        guard let key = item.ratingKey, let record = record(for: key, serverID: serverID) else { return nil }
-        return localPlayback(record: record, serverItem: item)
+        guard let key = item.ratingKey, let record = record(forRatingKey: key, serverID: serverID) else { return nil }
+        return localPlayback(record: record, server: (item.viewOffset, item.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }))
+    }
+
+    /// A Jellyfin or Emby `item`'s download, or a Plex item's, as a playback request.
+    func localPlayback(for item: MediaItem) -> IOSPlexPlaybackRequest? {
+        guard let record = record(for: item.ref) else { return nil }
+        let offset = item.userState.viewOffset > 0 ? Int(item.userState.viewOffset * 1000) : nil
+        return localPlayback(record: record, server: (offset, item.userState.lastViewedAt))
     }
 
     /// A finished download as a playback request: local file, no headers, stored markers.
-    /// `serverItem`'s resume point wins unless an unsent offline one is newer.
-    func localPlayback(record: DownloadRecord, serverItem: PlexMetadata? = nil) -> IOSPlexPlaybackRequest? {
+    /// The server's resume point wins unless an unsent offline one is newer.
+    func localPlayback(record: DownloadRecord, server: (offsetMs: Int?, lastViewedAt: Date?)? = nil) -> IOSPlexPlaybackRequest? {
         guard record.state == .completed, let name = record.fileName else { return nil }
         let url = Self.directory.appending(path: name)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -156,25 +171,25 @@ final class IOSDownloadCenter: ObservableObject {
         }
 
         var meta = record.metadata
-        if var media = meta.Media, let index = media.firstIndex(where: { $0.id == record.mediaID }) {
+        if var media = meta.Media, let index = media.firstIndex(where: { String($0.id) == record.sourceID }) {
             media.insert(media.remove(at: index), at: 0)
             meta.Media = media
         }
-        if let serverItem {
+        if let server {
             let pending = IOSOfflineProgress.log.entries.first {
-                $0.serverID == record.serverID && $0.profileID == currentProfileID && $0.ratingKey == record.ratingKey
+                DownloadIdentity.matches($0.providerID, record.providerID) && $0.profileID == currentProfileID
+                    && $0.itemID == record.itemID
             }
             meta.viewOffset = OfflineProgressLog.resumeOffsetMs(
-                serverOffsetMs: serverItem.viewOffset,
-                serverLastViewedAt: serverItem.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) },
-                pending: pending)
+                serverOffsetMs: server.offsetMs, serverLastViewedAt: server.lastViewedAt, pending: pending)
         }
         let resume = meta.resumeSeconds
         let resumes = meta.durationSeconds > 0
             ? WatchProgressPolicy.hasResumePoint(offsetSeconds: resume, runtimeSeconds: meta.durationSeconds)
             : WatchProgressPolicy.hasResumePoint(offsetSeconds: resume)
-        // Progress reports go to the server only when it is the one that made the download.
-        let session = record.serverID == currentServerID ? config() : otherServerConfig(record.serverID)
+        // Progress reports go to a Plex server only when it is the one that made the download.
+        let machineID = DownloadIdentity.plexMachineID(of: record.providerID)
+        let session = !record.isPlex ? nil : (machineID == nil || machineID == currentServerID ? config() : otherServerConfig(machineID))
 
         var request = IOSPlexPlaybackRequest(
             item: meta,
@@ -198,13 +213,15 @@ final class IOSDownloadCenter: ObservableObject {
                 isForced: $0.isForced, isHearingImpaired: false, isDefault: false, formatHint: $0.codec)
         }
         request.localArtworkURL = record.posterFileName.map { Self.directory.appending(path: $0) }
-        request.downloadServerID = record.serverID
+        request.downloadProviderID = record.providerID
         return request
     }
 
     /// Keeps a download's resume point current so an offline play resumes where the last one stopped.
-    func noteProgress(ratingKey: String, serverID: String?, offsetMs: Int, watched: Bool, persist: Bool) {
-        guard let id = record(for: ratingKey, serverID: serverID)?.id, let index = records.firstIndex(where: { $0.id == id }) else { return }
+    func noteProgress(for request: IOSPlexPlaybackRequest, offsetMs: Int, watched: Bool, persist: Bool) {
+        guard let key = request.item.ratingKey, let providerID = request.downloadProviderID,
+              let id = record(providerID: providerID, itemID: key)?.id,
+              let index = records.firstIndex(where: { $0.id == id }) else { return }
         // Written directly: PlexMetadata's == sees only ratingKey, so `update` would skip it.
         if watched {
             records[index].metadata.viewOffset = nil
@@ -217,34 +234,42 @@ final class IOSDownloadCenter: ObservableObject {
 
     // MARK: - Actions
 
-    /// Starts a download at `quality`, or the Download Quality setting. A failed one retries.
-    func download(_ item: PlexMetadata, quality: StreamingQuality? = nil) {
-        guard let key = item.ratingKey, (item.serverID.map(otherServerConfig) ?? config()) != nil else { return }
-        if let existing = record(for: key, serverID: item.serverID) {
+    /// Starts a download, or retries a failed one. `quality` (else the Download Quality setting) applies to
+    /// Plex only: it converts on the server, while Jellyfin and Emby always send the original file.
+    func download(_ item: MediaItem, quality: StreamingQuality? = nil) {
+        guard IOSDownloadGate.canDownload(item.ref),
+              let key = DownloadIdentity.providerID(for: item.ref, selectedPlexMachineID: currentServerID) else { return }
+        let plexMachineID = DownloadIdentity.plexMachineID(of: key)
+        let provider = registry.provider(for: item.ref.providerID)
+        if key.hasPrefix("plex:") {
+            guard (plexMachineID.flatMap { $0 == currentServerID ? nil : otherServerConfig($0) } ?? config()) != nil else { return }
+        } else if provider == nil {
+            return
+        }
+        if let existing = record(for: item.ref) {
             if case .failed = existing.state { retry(recordID: existing.id) }
             return
         }
         // Auto has no meaning offline, so anything but a step is Original.
         var chosen = StreamingQuality.original
-        if case .step(let step)? = quality
+        if key.hasPrefix("plex:"), case .step(let step)? = quality
             ?? UserDefaults.standard.string(forKey: Self.qualityKey).flatMap(StreamingQuality.init(rawValue:)) {
             chosen = .step(step)
         }
         records.append(DownloadRecord(
-            serverID: item.serverID ?? currentServerID ?? "", profileID: currentProfileID, ratingKey: key, mediaID: 0,
-            quality: chosen.rawValue, state: .waitingForServer, metadata: item))
+            providerID: key, profileID: currentProfileID, accountID: key.hasPrefix("plex:") ? nil : provider?.accountID,
+            itemID: item.ref.itemID, quality: chosen.rawValue, state: .waitingForServer,
+            item: item.storedForDownload(providerID: key),
+            metadata: key.hasPrefix("plex:") ? item.plexStub : ProviderPlaybackMetadata.listing(item: item)))
         save()
         ensureTicking()
     }
 
     /// Every episode of a season, started together so the session queues them at once.
-    func downloadSeason(_ season: PlexMetadata, quality: StreamingQuality? = nil) async throws {
-        guard let key = season.ratingKey, let (serverURL, token) = season.serverID.map(otherServerConfig) ?? config() else {
-            throw IOSPlexSessionError.notConfigured
-        }
-        let episodes = IOSPlexSession.onServer(
-            try await network.getChildren(serverURL: serverURL, authToken: token, ratingKey: key), season.serverID)
-        for episode in episodes.sorted(by: { ($0.index ?? 0) < ($1.index ?? 0) }) {
+    func downloadSeason(_ season: MediaItem, quality: StreamingQuality? = nil) async throws {
+        guard let provider = registry.provider(for: season.ref.providerID) else { throw MediaProviderError.unreachable }
+        let episodes = try await provider.children(of: season.ref).filter { $0.kind == .episode }
+        for episode in episodes.sorted(by: { ($0.episodeNumber ?? 0) < ($1.episodeNumber ?? 0) }) {
             download(episode, quality: quality)
         }
     }
@@ -291,7 +316,7 @@ final class IOSDownloadCenter: ObservableObject {
         Task {
             await transfer.cancel(recordID: id)
             removeFiles(id)
-            await removeServerItem(record.queueItemID, serverID: record.serverID)
+            await removeServerItem(record.queueItemID, serverID: DownloadIdentity.plexMachineID(of: record.providerID) ?? "")
         }
     }
 
@@ -333,7 +358,7 @@ final class IOSDownloadCenter: ObservableObject {
                 $0.completedAt = Date()
                 $0.queueItemID = nil
             }
-            Task { await removeServerItem(record.queueItemID, serverID: record.serverID) }
+            Task { await removeServerItem(record.queueItemID, serverID: DownloadIdentity.plexMachineID(of: record.providerID) ?? "") }
 
         case let .rejected(id, taskID, status):
             guard accepts(id, taskID) else { return }
@@ -344,7 +369,7 @@ final class IOSDownloadCenter: ObservableObject {
                 // Resume data replays the old token; start over with the current one.
                 set(id, .waitingForServer)
             } else {
-                set(id, DownloadRules.state(afterRejectedStatus: status, converted: record(id)?.queueItemID != nil))
+                set(id, DownloadRules.state(afterRejectedStatus: status, converted: record(id)?.queueItemID != nil, kind: record(id)?.kind ?? .plex))
             }
             ensureTicking()
 
@@ -378,7 +403,8 @@ final class IOSDownloadCenter: ObservableObject {
 
     /// Starts work on each record that has no transfer. False when none needs any.
     private func advanceWaiting() -> Bool {
-        let pending = records.filter { !$0.state.isSettled && activeTasks[$0.id] == nil }
+        // A record hidden from this profile or account waits for its owner and keeps nothing running.
+        let pending = DownloadRules.pending(records, visibleIDs: Set(visibleRecords.map(\.id)), activeIDs: Set(activeTasks.keys))
         for record in pending where !busy.contains(record.id) {
             Task { await advance(record.id) }
         }
@@ -390,22 +416,24 @@ final class IOSDownloadCenter: ObservableObject {
         guard busy.insert(id).inserted else { return }
         defer { busy.remove(id) }
         guard let record = record(id), !record.state.isSettled, activeTasks[id] == nil else { return }
+        guard record.isPlex else { return await advanceProvider(id) }
         if currentServerID == nil { await refreshServerID() }
         // Another of the account's servers downloads from that server directly.
-        let other = otherServerConfig(record.serverID)
+        let other = otherServerConfig(DownloadIdentity.plexMachineID(of: record.providerID))
         guard let (serverURL, token) = other ?? config() else { return set(id, .waitingForServer) }
         if ServerLocation.classify(serverURL) == .relay {
-            return record.mediaID == 0 ? fail(id, DownloadRules.relayReason) : set(id, .waitingForServer)
+            return record.sourceID == nil ? fail(id, DownloadRules.relayReason) : set(id, .waitingForServer)
         }
         if other == nil {
             guard let serverID = currentServerID else { return set(id, .waitingForServer) }
-            if record.serverID.isEmpty { update(id) { $0.serverID = serverID } }
+            let key = DownloadIdentity.plexProviderID(machineID: serverID)
+            if record.providerID == "plex:" { update(id) { $0.providerID = key } }
             // A server this profile no longer sees waits until it is back.
-            guard self.record(id)?.serverID == serverID else { return set(id, .waitingForServer) }
+            guard self.record(id)?.providerID == key else { return set(id, .waitingForServer) }
         }
 
         do {
-            if record.mediaID == 0 {
+            if record.sourceID == nil {
                 try await plan(id, serverURL: serverURL, token: token)
             }
             guard let planned = self.record(id), !planned.state.isSettled else { return }
@@ -416,7 +444,7 @@ final class IOSDownloadCenter: ObservableObject {
             }
         } catch PlexAPIError.httpError(let status, _) {
             if status == 404 { forgetConversion(id) }
-            if let reason = DownloadRules.failureReason(httpStatus: status) { fail(id, reason) } else { set(id, .waitingForServer) }
+            if let reason = DownloadRules.failureReason(httpStatus: status, kind: .plex) { fail(id, reason) } else { set(id, .waitingForServer) }
         } catch PlexAPIError.parsingError {
             fail(id, String(localized: "The server sent a response Rivulet couldn't read"))
         } catch {
@@ -426,27 +454,34 @@ final class IOSDownloadCenter: ObservableObject {
 
     /// Full metadata, the version, and Original vs a conversion. Saves the poster and subtitles.
     private func plan(_ id: String, serverURL: String, token: String) async throws {
-        guard let key = record(id)?.ratingKey else { return }
+        guard let key = record(id)?.itemID else { return }
         let full = try await network.getFullMetadata(serverURL: serverURL, authToken: token, ratingKey: key)
         guard let record = record(id) else { return }
+        // The browse-time item lacks the hierarchy; the full metadata has it.
+        let listItem = MediaItem.plexDownloadCopy(full, providerID: record.providerID)
         let step: QualityStep? = if case .step(let step) = StreamingQuality(rawValue: record.quality) { step } else { nil }
         let chosen = VersionRanking.select(.best, in: full.Media ?? [], capKbps: step?.kbps).media.first
 
         switch DownloadRules.plan(step: step, media: chosen) {
         case .refused(let reason):
-            update(id) { $0.metadata = full }
+            update(id) {
+                $0.metadata = full
+                $0.item = listItem
+            }
             return fail(id, reason)
         case .original(let partID):
             update(id) {
                 $0.metadata = full
-                $0.mediaID = chosen?.id ?? 0
+                $0.item = listItem
+                $0.sourceID = chosen.map { String($0.id) }
                 $0.partID = partID
                 $0.quality = StreamingQuality.original.rawValue
             }
         case .converted(let step):
             update(id) {
                 $0.metadata = full
-                $0.mediaID = chosen?.id ?? 0
+                $0.item = listItem
+                $0.sourceID = chosen.map { String($0.id) }
                 $0.partID = chosen?.Part?.first?.id
                 $0.quality = StreamingQuality.step(step).rawValue
             }
@@ -456,7 +491,7 @@ final class IOSDownloadCenter: ObservableObject {
 
     private func startOriginal(_ id: String, serverURL: String, token: String) async throws {
         guard let record = record(id),
-              let part = record.metadata.Media?.first(where: { $0.id == record.mediaID })?
+              let part = record.metadata.Media?.first(where: { String($0.id) == record.sourceID })?
                 .Part?.first(where: { $0.id == record.partID }),
               let key = part.key,
               let request = network.partDownloadRequest(serverURL: serverURL, authToken: token, partKey: key)
@@ -473,21 +508,21 @@ final class IOSDownloadCenter: ObservableObject {
         guard let itemID = record.queueItemID else {
             // An add that timed out may have queued it anyway; take that one over a second conversion.
             let queued = try await network.liveDownloadQueueItemIDs(
-                serverURL: serverURL, authToken: token, queueID: queueID, ratingKey: record.ratingKey)
+                serverURL: serverURL, authToken: token, queueID: queueID, ratingKey: record.itemID)
             let claimed = Set(records.compactMap(\.queueItemID) + pendingRemovals.map(\.itemID))
             let itemID: Int
             if let free = queued.first(where: { !claimed.contains($0) }) {
                 itemID = free
             } else {
                 let media = record.metadata.Media ?? []
-                let index = media.count > 1 ? media.firstIndex { $0.id == record.mediaID } : nil
+                let index = media.count > 1 ? media.firstIndex { String($0.id) == record.sourceID } : nil
                 itemID = try await network.addToDownloadQueue(
                     serverURL: serverURL, authToken: token, queueID: queueID,
-                    ratingKey: record.ratingKey, mediaIndex: index, maxVideoBitrateKbps: step.kbps)
+                    ratingKey: record.itemID, mediaIndex: index, maxVideoBitrateKbps: step.kbps)
             }
             guard self.record(id) != nil else {
                 // Deleted while the request was out.
-                return await removeServerItem(itemID, serverID: record.serverID)
+                return await removeServerItem(itemID, serverID: DownloadIdentity.plexMachineID(of: record.providerID) ?? "")
             }
             return update(id) {
                 $0.queueItemID = itemID
@@ -516,28 +551,46 @@ final class IOSDownloadCenter: ObservableObject {
         case .failed(let reason):
             forgetConversion(id)
             fail(id, reason)
-            await removeServerItem(itemID, serverID: record.serverID)
+            await removeServerItem(itemID, serverID: DownloadIdentity.plexMachineID(of: record.providerID) ?? "")
         case let state:
             set(id, state)
         }
     }
 
+    /// The status, size and ETag the file would come with. Plex answers HEAD; Jellyfin and Emby do not,
+    /// so they get a one-byte range and the body is dropped as soon as the headers are in.
+    private func probeFile(_ request: URLRequest, ranged: Bool) async throws -> (status: Int, length: Int64?, etag: String?) {
+        var head = request
+        head.timeoutInterval = 20
+        let response: URLResponse
+        if ranged {
+            head.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+            let (bytes, answer) = try await probe.bytes(for: head)
+            bytes.task.cancel()
+            response = answer
+        } else {
+            head.httpMethod = "HEAD"
+            response = try await probe.data(for: head).1
+        }
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        return (http.statusCode,
+                DownloadRules.totalLength(status: http.statusCode, contentRange: http.value(forHTTPHeaderField: "Content-Range"),
+                                          contentLength: http.expectedContentLength),
+                http.value(forHTTPHeaderField: "ETag"))
+    }
+
     /// Checks the file, space and network, then starts or resumes the background transfer.
-    private func startTransfer(_ id: String, request: URLRequest, fallbackSize: Int64?) async throws {
+    private func startTransfer(_ id: String, request: URLRequest, fallbackSize: Int64?, ranged: Bool = false) async throws {
         let cellular = UserDefaults.standard.bool(forKey: IOSDownloadTransfer.cellularKey)
         let away = NetworkPathMonitor.shared.isAwayPath
         if !cellular, away { return set(id, .waitingForNetwork) }
-        var head = request
-        head.httpMethod = "HEAD"
-        head.timeoutInterval = 20
-        let (_, response) = try await probe.data(for: head)
-        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        if http.statusCode == 503, record(id)?.queueItemID != nil { return set(id, .preparing(progress: 100)) }
-        guard (200...299).contains(http.statusCode) else {
-            throw PlexAPIError.httpError(statusCode: http.statusCode, data: nil)
+        let found = try await probeFile(request, ranged: ranged)
+        if found.status == 503, record(id)?.queueItemID != nil { return set(id, .preparing(progress: 100)) }
+        guard (200...299).contains(found.status) else {
+            throw PlexAPIError.httpError(statusCode: found.status, data: nil)
         }
-        let length = http.expectedContentLength > 0 ? http.expectedContentLength : fallbackSize
-        let etag = http.value(forHTTPHeaderField: "ETag")
+        let length = found.length ?? fallbackSize
+        let etag = found.etag
         if let length, !hasRoom(for: length) { return fail(id, DownloadRules.noSpaceReason) }
         guard let record = record(id), !record.state.isSettled, activeTasks[id] == nil else { return }
 
@@ -565,12 +618,100 @@ final class IOSDownloadCenter: ObservableObject {
         }
     }
 
+    // MARK: - Jellyfin and Emby
+
+    /// One step for a record on a server beside Plex: plan it, then fetch its original file.
+    private func advanceProvider(_ id: String) async {
+        guard let record = record(id), let provider = registry.provider(for: record.providerID) else {
+            return set(id, .waitingForServer)
+        }
+        // Another account on the same server is not the one that started this.
+        if let owner = record.accountID, let current = provider.accountID, owner != current {
+            return set(id, .waitingForServer)
+        }
+        do {
+            if record.sourceID == nil { try await planProvider(id, provider: provider) }
+            guard let planned = self.record(id), !planned.state.isSettled else { return }
+            let source = try await provider.downloadSource(
+                for: MediaItemRef(providerID: provider.id, itemID: planned.itemID), sourceID: planned.sourceID)
+            try await startTransfer(id, request: source.request, fallbackSize: planned.expectedBytes, ranged: true)
+        } catch PlexAPIError.httpError(let status, _) {
+            if let reason = DownloadRules.failureReason(httpStatus: status, kind: record.kind ?? .jellyfin) {
+                fail(id, reason)
+            } else {
+                set(id, .waitingForServer)
+            }
+        } catch MediaProviderError.unauthorized {
+            fail(id, DownloadRules.failureReason(httpStatus: 401, kind: record.kind ?? .jellyfin) ?? "")
+        } catch MediaProviderError.notFound {
+            fail(id, DownloadRules.failureReason(httpStatus: 404, kind: record.kind ?? .jellyfin) ?? "")
+        } catch MediaProviderError.notPlayable {
+            fail(id, DownloadRules.noFileReason)
+        } catch {
+            set(id, .waitingForServer)
+        }
+    }
+
+    /// The version, the player's metadata, the poster and the external subtitles.
+    private func planProvider(_ id: String, provider: any MediaProvider) async throws {
+        guard let record = record(id) else { return }
+        // An unread policy throws, and the record waits for the server; only an explicit no fails it.
+        guard try await provider.canDownloadMedia() else { return fail(id, DownloadRules.notAllowedReason) }
+        let ref = MediaItemRef(providerID: provider.id, itemID: record.itemID)
+        let detail = try await provider.fullDetail(for: ref)
+        // Skip markers are per version on some servers, so ask for the one that will be downloaded.
+        let picked = VersionRanking.choose(.best, from: detail.mediaSources)?.id
+        let extras = await provider.playbackExtras(for: ref, sourceID: picked)
+        let plan = try ProviderDownloadPlanner.plan(detail: detail, extras: extras, choice: picked.map(VersionChoice.source) ?? .best)
+        guard self.record(id) != nil else { return }
+        update(id) {
+            $0.sourceID = plan.sourceID
+            $0.item = plan.item.storedForDownload(providerID: record.providerID)
+            $0.metadata = plan.metadata
+        }
+        await saveProviderExtras(id, plan: plan, provider: provider)
+    }
+
+    /// The poster and the external subtitles as files. Failures are skipped.
+    private func saveProviderExtras(_ id: String, plan: ProviderDownloadPlan, provider: any MediaProvider) async {
+        guard let record = record(id) else { return }
+        var poster: String?
+        let art = record.item.kind == .episode
+            ? record.item.grandparentArtwork?.poster ?? record.item.artwork.poster : record.item.artwork.poster
+        if let art, let data = await fetchPlain(provider.imageURL(art, width: 600, height: 900)) {
+            poster = "\(id).poster.jpg"
+            try? data.write(to: Self.directory.appending(path: "\(id).poster.jpg"), options: .atomic)
+        }
+        var subtitles: [DownloadRecord.SubtitleFile] = []
+        for (n, sidecar) in plan.sidecars.enumerated() {
+            guard let data = await fetchPlain(sidecar.url) else { continue }
+            let name = "\(id).sub\(n).\(sidecar.ext)"
+            guard (try? data.write(to: Self.directory.appending(path: name), options: .atomic)) != nil else { continue }
+            subtitles.append(.init(fileName: name, language: sidecar.language, title: sidecar.title,
+                                   codec: sidecar.ext, isForced: sidecar.isForced))
+        }
+        // Deleted while these were fetched.
+        guard self.record(id) != nil else { return removeFiles(id) }
+        update(id) {
+            $0.posterFileName = poster
+            $0.subtitleFiles = subtitles
+        }
+    }
+
+    /// A small GET; the URL carries any key it needs.
+    private func fetchPlain(_ url: URL) async -> Data? {
+        guard let (data, response) = try? await probe.data(for: URLRequest(url: url, timeoutInterval: 30)),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    }
+
     /// Foreground or a server switch: learn the server's id, and move transfers whose host is gone.
     private func serverChanged() async {
         await refreshServerID()
         if let (serverURL, _) = config(), let serverID = currentServerID {
             for task in await transfer.allTasks() {
-                guard let id = task.taskDescription, record(id)?.serverID == serverID,
+                guard let id = task.taskDescription, let owner = record(id), owner.isPlex,
+                      DownloadIdentity.matches(owner.providerID, DownloadIdentity.plexProviderID(machineID: serverID)),
                       DownloadRules.hostChanged(taskURL: task.originalRequest?.url, serverURL: serverURL) else { continue }
                 // Resume data is bound to the old host, so this one starts over.
                 retire(task)
@@ -699,7 +840,7 @@ final class IOSDownloadCenter: ObservableObject {
 
         var subtitles: [DownloadRecord.SubtitleFile] = []
         if record.quality == StreamingQuality.original.rawValue {
-            let streams = record.metadata.Media?.first { $0.id == record.mediaID }?.Part?.first?.Stream ?? []
+            let streams = record.metadata.Media?.first { String($0.id) == record.sourceID }?.Part?.first?.Stream ?? []
             for (n, stream) in streams.enumerated() where stream.isSubtitle {
                 guard let key = stream.key, let url = URL(string: serverURL + key),
                       let data = await fetch(url, token: token) else { continue }

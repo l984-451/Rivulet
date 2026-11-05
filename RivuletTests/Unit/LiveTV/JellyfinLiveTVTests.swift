@@ -319,6 +319,18 @@ final class JellyfinLiveTVTests: XCTestCase {
         XCTAssertFalse(store.channels.contains { $0.sourceType == .jellyfin })
     }
 
+    func test_sync_signOutDuringTheProbe_installsNothing() async {
+        server.respond("/LiveTv/Channels", body: #"{"Items":[],"TotalRecordCount":3}"#)
+        server.respond("/Users/Me", body: #"{"Policy":{"IsAdministrator":true}}"#)
+        let signedIn = JellyfinProvider(serverID: "srv", displayName: "NAS", userID: "user-1",
+                                        client: JellyfinClient(baseURL: base, token: "tok", transport: server.transport))
+        let probe = JellyfinLiveTVProvider.sync(signedIn)
+        JellyfinLiveTVProvider.sync(nil)
+        await probe?.value
+        XCTAssertFalse(LiveTVDataStore.shared.hasSource(id: "jellyfin:srv"))
+        LiveTVDataStore.shared.setServerSource(nil, of: .jellyfin)
+    }
+
     func test_followsServer_onlyForMediaServers() {
         XCTAssertEqual(LiveTVSourceType.allCases.filter(\.followsServer), [.plex, .jellyfin, .emby])
     }

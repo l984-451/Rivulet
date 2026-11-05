@@ -138,8 +138,8 @@ final class ServerDataStore: ObservableObject {
         // Assigned only on change: Plex-only users reach here on every launch,
         // foreground and watch-state change, and each publish redraws Home.
         update(\.sources, providers.map { Source(providerID: $0.id, name: $0.displayName) })
-        // The server's Live TV follows the account into and out of Live TV.
-        for other in OtherServerKind.all { other.syncLiveTV(providers.first { $0.kind == other.kind }) }
+        // The server's Live TV follows the account into and out of Live TV (shared with iOS).
+        OtherServerKind.configureLiveTV(restricted: restricted)
         let gone = Set(slices.keys).subtracting(providers.map(\.id))
         gone.forEach { slices.removeValue(forKey: $0) }
         if !gone.isEmpty || providers.isEmpty { publish() }
@@ -160,10 +160,8 @@ final class ServerDataStore: ObservableObject {
         }
     }
 
-    /// The extra Plex servers, and each other kind's server only while it is that kind's signed-in account
-    /// (`accountIDs`, empty for a restricted profile); a registry entry left over from a sign-out is dropped.
     static func shown(_ providers: [any MediaProvider], accountIDs: [MediaProviderKind: String]) -> [any MediaProvider] {
-        providers.filter { $0.kind == .plex || accountIDs[$0.kind] == $0.id }
+        OtherServerKind.shown(providers, accountIDs: accountIDs)
     }
 
     private func update<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<ServerDataStore, Value>, _ value: Value) {

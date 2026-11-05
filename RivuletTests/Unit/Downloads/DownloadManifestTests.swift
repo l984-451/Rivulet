@@ -17,11 +17,11 @@ final class DownloadManifestTests: XCTestCase {
 
     private func record(_ state: DownloadState, fileName: String? = nil, key: String = "971") -> DownloadRecord {
         DownloadRecord(
-            serverID: "srv", profileID: "1", ratingKey: key, mediaID: 35314, partID: 35569,
+            providerID: "plex:srv", profileID: "1", itemID: key, sourceID: "35314", partID: 35569,
             quality: "original", state: state, expectedBytes: 235_691_435, receivedBytes: 1024,
             etag: "\"42bd27\"", queueItemID: 134, fileName: fileName, posterFileName: "p.jpg",
             subtitleFiles: [.init(fileName: "s.srt", language: "en", title: nil, codec: "srt", isForced: false)],
-            metadata: PlexMetadata(ratingKey: key, type: "episode", title: "Pilot", viewOffset: 5000),
+            item: DownloadFixtures.item(key), metadata: PlexMetadata(ratingKey: key, type: "episode", title: "Pilot", viewOffset: 5000),
             outputLabel: "720x404", createdAt: Date(timeIntervalSince1970: 1_790_000_000), completedAt: nil)
     }
 

@@ -41,6 +41,8 @@ final class IOSProviderBackend: IOSPlayerBackend {
     func upNextPlayback(for item: PlexMetadata, quality: StreamingQuality?,
                         previous: IOSPlexPlaybackRequest?) async throws -> IOSPlexPlaybackRequest {
         guard let key = item.ratingKey else { throw MediaProviderError.notFound }
+        // A downloaded episode plays its file, online or not.
+        if let known = items[key], let local = IOSDownloadCenter.shared.localPlayback(for: known) { return local }
         let target: MediaItem
         if let known = items[key] {
             target = known
@@ -112,6 +114,15 @@ final class IOSProviderBackend: IOSPlayerBackend {
 
     @discardableResult
     func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
+        // A downloaded file keeps its own resume point; the server hears at the end, or when it is back.
+        if request.isLocal {
+            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: Int(time * 1000), watched: false, persist: state != "playing")
+            if state == "stopped", let key = request.item.ratingKey {
+                IOSOfflineProgress.record(providerID: provider.id, itemID: key, offsetMs: Int(time * 1000),
+                                          durationMs: request.item.duration, watched: false, at: Date())
+            }
+            return nil
+        }
         guard let playback = request.providerPlayback else { return nil }
         await ledger.report(reportKey(request), make: { reporter(for: playback) }, state: state, time: time)
         return nil
@@ -142,6 +153,13 @@ final class IOSProviderBackend: IOSPlayerBackend {
     // MARK: - Items
 
     func markWatched(_ request: IOSPlexPlaybackRequest) async {
+        if request.isLocal, let key = request.item.ratingKey {
+            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: 0, watched: true, persist: true)
+            let duration = request.item.duration
+            IOSOfflineProgress.record(providerID: provider.id, itemID: key, offsetMs: duration ?? 0,
+                                      durationMs: duration, watched: true, at: Date())
+            return
+        }
         guard let ref = request.providerPlayback?.item.ref else { return }
         try? await provider.markPlayed(ref)
     }
@@ -151,7 +169,14 @@ final class IOSProviderBackend: IOSPlayerBackend {
               current.ref.itemID == key else { return nil }
         let result = await EpisodePicker.upNext(after: current, provider: provider)
         register(result.season + [result.next].compactMap { $0 })
-        return result.next.map(ProviderPlaybackMetadata.listing(item:))
+        if let next = result.next { return ProviderPlaybackMetadata.listing(item: next) }
+        // Offline, or the server has no more: the next episode that is on the device.
+        let center = IOSDownloadCenter.shared
+        guard let downloaded = DownloadRules.nextDownloaded(
+            afterShow: current.grandparentRef?.itemID, season: current.seasonNumber ?? 0, episode: current.episodeNumber ?? 0,
+            providerID: provider.id, in: center.visibleRecords) else { return nil }
+        register([downloaded.item])
+        return ProviderPlaybackMetadata.listing(item: downloaded.item)
     }
 
     /// The transcode reads its picks from the URL it was built with, so there is nothing to write.
@@ -171,5 +196,9 @@ final class IOSProviderBackend: IOSPlayerBackend {
     /// Chapters carry no server image path in the shim.
     func imageURL(path: String?, width: Int, height: Int, serverID: String?) -> URL? { nil }
 
-    func watchStateDidChange() async { await onWatchStateChange() }
+    /// After a stopped report and a scrobble: send what a download queued, then repaint.
+    func watchStateDidChange() async {
+        _ = await IOSOfflineProgress.flushProviders()
+        await onWatchStateChange()
+    }
 }

@@ -165,8 +165,7 @@ struct IOSPlexDetailView: View {
         }
     }
 
-    /// Downloads are Plex's until stage 5.
-    private var canDownload: Bool { item.ref.providerID.hasPrefix("plex:") }
+    private var canDownload: Bool { browse.canDownload(item) }
 
     private func seasonLabel(_ season: MediaItem) -> String {
         guard let index = season.seasonNumber else { return season.displayTitle }
@@ -369,8 +368,7 @@ private struct IOSPlexDetailHeader: View {
                         actions.setWatchlisted(item, !onList)
                     }
                 }
-                // Downloads are Plex's until stage 5.
-                if item.isPlayable, item.ref.providerID.hasPrefix("plex:") {
+                if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
                 Menu {
@@ -393,6 +391,7 @@ private struct IOSPlexDetailHeader: View {
     }
 
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
+    private var canDownload: Bool { browse.canDownload(item) }
 
     /// Plex answers from its watchlist; an episode or season stands for its show.
     private func loadWatchlistState() async {

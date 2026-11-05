@@ -18,8 +18,8 @@ final class DownloadRulesTests: XCTestCase {
     private func step(_ kbps: Int) -> QualityStep { QualityStep.step(kbps: kbps)! }
 
     private func record(_ id: String, _ state: DownloadState) -> DownloadRecord {
-        DownloadRecord(id: id, serverID: "srv", ratingKey: id, mediaID: 1, quality: "original",
-                       state: state, metadata: PlexMetadata(ratingKey: id))
+        DownloadRecord(id: id, providerID: "plex:srv", itemID: id, sourceID: "1", quality: "original",
+                       state: state, item: DownloadFixtures.item(id), metadata: PlexMetadata(ratingKey: id))
     }
 
     // MARK: - Plan
@@ -158,5 +158,63 @@ final class DownloadRulesTests: XCTestCase {
         XCTAssertTrue(DownloadRules.hostChanged(taskURL: lan, serverURL: "https://71-2-3-4.abc.plex.direct:32400"))
         XCTAssertTrue(DownloadRules.hostChanged(taskURL: lan, serverURL: "https://192-168-1-140.abc.plex.direct:443"))
         XCTAssertFalse(DownloadRules.hostChanged(taskURL: nil, serverURL: "https://x.plex.direct:32400"))
+    }
+
+    // MARK: - Visibility
+
+    private func owned(_ id: String, provider: String = "jellyfin:srv", profile: String? = nil, account: String? = "u1") -> DownloadRecord {
+        DownloadRecord(id: id, providerID: provider, profileID: profile, accountID: account, itemID: id, sourceID: id,
+                       quality: "original", state: .completed, item: DownloadFixtures.item(id, providerID: provider),
+                       metadata: PlexMetadata(ratingKey: id))
+    }
+
+    func test_visible_aProfileSeesItsOwnAndUnownedDownloads() {
+        let records = [owned("a", profile: "1"), owned("b", profile: "2"), owned("c", profile: nil)]
+        XCTAssertEqual(DownloadRules.visible(records, profileID: "1", restricted: false, signedInAccounts: [:]).map(\.id), ["a", "c"])
+        XCTAssertEqual(DownloadRules.visible(records, profileID: nil, restricted: false, signedInAccounts: [:]).map(\.id), ["a", "b", "c"])
+    }
+
+    func test_visible_aRestrictedProfileSeesOnlyPlex() {
+        let records = [owned("j"), owned("e", provider: "emby:srv"), owned("p", provider: "plex:M", account: nil)]
+        XCTAssertEqual(DownloadRules.visible(records, profileID: nil, restricted: true, signedInAccounts: [:]).map(\.id), ["p"])
+    }
+
+    func test_visible_anotherAccountOnTheSameServerHidesTheDownload() {
+        let records = [owned("mine", account: "u1"), owned("theirs", account: "u2")]
+        let seen = DownloadRules.visible(records, profileID: nil, restricted: false, signedInAccounts: ["jellyfin:srv": "u1"])
+        XCTAssertEqual(seen.map(\.id), ["mine"])
+    }
+
+    func test_visible_signedOutOfTheServerKeepsDownloadsPlayable() {
+        let records = [owned("a", account: "u1")]
+        XCTAssertEqual(DownloadRules.visible(records, profileID: nil, restricted: false, signedInAccounts: [:]).map(\.id), ["a"])
+    }
+
+    // MARK: - Size and reasons
+
+    func test_totalLength_prefersTheRangeTotal() {
+        XCTAssertEqual(DownloadRules.totalLength(status: 206, contentRange: "bytes 0-0/5839739171", contentLength: 1), 5_839_739_171)
+        XCTAssertEqual(DownloadRules.totalLength(status: 200, contentRange: nil, contentLength: 235_691_435), 235_691_435)
+        XCTAssertNil(DownloadRules.totalLength(status: 200, contentRange: nil, contentLength: -1))
+        XCTAssertNil(DownloadRules.totalLength(status: 206, contentRange: nil, contentLength: 1))
+        XCTAssertNil(DownloadRules.totalLength(status: 206, contentRange: "bytes 0-0/*", contentLength: 1))
+    }
+
+    func test_failureReason_otherServersSpeakForThemselves() {
+        XCTAssertEqual(DownloadRules.failureReason(httpStatus: 403, kind: .jellyfin), DownloadRules.notAllowedReason)
+        XCTAssertEqual(DownloadRules.failureReason(httpStatus: 403, kind: .emby), DownloadRules.notAllowedReason)
+        XCTAssertEqual(DownloadRules.failureReason(httpStatus: 403), DownloadRules.remotePassReason)
+        XCTAssertFalse(DownloadRules.failureReason(httpStatus: 401, kind: .jellyfin)?.contains("Plex") ?? true)
+        XCTAssertTrue(DownloadRules.failureReason(httpStatus: 401)?.contains("Plex") ?? false)
+        XCTAssertEqual(DownloadRules.failureReason(httpStatus: 404, kind: .emby), DownloadRules.failureReason(httpStatus: 404))
+        XCTAssertNil(DownloadRules.failureReason(httpStatus: 503, kind: .jellyfin))
+    }
+
+    func test_rejectedStatus_followsTheServersKind() {
+        XCTAssertEqual(DownloadRules.state(afterRejectedStatus: 403, converted: false, kind: .jellyfin),
+                       .failed(reason: DownloadRules.notAllowedReason))
+        XCTAssertEqual(DownloadRules.state(afterRejectedStatus: 403, converted: false),
+                       .failed(reason: DownloadRules.remotePassReason))
+        XCTAssertEqual(DownloadRules.state(afterRejectedStatus: 503, converted: false, kind: .emby), .waitingForServer)
     }
 }

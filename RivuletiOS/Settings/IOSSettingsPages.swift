@@ -193,7 +193,10 @@ struct IOSDownloadSettingsView: View {
                     ForEach(IOSDownloadCenter.qualityChoices, id: \.self) { Text($0.label).tag($0) }
                 }
             } footer: {
-                Text("Original saves the file as it is on the server. Smaller sizes are converted by the server first, and a size at or above the file's own downloads the Original.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Original saves the file as it is on the server. Smaller sizes are converted by the server first, and a size at or above the file's own downloads the Original.")
+                    Text("Only Plex converts. Jellyfin and Emby always download the original file.")
+                }
             }
 
             Section {

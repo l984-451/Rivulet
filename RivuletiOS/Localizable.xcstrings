@@ -3429,6 +3429,16 @@
         }
       }
     },
+    "Only Plex converts. Jellyfin and Emby always download the original file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Plex konvertiert. Jellyfin und Emby laden immer die Originaldatei herunter."
+          }
+        }
+      }
+    },
     "Open Source Software" : {
       "localizations" : {
         "de" : {
@@ -4765,6 +4775,16 @@
         }
       }
     },
+    "Sign in to the server to play this download." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich beim Server an, um diesen Download abzuspielen."
+          }
+        }
+      }
+    },
     "Sign Out" : {
       "localizations" : {
         "de" : {
@@ -5175,12 +5195,32 @@
         }
       }
     },
+    "The server didn't accept the sign-in; sign in again, then retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
+          }
+        }
+      }
+    },
     "The server doesn't have that." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat das nicht."
+          }
+        }
+      }
+    },
+    "This account isn't allowed to download from the server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Konto darf vom Server nichts herunterladen"
           }
         }
       }

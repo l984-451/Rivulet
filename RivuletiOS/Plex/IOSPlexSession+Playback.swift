@@ -9,7 +9,7 @@ extension IOSPlexSession {
     func markWatched(_ request: IOSPlexPlaybackRequest) async {
         guard let key = request.item.ratingKey else { return }
         let at = Date()
-        if request.isLocal { IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: 0, watched: true, persist: true) }
+        if request.isLocal { IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: 0, watched: true, persist: true) }
         guard !request.serverURL.isEmpty else { return }
         do {
             try await PlexNetworkManager.shared.markWatched(
@@ -17,10 +17,13 @@ extension IOSPlexSession {
                 authToken: request.token,
                 ratingKey: key
             )
-            IOSOfflineProgress.reached(key, at: at)
+            if let owner = plexProviderID(of: request) { IOSOfflineProgress.reached(owner, itemID: key, at: at) }
         } catch {
             let duration = request.item.duration
-            IOSOfflineProgress.failed(key, offsetMs: duration ?? 0, durationMs: duration, watched: true, at: at)
+            if let owner = plexProviderID(of: request) {
+                IOSOfflineProgress.record(providerID: owner, itemID: key, offsetMs: duration ?? 0,
+                                          durationMs: duration, watched: true, at: at)
+            }
         }
     }
 
@@ -44,40 +47,43 @@ extension IOSPlexSession {
            let next = await children(nextSeason.ratingKey).first {
             return next
         }
-        let position = { (item: PlexMetadata) in (item.parentIndex ?? 0, item.index ?? 0) }
         let center = IOSDownloadCenter.shared
-        let server = request.downloadServerID ?? center.currentServerID
-        return center.visibleRecords
-            .filter { $0.state == .completed && (server == nil || $0.serverID.isEmpty || $0.serverID == server) }
-            .map(\.metadata)
-            .filter { $0.type == "episode" && $0.grandparentRatingKey == episode.grandparentRatingKey }
-            .filter { position($0) > (season, index) }
-            .min { position($0) < position($1) }
+        let server = request.downloadProviderID ?? DownloadIdentity.plexProviderID(machineID: center.currentServerID)
+        return DownloadRules.nextDownloaded(
+            afterShow: episode.grandparentRatingKey, season: season, episode: index, providerID: server,
+            in: center.visibleRecords)?.metadata
     }
 
-    /// Replays progress logged while the server was unreachable, unless the server saw a later view.
+    /// Replays progress logged while a server was unreachable, unless the server saw a later view.
     /// True when anything was sent.
     func flushOfflineProgress() async -> Bool {
+        let plex = await flushPlexProgress()
+        let others = await IOSOfflineProgress.flushProviders()
+        return plex || others
+    }
+
+    private func flushPlexProgress() async -> Bool {
         let center = IOSDownloadCenter.shared
         guard !IOSOfflineProgress.isFlushing, let (serverURL, token) = try? configuration(),
               let server = center.currentServerID else { return false }
         let profile = center.currentProfileID
-        let due = IOSOfflineProgress.log.entries.filter { $0.serverID == server && $0.profileID == profile }
+        let key = DownloadIdentity.plexProviderID(machineID: server)
+        let due = IOSOfflineProgress.log.entries.filter { DownloadIdentity.matches($0.providerID, key) && $0.profileID == profile }
         guard !due.isEmpty else { return false }
         IOSOfflineProgress.isFlushing = true
         defer { IOSOfflineProgress.isFlushing = false }
         return await OfflineProgressLog.replay(
             due,
             serverLastViewedAt: { entry in
-                let current = try await network.getMetadata(serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey)
+                let current = try await network.getMetadata(serverURL: serverURL, authToken: token, ratingKey: entry.itemID)
                 return current.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
             },
             send: { entry in
                 try await network.reportProgress(
-                    serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey,
+                    serverURL: serverURL, authToken: token, ratingKey: entry.itemID,
                     timeMs: entry.offsetMs, state: "stopped", duration: entry.durationMs)
                 if entry.watched {
-                    try await network.markWatched(serverURL: serverURL, authToken: token, ratingKey: entry.ratingKey)
+                    try await network.markWatched(serverURL: serverURL, authToken: token, ratingKey: entry.itemID)
                 }
             },
             remove: { IOSOfflineProgress.remove($0) }
@@ -117,29 +123,35 @@ extension IOSPlexSession {
     }
 }
 
-/// Progress that failed to reach the server, kept next to the downloads manifest.
+/// Progress that failed to reach a server, kept next to the downloads manifest.
 @MainActor
 enum IOSOfflineProgress {
     private static let url = IOSDownloadTransfer.directory.appending(path: "offline-progress.json")
     private(set) static var log = OfflineProgressLog.load(from: url)
     private static var lastReached: [String: Date] = [:]
     static var isFlushing = false
+    private static var isFlushingProviders = false
 
-    static func failed(_ ratingKey: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {
+    /// Queues a position for `providerID` (a download key), for the current profile and, on Jellyfin and
+    /// Emby, the signed-in account.
+    static func record(providerID: String, itemID: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {
         let center = IOSDownloadCenter.shared
+        // A bare Plex key (server not known) would replay to whichever server is current, and never clear.
+        guard providerID != "plex:" else { return }
         // A report that failed after a newer one landed adds nothing.
-        guard let server = center.currentServerID, lastReached[ratingKey].map({ $0 < at }) ?? true else { return }
-        log.record(.init(serverID: server, profileID: center.currentProfileID, ratingKey: ratingKey,
+        guard lastReached["\(providerID)|\(itemID)"].map({ $0 < at }) ?? true else { return }
+        let account = account(of: providerID)
+        log.record(.init(providerID: providerID, profileID: center.currentProfileID, accountID: account, itemID: itemID,
                          offsetMs: offsetMs, durationMs: durationMs, watched: watched, at: at))
         try? log.save(to: url)
     }
 
     /// A report landed, so older offline entries for the item are stale.
-    static func reached(_ ratingKey: String, at: Date) {
-        lastReached[ratingKey] = max(at, lastReached[ratingKey] ?? at)
+    static func reached(_ providerID: String, itemID: String, at: Date) {
+        let key = "\(providerID)|\(itemID)"
+        lastReached[key] = max(at, lastReached[key] ?? at)
         let before = log.entries.count
-        let server = IOSDownloadCenter.shared.currentServerID
-        log.entries.removeAll { $0.serverID == server && $0.ratingKey == ratingKey && $0.at <= at }
+        log.entries.removeAll { $0.providerID == providerID && $0.itemID == itemID && $0.at <= at }
         if log.entries.count != before { try? log.save(to: url) }
     }
 
@@ -147,6 +159,27 @@ enum IOSOfflineProgress {
     static func remove(_ entry: OfflineProgressLog.Entry) {
         log.entries.removeAll { $0 == entry }
         try? log.save(to: url)
+    }
+
+    /// The signed-in account of a Jellyfin or Emby download key; Plex entries have none.
+    private static func account(of providerID: String) -> String? {
+        guard !providerID.hasPrefix("plex:") else { return nil }
+        return MediaProviderRegistry.shared.provider(for: providerID)?.accountID
+    }
+
+    /// Sends what is queued for the signed-in Jellyfin and Emby servers. True when anything was sent.
+    static func flushProviders() async -> Bool {
+        guard !isFlushingProviders else { return false }
+        isFlushingProviders = true
+        defer { isFlushingProviders = false }
+        var sent = false
+        for provider in MediaProviderRegistry.shared.secondaryProviders where provider.kind != .plex {
+            let due = ProviderProgressReplay.due(log.entries, providerID: provider.id, accountID: provider.accountID,
+                                                 profileID: IOSDownloadCenter.shared.currentProfileID)
+            guard !due.isEmpty else { continue }
+            if await ProviderProgressReplay.replay(due, provider: provider, remove: { remove($0) }) { sent = true }
+        }
+        return sent
     }
 }
 

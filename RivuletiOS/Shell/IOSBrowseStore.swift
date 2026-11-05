@@ -33,6 +33,9 @@ final class IOSBrowseStore: ObservableObject {
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
     @Published private(set) var deletableProviders: Set<String> = []
+    /// Providers where the account may save files for offline use; asked once per session.
+    @Published private(set) var downloadableProviders: Set<String> = []
+    private var downloadPermissions = DownloadPermissions()
     @Published private(set) var labels = ServerLabels([])
     /// Any server to browse, Plex or not: Home shows content, not the sign-in prompt.
     @Published private(set) var hasServers = false
@@ -177,6 +180,8 @@ final class IOSBrowseStore: ObservableObject {
         cwCopies = [:]
         logos = [:]
         checkedPermissions = []
+        downloadPermissions.reset()
+        downloadableProviders = []
         deletableProviders = []
         refreshBlocked = []
         libraries = []
@@ -267,6 +272,17 @@ final class IOSBrowseStore: ObservableObject {
             if await provider.canDeleteMedia() { deletableProviders.insert(provider.id) }
             if await !provider.canRefreshMetadata() { refreshBlocked.insert(provider.id) }
         }
+        // Download is asked until a server answers, so one failed read never hides it for the session.
+        var asked = downloadPermissions
+        await asked.ask(providers)
+        downloadPermissions = asked
+        if asked.allowed != downloadableProviders { downloadableProviders = asked.allowed }
+    }
+
+    /// Whether the item can be downloaded: a Plex server still signed in, or a server whose account may.
+    func canDownload(_ item: MediaItem) -> Bool {
+        IOSDownloadGate.canDownload(item.ref)
+            && (item.ref.plexRoute != nil || downloadableProviders.contains(item.ref.providerID))
     }
 
     func canDelete(_ item: MediaItem) -> Bool {

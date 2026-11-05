@@ -121,8 +121,11 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     /// `maxBitrate` of each `resolveStream`, in order.
     var resolveBitrates: [Int?] { callLock.withLock { recordedBitrates } }
     private func recordCall(_ call: String) { callLock.withLock { recordedCalls.append(call) } }
+    /// Answers `fullDetail` per item when set.
+    var detailResultFor: (@Sendable (MediaItemRef) throws -> MediaItemDetail)?
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         recordCall("detail(\(itemRef.itemID))")
+        if let detailResultFor { return try detailResultFor(itemRef) }
         guard let detailResult else { throw MediaProviderError.notFound }
         return detailResult
     }
@@ -194,9 +197,25 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     private(set) var refreshed: [MediaItemRef] = []
     func refreshMetadata(_ itemRef: MediaItemRef) async throws { refreshed.append(itemRef) }
     private(set) var progressUpdates: [(MediaItemRef, TimeInterval)] = []
+    var progressError: Error?
+    /// Fails `updateProgress` for some items only.
+    var progressErrorFor: (@Sendable (MediaItemRef) -> Error?)?
     func updateProgress(_ itemRef: MediaItemRef, position: TimeInterval) async throws {
+        if let progressError { throw progressError }
+        if let error = progressErrorFor?(itemRef) { throw error }
         progressUpdates.append((itemRef, position))
     }
+    /// What `canDownloadMedia` answers in turn (the last repeats), and how often it was asked.
+    var downloadAnswers: [Result<Bool, Error>] = []
+    private(set) var downloadAsks = 0
+    func canDownloadMedia() async throws -> Bool {
+        downloadAsks += 1
+        guard !downloadAnswers.isEmpty else { return false }
+        let answer = downloadAnswers.count > 1 ? downloadAnswers.removeFirst() : downloadAnswers[0]
+        return try answer.get()
+    }
+    var accountIDValue: String?
+    var accountID: String? { accountIDValue }
     func isOnWatchlist(_ ref: MediaItemRef) async -> Bool { false }
     func addToWatchlist(_ ref: MediaItemRef) async throws {}
     func removeFromWatchlist(_ ref: MediaItemRef) async throws {}

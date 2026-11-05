@@ -292,7 +292,8 @@ enum PlexMediaMapper {
             versionCount: meta.Media.map { Set($0.map(\.id)).count },
             editionTitle: meta.editionTitle,
             genres: genres(meta),
-            externalIDs: listExternalIDs(meta)
+            externalIDs: listExternalIDs(meta),
+            libraryID: meta.librarySectionID.map(String.init)
         )
     }
 
@@ -306,6 +307,9 @@ enum PlexMediaMapper {
     private static func listExternalIDs(_ meta: PlexMetadata) -> [String: String]? {
         var ids = externalIDs(meta.Guid)
         if let guid = meta.guid, guid.hasPrefix("plex://") { ids["plex"] = guid }
+        // An episode or season stands for its show on the watchlist.
+        let showGUID = meta.type == "episode" ? meta.grandparentGuid : (meta.type == "season" ? meta.parentGuid : nil)
+        if let showGUID, showGUID.hasPrefix("plex://") { ids["showPlex"] = showGUID }
         return ids.isEmpty ? nil : ids
     }
 

@@ -11,7 +11,7 @@
 
 import Foundation
 
-struct MediaHub: Identifiable, Hashable, Sendable {
+nonisolated struct MediaHub: Identifiable, Hashable, Sendable {
     let id: String                  // hub identifier
     let providerID: String
     let title: String

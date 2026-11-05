@@ -34,28 +34,33 @@ enum IOSScreenshotMode {
         }
     }
 
-    static func demoLibraries(_ libraries: [PlexLibrary]) -> [PlexLibrary] {
-        guard isOn else { return libraries }
-        return libraries.compactMap { library in
+    /// Only the demo libraries, renamed without the suffix, with the rows and Continue Watching items that belong to them.
+    static func demo(_ home: HomeFeed.Assembled) -> HomeFeed.Assembled {
+        guard isOn else { return home }
+        let libraries = home.libraries.compactMap { library -> MediaLibrary? in
             guard library.title.hasSuffix(demoSuffix) else { return nil }
-            var copy = library
-            copy.title = String(library.title.dropLast(demoSuffix.count))
+            var copy = MediaLibrary(id: library.id, providerID: library.providerID,
+                                    title: String(library.title.dropLast(demoSuffix.count)), kind: library.kind)
+            copy.browsesByFolder = library.browsesByFolder
+            copy.isPinnedToHome = library.isPinnedToHome
             return copy
         }
-    }
-
-    static func demoHubs(_ hubs: [PlexHub]) -> [PlexHub] {
-        hubs.map { hub in
-            var copy = hub
-            copy.title = hub.title?.replacingOccurrences(of: demoSuffix, with: "")
-            return copy
+        let keys = Set(libraries.map(\.id))
+        let shelves = home.shelves.compactMap { hub -> MediaHub? in
+            let items = hub.items.filter { $0.libraryID.map(keys.contains) ?? false }
+            guard !items.isEmpty else { return nil }
+            return MediaHub(id: hub.id, providerID: hub.providerID, title: hub.title.replacingOccurrences(of: demoSuffix, with: ""),
+                            style: hub.style, items: items, pagingKey: hub.pagingKey, isPromoted: hub.isPromoted)
         }
+        let continueWatching = home.continueWatching.map { $0.filter { $0.libraryID.map(keys.contains) ?? false } }
+        return HomeFeed.Assembled(libraries: libraries, continueWatching: continueWatching, shelves: shelves)
     }
 
-    static func demoItems(_ items: [PlexMetadata], libraries: [PlexLibrary]) -> [PlexMetadata] {
+    /// Search results from the demo libraries only.
+    static func demoItems(_ items: [MediaItem], libraries: [MediaLibrary]) -> [MediaItem] {
         guard isOn else { return items }
-        let keys = Set(libraries.map(\.key))
-        return items.filter { $0.librarySectionID.map { keys.contains(String($0)) } ?? false }
+        let keys = Set(libraries.map(\.id))
+        return items.filter { $0.libraryID.map(keys.contains) ?? false }
     }
 }
 #endif

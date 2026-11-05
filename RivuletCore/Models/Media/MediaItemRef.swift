@@ -13,7 +13,7 @@
 import Foundation
 import Synchronization
 
-struct MediaItemRef: Hashable, Codable, Sendable {
+nonisolated struct MediaItemRef: Hashable, Codable, Sendable {
     /// Provider identifier — "plex:<machineId>" / "tmdb" / "jellyfin:<serverId>".
     let providerID: String
     /// Provider-native item identifier (Plex ratingKey / TMDB id / Jellyfin Guid).
@@ -31,4 +31,8 @@ extension MediaItemRef {
     /// Provider ids of the Plex servers other than the selected one. Set by
     /// `MediaProviderRegistry`; a lock because refs are read off the main actor.
     static let extraPlexIDs = Mutex<Set<String>>([])
+
+    /// Provider ids the selected Plex server has had this sign-in: an id minted by a URL change
+    /// stays valid for tiles already on screen. Set by `MediaProviderRegistry`.
+    static let selectedPlexIDs = Mutex<Set<String>>([])
 }

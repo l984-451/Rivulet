@@ -22,13 +22,24 @@ enum ConnectionState: Sendable, Hashable {
     case unauthorized
 }
 
-enum MediaProviderError: Error, Sendable {
+nonisolated enum MediaProviderError: Error, Sendable {
     case unreachable
     case unauthorized
     case notFound
     case transcodeRequired
     case notPlayable
     case backendSpecific(underlying: String)
+}
+
+extension MediaProviderError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .unreachable: String(localized: "Couldn't reach the server.")
+        case .unauthorized: String(localized: "The server didn't accept the sign-in.")
+        case .notFound: String(localized: "The server doesn't have that.")
+        default: nil
+        }
+    }
 }
 
 extension MediaProviderKind {

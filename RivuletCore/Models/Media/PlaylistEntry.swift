@@ -29,7 +29,7 @@ extension PlayQueue where Entry == PlaylistEntry {
     }
 }
 
-struct MediaPlaylist: Hashable, Sendable {
+nonisolated struct MediaPlaylist: Hashable, Sendable {
     let item: MediaItem
     let isSmart: Bool
 

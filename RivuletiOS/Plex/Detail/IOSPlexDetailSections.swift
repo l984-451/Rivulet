@@ -8,22 +8,14 @@ import SwiftUI
 struct IOSPlexEpisodeCell: View {
     enum Layout { case row, card(CGFloat) }
 
-    let episode: PlexMetadata
+    let episode: MediaItem
     let isNextUp: Bool
     let layout: Layout
-    private let watchStamp: [Int]
     @Environment(\.plexActions) private var actions
     @ScaledMetric(relativeTo: .body) private var rowStillWidth: CGFloat = 150
 
-    init(episode: PlexMetadata, isNextUp: Bool, layout: Layout) {
-        self.episode = episode
-        self.isNextUp = isNextUp
-        self.layout = layout
-        watchStamp = episode.watchStamp
-    }
-
     private var title: String {
-        episode.index.map { "\($0). \(episode.displayTitle)" } ?? episode.displayTitle
+        episode.episodeNumber.map { "\($0). \(episode.displayTitle)" } ?? episode.displayTitle
     }
 
     private var detail: String? {
@@ -31,7 +23,8 @@ struct IOSPlexEpisodeCell: View {
     }
 
     var body: some View {
-        Button { actions.play(episode) } label: {
+        // A server whose playback is not connected yet opens the episode's page instead (`IOSPlaybackGate`).
+        Button { IOSPlaybackGate.canPlay(episode.ref) ? actions.play(episode) : actions.open(episode) } label: {
             switch layout {
             case .row: row
             case .card(let width): card(width: width)
@@ -43,16 +36,16 @@ struct IOSPlexEpisodeCell: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel([isNextUp ? String(localized: "Up Next") : nil, title, detail].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(episode.watchStateDescription)
-        .accessibilityHint("Plays the episode")
+        .accessibilityHint(IOSPlaybackGate.canPlay(episode.ref) ? LocalizedStringKey("Plays the episode") : LocalizedStringKey("Opens the episode"))
     }
 
     private func still(width: CGFloat) -> some View {
-        IOSPlexArtwork(episode: episode, width: width)
+        IOSItemArtwork(item: episode, kind: .thumb, width: width, aspectRatio: 16 / 9)
             .frame(width: width, height: width * 9 / 16)
             .plexWatchState(episode)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                if actions.preparingID == episode.id { ProgressView().tint(.white) }
+                if actions.preparingID == episode.ref.actionKey { ProgressView().tint(.white) }
             }
     }
 
@@ -75,7 +68,7 @@ struct IOSPlexEpisodeCell: View {
                 heading
                 Spacer(minLength: 0)
             }
-            if let summary = episode.summary, !summary.isEmpty {
+            if let summary = episode.overview, !summary.isEmpty {
                 Text(summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -89,7 +82,7 @@ struct IOSPlexEpisodeCell: View {
         VStack(alignment: .leading, spacing: 8) {
             still(width: width)
             heading
-            if let summary = episode.summary, !summary.isEmpty {
+            if let summary = episode.overview, !summary.isEmpty {
                 Text(summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -101,35 +94,26 @@ struct IOSPlexEpisodeCell: View {
     }
 }
 
-private extension IOSPlexArtwork {
-    /// Episode thumbs are Plex's 16:9 stills, not the show's backdrop.
-    init(episode: PlexMetadata, width: CGFloat) {
-        self.init(item: episode, kind: .thumb, width: width, aspectRatio: 16 / 9)
-    }
-}
-
 /// Cast & Crew: actors, then directors.
 struct IOSPlexCastRow: View {
-    let item: PlexMetadata
-    @EnvironmentObject private var plex: IOSPlexSession
+    let item: MediaItem
+    let detail: MediaItemDetail?
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.displayScale) private var displayScale
 
     private struct Person: Identifiable {
         let id: Int
         let name: String
         let role: String?
-        let thumb: String?
+        let image: URL?
     }
 
     private var people: [Person] {
-        let cast = (item.Role ?? []).prefix(20).compactMap { role in
-            role.tag.map { (name: $0, role: role.role, thumb: role.thumb) }
-        }
-        let directors = (item.Director ?? []).compactMap { member in
-            member.tag.map { (name: $0, role: Optional("Director"), thumb: member.thumb) }
-        }
-        return (cast + directors).enumerated().map {
-            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, thumb: $0.element.thumb)
+        guard let detail else { return [] }
+        let cast = detail.cast.prefix(20).map { (name: $0.name, role: $0.role, image: $0.imageURL) }
+        let directors = detail.directors.map { (name: $0.name, role: Optional("Director"), image: $0.imageURL) }
+        return (cast + directors).filter { !$0.name.isEmpty }.enumerated().map {
+            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image)
         }
     }
 
@@ -141,9 +125,9 @@ struct IOSPlexCastRow: View {
             } tile: { person, width in
                 let pixels = Int((width * displayScale).rounded(.up))
                 VStack(spacing: 6) {
-                    IOSPlexImage(url: plex.imageURL(path: person.thumb, width: pixels, height: pixels))
+                    IOSPlexImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
                         .overlay {
-                            if person.thumb == nil {
+                            if person.image == nil {
                                 Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
                             }
                         }
@@ -161,20 +145,16 @@ struct IOSPlexCastRow: View {
     }
 }
 
-/// Extras and trailers from the full metadata; tapping one plays it.
+/// Extras and trailers from the full detail; tapping one plays it. Plex's until stage 4 connects
+/// the others (`IOSPlaybackGate`).
 struct IOSPlexExtrasRow: View {
-    let item: PlexMetadata
+    let detail: MediaItemDetail?
     @Environment(\.plexActions) private var actions
+    @EnvironmentObject private var browse: IOSBrowseStore
+    @Environment(\.displayScale) private var displayScale
 
-    private var extras: [PlexMetadata] {
-        item.allExtras
-            .sorted { ExtraSubtype.from(subtype: $0.subtype, extraType: $0.extraType)
-                < ExtraSubtype.from(subtype: $1.subtype, extraType: $1.extraType) }
-            .compactMap { extra in
-                extra.ratingKey.map {
-                    PlexMetadata(ratingKey: $0, type: "clip", title: extra.title, thumb: extra.thumb, duration: extra.duration)
-                }
-            }
+    private var extras: [MediaItemDetail.Extra] {
+        (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && Int($0.id) != nil }
     }
 
     var body: some View {
@@ -183,15 +163,16 @@ struct IOSPlexExtrasRow: View {
             IOSShelfRow(kind: .landscape, items: extras) {
                 IOSPlexShelfHeader(title: String(localized: "Extras"))
             } tile: { extra, width in
-                Button { actions.play(extra) } label: {
+                Button { actions.playExtra(extra) } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        IOSPlexArtwork(item: extra, kind: .thumb, width: width, aspectRatio: 16 / 9)
+                        IOSPlexImage(url: browse.imageURL(extra.thumbnailURL, providerID: extra.providerID,
+                                                          width: Int(width * displayScale), height: Int(width * displayScale * 9 / 16)))
                             .frame(width: width, height: width * 9 / 16)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay {
                                 if actions.preparingID == extra.id { ProgressView().tint(.white) }
                             }
-                        Text(extra.displayTitle).font(.footnote.weight(.semibold)).lineLimit(1)
+                        Text(extra.title).font(.footnote.weight(.semibold)).lineLimit(1)
                         if let runtime = extra.runtimeText {
                             Text(runtime).font(.caption).foregroundStyle(.secondary)
                         }
@@ -204,37 +185,44 @@ struct IOSPlexExtrasRow: View {
     }
 }
 
+private extension MediaItemDetail.Extra {
+    var runtimeText: String? {
+        guard let duration, duration > 0 else { return nil }
+        let minutes = Int(duration / 60)
+        return minutes >= 60 ? String(localized: "\(minutes / 60)h \(minutes % 60)m") : String(localized: "\(minutes)m")
+    }
+}
+
 /// Studio, genres, rating, release date, languages: whatever the item has.
 struct IOSPlexInformationSection: View {
-    let item: PlexMetadata
+    let item: MediaItem
+    let detail: MediaItemDetail?
     @Environment(\.horizontalSizeClass) private var sizeClass
     /// With iPhone Duo's fold down its middle, four columns instead of three so none sits on it.
     @State private var crossesFold = false
 
+    /// A release date as the server wrote it ("2020-01-31", or with a time after it), long form.
     nonisolated static func formattedDate(_ isoDay: String) -> String? {
-        guard let date = try? Date(isoDay, strategy: .iso8601.year().month().day().dateSeparator(.dash)) else { return nil }
+        guard let date = try? Date(String(isoDay.prefix(10)), strategy: .iso8601.year().month().day().dateSeparator(.dash)) else { return nil }
         return date.formatted(date: .long, time: .omitted)
     }
 
-    private func languages(streamType: Int) -> String? {
-        let streams = item.Media?.first?.Part?.first?.Stream ?? []
+    private func languages(_ codes: [String?]) -> String? {
         var seen = Set<String>()
-        let names = streams
-            .filter { $0.streamType == streamType }
-            .compactMap { $0.language ?? $0.languageTag }
-            .filter { seen.insert($0).inserted }
+        let names = codes.compactMap { $0 }.map { LanguageLabel.display($0) }.filter { seen.insert($0).inserted }
         return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     private var rows: [(String, String)] {
-        [
-            (String(localized: "Studio"), item.studio),
-            (String(localized: "Genre"), item.Genre?.compactMap(\.tag).joined(separator: ", ")),
-            (String(localized: "Rated"), item.displayContentRating),
-            (String(localized: "Released"), item.originallyAvailableAt.flatMap(Self.formattedDate)),
+        let source = detail?.mediaSources.first
+        return [
+            (String(localized: "Studio"), detail?.studios.joined(separator: ", ")),
+            (String(localized: "Genre"), (detail?.genres.nilIfEmpty ?? item.genres)?.joined(separator: ", ")),
+            (String(localized: "Rated"), detail?.contentRating ?? item.contentRating),
+            (String(localized: "Released"), item.releaseDate.flatMap(Self.formattedDate)),
             (String(localized: "Runtime"), item.runtimeText),
-            (String(localized: "Audio"), languages(streamType: 2)),
-            (String(localized: "Subtitles"), languages(streamType: 3))
+            (String(localized: "Audio"), languages(source?.audioTracks.map(\.language) ?? [])),
+            (String(localized: "Subtitles"), languages(source?.subtitleTracks.map(\.language) ?? []))
         ].compactMap { label, value in
             guard let value, !value.isEmpty else { return nil }
             return (label, value)

@@ -1313,6 +1313,16 @@
         }
       }
     },
+    "Couldn't Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download fehlgeschlagen"
+          }
+        }
+      }
+    },
     "Couldn't Download Season" : {
       "localizations" : {
         "de" : {
@@ -1329,6 +1339,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laden fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't load %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ konnte nicht geladen werden"
           }
         }
       }
@@ -1379,6 +1399,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergabe fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't reach the server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server ist nicht erreichbar."
           }
         }
       }
@@ -1489,16 +1519,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Watchlist konnte nicht aktualisiert werden"
-          }
-        }
-      }
-    },
-    "Couldn't update your Watchlist." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Watchlist konnte nicht aktualisiert werden."
           }
         }
       }
@@ -3439,6 +3459,26 @@
         }
       }
     },
+    "Opens the episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet die Folge"
+          }
+        }
+      }
+    },
+    "Opens the item" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet den Eintrag"
+          }
+        }
+      }
+    },
     "Optional" : {
       "localizations" : {
         "de" : {
@@ -4535,12 +4575,12 @@
         }
       }
     },
-    "Search Your Plex Libraries" : {
+    "Search Your Libraries" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deine Plex-Mediatheken durchsuchen"
+            "value" : "Deine Mediatheken durchsuchen"
           }
         }
       }
@@ -5101,6 +5141,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Profil wechseln"
+          }
+        }
+      }
+    },
+    "The server didn't accept the sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server doesn't have that." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat das nicht."
           }
         }
       }

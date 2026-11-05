@@ -22,6 +22,8 @@ struct RivuletiOSApp: App {
         #endif
         PlexAPI.platform = "iOS"
         PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
+        // The iOS library grid lists titles; tvOS also lists a library's collections.
+        MediaProviderRegistry.plexIncludesCollections = false
         // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         let session = IOSPlexSession()
@@ -57,6 +59,7 @@ struct RivuletiOSApp: App {
         WindowGroup {
             IOSRootView()
                 .environmentObject(plex)
+                .environmentObject(plex.browse)
                 .environmentObject(IOSDownloadCenter.shared)
         }
     }

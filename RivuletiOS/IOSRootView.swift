@@ -6,6 +6,7 @@ import SwiftUI
 /// Tab bar on iPhone, sidebar on iPad (with each video library listed under Library).
 struct IOSRootView: View {
     @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
@@ -34,7 +35,7 @@ struct IOSRootView: View {
             Tab("Library", systemImage: "rectangle.stack", value: "library") {
                 IOSPlexLibrarySplitView(selection: $librarySelection, column: $libraryColumn, path: $libraryPath)
                     // A server or profile switch drops the split: its pages hold the old one's items.
-                    .id(plex.sessionGeneration)
+                    .id(browse.sessionGeneration)
                     .environment(\.plexZoomNamespace, libraryZoom)
             }
             // The sidebar lists each library itself, so the list tab would repeat it.
@@ -48,17 +49,16 @@ struct IOSRootView: View {
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
                 ForEach(showsSidebarLibraries ? videoLibraries : []) { library in
-                    Tab(plex.displayTitle(library.title, serverID: library.serverID), systemImage: library.icon,
-                        value: "library:\(library.id)") {
+                    Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.icon,
+                        value: libraryTab(library)) {
                         tabStack(sidebarZoom) { IOSPlexLibraryView(library: library, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
-                ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { key in
-                    let serverID = key.isEmpty ? nil : key
-                    Tab(plex.displayTitle(String(localized: "Playlists"), serverID: serverID), systemImage: "list.and.film",
-                        value: "playlists:\(key)") {
-                        tabStack(sidebarZoom) { IOSPlexPlaylistsView(serverID: serverID, showsAccount: true) }
+                ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { providerID in
+                    Tab(browse.labels.title(String(localized: "Playlists"), providerID: providerID), systemImage: "list.and.film",
+                        value: "playlists:\(providerID)") {
+                        tabStack(sidebarZoom) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
@@ -107,7 +107,7 @@ struct IOSRootView: View {
                         // The list may have loaded just now and found the profile locked.
                         if profiles.needsProfileSelection, profiles.hasLoadedProfiles { choosingProfile = true }
                     }
-                    await plex.refreshIfStale()
+                    await browse.refreshIfStale()
                 }
                 // A dismissed picker leaves content locked; ask again on return.
                 if profiles.needsProfileSelection, profiles.hasLoadedProfiles { choosingProfile = true }
@@ -117,26 +117,26 @@ struct IOSRootView: View {
             }
         }
         .onChange(of: sizeClass) { dropOrphanedLibraryTab() }
-        .onChange(of: plex.sessionGeneration) {
+        .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
             libraryPath = NavigationPath()
         }
-        .onChange(of: plex.libraries) { _, libraries in
-            if !libraries.isEmpty, !plex.isLoadingOtherServers { dropOrphanedLibraryTab() }
+        .onChange(of: browse.libraries) { _, libraries in
+            if !libraries.isEmpty, !browse.isLoadingOtherServers { dropOrphanedLibraryTab() }
             if case .library(let library) = librarySelection, !libraries.contains(library) { librarySelection = nil }
         }
-        .onChange(of: plex.isLoadingOtherServers) { _, loading in
-            if !loading, !plex.libraries.isEmpty { dropOrphanedLibraryTab() }
+        .onChange(of: browse.isLoadingOtherServers) { _, loading in
+            if !loading, !browse.libraries.isEmpty { dropOrphanedLibraryTab() }
         }
-        .onChange(of: playlistServers) { if !plex.isLoadingOtherServers { dropOrphanedLibraryTab() } }
+        .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
     }
 
     /// A sidebar library tab vanishes at compact width or on a server without that library.
     private func dropOrphanedLibraryTab() {
         guard selectedTab.hasPrefix("library:") || selectedTab.hasPrefix("playlists:") || selectedTab == "downloads" else { return }
         let live = showsSidebarLibraries
-            ? videoLibraries.map { "library:\($0.id)" } + playlistServers.map { "playlists:\($0)" } + ["downloads"] : []
+            ? videoLibraries.map(libraryTab) + playlistServers.map { "playlists:\($0)" } + ["downloads"] : []
         if !live.contains(selectedTab) { selectedTab = "library" }
     }
 
@@ -146,24 +146,18 @@ struct IOSRootView: View {
         UIDevice.current.userInterfaceIdiom == .pad && sizeClass == .regular
     }
 
-    /// Servers with video playlists, by `serverID ?? ""`: the selected one first.
+    /// Servers with video playlists, the selected one first.
     private var playlistServers: [String] {
         guard showPlaylists else { return [] }
-        return plex.videoPlaylists.keys.sorted { lhs, rhs in lhs.isEmpty || (!rhs.isEmpty && lhs < rhs) }
+        return browse.providerOrder.filter { browse.playlists[$0] != nil }
     }
 
-    /// Movie and TV libraries only: iOS has no music player.
-    private var videoLibraries: [PlexLibrary] {
-        plex.libraries
-            .filter { $0.type == "movie" || $0.type == "show" }
-            .sorted { lhs, rhs in
-                // The selected server's first, then each other server's together.
-                guard lhs.serverID == rhs.serverID else { return lhs.serverID == nil }
-                return lhs.type != rhs.type
-                    ? lhs.type == "movie"
-                    : lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-            }
+    /// Movie and TV libraries only: iOS has no music player. Each server's together, the selected first.
+    private var videoLibraries: [MediaLibrary] {
+        browse.libraries.sidebarOrder(servers: browse.providerOrder)
     }
+
+    private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }
 
     /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
     /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
@@ -179,18 +173,18 @@ struct IOSRootView: View {
     private func applyScreenshotState() async {
         if let tab = IOSScreenshotMode.tab { selectedTab = tab }
         guard let title = IOSScreenshotMode.openTitle else { return }
-        while plex.libraries.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
-        if let library = plex.libraries.first(where: { $0.title == title }) {
+        while browse.libraries.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
+        if let library = browse.libraries.first(where: { $0.title == title }) {
             selectedTab = "library"
             librarySelection = .library(library)
             libraryColumn = .detail
             return
         }
-        guard let item = try? await plex.search(title).first(where: { $0.title == title }) else { return }
+        guard let item = try? await SearchResults.search(title, providers: browse.searchProviders).first(where: { $0.title == title }) else { return }
         selectedTab = "library"
         libraryColumn = .detail
         // iPad's split view picks a library on appear and clears the path when it does, so pick first.
-        if let library = plex.libraries.first(where: { $0.key == item.librarySectionID.map(String.init) }) {
+        if let library = browse.libraries.first(where: { $0.id == item.libraryID }) {
             librarySelection = .library(library)
             try? await Task.sleep(for: .seconds(2))
         }
@@ -215,13 +209,15 @@ struct IOSRootView: View {
     ) -> some View {
         NavigationStack { content().iosPlexDestinations() }
         // A server or profile switch pops every stack: open pages hold the old one's items.
-        .id(plex.sessionGeneration)
+        .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, namespace)
     }
 }
 
 #Preview {
+    let session = IOSPlexSession()
     IOSRootView()
-        .environmentObject(IOSPlexSession())
+        .environmentObject(session)
+        .environmentObject(session.browse)
         .environmentObject(IOSDownloadCenter.shared)
 }

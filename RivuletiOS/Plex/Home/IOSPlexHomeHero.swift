@@ -8,12 +8,12 @@ import SwiftUI
 /// crossfades and the buttons stay put. The artwork fades out at the bottom into the
 /// page's ambient wash, which follows `selection`.
 struct IOSPlexHomeHero: View {
-    let items: [PlexMetadata]
+    let items: [MediaItem]
     /// Screen size including the area under the navigation bar.
     let size: CGSize
     /// Side safe-area insets the artwork runs under, such as iPhone Duo's side bars.
     var bleed = EdgeInsets()
-    @Binding var selection: String?
+    @Binding var selection: MediaItemRef?
     /// iPhone Duo's fold runs down the middle, so the dots sit at the leading margin.
     @State private var dotsLeading = false
 
@@ -23,7 +23,7 @@ struct IOSPlexHomeHero: View {
     private var isWide: Bool { size.width > size.height }
     private var pageWidth: CGFloat { Self.pageWidth(size.width, bleed: bleed) }
     private var heroHeight: CGFloat { max(Self.height(for: size), 300) }
-    private var current: PlexMetadata? { items.first { $0.id == selection } ?? items.first }
+    private var current: MediaItem? { items.first { $0.id == selection } ?? items.first }
 
     /// Wide: 16:9 capped at 60% of the height. Tall: a slightly cropped frame.
     static func height(for size: CGSize) -> CGFloat {
@@ -73,7 +73,7 @@ struct IOSPlexHomeHero: View {
             .frame(height: heroHeight)
             .environment(\.colorScheme, .dark)
             // Keyed on the items too, so a refresh that drops the shown page restarts the rotation.
-            .task(id: items.map(\.id) + [selection ?? ""]) {
+            .task(id: items.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(selection?.providerID ?? "")|\(selection?.itemID ?? "")"]) {
                 if selection == nil || !items.contains(where: { $0.id == selection }) {
                     selection = items.first?.id
                 }
@@ -94,7 +94,7 @@ struct IOSPlexHomeHero: View {
                 HStack(spacing: 0) {
                     ForEach(items) { item in
                         // Pages take the pager's own width, so they always match its paging step.
-                        IOSPlexArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9)
+                        IOSItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .visualEffect { content, proxy in
@@ -144,12 +144,12 @@ struct IOSPlexHomeHero: View {
 /// Title, metadata and buttons for the shown page. The buttons never move; the title
 /// and metadata crossfade when the page changes.
 private struct IOSPlexHeroControls: View {
-    let item: PlexMetadata
+    let item: MediaItem
     let isWide: Bool
     @Environment(\.plexActions) private var actions
 
     private var metadataLine: String {
-        [item.episodeCode ?? item.year.map(String.init), item.Genre?.first?.tag]
+        [item.episodeCode ?? item.year.map(String.init), item.genres?.first]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
@@ -166,11 +166,14 @@ private struct IOSPlexHeroControls: View {
             .allowsHitTesting(false)
 
             HStack(spacing: 12) {
-                Button { actions.play(item) } label: {
-                    Label(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
-                        .overlay { if actions.preparingID == item.id { ProgressView() } }
+                // Jellyfin and Emby slides wait for stage 4 to connect their playback (`IOSPlaybackGate`).
+                if IOSPlaybackGate.canPlay(item.ref) {
+                    Button { actions.play(item) } label: {
+                        Label(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
+                            .overlay { if actions.preparingID == item.ref.actionKey { ProgressView() } }
+                    }
+                    .buttonStyle(.glassProminent)
                 }
-                .buttonStyle(.glassProminent)
                 NavigationLink(value: IOSPlexDetailRoute(item: item, scope: "hero")) {
                     Label("Details", systemImage: "info.circle")
                 }

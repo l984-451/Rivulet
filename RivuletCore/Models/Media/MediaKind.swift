@@ -10,7 +10,7 @@
 
 import Foundation
 
-enum MediaKind: String, Sendable, Hashable, Codable {
+nonisolated enum MediaKind: String, Sendable, Hashable, Codable {
     case movie
     case show
     case season

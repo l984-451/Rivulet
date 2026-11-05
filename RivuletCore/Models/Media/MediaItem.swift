@@ -13,7 +13,7 @@
 
 import Foundation
 
-struct MediaItem: Identifiable, Hashable, Sendable, Codable {
+nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     var id: MediaItemRef { ref }
     let ref: MediaItemRef
     let kind: MediaKind
@@ -60,6 +60,8 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let genres: [String]?
     /// External ids keyed lowercase ("tmdb", "imdb", "tvdb", Plex's own as "plex"); nil when the list had none.
     let externalIDs: [String: String]?
+    /// The library the item sits in, when the list said (Plex `librarySectionID`).
+    let libraryID: String?
 
     init(
         ref: MediaItemRef,
@@ -86,7 +88,8 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         editionTitle: String? = nil,
         identity: [String]? = nil,
         genres: [String]? = nil,
-        externalIDs: [String: String]? = nil
+        externalIDs: [String: String]? = nil,
+        libraryID: String? = nil
     ) {
         self.ref = ref
         self.kind = kind
@@ -113,6 +116,7 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.identity = identity
         self.genres = genres
         self.externalIDs = externalIDs
+        self.libraryID = libraryID
     }
 }
 
@@ -189,7 +193,8 @@ extension MediaItem {
             versionCount: versionCount,
             editionTitle: editionTitle,
             genres: genres,
-            externalIDs: externalIDs
+            externalIDs: externalIDs,
+            libraryID: libraryID
         )
     }
 }

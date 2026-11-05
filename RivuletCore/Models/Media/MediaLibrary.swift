@@ -10,7 +10,7 @@
 
 import Foundation
 
-struct MediaLibrary: Identifiable, Hashable, Sendable {
+nonisolated struct MediaLibrary: Identifiable, Hashable, Sendable {
     let id: String                  // provider-native (Plex sectionID)
     let providerID: String
     let title: String

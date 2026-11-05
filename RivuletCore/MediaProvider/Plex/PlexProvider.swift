@@ -29,6 +29,9 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     let logoResolver: PlexLogoResolver
     /// The Plex profile an extra server's library settings belong to; nil for the selected server.
     nonisolated let accountID: String?
+    /// Whether a title-sorted library page also lists the library's collections (tvOS does, per the
+    /// library's Collections setting; the iOS grid shows titles only).
+    let includesCollections: Bool
 
     init(
         machineIdentifier: String,
@@ -36,6 +39,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         serverURL: String,
         authToken: String,
         accountID: String? = nil,
+        includesCollections: Bool = true,
         networkManager: PlexNetworkManager = .shared,
         watchlistAPI: PlexWatchlistAPI = PlexWatchlistAPI(),
         accountToken: @escaping @Sendable () async -> String? = { await MainActor.run { PlexAuthManager.shared.authToken } },
@@ -47,6 +51,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         self.serverURL = serverURL
         self.authToken = authToken
         self.accountID = accountID
+        self.includesCollections = includesCollections
         self.networkManager = networkManager
         self.watchlistAPI = watchlistAPI
         self.accountToken = accountToken
@@ -73,7 +78,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         try await plexCall {
             let result = try await libraryMetadataPage(
                 sectionID: library.id, sort: plexSortString(for: sort), unwatchedOnly: unwatchedOnly,
-                start: page.offset, size: page.limit, followCollections: true
+                start: page.offset, size: page.limit, followCollections: includesCollections
             )
             let mapped = result.items.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
@@ -210,6 +215,16 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
                 collection = CollectionRow(title: title, members: split.members.map(item), collection: tile)
             }
             return RelatedContent(items: split.related.map(item), collection: collection)
+        }
+    }
+
+    func moreLikeThis(for ref: MediaItemRef, kind: MediaKind) async throws -> [MediaItem] {
+        try await plexCall {
+            let hubs = try await networkManager.getRelatedItems(
+                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID)
+            return Self.similarItems(hubs: hubs, currentRatingKey: ref.itemID).map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
         }
     }
 

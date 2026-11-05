@@ -7,8 +7,8 @@ import SwiftUI
 /// or pushes it at compact width.
 enum IOSLibrarySelection: Hashable {
     case downloads
-    case library(PlexLibrary)
-    case playlists(serverID: String?)
+    case library(MediaLibrary)
+    case playlists(providerID: String)
 }
 
 /// Library tab: the list as a split view's sidebar, so a regular-width iPhone (iPhone Duo
@@ -17,7 +17,7 @@ struct IOSPlexLibrarySplitView: View {
     @Binding var selection: IOSLibrarySelection?
     @Binding var column: NavigationSplitViewColumn
     @Binding var path: NavigationPath
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -31,8 +31,8 @@ struct IOSPlexLibrarySplitView: View {
         }
         .onChange(of: selection) { path = NavigationPath() }
         // Side by side, the detail column is never left empty.
-        .onChange(of: [sizeClass == .regular, plex.libraries.isEmpty], initial: true) {
-            if sizeClass == .regular, selection == nil, let first = plex.libraries.first {
+        .onChange(of: [sizeClass == .regular, browse.libraries.isEmpty], initial: true) {
+            if sizeClass == .regular, selection == nil, let first = browse.libraries.first {
                 selection = .library(first)
             }
         }
@@ -43,7 +43,7 @@ struct IOSPlexLibrarySplitView: View {
         switch selection {
         case .downloads: IOSDownloadsView()
         case .library(let library): IOSPlexLibraryView(library: library)
-        case .playlists(let serverID): IOSPlexPlaylistsView(serverID: serverID)
+        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
         }
     }
@@ -53,13 +53,13 @@ struct IOSPlexLibrarySplitView: View {
 /// Downloads stays reachable signed out or with the server unreachable.
 struct IOSPlexLibrariesView: View {
     @Binding var selection: IOSLibrarySelection?
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
 
     var body: some View {
         Group {
-            if !plex.isConfigured, downloads.visibleRecords.isEmpty {
+            if !browse.hasServers, downloads.visibleRecords.isEmpty {
                 IOSPlexConnectView()
             } else {
                 List(selection: $selection) {
@@ -68,9 +68,9 @@ struct IOSPlexLibrariesView: View {
                             Label("Downloads", systemImage: "arrow.down.circle")
                         }
                     }
-                    if !plex.isConfigured {
+                    if !browse.hasServers {
                         IOSPlexConnectView().listRowBackground(Color.clear)
-                    } else if plex.libraries.isEmpty {
+                    } else if videoLibraries.isEmpty {
                         status.frame(maxWidth: .infinity).listRowBackground(Color.clear)
                     } else {
                         // One section per server, under its name once there are several.
@@ -81,17 +81,21 @@ struct IOSPlexLibrariesView: View {
                                         Label(library.title, systemImage: library.icon)
                                     }
                                 }
-                                if showPlaylists, !plex.playlists(serverID: group.serverID).isEmpty {
-                                    NavigationLink(value: IOSLibrarySelection.playlists(serverID: group.serverID)) {
+                                if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
+                                    NavigationLink(value: IOSLibrarySelection.playlists(providerID: group.providerID)) {
                                         Label("Playlists", systemImage: "list.and.film")
                                     }
                                 }
                             }
                         }
+                        // A server that failed is named in its own section; the others still list.
+                        ForEach(browse.failedServers) { failure in
+                            Section { IOSServerFailureBanner(failure: failure).listRowInsets(EdgeInsets()) }
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable { await plex.refresh() }
+                .refreshable { await browse.refresh() }
             }
         }
         .navigationTitle("Library")
@@ -101,21 +105,22 @@ struct IOSPlexLibrariesView: View {
         }
     }
 
-    private var serverGroups: [(id: String, serverID: String?, name: String?, libraries: [PlexLibrary])] {
-        let names = plex.otherServerNames
-        let ids = plex.libraries.reduce(into: [String?]()) { if !$0.contains($1.serverID) { $0.append($1.serverID) } }
+    private var videoLibraries: [MediaLibrary] { browse.libraries }
+
+    /// One section per server, under its name once there are several.
+    private var serverGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {
+        let ids = videoLibraries.reduce(into: [String]()) { if !$0.contains($1.providerID) { $0.append($1.providerID) } }
         return ids.map { id in
-            (id ?? "", id, ids.count > 1 ? id.flatMap { names[$0] } ?? plex.auth.savedServerName : nil,
-             plex.libraries.filter { $0.serverID == id })
+            (id, id, ids.count > 1 ? browse.labels.badge(providerID: id) : nil, videoLibraries.filter { $0.providerID == id })
         }
     }
 
     @ViewBuilder
     private var status: some View {
-        if plex.isLoadingContent {
+        if browse.isLoadingContent {
             ProgressView().padding()
-        } else if let error = plex.contentError {
-            IOSPlexErrorView(title: "Couldn't Load Libraries", message: error) { await plex.refresh() }
+        } else if let error = browse.contentError ?? browse.failedServers.first?.message {
+            IOSPlexErrorView(title: "Couldn't Load Libraries", message: error) { await browse.refresh() }
         } else {
             ContentUnavailableView("No Libraries", systemImage: "film.stack")
         }
@@ -124,15 +129,15 @@ struct IOSPlexLibrariesView: View {
 
 /// One library as a paged poster grid with Sort and Filter menus.
 struct IOSPlexLibraryView: View {
-    let library: PlexLibrary
+    let library: MediaLibrary
     /// Only a tab root shows the avatar; a grid pushed from the Library list does not.
     var showsAccount = false
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @AppStorage private var sortRaw: String
     @State private var unwatchedOnly = false
     /// Every item's place, filled page by page as the grid scrolls, so the
     /// scroll length is the library's from the first page.
-    @State private var slots = PagedSlots<PlexMetadata>(pageSize: Self.pageSize)
+    @State private var slots = PagedSlots<MediaItem>(pageSize: Self.pageSize)
     @State private var error: String?
     /// Query and watch-state revision the grid holds, so a reappearing view
     /// keeps its data and scroll position instead of reloading.
@@ -148,10 +153,19 @@ struct IOSPlexLibraryView: View {
         (.ratingDesc, String(localized: "Rating"))
     ]
 
-    init(library: PlexLibrary, showsAccount: Bool = false) {
+    init(library: MediaLibrary, showsAccount: Bool = false) {
         self.library = library
         self.showsAccount = showsAccount
-        _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.key)")
+        _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.settingKey)")
+    }
+
+    /// The sorts the library page offers, in its order: all of them on Plex, else what the server can apply.
+    private var sorts: [(LibrarySortOption, String)] {
+        let provider = browse.provider(for: library.providerID)
+        let offered = IOSLibrarySorts.menu(
+            offered: provider?.sortOptions(for: library.kind) ?? LibrarySortOption.expressible(for: library.kind),
+            isPlex: provider?.kind == .plex)
+        return Self.sorts.filter { offered.contains($0.0) }
     }
 
     private var sort: LibrarySortOption { LibrarySortOption(rawValue: sortRaw) ?? .titleAsc }
@@ -179,13 +193,13 @@ struct IOSPlexLibraryView: View {
                 .refreshable { await refetchLoaded() }
             }
         }
-        .navigationTitle(plex.displayTitle(library.title, serverID: library.serverID))
+        .navigationTitle(browse.labels.title(library.title, providerID: library.providerID))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Picker("Sort By", selection: $sortRaw) {
-                        ForEach(Self.sorts, id: \.0) { Text($0.1).tag($0.0.rawValue) }
+                        ForEach(sorts, id: \.0) { Text($0.1).tag($0.0.rawValue) }
                     }
                 } label: {
                     Label("Sort", systemImage: "arrow.up.arrow.down")
@@ -204,11 +218,11 @@ struct IOSPlexLibraryView: View {
             }
             if showsAccount { IOSAccountToolbarItem() }
         }
-        .task(id: "\(queryKey)|\(plex.watchStateRevision)") {
+        .task(id: "\(queryKey)|\(browse.watchStateRevision)") {
             // Nothing claimed and nothing shown: a first page that was cancelled when the view left.
             if loadedQuery != queryKey || (slots.slots.isEmpty && slots.claimedPages.isEmpty) {
                 await restart()
-            } else if loadedRevision != plex.watchStateRevision {
+            } else if loadedRevision != browse.watchStateRevision {
                 await refetchLoaded()
             }
         }
@@ -219,7 +233,7 @@ struct IOSPlexLibraryView: View {
         slots = PagedSlots(pageSize: Self.pageSize)
         error = nil
         loadedQuery = queryKey
-        loadedRevision = plex.watchStateRevision
+        loadedRevision = browse.watchStateRevision
         isFetchingFirstPage = true
         defer { isFetchingFirstPage = false }
         slots.claim(0)
@@ -228,7 +242,7 @@ struct IOSPlexLibraryView: View {
 
     /// Refetches every page fetched so far, in place: a watch-state change or pull to refresh.
     private func refetchLoaded() async {
-        loadedRevision = plex.watchStateRevision
+        loadedRevision = browse.watchStateRevision
         for start in slots.claimedPages { await fetch(start) }
     }
 
@@ -245,11 +259,12 @@ struct IOSPlexLibraryView: View {
     private func fetch(_ start: Int) async {
         let query = queryKey
         do {
-            let page = try await plex.libraryPage(
-                library, sort: sort, unwatchedOnly: unwatchedOnly, start: start, size: Self.pageSize
+            guard let provider = browse.provider(for: library.providerID) else { throw MediaProviderError.unreachable }
+            let page = try await provider.items(
+                in: library, sort: sort.seamSort, unwatchedOnly: unwatchedOnly, page: Page(offset: start, limit: Self.pageSize)
             )
             guard query == queryKey else { return }
-            slots.fill(page.items, at: start, total: page.totalSize)
+            slots.fill(page.items, at: start, total: page.total)
             error = nil
         } catch {
             // A newer query has its own slots; only this query's claim is released.

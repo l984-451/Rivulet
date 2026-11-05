@@ -86,7 +86,18 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     var searchItems: [MediaItem] = []
-    func search(_ query: String) async throws -> [MediaItem] { searchItems }
+    var searchError: Error?
+    func search(_ query: String) async throws -> [MediaItem] {
+        if let searchError { throw searchError }
+        return searchItems
+    }
+    /// What `ownedItems(matching:limit:)` answers, and the titles it was asked for.
+    var ownedItemsResult: [MediaItem] = []
+    private(set) var ownedRequests: [[TitleMatch]] = []
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
+        ownedRequests.append(titles)
+        return Array(ownedItemsResult.prefix(limit))
+    }
     /// What `related(for:kind:)` answers, and the kinds it was asked for.
     var relatedContent = RelatedContent(items: [], collection: nil)
     private(set) var relatedKinds: [MediaKind] = []
@@ -127,8 +138,11 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     func hubs() async throws -> [MediaHub] { [] }
     var hubsByLibrary: [String: [MediaHub]] = [:]
     var hubsError: Error?
+    /// Libraries whose `hubs(in:)` throws, the others answering.
+    var failingHubLibraries: Set<String> = []
     func hubs(in library: MediaLibrary) async throws -> [MediaHub] {
         if let hubsError { throw hubsError }
+        if failingHubLibraries.contains(library.id) { throw MediaProviderError.unreachable }
         return hubsByLibrary[library.id] ?? []
     }
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
@@ -163,7 +177,11 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     func setSelectedSubtitleTrack(_ trackID: String?, source sourceID: String, of itemRef: MediaItemRef) async throws {}
     private(set) var markedPlayed: [MediaItemRef] = []
     private(set) var markedUnplayed: [MediaItemRef] = []
-    func markPlayed(_ itemRef: MediaItemRef) async throws { markedPlayed.append(itemRef) }
+    var markPlayedError: Error?
+    func markPlayed(_ itemRef: MediaItemRef) async throws {
+        if let markPlayedError { throw markPlayedError }
+        markedPlayed.append(itemRef)
+    }
     func markUnplayed(_ itemRef: MediaItemRef) async throws { markedUnplayed.append(itemRef) }
     private(set) var refreshed: [MediaItemRef] = []
     func refreshMetadata(_ itemRef: MediaItemRef) async throws { refreshed.append(itemRef) }

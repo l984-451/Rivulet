@@ -4,12 +4,17 @@
 // The active MediaProvider instances (the Plex servers and one server per other kind), keyed by id.
 
 import Foundation
+import Synchronization
 
 @Observable @MainActor
 final class MediaProviderRegistry {
     static let shared = MediaProviderRegistry()
 
     private(set) var providers: [String: any MediaProvider] = [:]
+
+    /// Whether the Plex providers list a library's collections beside its titles. The iOS app
+    /// turns it off at launch, before the first `populate`.
+    static var plexIncludesCollections = true
 
     /// Told the other servers after each populate. tvOS loads their library settings here.
     @ObservationIgnored var onSecondaryProvidersChanged: (([any MediaProvider]) -> Void)?
@@ -72,12 +77,16 @@ final class MediaProviderRegistry {
 
     func register(_ provider: any MediaProvider) {
         providers[provider.id] = provider
-        if provider.kind == .plex { currentPlexID = provider.id }
+        if provider.kind == .plex {
+            currentPlexID = provider.id
+            if self === Self.shared { MediaItemRef.selectedPlexIDs.withLock { _ = $0.insert(provider.id) } }
+        }
     }
 
     func unregister(providerID: String) {
         providers.removeValue(forKey: providerID)
         if providerID == currentPlexID { currentPlexID = nil }
+        if self === Self.shared { MediaItemRef.selectedPlexIDs.withLock { _ = $0.remove(providerID) } }
     }
 
     /// Brings the registry in line with what is signed in: the Plex server from
@@ -118,6 +127,7 @@ final class MediaProviderRegistry {
         guard let serverURL = plexServerURL, let token = plexToken else {
             providers = providers.filter { $0.value.kind != .plex }
             currentPlexID = nil
+            if self === Self.shared { MediaItemRef.selectedPlexIDs.withLock { $0 = [] } }
             return
         }
         // Prefer Plex's real machineIdentifier when the user has selected a
@@ -130,11 +140,13 @@ final class MediaProviderRegistry {
             machineIdentifier: machineID,
             displayName: plexName,
             serverURL: serverURL,
-            authToken: token
+            authToken: token,
+            includesCollections: Self.plexIncludesCollections
         ))
         for (server, token) in extraPlex where server.machineID != machineID {
             providers[server.providerID] = PlexProvider(machineIdentifier: server.machineID, displayName: server.name,
-                                                        serverURL: server.url, authToken: token, accountID: plexOwnerID)
+                                                        serverURL: server.url, authToken: token, accountID: plexOwnerID,
+                                                        includesCollections: Self.plexIncludesCollections)
             extraPlexIDs.append(server.providerID)
         }
     }

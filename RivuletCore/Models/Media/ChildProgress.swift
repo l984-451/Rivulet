@@ -11,7 +11,7 @@
 
 import Foundation
 
-struct ChildProgress: Hashable, Sendable, Codable {
+nonisolated struct ChildProgress: Hashable, Sendable, Codable {
     let played: Int
     let total: Int
     /// True when only the unplayed count is known (`total` stands for it, `played` is 0), so the pair is not a real "n of m".

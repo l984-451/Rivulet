@@ -164,13 +164,13 @@ private struct IOSDownloadRow: View {
 
 /// The detail page's download circle: Download, a progress ring, or a filled arrow with Play and Remove.
 struct IOSDownloadButton: View {
-    let item: PlexMetadata
+    let item: MediaItem
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @EnvironmentObject private var plex: IOSPlexSession
     @Environment(\.plexActions) private var actions
 
     var body: some View {
-        if let key = item.ratingKey, let record = downloads.record(for: key) {
+        if let record = downloads.record(for: item.ref.itemID, serverID: item.ref.plexServerID) {
             Menu {
                 Section(record.statusText) {
                     switch record.state {

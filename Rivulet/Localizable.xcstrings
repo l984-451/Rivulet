@@ -8959,6 +8959,26 @@
         }
       }
     },
+    "The server didn't accept the sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server doesn't have that." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat das nicht."
+          }
+        }
+      }
+    },
     "TMDB users" : {
       "localizations" : {
         "de" : {

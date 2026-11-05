@@ -43,6 +43,10 @@ protocol MediaProvider: Sendable, Identifiable {
     /// the item's own kind, which a ref does not carry.
     func related(for ref: MediaItemRef, kind: MediaKind) async throws -> RelatedContent
 
+    /// The detail page's "More Like This" row. Default: the related row. Plex keeps only its
+    /// similar-title hubs, uncapped, which is what iOS shows.
+    func moreLikeThis(for ref: MediaItemRef, kind: MediaKind) async throws -> [MediaItem]
+
     /// All episodes flattened across all seasons of a show. For shows only.
     /// Plex: getAllLeaves. Jellyfin: /Shows/{id}/Episodes.
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem]
@@ -197,6 +201,9 @@ extension MediaProvider {
     func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,
                          maxBitrate: Int?, audioStreamIndex: Int?, subtitleStreamIndex: Int?) async throws -> StreamInfo {
         throw MediaProviderError.transcodeRequired
+    }
+    func moreLikeThis(for ref: MediaItemRef, kind: MediaKind) async throws -> [MediaItem] {
+        try await related(for: ref, kind: kind).items
     }
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras { PlaybackExtras() }
     func showIdentityKeys(for showIDs: [String]) async -> [String: [String]] { [:] }

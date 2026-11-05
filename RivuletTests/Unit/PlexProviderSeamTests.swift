@@ -166,6 +166,38 @@ final class PlexProviderSeamTests: XCTestCase {
         XCTAssertEqual(call.sort, "titleSort:asc")
     }
 
+    func test_items_aProviderThatExcludesCollectionsAsksForTitlesOnly() async throws {
+        let network = StubNetwork()
+        let library = MediaLibrary(id: "7", providerID: "plex:test", title: "Movies", kind: .movies)
+        let titlesOnly = PlexProvider(machineIdentifier: "test", displayName: "Test", serverURL: "http://plex.test",
+                                      authToken: "t", includesCollections: false, networkManager: network)
+        _ = try await titlesOnly.items(in: library, sort: .titleAsc, unwatchedOnly: false, page: Page(offset: 0, limit: 50))
+        XCTAssertEqual(network.libraryCalls.first?.collections, false)
+    }
+
+    func test_registry_hostCanTurnCollectionsOffForEveryPlexProvider() {
+        let registry = MediaProviderRegistry()
+        MediaProviderRegistry.plexIncludesCollections = false
+        defer { MediaProviderRegistry.plexIncludesCollections = true }
+        registry.populate(plexServerURL: "http://plex.test", plexToken: "t", plexMachineID: "m", plexName: "P")
+        XCTAssertEqual((registry.plexProvider as? PlexProvider)?.includesCollections, false)
+    }
+
+    func test_mappedEpisodeAndSeason_carryTheShowsPlexGuid() {
+        var episode = meta("e", type: "episode", guid: "plex://episode/1")
+        episode.grandparentGuid = "plex://show/abc"
+        var season = meta("s", type: "season", guid: "plex://season/1")
+        season.parentGuid = "plex://show/abc"
+        XCTAssertEqual(mapped(episode).externalIDs?["showPlex"], "plex://show/abc")
+        XCTAssertEqual(mapped(season).externalIDs?["showPlex"], "plex://show/abc")
+        XCTAssertNil(mapped(meta("m", guid: "plex://movie/2")).externalIDs?["showPlex"])
+    }
+
+    func test_mappedItem_namesItsLibrary() {
+        XCTAssertEqual(mapped(meta("1", section: 12)).libraryID, "12")
+        XCTAssertNil(mapped(meta("2")).libraryID)
+    }
+
     func test_items_threeArgumentFormSendsNoFilter() async throws {
         let network = StubNetwork()
         let library = MediaLibrary(id: "7", providerID: "plex:test", title: "Movies", kind: .movies)

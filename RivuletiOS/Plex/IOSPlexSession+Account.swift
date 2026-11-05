@@ -12,11 +12,11 @@ extension IOSPlexSession {
             contentSessionChanged()
             // Locked: nothing loads, and the last profile's rows must not stay up.
             if !isConfigured { clearContent() }
-            await refresh()
+            await authChanged()
         }
         // The first selection confirms the profile's server token; reload under it.
         PlexUserProfileManager.onInitialProfileSelected = { [weak self] in
-            Task { await self?.refresh() }
+            Task { await self?.authChanged() }
         }
     }
 
@@ -32,7 +32,7 @@ extension IOSPlexSession {
         await auth.verifyAndFixConnection()
         let moved = auth.selectedServerURL != before
         if moved {
-            await refresh()
+            await authChanged()
         } else if auth.isConnected, await flushOfflineProgress() {
             await watchStateDidChange()
         }
@@ -57,7 +57,7 @@ extension IOSPlexSession {
     func switchServer(to server: PlexDevice) async -> Bool {
         guard await PlexAuthManager.shared.selectServer(server) else { return false }
         contentSessionChanged()
-        await refresh()
+        await authChanged()
         return true
     }
 }

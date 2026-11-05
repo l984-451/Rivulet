@@ -521,10 +521,12 @@ enum EpisodeMenu {
         guard host.presentedViewController == nil,
               let provider = MediaProviderRegistry.shared.provider(for: episode.ref.providerID) else { return }
         Task { @MainActor [weak host] in
-            let canRefresh = await provider.canRefreshMetadata()
+            async let canRefresh = provider.canRefreshMetadata()
+            async let canDelete = provider.canDeleteMedia()
+            let (refresh, delete) = await (canRefresh, canDelete)
             guard let host, host.presentedViewController == nil else { return }
-            let sections = PlexHomeViewController.providerTileMenuSections(
-                for: episode, provider: provider, isContinueWatching: false, canRefreshMetadata: canRefresh,
+            var sections = PlexHomeViewController.providerTileMenuSections(
+                for: episode, provider: provider, isContinueWatching: false, canRefreshMetadata: refresh,
                 onWatchFromBeginning: { play(nil, true) },
                 onMoreInfo: moreInfo,
                 onPlayVersion: { [weak host] in
@@ -539,6 +541,9 @@ enum EpisodeMenu {
                     guard let host else { return }
                     PlaylistMenus.presentAddToPlaylist(for: episode, from: host, sourceFrame: sourceFrame)
                 })
+            if delete {
+                sections.append([PlexHomeViewController.deleteAction(for: episode, provider: provider, from: host)])
+            }
             // animated: false; the popup runs its own entrance from the thumb.
             host.present(TileMenuPopupViewController(sections: sections, sourceFrame: sourceFrame), animated: false)
         }

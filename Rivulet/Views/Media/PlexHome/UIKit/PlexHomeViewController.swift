@@ -4174,25 +4174,29 @@ final class PlexHomeViewController: UIViewController {
                 sections.insert(entryGroup, at: 0)
             }
             if canDelete, let provider {
-                sections.append([TileMenuAction(title: "Delete", systemImage: "trash", destructive: true) {
-                    [weak self] in self?.confirmDelete(item, provider: provider)
-                }])
+                sections.append([Self.deleteAction(for: item, provider: provider, from: self)])
             }
             presentTileMenu(sections: sections)
         }
     }
 
-    private func confirmDelete(_ item: MediaItem, provider: any MediaProvider) {
-        Task { @MainActor [weak self] in
-            let message = await provider.deleteConfirmation(for: item)
-            self?.presentDeleteConfirmation(item, message: message, provider: provider)
+    /// "Delete", behind a confirmation. Shared with the episode menu on the show and season pages.
+    static func deleteAction(for item: MediaItem, provider: any MediaProvider,
+                             from presenter: UIViewController) -> TileMenuAction {
+        TileMenuAction(title: "Delete", systemImage: "trash", destructive: true) { [weak presenter] in
+            Task { @MainActor in
+                let message = await provider.deleteConfirmation(for: item)
+                guard let presenter else { return }
+                presentDeleteConfirmation(item, message: message, provider: provider, from: presenter)
+            }
         }
     }
 
-    private func presentDeleteConfirmation(_ item: MediaItem, message: String, provider: any MediaProvider) {
+    private static func presentDeleteConfirmation(_ item: MediaItem, message: String, provider: any MediaProvider,
+                                                  from presenter: UIViewController) {
         let alert = UIAlertController(title: String(localized: "Delete \u{201C}\(item.title)\u{201D}?"), message: message,
                                       preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: String(localized: "Delete"), style: .destructive) { [weak presenter] _ in
             Task { @MainActor in
                 do {
                     try await provider.deleteMedia(item.ref)

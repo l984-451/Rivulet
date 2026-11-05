@@ -221,7 +221,7 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertTrue(query.contains(URLQueryItem(name: "parentId", value: "lib-tv")))
         XCTAssertTrue(query.contains(URLQueryItem(name: "includeItemTypes", value: "Series")))
         XCTAssertTrue(query.contains(URLQueryItem(name: "sortBy", value: "SortName")))
-        XCTAssertTrue(query.contains(URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount")))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount,Genres,ProviderIds")))
     }
 
     func test_items_lastPage_hasNoNextPage() async throws {

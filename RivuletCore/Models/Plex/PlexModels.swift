@@ -301,6 +301,28 @@ nonisolated struct PlexHub: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+extension PlexHub {
+    /// Matched on identifier like tvOS `PlexDataStore.isContinueWatchingFamily`,
+    /// never on the localized title. On Deck is in the family.
+    nonisolated var isContinueWatching: Bool {
+        let id = (hubIdentifier ?? "").lowercased()
+        return id.contains("continue") || id.contains("inprogress") || id.contains("ondeck")
+    }
+
+    /// The row is on the user's Plex home screen; nil `promoted` (library pages) is not.
+    nonisolated var isPromoted: Bool { promoted == true }
+
+    /// What pages this row's See All: the hub key with its query, which is the row's definition.
+    /// `/hubs/items` answers 404 without its identifier, so the key carries it. Nil for Continue
+    /// Watching (the cache-busted fetch) and a literal id list (`/library/metadata/1,2,3`): neither pages.
+    nonisolated var pagingKey: String? {
+        guard !isContinueWatching, let key = key ?? hubKey, !key.hasPrefix("/library/metadata/") else { return nil }
+        guard key == "/hubs/items" || key.hasSuffix("/hubs/items") else { return key }
+        guard let hubIdentifier, !hubIdentifier.isEmpty else { return nil }
+        return "\(key)?identifier=\(hubIdentifier)"
+    }
+}
+
 // MARK: - Media Item (Movie, Show, Episode, etc.)
 
 nonisolated struct PlexMedia: Codable, Sendable {

@@ -118,20 +118,22 @@ enum JellyfinMediaMapper {
         }
         let grandparentRef: MediaItemRef? = mediaKind == .episode ? ref(dto.seriesId) : nil
 
+        let showLogo = imageURL(baseURL, itemID: dto.parentLogoItemId, type: "Logo", tag: dto.parentLogoImageTag)
         let parentArtwork: MediaArtwork? = {
             guard mediaKind == .episode || mediaKind == .season,
                   let poster = imageURL(baseURL, itemID: dto.parentPrimaryImageItemId, type: "Primary",
                                         tag: dto.parentPrimaryImageTag)
             else { return nil }
-            return MediaArtwork(poster: poster, backdrop: nil, thumbnail: poster, logo: nil)
+            // A season's parent is its show, so its logo rides here.
+            return MediaArtwork(poster: poster, backdrop: nil, thumbnail: poster, logo: mediaKind == .season ? showLogo : nil)
         }()
         let grandparentArtwork: MediaArtwork? = {
             guard mediaKind == .episode else { return nil }
             let poster = imageURL(baseURL, itemID: dto.seriesId, type: "Primary", tag: dto.seriesPrimaryImageTag)
             let backdrop = imageURL(baseURL, itemID: dto.parentBackdropItemId, type: "Backdrop",
                                     tag: dto.parentBackdropImageTags?.first)
-            guard poster != nil || backdrop != nil else { return nil }
-            return MediaArtwork(poster: poster, backdrop: backdrop, thumbnail: poster, logo: nil)
+            guard poster != nil || backdrop != nil || showLogo != nil else { return nil }
+            return MediaArtwork(poster: poster, backdrop: backdrop, thumbnail: poster, logo: showLogo)
         }()
 
         // Folder counts need Fields=RecursiveItemCount; UnplayedItemCount is
@@ -164,7 +166,9 @@ enum JellyfinMediaMapper {
             artwork: artwork(dto, baseURL: baseURL),
             parentArtwork: parentArtwork,
             grandparentArtwork: grandparentArtwork,
-            versionCount: dto.mediaSourceCount
+            versionCount: dto.mediaSourceCount,
+            genres: (dto.genres ?? []).isEmpty ? nil : dto.genres,
+            externalIDs: externalIDs(dto.providerIds).nilIfEmpty
         )
     }
 

@@ -378,11 +378,8 @@ struct IOSPlexHubRoute: Hashable {
     let hub: PlexHub
 
     /// Continue Watching is the cache-busted fetch, and a literal id list is a
-    /// fixed set, so neither pages.
-    var pages: Bool {
-        guard !hub.isContinueWatching, let key = hub.key ?? hub.hubKey else { return false }
-        return !key.hasPrefix("/library/metadata/")
-    }
+    /// fixed set, so neither pages (`PlexHub.pagingKey`).
+    var pages: Bool { hub.pagingKey != nil }
 }
 
 /// "Title ›" heading that pushes the full grid.

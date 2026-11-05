@@ -93,13 +93,6 @@ extension PlexHub {
 
     /// Rails stop at 20; the header's See All pages the rest.
     var items: [PlexMetadata] { Array((Metadata ?? []).prefix(20)) }
-
-    /// Matched on identifier like tvOS `PlexDataStore.isContinueWatchingFamily`,
-    /// never on the localized title. On Deck is in the family.
-    var isContinueWatching: Bool {
-        let id = (hubIdentifier ?? "").lowercased()
-        return id.contains("continue") || id.contains("inprogress") || id.contains("ondeck")
-    }
 }
 
 /// Same module, so this is not a retroactive conformance: RivuletCore folders

@@ -23,7 +23,12 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     let userID: String
     let client: JellyfinClient
 
-    init(serverID: String, displayName: String, userID: String, client: JellyfinClient) {
+    /// `now` is the clock the owned-id index ages by.
+    private let now: @Sendable () -> Date
+
+    init(serverID: String, displayName: String, userID: String, client: JellyfinClient,
+         now: @escaping @Sendable () -> Date = { Date() }) {
+        self.now = now
         self.id = "jellyfin:\(serverID)"
         self.displayName = displayName
         self.userID = userID
@@ -42,7 +47,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     /// "12/24 watched", and the parent image ids that list responses omit
     /// otherwise. Detail calls (GET /Items/{id}) return every field.
     private static let listFields = URLQueryItem(
-        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount"
+        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount,Genres,ProviderIds"
     )
 
     private func map(_ dtos: [JFItem]?) -> [MediaItem] {
@@ -68,13 +73,30 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     }
 
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
+        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+    }
+
+    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
+        try await listing(libraryQuery(library, sort: sort, unwatchedOnly: unwatchedOnly), page: page)
+    }
+
+    /// The query that defines a library listing, without its page.
+    private func libraryQuery(_ library: MediaLibrary, sort: SortOption, itemTypes: String? = nil,
+                              unwatchedOnly: Bool = false) -> [URLQueryItem] {
         let (sortBy, order) = Self.sortParameters(sort)
-        let result: JFQueryResult = try await client.get("Items", [
+        var query = [
             URLQueryItem(name: "parentId", value: library.id),
             URLQueryItem(name: "recursive", value: "true"),
-            URLQueryItem(name: "includeItemTypes", value: Self.itemTypes(for: library.kind)),
+            URLQueryItem(name: "includeItemTypes", value: itemTypes ?? Self.itemTypes(for: library.kind)),
             URLQueryItem(name: "sortBy", value: sortBy),
-            URLQueryItem(name: "sortOrder", value: order),
+            URLQueryItem(name: "sortOrder", value: order)
+        ]
+        if unwatchedOnly { query.append(URLQueryItem(name: "filters", value: "IsUnplayed")) }
+        return query
+    }
+
+    private func listing(_ query: [URLQueryItem], page: Page, path: String = "Items") async throws -> PagedResult<MediaItem> {
+        let result: JFQueryResult = try await client.get(path, query + [
             URLQueryItem(name: "startIndex", value: "\(page.offset)"),
             URLQueryItem(name: "limit", value: "\(page.limit)"),
             URLQueryItem(name: "enableTotalRecordCount", value: "true"),
@@ -85,6 +107,15 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         let next: Page? = (page.offset + page.limit < total)
             ? Page(offset: page.offset + page.limit, limit: page.limit) : nil
         return PagedResult(items: items, total: total, nextPage: next)
+    }
+
+    /// A row's See All. Only Recently Added pages: its key is the library listing newest first, which
+    /// `Items/Latest` cannot page. The first rows can differ from `Latest`'s grouping.
+    func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {
+        guard let key = hub.pagingKey, let components = URLComponents(string: key) else {
+            return PagedResult(items: page.offset == 0 ? hub.items : [], total: hub.items.count, nextPage: nil)
+        }
+        return try await listing(components.queryItems ?? [], page: page, path: components.path)
     }
 
     /// Show -> seasons, season -> episodes, anything else -> direct children.
@@ -207,7 +238,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     }
 
     private static let continueWatchingFields = URLQueryItem(
-        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount,ProviderIds"
+        name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,MediaSourceCount,ProviderIds,Genres"
     )
 
     /// Each show's latest played episode date. A series' own UserData carries
@@ -268,15 +299,17 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         var query = [
             URLQueryItem(name: "parentId", value: library.id),
             URLQueryItem(name: "limit", value: "\(limit)"),
-            URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,DateCreated,DateLastContentAdded,MediaSourceCount")
+            URLQueryItem(name: "fields", value: "Overview,RecursiveItemCount,SortName,ParentId,DateCreated,DateLastContentAdded,MediaSourceCount,Genres,ProviderIds")
         ]
         // A "Home Videos and Photos" library also answers with photos, which
         // nothing here can open. Leaf types: the server groups episodes itself.
         if library.kind == .mixed {
-            query.append(URLQueryItem(name: "includeItemTypes", value: "Movie,Episode,Video,MusicVideo"))
+            query.append(URLQueryItem(name: "includeItemTypes", value: Self.mixedLatestTypes))
         }
         return try await client.get("Items/Latest", query)
     }
+
+    private static let mixedLatestTypes = "Movie,Episode,Video,MusicVideo"
 
     /// Asked per library: across every library at once, a 12.1 server returns
     /// only the newest grouped series and drops the movies. Jellyfin's own
@@ -326,7 +359,19 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     private func recentlyAddedHub(_ library: MediaLibrary, _ added: [JFItem]) -> MediaHub? {
         added.isEmpty ? nil : MediaHub(id: "\(library.id).recentlyAdded", providerID: id,
-                                       title: String(localized: "Recently Added in \(library.title)"), style: .shelf, items: map(added))
+                                       title: String(localized: "Recently Added in \(library.title)"), style: .shelf, items: map(added),
+                                       pagingKey: recentlyAddedKey(library))
+    }
+
+    /// The library listing newest first as a relative request, the items `Latest` returns: a TV
+    /// library's are episodes (measured on 12.1), a mixed one's are the leaf types.
+    private func recentlyAddedKey(_ library: MediaLibrary) -> String? {
+        var components = URLComponents()
+        components.path = "Items"
+        components.queryItems = libraryQuery(
+            library, sort: .addedAtDesc,
+            itemTypes: library.kind == .mixed ? Self.mixedLatestTypes : library.kind == .shows ? "Episode" : nil)
+        return components.string
     }
 
     /// Two requests: the library's TMDB ids, then the matches. 12.1 ignores
@@ -352,6 +397,90 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         ])
         let byID = Dictionary(map(result.items).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
         return ids.compactMap { byID[$0] }
+    }
+
+    /// The matches are one `Items?ids=` request. Finding them needs every movie and show on the server with its
+    /// provider ids (12.1 ignores `anyProviderIdEquals`, as `trending` found), so that listing is kept for
+    /// ten minutes and shared by concurrent calls.
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
+        let owned = try await ownedIndex()
+        let ids = TitleMatch.orderedIDs(titles, among: owned.map { (id: $0.id, kind: $0.kind, ids: $0.ids) }, limit: limit)
+        guard !ids.isEmpty else { return [] }
+        let result: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "ids", value: ids.joined(separator: ",")), Self.listFields
+        ])
+        let byID = Dictionary(map(result.items).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.compactMap { byID[$0] }
+    }
+
+    private struct OwnedEntry: Sendable {
+        let id: String
+        let kind: MediaKind
+        let ids: [String: String]
+    }
+
+    private struct OwnedIndex {
+        var entries: [OwnedEntry] = []
+        var listedAt: Date?
+        var running: Task<[OwnedEntry], Error>?
+    }
+
+    private static let ownedIndexLifetime: TimeInterval = 600
+    private let ownedIndexState = OSAllocatedUnfairLock(initialState: OwnedIndex())
+
+    // ponytail: the whole catalog's ids in memory; page the listing if a server's catalog makes this heavy.
+    private func ownedIndex() async throws -> [OwnedEntry] {
+        enum Step { case ready([OwnedEntry]), wait(Task<[OwnedEntry], Error>) }
+        let step = ownedIndexState.withLock { state -> Step in
+            if let listedAt = state.listedAt, now().timeIntervalSince(listedAt) < Self.ownedIndexLifetime {
+                return .ready(state.entries)
+            }
+            if let running = state.running { return .wait(running) }
+            let task = Task { [self] in
+                do {
+                    let entries = try await listOwned()
+                    ownedIndexState.withLock { state in
+                        state.entries = entries
+                        state.listedAt = now()
+                        state.running = nil
+                    }
+                    return entries
+                } catch {
+                    ownedIndexState.withLock { $0.running = nil }
+                    throw error
+                }
+            }
+            state.running = task
+            return .wait(task)
+        }
+        switch step {
+        case .ready(let entries): return entries
+        case .wait(let task): return try await task.value
+        }
+    }
+
+    private func listOwned() async throws -> [OwnedEntry] {
+        let index: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "fields", value: "ProviderIds"),
+            URLQueryItem(name: "enableImages", value: "false"),
+            URLQueryItem(name: "enableUserData", value: "false")
+        ])
+        return (index.items ?? []).compactMap { dto in
+            dto.id.map { OwnedEntry(id: $0, kind: JellyfinMediaMapper.kind(dto.type), ids: JellyfinMediaMapper.externalIDs(dto.providerIds)) }
+        }
+    }
+
+    /// This server's image resized to fill the box (measured on 12.1: a cover that never upscales).
+    func imageURL(_ url: URL, width: Int, height: Int) -> URL {
+        guard url.host == baseURL.host, url.port == baseURL.port, url.path.contains("/Images/"),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        let sizing: Set<String> = ["fillWidth", "fillHeight", "maxWidth", "maxHeight", "width", "height"]
+        components.queryItems = (components.queryItems ?? []).filter { !sizing.contains($0.name) } + [
+            URLQueryItem(name: "fillWidth", value: "\(width)"), URLQueryItem(name: "fillHeight", value: "\(height)")
+        ]
+        return components.url ?? url
     }
 
     /// Box sets with a member in this library (measured: `parentId` on a

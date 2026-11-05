@@ -56,6 +56,10 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// Keys naming the same title on any server (`ContinueWatchingMerge`); set
     /// on Continue Watching items only. Optional so cached items still decode.
     var identity: [String]?
+    /// List-level genre names; nil when the list did not carry them.
+    let genres: [String]?
+    /// External ids keyed lowercase ("tmdb", "imdb", "tvdb", Plex's own as "plex"); nil when the list had none.
+    let externalIDs: [String: String]?
 
     init(
         ref: MediaItemRef,
@@ -80,7 +84,9 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         grandparentArtwork: MediaArtwork?,
         versionCount: Int? = nil,
         editionTitle: String? = nil,
-        identity: [String]? = nil
+        identity: [String]? = nil,
+        genres: [String]? = nil,
+        externalIDs: [String: String]? = nil
     ) {
         self.ref = ref
         self.kind = kind
@@ -105,6 +111,8 @@ struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.versionCount = versionCount
         self.editionTitle = editionTitle
         self.identity = identity
+        self.genres = genres
+        self.externalIDs = externalIDs
     }
 }
 
@@ -179,7 +187,14 @@ extension MediaItem {
             parentArtwork: parentArtwork,
             grandparentArtwork: grandparentArtwork,
             versionCount: versionCount,
-            editionTitle: editionTitle
+            editionTitle: editionTitle,
+            genres: genres,
+            externalIDs: externalIDs
         )
     }
+}
+
+extension Dictionary {
+    /// Self, or nil when empty, for the optional list fields of `MediaItem`.
+    var nilIfEmpty: Self? { isEmpty ? nil : self }
 }

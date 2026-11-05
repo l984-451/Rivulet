@@ -17,10 +17,10 @@ extension EmbyProvider {
     /// make `UserData.PlayCount` and `LastPlayedDate` real; the rest is not on lists by default.
     nonisolated static let listFieldNames = "PrimaryImageAspectRatio,ProductionYear,PremiereDate,SortName,DateCreated,"
         + "ParentId,ChildCount,RecursiveItemCount,CommunityRating,OfficialRating,Overview,"
-        + "UserDataPlayCount,UserDataLastPlayedDate"
+        + "UserDataPlayCount,UserDataLastPlayedDate,Genres,ProviderIds"
     static let listFields = URLQueryItem(name: "Fields", value: listFieldNames)
-    /// `ProviderIds` is absent on lists unless asked for (cross-server identity, trending).
-    static let identityFields = URLQueryItem(name: "Fields", value: listFieldNames + ",ProviderIds")
+    /// `ProviderIds` is absent on lists unless asked for (cross-server identity, trending); `listFields` asks for it too.
+    static let identityFields = listFields
     /// Detail needs no Fields for its sources, people or chapters; these three are the extras.
     static let detailFields = URLQueryItem(name: "Fields", value: "ChildCount,RecursiveItemCount,Collections")
 
@@ -66,13 +66,29 @@ extension EmbyProvider {
     /// A movie library's `ParentId` read returns `Folder` wrappers, so every listing is
     /// recursive with explicit types. `GroupItemsIntoCollections` is never sent: it injects box sets.
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
+        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+    }
+
+    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
+        try await listing(libraryQuery(library, sort: sort, unwatchedOnly: unwatchedOnly), page: page)
+    }
+
+    /// The query that defines a library listing, without its page.
+    private func libraryQuery(_ library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool = false) -> [URLQueryItem] {
         let (sortBy, order) = Self.sortParameters(sort)
-        let result = try await query([
+        var query = [
             URLQueryItem(name: "ParentId", value: library.id),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: Self.itemTypes(for: library.kind)),
             URLQueryItem(name: "SortBy", value: sortBy),
-            URLQueryItem(name: "SortOrder", value: order),
+            URLQueryItem(name: "SortOrder", value: order)
+        ]
+        if unwatchedOnly { query.append(URLQueryItem(name: "Filters", value: "IsUnplayed")) }
+        return query
+    }
+
+    private func listing(_ query: [URLQueryItem], page: Page) async throws -> PagedResult<MediaItem> {
+        let result = try await self.query(query + [
             URLQueryItem(name: "StartIndex", value: "\(page.offset)"),
             URLQueryItem(name: "Limit", value: "\(page.limit)"),
             Self.listFields
@@ -82,6 +98,15 @@ extension EmbyProvider {
         let next: Page? = (page.offset + page.limit < total)
             ? Page(offset: page.offset + page.limit, limit: page.limit) : nil
         return PagedResult(items: items, total: total, nextPage: next)
+    }
+
+    /// A row's See All. Only Recently Added pages: its key is the library listing newest first, the order
+    /// `Latest` uses (a series by its own date). A key that is not a request of this provider's is one page.
+    func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {
+        guard let key = hub.pagingKey, let components = URLComponents(string: key) else {
+            return PagedResult(items: page.offset == 0 ? hub.items : [], total: hub.items.count, nextPage: nil)
+        }
+        return try await listing(components.queryItems ?? [], page: page)
     }
 
     /// An unknown `SortBy` key is a 500, and one bad key in the list fails the call, so the
@@ -318,8 +343,16 @@ extension EmbyProvider {
         let added = try await latestItems(in: library, limit: 24)
         return added.isEmpty ? nil : MediaHub(
             id: "\(library.id).recentlyAdded", providerID: id,
-            title: String(localized: "Recently Added in \(library.title)"), style: .shelf, items: map(added)
+            title: String(localized: "Recently Added in \(library.title)"), style: .shelf, items: map(added),
+            pagingKey: recentlyAddedKey(library)
         )
+    }
+
+    /// The library listing newest first as a relative request, items only (the path is always this user's).
+    private func recentlyAddedKey(_ library: MediaLibrary) -> String? {
+        var components = URLComponents()
+        components.queryItems = libraryQuery(library, sort: .addedAtDesc)
+        return components.string
     }
 
     /// The library's titles on `trending`, in its order. `AnyProviderIdEquals` takes `tmdb.<id>`
@@ -347,6 +380,45 @@ extension EmbyProvider {
         let ids = TrendingMatch.ownedIDs(trending, owned: owned, limit: limit)
         let byID = Dictionary(map(found).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byID[$0] }
+    }
+
+    /// Each video library asked for the titles' ids: `AnyProviderIdEquals` (`tmdb.<id>`, `imdb.<id>`, `tvdb.<id>`, a comma
+    /// list is OR) works only with `ParentId` plus `Recursive`. Hits are matched on kind and id again, in title order.
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
+        var seen = Set<String>()
+        let pairs = titles.flatMap { title in title.externalIDs.sorted { $0.key < $1.key }.map { "\($0.key).\($0.value)" } }
+            .filter { seen.insert($0).inserted }
+        guard !pairs.isEmpty else { return [] }
+        var found: [EmbyItem] = []
+        var foundIDs = Set<String>()
+        for library in try await libraries() where [.movies, .shows, .mixed].contains(library.kind) {
+            for start in stride(from: 0, to: pairs.count, by: 200) {
+                let batch = pairs[start..<min(start + 200, pairs.count)]
+                let hits = try await query([
+                    URLQueryItem(name: "ParentId", value: library.id),
+                    URLQueryItem(name: "Recursive", value: "true"),
+                    URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+                    URLQueryItem(name: "AnyProviderIdEquals", value: batch.joined(separator: ",")),
+                    Self.identityFields
+                ]).items ?? []
+                found += hits.filter { foundIDs.insert($0.id.value).inserted }
+            }
+        }
+        let owned = found.map { (id: $0.id.value, kind: EmbyMediaMapper.kind($0.type), ids: EmbyMediaMapper.externalIDs($0)) }
+        let byID = Dictionary(map(found).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { first, _ in first })
+        return TitleMatch.orderedIDs(titles, among: owned, limit: limit).compactMap { byID[$0] }
+    }
+
+    /// This server's image fitted to the box. `FillWidth` and `FillHeight` are ignored here (measured: the
+    /// original comes back), so the box is `MaxWidth` by `MaxHeight`.
+    func imageURL(_ url: URL, width: Int, height: Int) -> URL {
+        guard url.host == baseURL.host, url.port == baseURL.port, url.path.contains("/Images/"),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        let sizing: Set<String> = ["fillwidth", "fillheight", "maxwidth", "maxheight", "width", "height"]
+        components.queryItems = (components.queryItems ?? []).filter { !sizing.contains($0.name.lowercased()) } + [
+            URLQueryItem(name: "MaxWidth", value: "\(width)"), URLQueryItem(name: "MaxHeight", value: "\(height)")
+        ]
+        return components.url ?? url
     }
 
     /// Box sets with a member in this library: `ParentId` plus `Recursive` on a library lists them.

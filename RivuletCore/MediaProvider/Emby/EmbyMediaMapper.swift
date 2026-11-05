@@ -107,15 +107,16 @@ enum EmbyMediaMapper {
 
         // A season's parent art is its show's poster. An episode's season art is not on the item.
         let seriesPoster = imageURL(baseURL, itemID: dto.seriesId, type: "Primary", tag: dto.seriesPrimaryImageTag)
+        let showLogo = imageURL(baseURL, itemID: dto.parentLogoItemId, type: "Logo", tag: dto.parentLogoImageTag)
         let parentArtwork: MediaArtwork? = mediaKind == .season ? seriesPoster.map {
-            MediaArtwork(poster: $0, backdrop: nil, thumbnail: $0, logo: nil)
+            MediaArtwork(poster: $0, backdrop: nil, thumbnail: $0, logo: showLogo)
         } : nil
         let grandparentArtwork: MediaArtwork? = {
             guard mediaKind == .episode else { return nil }
             let backdrop = imageURL(baseURL, itemID: dto.parentBackdropItemId, type: "Backdrop",
                                     tag: dto.parentBackdropImageTags?.first)
-            guard seriesPoster != nil || backdrop != nil else { return nil }
-            return MediaArtwork(poster: seriesPoster, backdrop: backdrop, thumbnail: seriesPoster, logo: nil)
+            guard seriesPoster != nil || backdrop != nil || showLogo != nil else { return nil }
+            return MediaArtwork(poster: seriesPoster, backdrop: backdrop, thumbnail: seriesPoster, logo: showLogo)
         }()
 
         return MediaItem(
@@ -140,7 +141,9 @@ enum EmbyMediaMapper {
             artwork: artwork(dto, baseURL: baseURL),
             parentArtwork: parentArtwork,
             grandparentArtwork: grandparentArtwork,
-            versionCount: dto.mediaSources.flatMap { $0.count > 1 ? $0.count : nil }
+            versionCount: dto.mediaSources.flatMap { $0.count > 1 ? $0.count : nil },
+            genres: (dto.genres ?? []).isEmpty ? nil : dto.genres,
+            externalIDs: externalIDs(dto).nilIfEmpty
         )
     }
 

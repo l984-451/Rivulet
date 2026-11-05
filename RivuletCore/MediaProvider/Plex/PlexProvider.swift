@@ -23,6 +23,10 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     let authToken: String
     let networkManager: PlexNetworkManager
     let watchlistAPI: PlexWatchlistAPI
+    /// The plex.tv account token and the guid lookup behind `ownedItems`; the defaults are the signed-in account and plex.tv.
+    private let accountToken: @Sendable () async -> String?
+    private let guidLookup: PlexTrendingHero.Lookup
+    let logoResolver: PlexLogoResolver
     /// The Plex profile an extra server's library settings belong to; nil for the selected server.
     nonisolated let accountID: String?
 
@@ -33,7 +37,10 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         authToken: String,
         accountID: String? = nil,
         networkManager: PlexNetworkManager = .shared,
-        watchlistAPI: PlexWatchlistAPI = PlexWatchlistAPI()
+        watchlistAPI: PlexWatchlistAPI = PlexWatchlistAPI(),
+        accountToken: @escaping @Sendable () async -> String? = { await MainActor.run { PlexAuthManager.shared.authToken } },
+        guidLookup: @escaping PlexTrendingHero.Lookup = { await PlexTrendingHero.plexTV($0, $1) },
+        logoResolver: PlexLogoResolver = PlexLogoResolver()
     ) {
         self.id = "plex:\(machineIdentifier)"
         self.displayName = displayName
@@ -42,6 +49,9 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         self.accountID = accountID
         self.networkManager = networkManager
         self.watchlistAPI = watchlistAPI
+        self.accountToken = accountToken
+        self.guidLookup = guidLookup
+        self.logoResolver = logoResolver
     }
 
     // MARK: - Browse
@@ -56,19 +66,50 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
+        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+    }
+
+    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
         try await plexCall {
-            let result = try await networkManager.getLibraryItemsWithTotal(
-                serverURL: serverURL, authToken: authToken,
-                sectionId: library.id,
-                start: page.offset,
-                size: page.limit,
-                sort: plexSortString(for: sort),
-                followCollectionMode: true
+            let result = try await libraryMetadataPage(
+                sectionID: library.id, sort: plexSortString(for: sort), unwatchedOnly: unwatchedOnly,
+                start: page.offset, size: page.limit, followCollections: true
             )
             let mapped = result.items.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
             }
             let total = result.totalSize ?? mapped.count
+            let next: Page? = (page.offset + page.limit < total)
+                ? Page(offset: page.offset + page.limit, limit: page.limit) : nil
+            return PagedResult(items: mapped, total: total, nextPage: next)
+        }
+    }
+
+    /// One page of a section's raw items; `sort` is a Plex sort key. iOS's library grid reads these too.
+    /// `followCollections` applies the library's Collections setting, which only a title sort honors.
+    func libraryMetadataPage(
+        sectionID: String, sort: String?, unwatchedOnly: Bool, start: Int, size: Int, followCollections: Bool
+    ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
+        try await networkManager.getLibraryItemsWithTotal(
+            serverURL: serverURL, authToken: authToken, sectionId: sectionID, start: start, size: size, sort: sort,
+            followCollectionMode: followCollections,
+            filters: unwatchedOnly ? [URLQueryItem(name: "unwatched", value: "1")] : []
+        )
+    }
+
+    /// One page of a row's See All, through the hub key: its own query is the row's definition and
+    /// `getHubItems` appends Start and Size. A row with no key is its own only page.
+    func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {
+        guard let key = hub.pagingKey else {
+            return PagedResult(items: page.offset == 0 ? hub.items : [], total: hub.items.count, nextPage: nil)
+        }
+        return try await plexCall {
+            let result = try await networkManager.getHubItems(
+                serverURL: serverURL, authToken: authToken, hubKey: key, start: page.offset, count: page.limit)
+            let mapped = result.items.map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
+            let total = result.totalSize ?? (page.offset + mapped.count)
             let next: Page? = (page.offset + page.limit < total)
                 ? Page(offset: page.offset + page.limit, limit: page.limit) : nil
             return PagedResult(items: mapped, total: total, nextPage: next)
@@ -313,7 +354,84 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         guard let hub = try await hubs(in: library).first(where: { $0.id.lowercased().contains("recentlyadded") }),
               !hub.items.isEmpty else { return nil }
-        return MediaHub(id: "\(library.id).recentlyAdded", providerID: id, title: hub.title, style: hub.style, items: hub.items)
+        return MediaHub(id: "\(library.id).recentlyAdded", providerID: id, title: hub.title, style: hub.style,
+                        items: hub.items, pagingKey: hub.pagingKey, isPromoted: hub.isPromoted)
+    }
+
+    // MARK: - Titles by external id
+
+    /// The server's items for `titles`, in title order, as Plex returns them. A title with a plex:// guid
+    /// is asked for as is; one with only a TMDB id first gets its guid from plex.tv. iOS Home's heroes read these.
+    func ownedMetadata(matching titles: [TitleMatch]) async throws -> [PlexMetadata] {
+        let guids = await PlexTrendingHero.guids(for: titles, accountToken: await accountToken(), lookup: guidLookup)
+        guard !guids.isEmpty else { return [] }
+        let owned = try await networkManager.findByGuids(serverURL: serverURL, authToken: authToken, guids: guids)
+        return PlexTrendingHero.ordered(owned, by: guids)
+    }
+
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
+        try await plexCall {
+            try await ownedMetadata(matching: titles).prefix(limit).map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
+        }
+    }
+
+    /// The library's titles on `trending`. One server-wide guid lookup, then cut to this library:
+    /// by section when the server says which, always by the library's kind.
+    func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] {
+        try await plexCall {
+            try await ownedMetadata(matching: trending.map(TitleMatch.init))
+                .filter { meta in
+                    let kindFits = switch library.kind {
+                    case .movies: meta.type == "movie"
+                    case .shows: meta.type == "show"
+                    default: true
+                    }
+                    return kindFits && (meta.librarySectionID.map { String($0) == library.id } ?? true)
+                }
+                .prefix(limit)
+                .map { PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken) }
+        }
+    }
+
+    // MARK: - Images
+
+    /// The photo transcoder's resize of `url`. The transcoder takes a server path (a relative URL, or this
+    /// server's own artwork minus its token) or an absolute plex.tv URL (the metadata CDN). Any other
+    /// URL belongs to another server and is returned unchanged, never handed to this one.
+    func imageURL(_ url: URL, width: Int, height: Int) -> URL {
+        guard let server = URL(string: serverURL) else { return url }
+        let source: String
+        if url.scheme == nil, url.host == nil, url.path.hasPrefix("/") {
+            source = url.absoluteString
+        } else if url.host == server.host, url.port == server.port,
+                  var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let query = (components.queryItems ?? []).filter { $0.name != "X-Plex-Token" }
+            components.queryItems = query.isEmpty ? nil : query
+            source = components.path + (components.query.map { "?\($0)" } ?? "")
+        } else if let host = url.host, url.scheme == "https" || url.scheme == "http",
+                  host == "plex.tv" || host.hasSuffix(".plex.tv") {
+            source = url.absoluteString
+        } else {
+            return url
+        }
+        return networkManager.buildThumbnailURL(
+            serverURL: serverURL, authToken: authToken, thumbPath: source, width: width, height: height) ?? url
+    }
+
+    /// The clear logo of the movie or show the item belongs to. Hub and episode responses carry no
+    /// `Image` array, so an episode's or season's show is fetched once and remembered, misses too.
+    func logoURL(for item: MediaItem) async -> URL? {
+        let owner: MediaItemRef? = switch item.kind {
+        case .episode: item.grandparentRef
+        case .season: item.parentRef ?? item.ref
+        default: item.ref
+        }
+        guard let key = owner?.itemID, !key.isEmpty else { return nil }
+        return await logoResolver.logo(
+            serverURL: serverURL, token: authToken, network: networkManager, sourceKey: key,
+            direct: item.kind == .episode || item.kind == .season ? nil : item.artwork.logo)
     }
 
     // MARK: - Playback

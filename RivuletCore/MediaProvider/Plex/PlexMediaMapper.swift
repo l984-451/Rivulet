@@ -26,6 +26,7 @@ enum PlexMediaMapper {
         }
         var library = MediaLibrary(id: section.key, providerID: providerID, title: section.title, kind: kind)
         library.browsesByFolder = section.hasNoMetadataAgent
+        library.isPinnedToHome = section.isPinnedToHome
         return library
     }
 
@@ -289,8 +290,23 @@ enum PlexMediaMapper {
             parentArtwork: parentArtwork,
             grandparentArtwork: grandparentArtwork,
             versionCount: meta.Media.map { Set($0.map(\.id)).count },
-            editionTitle: meta.editionTitle
+            editionTitle: meta.editionTitle,
+            genres: genres(meta),
+            externalIDs: listExternalIDs(meta)
         )
+    }
+
+    /// Genre names when the list carried a `Genre` array.
+    private static func genres(_ meta: PlexMetadata) -> [String]? {
+        let names = (meta.Genre ?? []).compactMap(\.tag)
+        return names.isEmpty ? nil : names
+    }
+
+    /// The `Guid` array's ids (only when the list asked for guids) plus Plex's own guid as "plex".
+    private static func listExternalIDs(_ meta: PlexMetadata) -> [String: String]? {
+        var ids = externalIDs(meta.Guid)
+        if let guid = meta.guid, guid.hasPrefix("plex://") { ids["plex"] = guid }
+        return ids.isEmpty ? nil : ids
     }
 
     // MARK: - Playlist
@@ -555,7 +571,9 @@ enum PlexMediaMapper {
             providerID: providerID,
             title: hub.title ?? "",
             style: style,
-            items: items
+            items: items,
+            pagingKey: hub.pagingKey,
+            isPromoted: hub.isPromoted
         )
     }
 }

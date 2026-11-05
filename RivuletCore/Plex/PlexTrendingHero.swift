@@ -3,54 +3,59 @@
 
 import Foundation
 
-/// TMDB's trending titles a Plex server owns, with no library index: each title's
-/// plex:// guid from Plex's metadata host (kept for the session), then one
-/// `/library/all?guid=a,b,…` on the server.
+/// Titles known by TMDB id (trending, watchlist) turned into the plex:// guids a Plex server
+/// indexes: from Plex's metadata host, kept for the session. The server is then asked for
+/// `/library/all?guid=a,b,…` (`findByGuids`).
 enum PlexTrendingHero {
-    /// `TrendingMatch.key` → plex:// guid; an empty string is a title Plex has no match for.
+    /// A title's plex:// guid: "" when Plex has none, nil when the request failed.
+    typealias Lookup = @Sendable (TitleMatch, String) async -> String?
+
+    /// `kind:tmdb id` → plex:// guid; an empty string is a title Plex has no match for.
     private static var plexGUIDs: [String: String] = [:]
 
-    static func items(serverURL: String, serverToken: String, accountToken: String, limit: Int = 10) async -> [PlexMetadata] {
-        async let movies = TMDBDiscoverService.shared.fetchSection(.movieTrending)
-        async let shows = TMDBDiscoverService.shared.fetchSection(.tvTrending)
-        let titles = TrendingMatch.interleave(movies: await movies, shows: await shows)
-        let guids = await resolve(titles, accountToken: accountToken)
-        guard let owned = try? await PlexNetworkManager.shared.findByGuids(
-            serverURL: serverURL, authToken: serverToken, guids: guids) else { return [] }
-        return ordered(owned, by: guids, limit: limit)
+    private static func cacheKey(_ title: TitleMatch) -> String? {
+        title.externalIDs["tmdb"].map { "\(title.kind):\($0)" }
     }
 
-    /// `owned` in `guids` order, with art, at most `limit`.
-    static func ordered(_ owned: [PlexMetadata], by guids: [String], limit: Int) -> [PlexMetadata] {
-        let byGUID = Dictionary(owned.compactMap { item in item.guid.map { ($0, item) } }, uniquingKeysWith: { a, _ in a })
-        return Array(guids.compactMap { byGUID[$0] }.filter { $0.art != nil }.prefix(limit))
-    }
-
-    /// The titles' plex:// guids in order, asking Plex only for ones not yet resolved.
-    private static func resolve(_ titles: [TMDBListItem], accountToken: String) async -> [String] {
-        let missing = titles.filter { plexGUIDs[TrendingMatch.key(tmdbID: String($0.id), type: $0.mediaType)] == nil }
-        // ponytail: 8 at a time with no cap on the list; TMDB's two trending pages are ~40 titles.
-        for chunk in stride(from: 0, to: missing.count, by: 8).map({ Array(missing[$0..<min($0 + 8, missing.count)]) }) {
-            let found = await withTaskGroup(of: (String, String?).self) { group in
-                for title in chunk {
-                    let key = TrendingMatch.key(tmdbID: String(title.id), type: title.mediaType)
-                    group.addTask { (key, await plexGUID(for: title, accountToken: accountToken)) }
-                }
-                // A failed request is asked again next time; only answers are kept.
-                return await group.reduce(into: [String: String]()) { $0[$1.0] = $1.1 }
-            }
-            plexGUIDs.merge(found) { _, new in new }
+    /// The titles' plex:// guids in title order, each once. A title's own guid is used as given;
+    /// the rest are looked up, only those not yet resolved, and are skipped without an account token.
+    static func guids(for titles: [TitleMatch], accountToken: String?, lookup: @escaping Lookup) async -> [String] {
+        let missing = titles.filter { title in
+            title.plexGUID == nil && cacheKey(title).map { plexGUIDs[$0] == nil } == true
         }
-        return titles.compactMap { plexGUIDs[TrendingMatch.key(tmdbID: String($0.id), type: $0.mediaType)] }
-            .filter { !$0.isEmpty }
+        if let accountToken {
+            // ponytail: 8 at a time with no cap on the list; TMDB's two trending pages are ~40 titles.
+            for chunk in stride(from: 0, to: missing.count, by: 8).map({ Array(missing[$0..<min($0 + 8, missing.count)]) }) {
+                let found = await withTaskGroup(of: (String, String?).self) { group in
+                    for title in chunk {
+                        guard let key = cacheKey(title) else { continue }
+                        group.addTask { (key, await lookup(title, accountToken)) }
+                    }
+                    // A failed request is asked again next time; only answers are kept.
+                    return await group.reduce(into: [String: String]()) { $0[$1.0] = $1.1 }
+                }
+                plexGUIDs.merge(found) { _, new in new }
+            }
+        }
+        var seen = Set<String>()
+        return titles.compactMap { title in
+            title.plexGUID ?? cacheKey(title).flatMap { plexGUIDs[$0] }
+        }.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
-    /// The title's plex:// guid, "" when Plex has none, nil when the request failed.
-    private static func plexGUID(for title: TMDBListItem, accountToken: String) async -> String? {
+    /// `owned` in `guids` order.
+    static func ordered(_ owned: [PlexMetadata], by guids: [String]) -> [PlexMetadata] {
+        let byGUID = Dictionary(owned.compactMap { item in item.guid.map { ($0, item) } }, uniquingKeysWith: { a, _ in a })
+        return guids.compactMap { byGUID[$0] }
+    }
+
+    /// Plex's metadata host: the title's plex:// guid from its TMDB id.
+    static func plexTV(_ title: TitleMatch, _ accountToken: String) async -> String? {
+        guard let tmdb = title.externalIDs["tmdb"] else { return nil }
         var components = URLComponents(string: "https://metadata.provider.plex.tv/library/metadata/matches")!
         components.queryItems = [
-            URLQueryItem(name: "type", value: title.mediaType == .movie ? "1" : "2"),
-            URLQueryItem(name: "guid", value: "tmdb://\(title.id)"),
+            URLQueryItem(name: "type", value: title.kind == .movie ? "1" : "2"),
+            URLQueryItem(name: "guid", value: "tmdb://\(tmdb)"),
             URLQueryItem(name: "X-Plex-Token", value: accountToken),
         ]
         var request = URLRequest(url: components.url!)

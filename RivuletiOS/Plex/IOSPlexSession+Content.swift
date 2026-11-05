@@ -92,22 +92,29 @@ extension IOSPlexSession {
         }
     }
 
-    /// One page of a hub's See All grid. The key's own query is the row's
-    /// definition; `getHubItems` appends Start and Size to it.
+    /// A provider over a server's URL and token, for the shared Plex jobs (paging, lookups, filters).
+    /// The ID only labels mapped items, which these callers do not use.
+    func plexProvider(serverID: String? = nil) throws -> PlexProvider {
+        let (serverURL, token) = try configuration(serverID: serverID)
+        return PlexProvider(machineIdentifier: serverID ?? "selected", displayName: "", serverURL: serverURL,
+                            authToken: token, networkManager: network)
+    }
+
+    /// One page of a hub's See All grid, through `PlexHub.pagingKey`: the key's own query is the row's
+    /// definition and `getHubItems` appends Start and Size to it.
     func hubPage(_ hub: PlexHub, start: Int, size: Int) async throws -> (items: [PlexMetadata], totalSize: Int?) {
-        guard let key = hub.key ?? hub.hubKey else { return (hub.Metadata ?? [], hub.Metadata?.count) }
+        guard let key = hub.pagingKey else { return (hub.Metadata ?? [], hub.Metadata?.count) }
         let (serverURL, token) = try configuration(serverID: hub.serverID)
         let page = try await network.getHubItems(
-            serverURL: serverURL, authToken: token, hubKey: key,
-            hubIdentifier: hub.hubIdentifier, start: start, count: size
+            serverURL: serverURL, authToken: token, hubKey: key, start: start, count: size
         )
         return (Self.onServer(page.items, hub.serverID), page.totalSize)
     }
 
     // MARK: - Library
 
-    /// One page of a library grid. Built as a hub key so the Unwatched filter
-    /// rides the same Start+Size paging (`getLibraryItemsWithTotal` has no filter).
+    /// One page of a library grid with the Unwatched filter (`PlexProvider`'s listing, without
+    /// the Collections setting: this grid shows titles only).
     func libraryPage(
         _ library: PlexLibrary,
         sort: LibrarySortOption,
@@ -115,11 +122,9 @@ extension IOSPlexSession {
         start: Int,
         size: Int
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
-        let (serverURL, token) = try configuration(serverID: library.serverID)
-        let key = "/library/sections/\(library.key)/all?sort=\(sort.apiParameter)"
-            + (unwatchedOnly ? "&unwatched=1" : "")
-        let page = try await network.getHubItems(
-            serverURL: serverURL, authToken: token, hubKey: key, start: start, count: size
+        let page = try await plexProvider(serverID: library.serverID).libraryMetadataPage(
+            sectionID: library.key, sort: sort.apiParameter, unwatchedOnly: unwatchedOnly,
+            start: start, size: size, followCollections: false
         )
         return (Self.onServer(page.items, library.serverID), page.totalSize)
     }

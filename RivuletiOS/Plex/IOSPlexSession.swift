@@ -73,9 +73,8 @@ final class IOSPlexSession: ObservableObject {
     /// Servers, by `serverID ?? ""`, where this account may delete media; asked once per session.
     @Published private(set) var deletableServers: Set<String> = []
     private var checkedDeleteServers: Set<String> = []
-    private var logoURLCache: [String: URL] = [:]
-    private var missingLogoKeys = Set<String>()
-    private var logoResolutionTasks: [String: Task<URL?, Never>] = [:]
+    /// Show logos, found once per server and key (`PlexProvider.logoURL` uses the same resolver).
+    private let logoResolver = PlexLogoResolver()
 
     init() {
         // The auth manager owns identity and hands content off to the host's
@@ -290,7 +289,7 @@ final class IOSPlexSession: ObservableObject {
             return (fetched ?? libraryHubs[library.id]).map { (library.id, $0) }
         })
         shelves = pinned.flatMap { libraryHubs[$0.id] ?? [] }.filter {
-            $0.promoted == true && !$0.isContinueWatching && !$0.items.isEmpty
+            $0.isPromoted && !$0.isContinueWatching && !$0.items.isEmpty
         }
         continueWatchingRows = [primaryContinueWatching?.Metadata ?? []]
             + others.map { ($0.continueWatching ?? nil)?.Metadata ?? [] }
@@ -365,63 +364,31 @@ final class IOSPlexSession: ObservableObject {
         )
     }
 
-    /// Resolves the same logo source as tvOS: episodes use their show's full
-    /// metadata, while movies and shows use their own. Hub responses omit the
-    /// Image array, so results (including misses) are cached per source key.
+    /// Episodes and seasons take their show's logo, which hub responses omit, so it is fetched once per
+    /// source and remembered (misses too): the same resolver as `PlexProvider.logoURL(for:)`.
     func logoURL(for item: PlexMetadata) async -> URL? {
-        guard let (serverURL, token) = try? configuration(serverID: item.serverID) else { return nil }
-        let sourceKey: String?
-        switch item.type {
-        case "episode":
-            sourceKey = item.grandparentRatingKey
-        case "season":
-            sourceKey = item.parentRatingKey ?? item.ratingKey
-        default:
-            sourceKey = item.ratingKey
-        }
-        guard let sourceKey else { return nil }
-        // Rating keys repeat across servers, so the cache is per server.
-        let cacheKey = "\(serverURL)|\(sourceKey)"
-
-        if let cached = logoURLCache[cacheKey] { return cached }
-        if missingLogoKeys.contains(cacheKey) { return nil }
-
-        if item.type != "episode", item.type != "season",
-           let direct = Self.directResourceURL(serverURL: serverURL, token: token, path: item.clearLogoPath) {
-            logoURLCache[cacheKey] = direct
-            return direct
-        }
-
-        if let existing = logoResolutionTasks[cacheKey] {
-            return await existing.value
-        }
-
-        let task = Task<URL?, Never> { [network] in
-            guard let metadata = try? await network.getMetadata(
-                serverURL: serverURL,
-                authToken: token,
-                ratingKey: sourceKey
-            ) else { return nil }
-            return Self.directResourceURL(serverURL: serverURL, token: token, path: metadata.clearLogoPath)
-        }
-        logoResolutionTasks[cacheKey] = task
-        let resolved = await task.value
-        logoResolutionTasks[cacheKey] = nil
-        if let resolved {
-            logoURLCache[cacheKey] = resolved
-        } else {
-            missingLogoKeys.insert(cacheKey)
-        }
-        return resolved
+        guard let (serverURL, token) = try? configuration(serverID: item.serverID),
+              let sourceKey = Self.logoSourceKey(item) else { return nil }
+        let direct = item.type == "episode" || item.type == "season"
+            ? nil : PlexLogoResolver.directURL(serverURL: serverURL, token: token, path: item.clearLogoPath)
+        return await logoResolver.logo(serverURL: serverURL, token: token, network: network,
+                                       sourceKey: sourceKey, direct: direct)
     }
 
-    /// The logo URL if `logoURL(for:)` already resolved it, so a view can draw it on its first frame.
+    /// The logo if `logoURL(for:)` already resolved it, so a view can draw it on its first frame.
     func cachedLogoURL(for item: PlexMetadata) -> URL? {
         guard let serverURL = try? configuration(serverID: item.serverID).serverURL,
-              let sourceKey = item.type == "episode" ? item.grandparentRatingKey
-                : item.type == "season" ? (item.parentRatingKey ?? item.ratingKey) : item.ratingKey
-        else { return nil }
-        return logoURLCache["\(serverURL)|\(sourceKey)"]
+              let sourceKey = Self.logoSourceKey(item) else { return nil }
+        return logoResolver.cached(serverURL: serverURL, sourceKey: sourceKey)
+    }
+
+    /// The rating key of the movie or show that owns the item's logo.
+    private static func logoSourceKey(_ item: PlexMetadata) -> String? {
+        switch item.type {
+        case "episode": item.grandparentRatingKey
+        case "season": item.parentRatingKey ?? item.ratingKey
+        default: item.ratingKey
+        }
     }
 
     /// Resolves logos and downloads them with the art, in row order, four at a
@@ -438,25 +405,6 @@ final class IOSPlexSession: ObservableObject {
                 }
             }
         }
-    }
-
-    /// Direct, authenticated URL for transparent assets such as clear logos.
-    /// The photo transcoder can flatten their alpha channel, so these skip it.
-    private static func directResourceURL(serverURL: String, token: String, path: String?) -> URL? {
-        guard let path, !path.isEmpty,
-              let base = URL(string: serverURL),
-              let absolute = URL(string: path, relativeTo: base)?.absoluteURL,
-              var components = URLComponents(url: absolute, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        // An absolute path on another host (a metadata CDN) must not receive the token.
-        guard absolute.host == base.host else { return absolute }
-        var queryItems = components.queryItems ?? []
-        if !queryItems.contains(where: { $0.name == "X-Plex-Token" }) {
-            queryItems.append(URLQueryItem(name: "X-Plex-Token", value: token))
-        }
-        components.queryItems = queryItems
-        return components.url
     }
 
     // MARK: - Playback
@@ -685,11 +633,15 @@ final class IOSPlexSession: ObservableObject {
 
     // MARK: - Home hero
 
-    /// TMDB's trending titles this server owns.
+    /// TMDB's trending titles this server owns, with backdrop art.
     func trendingHeroItems() async -> [PlexMetadata] {
         if let trendingHero, Date.now.timeIntervalSince(trendingHero.at) < 3600 { return trendingHero.items }
-        guard let (serverURL, token) = try? configuration(), let account = auth.authToken else { return [] }
-        let items = await PlexTrendingHero.items(serverURL: serverURL, serverToken: token, accountToken: account)
+        async let movies = TMDBDiscoverService.shared.fetchSection(.movieTrending)
+        async let shows = TMDBDiscoverService.shared.fetchSection(.tvTrending)
+        let titles = TrendingMatch.interleave(movies: await movies, shows: await shows).map(TitleMatch.init)
+        guard let provider = try? plexProvider(),
+              let owned = try? await provider.ownedMetadata(matching: titles) else { return [] }
+        let items = Array(owned.filter { $0.art != nil }.prefix(10))
         if !items.isEmpty { trendingHero = (items, .now) }
         return items
     }
@@ -699,10 +651,9 @@ final class IOSPlexSession: ObservableObject {
         let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
         let ids = entries.map(\.id)
         if let watchlistHero, watchlistHero.ids == ids { return watchlistHero.items }
-        let guids = entries.compactMap(\.plexGUID)
-        guard let (serverURL, token) = try? configuration(),
-              let owned = try? await network.findByGuids(serverURL: serverURL, authToken: token, guids: guids) else { return [] }
-        let items = PlexTrendingHero.ordered(owned, by: guids, limit: 10)
+        guard let provider = try? plexProvider(),
+              let owned = try? await provider.ownedMetadata(matching: entries.map(TitleMatch.init)) else { return [] }
+        let items = Array(owned.filter { $0.art != nil }.prefix(10))
         watchlistHero = (ids, items)
         return items
     }
@@ -728,10 +679,7 @@ final class IOSPlexSession: ObservableObject {
         primaryContinueWatching = nil
         continueWatchingRows = []
         continueWatchingCopies = [:]
-        logoURLCache = [:]
-        missingLogoKeys = []
-        logoResolutionTasks.values.forEach { $0.cancel() }
-        logoResolutionTasks = [:]
+        logoResolver.reset()
     }
 
     func configuration() throws -> (serverURL: String, token: String) {

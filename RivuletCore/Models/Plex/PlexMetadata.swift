@@ -583,7 +583,7 @@ extension PlexMetadata {
 
     /// Relative path of the clearLogo image from the Plex `Image` array, if present.
     /// Returns a server-relative path that still needs the server URL + X-Plex-Token to fetch.
-    var clearLogoPath: String? {
+    nonisolated var clearLogoPath: String? {
         Image?.first(where: { $0.type == "clearLogo" })?.url
     }
 

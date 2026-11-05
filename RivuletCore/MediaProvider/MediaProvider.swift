@@ -30,6 +30,9 @@ protocol MediaProvider: Sendable, Identifiable {
     // MARK: - Browse
     func libraries() async throws -> [MediaLibrary]
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem>
+    /// `items(in:sort:page:)` with the library's Unwatched filter. Default: the plain listing when
+    /// `unwatchedOnly` is off, and a refusal when it is on, since a provider must not pretend to filter.
+    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem>
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem]
     func search(_ query: String) async throws -> [MediaItem]
     /// Search limited to these libraries' ids. Default: all libraries.
@@ -67,6 +70,18 @@ protocol MediaProvider: Sendable, Identifiable {
     /// The library's titles on `trending`, in its order, at most `limit`.
     /// Home's hero on a server with no TMDB index of its own. Default: none.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem]
+    /// One page of a row's See All grid, through `hub.pagingKey`. Default (and a row with no key):
+    /// the row's own items as the only page.
+    func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem>
+    /// The server's items for these titles, in title order, each once, at most `limit`.
+    /// Home's watchlist hero. Default: none.
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem]
+    /// `url` (one of this provider's artwork URLs) resized to fit a `width` x `height` box in pixels,
+    /// by the server. Any other URL comes back unchanged. Default: unchanged.
+    func imageURL(_ url: URL, width: Int, height: Int) -> URL
+    /// The clear logo of the item's title: a movie's or show's own, an episode's or season's show.
+    /// May ask the server, since list responses often carry none. Default: what the item already holds.
+    func logoURL(for item: MediaItem) async -> URL?
     /// The library's collections (Plex collections, Jellyfin box sets), in
     /// the server's order. Default: none.
     func collections(in library: MediaLibrary) async throws -> [MediaItem]
@@ -198,6 +213,22 @@ extension MediaProvider {
         try await hubs(in: library).first { $0.id == "\(library.id).recentlyAdded" }
     }
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] { [] }
+    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
+        guard unwatchedOnly else { return try await items(in: library, sort: sort, page: page) }
+        throw MediaProviderError.backendSpecific(underlying: "unwatched filter not supported")
+    }
+    func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {
+        PagedResult(items: page.offset == 0 ? hub.items : [], total: hub.items.count, nextPage: nil)
+    }
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] { [] }
+    func imageURL(_ url: URL, width: Int, height: Int) -> URL { url }
+    func logoURL(for item: MediaItem) async -> URL? {
+        switch item.kind {
+        case .episode: item.grandparentArtwork?.logo ?? item.artwork.logo
+        case .season: item.parentArtwork?.logo ?? item.artwork.logo
+        default: item.artwork.logo
+        }
+    }
     func letterCounts(in library: MediaLibrary) async throws -> [PlexFirstCharacter] { [] }
     func refreshMetadata(_ itemRef: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "refresh not supported")

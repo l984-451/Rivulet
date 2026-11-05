@@ -4246,12 +4246,12 @@ final class PlexHomeViewController: UIViewController {
                     let failed = UIAlertController(title: String(localized: "Couldn't Delete"), message: error.localizedDescription,
                                                    preferredStyle: .alert)
                     failed.addAction(UIAlertAction(title: String(localized: "OK"), style: .cancel))
-                    self?.present(failed, animated: true)
+                    presenter?.present(failed, animated: true)
                 }
             }
         })
         alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
-        present(alert, animated: true)
+        presenter.present(alert, animated: true)
     }
 
     private func presentTileMenu(sections: [[TileMenuAction]]) {

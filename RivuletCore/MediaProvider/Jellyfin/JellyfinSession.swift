@@ -195,4 +195,32 @@ enum JellyfinSession {
         guard parts.count >= 2 else { return false }
         return (parts[0], parts[1]) >= (minimumVersion.major, minimumVersion.minor)
     }
+
+    /// What a failed Quick Connect sign-in tells the user.
+    static func quickConnectFailureMessage(for error: Error) -> String {
+        switch error {
+        case MediaProviderError.unauthorized:
+            String(localized: "Quick Connect is off on this server. Turn it on in the Jellyfin dashboard, under General.")
+        case MediaProviderError.notFound:
+            String(localized: "That code expired. Try again.")
+        default:
+            failureMessage(for: error)
+        }
+    }
+
+    /// What a failed sign-in tells the user.
+    static func failureMessage(for error: Error) -> String {
+        switch error {
+        case JellyfinSignInError.notJellyfin:
+            String(localized: "That address isn't a Jellyfin server. Check the port. An Emby server signs in under Emby Server.")
+        case JellyfinSignInError.serverTooOld(let version):
+            String(localized: "This server runs Jellyfin \(version). Rivulet needs \(minimumVersion.major).\(minimumVersion.minor) or newer.")
+        case JellyfinSignInError.untrustedCertificate:
+            String(localized: "This server's HTTPS certificate isn't trusted. Try its http:// address.")
+        case MediaProviderError.unauthorized:
+            String(localized: "Jellyfin didn't accept that username and password.")
+        default:
+            String(localized: "Couldn't reach that server. Check the address and port.")
+        }
+    }
 }

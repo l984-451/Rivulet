@@ -78,14 +78,29 @@ final class SettingsAsyncFormFinishTests: XCTestCase {
     // MARK: - Jellyfin failure copy
 
     func test_tooOldCopy_namesBothVersions() {
-        let copy = SettingsContent.jellyfinFailureCopy(for: JellyfinSignInError.serverTooOld(version: "10.8.13"))
+        let copy = JellyfinSession.failureMessage(for: JellyfinSignInError.serverTooOld(version: "10.8.13"))
         let floor = "\(JellyfinSession.minimumVersion.major).\(JellyfinSession.minimumVersion.minor)"
         XCTAssertTrue(copy.contains("10.8.13"), copy)
         XCTAssertTrue(copy.contains(floor), copy)
     }
 
     func test_untrustedCertificateCopy_namesTheCertificate() {
-        let copy = SettingsContent.jellyfinFailureCopy(for: JellyfinSignInError.untrustedCertificate)
+        let copy = JellyfinSession.failureMessage(for: JellyfinSignInError.untrustedCertificate)
         XCTAssertTrue(copy.localizedCaseInsensitiveContains("certificate"), copy)
+    }
+
+    func test_failureCopy_otherBranches() {
+        XCTAssertTrue(JellyfinSession.failureMessage(for: JellyfinSignInError.notJellyfin).contains("isn't a Jellyfin server"))
+        XCTAssertEqual(JellyfinSession.failureMessage(for: MediaProviderError.unauthorized),
+                       "Jellyfin didn't accept that username and password.")
+        XCTAssertEqual(JellyfinSession.failureMessage(for: MediaProviderError.unreachable),
+                       "Couldn't reach that server. Check the address and port.")
+    }
+
+    func test_quickConnectCopy_offExpiredAndOther() {
+        XCTAssertTrue(JellyfinSession.quickConnectFailureMessage(for: MediaProviderError.unauthorized).contains("Quick Connect is off"))
+        XCTAssertEqual(JellyfinSession.quickConnectFailureMessage(for: MediaProviderError.notFound), "That code expired. Try again.")
+        XCTAssertEqual(JellyfinSession.quickConnectFailureMessage(for: MediaProviderError.unreachable),
+                       JellyfinSession.failureMessage(for: MediaProviderError.unreachable))
     }
 }

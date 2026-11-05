@@ -145,7 +145,7 @@ final class EmbySettingsTests: XCTestCase {
     // MARK: - Failure copy
 
     func test_failureCopy_eachSignInError() {
-        let copy = SettingsContent.embyFailureCopy
+        let copy = EmbySession.failureMessage
         XCTAssertTrue(copy(EmbySignInError.notEmby).contains("isn't an Emby server"))
         XCTAssertTrue(copy(EmbySignInError.notEmby).contains("Jellyfin"))
         XCTAssertEqual(copy(EmbySignInError.serverTooOld(version: "4.7.0.0")), "Rivulet needs Emby Server 4.8.11 or newer.")
@@ -159,9 +159,9 @@ final class EmbySettingsTests: XCTestCase {
         let locked = "Your account has been temporarily locked out. Try again later."
         let disabled = "Your account has been disabled. Please contact your system administrator."
         let blocked = "You've not been granted remote access to this server."
-        XCTAssertEqual(SettingsContent.embyFailureCopy(for: EmbySignInError.lockedOut(message: locked)), locked)
-        XCTAssertEqual(SettingsContent.embyFailureCopy(for: EmbySignInError.accountDisabled(message: disabled)), disabled)
-        XCTAssertEqual(SettingsContent.embyFailureCopy(for: EmbySignInError.notAllowed(message: blocked)), blocked)
+        XCTAssertEqual(EmbySession.failureMessage(for: EmbySignInError.lockedOut(message: locked)), locked)
+        XCTAssertEqual(EmbySession.failureMessage(for: EmbySignInError.accountDisabled(message: disabled)), disabled)
+        XCTAssertEqual(EmbySession.failureMessage(for: EmbySignInError.notAllowed(message: blocked)), blocked)
     }
 
     func test_signInWithNoAddress_isAPopup_notARow() throws {

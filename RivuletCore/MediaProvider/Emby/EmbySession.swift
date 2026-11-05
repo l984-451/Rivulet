@@ -188,4 +188,25 @@ enum EmbySession {
         let floor = minimumVersion
         return (p[0], p[1], p[2], p[3]) >= (floor.major, floor.minor, floor.patch, floor.build)
     }
+
+    /// The server's own text for a lockout, a disabled account or a blocked device: only English says which.
+    static func failureMessage(for error: Error) -> String {
+        let name = MediaProviderKind.emby.displayName
+        let floor = minimumVersion
+        switch error {
+        case EmbySignInError.notEmby:
+            return String(localized: "That address isn't an \(name) server. Check the port. A Jellyfin server signs in under Jellyfin Server.")
+        case EmbySignInError.serverTooOld:
+            return String(localized: "Rivulet needs \(name) Server \(floor.major).\(floor.minor).\(floor.patch) or newer.")
+        case EmbySignInError.untrustedCertificate:
+            return String(localized: "This server's HTTPS certificate isn't trusted. Try its http:// address.")
+        case EmbySignInError.invalidCredentials, MediaProviderError.unauthorized:
+            return String(localized: "\(name) didn't accept that username and password.")
+        case EmbySignInError.lockedOut(let message), EmbySignInError.accountDisabled(let message),
+             EmbySignInError.notAllowed(let message):
+            return message
+        default:
+            return String(localized: "Couldn't reach that server. Check the address and port.")
+        }
+    }
 }

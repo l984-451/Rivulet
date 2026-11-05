@@ -236,6 +236,14 @@ extension IOSPlexSession {
         await watchStateDidChange()
     }
 
+    /// Asks the server to re-read the item's metadata, then repaints.
+    func refreshMetadata(_ item: PlexMetadata) async throws {
+        guard let key = item.ratingKey else { return }
+        let (serverURL, token) = try configuration(serverID: item.serverID)
+        try await network.refreshMetadata(serverURL: serverURL, authToken: token, ratingKey: key)
+        await watchStateDidChange()
+    }
+
     // MARK: - Delete
 
     /// A movie, show, season or episode on a server where the account may delete media.

@@ -1343,6 +1343,16 @@
         }
       }
     },
+    "Couldn't Refresh Metadata" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisieren der Metadaten fehlgeschlagen"
+          }
+        }
+      }
+    },
     "Couldn't Update" : {
       "localizations" : {
         "de" : {
@@ -3859,6 +3869,16 @@
         }
       }
     },
+    "Refresh Metadata" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metadaten aktualisieren"
+          }
+        }
+      }
+    },
     "Release Date" : {
       "localizations" : {
         "de" : {
@@ -5567,6 +5587,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ live ansehen"
+          }
+        }
+      }
+    },
+    "Watch from Beginning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von vorne beginnen"
           }
         }
       }

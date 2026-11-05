@@ -464,12 +464,14 @@ final class IOSPlexSession: ObservableObject {
     /// `quality` overrides the Home or Away setting; `previous` lends its fresh throughput reading.
     func playback(
         for item: PlexMetadata,
+        fromBeginning: Bool = false,
         quality: StreamingQuality? = nil,
         previous: IOSPlexPlaybackRequest? = nil
     ) async throws -> IOSPlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
-        if let local = IOSDownloadCenter.shared.localPlayback(for: item, serverID: item.serverID ?? previous?.downloadServerID) {
+        if var local = IOSDownloadCenter.shared.localPlayback(for: item, serverID: item.serverID ?? previous?.downloadServerID) {
+            if fromBeginning { local.startTime = nil }
             return local
         }
         let full = try await metadata(for: item)
@@ -514,7 +516,7 @@ final class IOSPlexSession: ObservableObject {
             quality: quality,
             plan: nil,
             measurement: previous?.freshMeasurement,
-            startTime: resumes ? resume : nil
+            startTime: resumes && !fromBeginning ? resume : nil
         )
     }
 
@@ -820,7 +822,7 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     let transcodeSessionID: String?
     var measuredKbps: Int?
     var measuredAt: Date?
-    let startTime: TimeInterval?
+    var startTime: TimeInterval?
     /// The Plex play session a direct-play file's timeline carries, so the dashboard shows it (#423).
     var directPlaySessionID: String? = nil
     /// Set for a downloaded file: its saved subtitles and poster.

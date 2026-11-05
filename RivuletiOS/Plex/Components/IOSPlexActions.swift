@@ -7,6 +7,7 @@ import SwiftUI
 /// `IOSPlexActionHost`; the default does nothing.
 struct IOSPlexActions {
     var play: (PlexMetadata) -> Void = { _ in }
+    var playFromBeginning: (PlexMetadata) -> Void = { _ in }
     /// Plays a playlist from its current entry, then on through the rest.
     var playQueue: (PlayQueue<PlexMetadata>) -> Void = { _ in }
     /// Adds to `playlist`, or asks for a name and makes a new one seeded with the item when nil.
@@ -16,6 +17,7 @@ struct IOSPlexActions {
     var setWatchlisted: (PlexMetadata, Bool) -> Void = { _, _ in }
     /// A movie or episode, or every episode of a season.
     var download: (PlexMetadata) -> Void = { _ in }
+    var refreshMetadata: (PlexMetadata) -> Void = { _ in }
     /// Asks, then deletes the item and its files from its server.
     var delete: (PlexMetadata) -> Void = { _ in }
     /// Item whose playback is being prepared, for a spinner.
@@ -48,7 +50,8 @@ private struct IOSPlexActionHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.plexActions, IOSPlexActions(
-                play: play,
+                play: { play($0) },
+                playFromBeginning: { play($0, fromBeginning: true) },
                 playQueue: playQueue,
                 addToPlaylist: { item, playlist in
                     if let playlist {
@@ -71,6 +74,9 @@ private struct IOSPlexActionHost: ViewModifier {
                     } else {
                         downloads.download(item)
                     }
+                },
+                refreshMetadata: { item in
+                    run(String(localized: "Couldn't Refresh Metadata")) { try await plex.refreshMetadata(item) }
                 },
                 delete: { pendingDelete = $0 },
                 preparingID: preparingID
@@ -106,14 +112,14 @@ private struct IOSPlexActionHost: ViewModifier {
             )
     }
 
-    private func play(_ item: PlexMetadata) {
+    private func play(_ item: PlexMetadata, fromBeginning: Bool = false) {
         guard preparingID == nil else { return }
         preparingID = item.id
         Task {
             defer { preparingID = nil }
             do {
                 let target = try await plex.playableTarget(for: item)
-                playback.play(try await plex.playback(for: target))
+                playback.play(try await plex.playback(for: target, fromBeginning: fromBeginning))
             } catch let error where isCancellationError(error) {
             } catch {
                 failure = (String(localized: "Couldn't Play"), error.localizedDescription)
@@ -184,6 +190,9 @@ struct IOSPlexItemMenu: View {
         if showsPlay {
             Button(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill") { actions.play(item) }
         }
+        if isTitle {
+            Button("Watch from Beginning", systemImage: "arrow.counterclockwise") { actions.playFromBeginning(item) }
+        }
         if showsDetails {
             Button("Details", systemImage: "info.circle") { actions.open(item) }
         }
@@ -223,6 +232,11 @@ struct IOSPlexItemMenu: View {
                 }
             }
         }
+        if isTitle {
+            Section {
+                Button("Refresh Metadata", systemImage: "arrow.clockwise") { actions.refreshMetadata(item) }
+            }
+        }
         if showsDelete, plex.canDelete(item) {
             Section {
                 Button("Delete", systemImage: "trash", role: .destructive) { actions.delete(item) }
@@ -232,6 +246,8 @@ struct IOSPlexItemMenu: View {
 }
 
 extension IOSPlexItemMenu {
+    private var isTitle: Bool { ["movie", "show", "season", "episode"].contains(item.type ?? "") }
+
     @ViewBuilder
     private var downloadItems: some View {
         if item.isPlayable, let key = item.ratingKey {

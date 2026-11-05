@@ -1193,6 +1193,16 @@
         }
       }
     },
+    "Add Show to Watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Serie zur Watchlist hinzufügen"
+          }
+        }
+      }
+    },
     "Add Source" : {
       "localizations" : {
         "de" : {

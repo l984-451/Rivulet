@@ -4165,24 +4165,61 @@ final class PlexHomeViewController: UIViewController {
         let provider = playableItem(item).flatMap { MediaProviderRegistry.shared.provider(for: $0.ref.providerID) }
         Task { @MainActor [weak self] in
             // Cached per provider after the first menu.
-            let canDelete = await provider?.canDeleteMedia() ?? false
             let canRefresh = await provider?.canRefreshMetadata() ?? true
             guard let self else { return }
             var sections = tileMenuSections(for: item, isContinueWatching: isContinueWatching,
                                             shelfLocation: shelfLocation, canRefreshMetadata: canRefresh)
+            if let provider {
+                sections = await Self.addingServerEntries(to: sections, for: item, provider: provider, from: self)
+            }
             if let gridIndex, let entryGroup = playlistEntryActions(at: gridIndex, item: item) {
                 sections.insert(entryGroup, at: 0)
-            }
-            if canDelete, let provider {
-                sections.append([Self.deleteAction(for: item, provider: provider, from: self)])
             }
             presentTileMenu(sections: sections)
         }
     }
 
-    /// "Delete", behind a confirmation. Shared with the episode menu on the show and season pages.
-    static func deleteAction(for item: MediaItem, provider: any MediaProvider,
-                             from presenter: UIViewController) -> TileMenuAction {
+    /// Adds what the item's server offers: the watchlist beside the watched state, Delete last.
+    /// Shared with the episode menu on the show and season pages.
+    static func addingServerEntries(to sections: [[TileMenuAction]], for item: MediaItem,
+                                    provider: any MediaProvider,
+                                    from presenter: UIViewController) async -> [[TileMenuAction]] {
+        let isTitle = switch item.kind {
+        case .movie, .show, .season, .episode: true
+        default: false
+        }
+        let wantsWatchlist = isTitle && provider.supportsWatchlist
+        async let canDelete = provider.canDeleteMedia()
+        async let onWatchlist = wantsWatchlist ? await provider.isOnWatchlist(item.ref) : false
+        var sections = sections
+        if wantsWatchlist {
+            let action = watchlistAction(for: item, provider: provider, isOn: await onWatchlist)
+            if sections.count > 1 { sections[1].append(action) } else { sections.append([action]) }
+        }
+        if await canDelete {
+            sections.append([deleteAction(for: item, provider: provider, from: presenter)])
+        }
+        return sections
+    }
+
+    /// Plex watchlists movies and shows, so an episode or season adds its show.
+    private static func watchlistAction(for item: MediaItem, provider: any MediaProvider,
+                                        isOn: Bool) -> TileMenuAction {
+        let ref = item.ref
+        if isOn {
+            return TileMenuAction(title: "Remove from Watchlist", systemImage: "minus.circle") {
+                Task { try? await provider.removeFromWatchlist(ref) }
+            }
+        }
+        let add: () -> Void = { Task { try? await provider.addToWatchlist(ref) } }
+        return item.kind == .episode || item.kind == .season
+            ? TileMenuAction(title: "Add Show to Watchlist", systemImage: "plus.circle", handler: add)
+            : TileMenuAction(title: "Add to Watchlist", systemImage: "plus.circle", handler: add)
+    }
+
+    /// "Delete", behind a confirmation.
+    private static func deleteAction(for item: MediaItem, provider: any MediaProvider,
+                                     from presenter: UIViewController) -> TileMenuAction {
         TileMenuAction(title: "Delete", systemImage: "trash", destructive: true) { [weak presenter] in
             Task { @MainActor in
                 let message = await provider.deleteConfirmation(for: item)

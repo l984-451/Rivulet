@@ -143,7 +143,7 @@ struct IOSAccountView: View {
                     LabeledContent {
                         Text(server.account()?.name ?? "")
                     } label: {
-                        Label(server.kind.displayName, systemImage: "server.rack")
+                        Label("\(server.kind.displayName) Server", systemImage: "server.rack")
                     }
                 }
             }

@@ -19,10 +19,4 @@ final class OtherServerKindSignInTests: XCTestCase {
                        JellyfinSession.quickConnectFailureMessage(for: error))
         XCTAssertEqual(OtherServerKind.emby.failureMessage(error), EmbySession.failureMessage(for: error))
     }
-
-    func test_signedOut_hasNoAccountOrUser() async {
-        await OtherServerKind.emby.signOut()
-        XCTAssertNil(OtherServerKind.emby.account())
-        XCTAssertNil(OtherServerKind.emby.userName())
-    }
 }

@@ -129,6 +129,8 @@ struct IOSServerSignInView: View {
                 revision += 1
             } catch where isCancellationError(error) {
             } catch {
+                // One alert at a time: the code alert goes before the failure shows.
+                quickConnectCode = nil
                 failure = server.quickConnectFailureMessage(error)
             }
         }

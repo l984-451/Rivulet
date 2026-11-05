@@ -13,6 +13,16 @@
         }
       }
     },
+    "%@ Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@-Server"
+          }
+        }
+      }
+    },
     "%@ behind live" : {
       "localizations" : {
         "de" : {
@@ -3601,6 +3611,12 @@
     },
     "Play S%lld, E%lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld wiedergeben"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -4331,6 +4347,12 @@
     },
     "Resume S%lld, E%lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld fortsetzen"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -4391,6 +4413,12 @@
     },
     "Rivulet needs %@ Server %lld.%lld.%lld or newer." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet benötigt %1$@-Server %2$lld.%3$lld.%4$lld oder neuer."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -4411,6 +4439,12 @@
     },
     "S%@E%@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$@F%2$@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -5253,6 +5287,12 @@
     },
     "The folder “%@” and everything in it will be deleted from %@. This cannot be undone." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Ordner „%1$@“ und alles darin wird von %2$@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -5523,6 +5563,12 @@
     },
     "This server runs Jellyfin %@. Rivulet needs %lld.%lld or newer." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Server läuft Jellyfin %@. Rivulet benötigt %lld.%lld oder neuer."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",

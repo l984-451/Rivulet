@@ -10,6 +10,7 @@
 //  signed in, the server, the user, Refresh and Sign Out. No Quick Connect.
 //
 
+import Combine
 import Foundation
 import UIKit
 

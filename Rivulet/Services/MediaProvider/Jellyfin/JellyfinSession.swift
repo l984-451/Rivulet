@@ -147,22 +147,49 @@ enum JellyfinSession {
             userID: userID,
             userName: auth.user?.name ?? username
         )
+        try await persist(account, token: token)
+        return account
+    }
+
+    private static func persist(_ account: Account, token: String) async throws {
         try await CredentialRegistry.shared.setToken(token, for: .server(providerID: account.providerID))
         UserDefaults.standard.set(try JSONEncoder().encode(account), forKey: accountKey)
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         MusicProviderRegistry.shared.populateFromCurrentAuth()
         onChanged?()
-        return account
+        CloudSync.shared.accountsChanged()
+    }
+
+    /// Signs in with a token another device holds, after one authenticated call proves the server takes it.
+    /// Refused when this device already has a server or the server rejects the token.
+    static func adopt(
+        account: Account, token: String,
+        transport: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) }
+    ) async -> AdoptOutcome {
+        guard self.account == nil else { return .refused }
+        let client = JellyfinClient(baseURL: account.serverURL, token: token, transport: transport)
+        do {
+            let _: JFUser = try await client.get("Users/Me")
+        } catch MediaProviderError.unauthorized {
+            return .refused
+        } catch {
+            return .unavailable
+        }
+        return (try? await persist(account, token: token)) != nil ? .adopted : .unavailable
     }
 
     /// Forgets everything locally, then revokes the token server-side without
     /// waiting. An unreachable server (the likeliest reason to sign out) must
     /// not hold the row for the 60s request timeout, and a second press finds
-    /// nothing left to sign out.
+    /// nothing left to sign out. With iCloud Sync the token is shared, so only
+    /// `.everywhere` revokes it; a caller that does not ask gets this device only.
     static func signOut(
+        scope signOutScope: SignOutScope? = nil,
         transport: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) }
     ) async {
         guard let account else { return }
+        let signOutScope = signOutScope ?? .thisDevice
+        let shared = CloudSync.shared.wasShared(accountID: account.providerID)
         let scope = CredentialScope.server(providerID: account.providerID)
         let token = CredentialRegistry.shared.token(for: scope)
         await CredentialRegistry.shared.clearToken(for: scope)
@@ -170,8 +197,11 @@ enum JellyfinSession {
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         MusicProviderRegistry.shared.populateFromCurrentAuth()
         onChanged?()
+        if signOutScope != .syncedRemoval {
+            CloudSync.shared.signedOut(accountID: account.providerID, identity: nil, scope: signOutScope)
+        }
 
-        guard let token else { return }
+        guard let token, signOutScope.revokesToken(everShared: shared) else { return }
         let client = JellyfinClient(baseURL: account.serverURL, token: token, transport: transport)
         Task { try? await client.post("Sessions/Logout") }
     }

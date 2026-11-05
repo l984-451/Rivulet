@@ -17,6 +17,7 @@ nonisolated enum DiagLog {
         case topShelf = "top_shelf"
         case deepLink = "deep_link"
         case liveTV = "live_tv"
+        case sync
     }
 
     private static let loggers: [Category: Logger] = Dictionary(

@@ -17,6 +17,7 @@ struct RivuletiOSApp: App {
         // A phone joins other people's networks; a LAN address there may be anyone.
         PlexAuthManager.prefersSecureLocalConnections = true
         Self.migrateLegacyIOSSession()
+        SkipLengthKeys.migrateLegacyKeys()
         #if DEBUG
         IOSScreenshotMode.seedSession()
         #endif
@@ -27,6 +28,11 @@ struct RivuletiOSApp: App {
         _plex = StateObject(wrappedValue: session)
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
+        // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish before the
+        // first sync pass, or a playlist URL with its login could be uploaded as a channel id.
+        _ = LiveTVDataStore.shared
+        // The iOS views read their synced keys live (@AppStorage), so no reload hook is needed.
+        CloudSync.shared.start()
         // Recreates the background session and resumes unfinished downloads.
         IOSDownloadCenter.shared.start()
         IOSDownloadActivity.shared.start()

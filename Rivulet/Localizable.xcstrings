@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ wird über iCloud geteilt. Nur von diesem Gerät entfernen oder von allen Geräten?"
+          }
+        }
+      }
+    },
     "%@" : {
       "localizations" : {
         "de" : {
@@ -1113,6 +1123,16 @@
         }
       }
     },
+    "All Devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Geräte"
+          }
+        }
+      }
+    },
     "AUDIO" : {
       "localizations" : {
         "de" : {
@@ -2025,6 +2045,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prüft den Server und meldet dich an."
+          }
+        }
+      }
+    },
+    "Checking iCloud…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud wird geprüft …"
           }
         }
       }
@@ -4529,6 +4559,26 @@
         }
       }
     },
+    "iCloud has a different Plex account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud hat ein anderes Plex-Konto"
+          }
+        }
+      }
+    },
+    "iCloud Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud-Synchronisierung"
+          }
+        }
+      }
+    },
     "IMDb users" : {
       "localizations" : {
         "de" : {
@@ -4795,6 +4845,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Im Programm weiterlaufen"
+          }
+        }
+      }
+    },
+    "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone and iPad signed in to your Apple Account. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf jedem Apple TV, iPhone und iPad gleich, die mit deinem Apple-Account angemeldet sind. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
           }
         }
       }
@@ -7653,6 +7713,36 @@
         }
       }
     },
+    "Sign in to iCloud on this device" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich auf diesem Gerät bei iCloud an"
+          }
+        }
+      }
+    },
+    "Sign Out of Emby?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von Emby abmelden?"
+          }
+        }
+      }
+    },
+    "Sign Out of Jellyfin?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von Jellyfin abmelden?"
+          }
+        }
+      }
+    },
     "SP" : {
       "localizations" : {
         "de" : {
@@ -8955,6 +9045,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wechsel zu %@ …"
+          }
+        }
+      }
+    },
+    "This Device Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur dieses Gerät"
           }
         }
       }
@@ -10849,12 +10949,32 @@
         }
       }
     },
+    "Your Emby sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Emby-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
+          }
+        }
+      }
+    },
     "Your Jellyfin server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Adresse deines Jellyfin-Servers mit Port, zum Beispiel http://192.168.1.100:8096. Du kannst die Adresse aus deinem Browser einfügen."
+          }
+        }
+      }
+    },
+    "Your Jellyfin sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Jellyfin-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
           }
         }
       }
@@ -10895,6 +11015,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Plex-Server hat diesen Stream beendet."
+          }
+        }
+      }
+    },
+    "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Plex-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
           }
         }
       }

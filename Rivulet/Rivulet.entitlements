@@ -12,5 +12,17 @@
 	     "production" or every attestation is rejected on-device. -->
 	<key>com.apple.developer.devicecheck.appattest-environment</key>
 	<string>$(APPATTEST_ENVIRONMENT)</string>
+	<!-- iCloud sync of preferences (NSUbiquitousKeyValueStore). Same store as iOS: one bundle id. -->
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
+	<!-- iCloud sync of sign-ins and Live TV sources: one encrypted CloudKit record. -->
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.gstudios.rivulet</string>
+	</array>
 </dict>
 </plist>

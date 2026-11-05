@@ -29,7 +29,11 @@ final class SetupLandingViewController: UIViewController {
                                                                  symbol: "antenna.radiowaves.left.and.right")
     private let doneButton = UIButton(configuration: .glass())
     private var sourcesObserver: AnyCancellable?
+    private var cloudObserver: AnyCancellable?
     private let doneGuide = UIFocusGuide()
+    private let cardRow = UIStackView()
+    private let checkingLabel = UILabel()
+    private var cardsRevealed = true
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,7 +54,8 @@ final class SetupLandingViewController: UIViewController {
         jellyfinCard.addAction(UIAction { [weak self] _ in self?.connectJellyfin() }, for: .primaryActionTriggered)
         embyCard.addAction(UIAction { [weak self] _ in self?.connectEmby() }, for: .primaryActionTriggered)
         liveTVCard.addAction(UIAction { [weak self] _ in self?.addLiveTV() }, for: .primaryActionTriggered)
-        let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, embyCard, liveTVCard])
+        let cards = cardRow
+        [plexCard, jellyfinCard, embyCard, liveTVCard].forEach(cards.addArrangedSubview)
         cards.spacing = Self.cardSpacing
 
         doneButton.configuration?.title = String(localized: "Start Watching")
@@ -86,6 +91,42 @@ final class SetupLandingViewController: UIViewController {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refresh() }
         refresh()
+        awaitICloud()
+    }
+
+    /// A new Apple TV may be about to get its sign-ins from iCloud: show "Checking iCloud" for a few
+    /// seconds before the cards, so nobody types a password the phone already entered.
+    private func awaitICloud() {
+        guard !CloudSync.shared.accountsReady, !Self.hasAnySource else { return }
+        cardsRevealed = false
+        cardRow.alpha = 0
+        doneButton.alpha = 0
+        checkingLabel.text = String(localized: "Checking iCloud…")
+        checkingLabel.font = .systemFont(ofSize: 29)
+        checkingLabel.textColor = UIColor.white.withAlphaComponent(0.7)
+        checkingLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(checkingLabel)
+        NSLayoutConstraint.activate([
+            checkingLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            checkingLabel.topAnchor.constraint(equalTo: cardRow.bottomAnchor, constant: 40)
+        ])
+        cloudObserver = CloudSync.shared.$accountsReady
+            .receive(on: RunLoop.main)
+            .sink { [weak self] ready in if ready { self?.revealCards() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.revealCards() }
+    }
+
+    private func revealCards() {
+        guard !cardsRevealed else { return }
+        cardsRevealed = true
+        cloudObserver = nil
+        checkingLabel.removeFromSuperview()
+        UIView.animate(withDuration: 0.3) {
+            self.cardRow.alpha = 1
+            self.doneButton.alpha = 1
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
     }
 
     /// Arriving, focus starts on the first card; Start Watching takes it only after a flow just connected something.

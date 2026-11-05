@@ -22,23 +22,27 @@ class LibrarySettingsManager: ObservableObject {
     /// Library keys that are hidden from the sidebar
     @Published var hiddenLibraryKeys: Set<String> {
         didSet {
-            saveHiddenLibraries()
+            if !isLoading { saveHiddenLibraries() }
         }
     }
 
     /// Ordered list of library keys (libraries not in this list appear at the end in default order)
     @Published var libraryOrder: [String] {
         didSet {
-            saveLibraryOrder()
+            if !isLoading { saveLibraryOrder() }
         }
     }
 
     /// Per-library sort options (libraryKey -> sort option)
     @Published var librarySortOptions: [String: LibrarySortOption] = [:] {
         didSet {
-            saveSortOptions()
+            if !isLoading { saveSortOptions() }
         }
     }
+
+    /// True while stored values are read into the properties above. Reading must not write: a fresh device's
+    /// defaults would look like choices to iCloud and beat a configured device's.
+    private var isLoading = false
 
     // MARK: - UserDefaults Keys (base keys - user ID is appended)
 
@@ -124,11 +128,17 @@ class LibrarySettingsManager: ObservableObject {
 
     /// Splits `keys` back into the Plex profile's list and each server's.
     private func save(_ keys: [String], baseKey: String) {
-        userDefaults.set(keys.filter { !Self.isProviderKey($0) }, forKey: currentKey(baseKey))
+        write(keys.filter { !Self.isProviderKey($0) }, forKey: currentKey(baseKey))
         for scope in providerScopes {
-            userDefaults.set(keys.filter { Self.isProviderKey($0) && Self.providerID(ofKey: $0) == scope.providerID },
-                             forKey: providerKey(baseKey, scope))
+            write(keys.filter { Self.isProviderKey($0) && Self.providerID(ofKey: $0) == scope.providerID },
+                  forKey: providerKey(baseKey, scope))
         }
+    }
+
+    /// Writes a list only when it differs from what is stored (an unchanged rewrite is still a write to iCloud).
+    private func write(_ list: [String], forKey key: String) {
+        guard userDefaults.stringArray(forKey: key) != list else { return }
+        userDefaults.set(list, forKey: key)
     }
 
     /// Called by `MediaProviderRegistry` whenever sign-ins change: loads the
@@ -141,6 +151,8 @@ class LibrarySettingsManager: ObservableObject {
 
     /// Load settings for the current user from UserDefaults
     private func loadSettingsForCurrentUser() {
+        isLoading = true
+        defer { isLoading = false }
         self.hiddenLibraryKeys = Set(storedKeys(hiddenLibrariesBaseKey))
         let combined = userDefaults.array(forKey: currentKey(combinedOrderBaseKey)) as? [String] ?? []
         self.libraryOrder = Self.arrange(storedKeys(libraryOrderBaseKey), key: { $0 }, savedOrder: combined)
@@ -156,6 +168,11 @@ class LibrarySettingsManager: ObservableObject {
             self.librarySortOptions = [:]
         }
 
+    }
+
+    /// iCloud changed a key this manager caches.
+    func reloadFromDefaults() {
+        loadSettingsForCurrentUser()
     }
 
     /// Switch to a different user's settings
@@ -500,12 +517,13 @@ class LibrarySettingsManager: ObservableObject {
     // MARK: - Private Methods
 
     private func saveHiddenLibraries() {
-        save(Array(hiddenLibraryKeys), baseKey: hiddenLibrariesBaseKey)
+        // Sorted: a Set's order changes per launch, which iCloud would read as an edit.
+        save(hiddenLibraryKeys.sorted(), baseKey: hiddenLibrariesBaseKey)
     }
 
     private func saveLibraryOrder() {
         save(libraryOrder, baseKey: libraryOrderBaseKey)
-        userDefaults.set(libraryOrder, forKey: currentKey(combinedOrderBaseKey))
+        write(libraryOrder, forKey: currentKey(combinedOrderBaseKey))
     }
 
     /// Drop what pre-#295 builds wrote for the retired shown-on-Home set, so a
@@ -519,7 +537,9 @@ class LibrarySettingsManager: ObservableObject {
     }
 
     private func saveSortOptions() {
-        if let data = try? JSONEncoder().encode(librarySortOptions) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        if let data = try? encoder.encode(librarySortOptions), userDefaults.data(forKey: currentKey(sortOptionsBaseKey)) != data {
             userDefaults.set(data, forKey: currentKey(sortOptionsBaseKey))
         }
     }

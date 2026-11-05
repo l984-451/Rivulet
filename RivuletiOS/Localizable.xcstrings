@@ -3,6 +3,16 @@
   "strings" : {
     "" : {},
     " " : {},
+    "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ wird über iCloud geteilt. Nur von diesem Gerät entfernen oder von allen Geräten?"
+          }
+        }
+      }
+    },
     "%@ Live TV" : {
       "localizations" : {
         "de" : {
@@ -569,6 +579,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Sender"
+          }
+        }
+      }
+    },
+    "All Devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Geräte"
           }
         }
       }
@@ -2469,6 +2489,26 @@
         }
       }
     },
+    "iCloud has a different Plex account." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud hat ein anderes Plex-Konto."
+          }
+        }
+      }
+    },
+    "iCloud Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud-Synchronisierung"
+          }
+        }
+      }
+    },
     "Incorrect PIN. Try again." : {
       "localizations" : {
         "de" : {
@@ -2595,6 +2635,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Behalten"
+          }
+        }
+      }
+    },
+    "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone and iPad. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf Apple TV, iPhone und iPad gleich. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
           }
         }
       }
@@ -4351,6 +4401,16 @@
         }
       }
     },
+    "Sign in to iCloud in the Settings app to sync." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich in der Einstellungen-App bei iCloud an, um zu synchronisieren."
+          }
+        }
+      }
+    },
     "Sign In to Plex" : {
       "localizations" : {
         "de" : {
@@ -4727,6 +4787,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Profil wechseln"
+          }
+        }
+      }
+    },
+    "This Device Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur dieses Gerät"
           }
         }
       }
@@ -5737,6 +5807,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Plex-Server hat diesen Stream beendet."
+          }
+        }
+      }
+    },
+    "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Plex-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
           }
         }
       }

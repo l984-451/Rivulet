@@ -278,6 +278,10 @@ enum SettingsDescriptorStore {
             icon: "internaldrive",
             description: "View storage usage and manage cached images, metadata, and other temporary data."
         ),
+        "iCloudSync": SettingDescriptor(
+            icon: "icloud",
+            description: "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone and iPad signed in to your Apple Account. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this."
+        ),
         "forceRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
             description: "Clear metadata cache and reload all library content from your Plex server. Images will be kept."

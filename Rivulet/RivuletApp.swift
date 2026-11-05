@@ -31,6 +31,7 @@ struct RivuletApp: App {
         // which returns false for an unset key, so register the default here
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
+        SkipLengthKeys.migrateLegacyKeys()
         // Every surface is dark artwork, so menus, popups and alerts stay dark in Light mode
         // too; Settings alone follows the system. On the window: SwiftUI's preferredColorScheme
         // never reached UIKit's presented popups.
@@ -85,6 +86,7 @@ struct RivuletApp: App {
             LibrarySettingsManager.shared.onProfileSwitched()
             ServerDataStore.shared.reload()
         }
+        Self.startCloudSync()
 
         #if !DEBUG
         // Sentry starts 3 s after launch: in init() its uploads beat the network
@@ -108,6 +110,37 @@ struct RivuletApp: App {
         Task { @MainActor in
             Perf.event(.appLaunch, message: "init")
         }
+    }
+
+    /// iCloud sync: stores that cache a synced key reload when the cloud changes it.
+    private static func startCloudSync() {
+        CloudSync.onPreferencesApplied = { keys in
+            func touched(_ prefixes: [String]) -> Bool { keys.contains { key in prefixes.contains { key.hasPrefix($0) } } }
+            if touched(["hiddenLibraryKeys", "libraryOrder", "librarySortOptions"]) {
+                LibrarySettingsManager.shared.reloadFromDefaults()
+            }
+            if touched(["hiddenHomeRowIdentifiers"]) {
+                NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
+            }
+            if touched(["homeCollectionPins", "libraryCollectionPins"]) {
+                NotificationCenter.default.post(name: HomeCollectionPins.changedNotification, object: nil)
+            }
+            if keys.contains(JellyfinLiveTVProvider.hiddenKey) {
+                _ = JellyfinLiveTVProvider.setHidden(UserDefaults.standard.bool(forKey: JellyfinLiveTVProvider.hiddenKey))
+            }
+            if keys.contains(EmbyLiveTVProvider.hiddenKey) {
+                _ = EmbyLiveTVProvider.setHidden(UserDefaults.standard.bool(forKey: EmbyLiveTVProvider.hiddenKey))
+            }
+        }
+        // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish before the
+        // first sync pass, or a playlist URL with its login could be uploaded as a channel id.
+        _ = LiveTVDataStore.shared
+        CloudSync.hostAccountKinds = [.jellyfin, .emby]
+        // Sources that arrive from iCloud finish the setup landing, so a new Apple TV opens on Home.
+        CloudSync.onAccountsChanged = {
+            if SetupLandingViewController.hasAnySource { UserDefaults.standard.set(true, forKey: "setupComplete") }
+        }
+        CloudSync.shared.start()
     }
 
     #if !DEBUG
@@ -151,7 +184,9 @@ struct RivuletApp: App {
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
-            allowsSave: true
+            allowsSave: true,
+            // With the CloudKit entitlement SwiftData would sync on its own and reject these models. Sync is ours.
+            cloudKitDatabase: .none
         )
 
         do {

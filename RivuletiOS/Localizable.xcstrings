@@ -1263,6 +1263,16 @@
         }
       }
     },
+    "Couldn't Delete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen fehlgeschlagen"
+          }
+        }
+      }
+    },
     "Couldn't Download Season" : {
       "localizations" : {
         "de" : {
@@ -2075,6 +2085,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Downloads auf diesem Gerät werden für alle Profile entfernt."
+          }
+        }
+      }
+    },
+    "Every episode's files will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Dateien aller Folgen werden von %@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
           }
         }
       }
@@ -4817,6 +4837,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Datei ist nicht mehr auf dem Server"
+          }
+        }
+      }
+    },
+    "The files will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Dateien werden von %@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
           }
         }
       }

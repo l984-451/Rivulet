@@ -16,6 +16,8 @@ struct IOSPlexActions {
     var setWatchlisted: (PlexMetadata, Bool) -> Void = { _, _ in }
     /// A movie or episode, or every episode of a season.
     var download: (PlexMetadata) -> Void = { _ in }
+    /// Asks, then deletes the item and its files from its server.
+    var delete: (PlexMetadata) -> Void = { _ in }
     /// Item whose playback is being prepared, for a spinner.
     var preparingID: String?
 }
@@ -41,6 +43,7 @@ private struct IOSPlexActionHost: ViewModifier {
     @State private var failure: (title: String, message: String)?
     @State private var newPlaylistSeed: PlexMetadata?
     @State private var newPlaylistName = ""
+    @State private var pendingDelete: PlexMetadata?
 
     func body(content: Content) -> some View {
         content
@@ -69,6 +72,7 @@ private struct IOSPlexActionHost: ViewModifier {
                         downloads.download(item)
                     }
                 },
+                delete: { pendingDelete = $0 },
                 preparingID: preparingID
             ))
             .navigationDestination(item: $pushed) { IOSPlexDetailView(item: $0).iosPlexActionHost() }
@@ -82,6 +86,18 @@ private struct IOSPlexActionHost: ViewModifier {
                     run(String(localized: "Couldn't Create Playlist")) { try await plex.createPlaylist(title: name, seededWith: item) }
                 }
             }
+            .alert(
+                pendingDelete.map { String(localized: "Delete \u{201C}\($0.title ?? "")\u{201D}?") } ?? "",
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                presenting: pendingDelete,
+                actions: { item in
+                    Button("Delete", role: .destructive) {
+                        run(String(localized: "Couldn't Delete")) { try await plex.delete(item) }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                },
+                message: { Text(plex.deleteConfirmation(for: $0)) }
+            )
             .alert(
                 failure?.title ?? "",
                 isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } }),
@@ -158,6 +174,7 @@ struct IOSPlexItemMenu: View {
     var showsPlay = true
     var showsDetails = false
     var showsWatchlist = true
+    var showsDelete = true
     @Environment(\.plexActions) private var actions
     @EnvironmentObject private var plex: IOSPlexSession
     @EnvironmentObject private var downloads: IOSDownloadCenter
@@ -204,6 +221,11 @@ struct IOSPlexItemMenu: View {
                 if let season = item.seasonStub {
                     Button("Go to Season", systemImage: "square.stack") { actions.open(season) }
                 }
+            }
+        }
+        if showsDelete, plex.canDelete(item) {
+            Section {
+                Button("Delete", systemImage: "trash", role: .destructive) { actions.delete(item) }
             }
         }
     }

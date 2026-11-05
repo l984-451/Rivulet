@@ -1345,6 +1345,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return root?.MediaContainer.allowMediaDeletion == true
     }
 
+    /// Whether `authToken` may delete media: the owner, with "Allow media deletion" on.
+    func canDeleteMedia(serverURL: String, authToken: String) async -> Bool {
+        async let admin = canAdministerServer(serverURL: serverURL, authToken: authToken)
+        async let allowed = allowsMediaDeletion(serverURL: serverURL, authToken: authToken)
+        let (isAdmin, isAllowed) = await (admin, allowed)
+        return isAdmin && isAllowed
+    }
+
     /// Deletes an item and its files from the server.
     func deleteMetadata(serverURL: String, authToken: String, ratingKey: String) async throws {
         guard let url = URL(string: "\(serverURL)/library/metadata/\(ratingKey)") else {

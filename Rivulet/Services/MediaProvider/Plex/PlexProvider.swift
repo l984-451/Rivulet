@@ -440,10 +440,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// Owner only, and only with the server's "Allow media deletion" on.
     func canDeleteMedia() async -> Bool {
         if let known = deletionAllowed.withLock({ $0 }) { return known }
-        async let isAdmin = networkManager.canAdministerServer(serverURL: serverURL, authToken: authToken)
-        async let allowed = networkManager.allowsMediaDeletion(serverURL: serverURL, authToken: authToken)
-        let (admin, on) = await (isAdmin, allowed)
-        let answer = admin && on
+        let answer = await networkManager.canDeleteMedia(serverURL: serverURL, authToken: authToken)
         deletionAllowed.withLock { $0 = answer }
         return answer
     }

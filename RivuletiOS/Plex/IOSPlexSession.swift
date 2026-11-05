@@ -70,6 +70,9 @@ final class IOSPlexSession: ObservableObject {
     /// A merged card's copies on other servers, by the card's id: watched and
     /// remove reach every copy, or the one left behind brings the card back.
     private(set) var continueWatchingCopies: [String: [PlexMetadata]] = [:]
+    /// Servers, by `serverID ?? ""`, where this account may delete media; asked once per session.
+    @Published private(set) var deletableServers: Set<String> = []
+    private var checkedDeleteServers: Set<String> = []
     private var logoURLCache: [String: URL] = [:]
     private var missingLogoKeys = Set<String>()
     private var logoResolutionTasks: [String: Task<URL?, Never>] = [:]
@@ -198,6 +201,8 @@ final class IOSPlexSession: ObservableObject {
             primaryContinueWatching = nil
             continueWatchingRows = []
             libraryHubsSession = session
+            deletableServers = []
+            checkedDeleteServers = []
         }
         // The other servers fill in behind: one that can't be reached must not hold back the rest (#474).
         isLoadingOtherServers = true
@@ -231,6 +236,19 @@ final class IOSPlexSession: ObservableObject {
         await PlexWatchlistService.shared.fetchWatchlist()
         // The server answered: send progress made offline, then repaint with it.
         if await flushOfflineProgress() { Task { await watchStateDidChange() } }
+        await loadDeletePermissions()
+    }
+
+    /// Asks each server not yet asked this session whether the account may delete media there.
+    private func loadDeletePermissions() async {
+        let ids: [String?] = [nil] + PlexExtraServers.shared.current.map(\.machineID)
+        for id in ids where !checkedDeleteServers.contains(id ?? "") {
+            guard let (serverURL, token) = try? configuration(serverID: id) else { continue }
+            checkedDeleteServers.insert(id ?? "")
+            if await network.canDeleteMedia(serverURL: serverURL, authToken: token) {
+                deletableServers.insert(id ?? "")
+            }
+        }
     }
 
     /// Fetches each other server, publishing as it answers. A server that fails drops its rows.

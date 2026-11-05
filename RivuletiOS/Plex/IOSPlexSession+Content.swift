@@ -236,6 +236,30 @@ extension IOSPlexSession {
         await watchStateDidChange()
     }
 
+    // MARK: - Delete
+
+    /// A movie, show, season or episode on a server where the account may delete media.
+    func canDelete(_ item: PlexMetadata) -> Bool {
+        ["movie", "show", "season", "episode"].contains(item.type ?? "")
+            && deletableServers.contains(item.serverID ?? "")
+    }
+
+    /// Deletes the item and its files from its server.
+    func delete(_ item: PlexMetadata) async throws {
+        guard let key = item.ratingKey else { return }
+        let (serverURL, token) = try configuration(serverID: item.serverID)
+        try await network.deleteMetadata(serverURL: serverURL, authToken: token, ratingKey: key)
+        await watchStateDidChange()
+    }
+
+    /// What the confirmation says, matching tvOS.
+    func deleteConfirmation(for item: PlexMetadata) -> String {
+        let server = item.serverID.flatMap { otherServerNames[$0] } ?? selectedServerName ?? "Plex"
+        return item.type == "show" || item.type == "season"
+            ? String(localized: "Every episode's files will be deleted from \(server). This cannot be undone.")
+            : String(localized: "The files will be deleted from \(server). This cannot be undone.")
+    }
+
     // MARK: - Watchlist
 
     /// Plex watchlists movies and shows; an episode or season stands for its show.

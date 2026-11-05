@@ -370,7 +370,8 @@ private struct IOSPlexDetailHeader: View {
                     IOSDownloadButton(item: item)
                 }
                 Menu {
-                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false)
+                    // No Delete: the page would be left showing what it deleted.
+                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsDelete: false)
                 } label: {
                     Image(systemName: "ellipsis").frame(width: 22, height: 22)
                 }

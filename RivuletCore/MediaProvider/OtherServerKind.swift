@@ -23,6 +23,16 @@ struct OtherServerKind {
     let isSameMusicAccount: (any MusicProvider, any MusicProvider) -> Bool
     /// Puts the server's Live TV in or out of Live TV, given the signed-in provider or nil.
     let syncLiveTV: ((any MediaProvider)?) -> Void
+    /// The signed-in user's name, for an account page.
+    let userName: () -> String?
+    /// Address, username, password. Registers the provider on success.
+    let signIn: (URL, String, String) async throws -> Void
+    /// Sign-in by a code approved on another device; nil where the server has none. Hands the code to the closure.
+    let quickConnect: ((URL, (String) -> Void) async throws -> Void)?
+    let signOut: () async -> Void
+    /// What a failed sign-in tells the user.
+    let failureMessage: (Error) -> String
+    let quickConnectFailureMessage: (Error) -> String
 
     static let all: [OtherServerKind] = [.jellyfin, .emby]
 
@@ -36,7 +46,13 @@ struct OtherServerKind {
         storedProvider: { JellyfinSession.storedProvider() },
         storedMusicProvider: { JellyfinSession.storedProvider().map(JellyfinMusicProvider.init) },
         isSameMusicAccount: { ($0 as? JellyfinMusicProvider)?.client.token == ($1 as? JellyfinMusicProvider)?.client.token },
-        syncLiveTV: { JellyfinLiveTVProvider.sync($0 as? JellyfinProvider) }
+        syncLiveTV: { JellyfinLiveTVProvider.sync($0 as? JellyfinProvider) },
+        userName: { JellyfinSession.account?.userName },
+        signIn: { _ = try await JellyfinSession.signIn(serverURL: $0, username: $1, password: $2) },
+        quickConnect: { url, showCode in _ = try await JellyfinSession.signInWithQuickConnect(serverURL: url, showCode: showCode) },
+        signOut: { await JellyfinSession.signOut() },
+        failureMessage: JellyfinSession.failureMessage,
+        quickConnectFailureMessage: JellyfinSession.quickConnectFailureMessage
     )
 
     static let emby = OtherServerKind(
@@ -45,6 +61,12 @@ struct OtherServerKind {
         storedProvider: { EmbySession.storedProvider() },
         storedMusicProvider: { EmbySession.storedProvider().map(EmbyMusicProvider.init) },
         isSameMusicAccount: { ($0 as? EmbyMusicProvider)?.client.token == ($1 as? EmbyMusicProvider)?.client.token },
-        syncLiveTV: { EmbyLiveTVProvider.sync($0 as? EmbyProvider) }
+        syncLiveTV: { EmbyLiveTVProvider.sync($0 as? EmbyProvider) },
+        userName: { EmbySession.account?.userName },
+        signIn: { _ = try await EmbySession.signIn(serverURL: $0, username: $1, password: $2) },
+        quickConnect: nil,
+        signOut: { await EmbySession.signOut() },
+        failureMessage: EmbySession.failureMessage,
+        quickConnectFailureMessage: EmbySession.failureMessage
     )
 }

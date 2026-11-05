@@ -22,6 +22,8 @@ struct RivuletiOSApp: App {
         #endif
         PlexAPI.platform = "iOS"
         PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
+        // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
+        MediaProviderRegistry.shared.populateFromCurrentAuth()
         let session = IOSPlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)

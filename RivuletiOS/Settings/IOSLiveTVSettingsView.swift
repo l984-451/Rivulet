@@ -509,7 +509,7 @@ private struct IOSLivePlaylistForm: View {
 
 /// A labelled form row, the way Settings and Mail lay out an account: the label
 /// stays put once the field has text, so what was typed is never ambiguous.
-private struct IOSFormField: View {
+struct IOSFormField: View {
     enum Kind { case text, url, username, password }
 
     let label: LocalizedStringKey

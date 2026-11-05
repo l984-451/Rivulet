@@ -112,10 +112,13 @@ private struct IOSPlexActionHost: ViewModifier {
             )
     }
 
-    /// Plex items play through the Plex player path. Jellyfin and Emby items wait for stage 4:
-    /// `IOSPlaybackGate` hides their Play buttons, and this refuses them too.
+    /// Plex items play through the Plex player path; Jellyfin and Emby items through the provider entry point.
     private func play(_ item: MediaItem, fromBeginning: Bool = false) {
         guard IOSPlaybackGate.canPlay(item.ref), preparingID == nil else { return }
+        guard item.ref.providerID.hasPrefix("plex:") else {
+            playback.play(item, fromBeginning: fromBeginning)
+            return
+        }
         guard serverIsKnown(item.ref) else { return }
         preparingID = item.ref.actionKey
         Task {
@@ -132,7 +135,12 @@ private struct IOSPlexActionHost: ViewModifier {
 
     private func playExtra(_ extra: MediaItemDetail.Extra) {
         let ref = MediaItemRef(providerID: extra.providerID, itemID: extra.id)
-        guard IOSPlaybackGate.canPlay(ref), preparingID == nil, serverIsKnown(ref) else { return }
+        guard IOSPlaybackGate.canPlay(ref), preparingID == nil else { return }
+        guard ref.providerID.hasPrefix("plex:") else {
+            playProviderExtra(ref)
+            return
+        }
+        guard serverIsKnown(ref) else { return }
         preparingID = extra.id
         Task {
             defer { preparingID = nil }
@@ -148,8 +156,28 @@ private struct IOSPlexActionHost: ViewModifier {
         }
     }
 
+    /// An extra off Plex is a library item of its own server.
+    private func playProviderExtra(_ ref: MediaItemRef) {
+        guard let provider = MediaProviderRegistry.shared.provider(for: ref.providerID) else { return }
+        preparingID = ref.itemID
+        Task {
+            defer { preparingID = nil }
+            do {
+                playback.play(try await provider.fullDetail(for: ref).item)
+            } catch let error where isCancellationError(error) {
+            } catch {
+                failure = (String(localized: "Couldn't Play"), error.localizedDescription)
+            }
+        }
+    }
+
     private func playQueue(_ queue: PlayQueue<MediaItem>) {
-        guard IOSPlaybackGate.canPlay(queue.current.ref), preparingID == nil, serverIsKnown(queue.current.ref),
+        guard IOSPlaybackGate.canPlay(queue.current.ref), preparingID == nil else { return }
+        guard queue.current.ref.providerID.hasPrefix("plex:") else {
+            playback.play(queue.current, queue: queue.playlistQueue)
+            return
+        }
+        guard serverIsKnown(queue.current.ref),
               let plexQueue = PlayQueue(entries: queue.entries.map(\.plexStub), startingAt: queue.index) else { return }
         preparingID = queue.current.ref.actionKey
         Task {

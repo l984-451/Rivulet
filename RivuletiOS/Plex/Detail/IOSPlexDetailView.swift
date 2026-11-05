@@ -360,7 +360,7 @@ private struct IOSPlexDetailHeader: View {
             ? AnyLayout(VStackLayout(spacing: 12))
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
-            // Jellyfin and Emby items wait for stage 4 to connect their playback (`IOSPlaybackGate`).
+            // Play shows only where `IOSPlaybackGate` allows it.
             if canPlay { playButton.layoutPriority(1) }
             HStack(spacing: 12) {
                 if browse.supportsWatchlist(item) {

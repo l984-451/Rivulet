@@ -30,10 +30,20 @@ final class IOSBrowseSupportTests: XCTestCase {
 
     // MARK: - Gate
 
-    func test_playbackGate_plexPlaysAndTheOthersWaitForStage4() {
+    func test_playbackGate_plexJellyfinAndEmbyPlay() {
         XCTAssertTrue(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "plex:a", itemID: "1")))
-        XCTAssertFalse(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "jellyfin:s", itemID: "1")))
-        XCTAssertFalse(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "emby:e", itemID: "1")))
+        XCTAssertTrue(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "jellyfin:s", itemID: "1")))
+        XCTAssertTrue(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "emby:e", itemID: "1")))
+        XCTAssertFalse(IOSPlaybackGate.canPlay(MediaItemRef(providerID: "iptv:x", itemID: "1")))
+    }
+
+    func test_playlistQueue_keepsOrderAndPosition_andNamesRepeatsApart() {
+        let a = episode("a", provider: "jellyfin:s"), b = episode("b", provider: "jellyfin:s")
+        let queue = PlayQueue(entries: [a, b, a], startingAt: 2)!.playlistQueue
+        XCTAssertEqual(queue.entries.map(\.item.ref.itemID), ["a", "b", "a"])
+        XCTAssertEqual(Set(queue.entries.map(\.entryID)).count, 3)
+        XCTAssertEqual(queue.index, 2)
+        XCTAssertEqual(queue.current.item.ref.itemID, "a")
     }
 
     // MARK: - Plex bridge

@@ -94,3 +94,69 @@ final class ProviderPlaybackVersionTests: XCTestCase {
         XCTAssertTrue(calls.contains("stream(m1,hd)"), "\(calls)")
     }
 }
+
+// MARK: - Start offset and extras
+
+@MainActor
+final class ProviderPrepareStartTests: XCTestCase {
+    private func source(kbps: Int, kind: MediaSource.StreamKind = .directPlay) -> MediaSource {
+        MediaSource(
+            id: "src", container: "mkv", duration: 100, bitrate: kbps * 1000, fileSize: nil, fileName: nil,
+            videoResolution: nil,
+            videoTracks: [VideoTrack(id: "v", codec: "hevc", profile: nil, level: nil, width: nil, height: 1080,
+                                     frameRate: nil, bitrate: nil, videoRange: .sdr, isDefault: true, scanType: nil)],
+            audioTracks: [], subtitleTracks: [], streamKind: kind, streamURL: URL(string: "http://s/x"))
+    }
+
+    private func stub(viewOffset: TimeInterval) -> StubMediaProvider {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        var item = JellyfinFixtures.mediaItem("m1")
+        item = MediaItem(ref: item.ref, kind: item.kind, title: item.title, sortTitle: nil, overview: nil, year: nil,
+                         runtime: nil, parentRef: nil, grandparentRef: nil, episodeNumber: nil, seasonNumber: nil,
+                         childProgress: nil,
+                         userState: MediaUserState(isPlayed: false, viewOffset: viewOffset, isFavorite: false, lastViewedAt: nil),
+                         artwork: item.artwork, parentArtwork: nil, grandparentArtwork: nil)
+        provider.detailResult = MediaItemDetail(
+            item: item, tagline: nil, genres: [], studios: [], cast: [], directors: [], writers: [], chapters: [],
+            mediaSources: [source(kbps: 20_000)], trailerURL: nil, contentRating: nil, nextEpisode: nil, collections: [])
+        provider.streamResult = StreamInfo(source: source(kbps: 20_000), playSessionID: nil, trackInfoAvailable: true)
+        provider.cappedStreamResult = StreamInfo(source: source(kbps: 20_000, kind: .hlsTranscode),
+                                                 playSessionID: nil, trackInfoAvailable: true)
+        return provider
+    }
+
+    private let step2 = QualityStep.step(kbps: 2000)!
+
+    func test_cappedStream_startsAtTheResumePoint() async throws {
+        let provider = stub(viewOffset: 600)
+        let item = JellyfinFixtures.mediaItem("m1")
+        _ = try await ProviderPlayback.prepare(item: item, provider: provider, quality: .step(step2))
+        XCTAssertEqual(provider.resolveStartTimes, [600], "the capped stream starts where the viewer left off")
+    }
+
+    func test_cappedStream_fromTheBeginningStartsAtZero() async throws {
+        let provider = stub(viewOffset: 600)
+        _ = try await ProviderPlayback.prepare(item: JellyfinFixtures.mediaItem("m1"), provider: provider,
+                                               quality: .step(step2), fromBeginning: true)
+        XCTAssertEqual(provider.resolveStartTimes, [0])
+    }
+
+    func test_extras_areFetchedByDefault() async throws {
+        let provider = stub(viewOffset: 0)
+        provider.extrasResult = PlaybackExtras(markers: [PlaybackMarker(kind: .intro, start: 1, end: 2)])
+        let prepared = try await ProviderPlayback.prepare(item: JellyfinFixtures.mediaItem("m1"), provider: provider,
+                                                          quality: .original)
+        XCTAssertEqual(prepared.extras.markers.count, 1)
+        XCTAssertFalse(prepared.extrasPending)
+    }
+
+    func test_extras_notAwaitedWhenTheCallerAppliesThemLater() async throws {
+        let provider = stub(viewOffset: 0)
+        provider.extrasResult = PlaybackExtras(markers: [PlaybackMarker(kind: .intro, start: 1, end: 2)])
+        let prepared = try await ProviderPlayback.prepare(item: JellyfinFixtures.mediaItem("m1"), provider: provider,
+                                                          quality: .original, awaitingExtras: false)
+        XCTAssertTrue(prepared.extras.markers.isEmpty)
+        XCTAssertTrue(prepared.extrasPending)
+        XCTAssertFalse(provider.playbackCalls.contains { $0.hasPrefix("extras") }, "\(provider.playbackCalls)")
+    }
+}

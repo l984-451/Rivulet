@@ -76,12 +76,7 @@ enum ProviderPlaybackMetadata {
             index: item.episodeNumber,
             viewOffset: offset > 0 ? ms(offset) : nil,
             Media: [media],
-            // The player tracks credits, recap and commercial markers by id, so
-            // each gets a unique negative one, clear of IntroDB's -900x range.
-            Marker: extras.markers.isEmpty ? nil : extras.markers.enumerated().map { i, marker in
-                PlexMarker(id: -(1 + i), type: marker.kind.rawValue,
-                           startTimeOffset: ms(marker.start), endTimeOffset: ms(marker.end))
-            }
+            Marker: extras.markers.isEmpty ? nil : markers(from: extras)
         )
         metadata.Chapter = detail.chapters.isEmpty ? nil : detail.chapters.enumerated().map { i, chapter in
             PlexChapter(
@@ -97,6 +92,28 @@ enum ProviderPlaybackMetadata {
             .sorted { $0.key < $1.key }
             .map { PlexGuid(id: "\($0.key)://\($0.value)") }
         return metadata
+    }
+
+    /// The source with the audio and subtitle tracks marked selected, as a transcode started on
+    /// them plays. Ids are the shim's stream ids; subtitle 0 is off.
+    static func applying(audio: Int?, subtitle: Int?, to source: MediaSource) -> MediaSource {
+        var source = source
+        if let audio {
+            for i in source.audioTracks.indices { source.audioTracks[i].isSelected = Int(source.audioTracks[i].id) == audio }
+        }
+        if let subtitle {
+            for i in source.subtitleTracks.indices { source.subtitleTracks[i].isSelected = Int(source.subtitleTracks[i].id) == subtitle }
+        }
+        return source
+    }
+
+    /// The player tracks credits, recap and commercial markers by id, so each gets a unique
+    /// negative one, clear of IntroDB's -900x range.
+    static func markers(from extras: PlaybackExtras) -> [PlexMarker] {
+        extras.markers.enumerated().map { i, marker in
+            PlexMarker(id: -(1 + i), type: marker.kind.rawValue,
+                       startTimeOffset: ms(marker.start), endTimeOffset: ms(marker.end))
+        }
     }
 
     /// An Up Next row or the next-episode card: what a listing shows, no media.

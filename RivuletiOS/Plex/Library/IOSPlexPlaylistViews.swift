@@ -49,7 +49,7 @@ struct IOSPlexPlaylistsView: View {
     private func menu(_ playlist: MediaPlaylist) -> some View {
         ForEach(PlaylistRules.playlistActions(isSmart: playlist.isSmart), id: \.self) { action in
             switch action {
-            // Jellyfin and Emby playlists wait for stage 4 to connect their playback (`IOSPlaybackGate`).
+            // Play shows only where `IOSPlaybackGate` allows it.
             case .play:
                 if IOSPlaybackGate.canPlay(playlist.item.ref) {
                     Button("Play", systemImage: "play.fill") { play(playlist, shuffled: false) }
@@ -131,7 +131,7 @@ struct IOSPlexPlaylistView: View {
         browse.playlists(providerID: route.playlist.item.ref.providerID).first { $0.item.ref == route.playlist.item.ref } ?? route.playlist
     }
     private var isSmart: Bool { smartContents ?? playlist.isSmart }
-    /// Jellyfin and Emby playlists wait for stage 4 to connect their playback (`IOSPlaybackGate`).
+    /// Play shows only where `IOSPlaybackGate` allows it.
     private var canPlay: Bool { IOSPlaybackGate.canPlay(route.playlist.item.ref) }
     private var items: [MediaItem] { entries.map(\.item) }
 

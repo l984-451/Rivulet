@@ -41,6 +41,41 @@ enum EpisodePicker {
         }
     }
 
+    /// The episode after `current`: the next by number in its season, else
+    /// the first of the next season. Episodes without a number are skipped.
+    static func nextEpisode(after current: MediaItem, in seasonEpisodes: [MediaItem],
+                            nextSeasonEpisodes: [MediaItem]?) -> MediaItem? {
+        guard let number = current.episodeNumber else { return nil }
+        return byEpisodeNumber(seasonEpisodes).first { ($0.episodeNumber ?? 0) > number }
+            ?? byEpisodeNumber(nextSeasonEpisodes ?? []).first
+    }
+
+    private static func byEpisodeNumber(_ episodes: [MediaItem]) -> [MediaItem] {
+        episodes.filter { $0.episodeNumber != nil }
+            .sorted { ($0.episodeNumber ?? 0) < ($1.episodeNumber ?? 0) }
+    }
+
+    /// The current season's episodes in order, and the episode after `current`.
+    /// Specials a server lists inside a season carry their own season number
+    /// and are left out, so they never become the next episode.
+    static func upNext(after current: MediaItem, provider: any MediaProvider) async -> (season: [MediaItem], next: MediaItem?) {
+        guard current.kind == .episode, let seasonRef = current.parentRef,
+              let children = try? await provider.children(of: seasonRef) else { return ([], nil) }
+        let season = byEpisodeNumber(children.filter { $0.seasonNumber == current.seasonNumber })
+        var nextSeasonEpisodes: [MediaItem]?
+        if let number = current.episodeNumber, let seasonNumber = current.seasonNumber,
+           !season.contains(where: { ($0.episodeNumber ?? 0) > number }),
+           let showRef = current.grandparentRef,
+           let seasons = try? await provider.children(of: showRef),
+           let nextSeason = seasons
+               .filter({ ($0.seasonNumber ?? Int.min) > seasonNumber })
+               .min(by: { ($0.seasonNumber ?? 0) < ($1.seasonNumber ?? 0) }) {
+            nextSeasonEpisodes = try? await provider.children(of: nextSeason.ref)
+                .filter { $0.seasonNumber == nextSeason.seasonNumber }
+        }
+        return (season, nextEpisode(after: current, in: season, nextSeasonEpisodes: nextSeasonEpisodes))
+    }
+
     /// The Play button's title for `target` (what Play starts) on a page of
     /// kind `page`. A show or season page names the episode; an item's own
     /// page does not.

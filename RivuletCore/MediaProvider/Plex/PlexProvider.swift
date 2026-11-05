@@ -32,6 +32,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// Whether a title-sorted library page also lists the library's collections (tvOS does, per the
     /// library's Collections setting; the iOS grid shows titles only).
     let includesCollections: Bool
+    /// The streams handed out, by play session id, for the reporter that opens and ends them.
+    let playSessions = OSAllocatedUnfairLock<[String: PlexPlaySession]>(initialState: [:])
 
     init(
         machineIdentifier: String,
@@ -450,25 +452,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     // MARK: - Playback
-
-    /// Plex items play through the `.plex` player path, which applies quality there; the cap is unused.
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
-        let detail = try await fullDetail(for: itemRef)
-        guard let chosen = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best,
-                                                 from: detail.mediaSources) else {
-            throw MediaProviderError.notFound
-        }
-        return StreamInfo(source: chosen, playSessionID: nil, trackInfoAvailable: true)
-    }
-
-    func progressReporter(for itemRef: MediaItemRef, sourceID: String?, playSessionID: String?) -> any ProgressReporter {
-        PlexTimelineReporter(
-            serverURL: serverURL,
-            authToken: authToken,
-            ratingKey: itemRef.itemID,
-            networkManager: networkManager
-        )
-    }
 
     // MARK: - Per-item track selection
 

@@ -23,7 +23,7 @@ struct IOSPlexEpisodeCell: View {
     }
 
     var body: some View {
-        // A server whose playback is not connected yet opens the episode's page instead (`IOSPlaybackGate`).
+        // A server the gate refuses opens the episode's page instead (`IOSPlaybackGate`).
         Button { IOSPlaybackGate.canPlay(episode.ref) ? actions.play(episode) : actions.open(episode) } label: {
             switch layout {
             case .row: row
@@ -145,8 +145,7 @@ struct IOSPlexCastRow: View {
     }
 }
 
-/// Extras and trailers from the full detail; tapping one plays it. Plex's until stage 4 connects
-/// the others (`IOSPlaybackGate`).
+/// Extras and trailers from the full detail; tapping one plays it (`IOSPlaybackGate`).
 struct IOSPlexExtrasRow: View {
     let detail: MediaItemDetail?
     @Environment(\.plexActions) private var actions
@@ -154,7 +153,7 @@ struct IOSPlexExtrasRow: View {
     @Environment(\.displayScale) private var displayScale
 
     private var extras: [MediaItemDetail.Extra] {
-        (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && Int($0.id) != nil }
+        (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && ($0.providerID.hasPrefix("plex:") ? Int($0.id) != nil : true) }
     }
 
     var body: some View {

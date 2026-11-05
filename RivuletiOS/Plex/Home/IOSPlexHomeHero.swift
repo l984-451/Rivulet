@@ -166,7 +166,7 @@ private struct IOSPlexHeroControls: View {
             .allowsHitTesting(false)
 
             HStack(spacing: 12) {
-                // Jellyfin and Emby slides wait for stage 4 to connect their playback (`IOSPlaybackGate`).
+                // Play shows only where `IOSPlaybackGate` allows it.
                 if IOSPlaybackGate.canPlay(item.ref) {
                     Button { actions.play(item) } label: {
                         Label(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill")

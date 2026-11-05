@@ -12,10 +12,10 @@
 import Foundation
 import Synchronization
 
-/// Which servers' items the iOS player can play. Stage 4 adds Jellyfin and Emby here; until then
-/// their Play buttons are hidden. This is the one place that says so.
+/// Which servers' items the iOS player can play. A Play control shows only where this says yes;
+/// it is the one gate.
 nonisolated enum IOSPlaybackGate {
-    static let playableKinds: Set<MediaProviderKind> = [.plex]
+    static let playableKinds: Set<MediaProviderKind> = [.plex, .jellyfin, .emby]
 
     static func canPlay(_ ref: MediaItemRef) -> Bool {
         MediaProviderKind(providerID: ref.providerID).map(playableKinds.contains) ?? false
@@ -252,5 +252,13 @@ extension PlexProvider {
         return hubs.filter { ($0.hubIdentifier ?? "").contains("similar") }
             .flatMap { $0.Metadata ?? [] }
             .filter { item in item.ratingKey.map { seen.insert($0).inserted } ?? true }
+    }
+}
+
+extension PlayQueue where Entry == MediaItem {
+    /// The same queue as the player takes it. Rows are named by position, so a title twice is two entries.
+    nonisolated var playlistQueue: PlayQueue<PlaylistEntry> {
+        let entries = entries.enumerated().map { PlaylistEntry(entryID: String($0.offset), item: $0.element) }
+        return PlayQueue<PlaylistEntry>(entries: entries, startingAt: index)!
     }
 }

@@ -23,8 +23,8 @@ struct MediaSource: Hashable, Sendable, Identifiable {
     let videoResolution: String?   // provider-computed label: "4k", "1080", "720", "480", "sd"
 
     let videoTracks: [VideoTrack]  // usually 1, rarely more
-    let audioTracks: [AudioTrack]
-    let subtitleTracks: [SubtitleTrack]
+    var audioTracks: [AudioTrack]
+    var subtitleTracks: [SubtitleTrack]
 
     let streamKind: StreamKind
     let streamURL: URL?            // nil until provider.resolveStream(for:) materializes it

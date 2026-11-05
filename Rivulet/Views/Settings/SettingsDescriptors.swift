@@ -358,6 +358,34 @@ enum SettingsDescriptorStore {
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of this Jellyfin server and remove its saved credentials."
         ),
+        "embyServer": SettingDescriptor(
+            icon: "server.rack",
+            description: "Sign in to your Emby server."
+        ),
+        "embyURL": SettingDescriptor(
+            icon: "globe",
+            description: "Your Emby server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser."
+        ),
+        "embyUsername": SettingDescriptor(
+            icon: "person",
+            description: "Your Emby username."
+        ),
+        "embyPassword": SettingDescriptor(
+            icon: "key",
+            description: "Used once, to sign in. Rivulet keeps the access token Emby returns, not the password."
+        ),
+        "embySignIn": SettingDescriptor(
+            icon: "link",
+            description: "Check the server and sign in."
+        ),
+        "embyRefresh": SettingDescriptor(
+            icon: "arrow.clockwise",
+            description: "Reload this server's libraries and Home rows now."
+        ),
+        "embySignOut": SettingDescriptor(
+            icon: "rectangle.portrait.and.arrow.right",
+            description: "Sign out of this Emby server and remove its saved credentials."
+        ),
         "connectPlex": SettingDescriptor(
             icon: "link",
             description: "Connect to your Plex server to browse and stream your media library."
@@ -589,6 +617,7 @@ enum SettingsDescriptorStore {
         case .plex: return ("server.rack", .systemOrange)
         case .plexServerDetail: return ("server.rack", .systemOrange)
         case .jellyfin: return ("server.rack", .systemPurple)
+        case .emby: return ("server.rack", .systemGreen)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)

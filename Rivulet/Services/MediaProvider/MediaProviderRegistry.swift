@@ -103,6 +103,8 @@ final class MediaProviderRegistry {
         providers = providers.filter { $0.value.kind != .jellyfin && !extraPlexIDs.contains($0.key) }
         extraPlexIDs = []
         if let jellyfin = JellyfinSession.storedProvider() { register(jellyfin) }
+        // Emby runs on the Jellyfin provider (kind .jellyfin), so the filter above clears it too.
+        if let emby = EmbySession.storedProvider() { register(emby) }
         guard let serverURL = plexServerURL, let token = plexToken else {
             providers = providers.filter { $0.value.kind != .plex }
             currentPlexID = nil

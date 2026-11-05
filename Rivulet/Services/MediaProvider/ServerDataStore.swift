@@ -68,8 +68,9 @@ final class ServerDataStore: ObservableObject {
         guard observesRefresh else { return }
         // Before the first sidebar render, so a Jellyfin-only launch never
         // flashes the signed-out welcome.
-        if !PlexUserProfileManager.shared.isRestrictedProfile, let account = JellyfinSession.account {
-            sources = [Source(providerID: account.providerID, name: account.serverName)]
+        if !PlexUserProfileManager.shared.isRestrictedProfile {
+            sources = [JellyfinSession.account, EmbySession.account].compactMap { $0 }
+                .map { Source(providerID: $0.providerID, name: $0.serverName) }
         }
         // Watch-state changes (detail page, tile menus, playback) post this.
         refreshObserver = NotificationCenter.default.addObserver(
@@ -133,13 +134,19 @@ final class ServerDataStore: ObservableObject {
         // The sidebar's Playlists rows follow every server reload, the selected Plex server's included.
         if self === Self.shared { Task { await PlaylistAvailability.shared.refresh() } }
         // A restricted profile does not see the Jellyfin server; a signed-out one is gone.
-        let jellyfinID = PlexUserProfileManager.shared.isRestrictedProfile ? nil : JellyfinSession.account?.providerID
-        let providers = MediaProviderRegistry.shared.secondaryProviders.filter { $0.kind != .jellyfin || $0.id == jellyfinID }
+        // The Emby server follows the same rule; it runs on the Jellyfin provider.
+        let restricted = PlexUserProfileManager.shared.isRestrictedProfile
+        let jellyfinID = restricted ? nil : JellyfinSession.account?.providerID
+        let embyID = restricted ? nil : EmbySession.account?.providerID
+        let providers = MediaProviderRegistry.shared.secondaryProviders.filter {
+            $0.kind != .jellyfin || $0.id == jellyfinID || $0.id == embyID
+        }
         // Assigned only on change: Plex-only users reach here on every launch,
         // foreground and watch-state change, and each publish redraws Home.
         update(\.sources, providers.map { Source(providerID: $0.id, name: $0.displayName) })
         // The server's Live TV follows the account into and out of Live TV.
-        JellyfinLiveTVProvider.sync(providers.first { $0.kind == .jellyfin } as? JellyfinProvider)
+        // Jellyfin's only: Emby's Live TV is not wired.
+        JellyfinLiveTVProvider.sync(providers.first { $0.id == jellyfinID } as? JellyfinProvider)
         let gone = Set(slices.keys).subtracting(providers.map(\.id))
         gone.forEach { slices.removeValue(forKey: $0) }
         if !gone.isEmpty || providers.isEmpty { publish() }

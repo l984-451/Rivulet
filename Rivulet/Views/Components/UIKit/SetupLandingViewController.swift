@@ -10,9 +10,10 @@ import UIKit
 
 final class SetupLandingViewController: UIViewController {
 
-    /// Plex, Jellyfin, or a Live TV source the user added (not one that follows a server).
+    /// Plex, Jellyfin, Emby, or a Live TV source the user added (not one that follows a server).
     static var hasAnySource: Bool {
-        PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil || !addedLiveTVSources.isEmpty
+        PlexAuthManager.shared.hasCredentials || JellyfinSession.account != nil || EmbySession.account != nil
+            || !addedLiveTVSources.isEmpty
     }
 
     private static var addedLiveTVSources: [LiveTVDataStore.LiveTVSourceInfo] {
@@ -23,6 +24,7 @@ final class SetupLandingViewController: UIViewController {
 
     private let plexCard = SetupLandingViewController.makeCard(title: "Plex", symbol: "play.rectangle.fill")
     private let jellyfinCard = SetupLandingViewController.makeCard(title: "Jellyfin", symbol: "server.rack")
+    private let embyCard = SetupLandingViewController.makeCard(title: "Emby", symbol: "server.rack")
     private let liveTVCard = SetupLandingViewController.makeCard(title: String(localized: "Live TV"),
                                                                  symbol: "antenna.radiowaves.left.and.right")
     private let doneButton = UIButton(configuration: .glass())
@@ -46,8 +48,10 @@ final class SetupLandingViewController: UIViewController {
 
         plexCard.addAction(UIAction { [weak self] _ in self?.connectPlex() }, for: .primaryActionTriggered)
         jellyfinCard.addAction(UIAction { [weak self] _ in self?.connectJellyfin() }, for: .primaryActionTriggered)
+        embyCard.addAction(UIAction { [weak self] _ in self?.connectEmby() }, for: .primaryActionTriggered)
         liveTVCard.addAction(UIAction { [weak self] _ in self?.addLiveTV() }, for: .primaryActionTriggered)
-        let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, liveTVCard])
+        // Four 400 pt cards and three 48 pt gaps: 1744 of 1920 pt.
+        let cards = UIStackView(arrangedSubviews: [plexCard, jellyfinCard, embyCard, liveTVCard])
         cards.spacing = 48
 
         doneButton.configuration?.title = String(localized: "Start Watching")
@@ -117,6 +121,11 @@ final class SetupLandingViewController: UIViewController {
         presentSettingsFlow(.jellyfin)
     }
 
+    private func connectEmby() {
+        SettingsContent.addSourceDraft = AddSourceDraft()
+        presentSettingsFlow(.emby)
+    }
+
     /// Selectable again once checked: Live TV takes more than one source.
     private func addLiveTV() {
         presentSettingsFlow(.addLiveTVSource)
@@ -158,6 +167,7 @@ final class SetupLandingViewController: UIViewController {
             : plexServers == 1 ? auth.savedServerName ?? String(localized: "Connected") : nil
         Self.setDone(plexCard, prompt: String(localized: "Sign In"), detail: plexDetail)
         Self.setDone(jellyfinCard, prompt: String(localized: "Sign In"), detail: JellyfinSession.account?.serverName)
+        Self.setDone(embyCard, prompt: String(localized: "Sign In"), detail: EmbySession.account?.serverName)
         let added = Self.addedLiveTVSources
         let liveTVDetail: String? = added.isEmpty ? nil
             : added.count == 1 ? added[0].displayName : String(localized: "\(added.count) Sources")

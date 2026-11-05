@@ -94,11 +94,16 @@ final class MusicProviderRegistry {
 
     /// Rebuilt from the stored account each time, as `MediaProviderRegistry` does.
     private func populateJellyfin() {
-        let jellyfin = JellyfinSession.storedProvider().map(JellyfinMusicProvider.init)
-        let previous = providers.values.first { $0.kind == .jellyfin } as? JellyfinMusicProvider
-        if previous?.id != jellyfin?.id || previous?.client.token != jellyfin?.client.token { generation += 1 }
+        // The Emby server, when signed in, runs on the Jellyfin provider too.
+        let fresh = [JellyfinSession.storedProvider(), EmbySession.storedProvider()]
+            .compactMap { $0 }.map(JellyfinMusicProvider.init)
+        let previous = providers.values.compactMap { $0 as? JellyfinMusicProvider }
+        func identity(_ list: [JellyfinMusicProvider]) -> [String] {
+            list.map { "\($0.id)|\($0.client.token ?? "")" }.sorted()
+        }
+        if identity(previous) != identity(fresh) { generation += 1 }
         providers = providers.filter { $0.value.kind != .jellyfin }
-        if let jellyfin { register(jellyfin) }
+        fresh.forEach { register($0) }
     }
 
     /// Process-stable hash. Avoid `String.hashValue` (per-process randomized).

@@ -789,6 +789,23 @@ final class UniversalPlayerViewModel: ObservableObject {
             playSessionID: playback.stream.playSessionID
         )
         providerReporterStarted = false
+        if playback.extrasPending { loadProviderMarkers(playback) }
+    }
+
+    /// Skip markers for a provider item that `prepare` left for later: fetched alongside the start
+    /// and applied when they arrive, as the selected server's markers are.
+    private func loadProviderMarkers(_ playback: ProviderPlayback) {
+        let ref = playback.item.ref
+        Task { [weak self] in
+            let extras = await playback.provider.playbackExtras(for: ref, sourceID: playback.stream.source.id)
+            // The source still being this item is the staleness check: an autoplay swap moves it.
+            guard let self, case .provider(var current) = self.source, current.item.ref == ref else { return }
+            current.extras = extras
+            current.extrasPending = false
+            self.source = .provider(current)
+            let markers = ProviderPlaybackMetadata.markers(from: extras)
+            if !markers.isEmpty { self.metadata.Marker = markers }
+        }
     }
 
     /// The provider stream's first route. A direct-play stream goes to Aether
@@ -796,11 +813,13 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// with nothing behind it. nil when the provider gave no URL.
     static func initialRoutes(for stream: StreamInfo) -> (primary: PlaybackRoute, hasTranscodeFallback: Bool)? {
         guard let url = stream.source.streamURL else { return nil }
+        // Plex carries its token and client profile in headers; Jellyfin and Emby carry auth in the URL.
+        let headers = stream.headers.isEmpty ? nil : stream.headers
         switch stream.source.streamKind {
         case .hlsTranscode:
-            return (.hls(url: url, headers: nil), false)
+            return (.hls(url: url, headers: headers), false)
         case .directPlay, .progressiveTranscode:
-            return (.aether(url: url, headers: nil), true)
+            return (.aether(url: url, headers: headers), true)
         }
     }
 
@@ -1385,7 +1404,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         playbackPlan = plan
         activeRoute = plan.primary
         streamURL = url
-        streamHeaders = [:]
+        streamHeaders = playback.stream.headers
         AppHangContext.setPlaybackRoute(plan.primary.description)
         diagnostics.setMedia(metadata, route: plan.primary.description, startOffset: startOffset, isRelay: false,
                              quality: quality.choice.rawValue, location: quality.isHome ? "home" : "away")
@@ -3103,7 +3122,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         let fallback: (url: URL, headers: [String: String], sessionId: String?)?
         if case .provider = source {
-            fallback = try await switchToProviderTranscode(resumeTime: resumeTime).map { ($0, [:], nil) }
+            fallback = try await switchToProviderTranscode(resumeTime: resumeTime).map { ($0.url, $0.headers, nil) }
         } else if resumeTime <= 0.5, let prebuiltURL = rivuletFallbackURL, !rivuletFallbackHeaders.isEmpty {
             let sessionId = URLComponents(url: prebuiltURL, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "session" })?.value
@@ -3218,10 +3237,11 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// The provider's server transcode, from where playback stopped. A new
     /// play session: the old one is stopped, and the stored stream and its
-    /// reporter follow the new one. Returns the URL to play, with no headers.
+    /// reporter follow the new one. Returns the URL to play with the headers its
+    /// server wants (Plex's token and client profile).
     /// `maxBitrate` (bps) caps it; nil leaves the bitrate to the server.
     func switchToProviderTranscode(resumeTime: TimeInterval, maxBitrate: Int? = nil,
-                                   tracks: PlexTrackIDs = PlexTrackIDs()) async throws -> URL? {
+                                   tracks: PlexTrackIDs = PlexTrackIDs()) async throws -> (url: URL, headers: [String: String])? {
         guard case .provider(var playback) = source else { return nil }
         playback.stream = try await playback.provider.transcodeStream(
             for: playback.item.ref,
@@ -3238,7 +3258,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         playback.quality.plan = activeStreamPlan
         await stopProviderReporter(at: resumeTime)
         setProviderStream(playback)
-        return playback.stream.source.streamURL
+        return playback.stream.source.streamURL.map { ($0, playback.stream.headers) }
     }
 
     /// The playing version's uncapped stream as a new play session, or nil when the
@@ -3482,12 +3502,12 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func reloadTranscode(at time: TimeInterval, tracks: PlexTrackIDs) async throws {
         let hls: (url: URL, headers: [String: String], sessionId: String?)
         if case .provider = source {
-            guard let url = try await switchToProviderTranscode(
+            guard let switched = try await switchToProviderTranscode(
                 resumeTime: time, maxBitrate: activeStreamPlan.step.map { $0.kbps * 1000 }, tracks: tracks) else {
                 throw PlayerError.loadFailed("Unable to start the provider transcode")
             }
             transcodeTrackIDs = tracks
-            hls = (url, [:], nil)
+            hls = (switched.url, switched.headers, nil)
         } else {
             transcodeTrackIDs = tracks
             await putTrackSelection(tracks)
@@ -6037,20 +6057,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
-    /// The episode after `current`: the next by number in its season, else
-    /// the first of the next season. Episodes without a number are skipped.
-    static func nextEpisode(after current: MediaItem, in seasonEpisodes: [MediaItem],
-                            nextSeasonEpisodes: [MediaItem]?) -> MediaItem? {
-        guard let number = current.episodeNumber else { return nil }
-        return byEpisodeNumber(seasonEpisodes).first { ($0.episodeNumber ?? 0) > number }
-            ?? byEpisodeNumber(nextSeasonEpisodes ?? []).first
-    }
-
-    private static func byEpisodeNumber(_ episodes: [MediaItem]) -> [MediaItem] {
-        episodes.filter { $0.episodeNumber != nil }
-            .sorted { ($0.episodeNumber ?? 0) < ($1.episodeNumber ?? 0) }
-    }
-
     /// `.provider` half of the next-episode lookup: the current season's
     /// episodes in order, and the episode after the current one. Every item
     /// returned is registered so its shim maps back to it.
@@ -6060,7 +6066,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         if let fetch = providerUpNextFetch, fetch.generation == generation {
             task = fetch.task
         } else {
-            task = Task { await Self.fetchProviderUpNext(playback) }
+            task = Task { await EpisodePicker.upNext(after: playback.detail.item, provider: playback.provider) }
             providerUpNextFetch = (generation, task)
         }
         let result = await task.value
@@ -6071,28 +6077,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             providerEpisodeItems[item.ref.itemID] = item
         }
         return result
-    }
-
-    /// Specials a server lists inside a season carry their own season number
-    /// and are left out, so they never become the next episode.
-    private static func fetchProviderUpNext(_ playback: ProviderPlayback) async -> (season: [MediaItem], next: MediaItem?) {
-        let current = playback.detail.item
-        let provider = playback.provider
-        guard current.kind == .episode, let seasonRef = current.parentRef,
-              let children = try? await provider.children(of: seasonRef) else { return ([], nil) }
-        let season = byEpisodeNumber(children.filter { $0.seasonNumber == current.seasonNumber })
-        var nextSeasonEpisodes: [MediaItem]?
-        if let number = current.episodeNumber, let seasonNumber = current.seasonNumber,
-           !season.contains(where: { ($0.episodeNumber ?? 0) > number }),
-           let showRef = current.grandparentRef,
-           let seasons = try? await provider.children(of: showRef),
-           let nextSeason = seasons
-               .filter({ ($0.seasonNumber ?? Int.min) > seasonNumber })
-               .min(by: { ($0.seasonNumber ?? 0) < ($1.seasonNumber ?? 0) }) {
-            nextSeasonEpisodes = try? await provider.children(of: nextSeason.ref)
-                .filter { $0.seasonNumber == nextSeason.seasonNumber }
-        }
-        return (season, nextEpisode(after: current, in: season, nextSeasonEpisodes: nextSeasonEpisodes))
     }
 
     /// A playlist row's still: an episode's frame, otherwise the backdrop.
@@ -6325,7 +6309,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             task = Task {
                 do {
                     return try await ProviderPlayback.prepare(item: item, provider: provider, version: version,
-                                                              quality: quality, throughput: throughput)
+                                                              quality: quality, throughput: throughput,
+                                                              awaitingExtras: false)
                 } catch {
                     print("🎬 [PostVideo] Next provider episode failed to prepare: \(error)")
                     return nil

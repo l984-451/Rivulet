@@ -414,7 +414,8 @@ final class IOSPlexSession: ObservableObject {
         for item: PlexMetadata,
         fromBeginning: Bool = false,
         quality: StreamingQuality? = nil,
-        previous: IOSPlexPlaybackRequest? = nil
+        previous: IOSPlexPlaybackRequest? = nil,
+        version: VersionChoice = .best
     ) async throws -> IOSPlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
@@ -426,30 +427,7 @@ final class IOSPlexSession: ObservableObject {
         let (serverURL, token) = try configuration(serverID: full.serverID)
         guard full.streamKey != nil else { throw IOSPlexSessionError.noPlayableURL }
 
-        var markers = full.Marker ?? []
-        if UserDefaults.standard.bool(forKey: "useIntroDB"),
-           full.type == "episode",
-           let showKey = full.grandparentRatingKey,
-           let season = full.parentIndex,
-           let episode = full.index {
-            // The show's IMDb id lives on the SHOW's guids; an episode's own
-            // Guid array carries episode-level ids that IntroDB rejects.
-            let show = try? await network.getMetadata(
-                serverURL: serverURL,
-                authToken: token,
-                ratingKey: showKey,
-                includeGuids: true
-            )
-            let guidStrings = (show?.Guid ?? []).compactMap(\.id) + [show?.guid].compactMap { $0 }
-            if let imdbID = guidStrings.compactMap(PlexMetadata.extractImdbId(from:)).first {
-                let community = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode)
-                let existingKinds = Set(markers.compactMap(\.type))
-                markers.append(contentsOf: community.filter { marker in
-                    guard let type = marker.type else { return false }
-                    return !existingKinds.contains(type)
-                })
-            }
-        }
+        let markers = await PlexPlaybackMarkers.markers(for: full, serverURL: serverURL, token: token, network: network)
 
         let resume = full.resumeSeconds
         let resumes = full.durationSeconds > 0
@@ -457,10 +435,10 @@ final class IOSPlexSession: ObservableObject {
             : WatchProgressPolicy.hasResumePoint(offsetSeconds: resume)
         return try await stream(
             full,
-            markers: markers.sorted { ($0.startTimeOffset ?? 0) < ($1.startTimeOffset ?? 0) },
+            markers: markers,
             serverURL: serverURL,
             token: token,
-            version: .best,
+            version: version,
             quality: quality,
             plan: nil,
             measurement: previous?.freshMeasurement,
@@ -538,7 +516,7 @@ final class IOSPlexSession: ObservableObject {
                 throw IOSPlexSessionError.noPlayableURL
             }
             url = direct
-            headers = Self.playbackHeaders(token: token)
+            headers = PlexProvider.directPlayHeaders(token: token)
         case .transcode(let step):
             guard let ratingKey = full.ratingKey,
                   let built = network.buildHLSDirectPlayURL(
@@ -618,17 +596,6 @@ final class IOSPlexSession: ObservableObject {
         query.append(URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName))
         components.queryItems = query
         return components.url
-    }
-
-    private static func playbackHeaders(token: String) -> [String: String] {
-        [
-            "X-Plex-Token": token,
-            "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
-            "X-Plex-Platform": PlexAPI.platform,
-            "X-Plex-Product": PlexAPI.productName,
-            "User-Agent": "\(PlexAPI.productName)/\(PlexAPI.platform)",
-            "X-Playback-Session-Id": UUID().uuidString
-        ]
     }
 
     // MARK: - Home hero
@@ -778,6 +745,8 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     var localArtworkURL: URL? = nil
     /// The server a downloaded file came from, which may not be the current one.
     var downloadServerID: String? = nil
+    /// Set for a Jellyfin or Emby item: `item` is then a display shim and this is the real stream.
+    var providerPlayback: ProviderPlayback? = nil
 
     /// A throughput reading young enough for Up Next and reloads to reuse.
     var freshMeasurement: (kbps: Int?, at: Date)? {

@@ -19,7 +19,9 @@ struct ProviderPlayback: Sendable {
     let item: MediaItem
     let detail: MediaItemDetail
     var stream: StreamInfo
-    let extras: PlaybackExtras
+    var extras: PlaybackExtras
+    /// True when `prepare` left the extras to the caller, who applies them as they arrive.
+    var extrasPending = false
     var quality = ProviderQuality()
 }
 

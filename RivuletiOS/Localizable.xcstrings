@@ -1443,6 +1443,16 @@
         }
       }
     },
+    "Couldn't reach the server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server ist nicht erreichbar."
+          }
+        }
+      }
+    },
     "Couldn't save the file: %@" : {
       "localizations" : {
         "de" : {
@@ -4885,6 +4895,16 @@
         }
       }
     },
+    "Something went wrong starting playback." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Starten der Wiedergabe ist etwas schiefgelaufen."
+          }
+        }
+      }
+    },
     "Sort" : {
       "localizations" : {
         "de" : {
@@ -5361,6 +5381,16 @@
         }
       }
     },
+    "The server didn't accept your sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat deine Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
     "The server is refusing new streams right now. Wait a moment and try again." : {
       "localizations" : {
         "de" : {
@@ -5557,6 +5587,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Damit wird die Playlist von deinem Server entfernt. Die Titel bleiben in deiner Mediathek."
+          }
+        }
+      }
+    },
+    "This server can't stream this title to this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Server kann diesen Titel nicht auf dieses Gerät streamen."
           }
         }
       }

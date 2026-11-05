@@ -28,10 +28,15 @@ extension EmbyProvider {
     /// is set even when it is false), else the hls transcode. A cap below the file's bitrate is
     /// the server refusing direct play, so it lands in the transcode.
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
+        try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate, startTime: 0)
+    }
+
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo {
         let response = try await playbackInfo(itemRef, sourceID: sourceID, direct: true, maxBitrate: maxBitrate)
         let chosen = try choose(from: response, itemRef: itemRef, sourceID: sourceID, maxBitrate: maxBitrate)
         guard chosen.supportsDirectPlay == true else {
-            return try await transcodeStream(for: itemRef, sourceID: chosen.id, startTime: 0, maxBitrate: maxBitrate,
+            return try await transcodeStream(for: itemRef, sourceID: chosen.id, startTime: startTime, maxBitrate: maxBitrate,
                                              audioStreamIndex: nil, subtitleStreamIndex: nil)
         }
         guard let source = EmbyMediaMapper.mediaSource(

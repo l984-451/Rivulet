@@ -101,6 +101,10 @@ protocol MediaProvider: Sendable, Identifiable {
     /// A nil `sourceID` plays the best version by `VersionRanking`.
     /// `maxBitrate` (bps, nil uncapped) is the most the stream may use; a provider without caps ignores it.
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo
+    /// As above, for a play that starts at `startTime`: a capped stream that comes back as a
+    /// transcode starts there, so the player does not have to restart it with a seek. Default: ignores it.
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo
 
     /// A server-side transcode starting at `startTime`, played with AVPlayer.
     /// For when the client cannot play the direct-play stream, or a quality cap.
@@ -183,6 +187,10 @@ protocol MediaProvider: Sendable, Identifiable {
 }
 
 extension MediaProvider {
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo {
+        try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate)
+    }
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?) async throws -> StreamInfo {
         try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: nil)
     }

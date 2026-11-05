@@ -28,7 +28,7 @@ struct AudioTrack: Hashable, Sendable, Identifiable {
     /// Jellyfin equivalent). Distinct from `isDefault` — `isDefault` is the
     /// file's authoring default, while `isSelected` reflects a per-user-per-item
     /// override that may have been set in any client.
-    let isSelected: Bool
+    var isSelected: Bool
 }
 
 extension AudioTrack {

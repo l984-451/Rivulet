@@ -157,9 +157,9 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         let vm = UniversalPlayerViewModel(providerPlayback: playback, startOffset: nil)
 
         provider.reporter = second
-        let url = try await vm.switchToProviderTranscode(resumeTime: 42)
+        let hls = try await vm.switchToProviderTranscode(resumeTime: 42)
 
-        XCTAssertEqual(url, hlsURL)
+        XCTAssertEqual(hls?.url, hlsURL)
         XCTAssertEqual(provider.transcodeRequests.map(\.ref), [playback.item.ref])
         XCTAssertEqual(provider.transcodeRequests.map(\.sourceID), ["src"])
         XCTAssertEqual(provider.transcodeRequests.map(\.startTime), [42])
@@ -231,7 +231,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         let e1 = episode("e1", season: 1, number: 1)
         let e2 = episode("e2", season: 1, number: 2)
         let e3 = episode("e3", season: 1, number: 3)
-        let next = UniversalPlayerViewModel.nextEpisode(after: e1, in: [e3, e1, e2], nextSeasonEpisodes: nil)
+        let next = EpisodePicker.nextEpisode(after: e1, in: [e3, e1, e2], nextSeasonEpisodes: nil)
         XCTAssertEqual(next?.ref.itemID, "e2")
     }
 
@@ -240,15 +240,43 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         let e2 = episode("e2", season: 1, number: 2)
         let s2e1 = episode("s2e1", season: 2, number: 1)
         let s2e2 = episode("s2e2", season: 2, number: 2)
-        let next = UniversalPlayerViewModel.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: [s2e2, s2e1])
+        let next = EpisodePicker.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: [s2e2, s2e1])
         XCTAssertEqual(next?.ref.itemID, "s2e1")
     }
 
     func test_nextEpisode_lastEpisodeOfShow_isNil() {
         let e1 = episode("e1", season: 1, number: 1)
         let e2 = episode("e2", season: 1, number: 2)
-        XCTAssertNil(UniversalPlayerViewModel.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: nil))
-        XCTAssertNil(UniversalPlayerViewModel.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: []))
+        XCTAssertNil(EpisodePicker.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: nil))
+        XCTAssertNil(EpisodePicker.nextEpisode(after: e2, in: [e1, e2], nextSeasonEpisodes: []))
+    }
+
+    func test_upNext_nextInTheSeasonFromTheProvider() async {
+        let stub = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let e1 = episode("e1", season: 1, number: 1)
+        let e2 = episode("e2", season: 1, number: 2)
+        stub.childrenByParent["season1"] = [e2, e1]
+        let result = await EpisodePicker.upNext(after: e1, provider: stub)
+        XCTAssertEqual(result.next?.ref.itemID, "e2")
+        XCTAssertEqual(result.season.map(\.ref.itemID), ["e1", "e2"])
+    }
+
+    func test_upNext_lastOfASeasonOpensTheNextOne() async {
+        let stub = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let e2 = episode("e2", season: 1, number: 2)
+        let s1 = episode("season1", season: 1, number: 0)
+        let s2 = episode("season2", season: 2, number: 0)
+        stub.childrenByParent["season1"] = [e2]
+        stub.childrenByParent["show"] = [s2, s1]
+        stub.childrenByParent["season2"] = [episode("s2e1", season: 2, number: 1)]
+        let result = await EpisodePicker.upNext(after: e2, provider: stub)
+        XCTAssertEqual(result.next?.ref.itemID, "s2e1")
+    }
+
+    func test_upNext_aMovieHasNone() async {
+        let result = await EpisodePicker.upNext(after: JellyfinFixtures.mediaItem("m1"), provider: StubMediaProvider())
+        XCTAssertNil(result.next)
+        XCTAssertTrue(result.season.isEmpty)
     }
 
     func test_providerAutoplay_swapsSourceAndReporter() async throws {

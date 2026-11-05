@@ -554,7 +554,12 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     /// Direct play when the server allows it, else the server's HLS transcode.
     /// A source with neither throws `.transcodeRequired`.
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
-        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: true, startTime: 0, maxBitrate: maxBitrate)
+        try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate, startTime: 0)
+    }
+
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo {
+        try await playbackInfo(itemRef, sourceID: sourceID, allowDirectPlay: true, startTime: startTime, maxBitrate: maxBitrate)
     }
 
     func transcodeStream(for itemRef: MediaItemRef, sourceID: String?, startTime: TimeInterval,

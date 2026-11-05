@@ -17,4 +17,6 @@ struct StreamInfo: Sendable {
     let playSessionID: String?
     /// false during HLS transcode where tracks come from the manifest, not from MediaSource fields.
     let trackInfoAvailable: Bool
+    /// Request headers the stream needs. Jellyfin and Emby carry auth in the URL and leave it empty.
+    var headers: [String: String] = [:]
 }

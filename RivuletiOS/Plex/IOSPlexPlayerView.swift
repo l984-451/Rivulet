@@ -22,7 +22,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// The server's reason when it ended this play session (dashboard Stop, paused too long; #403).
     @Published private(set) var serverStopReason: String?
 
-    private let plex: IOSPlexSession
+    private let plex: any IOSPlayerBackend
     private var skippedMarkerIDs: Set<String> = []
     private var lastReportBucket = -1
     private var reportedStopped = false
@@ -47,7 +47,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var needsStartingTracks = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(request: IOSPlexPlaybackRequest, plex: IOSPlexSession, queue: PlayQueue<PlexMetadata>? = nil) {
+    init(request: IOSPlexPlaybackRequest, plex: any IOSPlayerBackend, queue: PlayQueue<PlexMetadata>? = nil) {
         self.request = request
         self.plex = plex
         self.queue = queue
@@ -84,7 +84,11 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             await finish?.value
             await plex.watchStateDidChange()
         }
-        Task { await plex.stopTranscode(request) }
+        // After the stopped report, so a provider's stop carries the real position.
+        Task {
+            await finish?.value
+            await plex.stopTranscode(request)
+        }
     }
 
     func screen(_ controller: IOSPlaybackController) -> AnyView {
@@ -159,7 +163,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         // A file that never listed its tracks (a failed start) has no picks to carry.
         let picks = streams ?? (previous.plan == .original && !player.audioTracks.isEmpty ? enginePicksAsPlexIDs() : nil)
         reloadTask = Task { [weak self] in
-            guard let next = try? await plex.playback(reloading: previous, quality: quality, plan: plan, at: time),
+            guard let next = try? await plex.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: picks),
                   let self, !Task.isCancelled else { return }
             // Same plan from a menu change: only the choice moves.
             if plan == nil, streams == nil, next.plan == previous.plan {
@@ -230,7 +234,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// a frame decoded from the file. A transcode has no file to decode from.
     func scrubStill(at time: Double) async -> UIImage? {
         let parts = request.item.Media.flatMap { $0.indices.contains(request.mediaIndex) ? $0[request.mediaIndex] : nil }?.Part
-        if !request.isLocal, parts?.count == 1, let partID = parts?.first?.id,
+        if !request.isLocal, !request.serverURL.isEmpty, parts?.count == 1, let partID = parts?.first?.id,
            !PlexThumbnailService.shared.isUnavailable(partId: partID) {
             if partID != thumbnailPartID { releaseThumbnails() }
             thumbnailPartID = partID
@@ -645,7 +649,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         nextTask = Task { [weak self] in
             // Up Next keeps the player-menu pick, else decides Home or Away again; a fresh reading is reused.
             guard let self,
-                  let nextRequest = try? await self.plex.playback(for: next, quality: self.sessionQuality, previous: previous),
+                  let nextRequest = try? await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous),
                   !Task.isCancelled else { return }
             let plex = plex
             Task { await plex.stopTranscode(previous) }

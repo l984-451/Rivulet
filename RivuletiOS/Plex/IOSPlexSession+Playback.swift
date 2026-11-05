@@ -159,6 +159,17 @@ extension IOSPlexPlaybackRequest {
     /// None on a transcode, which carries the server's own subtitle rendition.
     var sidecarSubtitles: [AetherPlayer.SidecarSubtitle] {
         if let localSidecars { return localSidecars }
+        if let providerPlayback {
+            // A provider's sidecars are its external tracks, with their own URL and auth.
+            guard plan == .original else { return [] }
+            return providerPlayback.stream.source.subtitleTracks.filter { !$0.isEmbedded }.compactMap { track in
+                guard let url = track.externalURL else { return nil }
+                return AetherPlayer.SidecarSubtitle(
+                    url: url, name: track.extendedTitle ?? track.title, language: track.language,
+                    isForced: track.isForced, isHearingImpaired: track.isHearingImpaired,
+                    isDefault: track.isDefault, formatHint: track.codec)
+            }
+        }
         guard plan == .original, let streams = item.Media?.first?.Part?.first?.Stream else { return [] }
         return streams.filter { $0.isSubtitle && $0.key != nil }.compactMap { stream in
             guard let key = stream.key,

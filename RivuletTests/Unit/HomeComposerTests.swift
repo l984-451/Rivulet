@@ -141,6 +141,14 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         guard let streamResult else { throw MediaProviderError.notFound }
         return streamResult
     }
+    /// `startTime` of each `resolveStream`, in order.
+    private var recordedStarts: [TimeInterval] = []
+    var resolveStartTimes: [TimeInterval] { callLock.withLock { recordedStarts } }
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo {
+        callLock.withLock { recordedStarts.append(startTime) }
+        return try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate)
+    }
     /// What `transcodeStream` answers, and what it was asked for.
     var transcodeResult: StreamInfo?
     private(set) var transcodeRequests: [(ref: MediaItemRef, sourceID: String?, startTime: TimeInterval)] = []

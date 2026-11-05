@@ -29,6 +29,8 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     let logoResolver: PlexLogoResolver
     /// The Plex profile an extra server's library settings belong to; nil for the selected server.
     nonisolated let accountID: String?
+    /// The streams handed out, by play session id, for the reporter that opens and ends them.
+    let playSessions = OSAllocatedUnfairLock<[String: PlexPlaySession]>(initialState: [:])
 
     init(
         machineIdentifier: String,
@@ -435,25 +437,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     // MARK: - Playback
-
-    /// Plex items play through the `.plex` player path, which applies quality there; the cap is unused.
-    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
-        let detail = try await fullDetail(for: itemRef)
-        guard let chosen = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best,
-                                                 from: detail.mediaSources) else {
-            throw MediaProviderError.notFound
-        }
-        return StreamInfo(source: chosen, playSessionID: nil, trackInfoAvailable: true)
-    }
-
-    func progressReporter(for itemRef: MediaItemRef, sourceID: String?, playSessionID: String?) -> any ProgressReporter {
-        PlexTimelineReporter(
-            serverURL: serverURL,
-            authToken: authToken,
-            ratingKey: itemRef.itemID,
-            networkManager: networkManager
-        )
-    }
 
     // MARK: - Per-item track selection
 

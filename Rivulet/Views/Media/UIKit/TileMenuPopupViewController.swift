@@ -104,6 +104,33 @@ enum TileLongPress {
     }
 }
 
+/// Where the tile menu sits: beside the tile, right of it when there is room. Top edges line up, or,
+/// when the panel would run off the bottom, bottom edges, so it grows upward like the system menu.
+enum TileMenuPlacement {
+    static func place(panel: CGSize, beside tile: CGRect?, in bounds: CGRect)
+        -> (frame: CGRect, anchor: CGPoint) {
+        let safe = bounds.insetBy(dx: 80, dy: 50)
+        let gap: CGFloat = 16
+        guard let tile else {
+            let origin = CGPoint(x: bounds.midX - panel.width / 2, y: bounds.midY - panel.height / 2)
+            return (CGRect(origin: origin, size: panel), CGPoint(x: 0.5, y: 0.5))
+        }
+        var origin = CGPoint(x: tile.maxX + gap, y: tile.minY)
+        var anchor = CGPoint(x: 0, y: 0)
+        if origin.x + panel.width > safe.maxX {
+            origin.x = tile.minX - gap - panel.width
+            anchor.x = 1
+        }
+        if origin.y + panel.height > safe.maxY {
+            origin.y = tile.maxY - panel.height
+            anchor.y = 1
+        }
+        origin.x = min(max(origin.x, safe.minX), safe.maxX - panel.width)
+        origin.y = min(max(origin.y, safe.minY), safe.maxY - panel.height)
+        return (CGRect(origin: origin, size: panel), anchor)
+    }
+}
+
 final class TileMenuPopupViewController: UIViewController {
 
     /// Action groups, with a hairline divider between groups.
@@ -204,31 +231,13 @@ final class TileMenuPopupViewController: UIViewController {
             + headerHeight
             + panelInset * 2
 
-        // Beside the tile, top edges aligned: right of it when there's
-        // room, else left. Clamped into the overscan-safe region.
-        let safe = view.bounds.insetBy(dx: 80, dy: 50)
-        let gap: CGFloat = 16
-        var origin: CGPoint
-        var growsFromLeftEdge = true  // panel's tile-adjacent top corner
-        if let sourceFrame {
-            origin = CGPoint(x: sourceFrame.maxX + gap, y: sourceFrame.minY)
-            if origin.x + panelWidth > safe.maxX {
-                origin.x = sourceFrame.minX - gap - panelWidth
-                growsFromLeftEdge = false
-            }
-        } else {
-            origin = CGPoint(x: view.bounds.midX - panelWidth / 2,
-                             y: view.bounds.midY - panelHeight / 2)
-        }
-        origin.x = min(max(origin.x, safe.minX), safe.maxX - panelWidth)
-        origin.y = min(max(origin.y, safe.minY), safe.maxY - panelHeight)
-        panel.frame = CGRect(origin: origin, size: CGSize(width: panelWidth, height: panelHeight))
+        let placement = TileMenuPlacement.place(panel: CGSize(width: panelWidth, height: panelHeight),
+                                                beside: sourceFrame, in: view.bounds)
+        panel.frame = placement.frame
         view.addSubview(panel)
 
-        // The system menu grows out of the tile's top corner and shrinks
-        // back into it. Anchor the scale at the panel's tile-adjacent top
-        // corner (re-deriving position so the frame stays put).
-        let anchor = CGPoint(x: growsFromLeftEdge ? 0 : 1, y: 0)
+        // The system menu grows out of the tile-side corner and shrinks back into it.
+        let anchor = placement.anchor
         let frame = panel.frame
         panel.layer.anchorPoint = anchor
         panel.layer.position = CGPoint(x: frame.minX + frame.width * anchor.x,

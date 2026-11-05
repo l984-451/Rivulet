@@ -294,6 +294,9 @@ final class PreviewCardView: UICollectionViewCell {
             guard let self, let item = self.chromeView.item else { return }
             self.onPlayVersion?(item, sourceID)
         }
+        chromeView.onPlayCopy = { [weak self] copy, sourceID in
+            self?.onPlayVersion?(copy, sourceID)
+        }
         chromeView.onShowFullDescription = { [weak self] detail in
             self?.onShowInfo?(detail)
         }

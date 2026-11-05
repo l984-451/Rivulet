@@ -47,6 +47,12 @@ struct MediaItemDetail: Sendable {
     /// External ids keyed lowercase: "tmdb", "imdb", "tvdb".
     var externalIDs: [String: String] = [:]
 
+    /// Plex's own guid ("plex://movie/…"), the same on every server: how another server's copy is found.
+    var plexGUID: String? = nil
+
+    /// The library the item sits in ("TV Shows 4K"), when the server says.
+    var library: String? = nil
+
     struct Extra: Sendable, Identifiable, Hashable {
         let id: String
         let title: String

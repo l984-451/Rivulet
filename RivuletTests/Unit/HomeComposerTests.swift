@@ -46,11 +46,12 @@ final class HomeComposerTests: XCTestCase {
 final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     nonisolated let id: String
     nonisolated let kind: MediaProviderKind
-    nonisolated let displayName = "Stub"
+    nonisolated let displayName: String
 
-    init(id: String = "stub", kind: MediaProviderKind = .plex) {
+    init(id: String = "stub", kind: MediaProviderKind = .plex, displayName: String = "Stub") {
         self.id = id
         self.kind = kind
+        self.displayName = displayName
     }
     let connectionState = ConnectionState.connected
     let supportsWatchlist = false
@@ -98,6 +99,8 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     /// What the playback calls answer (nil throws `.notFound`), and the calls
     /// made, as "detail(m1)", "stream(m1,nil)", "extras(m1,src)".
     var detailResult: MediaItemDetail?
+    /// Per-item answers to `fullDetail`, keyed by itemID; checked before `detailResult`.
+    var detailsByItem: [String: MediaItemDetail] = [:]
     var streamResult: StreamInfo?
     /// What a capped `resolveStream` answers (nil: `streamResult`), or throws.
     var cappedStreamResult: StreamInfo?
@@ -112,8 +115,8 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     private func recordCall(_ call: String) { callLock.withLock { recordedCalls.append(call) } }
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         recordCall("detail(\(itemRef.itemID))")
-        guard let detailResult else { throw MediaProviderError.notFound }
-        return detailResult
+        guard let detail = detailsByItem[itemRef.itemID] ?? detailResult else { throw MediaProviderError.notFound }
+        return detail
     }
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras {
         recordCall("extras(\(itemRef.itemID),\(sourceID ?? "nil"))")

@@ -1,6 +1,6 @@
 # Rivulet - Claude Context
 
-Rivulet is a tvOS media client for Plex, Jellyfin, Emby and IPTV (the iOS app is Plex and IPTV only). The primary surfaces (Home, Library, Search, Discover, Media Detail, the preview carousel, Person detail, Music, and the player chrome) are **UIKit**, as is Settings; SwiftUI remains for thin navigation shells and Live TV slots.
+Rivulet is a tvOS and iOS media client for Plex, Jellyfin, Emby and IPTV. The primary surfaces (Home, Library, Search, Discover, Media Detail, the preview carousel, Person detail, Music, and the player chrome) are **UIKit**, as is Settings; SwiftUI remains for thin navigation shells and Live TV slots.
 
 **UIKit is the default. Do not add SwiftUI to a primary surface.** When you find SwiftUI in one, assume it is a leftover and check reachability before building on it.
 
@@ -67,9 +67,9 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   Models/Photos (the agnostic item types).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
-│                       #   navigation contract), Plex/ (IOSPlexSession + its
-│                       #   extensions, IOSPlexAdapters, Home/Library/Detail views;
-│                       #   no endpoint code), Search/, Settings/, LiveTV/ (views
+│                       #   navigation contract, IOSBrowseStore: every server's
+│                       #   content), Plex/ (IOSPlexSession: Plex sign-in and
+│                       #   playback; Home/Library/Detail views; no endpoint code), Search/, Settings/, LiveTV/ (views
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
@@ -141,12 +141,10 @@ Rivulet/                # The tvOS app — everything below.
 ## Feature parity
 
 **Every user-facing feature is built for both apps and for every server type each
-app supports**: tvOS on Plex, Jellyfin and Emby, iOS on Plex (IPTV where it
-applies). A feature that leaves a platform or a server out says so in the commit
+app supports**: Plex, Jellyfin and Emby on both apps (IPTV where it applies). A feature that leaves a platform or a server out says so in the commit
 message, and a standing exception is listed below. A gap nobody wrote down is a bug.
 
 Standing exceptions:
-- Jellyfin and Emby are tvOS only.
 - Photos are tvOS only.
 - Downloads are iOS only.
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
@@ -219,9 +217,10 @@ So is the Live TV stack: `LiveTVDataStore`, `PlexLiveTVProvider` + the timeline
 keepalive, `IPTVProvider`, `DispatcharrService`, `LiveTVSourceConnector` (the
 verify-then-add behind both apps' add-source forms) and `LiveShelves` (What's On
 rows). **There is exactly one Plex client.** `RivuletiOS/Plex/` holds
-`IOSPlexSession` (the iOS content store, counterpart of `PlexDataStore`, with its
-`+Account`/`+Content`/`+Playback` extensions), `IOSPlexAdapters` (display
-accessors) and the SwiftUI views; no endpoint code. Never add a second decoder for a Plex
+`IOSPlexSession` (Plex sign-in, profile, server choice and the Plex playback
+path) and the SwiftUI views; iOS content for every server comes from
+`RivuletiOS/Shell/IOSBrowseStore` over `MediaProviderRegistry` and the shared
+`HomeFeed`. No endpoint code in the iOS folder. Never add a second decoder for a Plex
 endpoint to the iOS folder; a bug fixed in the shared client must be the fix
 for both apps.
 
@@ -769,7 +768,7 @@ write either number anywhere else.
 
 ### Media providers (Plex, Jellyfin, Emby)
 
-Jellyfin and Emby are tvOS only. All three backends sit behind one seam,
+All three backends sit behind one seam, on both apps,
 `RivuletCore/MediaProvider/MediaProvider.swift`, with `Plex/`, `Jellyfin/` and `Emby/` below it.
 Views talk to the protocol. A non-Plex item plays through `ProviderPlayback+Prepare.swift`,
 which never names a backend.

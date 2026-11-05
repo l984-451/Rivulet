@@ -29,7 +29,8 @@ struct OtherServerKind {
     let signIn: (URL, String, String) async throws -> Void
     /// Sign-in by a code approved on another device; nil where the server has none. Hands the code to the closure.
     let quickConnect: ((URL, (String) -> Void) async throws -> Void)?
-    let signOut: () async -> Void
+    /// Nil scope is a sign-out nobody was asked about: this device only.
+    let signOut: (SignOutScope?) async -> Void
     /// What a failed sign-in tells the user.
     let failureMessage: (Error) -> String
     let quickConnectFailureMessage: (Error) -> String
@@ -50,7 +51,7 @@ struct OtherServerKind {
         userName: { JellyfinSession.account?.userName },
         signIn: { _ = try await JellyfinSession.signIn(serverURL: $0, username: $1, password: $2) },
         quickConnect: { url, showCode in _ = try await JellyfinSession.signInWithQuickConnect(serverURL: url, showCode: showCode) },
-        signOut: { await JellyfinSession.signOut() },
+        signOut: { await JellyfinSession.signOut(scope: $0) },
         failureMessage: JellyfinSession.failureMessage,
         quickConnectFailureMessage: JellyfinSession.quickConnectFailureMessage
     )
@@ -65,7 +66,7 @@ struct OtherServerKind {
         userName: { EmbySession.account?.userName },
         signIn: { _ = try await EmbySession.signIn(serverURL: $0, username: $1, password: $2) },
         quickConnect: nil,
-        signOut: { await EmbySession.signOut() },
+        signOut: { await EmbySession.signOut(scope: $0) },
         failureMessage: EmbySession.failureMessage,
         quickConnectFailureMessage: EmbySession.failureMessage
     )

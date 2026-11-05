@@ -38,10 +38,20 @@ extension SettingsContent {
                 }), isBusy: { ServerDataStore.shared.isLoading }),
                 SettingsRowItem(id: "jellyfinSignOut", title: "Sign Out",
                                 kind: .action(destructive: true, handler: { vc in
-                    Task { @MainActor in
-                        await JellyfinSession.signOut()
-                        addSourceDraft = AddSourceDraft()
-                        (vc as? SettingsPageViewController)?.reloadRows()
+                    func signOut(_ scope: SignOutScope?) {
+                        Task { @MainActor in
+                            await JellyfinSession.signOut(scope: scope)
+                            addSourceDraft = AddSourceDraft()
+                            (vc as? SettingsPageViewController)?.reloadRows()
+                        }
+                    }
+                    if CloudSync.shared.isSynced(accountID: account.providerID) {
+                        presentSignOutChoice(
+                            on: vc, title: String(localized: "Sign Out of Jellyfin?"),
+                            message: String(localized: "Your Jellyfin sign-in is shared through iCloud. Sign out of this device only, or of every device?"),
+                            thisDevice: { signOut(.thisDevice) }, everywhere: { signOut(.everywhere) })
+                    } else {
+                        signOut(nil)
                     }
                 }))
             ]

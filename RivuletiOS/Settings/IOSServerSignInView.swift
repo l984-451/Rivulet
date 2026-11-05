@@ -16,6 +16,7 @@ struct IOSServerSignInView: View {
     @State private var quickConnectTask: Task<Void, Never>?
     /// Bumped after a sign-in or sign-out, so the page re-reads the stored account.
     @State private var revision = 0
+    @State private var confirmingSignOut = false
 
     private var name: String { server.kind.displayName }
 
@@ -23,6 +24,7 @@ struct IOSServerSignInView: View {
         let _ = revision
         Form {
             if let account = server.account() {
+                let synced = CloudSync.shared.isSynced(accountID: account.providerID)
                 Section {
                     LabeledContent("Server", value: account.name)
                     if let user = server.userName(), !user.isEmpty {
@@ -30,12 +32,21 @@ struct IOSServerSignInView: View {
                     }
                 }
                 Section {
-                    Button("Sign Out", role: .destructive) {
-                        Task {
-                            await server.signOut()
-                            revision += 1
+                    Button("Sign Out", role: .destructive) { confirmingSignOut = true }
+                        .confirmationDialog("Sign out of \(name)?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                            if synced {
+                                Button("This Device Only") { signOut(.thisDevice) }
+                                Button("All Devices", role: .destructive) { signOut(.everywhere) }
+                            } else {
+                                Button("Sign Out", role: .destructive) { signOut(nil) }
+                            }
+                        } message: {
+                            if synced {
+                                Text("Your \(name) sign-in is shared through iCloud. Sign out of this device only, or of every device?")
+                            } else {
+                                Text("You can sign back in at any time.")
+                            }
                         }
-                    }
                 }
             } else {
                 signInSections
@@ -87,6 +98,13 @@ struct IOSServerSignInView: View {
                 Button("Quick Connect", action: startQuickConnect)
                     .frame(maxWidth: .infinity)
             }
+        }
+    }
+
+    private func signOut(_ scope: SignOutScope?) {
+        Task {
+            await server.signOut(scope)
+            revision += 1
         }
     }
 

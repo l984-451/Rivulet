@@ -54,8 +54,8 @@ struct IOSLibrarySettingsView: View {
 
 /// Account > Playback: streaming quality, skip buttons, automatic skips and the markers they use.
 struct IOSPlaybackSettingsView: View {
-    @AppStorage("playerSkipBackwardSeconds") private var skipBackwardSeconds = 10
-    @AppStorage("playerSkipForwardSeconds") private var skipForwardSeconds = 30
+    @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
+    @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
     /// Observed so the skip pickers redraw; read and written through `MarkerSkipMode`.
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipRecap") private var autoSkipRecap = false
@@ -88,10 +88,10 @@ struct IOSPlaybackSettingsView: View {
 
             Section {
                 Picker("Skip Back", selection: $skipBackwardSeconds) {
-                    ForEach([5, 10, 15, 30], id: \.self) { Text("\($0) seconds").tag($0) }
+                    ForEach(SkipLengthKeys.options, id: \.self) { Text("\($0) seconds").tag($0) }
                 }
                 Picker("Skip Forward", selection: $skipForwardSeconds) {
-                    ForEach([10, 15, 30, 60], id: \.self) { Text("\($0) seconds").tag($0) }
+                    ForEach(SkipLengthKeys.options, id: \.self) { Text("\($0) seconds").tag($0) }
                 }
             } header: {
                 Text("Skip Buttons")

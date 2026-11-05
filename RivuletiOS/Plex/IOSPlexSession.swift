@@ -108,9 +108,9 @@ final class IOSPlexSession: ObservableObject {
 
     func selectServer(_ server: PlexDevice) async { await auth.selectServer(server) }
 
-    func signOut() {
+    func signOut(scope: SignOutScope? = nil) {
         // clearContent() runs via the onSignedOut handoff.
-        auth.signOut()
+        auth.signOut(scope: scope)
     }
 
     /// Maps the shared auth state machine onto the iOS view states.

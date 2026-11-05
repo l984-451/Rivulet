@@ -848,6 +848,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconSimpleColor AppIconSimpleWhite AppIconPixel";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RivuletiOS/RivuletiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 77;
 				DEVELOPMENT_TEAM = ZHB786H6YN;
@@ -885,6 +886,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconSimpleColor AppIconSimpleWhite AppIconPixel";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RivuletiOS/RivuletiOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 77;
 				DEVELOPMENT_TEAM = ZHB786H6YN;

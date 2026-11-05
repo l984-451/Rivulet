@@ -877,6 +877,33 @@ transports through `DirectionalInputBinding`). tvOS only.
   - Server limits: HEIC is not indexed (0 of 4), `isFolder` is not an `/Items` parameter, and
     the legacy `X-Emby-Token` header answers 401 (the client sends `Authorization: MediaBrowser`).
 
+### iCloud sync
+
+Both apps sync through `RivuletCore/Sync/`. Design, measurements and the one-time
+owner steps (developer portal, CloudKit schema deploy, profiles) are in
+`Docs/superpowers/specs/2026-11-05-icloud-sync-design.md` (maintainer-local).
+
+- **Preferences ride `NSUbiquitousKeyValueStore`, from an allowlist.** `SyncCatalog`
+  names every synced key (exact keys plus per-profile/per-server families);
+  `PreferenceMirror` reconciles them with `UserDefaults`, which stays the source of
+  truth. A new setting does not sync until it is listed. **Never put a secret in KVS**:
+  it is unencrypted on disk, and a key that can embed access (a list source URL) stays out.
+- **Credentials ride one CloudKit record, encrypted with `encryptedValues`.**
+  `AccountVault` holds the record, `AccountSyncCoordinator` runs a cycle, and the
+  kinds (`SyncedAccountKind`: Plex, Live TV, Jellyfin, Emby) live in RivuletCore beside
+  their sessions. A new account type is one kind registered in `CloudSync.accountKinds`,
+  not a per-app hook. Adoption verifies the token with one authenticated call first.
+- **Sign-out asks "this device only" or "all devices" when the account is shared**
+  (`CloudSync.isSynced(accountID:)`); a token that was ever shared is revoked only
+  by "all devices". A tombstone makes the other devices sign out without revoking.
+- **One per-device switch, `iCloudSyncEnabled`, on by default**, never itself synced.
+  Order at launch: the Live TV store (it re-keys old M3U ids) and the provider registry
+  populate first, then `CloudSync.shared.start()`.
+- **Adoption reaches the UI through the existing paths**: Plex through
+  `PlexAuthManager.onAuthenticated`/`onSignedOut`, Jellyfin and Emby through the
+  registry's `populateFromCurrentAuth` (iOS follows `onSecondaryProvidersChanged`).
+  Do not add a second refresh route.
+
 ### Glass UI Style
 
 All focusable rows use consistent styling (see `Docs/DESIGN_GUIDE.md`):

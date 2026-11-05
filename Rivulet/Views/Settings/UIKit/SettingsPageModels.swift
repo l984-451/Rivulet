@@ -203,7 +203,7 @@ enum SettingsContent {
 
     /// Rows a restricted (managed) Plex profile does not get: other servers,
     /// sources, sign-out, and the parental controls themselves.
-    static let ownerOnlyRowIDs: Set<String> = ["cat_servers", "liveTVSources", "hdr_Filtering", "cat_contentFilter", "profilePickerOnLaunch"]
+    static let ownerOnlyRowIDs: Set<String> = ["cat_servers", "liveTVSources", "hdr_Filtering", "cat_contentFilter", "profilePickerOnLaunch", "iCloudSync"]
 
     static func rows(for page: SettingsPage) -> [SettingsRowItem] {
         let rows = allRows(for: page)
@@ -385,8 +385,22 @@ enum SettingsContent {
             SettingsRowItem(id: "cat_liveTV",     title: "Live TV",    kind: .navigation(.liveTV)),
             SettingsRowItem(id: "cat_servers",    title: "Servers",    kind: .navigation(.servers)),
             SettingsRowItem(id: "cache",          title: "Cache & Storage", kind: .navigation(.cache)),
+            SettingsRowItem(id: "iCloudSync",     title: "iCloud Sync",
+                            kind: .cycle(value: { iCloudSyncValue },
+                                         next: { CloudSync.shared.setEnabled(!CloudSync.shared.isEnabled) })),
             SettingsRowItem(id: "cat_about",      title: "About",      kind: .navigation(.about))
         ]
+    }
+
+    private static var iCloudSyncValue: String {
+        if CloudSync.shared.status == .on, CloudSync.shared.blockedAccountIDs.contains(PlexAuthManager.syncID) {
+            return String(localized: "iCloud has a different Plex account")
+        }
+        switch CloudSync.shared.status {
+        case .on: return String(localized: "On")
+        case .off: return String(localized: "Off")
+        case .noAccount: return String(localized: "Sign in to iCloud on this device")
+        }
     }
 
     // MARK: Appearance
@@ -769,6 +783,15 @@ enum SettingsContent {
         return plexServerRows + [
             SettingsRowItem(id: "signOut", title: "Sign Out",
                             kind: .action(destructive: true, handler: { vc in
+                let page = vc as? SettingsPageViewController
+                if CloudSync.shared.isSynced(accountID: PlexAuthManager.syncID) {
+                    presentSignOutChoice(
+                        on: vc, title: String(localized: "Sign Out of Plex?"),
+                        message: String(localized: "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?"),
+                        thisDevice: { PlexAuthManager.shared.signOut(scope: .thisDevice); page?.reloadRows() },
+                        everywhere: { PlexAuthManager.shared.signOut(scope: .everywhere); page?.reloadRows() })
+                    return
+                }
                 // Ask first. An accidental Select must not sign out.
                 presentConfirm(on: vc, title: "Sign Out of Plex?",
                                message: "This signs out of every Plex server on your account.",
@@ -1216,6 +1239,16 @@ enum SettingsContent {
         vc.present(popup, animated: true)
     }
 
+    /// The sign-out question when the item is shared through iCloud: this device only, or all of them.
+    /// Menu and Cancel do nothing.
+    static func presentSignOutChoice(on vc: UIViewController, title: String, message: String,
+                                     thisDevice: @escaping () -> Void, everywhere: @escaping () -> Void) {
+        vc.present(ConfirmationPopupViewController(
+            title: title, message: message, confirmTitle: String(localized: "All Devices"),
+            alternateTitle: String(localized: "This Device Only"), onAlternate: thisDevice,
+            destructive: true, width: 1160, onConfirm: everywhere), animated: true)
+    }
+
     // MARK: Live TV Sources
 
     /// The source whose detail page is currently being shown. Set by a source
@@ -1291,6 +1324,20 @@ enum SettingsContent {
         guard !source.sourceType.followsServer else { return rows }
         rows.append(SettingsRowItem(id: "removeSource", title: "Remove Source",
                                     kind: .action(destructive: true, handler: { vc in
+            let page = vc as? SettingsPageViewController
+            if CloudSync.shared.isSynced(accountID: LiveTVDataStore.syncID(forSource: source.id)) {
+                func remove(_ scope: SignOutScope) {
+                    Task { @MainActor in
+                        await LiveTVDataStore.shared.removeSource(id: source.id, scope: scope)
+                        page?.onPop?()
+                    }
+                }
+                presentSignOutChoice(
+                    on: vc, title: String(localized: "Remove Source?"),
+                    message: String(localized: "\"\(source.displayName)\" is shared through iCloud. Remove it from this device only, or from every device?"),
+                    thisDevice: { remove(.thisDevice) }, everywhere: { remove(.everywhere) })
+                return
+            }
             presentConfirm(on: vc, title: "Remove Source?",
                            message: "This will remove \"\(source.displayName)\" and all its channels from Live TV.",
                            confirmTitle: "Remove", destructive: true) {

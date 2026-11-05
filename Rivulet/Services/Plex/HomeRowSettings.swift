@@ -52,7 +52,7 @@ enum HomeRowSettings {
     }
 
     private static func write(_ ids: Set<String>) {
-        defaults.set(Array(ids), forKey: hiddenKey)
+        defaults.set(ids.sorted(), forKey: hiddenKey)
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 }

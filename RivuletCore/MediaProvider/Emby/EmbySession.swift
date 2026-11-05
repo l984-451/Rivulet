@@ -102,12 +102,35 @@ enum EmbySession {
             userName: auth.user?.name ?? username,
             policy: policy
         )
+        try await persist(account, token: token)
+        return account
+    }
+
+    private static func persist(_ account: Account, token: String) async throws {
         try await CredentialRegistry.shared.setToken(token, for: .server(providerID: account.providerID))
         UserDefaults.standard.set(try JSONEncoder().encode(account), forKey: accountKey)
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         MusicProviderRegistry.shared.populateFromCurrentAuth()
         onChanged?()
-        return account
+        CloudSync.shared.accountsChanged()
+    }
+
+    /// Signs in with a token another device holds, after one authenticated call proves the server takes it.
+    /// Refused when this device already has a server or the server rejects the token.
+    static func adopt(
+        account: Account, token: String,
+        transport: @escaping EmbyClient.Transport = { try await URLSession.shared.data(for: $0) }
+    ) async -> AdoptOutcome {
+        guard self.account == nil else { return .refused }
+        let client = EmbyClient(baseURL: account.serverURL, token: token, transport: transport)
+        do {
+            let _: EmbyUser = try await client.get("Users/\(account.userID)")
+        } catch MediaProviderError.unauthorized {
+            return .refused
+        } catch {
+            return .unavailable
+        }
+        return (try? await persist(account, token: token)) != nil ? .adopted : .unavailable
     }
 
     /// The address answers as an Emby server new enough for Rivulet. Runs before any
@@ -139,11 +162,15 @@ enum EmbySession {
     }
 
     /// Forgets everything locally, then revokes the token without waiting: an unreachable
-    /// server must not hold the row for the 60s request timeout.
+    /// server must not hold the row for the 60s request timeout. With iCloud Sync the token
+    /// is shared, so only `.everywhere` revokes it; a caller that does not ask gets this device only.
     static func signOut(
+        scope signOutScope: SignOutScope? = nil,
         transport: @escaping EmbyClient.Transport = { try await URLSession.shared.data(for: $0) }
     ) async {
         guard let account else { return }
+        let signOutScope = signOutScope ?? .thisDevice
+        let shared = CloudSync.shared.wasShared(accountID: account.providerID)
         let scope = CredentialScope.server(providerID: account.providerID)
         let token = CredentialRegistry.shared.token(for: scope)
         await CredentialRegistry.shared.clearToken(for: scope)
@@ -151,8 +178,11 @@ enum EmbySession {
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         MusicProviderRegistry.shared.populateFromCurrentAuth()
         onChanged?()
+        if signOutScope != .syncedRemoval {
+            CloudSync.shared.signedOut(accountID: account.providerID, identity: nil, scope: signOutScope)
+        }
 
-        guard let token else { return }
+        guard let token, signOutScope.revokesToken(everShared: shared) else { return }
         let client = EmbyClient(baseURL: account.serverURL, token: token, transport: transport)
         Task { try? await client.post("Sessions/Logout") }
     }

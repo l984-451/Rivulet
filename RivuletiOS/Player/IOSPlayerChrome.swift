@@ -86,8 +86,8 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private let video: (CGFloat?) -> Video
     private let trailing: () -> Trailing
 
-    @AppStorage("playerSkipBackwardSeconds") private var skipBackwardSeconds = 10
-    @AppStorage("playerSkipForwardSeconds") private var skipForwardSeconds = 30
+    @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
+    @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
     @AppStorage(AudioSync.key) private var audioDelayMs = 0
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var chromeVisible = true

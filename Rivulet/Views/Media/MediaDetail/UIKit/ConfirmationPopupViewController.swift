@@ -3,7 +3,8 @@
 
 //  The app's one Yes/No popup, on `InfoPopupViewController`'s card; `cancelTitle: nil`
 //  makes it a one-button notice. Buttons own Select through press recognizers, and Menu cancels.
-//  Confirm takes initial focus, or cancel for a destructive prompt.
+//  Confirm takes initial focus, or cancel for a destructive prompt. An `alternateTitle` adds a
+//  third choice between Cancel and Confirm (the iCloud sign-out question).
 
 import UIKit
 
@@ -13,6 +14,8 @@ final class ConfirmationPopupViewController: UIViewController {
     private let message: String
     private let confirmTitle: String
     private let cancelTitle: String?
+    private let alternateTitle: String?
+    private let onAlternate: (() -> Void)?
     private let destructive: Bool
     private let cardWidth: CGFloat
     private let onConfirm: () -> Void
@@ -26,6 +29,8 @@ final class ConfirmationPopupViewController: UIViewController {
          message: String,
          confirmTitle: String,
          cancelTitle: String? = String(localized: "Cancel"),
+         alternateTitle: String? = nil,
+         onAlternate: (() -> Void)? = nil,
          destructive: Bool = false,
          width: CGFloat = 840,
          onConfirm: @escaping () -> Void,
@@ -34,6 +39,8 @@ final class ConfirmationPopupViewController: UIViewController {
         self.message = message
         self.confirmTitle = confirmTitle
         self.cancelTitle = cancelTitle
+        self.alternateTitle = alternateTitle
+        self.onAlternate = onAlternate
         self.destructive = destructive
         self.cardWidth = width
         self.onConfirm = onConfirm
@@ -77,7 +84,13 @@ final class ConfirmationPopupViewController: UIViewController {
             PopupPillButton(title: title, destructive: false) { [weak self] in self?.cancel() }
         }
 
-        let buttonRow = UIStackView(arrangedSubviews: [cancelButton, confirmButton].compactMap { $0 })
+        let alternateButton = alternateTitle.map { title in
+            PopupPillButton(title: title, destructive: false) { [weak self] in
+                self?.dismiss(animated: true) { self?.onAlternate?() }
+            }
+        }
+
+        let buttonRow = UIStackView(arrangedSubviews: [cancelButton, alternateButton, confirmButton].compactMap { $0 })
         buttonRow.axis = .horizontal
         buttonRow.alignment = .center
         buttonRow.distribution = .fillEqually

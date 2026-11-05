@@ -148,8 +148,8 @@ final class IOSPlaybackController: NSObject, ObservableObject {
         guard let session else { return }
         let player = session.player
         let defaults = UserDefaults.standard
-        let back = Double(defaults.object(forKey: "playerSkipBackwardSeconds") as? Int ?? 10)
-        let forward = Double(defaults.object(forKey: "playerSkipForwardSeconds") as? Int ?? 30)
+        let back = Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
+        let forward = Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
         let item = session.nowPlayingItem
         nowPlaying.start(
             item,

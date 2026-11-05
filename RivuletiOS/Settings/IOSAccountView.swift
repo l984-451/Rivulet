@@ -7,6 +7,7 @@ import SwiftUI
 struct IOSAccountView: View {
     @EnvironmentObject private var plex: IOSPlexSession
     @ObservedObject private var profiles = PlexUserProfileManager.shared
+    @ObservedObject private var sync = CloudSync.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingSignIn = false
     @State private var confirmingSignOut = false
@@ -65,6 +66,19 @@ struct IOSAccountView: View {
                     }
                 }
 
+                // Sources and server choice are the owner's, not a restricted profile's.
+                if !profiles.isRestrictedProfile {
+                    Section {
+                        Toggle("iCloud Sync", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
+                    } footer: {
+                        Text(sync.status == .noAccount
+                             ? "Sign in to iCloud in the Settings app to sync."
+                             : sync.status == .on && sync.blockedAccountIDs.contains(PlexAuthManager.syncID)
+                             ? "iCloud has a different Plex account."
+                             : "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone and iPad. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this.")
+                    }
+                }
+
                 Section("About") {
                     LabeledContent("Version", value: IOSChangelog.currentVersion)
                     NavigationLink("Changelog") { IOSChangelogView() }
@@ -75,9 +89,16 @@ struct IOSAccountView: View {
                     Section {
                         Button("Sign Out", role: .destructive) { confirmingSignOut = true }
                             .confirmationDialog("Sign out of Plex?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                                Button("Sign Out", role: .destructive) { plex.signOut() }
+                                if sync.isSynced(accountID: PlexAuthManager.syncID) {
+                                    Button("This Device Only") { plex.signOut(scope: .thisDevice) }
+                                    Button("All Devices", role: .destructive) { plex.signOut(scope: .everywhere) }
+                                } else {
+                                    Button("Sign Out", role: .destructive) { plex.signOut() }
+                                }
                             } message: {
-                                Text("You can sign back in at any time.")
+                                Text(sync.isSynced(accountID: PlexAuthManager.syncID)
+                                     ? "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?"
+                                     : "You can sign back in at any time.")
                             }
                     }
                 }

@@ -19,14 +19,14 @@ final class PartKeyQueryStringTests: XCTestCase {
 
     func test_libraryPartKey_isUnchanged() {
         let key = "/library/parts/98765/1234567890/file.mkv"
-        let (path, items) = ContentRouter.splitPartKey(key)
+        let (path, items) = PlexPartKey.split(key)
         XCTAssertEqual(path, key)
         XCTAssertTrue(items.isEmpty)
     }
 
     func test_libraryPartKeyWithEncodedSpaces_isUnchanged() {
         let key = "/library/parts/1/2/My%20Movie.mkv"
-        let (path, items) = ContentRouter.splitPartKey(key)
+        let (path, items) = PlexPartKey.split(key)
         XCTAssertEqual(path, key)
         XCTAssertTrue(items.isEmpty)
     }
@@ -34,7 +34,7 @@ final class PartKeyQueryStringTests: XCTestCase {
     // MARK: - IVA keys carrying a query string — the #255 defect
 
     func test_ivaKeyWithQueryString_splitsPathFromQuery() {
-        let (path, items) = ContentRouter.splitPartKey(
+        let (path, items) = PlexPartKey.split(
             "/services/iva/assets/715933/video.mp4?fmt=4&bitrate=5000"
         )
         XCTAssertEqual(path, "/services/iva/assets/715933/video.mp4")
@@ -46,7 +46,7 @@ final class PartKeyQueryStringTests: XCTestCase {
     /// The key may also arrive with the delimiter already percent-encoded.
     /// Assigning that to `.path` would double-encode it to %253F.
     func test_ivaKeyWithEncodedDelimiter_splitsPathFromQuery() {
-        let (path, items) = ContentRouter.splitPartKey(
+        let (path, items) = PlexPartKey.split(
             "/services/iva/assets/715933/video.mp4%3Ffmt=4&bitrate=5000"
         )
         XCTAssertEqual(path, "/services/iva/assets/715933/video.mp4")
@@ -56,7 +56,7 @@ final class PartKeyQueryStringTests: XCTestCase {
 
     /// Only the FIRST delimiter splits; later ones belong to the query.
     func test_onlyFirstDelimiterSplits() {
-        let (path, items) = ContentRouter.splitPartKey("/a/b.mp4?u=http%3A%2F%2Fx")
+        let (path, items) = PlexPartKey.split("/a/b.mp4?u=http%3A%2F%2Fx")
         XCTAssertEqual(path, "/a/b.mp4")
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.value, "http://x")
@@ -69,7 +69,7 @@ final class PartKeyQueryStringTests: XCTestCase {
     func test_composedURL_isWellFormed() {
         let server = URL(string: "https://example.plex.direct:32400")!
         var components = URLComponents(url: server, resolvingAgainstBaseURL: false)!
-        let (path, inherited) = ContentRouter.splitPartKey(
+        let (path, inherited) = PlexPartKey.split(
             "/services/iva/assets/715933/video.mp4?fmt=4&bitrate=5000"
         )
         components.path = path
@@ -88,7 +88,7 @@ final class PartKeyQueryStringTests: XCTestCase {
     func test_composedURL_forLibraryPart_isUnchangedShape() {
         let server = URL(string: "https://example.plex.direct:32400")!
         var components = URLComponents(url: server, resolvingAgainstBaseURL: false)!
-        let (path, inherited) = ContentRouter.splitPartKey("/library/parts/98765/1234567890/file.mkv")
+        let (path, inherited) = PlexPartKey.split("/library/parts/98765/1234567890/file.mkv")
         components.path = path
         components.queryItems = inherited + [URLQueryItem(name: "X-Plex-Token", value: "TOK")]
 

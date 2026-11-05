@@ -22,7 +22,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     let serverURL: String
     let authToken: String
     let networkManager: PlexNetworkManager
-    let dataStore: PlexDataStore
     let watchlistAPI: PlexWatchlistAPI
     /// The Plex profile an extra server's library settings belong to; nil for the selected server.
     nonisolated let accountID: String?
@@ -34,7 +33,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         authToken: String,
         accountID: String? = nil,
         networkManager: PlexNetworkManager = .shared,
-        dataStore: PlexDataStore = .shared,
         watchlistAPI: PlexWatchlistAPI = PlexWatchlistAPI()
     ) {
         self.id = "plex:\(machineIdentifier)"
@@ -43,7 +41,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         self.authToken = authToken
         self.accountID = accountID
         self.networkManager = networkManager
-        self.dataStore = dataStore
         self.watchlistAPI = watchlistAPI
     }
 

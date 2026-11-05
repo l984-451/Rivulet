@@ -88,7 +88,7 @@ enum PlexMediaMapper {
         guard let key, !key.isEmpty else { return nil }
         guard var components = URLComponents(string: serverURL) else { return nil }
 
-        let (path, inherited) = ContentRouter.splitPartKey(key)
+        let (path, inherited) = PlexPartKey.split(key)
         components.path = path
         components.queryItems = inherited + [URLQueryItem(name: "X-Plex-Token", value: authToken)]
         return components.url

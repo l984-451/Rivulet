@@ -19,6 +19,12 @@ struct RivuletApp: App {
     init() {
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
+        // Other servers' library settings belong to their own users, so they load with the sign-in.
+        MediaProviderRegistry.shared.onSecondaryProvidersChanged = { providers in
+            LibrarySettingsManager.shared.setProviderScopes(providers
+                .sorted { $0.id < $1.id }
+                .map { .init(providerID: $0.id, accountID: $0.accountID) })
+        }
         #if DEBUG
         TVScreenshotMode.seedSession()
         TVScreenshotMode.runFocusMovesIfRequested()

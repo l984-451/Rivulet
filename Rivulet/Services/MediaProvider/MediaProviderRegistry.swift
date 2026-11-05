@@ -11,6 +11,9 @@ final class MediaProviderRegistry {
 
     private(set) var providers: [String: any MediaProvider] = [:]
 
+    /// Told the other servers after each populate. tvOS loads their library settings here.
+    @ObservationIgnored var onSecondaryProvidersChanged: (([any MediaProvider]) -> Void)?
+
     func provider(for id: String) -> (any MediaProvider)? {
         providers[id]
     }
@@ -106,11 +109,7 @@ final class MediaProviderRegistry {
                   extraPlex: [(server: PlexExtraServers.Server, token: String)] = [], plexOwnerID: String? = nil) {
         // Other servers' library settings belong to their own users (an extra
         // Plex server's to the profile), so they load with the sign-in.
-        defer {
-            LibrarySettingsManager.shared.setProviderScopes(secondaryProviders
-                .sorted { $0.id < $1.id }
-                .map { .init(providerID: $0.id, accountID: $0.accountID) })
-        }
+        defer { onSecondaryProvidersChanged?(secondaryProviders) }
         providers = providers.filter { $0.value.kind == .plex && !extraPlexIDs.contains($0.key) }
         extraPlexIDs = []
         for other in OtherServerKind.all {

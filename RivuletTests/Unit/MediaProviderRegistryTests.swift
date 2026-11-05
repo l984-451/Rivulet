@@ -72,6 +72,17 @@ final class MediaProviderRegistryTests: XCTestCase {
                        "an extra server's library settings belong to the profile")
     }
 
+    /// The host learns the other servers on every populate (tvOS loads their library settings).
+    func test_populate_reportsSecondaryProvidersToTheHost() {
+        let registry = MediaProviderRegistry()
+        var reported: [String] = []
+        registry.onSecondaryProvidersChanged = { reported = $0.map(\.id) }
+        registry.populate(plexServerURL: "http://a:32400", plexToken: "t", plexMachineID: "main", plexName: "Angel",
+                          extraPlex: [extra("office", "Office")], plexOwnerID: "0")
+        XCTAssertTrue(reported.contains("plex:office"))
+        XCTAssertFalse(reported.contains("plex:main"), "the selected server is not a secondary one")
+    }
+
     /// Home and the sidebar list servers in this order, whatever order they registered in.
     func test_secondaryProviders_extrasFirst_thenEachKindInOrder_sortedByID() {
         let registry = MediaProviderRegistry()

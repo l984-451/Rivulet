@@ -134,6 +134,20 @@ Rivulet/                # The tvOS app — everything below.
     └── DESIGN_GUIDE.md     # UI/UX documentation
 ```
 
+## Feature parity
+
+**Every user-facing feature is built for both apps and for every server type each
+app supports**: tvOS on Plex, Jellyfin and Emby, iOS on Plex (IPTV where it
+applies). A feature that leaves a platform or a server out says so in the commit
+message, and a standing exception is listed below. A gap nobody wrote down is a bug.
+
+Standing exceptions:
+- Jellyfin and Emby are tvOS only.
+- Photos are tvOS only.
+- Downloads are iOS only.
+- The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
+- The detail page offers no Delete on either app: it would be left showing what it deleted.
+
 ## Platform Boundary (tvOS / iOS)
 
 Three buildable folders, three memberships. `Rivulet/` is the tvOS app.

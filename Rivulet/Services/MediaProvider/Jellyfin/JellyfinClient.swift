@@ -20,6 +20,10 @@ nonisolated final class JellyfinClient: Sendable {
 
     let baseURL: URL
     let token: String?
+    /// The query name that carries `token` in a URL a player fetches on its own
+    /// (the direct stream). Jellyfin 12 takes `ApiKey`; a server that reads only
+    /// the legacy `api_key` passes that.
+    let tokenQueryName: String
     let authorization: String
     private let transport: Transport
 
@@ -29,10 +33,12 @@ nonisolated final class JellyfinClient: Sendable {
     init(
         baseURL: URL,
         token: String?,
+        tokenQueryName: String = "ApiKey",
         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
     ) {
         self.baseURL = baseURL
         self.token = token
+        self.tokenQueryName = tokenQueryName
         self.authorization = Self.authorizationHeader(token: token)
         self.transport = transport
     }

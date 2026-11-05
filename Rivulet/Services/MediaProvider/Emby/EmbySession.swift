@@ -48,7 +48,10 @@ enum EmbySession {
         for account: Account, token: String,
         transport: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) }
     ) -> JellyfinClient {
-        JellyfinClient(baseURL: account.serverURL, token: token, transport: EmbyRequests.transport(
+        // Emby reads the token from `api_key` and answers 401 to `ApiKey`
+        // (measured on 4.11.0.13): the direct stream and the throughput probe use it.
+        JellyfinClient(baseURL: account.serverURL, token: token, tokenQueryName: "api_key",
+                       transport: EmbyRequests.transport(
             baseURL: account.serverURL, userID: account.userID, token: token, sending: transport))
     }
 

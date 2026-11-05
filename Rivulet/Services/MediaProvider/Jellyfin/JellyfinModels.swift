@@ -143,6 +143,21 @@ nonisolated struct JFLyrics: Decodable, Sendable {
 nonisolated struct JFNameId: Decodable, Sendable {
     let name: String?
     let id: String?
+
+    private enum CodingKeys: String, CodingKey { case name, id }
+
+    /// Emby sends a studio's id as a number, Jellyfin as a string.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        if let text = try? container.decodeIfPresent(String.self, forKey: .id) {
+            id = text
+        } else if let number = try? container.decodeIfPresent(Int64.self, forKey: .id) {
+            id = String(number)
+        } else {
+            id = nil
+        }
+    }
 }
 
 nonisolated struct JFPerson: Decodable, Sendable {

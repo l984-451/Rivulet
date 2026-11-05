@@ -23,12 +23,31 @@ import Foundation
 
 nonisolated enum EmbyRequests {
 
+    /// How long a confirmed stop report is held before the caller sees it.
+    /// Emby answers `Sessions/Playing/Stopped` before the resume point is
+    /// saved, and the player reloads Continue Watching the moment the report
+    /// returns, so without the wait the row comes back without the title
+    /// (seen on 4.11.0.13). Plex playback waits 2 s for the same reason.
+    static let stopSettle: Duration = .milliseconds(1500)
+
     /// A JellyfinClient transport that rewrites each request for Emby, then sends it.
     static func transport(
         baseURL: URL, userID: String?, token: String?,
-        sending: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) }
+        sending: @escaping JellyfinClient.Transport = { try await URLSession.shared.data(for: $0) },
+        settle: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) -> JellyfinClient.Transport {
-        { request in try await sending(rewrite(request, baseURL: baseURL, userID: userID, token: token)) }
+        { request in
+            let rewritten = rewrite(request, baseURL: baseURL, userID: userID, token: token)
+            let result = try await sending(rewritten)
+            if isStopReport(rewritten), let http = result.1 as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                await settle(stopSettle)
+            }
+            return result
+        }
+    }
+
+    static func isStopReport(_ request: URLRequest) -> Bool {
+        request.httpMethod == "POST" && (request.url?.path.hasSuffix("/Sessions/Playing/Stopped") ?? false)
     }
 
     static func rewrite(_ request: URLRequest, baseURL: URL, userID: String?, token: String?) -> URLRequest {

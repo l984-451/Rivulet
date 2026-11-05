@@ -328,7 +328,7 @@ final class JellyfinMusicProvider: MusicProvider, @unchecked Sendable {
         }
         let media = JellyfinMediaMapper.mediaSource(
             source, itemID: trackRef.itemID, playSessionID: response.playSessionId, baseURL: baseURL,
-            token: client.token ?? "", transcodeURL: transcodeURL
+            token: client.token ?? "", tokenQueryName: client.tokenQueryName, transcodeURL: transcodeURL
         )
         return StreamInfo(source: media, playSessionID: response.playSessionId, trackInfoAvailable: true)
     }

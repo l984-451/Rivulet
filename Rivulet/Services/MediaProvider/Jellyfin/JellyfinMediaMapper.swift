@@ -286,6 +286,7 @@ enum JellyfinMediaMapper {
     /// that cannot send headers (AVPlayer) if that endpoint is locked down.
     static func mediaSource(
         _ src: JFMediaSource, itemID: String, playSessionID: String?, baseURL: URL, token: String,
+        tokenQueryName: String = "ApiKey",
         transcodeURL: URL? = nil
     ) -> MediaSource {
         let sourceID = src.id ?? itemID
@@ -296,7 +297,7 @@ enum JellyfinMediaMapper {
             URLQueryItem(name: "mediaSourceId", value: sourceID)
         ]
         if let playSessionID { query.append(URLQueryItem(name: "playSessionId", value: playSessionID)) }
-        query.append(URLQueryItem(name: "ApiKey", value: token))
+        query.append(URLQueryItem(name: tokenQueryName, value: token))
         var components = URLComponents(
             url: baseURL.appending(path: "Videos/\(itemID)/stream"), resolvingAgainstBaseURL: false
         )
@@ -328,7 +329,7 @@ enum JellyfinMediaMapper {
 
     static func detail(
         _ dto: JFItem, nextEpisode: JFItem?, trailers: [JFItem] = [], specialFeatures: [JFItem] = [],
-        providerID: String, baseURL: URL, token: String
+        providerID: String, baseURL: URL, token: String, tokenQueryName: String = "ApiKey"
     ) -> MediaItemDetail {
         let item = item(dto, providerID: providerID, baseURL: baseURL)
         let itemID = dto.id ?? ""
@@ -373,7 +374,8 @@ enum JellyfinMediaMapper {
             writers: people(["Writer"]),
             chapters: chapters,
             mediaSources: (dto.mediaSources ?? []).map {
-                mediaSource($0, itemID: itemID, playSessionID: nil, baseURL: baseURL, token: token)
+                mediaSource($0, itemID: itemID, playSessionID: nil, baseURL: baseURL, token: token,
+                            tokenQueryName: tokenQueryName)
             },
             trailerURL: nil,
             contentRating: dto.officialRating,

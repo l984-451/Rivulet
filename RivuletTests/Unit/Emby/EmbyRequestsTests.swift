@@ -6,6 +6,7 @@
 //  RivuletTests
 //
 
+import os
 import XCTest
 @testable import Rivulet
 
@@ -16,6 +17,50 @@ final class EmbyRequestsTests: XCTestCase {
 
     private func route(_ method: String, _ path: String) -> String {
         EmbyRequests.route(method, path, userID: "u1")
+    }
+
+    /// Emby sends a studio's id as a number; Jellyfin as a string.
+    func test_nameId_acceptsNumericAndStringIds() throws {
+        let json = Data(#"[{"Name":"A24","Id":123456},{"Name":"Pixar","Id":"abc"},{"Name":"None"}]"#.utf8)
+        let decoded = try JellyfinJSON.decoder().decode([JFNameId].self, from: json)
+        XCTAssertEqual(decoded.map(\.id), ["123456", "abc", nil])
+        XCTAssertEqual(decoded.map(\.name), ["A24", "Pixar", "None"])
+    }
+
+    /// Emby answers 401 to `ApiKey=` on the direct stream and 206 to `api_key=`.
+    func test_directStream_carriesTokenAsApiKeyLowercase() throws {
+        let account = JellyfinSession.Account(serverURL: base, serverID: "s1", serverName: "Emby",
+                                              userID: "u1", userName: "me")
+        let client = EmbySession.client(for: account, token: "tok")
+        XCTAssertEqual(client.tokenQueryName, "api_key")
+
+        let src = try JellyfinJSON.decoder().decode(JFMediaSource.self, from: Data(#"{"Id":"m1"}"#.utf8))
+        let source = JellyfinMediaMapper.mediaSource(src, itemID: "i1", playSessionID: nil, baseURL: base,
+                                                     token: "tok", tokenQueryName: client.tokenQueryName)
+        let query = URLComponents(url: try XCTUnwrap(source.streamURL), resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(query?.first { $0.name == "api_key" }?.value, "tok")
+        XCTAssertNil(query?.first { $0.name == "ApiKey" })
+    }
+
+    /// Emby confirms a stop before it saves the resume point, so a confirmed
+    /// stop is held; progress reports and a failed stop are not.
+    func test_transport_holdsOnlyAConfirmedStopReport() async throws {
+        let waits = OSAllocatedUnfairLock(initialState: [Duration]())
+        server.respond("/Sessions/Playing/Progress", status: 204)
+        server.respond("/Sessions/Playing/Stopped", status: 204)
+        let client = JellyfinClient(baseURL: base, token: "tok", transport: EmbyRequests.transport(
+            baseURL: base, userID: "u1", token: "tok", sending: server.transport,
+            settle: { duration in waits.withLock { $0.append(duration) } }))
+
+        try await client.post("Sessions/Playing/Progress")
+        XCTAssertEqual(waits.withLock { $0 }, [])
+        try await client.post("Sessions/Playing/Stopped")
+        XCTAssertEqual(waits.withLock { $0 }, [EmbyRequests.stopSettle])
+
+        server.reset()
+        server.respond("/Sessions/Playing/Stopped", status: 500)
+        try? await client.post("Sessions/Playing/Stopped")
+        XCTAssertEqual(waits.withLock { $0 }.count, 1)
     }
 
     func test_routes() {

@@ -172,7 +172,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         }
         return JellyfinMediaMapper.detail(dto, nextEpisode: next, trailers: await trailers,
                                           specialFeatures: await features,
-                                          providerID: id, baseURL: baseURL, token: token)
+                                          providerID: id, baseURL: baseURL, token: token,
+                                          tokenQueryName: client.tokenQueryName)
     }
 
     /// Local trailers or special features; asked only when the item counts some.
@@ -451,7 +452,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         let sources = response.mediaSources ?? []
         let ranked = sources.map {
             JellyfinMediaMapper.mediaSource($0, itemID: itemRef.itemID, playSessionID: response.playSessionId,
-                                            baseURL: baseURL, token: token)
+                                            baseURL: baseURL, token: token,
+                                            tokenQueryName: client.tokenQueryName)
         }
         // The cap picks a version that fits before the server decides how to play it.
         let pickedID = VersionRanking.choose(sourceID.map(VersionChoice.source) ?? .best, from: ranked,
@@ -470,6 +472,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         }
         let source = JellyfinMediaMapper.mediaSource(
             chosen, itemID: itemRef.itemID, playSessionID: response.playSessionId, baseURL: baseURL, token: token,
+            tokenQueryName: client.tokenQueryName,
             transcodeURL: transcodeURL
         )
         return StreamInfo(source: source, playSessionID: response.playSessionId, trackInfoAvailable: true)

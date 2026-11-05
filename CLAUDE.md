@@ -204,16 +204,11 @@ plus `DisplayCriteriaManager`. Judge by tvOS-only frameworks (`TVServices`,
 Move existing files into `RivuletCore/` when a slice actually needs them, not
 speculatively. The list above is the destination, not a migration order.
 
-**The app folders hold GUI; logic lives in `RivuletCore/`.** `Rivulet/` and
-`RivuletiOS/` are for views, input, focus, and stores shaped for one app's
-screens. Everything else (server behavior, rules, mapping, non-UI state) is
-written in `RivuletCore/` from the first commit, so both apps get it at once.
-
-**New business logic starts in `RivuletCore/`, even when only tvOS ships it.**
-Rules, server and API behavior, and non-UI state go there from the first
-commit, written generic over the item type (closures for keys and dates) so
-they do not depend on tvOS models like `MediaItem`; only views, input and
-tvOS-shaped stores stay in `Rivulet/`. #87 is the worked example of getting
+**The app folders hold GUI; logic lives in `RivuletCore/`, even when only one
+app ships it.** `Rivulet/` and `RivuletiOS/` are for views, input, focus, and
+stores shaped for one app's screens. Server and API behavior, rules, mapping and
+non-UI state go in `RivuletCore/` from the first commit, built on the shared
+types (`MediaItem`, `MediaProvider`) or generic over the item type. #87 is the worked example of getting
 this wrong: multi-server discovery and the Continue Watching merge landed in
 the tvOS folder and had to be lifted before iOS could use them.
 

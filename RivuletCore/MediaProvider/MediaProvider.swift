@@ -175,6 +175,14 @@ protocol MediaProvider: Sendable, Identifiable {
     func renamePlaylist(_ playlist: MediaItemRef, title: String) async throws
     func deletePlaylist(_ playlist: MediaItemRef) async throws
 
+    // MARK: - Downloads
+
+    /// Whether this account may save the server's files for offline use. Default: no. Plex says yes
+    /// and downloads through its own conversion queue, not `downloadSource`.
+    func canDownloadMedia() async throws -> Bool
+    /// The original file of the version (nil: the item's own) as a ranged GET. Default: unsupported.
+    func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource
+
     // MARK: - Content advisory
 
     /// Provider-agnostic content advisory (Common Sense Media on Plex). Returns
@@ -254,6 +262,10 @@ extension MediaProvider {
         try await updateProgress(item.ref, position: 0)
     }
     func canRemoveFromContinueWatching(_ item: MediaItem) -> Bool { item.kind != .episode }
+    func canDownloadMedia() async -> Bool { false }
+    func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource {
+        throw MediaProviderError.backendSpecific(underlying: "downloads not supported")
+    }
     func canDeleteMedia() async -> Bool { false }
     func deleteConfirmation(for item: MediaItem) async -> String { standardDeleteConfirmation(for: item) }
     /// The default text, for an override that has nothing more to say about this item.

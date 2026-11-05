@@ -32,6 +32,8 @@ enum EmbySession {
         var enableContentDeletion = false
         var enableContentDeletionFromFolders: [String] = []
         var enableLiveTvAccess = false
+        /// Nil when the server did not say, which counts as allowed.
+        var enableContentDownloading: Bool?
 
         init() {}
 
@@ -40,6 +42,7 @@ enum EmbySession {
             enableContentDeletion = dto?.enableContentDeletion ?? false
             enableContentDeletionFromFolders = (dto?.enableContentDeletionFromFolders ?? []).map(\.value)
             enableLiveTvAccess = dto?.enableLiveTvAccess ?? false
+            enableContentDownloading = dto?.enableContentDownloading
         }
     }
 

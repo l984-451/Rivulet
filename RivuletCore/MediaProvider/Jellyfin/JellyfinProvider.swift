@@ -635,6 +635,24 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
 
     /// Answered once per provider from the user's policy.
     private let deletionAllowed = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+    private let downloadAllowed = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+
+    /// Administrators and users with downloading on. The server answers 403 to a download otherwise.
+    /// A failed read throws (the server is unreachable, not "no") and is not remembered.
+    func canDownloadMedia() async throws -> Bool {
+        if let known = downloadAllowed.withLock({ $0 }) { return known }
+        let me: JFUserWithPolicy = try await client.get("Users/Me")
+        let answer = me.policy?.isAdministrator == true || me.policy?.enableContentDownloading != false
+        downloadAllowed.withLock { $0 = answer }
+        return answer
+    }
+
+    /// The file itself: `Items/<id>/Download` takes only the Authorization header (a key in the query
+    /// answers 401), has no HEAD, and honors Range. A version of its own item is downloaded by its id.
+    func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource {
+        DownloadSource(url: client.url("Items/\(sourceID ?? itemRef.itemID)/Download"),
+                       headers: ["Authorization": client.authorization])
+    }
 
     func canDeleteMedia() async -> Bool {
         if let known = deletionAllowed.withLock({ $0 }) { return known }

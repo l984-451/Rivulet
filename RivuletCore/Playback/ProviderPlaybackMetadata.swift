@@ -18,19 +18,29 @@ import Foundation
 
 enum ProviderPlaybackMetadata {
 
-    static func make(detail: MediaItemDetail, source: MediaSource, extras: PlaybackExtras) -> PlexMetadata {
+    /// `sidecarSlots` names each external subtitle "sidecar:<n>" instead of by URL, for a copy that is
+    /// stored: the URL carries the account's key.
+    static func make(detail: MediaItemDetail, source: MediaSource, extras: PlaybackExtras,
+                     sidecarSlots: Bool = false) -> PlexMetadata {
         let item = detail.item
         let durationSeconds = source.duration > 0 ? source.duration : item.runtime
         let video = source.videoTracks.first
         let audio = source.audioTracks.first
         let offset = item.userState.viewOffset
 
+        // The external subtitle's key: its URL, or its place among the external ones.
+        var next = 0
+        let slots: [String?] = source.subtitleTracks.map { track in
+            guard !track.isEmbedded, let url = track.externalURL else { return nil }
+            defer { next += 1 }
+            return sidecarSlots ? "sidecar:\(next)" : url.absoluteString
+        }
         // Each stream's position in the list is its fallback id (see `stream`).
         let audioStart = source.videoTracks.count
         let subtitleStart = audioStart + source.audioTracks.count
         let streams = source.videoTracks.enumerated().map { videoStream($1, ordinal: $0) }
             + source.audioTracks.enumerated().map { audioStream($1, ordinal: audioStart + $0) }
-            + source.subtitleTracks.enumerated().map { subtitleStream($1, ordinal: subtitleStart + $0) }
+            + source.subtitleTracks.enumerated().map { subtitleStream($1, ordinal: subtitleStart + $0, slot: slots[$0]) }
         let part = PlexPart(
             id: 0,
             key: nil,
@@ -169,13 +179,13 @@ enum ProviderPlaybackMetadata {
 
     /// Embedded tracks join the engine on `index`; sidecars have no index and
     /// carry their URL as `key`.
-    private static func subtitleStream(_ t: SubtitleTrack, ordinal: Int) -> PlexStream {
+    private static func subtitleStream(_ t: SubtitleTrack, ordinal: Int, slot: String?) -> PlexStream {
         stream(
             id: t.id, ordinal: ordinal, type: 3, index: t.isEmbedded ? t.index : nil, codec: t.codec,
             language: t.language, title: t.title, extendedTitle: t.extendedTitle,
             isDefault: t.isDefault, isForced: t.isForced, isSelected: t.isSelected,
             hearingImpaired: t.isHearingImpaired,
-            key: t.isEmbedded ? nil : t.externalURL?.absoluteString
+            key: slot
         )
     }
 

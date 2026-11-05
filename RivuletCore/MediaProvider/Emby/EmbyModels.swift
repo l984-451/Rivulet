@@ -63,6 +63,7 @@ nonisolated struct EmbyUser: Decodable, Sendable {
         let isAdministrator: Bool?
         let enableContentDeletion: Bool?
         let enableContentDeletionFromFolders: [EmbyID]?
+        let enableContentDownloading: Bool?
         let enableLiveTvAccess: Bool?
     }
 }

@@ -191,17 +191,15 @@ private struct IOSPlexActionHost: ViewModifier {
         }
     }
 
-    /// Plex only: Jellyfin and Emby downloads are stage 5.
     private func download(_ item: MediaItem) {
-        guard item.ref.providerID.hasPrefix("plex:") else { return }
-        guard item.ref.hasKnownPlexServer else {
+        guard IOSDownloadGate.canDownload(item.ref) else {
             failure = (String(localized: "Couldn't Download"), MediaProviderError.unreachable.localizedDescription)
             return
         }
         if item.kind == .season {
-            run(String(localized: "Couldn't Download Season")) { try await downloads.downloadSeason(item.plexStub) }
+            run(String(localized: "Couldn't Download Season")) { try await downloads.downloadSeason(item) }
         } else {
-            downloads.download(item.plexStub)
+            downloads.download(item)
         }
     }
 
@@ -327,12 +325,11 @@ struct IOSPlexItemMenu: View {
 extension IOSPlexItemMenu {
     private var isTitle: Bool { item.kind.plexType != nil }
 
-    /// Downloads are Plex's until stage 5 gives Jellyfin and Emby theirs.
     @ViewBuilder
     private var downloadItems: some View {
-        if item.ref.hasKnownPlexServer {
+        if browse.canDownload(item) {
             if item.isPlayable {
-                if let record = downloads.record(for: item.ref.itemID, serverID: item.ref.plexServerID) {
+                if let record = downloads.record(for: item.ref) {
                     if case .failed = record.state {
                         Button("Retry Download", systemImage: "arrow.clockwise") { downloads.retry(recordID: record.id) }
                     }

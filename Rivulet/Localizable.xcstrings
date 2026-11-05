@@ -8969,12 +8969,32 @@
         }
       }
     },
+    "The server didn't accept the sign-in; sign in again, then retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
+          }
+        }
+      }
+    },
     "The server doesn't have that." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat das nicht."
+          }
+        }
+      }
+    },
+    "This account isn't allowed to download from the server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Konto darf vom Server nichts herunterladen"
           }
         }
       }

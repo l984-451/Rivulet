@@ -22,6 +22,15 @@ nonisolated enum IOSPlaybackGate {
     }
 }
 
+/// Which servers' items the iOS app can download. A Plex ref needs a server still signed in, since
+/// its rating key means nothing on another one.
+nonisolated enum IOSDownloadGate {
+    static func canDownload(_ ref: MediaItemRef) -> Bool {
+        guard let kind = MediaProviderKind(providerID: ref.providerID) else { return false }
+        return kind == .plex ? ref.hasKnownPlexServer : true
+    }
+}
+
 /// Which Plex server a Plex ref names, against the registry's current servers.
 nonisolated enum PlexRoute: Equatable, Sendable {
     case selected

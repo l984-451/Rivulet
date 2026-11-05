@@ -63,12 +63,16 @@ final class IOSPlexSession: ObservableObject {
         // Jellyfin and Emby sign in and out through the registry; follow it.
         secondaryIDs = MediaProviderRegistry.shared.secondaryProviders.map(\.id)
         MediaProviderRegistry.shared.onSecondaryProvidersChanged = { [weak self] providers in
+            // The servers' Live TV follows every sign-in, sign-out and profile change (shared with tvOS).
+            OtherServerKind.configureLiveTV(secondary: providers, restricted: PlexUserProfileManager.shared.isRestrictedProfile)
             guard let self else { return }
             let ids = providers.map(\.id)
             defer { secondaryIDs = ids }
             guard !repopulating, ids != secondaryIDs else { return }
             Task { await self.refresh() }
         }
+        // The registry was filled before this ran, so the first pass is ours.
+        OtherServerKind.configureLiveTV(restricted: PlexUserProfileManager.shared.isRestrictedProfile)
         // Progress logged while the server was unreachable goes out once it answers.
         browse.afterRefresh = { [weak self] in
             guard let self, await flushOfflineProgress() else { return }
@@ -228,7 +232,8 @@ final class IOSPlexSession: ObservableObject {
     ) async throws -> IOSPlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
-        if var local = IOSDownloadCenter.shared.localPlayback(for: item, serverID: item.serverID ?? previous?.downloadServerID) {
+        if var local = IOSDownloadCenter.shared.localPlayback(
+            for: item, serverID: item.serverID ?? previous?.downloadProviderID.flatMap(DownloadIdentity.plexMachineID(of:))) {
             if fromBeginning { local.startTime = nil }
             return local
         }
@@ -372,7 +377,7 @@ final class IOSPlexSession: ObservableObject {
         let at = Date()
         let offsetMs = Int(time * 1000)
         if request.isLocal {
-            IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: offsetMs, watched: false, persist: state != "playing")
+            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
         guard !request.serverURL.isEmpty else { return nil }
         do {
@@ -385,12 +390,22 @@ final class IOSPlexSession: ObservableObject {
                 duration: request.item.duration,
                 sessionIdentifier: request.directPlaySessionID
             )
-            IOSOfflineProgress.reached(key, at: at)
+            if let owner = plexProviderID(of: request) { IOSOfflineProgress.reached(owner, itemID: key, at: at) }
             return terminated
         } catch {
-            IOSOfflineProgress.failed(key, offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
+            if let owner = plexProviderID(of: request) {
+                IOSOfflineProgress.record(providerID: owner, itemID: key, offsetMs: offsetMs,
+                                          durationMs: request.item.duration, watched: false, at: at)
+            }
             return nil
         }
+    }
+
+    /// The download key of the Plex server a request reports to: a download's own server (its metadata
+    /// carries none), else the item's, else the current one. Nil when no server is known.
+    func plexProviderID(of request: IOSPlexPlaybackRequest) -> String? {
+        DownloadIdentity.reportingKey(isLocal: request.isLocal, downloadProviderID: request.downloadProviderID,
+                                      itemServerID: request.item.serverID, currentMachineID: IOSDownloadCenter.shared.currentServerID)
     }
 
     private static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
@@ -457,8 +472,8 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     /// Set for a downloaded file: its saved subtitles and poster.
     var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
     var localArtworkURL: URL? = nil
-    /// The server a downloaded file came from, which may not be the current one.
-    var downloadServerID: String? = nil
+    /// The server a downloaded file came from (`DownloadRecord.providerID`), which may not be the current one.
+    var downloadProviderID: String? = nil
     /// Set for a Jellyfin or Emby item: `item` is then a display shim and this is the real stream.
     var providerPlayback: ProviderPlayback? = nil
 

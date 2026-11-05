@@ -64,8 +64,7 @@ struct RivuletApp: App {
         }
         JellyfinSession.onChanged = { ServerDataStore.shared.reload() }
         EmbySession.onChanged = { ServerDataStore.shared.reload() }
-        PlexLiveTimelineKeepalive.otherSessionClosers[MediaProviderKind.jellyfin.rawValue] = { JellyfinLiveTVProvider.closeLiveStream($0) }
-        PlexLiveTimelineKeepalive.otherSessionClosers[MediaProviderKind.emby.rawValue] = { EmbyLiveTVProvider.closeLiveStream($0) }
+        OtherServerKind.installLiveSessionClosers()
         PlexUserProfileManager.onProfileChanged = {
             // The queue reports progress with whichever token is current.
             MusicQueue.shared.stop()

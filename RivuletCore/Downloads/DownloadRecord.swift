@@ -18,7 +18,7 @@ nonisolated enum DownloadState: Codable, Sendable, Equatable {
     case completed
 }
 
-/// One download, keyed by server machine id and ratingKey, never by URL or token.
+/// One download, keyed by server and item id, never by URL or token.
 nonisolated struct DownloadRecord: Codable, Sendable, Equatable, Identifiable {
     /// A sidecar subtitle saved next to an Original download.
     nonisolated struct SubtitleFile: Codable, Sendable, Equatable {
@@ -30,12 +30,19 @@ nonisolated struct DownloadRecord: Codable, Sendable, Equatable, Identifiable {
     }
 
     var id: String = UUID().uuidString
-    var serverID: String
+    /// The server: "plex:<machine id>", "jellyfin:<server id>" or "emby:<server id>". Plex ids here are
+    /// always the machine id (`DownloadIdentity`), never the registry's URL hash. A bare "plex:" is a
+    /// legacy record made before the server was known; it matches any Plex server and is filled in.
+    var providerID: String
+    /// The Plex Home profile that made it (nil: no profiles).
     var profileID: String?
-    var ratingKey: String
-    var mediaID: Int
+    /// The server account that made it on kinds that have one (the Jellyfin or Emby user); nil on Plex.
+    var accountID: String?
+    var itemID: String
+    /// The version downloaded: Plex `Media.id` or the provider's source id. Nil until planned.
+    var sourceID: String?
     var partID: Int?
-    /// `StreamingQuality` raw value.
+    /// `StreamingQuality` raw value. Only Plex converts; every other server downloads the original.
     var quality: String
     var state: DownloadState
     var expectedBytes: Int64?
@@ -48,10 +55,18 @@ nonisolated struct DownloadRecord: Codable, Sendable, Equatable, Identifiable {
     var fileName: String?
     var posterFileName: String?
     var subtitleFiles: [SubtitleFile] = []
-    /// Full metadata (markers included) so playback works offline.
+    /// What lists show (title, hierarchy, numbers), without any token in its artwork URLs.
+    var item: MediaItem
+    /// What the player reads offline (markers included): Plex's full metadata, or for any other
+    /// server the display shape built from its detail (duration, chapters, tracks, markers).
     var metadata: PlexMetadata
     /// The server's output label for converted downloads, e.g. "720x404".
     var outputLabel: String?
     var createdAt: Date = Date()
     var completedAt: Date?
+}
+
+extension DownloadRecord {
+    nonisolated var kind: MediaProviderKind? { MediaProviderKind(providerID: providerID) }
+    nonisolated var isPlex: Bool { kind == .plex }
 }

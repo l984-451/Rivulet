@@ -61,6 +61,9 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         self.logoResolver = logoResolver
     }
 
+    /// Plex downloads through its own conversion queue (`IOSDownloadCenter`), not `downloadSource`.
+    func canDownloadMedia() async -> Bool { true }
+
     // MARK: - Browse
 
     func libraries() async throws -> [MediaLibrary] {

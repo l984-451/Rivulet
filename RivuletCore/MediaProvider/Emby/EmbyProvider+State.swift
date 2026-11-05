@@ -87,6 +87,19 @@ extension EmbyProvider {
         return policy.isAdministrator || policy.enableContentDeletion || !policy.enableContentDeletionFromFolders.isEmpty
     }
 
+    /// Administrators and users with downloading on. The server answers 403 to a download otherwise.
+    func canDownloadMedia() async -> Bool {
+        let policy = await currentPolicy()
+        return policy.isAdministrator || policy.enableContentDownloading != false
+    }
+
+    /// The file itself: `Items/<id>/Download` with the key in the query, `MediaSourceId` for a version.
+    /// It has no HEAD and honors Range.
+    func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource {
+        let version = sourceID.map { [URLQueryItem(name: "MediaSourceId", value: $0)] } ?? []
+        return DownloadSource(url: client.authenticatedURL("Items/\(itemRef.itemID)/Download", version), headers: [:])
+    }
+
     private static let videoExtensions: Set<String> = ["mkv", "mp4", "m4v", "avi", "mov", "ts", "m2ts", "wmv", "mpg", "mpeg", "iso", "webm", "flv", "vob", "3gp", "divx", "rmvb", "wtv", "ogv", "mts", "asf", "f4v"]
 
     /// Deleting a movie deletes its whole folder (`DeleteInfo.Paths`, a folder name; an episode's is

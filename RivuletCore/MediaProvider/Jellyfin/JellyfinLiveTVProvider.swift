@@ -40,6 +40,9 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
     /// The server's Live TV while hidden, so Settings can list it as Off.
     @MainActor static var hiddenSource: LiveTVDataStore.LiveTVSourceInfo?
 
+    /// Each sync supersedes the last, so a probe still in flight at sign-out cannot install a source.
+    @MainActor private static var syncTask: Task<Void, Never>?
+
     /// Shows or hides the signed-in server's Live TV; the task ends once the source is found again.
     @MainActor
     static func setHidden(_ hide: Bool) -> Task<Void, Never>? {
@@ -53,18 +56,20 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
     @MainActor @discardableResult
     static func sync(_ provider: JellyfinProvider?) -> Task<Void, Never>? {
         let store = LiveTVDataStore.shared
+        syncTask?.cancel()
         guard let provider else {
             hiddenSource = nil
             store.setServerSource(nil, of: .jellyfin)
             return nil
         }
-        return Task { @MainActor in
+        let task = Task { @MainActor in
             let probe: JFLiveQuery<JFLiveChannel>
             do {
                 probe = try await provider.client.get("LiveTv/Channels", [URLQueryItem(name: "limit", value: "0")])
             } catch {
                 return
             }
+            guard !Task.isCancelled else { return }
             guard (probe.totalRecordCount ?? 0) > 0 else {
                 hiddenSource = nil
                 store.setServerSource(nil, of: .jellyfin)
@@ -82,10 +87,13 @@ actor JellyfinLiveTVProvider: LiveTVProvider {
                 // Admins pass without the Live TV management right; the server
                 // answers 403 to timer requests from anyone else.
                 let me: JFUserWithPolicy? = try? await provider.client.get("Users/Me")
+                guard !Task.isCancelled else { return }
                 let canRecord = me?.policy?.isAdministrator == true || me?.policy?.enableLiveTvManagement == true
                 store.setServerSource(JellyfinLiveTVProvider(provider: provider, canRecord: canRecord), of: .jellyfin)
             }
         }
+        syncTask = task
+        return task
     }
 
     // MARK: - Channels

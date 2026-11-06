@@ -15,6 +15,8 @@ final class HeroSlideView: UIView {
     private let fallbackTitleLabel = UILabel()
     private let metadataLabel = UILabel()
     private let ratingBadge = HeroRatingBadgeView()
+    /// The rating badge's text while it shows (tests).
+    var ratingBadgeText: String? { ratingBadge.isHidden ? nil : ratingBadge.text }
     private let metadataRow = UIStackView()
     private let taglineLabel = UILabel()
     private let stack = UIStackView()
@@ -143,7 +145,7 @@ final class HeroSlideView: UIView {
 
         // Metadata row
         metadataLabel.text = metaLine(for: item)
-        if let rating = item.contentRating, !rating.isEmpty {
+        if let rating = item.displayContentRating, !rating.isEmpty {
             ratingBadge.text = rating
             ratingBadge.isHidden = false
         } else {

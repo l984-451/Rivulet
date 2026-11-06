@@ -1240,7 +1240,7 @@ SwiftUI surfaces only:
 ### Post-Video Not Triggering
 - Check if `hasTriggeredPostVideo` flag needs resetting
 - Verify credits marker detection in `checkMarkers(at:)`
-- Ensure `duration > 60` for time-based trigger (45s before end)
+- Ensure `duration > 60` for time-based trigger (one autoplay countdown before the end; at the end when the countdown is off)
 
 ### Plex Live TV Not Starting (DVB Tuners)
 - DVB tuners (TBS cards, etc.) don't have HDHomeRun stream URLs

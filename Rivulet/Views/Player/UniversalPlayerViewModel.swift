@@ -207,6 +207,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var skippedCommercialIds: Set<Int> = []  // Track skipped commercials by ID
     private var skippedRecapIds: Set<Int> = []  // Track skipped recaps by ID (IntroDB backup)
     private var hasTriggeredPostVideo = false
+    /// Up Next was closed with a next episode waiting: the skip pill stands in for it, labelled "Up Next".
+    @Published private(set) var upNextCollapsed = false
 
     // MARK: - Auto-Skip Countdown State
     /// Current countdown value (5...4...3...2...1), 0 means no countdown active.
@@ -5106,7 +5108,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         // Check credits markers - can have multiple (e.g., mid-credits and post-credits)
-        // Trigger post-video when FIRST credits marker starts
+        // Trigger post-video when the Up Next credits marker starts
+        let upNextCredits = PlexPlaybackMarkers.upNextCredits(metadata.creditsMarkers, duration: duration)
         for credits in metadata.creditsMarkers {
             guard let creditsId = credits.id else { continue }
 
@@ -5114,11 +5117,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             guard credits.endTimeSeconds > credits.startTimeSeconds else { continue }
 
             let previewStart = max(0, credits.startTimeSeconds - markerPreviewTime)
-            let creditsStartPercent = duration > 0 ? credits.startTimeSeconds / duration : 1.0
-            let remainingAfterCredits = duration - credits.startTimeSeconds
-
-            // Sanity check: credits should be in the last half of the video OR < 5 min of content remains
-            let creditsAreValid = creditsStartPercent >= 0.5 || remainingAfterCredits < 300
+            let creditsAreValid = PlexPlaybackMarkers.readsAsEndCredits(credits, duration: duration)
 
             // Reset skip flag if user rewound before the marker
             if skippedCreditsIds.contains(creditsId) {
@@ -5129,10 +5128,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
             }
 
-            // Reset post-video trigger if rewound before first credits marker
-            if let firstCredits = metadata.firstCreditsMarker,
-               time < max(0, firstCredits.startTimeSeconds - markerPreviewTime) {
+            // Reset post-video trigger if rewound before the Up Next credits
+            if let upNextCredits,
+               time < max(0, upNextCredits.startTimeSeconds - markerPreviewTime) {
                 if hasTriggeredPostVideo { hasTriggeredPostVideo = false }
+                if upNextCollapsed { upNextCollapsed = false }
             }
 
             // Show skip button from the exact credits marker start (no 5s
@@ -5144,8 +5144,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
                 // Trigger post-video summary when FIRST credits marker actually starts
                 // (skip button will be hidden by UI when postVideoState != .hidden)
-                if let firstCredits = metadata.firstCreditsMarker,
-                   credits.id == firstCredits.id,
+                if credits.id == upNextCredits?.id,
                    time >= credits.startTimeSeconds && !hasTriggeredPostVideo {
                     hasTriggeredPostVideo = true
                     triggerPostVideoTransition()
@@ -5179,15 +5178,16 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
         }
 
-        // No credits markers - trigger post-video 45 seconds before end
-        // BUT require at least 85% completion to avoid triggering too early on short videos
+        // No credits markers: Up Next opens one countdown before the end, so autoplay lands at the
+        // end. Countdown off opens it at the end. At least 85% watched, for short videos.
         if metadata.creditsMarkers.isEmpty && duration > 60 {
-            let triggerTime = duration - 45
+            let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
             let minCompletionTime = duration * 0.85  // At least 85% watched
 
             // Reset flag if user rewound before trigger point
             if time < triggerTime - 10 && hasTriggeredPostVideo {
                 hasTriggeredPostVideo = false
+                upNextCollapsed = false
             }
 
             // Only trigger if we're both near the end AND have watched most of the content
@@ -5287,7 +5287,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Handle when playback enters a credits marker range (or preview window)
     /// Auto-skip only triggers when actually inside the marker (at or past startTimeSeconds).
     private func handleCreditsMarkerActive(_ marker: PlexMarker, currentTime: TimeInterval) {
-        guard let creditsId = marker.id else { return }
+        // The pill is Up Next's while it's folded there; no credits skip or auto-skip.
+        guard let creditsId = marker.id, !upNextCollapsed else { return }
 
         let mode = MarkerSkipMode.current(for: "credits")
         guard mode != .off else { return }
@@ -5378,6 +5379,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
+    /// The pill is up: a marker is active, or Up Next is folded into it.
+    var showsSkipPill: Bool { showSkipButton || upNextCollapsed }
+
     /// Skip to end of current marker (called from UI skip button)
     func skipActiveMarker() async {
         guard let marker = activeMarker else { return }
@@ -5439,6 +5443,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Label for current skip button
     var skipButtonLabel: String {
+        if upNextCollapsed { return String(localized: "Up Next") }
         guard let marker = activeMarker else { return String(localized: "Skip") }
         if isPlayingCinemaExtra {
             return String(localized: "Skip Trailer")
@@ -5468,7 +5473,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// `controlsFocusActive`: while true the SwiftUI content layer releases
     /// focus and `PlayerContainerViewController` routes it to the pill.
     var skipPillOwnsFocus: Bool {
-        showSkipButton
+        showsSkipPill
             && !showControls
             && !isScrubbing
             && postVideoState == .hidden
@@ -5654,19 +5659,25 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Don't re-enter if already showing post-video
         guard postVideoState == .hidden else { return }
 
-        // Mark as watched immediately when playback ends/reaches credits.
-        // This runs exactly once whether the custom overlay or the native
-        // card drives Up Next.
-        await markCurrentAsWatched()
-        guard generation == itemGeneration else { return }
-
         // Per-user opt-out of the post-video "Up Next" chooser for TV
         // episodes. When disabled, episodes follow the same path movies
         // already take: credits play uninterrupted at full size.
         // Movies: No PostVideo - just let the video play through to the end.
         // A playlist's next entry follows any type, ahead of both gates.
-        guard playQueue != nil || (isEpisode && showPostVideoUpNext) else { return }
+        guard playQueue != nil || (isEpisode && showPostVideoUpNext) else {
+            await markCurrentAsWatched()
+            return
+        }
 
+        // Marked beside the page, so Up Next opens at the credits rather than after
+        // the server's replies. A folded Up Next was marked when it first opened.
+        if !upNextCollapsed {
+            Task {
+                guard generation == self.itemGeneration else { return }
+                await self.markCurrentAsWatched()
+            }
+        }
+        upNextCollapsed = false
         postVideoState = .loading
 
         // TV Show: Only show PostVideo if there's a next episode
@@ -6190,15 +6201,15 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// Start autoplay countdown timer
+    /// The Countdown setting in seconds: 5 when unset, 0 when off.
+    private var autoplayCountdownSetting: Int {
+        UserDefaults.standard.object(forKey: "autoplayCountdown") == nil
+            ? AutoplayCountdown.fiveSeconds.rawValue
+            : UserDefaults.standard.integer(forKey: "autoplayCountdown")
+    }
+
     func startAutoplayCountdown() {
-        // Default to 5 seconds if not set (key doesn't exist)
-        // 0 explicitly means disabled
-        let countdownSetting: Int
-        if UserDefaults.standard.object(forKey: "autoplayCountdown") == nil {
-            countdownSetting = 5  // Default: 5 seconds
-        } else {
-            countdownSetting = UserDefaults.standard.integer(forKey: "autoplayCountdown")
-        }
+        let countdownSetting = autoplayCountdownSetting
 
         // 0 means disabled
         guard countdownSetting > 0 else {
@@ -6439,6 +6450,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         isCountdownPaused = false
         episodesInARow = autoplayed ? episodesInARow + 1 : 1
 
+        upNextCollapsed = false
         postVideoState = .hidden
 
         if let nextProviderPlayback {
@@ -6590,12 +6602,37 @@ final class UniversalPlayerViewModel: ObservableObject {
     func dismissPostVideo() {
         countdownTimer?.invalidate()
         countdownTimer = nil
+        upNextCollapsed = false
         postVideoState = .hidden
         nextEpisode = nil
         countdownSeconds = 0
         isCountdownPaused = false
         // Don't reset hasTriggeredPostVideo here - prevents immediate re-trigger
         clearPreloadedData()
+    }
+
+    /// Back or Dismiss on Up Next. With a next episode the page folds into the pill and the
+    /// credits play on; the next episode and its preload stay. Otherwise it closes.
+    func closePostVideo() {
+        guard postVideoState == .showingEpisodeSummary, nextEpisode != nil else {
+            dismissPostVideo()
+            return
+        }
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        countdownSeconds = 0
+        isCountdownPaused = false
+        cancelSkipCountdownTimer()
+        // Before the state: the container reads it when the page leaves.
+        upNextCollapsed = true
+        postVideoState = .hidden
+    }
+
+    /// The Up Next pill: the page comes back, with no countdown (the viewer asked for it).
+    func reopenUpNext() {
+        guard upNextCollapsed, nextEpisode != nil else { return }
+        upNextCollapsed = false
+        postVideoState = .showingEpisodeSummary
     }
 
     // MARK: - Navigation

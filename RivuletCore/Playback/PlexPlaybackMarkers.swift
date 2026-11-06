@@ -19,6 +19,20 @@ enum PlexPlaybackMarkers {
         return (plex + extra).sorted { ($0.startTimeOffset ?? 0) < ($1.startTimeOffset ?? 0) }
     }
 
+    /// The credits marker that opens Up Next: the earliest that reads as end credits.
+    /// Not server order: an early "credits" marker would otherwise keep Up Next shut until the file ends.
+    static func upNextCredits(_ markers: [PlexMarker], duration: TimeInterval) -> PlexMarker? {
+        markers
+            .filter { $0.isCredits && $0.endTimeSeconds > $0.startTimeSeconds && readsAsEndCredits($0, duration: duration) }
+            .min { $0.startTimeSeconds < $1.startTimeSeconds }
+    }
+
+    /// Credits starting in the second half, or under five minutes from the end. `duration` 0 is unknown.
+    static func readsAsEndCredits(_ marker: PlexMarker, duration: TimeInterval) -> Bool {
+        guard duration > 0 else { return true }
+        return marker.startTimeSeconds / duration >= 0.5 || duration - marker.startTimeSeconds < 300
+    }
+
     /// The agnostic markers: known kinds with both ends.
     static func playbackMarkers(_ markers: [PlexMarker]) -> [PlaybackMarker] {
         markers.compactMap { marker in

@@ -590,7 +590,7 @@ private final class UniversalPlaybackInputTarget: PlaybackInputTarget {
                 // Matches Apple TV convention and the overlays' own
                 // .onExitCommand intent (which the UIKit press interception
                 // pre-empts, so it has to be honored here too).
-                vm.dismissPostVideo()
+                vm.closePostVideo()
             } else if vm.isScrubbing {
                 let speedBefore = vm.scrubSpeed
                 PlaybackInputTelemetry.shared.recordScrubTransition(

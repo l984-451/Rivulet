@@ -4443,6 +4443,10 @@ final class PlexHomeViewController: UIViewController {
         if case .playlists = mode {
             return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems))]
         }
+        // Every server's favorites: one untitled grid, like a server's playlists.
+        if case .favorites = mode {
+            return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems))]
+        }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
         if case .playlist(let playlist) = mode {
             return gridItems.isEmpty ? [] : [.sortHeader(title: playlist.title), .grid(items: mapGridSlots(gridItems))]

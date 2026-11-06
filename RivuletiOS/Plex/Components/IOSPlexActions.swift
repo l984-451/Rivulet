@@ -19,6 +19,8 @@ struct IOSPlexActions {
     var open: (MediaItem) -> Void = { _ in }
     var setWatched: (MediaItem, Bool) -> Void = { _, _ in }
     var setWatchlisted: (MediaItem, Bool) -> Void = { _, _ in }
+    /// Adds a movie or show to Favorites on its server, or removes it.
+    var setFavorite: (MediaItem, Bool) -> Void = { _, _ in }
     /// A movie or episode, or every episode of a season. Plex items only.
     var download: (MediaItem) -> Void = { _ in }
     /// A trailer or extra from a title's page.
@@ -86,6 +88,9 @@ private struct IOSPlexActionHost: ViewModifier {
                 },
                 setWatchlisted: { item, on in
                     run(String(localized: "Couldn't Update Watchlist")) { try await browse.setWatchlisted(on, item: item) }
+                },
+                setFavorite: { item, on in
+                    run(String(localized: "Couldn't Update Favorites")) { try await browse.setFavorite(on, item: item) }
                 },
                 download: download,
                 playExtra: playExtra,
@@ -289,6 +294,8 @@ struct IOSPlexItemMenu: View {
     var showsPlay = true
     var showsDetails = false
     var showsWatchlist = true
+    /// The title page has its own heart and passes false.
+    var showsFavorite = true
     var showsDelete = true
     @Environment(\.plexActions) private var actions
     @EnvironmentObject private var browse: IOSBrowseStore
@@ -325,6 +332,13 @@ struct IOSPlexItemMenu: View {
                     onList ? "Remove from Watchlist" : (standsForShow ? "Add Show to Watchlist" : "Add to Watchlist"),
                     systemImage: onList ? "minus.circle" : "plus.circle"
                 ) { actions.setWatchlisted(item, !onList) }
+            }
+            if showsFavorite, FavoritesFeed.canFavorite(item) {
+                let isFavorite = browse.isFavorite(item)
+                Button(
+                    isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                    systemImage: isFavorite ? "heart.slash" : "heart"
+                ) { actions.setFavorite(item, !isFavorite) }
             }
         }
         if browse.supportsPlaylists(item) {

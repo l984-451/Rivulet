@@ -381,12 +381,19 @@ private struct IOSPlexDetailHeader: View {
                         actions.setWatchlisted(item, !onList)
                     }
                 }
+                if FavoritesFeed.canFavorite(item) {
+                    let isFavorite = browse.isFavorite(item)
+                    circleButton(isFavorite ? "heart.fill" : "heart",
+                                 label: isFavorite ? "Remove from Favorites" : "Add to Favorites") {
+                        actions.setFavorite(item, !isFavorite)
+                    }
+                }
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
                 Menu {
                     // No Delete: the page would be left showing what it deleted.
-                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsDelete: false)
+                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
                 } label: {
                     Image(systemName: "ellipsis").frame(width: 22, height: 22)
                 }

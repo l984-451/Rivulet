@@ -7,6 +7,7 @@ import SwiftUI
 /// or pushes it at compact width.
 enum IOSLibrarySelection: Hashable {
     case downloads
+    case favorites
     case library(MediaLibrary)
     case playlists(providerID: String)
 }
@@ -42,6 +43,7 @@ struct IOSPlexLibrarySplitView: View {
     private var detail: some View {
         switch selection {
         case .downloads: IOSDownloadsView()
+        case .favorites: IOSFavoritesView()
         case .library(let library): IOSPlexLibraryView(library: library)
         case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
@@ -66,6 +68,12 @@ struct IOSPlexLibrariesView: View {
                     Section {
                         NavigationLink(value: IOSLibrarySelection.downloads) {
                             Label("Downloads", systemImage: "arrow.down.circle")
+                        }
+                        // Every server's favorite movies and shows, as the tvOS sidebar has them.
+                        if browse.hasServers {
+                            NavigationLink(value: IOSLibrarySelection.favorites) {
+                                Label("Favorites", systemImage: "heart")
+                            }
                         }
                     }
                     if !browse.hasServers {

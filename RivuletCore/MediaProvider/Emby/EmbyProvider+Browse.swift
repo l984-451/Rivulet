@@ -102,6 +102,27 @@ extension EmbyProvider {
         return map((try await self.query(query).items ?? []).filter { $0.locationType != "Virtual" })
     }
 
+    // MARK: - Favorites
+
+    var supportsFavorites: Bool { true }
+
+    func favorites(limit: Int) async throws -> [MediaItem] {
+        map(try await query([
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "Filters", value: "IsFavorite"),
+            URLQueryItem(name: "SortBy", value: "SortName"),
+            URLQueryItem(name: "SortOrder", value: "Ascending"),
+            URLQueryItem(name: "Limit", value: "\(limit)"),
+            Self.listFields
+        ]).items)
+    }
+
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        let path = "Users/\(userID)/FavoriteItems/\(ref.itemID)"
+        if favorite { try await client.post(path) } else { try await client.delete(path) }
+    }
+
     /// What a shuffle plays: a TV library's episodes rather than its series. A mixed library holds episodes too.
     nonisolated static func shuffleItemTypes(for kind: MediaLibrary.LibraryKind) -> String {
         switch kind {

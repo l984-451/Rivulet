@@ -15,6 +15,34 @@ final class ShellSidebarModelTests: XCTestCase {
             profileName: "Bain")
     }
 
+    func test_favorites_showWithAnyMediaServer_andLeadBesideTheWatchlist() {
+        func tabs(showFavorites: Bool, hasServer: Bool) -> [SidebarTab] {
+            ShellSidebarModel.sections(
+                libraries: [], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: true, showFavorites: showFavorites,
+                profileName: "Bain", hasMediaServer: hasServer)
+                .flatMap(\.items).map(\.tab)
+        }
+        XCTAssertEqual(tabs(showFavorites: true, hasServer: true),
+                       [.account, .search, .home, .watchlist, .favorites, .settings])
+        XCTAssertFalse(tabs(showFavorites: false, hasServer: true).contains(.favorites))
+        XCTAssertFalse(tabs(showFavorites: true, hasServer: false).contains(.favorites))
+    }
+
+    func test_favoritesOrder_isTitleOrder_acrossServers() {
+        func movie(_ id: String, _ title: String, sort: String? = nil) -> MediaItem {
+            MediaItem(ref: MediaItemRef(providerID: "p", itemID: id), kind: .movie, title: title, sortTitle: sort,
+                      overview: nil, year: nil, runtime: nil, parentRef: nil, grandparentRef: nil,
+                      episodeNumber: nil, seasonNumber: nil, childProgress: nil,
+                      userState: MediaUserState(isPlayed: false, viewOffset: 0, isFavorite: true, lastViewedAt: nil),
+                      artwork: MediaArtwork(poster: nil, backdrop: nil, thumbnail: nil, logo: nil),
+                      parentArtwork: nil, grandparentArtwork: nil)
+        }
+        let ordered = FavoritesOrder.byTitle([movie("1", "Zodiac"), movie("2", "The Abyss", sort: "Abyss"),
+                                              movie("3", "Alien 10"), movie("4", "Alien 2")])
+        XCTAssertEqual(ordered.map(\.ref.itemID), ["2", "4", "3", "1"])
+    }
+
     private func tabs(hasServer: Bool, liveTV: Bool, libraries: [PlexLibrary] = [],
                       playlistServers: [PlaylistServer] = []) -> [SidebarTab] {
         let source = LiveTVDataStore.LiveTVSourceInfo(

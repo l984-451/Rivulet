@@ -34,6 +34,7 @@ struct TVSidebarView: View {
     @AppStorage("combineLiveTVSources") private var combineLiveTVSources = true
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("showWatchlistTab") private var showWatchlistTab = true
+    @AppStorage("showFavoritesTab") private var showFavoritesTab = true
     @State private var selectedTab: SidebarTab = .home
     @State private var showProfilePicker = false
     /// A profile was entered through the picker; any other close re-presents it.
@@ -107,6 +108,8 @@ struct TVSidebarView: View {
             // Both need a Plex account; a Jellyfin-only setup has neither (#478).
             showDiscover: showDiscoverTab && authManager.hasCredentials,
             showWatchlist: showWatchlistTab && authManager.hasCredentials,
+            // Every server keeps favorites, so any signed-in one shows the row.
+            showFavorites: showFavoritesTab,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
@@ -215,6 +218,11 @@ struct TVSidebarView: View {
         }
         .onChange(of: showWatchlistTab) { _, shown in
             if !shown && selectedTab == .watchlist {
+                selectedTab = .home
+            }
+        }
+        .onChange(of: showFavoritesTab) { _, shown in
+            if !shown && selectedTab == .favorites {
                 selectedTab = .home
             }
         }
@@ -610,6 +618,8 @@ struct TVSidebarView: View {
             return PlexHomeViewController(mode: .discover)
         case .watchlist:
             return PlexHomeViewController(mode: .watchlist)
+        case .favorites:
+            return PlexHomeViewController(mode: .favorites)
         case .playlists(let providerID):
             return PlexHomeViewController(mode: .playlists(providerID: providerID))
         case .search:
@@ -688,7 +698,7 @@ struct TVSidebarView: View {
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear
-            case .watchlist, .playlists:
+            case .watchlist, .favorites, .playlists:
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear

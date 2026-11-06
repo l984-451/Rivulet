@@ -1343,6 +1343,16 @@
         }
       }
     },
+    "Couldn't Update Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favoriten konnten nicht aktualisiert werden"
+          }
+        }
+      }
+    },
     "Couldn't load %@" : {
       "localizations" : {
         "de" : {
@@ -3135,6 +3145,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Downloads"
+          }
+        }
+      }
+    },
+    "No Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Favoriten"
           }
         }
       }
@@ -5863,6 +5883,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Halte einen Sender in Live-TV gedrückt, um ihn hinzuzufügen."
+          }
+        }
+      }
+    },
+    "Touch and hold a movie or show, then choose Add to Favorites." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halte einen Film oder eine Serie gedrückt und wähle dann „Als Favoriten sichern“."
           }
         }
       }

@@ -111,6 +111,31 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return map(result.items)
     }
 
+    // MARK: - Favorites
+
+    var supportsFavorites: Bool { true }
+
+    func favorites(limit: Int) async throws -> [MediaItem] {
+        let result: JFQueryResult = try await client.get("Items", [
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "filters", value: "IsFavorite"),
+            URLQueryItem(name: "sortBy", value: "SortName"),
+            URLQueryItem(name: "sortOrder", value: "Ascending"),
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            Self.listFields
+        ])
+        return map(result.items)
+    }
+
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        if favorite {
+            try await client.post("UserFavoriteItems/\(ref.itemID)")
+        } else {
+            try await client.delete("UserFavoriteItems/\(ref.itemID)")
+        }
+    }
+
     /// What a shuffle plays: a TV library's episodes rather than its series.
     static func shuffleItemTypes(for kind: MediaLibrary.LibraryKind) -> String {
         switch kind {

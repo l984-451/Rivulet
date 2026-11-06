@@ -164,6 +164,14 @@ protocol MediaProvider: Sendable, Identifiable {
     func addToWatchlist(_ ref: MediaItemRef) async throws
     func removeFromWatchlist(_ ref: MediaItemRef) async throws
 
+    // MARK: - Favorites (movies and shows)
+    /// Plex has no favorite flag: a rating above three stars is one (`PlexUserRating`).
+    /// Jellyfin and Emby keep a per-user favorite flag.
+    var supportsFavorites: Bool { get }
+    /// The user's favorite movies and shows across the server's video libraries, by title.
+    func favorites(limit: Int) async throws -> [MediaItem]
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
+
     // MARK: - Playlists (video)
     var supportsPlaylists: Bool { get }
     /// Regular and smart video playlists, sorted by title.
@@ -271,6 +279,11 @@ extension MediaProvider {
     func canDownloadMedia() async -> Bool { false }
     func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource {
         throw MediaProviderError.backendSpecific(underlying: "downloads not supported")
+    }
+    var supportsFavorites: Bool { false }
+    func favorites(limit: Int) async throws -> [MediaItem] { [] }
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        throw MediaProviderError.backendSpecific(underlying: "favorites not supported")
     }
     func canDeleteMedia() async -> Bool { false }
     func deleteConfirmation(for item: MediaItem) async -> String { standardDeleteConfirmation(for: item) }

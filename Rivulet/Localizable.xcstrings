@@ -5585,6 +5585,16 @@
         }
       }
     },
+    "No favorites yet. Hold Select on a movie or show to add one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Favoriten. Halte auf einem Film oder einer Serie die Auswahltaste gedrückt, um einen hinzuzufügen."
+          }
+        }
+      }
+    },
     "No guide data" : {
       "localizations" : {
         "de" : {

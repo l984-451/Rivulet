@@ -76,6 +76,15 @@ enum EpisodePicker {
         return (season, nextEpisode(after: current, in: season, nextSeasonEpisodes: nextSeasonEpisodes))
     }
 
+    /// `resolvePlayTarget` for a show whose detail, seasons and episodes are already loaded.
+    static func showPlayTarget(
+        nextEpisode: MediaItem?, seasons: [MediaItem], episodes: [MediaItem]
+    ) -> MediaItem? {
+        if let nextEpisode { return nextEpisode }
+        guard let firstSeason = seasons.first else { return nil }
+        return firstUnplayed(in: episodes.filter { $0.parentRef == firstSeason.ref })
+    }
+
     /// The Play button's title for `target` (what Play starts) on a page of
     /// kind `page`. A show or season page names the episode; an item's own
     /// page does not.

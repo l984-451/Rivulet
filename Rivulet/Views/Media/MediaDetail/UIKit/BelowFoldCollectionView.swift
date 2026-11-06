@@ -533,7 +533,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             guard self.loadToken == token else { return }
             self.ingest(content)
             self.applySnapshot()
-            self.scrollToInitialEpisode(item: item)
+            // The load can finish after the user entered the rail; don't move it under them.
+            if self.collectionView.focusedEpisodeIndexPath == nil {
+                self.scrollToInitialEpisode(item: content.initialEpisode ?? item)
+            }
             self.loadRatings(token: token)
             // Chained after ingest, which would otherwise overwrite it with the partial detail.
             let advisory = await self.loader.loadAdvisory(for: item)
@@ -598,7 +601,11 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // A movie fetches nothing here, so its fade does not wait.
         isLoadingEpisodes = showRef != nil || item.kind == .season
         Task { [weak self] in
-            guard let self else { return }
+            // A standalone page's `configure` has already replaced this load.
+            guard let self, self.loadToken == token else { return }
+            // Fetched together: the rail's fade waits on both.
+            async let target: MediaItem? = item.kind == .show
+                ? EpisodePicker.resolvePlayTarget(for: item, provider: provider) : nil
             let eps: [MediaItem]
             if let showRef {
                 eps = (try? await provider.allEpisodes(of: showRef)) ?? []
@@ -607,10 +614,12 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             } else {
                 eps = []
             }
+            let playTarget = await target
             guard self.loadToken == token else { return }
             self.ingestEpisodesOnly(eps)
             self.applySnapshot()
-            self.scrollToInitialEpisode(item: item)
+            let initialEpisode = eps.first { $0.ref == playTarget?.ref }
+            self.scrollToInitialEpisode(item: initialEpisode ?? item)
             self.isLoadingEpisodes = false
             // Realize the cells now, so the fade starts over a built rail.
             self.collectionView.layoutIfNeeded()
@@ -853,6 +862,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// Targets the item's own episode (a season's first), positioned in `layoutSubviews` before first render.
     func scrollToInitialEpisode(item: MediaItem) {
+        pendingInitialScroll = nil
+        pendingInitialFocus = nil
+        currentSeasonFirstEpisode = nil
         guard let epSection = sectionKinds.firstIndex(of: .episodes) else { return }
         let targetIdx: Int?
         switch item.kind {
@@ -868,10 +880,15 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 }
                 return false
             })
+        case .show:
+            targetIdx = cachedEpisodes.firstIndex(where: {
+                if case .episode = $0 { return true }
+                return false
+            })
         default:
             return
         }
-        guard let idx = targetIdx, idx > 0 else { return }
+        guard let idx = targetIdx else { return }
         let target = IndexPath(item: idx, section: epSection)
         pendingInitialScroll = target
         // Land focus here on the first Down into the rail (else the engine focuses

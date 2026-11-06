@@ -15,6 +15,15 @@ enum IOSPlayerTimeline: Equatable {
     case live(range: ClosedRange<Double>?, position: Double, edge: Double, isAtEdge: Bool, programme: ClosedRange<Date>?)
 }
 
+/// Live only: the bar reaching back over a rewind window. `bar` is the span
+/// on the session axis (earlier programmes the window reaches into, through
+/// the end of the one on air), `sections` the programme boundaries inside it,
+/// on the same axis. The scrub stays inside the timeline's seekable range.
+struct IOSLiveScrub {
+    let bar: ClosedRange<Double>
+    let sections: [Double]
+}
+
 /// The capsule at the bottom trailing edge (Skip Intro, Next Episode).
 struct IOSPlayerContextualAction {
     let title: String
@@ -83,6 +92,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private let isMuted: Bool
     private let canPictureInPicture: Bool
     private let actions: IOSPlayerChromeActions
+    private let liveScrub: IOSLiveScrub?
     private let video: (CGFloat?) -> Video
     private let trailing: () -> Trailing
 
@@ -120,6 +130,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         isMuted: Bool = false,
         canPictureInPicture: Bool = false,
         actions: IOSPlayerChromeActions,
+        liveScrub: IOSLiveScrub? = nil,
         @ViewBuilder video: @escaping (CGFloat?) -> Video,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) {
@@ -139,6 +150,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         self.isMuted = isMuted
         self.canPictureInPicture = canPictureInPicture
         self.actions = actions
+        self.liveScrub = liveScrub
         self.video = video
         self.trailing = trailing
     }
@@ -389,12 +401,14 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 let shown = scrubValue ?? position
                 let behind = max(0, edge - shown)
                 IOSPlayerScrubber(
-                    range: range.lowerBound...edge,
+                    range: liveScrub?.bar ?? range.lowerBound...edge,
                     value: position,
                     scrubValue: $scrubValue,
                     leadingLabel: behind >= 1 ? "-" + Self.format(behind) : "",
                     trailingLabel: programme.map { $0.upperBound.formatted(date: .omitted, time: .shortened) } ?? "",
                     accessibilityValue: behind >= 1 ? String(localized: "\(Self.format(behind)) behind live") : String(localized: "Live"),
+                    seekable: liveScrub == nil ? nil : range.lowerBound...edge,
+                    sections: liveScrub?.sections ?? [],
                     onCommit: commitScrub,
                     onStep: stepFromAccessibility
                 )
@@ -732,6 +746,12 @@ private struct IOSPlayerScrubber: View {
     let accessibilityValue: String
     var isInteractive = true
     var scrubStill: ((Double) async -> UIImage?)?
+    /// Live with a rewind window: what can be reached inside the bar. The
+    /// reachable part is filled the way a buffered range is, the fill runs from
+    /// its start, and a drag stays inside it. nil draws the plain bar.
+    var seekable: ClosedRange<Double>? = nil
+    /// Programme boundaries on the bar's axis: they cut it into sections.
+    var sections: [Double] = []
     let onCommit: (Double) -> Void
     let onStep: (Double) -> Void
     @State private var still: UIImage?
@@ -742,18 +762,16 @@ private struct IOSPlayerScrubber: View {
 
     private var span: Double { max(range.upperBound - range.lowerBound, 0.001) }
 
-    private var fraction: Double {
-        let shown = scrubValue ?? value
-        return min(max((shown - range.lowerBound) / span, 0), 1)
+    private func fraction(_ value: Double) -> Double {
+        min(max((value - range.lowerBound) / span, 0), 1)
     }
+
+    private var fraction: Double { fraction(scrubValue ?? value) }
 
     var body: some View {
         VStack(spacing: 6) {
             GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.28))
-                    Capsule().fill(.white).frame(width: geometry.size.width * fraction)
-                }
+                track(width: geometry.size.width)
                 .frame(height: scrubValue == nil ? 6 : 12)
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -776,7 +794,9 @@ private struct IOSPlayerScrubber: View {
                         .onChanged { drag in
                             guard isInteractive, geometry.size.width > 0 else { return }
                             let f = min(max(drag.location.x / geometry.size.width, 0), 1)
-                            scrubValue = range.lowerBound + span * f
+                            var target = range.lowerBound + span * f
+                            if let seekable { target = min(max(target, seekable.lowerBound), seekable.upperBound) }
+                            scrubValue = target
                         }
                         .onEnded { _ in
                             guard let target = scrubValue else { return }
@@ -823,6 +843,52 @@ private struct IOSPlayerScrubber: View {
                 if scrubValue != nil, let image { still = image }
             }
             stillLoad = nil
+        }
+    }
+}
+
+extension IOSPlayerScrubber {
+    @ViewBuilder
+    fileprivate func track(width: CGFloat) -> some View {
+        if seekable == nil, sections.isEmpty {
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.28))
+                Capsule().fill(.white).frame(width: width * fraction)
+            }
+        } else {
+            let start = seekable.map { width * fraction($0.lowerBound) } ?? 0
+            let reach = seekable.map { width * fraction($0.upperBound) } ?? width
+            ZStack(alignment: .leading) {
+                Rectangle().fill(.white.opacity(0.28))
+                Rectangle().fill(.white.opacity(0.22))
+                    .frame(width: max(0, reach - start)).offset(x: start)
+                Rectangle().fill(.white)
+                    .frame(width: max(0, width * fraction - start)).offset(x: start)
+            }
+            .mask { IOSTimelineSections(cuts: sections.map(fraction)) }
+        }
+    }
+}
+
+/// The track cut into one rounded section per programme. No cuts: one capsule.
+private struct IOSTimelineSections: View {
+    let cuts: [Double]
+    private static let gap: CGFloat = 3
+
+    var body: some View {
+        Canvas { context, size in
+            guard size.width > 0, size.height > 0 else { return }
+            let edges = [0] + cuts.filter { $0 > 0 && $0 < 1 }.sorted() + [1]
+            var path = Path()
+            for (from, to) in zip(edges, edges.dropFirst()) {
+                let minX = size.width * from + (from > 0 ? Self.gap / 2 : 0)
+                let maxX = size.width * to - (to < 1 ? Self.gap / 2 : 0)
+                guard maxX > minX else { continue }
+                let rect = CGRect(x: minX, y: 0, width: maxX - minX, height: size.height)
+                let radius = min(size.height / 2, rect.width / 2)
+                path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+            }
+            context.fill(path, with: .color(.white))
         }
     }
 }

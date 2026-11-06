@@ -557,7 +557,7 @@ struct GuideLayoutView: View {
         if focusedChannel == nil {
             focusedChannel = first
             focusedProgram = dataStore.getCurrentProgram(for: first)
-                ?? dataStore.epg[first.id]?.first
+                ?? dataStore.epg[first.id]?.first { $0.endTime > timelineStart }
         }
     }
 }

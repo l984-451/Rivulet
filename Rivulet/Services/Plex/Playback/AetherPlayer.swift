@@ -382,6 +382,8 @@ final class AetherPlayer: PlayerProtocol {
         videoSizeCancellable = nil
         guard let player else {
             videoItemCancellable = nil
+            seekableCancellable = nil
+            itemSeekableWindow = nil
             videoSize = .zero
             return
         }
@@ -392,8 +394,20 @@ final class AetherPlayer: PlayerProtocol {
                 guard let self else { return }
                 guard let item else {
                     self.videoSizeCancellable = nil
+                    self.seekableCancellable = nil
+                    self.itemSeekableWindow = nil
                     return
                 }
+                self.seekableCancellable = item
+                    .publisher(for: \.seekableTimeRanges)
+                    .map { ranges in
+                        LiveSeekableWindow(ranges: ranges.map {
+                            let range = $0.timeRangeValue
+                            return (start: range.start.seconds, duration: range.duration.seconds)
+                        })
+                    }
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] window in self?.itemSeekableWindow = window }
                 self.videoSizeCancellable = item
                     .publisher(for: \.presentationSize)
                     // A zero size is the pre-ready placeholder; publishing it
@@ -1259,6 +1273,8 @@ final class AetherPlayer: PlayerProtocol {
         partIndex = 0
         finishAVCapture()
         dropFrameExtractor()
+        seekableCancellable = nil
+        itemSeekableWindow = nil
         engine.stop(resetDisplayCriteria: resetDisplayCriteria)
     }
 
@@ -1407,8 +1423,28 @@ final class AetherPlayer: PlayerProtocol {
 
     /// A snapshot of the live window. Cheap: these are the clock's own
     /// published values, which the engine keeps current even while paused.
+    ///
+    /// Direct HLS is the exception: there the engine publishes an unbounded
+    /// `0...edge` (AVPlayer clamps seeks itself), which would offer media the
+    /// origin evicted long ago. The window comes from the AVPlayer item, on the
+    /// same axis (the engine applies no playlist shift on that route), and one
+    /// no deeper than the playlist's live holdback is no window at all.
     var liveTimeshift: LiveTimeshift {
         let clock = engine.clock
+        if engine.isLive, engine.videoRoute == .remoteBypass {
+            guard let window = remoteLiveWindow, window.isSeekable else {
+                return LiveTimeshift(seekableRange: nil, edgeTime: clock.liveEdgeTime, playhead: clock.currentTime,
+                                     behindLiveSeconds: 0, isAtLiveEdge: true)
+            }
+            let playhead = clock.currentTime
+            return LiveTimeshift(
+                seekableRange: window.lowerBound...window.upperBound,
+                edgeTime: window.upperBound,
+                playhead: playhead,
+                behindLiveSeconds: max(0, window.upperBound - playhead),
+                isAtLiveEdge: window.isAtLiveEdge(playhead)
+            )
+        }
         return LiveTimeshift(
             seekableRange: clock.seekableLiveRange,
             edgeTime: clock.liveEdgeTime,
@@ -1433,7 +1469,10 @@ final class AetherPlayer: PlayerProtocol {
     func seekLive(to sessionSeconds: Double) async -> Bool {
         let shift = liveTimeshift
         guard let range = shift.seekableRange else { return false }
-        let target = min(max(sessionSeconds, range.lowerBound), shift.edgeTime)
+        // On direct HLS, clear of the oldest segment: the next playlist refresh
+        // may evict it before the seek lands.
+        let floor = remoteLiveWindow.map { $0.seekTarget($0.lowerBound) } ?? range.lowerBound
+        let target = min(max(sessionSeconds, floor), shift.edgeTime)
         if shift.edgeTime - target < 1 {
             await engine.seekToLiveEdge()
         } else {
@@ -1452,6 +1491,15 @@ final class AetherPlayer: PlayerProtocol {
     /// remote-HLS bypass, or across a channel change.
     func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
         await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// The AVPlayer item's seekable window, mirrored by KVO: the getter is a
+    /// sync XPC round trip to mediaserverd and this is read on every scrub tick.
+    private var itemSeekableWindow: LiveSeekableWindow?
+    private var seekableCancellable: AnyCancellable?
+
+    private var remoteLiveWindow: LiveSeekableWindow? {
+        engine.videoRoute == .remoteBypass ? itemSeekableWindow : nil
     }
 
     /// True once the current load has its first frame on screen (an audio-only

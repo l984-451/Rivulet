@@ -20,8 +20,51 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     private var rolloverTask: Task<Void, Never>?
     private var shownProgramId: String?
 
+    /// Skips stack here and land as one seek once the taps settle: AVPlayer
+    /// cancelling its segment loads for every superseded seek is what takes a
+    /// live item down under rapid taps.
+    private let windowSeeker = LiveWindowSeekController()
+
     init(channel: UnifiedChannel) {
         self.channel = channel
+        let player = player
+        windowSeeker.attach(LiveWindowSeekController.Player(
+            window: { [weak player] in
+                guard let window = player?.liveWindow, let range = window.seekableRange else { return nil }
+                return LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: window.edgeTime)
+            },
+            position: { [weak player] in player?.liveWindow.playhead ?? 0 },
+            seek: { [weak player] in await player?.seekLive(to: $0) },
+            seekToLiveEdge: { [weak player] in await player?.seekToLiveEdge() },
+            play: { [weak player] in player?.play() },
+            isUserPaused: { [weak player] in player?.state == .paused }
+        ))
+        windowSeeker.onChange = { [weak self] in self?.objectWillChange.send() }
+    }
+
+    /// Where stacked skips will land while they settle, on the session axis.
+    var stagedSkipTarget: Double? {
+        if case .position(let target) = windowSeeker.pendingRequest { return target }
+        return nil
+    }
+
+    /// Skip within the rewind window, stacked; without one, the player's own skip.
+    func skip(by seconds: Double) {
+        if player.liveWindow.seekableRange != nil {
+            windowSeeker.step(by: seconds)
+        } else {
+            Task { await player.skip(by: seconds) }
+        }
+    }
+
+    func goLive() {
+        windowSeeker.cancelPending()
+        Task { await player.seekToLiveEdge() }
+    }
+
+    func seek(to sessionSeconds: Double) {
+        windowSeeker.cancelPending()
+        Task { await player.seekLive(to: sessionSeconds) }
     }
 
     var programme: UnifiedProgram? { store.getCurrentProgram(for: channel) }
@@ -43,6 +86,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     }
 
     func end() {
+        windowSeeker.reset()
         loadTask?.cancel()
         watchTask?.cancel()
         rolloverTask?.cancel()
@@ -68,6 +112,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
 
     private func load() async {
         notice = nil
+        windowSeeker.cancelPending()
         keepalive.stop()
         watchTask?.cancel()
         let channel = channel
@@ -142,7 +187,7 @@ private struct IOSLivePlayerScreen: View {
                 isBusy: session.notice == nil && (player.state == .idle || player.state == .loading || player.isBuffering),
                 timeline: .live(
                     range: player.liveWindow.seekableRange,
-                    position: player.pendingSeekTarget ?? player.liveWindow.playhead,
+                    position: session.stagedSkipTarget ?? player.pendingSeekTarget ?? player.liveWindow.playhead,
                     edge: player.liveWindow.edgeTime,
                     isAtEdge: player.liveWindow.isAtLiveEdge,
                     programme: programme.map { $0.startTime...$0.endTime }
@@ -157,9 +202,9 @@ private struct IOSLivePlayerScreen: View {
                 actions: IOSPlayerChromeActions(
                     close: controller.close,
                     playPause: player.togglePlayPause,
-                    skip: { seconds in Task { await player.skip(by: seconds) } },
-                    seek: { time in Task { await player.seekLive(to: time) } },
-                    goLive: { Task { await player.seekToLiveEdge() } },
+                    skip: session.skip(by:),
+                    seek: session.seek(to:),
+                    goLive: session.goLive,
                     selectAudio: player.selectAudioTrack,
                     selectSubtitle: player.selectSubtitleTrack,
                     stepAudioDelay: player.stepAudioDelay,
@@ -168,7 +213,8 @@ private struct IOSLivePlayerScreen: View {
                     setFillsScreen: { player.fillsScreen = $0 },
                     retry: session.retry,
                     swipeDown: controller.dismissGesture
-                )
+                ),
+                liveScrub: liveScrub(now: context.date)
             ) { osdTop in
                 ZStack {
                     IOSPlayerSurface(surface: controller.surface)
@@ -195,6 +241,31 @@ private struct IOSLivePlayerScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
         }
+    }
+
+    /// The bar reaching back over the rewind window, split at the earlier
+    /// programmes it covers (at most four hours), on the session axis.
+    private func liveScrub(now: Date) -> IOSLiveScrub? {
+        let window = player.liveWindow
+        guard let range = window.seekableRange, window.edgeTime > range.lowerBound else { return nil }
+        let onAir = store.getCurrentProgram(for: session.channel)
+        let earlier = onAir.map {
+            store.getPrograms(for: session.channel,
+                              startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
+                              endDate: $0.startTime)
+        } ?? []
+        guard let layout = LiveTimelineLayout(
+            now: now, program: onAir, earlierPrograms: earlier,
+            seekWindowSeconds: window.edgeTime - range.lowerBound,
+            behindLiveSeconds: max(0, window.edgeTime - window.playhead)
+        ) else { return nil }
+        // Wall clock to session axis: the edge is now.
+        let span = layout.end.timeIntervalSince(layout.start)
+        func onAxis(_ date: Date) -> Double { window.edgeTime - now.timeIntervalSince(date) }
+        return IOSLiveScrub(
+            bar: onAxis(layout.start)...max(onAxis(layout.end), onAxis(layout.start) + 1),
+            sections: layout.boundaries.map { onAxis(layout.start.addingTimeInterval(span * $0)) }
+        )
     }
 
     /// The programme at the playhead: behind live, that is in the past.

@@ -50,6 +50,18 @@ private enum Metrics {
     static let avatarFocusGrowth: CGFloat = 4
     /// The profile header band: the first tab sits this far below the list top.
     static let profileBandHeight: CGFloat = 90
+    /// While music plays the profile slot is the avatar's column plus the Now
+    /// Playing pill, which is as tall as the avatar and centred on it.
+    static var avatarColumnWidth: CGFloat { iconCenterX * 2 }
+    static var nowPlayingHeight: CGFloat { avatarSize }
+    static let nowPlayingInset: CGFloat = 18
+    static let nowPlayingBarsGap: CGFloat = 12
+    static let nowPlayingBarsPeak: CGFloat = 20
+    /// A long title scrolls at this speed, pauses at the start of each lap, and fades at the right edge.
+    static let marqueeGap: CGFloat = 40
+    static let marqueeSpeed: CGFloat = 30
+    static let marqueePause: CFTimeInterval = 1.5
+    static let marqueeFade: CGFloat = 24
     /// One spring crossfade, checked by eye against the system morph. A
     /// three-phase timing from 120fps frame analysis looked worse on screen.
     static let morphDuration: TimeInterval = 0.45
@@ -264,6 +276,163 @@ final class ShellSidebarRowCell: UICollectionViewCell {
     }
 }
 
+// MARK: - Now Playing pill
+
+/// One line that scrolls left in a loop while `isScrolling` and wider than its
+/// bounds, pausing at the start of each lap; otherwise it truncates. The offset
+/// is a function of the clock, so the system stripping layer animations
+/// (inactive app, a cell leaving the window) costs nothing.
+private final class SidebarMarqueeLabel: UIView {
+    private let track = UIView()
+    private let label = UILabel()
+    private let copy = UILabel()
+    private let fadeMask = CAGradientLayer()
+    private var scrollStart: CFTimeInterval = 0
+    private var link: CADisplayLink?
+
+    var text: String? {
+        didSet { label.text = text; copy.text = text; setNeedsLayout() }
+    }
+    var font: UIFont? {
+        didSet { label.font = font; copy.font = font; setNeedsLayout() }
+    }
+    var textColor: UIColor? {
+        didSet { label.textColor = textColor; copy.textColor = textColor }
+    }
+    var isScrolling = false {
+        didSet { if isScrolling != oldValue { setNeedsLayout() } }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+        isUserInteractionEnabled = false
+        fadeMask.startPoint = CGPoint(x: 0, y: 0.5)
+        fadeMask.endPoint = CGPoint(x: 1, y: 0.5)
+        fadeMask.colors = [UIColor.black, .black, .clear].map(\.cgColor)
+        track.addSubview(label)
+        track.addSubview(copy)
+        addSubview(track)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let textWidth = ceil(label.intrinsicContentSize.width)
+        let scrolls = isScrolling && bounds.width > 0 && textWidth > bounds.width
+        copy.isHidden = !scrolls
+        track.transform = .identity
+        if scrolls {
+            label.frame = CGRect(x: 0, y: 0, width: textWidth, height: bounds.height)
+            copy.frame = label.frame.offsetBy(dx: textWidth + Metrics.marqueeGap, dy: 0)
+            track.frame = CGRect(x: 0, y: 0, width: textWidth * 2 + Metrics.marqueeGap, height: bounds.height)
+            fadeMask.frame = bounds
+            fadeMask.locations = [0, NSNumber(value: 1 - Double(Metrics.marqueeFade / bounds.width)), 1]
+            layer.mask = fadeMask
+        } else {
+            track.frame = bounds
+            label.frame = bounds
+            layer.mask = nil
+        }
+        updateLink(running: scrolls && window != nil)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        setNeedsLayout()
+    }
+
+    private func updateLink(running: Bool) {
+        if running, link == nil {
+            scrollStart = CACurrentMediaTime()
+            let link = CADisplayLink(target: self, selector: #selector(step))
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        } else if !running {
+            link?.invalidate()
+            link = nil
+        }
+    }
+
+    /// A lap is a pause at the start, then one text width and gap to the left.
+    @objc private func step() {
+        let distance = label.frame.width + Metrics.marqueeGap
+        let lap = Metrics.marqueePause + CFTimeInterval(distance / Metrics.marqueeSpeed)
+        let into = (CACurrentMediaTime() - scrollStart).truncatingRemainder(dividingBy: lap)
+        let offset = into < Metrics.marqueePause ? 0 : CGFloat(into - Metrics.marqueePause) * Metrics.marqueeSpeed
+        track.transform = CGAffineTransform(translationX: -offset, y: 0)
+    }
+}
+
+/// The Now Playing pill beside the avatar: playing bars and "title · artist".
+final class ShellSidebarNowPlayingCell: UICollectionViewCell {
+    static let reuseIdentifier = "ShellSidebarNowPlayingCell"
+
+    private let capsule = UIView()
+    private let bars = MusicPlaybackBarsView(peak: Metrics.nowPlayingBarsPeak)
+    private let marquee = SidebarMarqueeLabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        capsule.layer.cornerRadius = Metrics.nowPlayingHeight / 2
+        marquee.font = .preferredFont(forTextStyle: .caption1)
+        for view in [capsule, bars, marquee] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            capsule.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            capsule.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            capsule.centerYAnchor.constraint(equalTo: contentView.topAnchor, constant: Metrics.headerCenterY),
+            capsule.heightAnchor.constraint(equalToConstant: Metrics.nowPlayingHeight),
+            bars.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: Metrics.nowPlayingInset),
+            bars.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+            marquee.leadingAnchor.constraint(equalTo: bars.trailingAnchor, constant: Metrics.nowPlayingBarsGap),
+            marquee.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -Metrics.nowPlayingInset),
+            marquee.topAnchor.constraint(equalTo: capsule.topAnchor),
+            marquee.bottomAnchor.constraint(equalTo: capsule.bottomAnchor),
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        applyAppearance(focused: false)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure(item: ShellSidebarItem) {
+        guard let track = item.nowPlaying else { return }
+        marquee.text = track.line
+        bars.isPlaying = track.isPlaying
+        if let artist = track.artist, !artist.isEmpty {
+            accessibilityLabel = String(localized: "Now Playing, \(track.title), \(artist)")
+        } else {
+            accessibilityLabel = String(localized: "Now Playing, \(track.title)")
+        }
+        applyAppearance(focused: isFocused)
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        if focused {
+            coordinator.addCoordinatedAnimations({ self.applyAppearance(focused: true) })
+        } else {
+            applyAppearance(focused: false)
+        }
+    }
+
+    // Unfocused it wears the selected row's translucent capsule, so it reads as a pill.
+    private func applyAppearance(focused: Bool) {
+        let colors = sidebarRowColors(focused: focused, selected: true)
+        capsule.backgroundColor = colors.background
+        marquee.textColor = colors.content
+        bars.barColor = colors.content
+        marquee.isScrolling = focused
+    }
+}
+
 // MARK: - Profile header cell
 
 /// The profile entry, above the tabs: avatar, first name and the time, no focus
@@ -284,6 +453,8 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
     private var nameBeforeClock: NSLayoutConstraint!
     private var nameToEdge: NSLayoutConstraint!
     private var canSwitch = false
+    /// Just the avatar: the slot is shared with the Now Playing pill.
+    private var compact = false
     private var clockTimer: Timer?
 
     override init(frame: CGRect) {
@@ -361,7 +532,8 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
         avatarView.setImageScale(scale)
     }
 
-    func configure(item: ShellSidebarItem) {
+    func configure(item: ShellSidebarItem, compact: Bool = false) {
+        self.compact = compact
         iconView.image = UIImage(systemName: item.icon)
         avatarView.url = item.avatarURL
         nameLabel.text = item.title
@@ -384,14 +556,16 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
     private func applyAppearance(focused: Bool) {
         iconView.tintColor = .white
         nameLabel.textColor = focused ? .white : UIColor.white.withAlphaComponent(0.5)
-        let captioned = focused && canSwitch
+        let captioned = focused && canSwitch && !compact
         captionLabel.alpha = captioned ? 1 : 0
-        clockLabel.alpha = focused ? 0 : 1
-        nameBeforeClock.isActive = !focused
-        nameToEdge.isActive = focused
+        nameLabel.isHidden = compact
+        clockLabel.alpha = focused || compact ? 0 : 1
+        nameBeforeClock.isActive = !focused && !compact
+        nameToEdge.isActive = focused || compact
         // The name rises by half the caption so the pair stays centred on the avatar.
         nameCenterY.constant = Metrics.headerCenterY - (captioned ? captionLabel.font.lineHeight / 2 : 0)
-        nameLeading.constant = Metrics.titleLeading + (focused ? Metrics.focusedNameShift : 0)
+        nameLeading.constant = compact ? Metrics.iconCenterX
+            : Metrics.titleLeading + (focused ? Metrics.focusedNameShift : 0)
         let scale = focused ? (Metrics.avatarSize + Metrics.avatarFocusGrowth) / Metrics.avatarSize : 1
         avatarView.transform = CGAffineTransform(scaleX: scale, y: scale)
         iconView.transform = avatarView.transform
@@ -530,11 +704,46 @@ final class ShellSidebarViewController: UIViewController {
     /// snapshot dance, the whole point of owning the shell.
     func setSections(_ new: [ShellSidebarSection]) {
         guard new != sections else { return }
+        let old = sections
         sections = new
         guard isViewLoaded else { return }
+        // A track change or a pause only redraws the pill; reloading would disturb its focus.
+        if Self.hasPill(old), Self.hasPill(new), Self.withoutPill(old) == Self.withoutPill(new) {
+            let pill = collectionView.cellForItem(at: IndexPath(item: 1, section: 0)) as? ShellSidebarNowPlayingCell
+            pill?.configure(item: new[0].items[1])
+            return
+        }
+        let pillFocused = Self.hasPill(old) && TileLongPress.focusedCell(in: collectionView).flatMap { old[$0.section].items[safe: $0.item] }?.tab == .nowPlaying
         collectionView.reloadData()
         configurePill()
+        if pillFocused, !Self.hasPill(new) { focusProfileSlotFallback() }
         if let key = pendingFocusKey ?? heldKey { focusRow(key) }
+    }
+
+    private static func hasPill(_ sections: [ShellSidebarSection]) -> Bool {
+        sections.first?.items.contains { $0.tab == .nowPlaying } == true
+    }
+
+    private static func withoutPill(_ sections: [ShellSidebarSection]) -> [ShellSidebarSection] {
+        sections.map { ShellSidebarSection(title: $0.title, items: $0.items.filter { $0.tab != .nowPlaying }) }
+    }
+
+    /// The pill left while focused: focus goes to the avatar, or the first row if it takes none.
+    private func focusProfileSlotFallback() {
+        let avatar = IndexPath(item: 0, section: 0)
+        let target = item(at: avatar)?.canSwitchProfile == true ? avatar : IndexPath(item: 0, section: 1)
+        if item(at: target) != nil { focus(at: target) }
+    }
+
+    /// Left and Right between the avatar and the pill are focus moves, not a request to close.
+    private func movesWithinProfileSlot(_ direction: DirectionalInputBinding.Direction) -> Bool {
+        guard Self.hasPill(sections), let focused = TileLongPress.focusedCell(in: collectionView), focused.section == 0
+        else { return false }
+        switch direction {
+        case .right: return focused.item == 0
+        case .left: return focused.item == 1 && item(at: IndexPath(item: 0, section: 0))?.canSwitchProfile == true
+        default: return false
+        }
     }
 
     /// Collapsed-state pill visibility, driven by the below-top focus signal.
@@ -592,7 +801,10 @@ final class ShellSidebarViewController: UIViewController {
         applyState(expanded: true, animated: false)
         closeSwipe = DirectionalInputBinding(
             gatedSwipesOn: view, directions: [.left, .right],
-            shouldHandle: { [weak self] _ in self?.state == .expanded && self?.rowMove?.isMoving != true },
+            shouldHandle: { [weak self] direction in
+                guard let self else { return false }
+                return state == .expanded && rowMove?.isMoving != true && !movesWithinProfileSlot(direction)
+            },
             onSwipe: { [weak self] _ in self?.requestCollapse() })
     }
 
@@ -620,6 +832,7 @@ final class ShellSidebarViewController: UIViewController {
         for press in presses {
             switch (press.type, state) {
             case (.leftArrow, .expanded), (.rightArrow, .expanded):
+                if movesWithinProfileSlot(press.type == .leftArrow ? .left : .right) { continue }
                 requestCollapse()
                 return
             case (.leftArrow, .collapsed) where !embedded:
@@ -763,6 +976,8 @@ final class ShellSidebarViewController: UIViewController {
                                 forCellWithReuseIdentifier: ShellSidebarRowCell.reuseIdentifier)
         collectionView.register(ShellSidebarProfileCell.self,
                                 forCellWithReuseIdentifier: ShellSidebarProfileCell.reuseIdentifier)
+        collectionView.register(ShellSidebarNowPlayingCell.self,
+                                forCellWithReuseIdentifier: ShellSidebarNowPlayingCell.reuseIdentifier)
         collectionView.register(ShellSidebarHeaderView.self,
                                 forSupplementaryViewOfKind: ShellSidebarHeaderView.elementKind,
                                 withReuseIdentifier: ShellSidebarHeaderView.reuseIdentifier)
@@ -844,8 +1059,24 @@ final class ShellSidebarViewController: UIViewController {
             let itemSize = NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
                 heightDimension: .absolute(isProfile ? Metrics.profileBandHeight : Metrics.rowPitch))
-            let item = NSCollectionLayoutItem(layoutSize: itemSize)
-            let group = NSCollectionLayoutGroup.vertical(layoutSize: itemSize, subitems: [item])
+            let group: NSCollectionLayoutGroup
+            if isProfile {
+                // Alone the avatar row fills the width; with music, the avatar's column and the pill.
+                let count = self?.sections[sectionIndex].items.count ?? 1
+                group = .custom(layoutSize: itemSize) { environment in
+                    let width = environment.container.effectiveContentSize.width
+                    let band = Metrics.profileBandHeight
+                    guard count > 1 else { return [NSCollectionLayoutGroupCustomItem(frame: CGRect(x: 0, y: 0, width: width, height: band))] }
+                    let column = Metrics.avatarColumnWidth
+                    return [
+                        NSCollectionLayoutGroupCustomItem(frame: CGRect(x: 0, y: 0, width: column, height: band)),
+                        NSCollectionLayoutGroupCustomItem(frame: CGRect(
+                            x: column, y: 0, width: width - column - Metrics.headerTrailing, height: band)),
+                    ]
+                }
+            } else {
+                group = .vertical(layoutSize: itemSize, subitems: [NSCollectionLayoutItem(layoutSize: itemSize)])
+            }
             let section = NSCollectionLayoutSection(group: group)
             // Window safe-area insets (80 leading / 60 top) must not shift
             // rows: the card's own geometry is the only frame of reference.
@@ -917,6 +1148,13 @@ extension ShellSidebarViewController: UICollectionViewDataSource, UICollectionVi
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: ShellSidebarProfileCell.reuseIdentifier,
                 for: indexPath) as! ShellSidebarProfileCell
+            cell.configure(item: item, compact: sections[indexPath.section].items.count > 1)
+            return cell
+        }
+        if item.tab == .nowPlaying {
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: ShellSidebarNowPlayingCell.reuseIdentifier,
+                for: indexPath) as! ShellSidebarNowPlayingCell
             cell.configure(item: item)
             return cell
         }
@@ -949,7 +1187,7 @@ extension ShellSidebarViewController: UICollectionViewDataSource, UICollectionVi
         if let rowMove, rowMove.swallowsNextSelect { rowMove.swallowsNextSelect = false; return }
         guard rowMove?.isMoving != true else { return }
         let tab = sections[indexPath.section].items[indexPath.item].tab
-        if tab != .account { select(tab: tab) }
+        if tab != .account, tab != .nowPlaying { select(tab: tab) }
         if embedded { onTabSelected?(tab) }
     }
 
@@ -1109,6 +1347,11 @@ extension ShellSidebarViewController {
         guard let indexPath = sections.indices.lazy.compactMap({ s in
             self.sections[s].items.firstIndex { $0.arrangeKey == key }.map { IndexPath(item: $0, section: s) }
         }).first else { return }
+        focus(at: indexPath)
+        updateRowWiggle()
+    }
+
+    fileprivate func focus(at indexPath: IndexPath) {
         collectionView.preferredFocusIndexPath = indexPath
         collectionView.layoutIfNeeded()
         collectionView.scrollToItem(at: indexPath, at: .centeredVertically, animated: false)
@@ -1121,6 +1364,5 @@ extension ShellSidebarViewController {
         let requester: UIFocusEnvironment = holdsFocus ? collectionView : (view.window?.rootViewController ?? self)
         requester.setNeedsFocusUpdate()
         requester.updateFocusIfNeeded()
-        updateRowWiggle()
     }
 }

@@ -31,6 +31,7 @@ struct TVSidebarView: View {
     @StateObject private var profileManager = PlexUserProfileManager.shared
     @StateObject private var nestedNavState = NestedNavigationState()
     @StateObject private var deepLinkHandler = DeepLinkHandler.shared
+    @StateObject private var nowPlayingFeed = SidebarNowPlayingFeed()
     @AppStorage("combineLiveTVSources") private var combineLiveTVSources = true
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("showWatchlistTab") private var showWatchlistTab = true
@@ -113,7 +114,8 @@ struct TVSidebarView: View {
             profileAvatar: profileManager.selectedUser?.thumb.flatMap { URL(string: $0) },
             canSwitchProfile: profileManager.hasMultipleProfiles,
             hasMediaServer: isSignedInToAnyServer,
-            playlistServers: PlaylistServer.current(visiblePlaylistProviders))
+            playlistServers: PlaylistServer.current(visiblePlaylistProviders),
+            nowPlaying: nowPlayingFeed.track)
     }
 
     /// Servers that get a Playlists row: those with playlists, less the rows Settings hides.
@@ -688,7 +690,7 @@ struct TVSidebarView: View {
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear
-            case .watchlist, .playlists:
+            case .watchlist, .playlists, .nowPlaying:
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear

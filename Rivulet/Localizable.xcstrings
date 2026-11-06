@@ -9052,6 +9052,12 @@
         }
       }
     },
+    "Now Playing, %@" : {
+
+    },
+    "Now Playing, %@, %@" : {
+
+    },
     "OK" : {
       "localizations" : {
         "de" : {

@@ -23,6 +23,20 @@ struct ShellSidebarItem: Hashable {
     var badge: String?
     /// The row's `SidebarArrangement` key; nil for the fixed rows.
     var arrangeKey: String?
+    /// The Now Playing pill's track; set only on the `.nowPlaying` item.
+    var nowPlaying: SidebarNowPlaying?
+}
+
+/// The track the profile slot's pill names. Server text, never localized.
+struct SidebarNowPlaying: Hashable {
+    var title: String
+    var artist: String?
+    var isPlaying: Bool
+
+    /// "title · artist", or the title alone.
+    var line: String {
+        [title, artist].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 }
 
 /// A server whose sidebar gets a Playlists row.
@@ -121,16 +135,23 @@ enum ShellSidebarModel {
         profileAvatar: URL? = nil,
         canSwitchProfile: Bool = false,
         hasMediaServer: Bool = true,
-        playlistServers: [PlaylistServer] = []
+        playlistServers: [PlaylistServer] = [],
+        nowPlaying: SidebarNowPlaying? = nil
     ) -> [ShellSidebarSection] {
         var sections: [ShellSidebarSection] = []
 
-        // The profile is a header in a section of its own, above the tabs.
-        sections.append(ShellSidebarSection(title: nil, items: [
+        // The profile is a header in a section of its own, above the tabs. While
+        // music plays its slot also holds the Now Playing pill, beside the avatar.
+        var header = [
             ShellSidebarItem(tab: .account, title: firstName(of: profileName),
                              icon: "person.crop.circle.fill", avatarURL: profileAvatar,
                              canSwitchProfile: canSwitchProfile),
-        ]))
+        ]
+        if let nowPlaying {
+            header.append(ShellSidebarItem(tab: .nowPlaying, title: nowPlaying.line, icon: "music.note",
+                                           nowPlaying: nowPlaying))
+        }
+        sections.append(ShellSidebarSection(title: nil, items: header))
 
         // Search, Discover and the watchlist need a media server. Without one,
         // Home is only the welcome screen, kept while there is no Live TV instead.

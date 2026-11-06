@@ -202,6 +202,29 @@ final class ShellSidebarModelTests: XCTestCase {
         XCTAssertEqual(sections([])[0].items.first?.canSwitchProfile, false)
     }
 
+    func test_nowPlaying_joinsTheProfileSlot_withoutAddingARowOrASection() {
+        func build(_ playing: SidebarNowPlaying?) -> [ShellSidebarSection] {
+            ShellSidebarModel.sections(
+                libraries: [], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: false,
+                profileName: "Bain", nowPlaying: playing)
+        }
+        let track = SidebarNowPlaying(title: "Nightcall", artist: "Kavinsky", isPlaying: true)
+        let with = build(track)
+        let without = build(nil)
+
+        XCTAssertEqual(with[0].items.map(\.tab), [.account, .nowPlaying])
+        XCTAssertEqual(with[0].items[1].title, "Nightcall \u{00B7} Kavinsky")
+        XCTAssertEqual(with[0].items[1].nowPlaying, track)
+        XCTAssertEqual(Array(with.dropFirst()), Array(without.dropFirst()))
+        XCTAssertEqual(without[0].items.map(\.tab), [.account])
+    }
+
+    func test_nowPlaying_lineWithoutArtist_isTheTitle() {
+        XCTAssertEqual(SidebarNowPlaying(title: "Intro", artist: nil, isPlaying: false).line, "Intro")
+        XCTAssertEqual(SidebarNowPlaying(title: "Intro", artist: "", isPlaying: false).line, "Intro")
+    }
+
     func test_firstName() {
         XCTAssertEqual(ShellSidebarModel.firstName(of: "William Gurley"), "William")
         XCTAssertEqual(ShellSidebarModel.firstName(of: "  Mary  Ann\tSmith"), "Mary")

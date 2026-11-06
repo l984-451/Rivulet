@@ -118,6 +118,12 @@ final class RootShellViewController: UIViewController {
             guard let self else { return }
             // The profile row opens the switcher; it has no content to mount.
             if tab == .account { self.onTabChange?(tab); return }
+            // Now Playing presents over everything; the tab stays where it is.
+            if tab == .nowPlaying {
+                self.collapseSidebar()
+                MusicQueue.shared.showNowPlaying = true
+                return
+            }
             let reselectedPage = tab == self.currentTab
                 ? self.contentVCs[tab].flatMap { SidebarReselection.target(in: $0.view) } : nil
             if reselectedPage != nil {

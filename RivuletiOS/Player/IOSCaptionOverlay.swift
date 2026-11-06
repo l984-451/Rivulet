@@ -8,7 +8,9 @@ struct IOSAetherSubtitleOverlay: View {
     let cues: [AetherPlayer.SubtitleCue]
     let nativeCues: [AetherPlayer.SubtitleCue]
     let style: CaptionStyle
-    let landscapeOSDTop: CGFloat?
+    /// The chrome's bottom bar top while it shows; captions lift above it
+    /// wherever the picture reaches it (landscape, a filled window, a short one).
+    let osdTop: CGFloat?
     let videoSize: CGSize
     /// Aspect fill crops the picture to the screen, so captions lay out against the screen.
     var fillsScreen = false
@@ -55,10 +57,7 @@ struct IOSAetherSubtitleOverlay: View {
                 font: style.font(ofSize: 100)
             )
             let picture = pictureRect(in: proxy.size)
-            let osdBoundary = landscapeCaptionMaxY(
-                in: picture,
-                container: proxy.size
-            )
+            let osdBoundary = captionMaxY(in: picture)
             let defaultBand = defaultBandRect(
                 in: picture,
                 osdBoundary: osdBoundary
@@ -288,15 +287,13 @@ struct IOSAetherSubtitleOverlay: View {
         )
     }
 
-    private func landscapeCaptionMaxY(
-        in picture: CGRect,
-        container: CGSize
-    ) -> CGFloat? {
-        guard container.width > container.height, let landscapeOSDTop else { return nil }
-        return min(
-            picture.maxY,
-            landscapeOSDTop - picture.height * Metrics.unpositionedBottomFraction
-        )
+    /// Where the bottom bar pushes captions up to. Geometric, not by
+    /// orientation: a letterboxed picture that ends above the bar is left alone,
+    /// so this is a no-op in portrait on a phone and lifts the band in any
+    /// window the picture fills.
+    private func captionMaxY(in picture: CGRect) -> CGFloat? {
+        guard let osdTop else { return nil }
+        return min(picture.maxY, osdTop - picture.height * Metrics.unpositionedBottomFraction)
     }
 }
 

@@ -222,7 +222,7 @@ private struct IOSLivePlayerScreen: View {
                         cues: player.subtitleCues.filter { $0.startTime <= player.sourceTime && $0.endTime >= player.sourceTime },
                         nativeCues: player.nativeSubtitleCues,
                         style: captionStyle,
-                        landscapeOSDTop: osdTop,
+                        osdTop: osdTop,
                         videoSize: player.videoSize,
                         fillsScreen: player.fillsScreen
                     )
@@ -360,6 +360,7 @@ struct IOSLiveChannelPicker: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
             }
             .overlay {

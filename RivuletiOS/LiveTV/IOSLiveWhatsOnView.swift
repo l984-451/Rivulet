@@ -119,6 +119,7 @@ struct IOSLiveCard: View {
             IOSLiveCardArt(item: item, now: now)
                 .frame(width: width, height: width * 9 / 16)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .tileHover(cornerRadius: 12)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.footnote.weight(.semibold))

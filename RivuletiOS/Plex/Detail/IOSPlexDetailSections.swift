@@ -47,6 +47,7 @@ struct IOSPlexEpisodeCell: View {
             .overlay {
                 if actions.preparingID == episode.ref.actionKey { ProgressView().tint(.white) }
             }
+            .tileHover(cornerRadius: 10)
     }
 
     private var heading: some View {
@@ -171,6 +172,7 @@ struct IOSPlexExtrasRow: View {
                             .overlay {
                                 if actions.preparingID == extra.id { ProgressView().tint(.white) }
                             }
+                            .tileHover(cornerRadius: 10)
                         Text(extra.title).font(.footnote.weight(.semibold)).lineLimit(1)
                         if let runtime = extra.runtimeText {
                             Text(runtime).font(.caption).foregroundStyle(.secondary)

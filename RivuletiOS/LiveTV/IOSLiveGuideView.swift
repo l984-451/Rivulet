@@ -359,7 +359,9 @@ final class IOSLiveGuideContainer: UIView {
         self.timer = timer
     }
 
-    /// Scrolls under the floating tab bar and lets it minimize on scroll.
+    /// Scrolls under the floating tab bar and lets it minimize on scroll. With no tab bar
+    /// (the iPad sidebar) the last row still clears the home indicator. Recomputed on every
+    /// layout, so the inset follows the tab bar as a window narrows into one and widens out.
     private func adoptTabBar() {
         var responder: UIResponder? = self
         var tabBar: UITabBar?
@@ -370,8 +372,10 @@ final class IOSLiveGuideContainer: UIView {
             }
             responder = current.next
         }
-        guard let tabBar, !tabBar.isHidden else { return }
-        let overlap = max(0, bounds.maxY - tabBar.convert(tabBar.bounds, to: self).minY)
+        var overlap = safeAreaInsets.bottom
+        if let tabBar, !tabBar.isHidden {
+            overlap = max(overlap, bounds.maxY - tabBar.convert(tabBar.bounds, to: self).minY)
+        }
         guard abs(overlap - bottomInset) > 0.5 else { return }
         bottomInset = overlap
         coordinator.collectionView.contentInset.bottom = overlap
@@ -568,6 +572,7 @@ private final class IOSLiveGuideProgramCell: UICollectionViewCell {
         ])
         isAccessibilityElement = true
         accessibilityTraits = .button
+        hoverStyle = UIHoverStyle(effect: .highlight, shape: .rect(cornerRadius: 8))
         updateColors()
     }
 
@@ -669,6 +674,7 @@ private final class IOSLiveGuideChannelView: UICollectionReusableView {
         isAccessibilityElement = true
         accessibilityTraits = .button
         accessibilityHint = String(localized: "Plays the channel")
+        box.hoverStyle = UIHoverStyle(effect: .highlight, shape: .rect(cornerRadius: 8))
     }
 
     required init?(coder: NSCoder) { fatalError() }

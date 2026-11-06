@@ -220,6 +220,7 @@ struct IOSPlexPosterCard: View {
             .plexWatchState(item)
             .overlay(alignment: .topLeading) { editionBadge }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .tileHover(cornerRadius: 10)
             .plexZoomSource(item)
 
             if showsCaption {
@@ -320,6 +321,7 @@ struct IOSPlexContinueCard: View {
         .frame(width: width, height: height)
         .environment(\.colorScheme, .dark)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .tileHover(cornerRadius: 12)
         .plexZoomSource(item)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -746,6 +748,13 @@ extension View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.secondary, lineWidth: 1))
+    }
+
+    /// The pointer's lift over a tappable tile's artwork, as the TV app's tiles on iPad.
+    /// Plain-style buttons and links get no pointer effect of their own.
+    func tileHover(cornerRadius: CGFloat) -> some View {
+        contentShape(.hoverEffect, .rect(cornerRadius: cornerRadius, style: .continuous))
+            .hoverEffect(.lift)
     }
 }
 

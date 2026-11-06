@@ -21,8 +21,11 @@ struct RivuletiOSApp: App {
         #if DEBUG
         IOSScreenshotMode.seedSession()
         #endif
-        PlexAPI.platform = "iOS"
-        PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
+        // Designed for iPad on a Mac is this same binary, so without the check
+        // plex.tv lists a Mac as an iPad. Shared code never asks; the host does.
+        let isMac = ProcessInfo.processInfo.isiOSAppOnMac
+        PlexAPI.platform = isMac ? "macOS" : "iOS"
+        PlexAPI.deviceName = isMac ? "Mac" : UIDevice.current.model   // "iPhone" / "iPad"
         // The iOS library grid lists titles; tvOS also lists a library's collections.
         MediaProviderRegistry.plexIncludesCollections = false
         // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
@@ -56,7 +59,7 @@ struct RivuletiOSApp: App {
         Task.detached(priority: .utility) {
             guard !Secrets.sentryDSN.isEmpty else { return }
             try? await Task.sleep(for: .seconds(3))
-            await SentryStartup.start(platform: .iOS)
+            await SentryStartup.start(platform: isMac ? .macOS : .iOS)
         }
         #endif
     }

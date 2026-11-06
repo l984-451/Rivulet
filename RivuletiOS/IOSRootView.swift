@@ -22,6 +22,9 @@ struct IOSRootView: View {
     @State private var librarySelection: IOSLibrarySelection?
     @State private var libraryColumn = NavigationSplitViewColumn.sidebar
     @State private var libraryPath = NavigationPath()
+    /// Each sidebar library tab's pushed pages, by tab value, so they can follow the
+    /// library into the Library tab when the window narrows and the tab goes away.
+    @State private var sidebarPaths: [String: NavigationPath] = [:]
     @Namespace private var homeZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
@@ -44,21 +47,21 @@ struct IOSRootView: View {
             TabSection("Library") {
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
-                        tabStack(sidebarZoom) { IOSDownloadsView(showsAccount: true) }
+                        sidebarStack("downloads") { IOSDownloadsView(showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
                 ForEach(showsSidebarLibraries ? videoLibraries : []) { library in
                     Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.icon,
                         value: libraryTab(library)) {
-                        tabStack(sidebarZoom) { IOSPlexLibraryView(library: library, showsAccount: true) }
+                        sidebarStack(libraryTab(library)) { IOSPlexLibraryView(library: library, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
                 ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { providerID in
                     Tab(browse.labels.title(String(localized: "Playlists"), providerID: providerID), systemImage: "list.and.film",
-                        value: "playlists:\(providerID)") {
-                        tabStack(sidebarZoom) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
+                        value: playlistsTab(providerID)) {
+                        sidebarStack(playlistsTab(providerID)) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
@@ -116,15 +119,24 @@ struct IOSRootView: View {
                 break
             }
         }
-        .onChange(of: sizeClass) { dropOrphanedLibraryTab() }
+        // Stage Manager and Split View resize the window: at compact width the sidebar's
+        // library tabs vanish, and the one in use folds into the Library tab. Back at
+        // regular width the Library tab's library returns to its sidebar tab.
+        .onChange(of: showsSidebarLibraries) { _, sidebar in
+            if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
+        }
         .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
             libraryPath = NavigationPath()
+            sidebarPaths = [:]
         }
         .onChange(of: browse.libraries) { _, libraries in
             if !libraries.isEmpty, !browse.isLoadingOtherServers { dropOrphanedLibraryTab() }
-            if case .library(let library) = librarySelection, !libraries.contains(library) { librarySelection = nil }
+            if case .library(let library) = librarySelection, !libraries.contains(library) {
+                librarySelection = nil
+                libraryPath = NavigationPath()
+            }
         }
         .onChange(of: browse.isLoadingOtherServers) { _, loading in
             if !loading, !browse.libraries.isEmpty { dropOrphanedLibraryTab() }
@@ -132,12 +144,61 @@ struct IOSRootView: View {
         .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
     }
 
-    /// A sidebar library tab vanishes at compact width or on a server without that library.
+    /// A sidebar library tab vanishes on a server without that library.
     private func dropOrphanedLibraryTab() {
-        guard selectedTab.hasPrefix("library:") || selectedTab.hasPrefix("playlists:") || selectedTab == "downloads" else { return }
-        let live = showsSidebarLibraries
-            ? videoLibraries.map(libraryTab) + playlistServers.map { "playlists:\($0)" } + ["downloads"] : []
-        if !live.contains(selectedTab) { selectedTab = "library" }
+        guard Self.isSidebarTab(selectedTab), !sidebarTabs.contains(selectedTab) else { return }
+        selectedTab = "library"
+    }
+
+    /// The window narrowed: the sidebar tab's library, and the pages pushed over it,
+    /// carry on in the Library tab's detail column.
+    private func foldSidebarTab() {
+        guard Self.isSidebarTab(selectedTab) else { return }
+        guard let selection = librarySelection(forTab: selectedTab) else {
+            selectedTab = "library"
+            return
+        }
+        librarySelection = selection
+        libraryColumn = .detail
+        libraryPath = sidebarPaths.removeValue(forKey: selectedTab) ?? NavigationPath()
+        selectedTab = "library"
+    }
+
+    /// The window widened: the Library tab's library, and the pages pushed over it,
+    /// carry on in that library's sidebar tab.
+    private func unfoldLibraryTab() {
+        guard selectedTab == "library", let selection = librarySelection else { return }
+        let tab = tab(for: selection)
+        guard sidebarTabs.contains(tab) else { return }
+        sidebarPaths[tab] = libraryPath
+        libraryColumn = .sidebar
+        libraryPath = NavigationPath()
+        selectedTab = tab
+    }
+
+    private static func isSidebarTab(_ tab: String) -> Bool {
+        tab.hasPrefix("library:") || tab.hasPrefix("playlists:") || tab == "downloads"
+    }
+
+    private func tab(for selection: IOSLibrarySelection) -> String {
+        switch selection {
+        case .downloads: "downloads"
+        case .library(let library): libraryTab(library)
+        case .playlists(let providerID): playlistsTab(providerID)
+        }
+    }
+
+    private func librarySelection(forTab tab: String) -> IOSLibrarySelection? {
+        if tab == "downloads" { return .downloads }
+        if let library = videoLibraries.first(where: { libraryTab($0) == tab }) { return .library(library) }
+        if let id = playlistServers.first(where: { playlistsTab($0) == tab }) { return .playlists(providerID: id) }
+        return nil
+    }
+
+    /// Every sidebar library tab while they show, libraries first.
+    private var sidebarTabs: [String] {
+        guard showsSidebarLibraries else { return [] }
+        return videoLibraries.map(libraryTab) + playlistServers.map(playlistsTab) + ["downloads"]
     }
 
     /// iPad only: a Plus/Max/Air iPhone is regular width in landscape, and tabs added
@@ -158,6 +219,7 @@ struct IOSRootView: View {
     }
 
     private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }
+    private func playlistsTab(_ providerID: String) -> String { "playlists:\(providerID)" }
 
     /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
     /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
@@ -211,6 +273,18 @@ struct IOSRootView: View {
         // A server or profile switch pops every stack: open pages hold the old one's items.
         .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, namespace)
+    }
+
+    /// A sidebar library tab's stack, its pages kept in `sidebarPaths` under the tab's value.
+    private func sidebarStack<Content: View>(_ tab: String, @ViewBuilder content: () -> Content) -> some View {
+        NavigationStack(path: Binding(
+            get: { sidebarPaths[tab] ?? NavigationPath() },
+            set: { sidebarPaths[tab] = $0 }
+        )) {
+            content().iosPlexDestinations()
+        }
+        .id(browse.sessionGeneration)
+        .environment(\.plexZoomNamespace, sidebarZoom)
     }
 }
 

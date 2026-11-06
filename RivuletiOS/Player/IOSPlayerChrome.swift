@@ -74,7 +74,9 @@ struct IOSPlayerQuality {
 
 /// Touch chrome modelled on the iOS 26 system player: close and PiP top
 /// leading, AirPlay and mute top trailing, transport in the centre, title,
-/// scrubber and menus along the bottom. Always dark.
+/// scrubber and menus along the bottom. Always dark. A hardware keyboard gets
+/// Space, Left, Right and Escape; a pointer brings the controls up by moving
+/// and is hidden over the picture while they are down.
 struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private let title: String
     private let subtitle: String?
@@ -105,7 +107,9 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     @State private var scrubValue: Double?
     @State private var ripple: Ripple?
     @State private var bottomBarTop: CGFloat?
+    @State private var topBarBottom: CGFloat?
     @State private var transportSize: CGSize = .zero
+    @State private var pointerLocation: CGPoint?
 
     /// - Parameters:
     ///   - rate: nil hides the speed menu (live).
@@ -161,11 +165,14 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             video(chromeVisible ? bottomBarTop : nil)
                 .ignoresSafeArea()
 
-            IOSPlayerGestureSurface(
+            IOSPlayerInputSurface(
+                chromeVisible: chromeVisible,
+                canSkip: canSkip,
                 onTap: toggleChrome,
                 onDoubleTap: { leading in skipFromGesture(leading: leading) },
                 onPinch: { fill in actions.setFillsScreen(fill) },
-                onSwipeDown: { (actions.swipeDown ?? actions.close)() }
+                onSwipeDown: { (actions.swipeDown ?? actions.close)() },
+                onKey: handleKey
             )
             .ignoresSafeArea()
 
@@ -187,6 +194,10 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         }
         .coordinateSpace(name: Self.space)
         .onPreferenceChange(BottomBarTopKey.self) { bottomBarTop = $0 }
+        .onPreferenceChange(TopBarBottomKey.self) { topBarBottom = $0 }
+        .onContinuousHover { phase in
+            if case .active(let location) = phase { pointerMoved(to: location) }
+        }
         .foregroundStyle(.white)
         .tint(.white)
         .environment(\.colorScheme, .dark)
@@ -214,6 +225,14 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         ZStack {
             VStack(spacing: 0) {
                 topBar
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: TopBarBottomKey.self,
+                                value: proxy.frame(in: .named(Self.space)).maxY
+                            )
+                        }
+                    }
                 Spacer(minLength: 0)
                 bottomBar
                     .background {
@@ -231,7 +250,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             GeometryReader { proxy in
                 transport
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { transportSize = $0 }
-                    .offset(foldOffset(proxy))
+                    .offset(transportOffset(proxy))
                     .frame(width: proxy.size.width, height: proxy.size.height)
             }
         }
@@ -256,7 +275,6 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
                     glassButton("Close", systemImage: "xmark", action: actions.close)
-                        .keyboardShortcut(.cancelAction)
                     if canPictureInPicture {
                         glassButton("Picture in Picture", systemImage: "pip.enter", action: actions.pictureInPicture)
                     }
@@ -268,6 +286,8 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     IOSRoutePicker()
                         .frame(width: 44, height: 44)
                         .glassEffect(.regular.interactive(), in: .circle)
+                        .contentShape(.hoverEffect, .circle)
+                        .hoverEffect()
                         .accessibilityLabel("AirPlay")
                     glassButton(
                         isMuted ? "Unmute" : "Mute",
@@ -278,6 +298,21 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             }
         }
     }
+
+    /// The centred transport, clear of the fold and, in a window too short to
+    /// hold all three bands (Stage Manager, a small Mac window), clear of the
+    /// bars: it lifts off the bottom bar and never rises into the top one.
+    private func transportOffset(_ proxy: GeometryProxy) -> CGSize {
+        var offset = foldOffset(proxy)
+        let half = transportSize.height / 2
+        var centre = proxy.size.height / 2 + offset.height
+        if let bottomBarTop { centre = min(centre, bottomBarTop - Self.bandClearance - half) }
+        if let topBarBottom { centre = max(centre, topBarBottom + Self.bandClearance + half) }
+        offset.height = centre - proxy.size.height / 2
+        return offset
+    }
+
+    private static var bandClearance: CGFloat { 12 }
 
     /// Moves the centred transport just clear of iPhone Duo's fold while partly
     /// folded: trailing for a book fold, below for a laptop fold. Zero otherwise.
@@ -310,7 +345,6 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 }
                 .frame(width: 72, height: 72)
             }
-            .keyboardShortcut(.space, modifiers: [])
             .accessibilityLabel(isPlaying ? "Pause" : "Play")
 
             if canSkip { skipButton(forward: true) }
@@ -326,7 +360,6 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 .font(.system(size: 26, weight: .medium))
                 .frame(width: 52, height: 52)
         }
-        .keyboardShortcut(forward ? .rightArrow : .leftArrow, modifiers: [])
         .accessibilityLabel(forward ? "Forward \(seconds) seconds" : "Back \(seconds) seconds")
     }
 
@@ -635,6 +668,29 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         scheduleHide()
     }
 
+    /// A moving pointer brings the controls up and keeps them up (Mac, iPad
+    /// trackpad). Movement only: a hover phase can arrive again for a pointer
+    /// that has not moved when the views under it change, as they do when the
+    /// chrome hides, and that must not bring it straight back.
+    private func pointerMoved(to location: CGPoint) {
+        defer { pointerLocation = location }
+        guard let last = pointerLocation else { return }
+        guard abs(location.x - last.x) > 2 || abs(location.y - last.y) > 2 else { return }
+        if !chromeVisible { chromeVisible = true }
+        scheduleHide()
+    }
+
+    /// One action per key press. Skips show the double-tap ripple, so a keyboard
+    /// user sees the jump with the controls down.
+    private func handleKey(_ key: IOSPlayerInputSurface.Key) {
+        switch key {
+        case .playPause: interact(actions.playPause)
+        case .skipBackward: skipFromGesture(leading: true)
+        case .skipForward: skipFromGesture(leading: false)
+        case .close: actions.close()
+        }
+    }
+
     /// Hides after 3 s while playing; paused, failed, scrubbing or VoiceOver
     /// keep the controls up.
     private func scheduleHide() {
@@ -735,6 +791,14 @@ private struct BottomBarTopKey: PreferenceKey {
     }
 }
 
+private struct TopBarBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
+    }
+}
+
 /// The system player's bar: no knob, thickens while dragging, and the time
 /// labels follow the finger. Seeks on release.
 private struct IOSPlayerScrubber: View {
@@ -758,7 +822,10 @@ private struct IOSPlayerScrubber: View {
     @State private var stillTime: Double?
     @State private var stillLoad: Task<Void, Never>?
 
-    private static let stillWidth: CGFloat = 176
+    /// A fifth of the bar, no smaller than the phone's: an iPad's preview reads at arm's length.
+    private static func stillWidth(for barWidth: CGFloat) -> CGFloat {
+        min(max(176, barWidth * 0.2), 320)
+    }
 
     private var span: Double { max(range.upperBound - range.lowerBound, 0.001) }
 
@@ -777,11 +844,12 @@ private struct IOSPlayerScrubber: View {
                 .contentShape(Rectangle())
                 .overlay(alignment: .topLeading) {
                     if let still, scrubValue != nil {
-                        let half = Self.stillWidth / 2
-                        let height = Self.stillWidth * still.size.height / max(still.size.width, 1)
+                        let width = Self.stillWidth(for: geometry.size.width)
+                        let half = width / 2
+                        let height = width * still.size.height / max(still.size.width, 1)
                         Image(uiImage: still)
                             .resizable()
-                            .frame(width: Self.stillWidth, height: height)
+                            .frame(width: width, height: height)
                             .clipShape(.rect(cornerRadius: 10))
                             .shadow(radius: 8)
                             .position(x: min(max(geometry.size.width * fraction, half), max(half, geometry.size.width - half)),
@@ -892,45 +960,135 @@ private struct IOSTimelineSections: View {
         }
     }
 }
+/// UIKit for what SwiftUI arbitrates poorly: single vs double tap with the
+/// touch location, pinch, and a vertical swipe that must not steal horizontal
+/// pans; plus the hardware keys and the pointer. Controls sit above this
+/// surface. The view is the first responder while nothing is presented over
+/// the player, so its key commands fire whether or not the chrome is up, and
+/// a sheet gets the keyboard back (its own Escape) while it is open.
+private struct IOSPlayerInputSurface: UIViewRepresentable {
+    enum Key {
+        case playPause, skipBackward, skipForward, close
+    }
 
-/// UIKit recognizers for what SwiftUI arbitrates poorly: single vs double tap
-/// with the touch location, pinch, and a vertical swipe that must not steal
-/// horizontal pans. Controls sit above this surface.
-private struct IOSPlayerGestureSurface: UIViewRepresentable {
+    let chromeVisible: Bool
+    let canSkip: Bool
     let onTap: () -> Void
     let onDoubleTap: (_ leading: Bool) -> Void
     let onPinch: (_ fill: Bool) -> Void
     let onSwipeDown: () -> Void
+    let onKey: (Key) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> SurfaceView {
+        let view = SurfaceView()
         view.backgroundColor = .clear
-        let coordinator = context.coordinator
-        let single = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.tap))
-        let double = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.doubleTap(_:)))
+        let single = UITapGestureRecognizer(target: view, action: #selector(SurfaceView.tap))
+        let double = UITapGestureRecognizer(target: view, action: #selector(SurfaceView.doubleTap(_:)))
         double.numberOfTapsRequired = 2
         single.require(toFail: double)
-        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.pinch(_:)))
-        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.pan(_:)))
-        pan.delegate = coordinator
+        let pinch = UIPinchGestureRecognizer(target: view, action: #selector(SurfaceView.pinch(_:)))
+        let pan = UIPanGestureRecognizer(target: view, action: #selector(SurfaceView.pan(_:)))
+        pan.delegate = view
         [single, double, pinch, pan].forEach(view.addGestureRecognizer)
+        view.addInteraction(UIPointerInteraction(delegate: view))
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.surface = self
+    func updateUIView(_ view: SurfaceView, context: Context) {
+        view.surface = self
+        view.syncKeyboardOwnership()
     }
 
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var surface: IOSPlayerGestureSurface?
+    final class SurfaceView: UIView, UIGestureRecognizerDelegate, UIPointerInteractionDelegate {
+        var surface: IOSPlayerInputSurface? {
+            didSet {
+                guard surface?.chromeVisible != oldValue?.chromeVisible else { return }
+                // The style is read when the pointer enters a region; a stationary pointer needs a re-read.
+                interactions.compactMap { $0 as? UIPointerInteraction }.forEach { $0.invalidate() }
+            }
+        }
+
+        private var recheckPending = false
+
+        override var canBecomeFirstResponder: Bool { true }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            syncKeyboardOwnership()
+        }
+
+        /// First responder while the player is frontmost; a sheet or alert over it takes the
+        /// keyboard (UIKit starts at the deepest presented controller when nobody holds it).
+        /// Nothing announces the cover's dismissal, so while covered it looks again every
+        /// half second and takes the keyboard back on the first look after it is gone.
+        func syncKeyboardOwnership() {
+            guard window != nil else { return }
+            if isCovered {
+                if isFirstResponder { resignFirstResponder() }
+                guard !recheckPending else { return }
+                recheckPending = true
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    self?.recheckPending = false
+                    self?.syncKeyboardOwnership()
+                }
+            } else if !isFirstResponder {
+                becomeFirstResponder()
+            }
+        }
+
+        private var isCovered: Bool {
+            var responder: UIResponder? = self
+            while let next = responder?.next {
+                if let controller = next as? UIViewController { return controller.presentedViewController != nil }
+                responder = next
+            }
+            return false
+        }
+
+        // MARK: Keys
+
+        /// Space, Left, Right and Escape; one action per press, however long the key
+        /// is held (UIKit repeats a key command by default, which would stack seeks).
+        /// With keyboard navigation on, the system would otherwise take Space and the
+        /// arrows for the focused control; Escape stays the system's.
+        /// Known gap: on iPad the Now Playing Live Activity can take keyboard focus after playback starts.
+        override var keyCommands: [UIKeyCommand]? {
+            guard let surface, !isCovered else { return nil }
+            var inputs = [UIKeyCommand.inputEscape, " "]
+            if surface.canSkip { inputs += [UIKeyCommand.inputLeftArrow, UIKeyCommand.inputRightArrow] }
+            return inputs.map { input in
+                let command = UIKeyCommand(input: input, modifierFlags: [], action: #selector(handleKey(_:)))
+                command.repeatBehavior = .nonRepeatable
+                command.wantsPriorityOverSystemBehavior = input != UIKeyCommand.inputEscape
+                return command
+            }
+        }
+
+        @objc private func handleKey(_ command: UIKeyCommand) {
+            let key: Key? = switch command.input {
+            case UIKeyCommand.inputEscape: .close
+            case " ": .playPause
+            case UIKeyCommand.inputLeftArrow: .skipBackward
+            case UIKeyCommand.inputRightArrow: .skipForward
+            default: nil
+            }
+            if let key { surface?.onKey(key) }
+        }
+
+        // MARK: Pointer
+
+        /// Hidden over the picture while the chrome is down; the system arrow otherwise.
+        func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+            surface?.chromeVisible == false ? .hidden() : nil
+        }
+
+        // MARK: Touches
 
         @objc func tap() { surface?.onTap() }
 
         @objc func doubleTap(_ recognizer: UITapGestureRecognizer) {
-            guard let view = recognizer.view else { return }
-            surface?.onDoubleTap(recognizer.location(in: view).x < view.bounds.midX)
+            surface?.onDoubleTap(recognizer.location(in: self).x < bounds.midX)
         }
 
         @objc func pinch(_ recognizer: UIPinchGestureRecognizer) {
@@ -940,15 +1098,16 @@ private struct IOSPlayerGestureSurface: UIViewRepresentable {
         }
 
         @objc func pan(_ recognizer: UIPanGestureRecognizer) {
-            guard recognizer.state == .ended, let view = recognizer.view else { return }
-            let translation = recognizer.translation(in: view).y
-            let velocity = recognizer.velocity(in: view).y
+            guard recognizer.state == .ended else { return }
+            let translation = recognizer.translation(in: self).y
+            let velocity = recognizer.velocity(in: self).y
             if translation > 80 || velocity > 900 { surface?.onSwipeDown() }
         }
 
-        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = recognizer as? UIPanGestureRecognizer, let view = pan.view else { return true }
-            let velocity = pan.velocity(in: view)
+        // UIView asks its own recognizers this too, so it is an override, not only the delegate.
+        override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: self)
             return velocity.y > abs(velocity.x)
         }
     }

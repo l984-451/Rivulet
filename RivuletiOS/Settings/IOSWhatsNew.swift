@@ -117,6 +117,8 @@ struct IOSWhatsNewSheet: View {
             .padding(.horizontal, 28)
             .padding(.vertical, 20)
         }
+        // On iPad a sheet is a page otherwise, with the notes at the top and Continue far below.
+        .presentationSizing(.form)
     }
 }
 

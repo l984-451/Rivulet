@@ -15,10 +15,12 @@ import Sentry
 public enum SentryStartup {
     /// Which app sent the event (both report into one project). Passed in by the
     /// caller: no `#if os` here, and `UIDevice.systemName` splits iPads across
-    /// "iOS" and "iPadOS".
+    /// "iOS" and "iPadOS". `macOS` is the iOS app running on a Mac (Designed for
+    /// iPad), so Mac-only runtime failures can be told apart from iPad ones.
     public enum Platform: String {
         case tvOS
         case iOS
+        case macOS
     }
 
     /// MUST be main-actor isolated: `SentrySDK.start` builds the SDK's

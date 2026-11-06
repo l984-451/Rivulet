@@ -249,6 +249,18 @@ RivuletCore is compiled into each app target, not built as a module, so
 also means an extension on a shared type inside `RivuletiOS/` is not a
 retroactive conformance.
 
+### Mac (Designed for iPad)
+
+The iOS app runs on Apple silicon Macs as **Designed for iPad**, not Mac Catalyst:
+the FFmpeg, LibDovi and LibTrueHD xcframeworks under AetherEngine ship no
+`maccatalyst` slice and the engine is upstream-only, so Catalyst cannot link
+(`SUPPORTS_MACCATALYST = NO`). The Mac runs the iphoneos binary; the only
+runtime signal is `ProcessInfo.isiOSAppOnMac`, read in `RivuletiOSApp.init` to
+inject `PlexAPI.platform`/`deviceName` and Sentry's `macOS` platform. Build with
+`-destination 'platform=macOS,arch=arm64,name=My Mac'` (the `variant=` form
+can't take Xcode 27's comma); a local build only launches in the App Store
+wrapper layout, so `generic/platform=iOS` is the usual compile check.
+
 ### The player split
 
 `AetherPlayer` is three pieces in two homes. The engine mapping (state and track

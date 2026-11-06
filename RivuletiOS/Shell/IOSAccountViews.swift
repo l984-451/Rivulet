@@ -335,6 +335,8 @@ struct IOSProfilePicker: View {
                         badge("lock.circle.fill", color: .gray)
                     }
                 }
+                .contentShape(.hoverEffect, .circle)
+                .hoverEffect(.lift)
             Text(user.displayName)
                 .font(.subheadline)
                 .lineLimit(1)
@@ -445,6 +447,8 @@ private struct IOSProfilePINEntry: View {
             }
         }
         .presentationDetents([.medium])
+        // On iPad a sheet is a page otherwise: too tall for one field and a toggle.
+        .presentationSizing(.form)
         .onAppear {
             error = initialError
             focused = true

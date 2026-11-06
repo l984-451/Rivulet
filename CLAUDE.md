@@ -848,6 +848,10 @@ Silo retains its native policy and reservation lifecycle there rather than a dup
 `6de6d5e5e285a9b423e95a1122cb39e5bb9ca93b`: API v2 and negotiated playback
 protocol v3, never compatibility endpoints or Plex Discover substitutions.
 
+- Shared source registration is not a Live TV capability. `OtherServerKind`
+  configures Live TV only for kinds providing `syncLiveTV`; Silo remains available
+  for account selection and catalog browsing without installing a Live TV source.
+
 - `SiloSession` stages login/profile/PIN before atomically committing the account.
   Keychain holds token pairs and profile proofs, not passwords/PINs. Providers
   capture `authorityRevision`; reject stale prepare/presentation work after a switch.

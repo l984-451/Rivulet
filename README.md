@@ -96,7 +96,7 @@ Silo's native account/profile selection, catalog browsing and playback use the s
 
 On iOS, native audio/subtitle selections and offered quality choices use the negotiated playback session. Subtitle changes reload at the current source position; tvOS retains its atomic text-caption-only swap when the server proves the video is unchanged.
 
-Silo offline downloads, music/books, editable native playlists, and multipart-only playback are not supported. Calendar, personal collection editing, presentation-preference synchronization, companion control/handoff/nearby pairing, and Watch Party are outside this integration. The still-undefined `header_refresh=session` transport mode is not advertised; this does not prevent current bearer-auth refresh or supported playback-session renewal.
+Silo offline downloads, Live TV, music/books, editable native playlists, and multipart-only playback are not supported. Calendar, personal collection editing, presentation-preference synchronization, companion control/handoff/nearby pairing, and Watch Party are outside this integration. The still-undefined `header_refresh=session` transport mode is not advertised; this does not prevent current bearer-auth refresh or supported playback-session renewal.
 
 <br></br>
 ## Live TV

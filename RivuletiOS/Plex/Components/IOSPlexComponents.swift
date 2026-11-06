@@ -435,8 +435,8 @@ struct IOSShelfGeometry {
             }
         }
 
-        /// Largest share of a phone-width row one tile may take; a capped tile
-        /// keeps the row's leading margin and shows more of the next tile.
+        /// Largest share of a phone-width row one tile may take; a capped row
+        /// rests on the margin and centres every later tile (`IOSCentredSnap`).
         func maximumShare(wide: Bool) -> CGFloat? {
             self == .landscape && !wide ? 0.64 : nil
         }
@@ -447,6 +447,8 @@ struct IOSShelfGeometry {
     /// system large title and toolbar sit on it too.
     static let leading: CGFloat = 20
     let tileWidth: CGFloat
+    /// True when `maximumShare` narrowed the tile below the row equation.
+    let isCapped: Bool
 
     /// `textScale` grows the minimum with Dynamic Type, so larger text gets fewer, wider tiles.
     init(width: CGFloat, kind: Kind, textScale: CGFloat = 1) {
@@ -458,7 +460,30 @@ struct IOSShelfGeometry {
         while tile(count + 2) >= minimum { count += 2 }
         var width0 = tile(count)
         if let share = kind.maximumShare(wide: width >= 600) { width0 = min(width0, width * share) }
+        isCapped = width0 < tile(count)
         tileWidth = max(0, width0)
+    }
+}
+
+/// A capped row's snap: the first tile rests on the leading margin, every later
+/// one centred, one tile per swipe. Offsets assume the row is padded, not
+/// content-margined.
+struct IOSCentredSnap: ScrollTargetBehavior {
+    let tile: CGFloat
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let pitch = tile + IOSShelfGeometry.gap
+        // Tile i >= 1 is centred at `centring + i * pitch`; tile 0 rests at 0.
+        let centring = IOSShelfGeometry.leading + tile / 2 - context.containerSize.width / 2
+        func offset(_ index: Int) -> CGFloat { index == 0 ? 0 : centring + CGFloat(index) * pitch }
+        func nearest(_ x: CGFloat) -> Int {
+            let index = max(1, Int(((x - centring) / pitch).rounded()))
+            return abs(x) < abs(x - offset(index)) ? 0 : index
+        }
+        let from = nearest(context.originalTarget.rect.minX)
+        let index = min(max(nearest(target.rect.minX), from - 1), from + 1)
+        let maxOffset = max(0, context.contentSize.width - context.containerSize.width)
+        target.rect.origin.x = min(max(0, offset(index)), maxOffset)
     }
 }
 
@@ -491,7 +516,20 @@ struct IOSShelfRow<Items: RandomAccessCollection, Header: View, Tile: View>: Vie
         let geometry = IOSShelfGeometry(width: width, kind: kind, textScale: textScale)
         VStack(alignment: .leading, spacing: 10) {
             header().padding(.horizontal, IOSShelfGeometry.leading)
-            if geometry.tileWidth > 0 {
+            if geometry.tileWidth > 0, geometry.isCapped {
+                // Padded, so the snap's offsets start at the first tile's rest.
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: IOSShelfGeometry.gap) {
+                        ForEach(items) { tile($0, geometry.tileWidth) }
+                    }
+                    .scrollTargetLayout()
+                    .padding(.leading, IOSShelfGeometry.leading)
+                    .padding(.trailing, max(IOSShelfGeometry.leading, (width - geometry.tileWidth) / 2))
+                }
+                .scrollTargetBehavior(IOSCentredSnap(tile: geometry.tileWidth))
+                .scrollPosition(id: $anchor, anchor: .center)
+                .scrollIndicators(.hidden)
+            } else if geometry.tileWidth > 0 {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: IOSShelfGeometry.gap) {
                         ForEach(items) { tile($0, geometry.tileWidth) }

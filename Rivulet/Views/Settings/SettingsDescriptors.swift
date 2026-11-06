@@ -57,7 +57,7 @@ enum SettingsDescriptorStore {
         // MARK: Root Categories
         "cat_appearance": SettingDescriptor(
             icon: "paintbrush.fill",
-            description: "Customize how Rivulet looks — display size, hero banners, sidebar libraries, and content discovery rows."
+            description: "Customize how Rivulet looks: the sidebar, Top Shelf, hero banners, Home and library rows, and ratings."
         ),
         "cat_playback": SettingDescriptor(
             icon: "play.fill",

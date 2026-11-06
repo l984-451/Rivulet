@@ -159,8 +159,9 @@ enum MediaRowMetrics {
     static let posterCaptionHeight: CGFloat = 66
     /// Settings → Appearance → Titles Under Posters (Home poster rows and library grids).
     static let posterTitlesKey = "showPosterTitles"
+    static let posterTitlesDefault = false
     static var showsPosterTitles: Bool {
-        (UserDefaults.standard.object(forKey: posterTitlesKey) as? Bool) ?? true
+        (UserDefaults.standard.object(forKey: posterTitlesKey) as? Bool) ?? posterTitlesDefault
     }
 
     /// Library poster grid: artwork top to the next row's artwork top (Apple's 55 between 390-tall tiles).

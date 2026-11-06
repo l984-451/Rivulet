@@ -480,6 +480,11 @@ extension EmbyProvider {
         ]).items)
     }
 
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        let path = "Users/\(userID)/FavoriteItems/\(ref.itemID)"
+        if favorite { try await client.post(path) } else { try await client.delete(path) }
+    }
+
     // MARK: - A to Z
 
     /// `Items/Prefixes` (bare route only; the user route is a 500) lists the letters in use with

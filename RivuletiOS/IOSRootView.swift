@@ -183,6 +183,7 @@ struct IOSRootView: View {
     private func tab(for selection: IOSLibrarySelection) -> String {
         switch selection {
         case .downloads: "downloads"
+        case .favorites: "favorites"  // not a sidebar tab: stays under Library
         case .library(let library): libraryTab(library)
         case .playlists(let providerID): playlistsTab(providerID)
         }

@@ -502,6 +502,15 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
+    /// Five stars, or no rating, as `PlexMusicProvider.setFavorite` does.
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await plexCall {
+            try await networkManager.setRating(
+                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID,
+                rating: favorite ? Int(5 * PlexUserRating.starScale) : nil)
+        }
+    }
+
     // MARK: - Playback
 
     // MARK: - Per-item track selection

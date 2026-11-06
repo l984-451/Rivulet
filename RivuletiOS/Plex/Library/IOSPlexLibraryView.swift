@@ -7,6 +7,7 @@ import SwiftUI
 /// or pushes it at compact width.
 enum IOSLibrarySelection: Hashable {
     case downloads
+    case favorites
     case library(MediaLibrary)
     case playlists(providerID: String)
 }
@@ -50,6 +51,7 @@ struct IOSPlexLibrarySplitView: View {
     private var detail: some View {
         switch selection {
         case .downloads: IOSDownloadsView()
+        case .favorites: IOSFavoritesView()
         case .library(let library): IOSPlexLibraryView(library: library)
         case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
@@ -64,6 +66,7 @@ struct IOSPlexLibrariesView: View {
     @EnvironmentObject private var browse: IOSBrowseStore
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
+    @AppStorage("showFavoritesTab") private var showFavorites = false
 
     var body: some View {
         Group {
@@ -74,6 +77,12 @@ struct IOSPlexLibrariesView: View {
                     Section {
                         NavigationLink(value: IOSLibrarySelection.downloads) {
                             Label("Downloads", systemImage: "arrow.down.circle")
+                        }
+                        // The tvOS sidebar's Favorites page, off until Account > Home turns it on.
+                        if showFavorites, browse.offersFavorites {
+                            NavigationLink(value: IOSLibrarySelection.favorites) {
+                                Label("Favorites", systemImage: "heart")
+                            }
                         }
                     }
                     if !browse.hasServers {

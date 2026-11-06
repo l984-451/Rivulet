@@ -418,6 +418,14 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return map(result.items)
     }
 
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        if favorite {
+            try await client.post("UserFavoriteItems/\(ref.itemID)")
+        } else {
+            try await client.delete("UserFavoriteItems/\(ref.itemID)")
+        }
+    }
+
     /// Two requests: the library's TMDB ids, then the matches. 12.1 ignores
     /// `anyProviderIdEquals` (measured: every title comes back), so the ids are listed.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] {

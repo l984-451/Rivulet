@@ -142,6 +142,7 @@ enum ShellSidebarModel {
         combineLiveTV: Bool,
         showDiscover: Bool,
         showWatchlist: Bool,
+        showFavorites: Bool = false,
         order: [String] = defaultOrder,
         hiddenKeys: Set<String> = [],
         profileName: String,
@@ -179,14 +180,16 @@ enum ShellSidebarModel {
         let rows = arrangeableRows(libraries: libraries, liveTVSources: liveTVSources, combineLiveTV: combineLiveTV,
                                    showDiscover: showDiscover && hasMediaServer,
                                    showWatchlist: showWatchlist && hasMediaServer,
+                                   showFavorites: showFavorites && hasMediaServer,
                                    hiddenKeys: hiddenKeys, playlistServers: playlistServers)
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let (arranged, grouped) = SidebarArrangement.sections(
             SidebarArrangement.arrange(rows.map(\.key), order: order))
         var middle = arranged
-        // Discover and the watchlist leading the list join Search and Home, as before.
+        // Discover, the watchlist and Favorites leading the list join Search and Home, as before.
         if let first = middle.first, first.server == nil {
-            let lead = first.keys.prefix { $0 == SidebarArrangement.discover || $0 == SidebarArrangement.watchlist }
+            let leading: Set = [SidebarArrangement.discover, SidebarArrangement.watchlist, SidebarArrangement.favorites]
+            let lead = first.keys.prefix { leading.contains($0) }
             top += lead.compactMap { key in
                 byKey[key].map { row in var item = row.item; item.arrangeKey = key; return item }
             }
@@ -221,7 +224,7 @@ enum ShellSidebarModel {
         let serverName: String?
     }
 
-    /// Every arrangeable row shown, before ordering: Discover, the watchlist, the
+    /// Every arrangeable row shown, before ordering: Discover, the watchlist, Favorites, the
     /// libraries in order, each server's Playlists row, and Live TV. Settings >
     /// Sidebar passes everything, hidden rows included.
     static func arrangeableRows(
@@ -230,6 +233,7 @@ enum ShellSidebarModel {
         combineLiveTV: Bool,
         showDiscover: Bool,
         showWatchlist: Bool,
+        showFavorites: Bool = false,
         hiddenKeys: Set<String> = [],
         playlistServers: [PlaylistServer] = []
     ) -> [Row] {
@@ -242,6 +246,11 @@ enum ShellSidebarModel {
         if showWatchlist {
             rows.append(Row(key: SidebarArrangement.watchlist,
                             item: ShellSidebarItem(tab: .watchlist, title: String(localized: "Watchlist"), icon: "bookmark.fill"), serverName: nil))
+        }
+        // Favorites gather every server's, so no server either.
+        if showFavorites {
+            rows.append(Row(key: SidebarArrangement.favorites,
+                            item: ShellSidebarItem(tab: .favorites, title: String(localized: "Favorites"), icon: "heart.fill"), serverName: nil))
         }
         rows += libraries.map { Row(key: $0.key, item: $0.item, serverName: $0.serverName) }
         for server in playlistServers {

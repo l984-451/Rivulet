@@ -24,6 +24,9 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// button) and the paginated poster grid below the hub rows.
     static let sortHeader = HomeSectionID(raw: "sortHeader")
     static let grid = HomeSectionID(raw: "grid")
+    /// Favorites-mode-only: the two rows, movies then shows.
+    static let favoriteMovies = HomeSectionID(raw: "favorites.movies")
+    static let favoriteShows = HomeSectionID(raw: "favorites.shows")
     /// Library-mode-only: the library's Collections shelf. Each library key
     /// has its own cached controller, so the id cannot collide.
     static let libraryCollections = HomeSectionID(raw: "collections")
@@ -58,6 +61,9 @@ enum HomeMode {
     /// entry (issue #287). Entries are Discover metadata, so the tiles,
     /// the tap and the tile menu all reuse the Home watchlist row's paths.
     case watchlist
+    /// Favorites surface: no hero, one poster grid of every server's favorite
+    /// movies and shows (`FavoritesFeed`), merged by title, whole in page 0.
+    case favorites
     /// Collection page: one Plex collection's members as a poster grid under
     /// the collection's title. `ref.itemID` is the collection ratingKey.
     case collection(MediaItem)
@@ -685,6 +691,8 @@ final class PlexHomeViewController: UIViewController {
             return String(localized: "This collection is empty.")
         case .playlists:
             return String(localized: "No playlists yet.")
+        case .favorites:
+            return String(localized: "No favorites yet. Hold Select on a movie or show to add one.")
         case .playlist:
             return String(localized: "This playlist is empty.")
         case .library where providerLibrary != nil:
@@ -712,8 +720,8 @@ final class PlexHomeViewController: UIViewController {
             return false  // Watchlist is the grid alone
         case .collection, .playlist:
             return false  // A collection page is its title and grid
-        case .playlists:
-            return false  // The playlists grid alone, like Watchlist
+        case .playlists, .favorites:
+            return false  // The grid alone, like Watchlist
         }
     }
     /// `enablePersonalizedRecommendations` AppStorage gate.
@@ -896,8 +904,8 @@ final class PlexHomeViewController: UIViewController {
                 applySnapshot(animated: false)
                 updateHomeState()
             }
-        case .playlists:
-            // A server's playlists, whole in page 0.
+        case .playlists, .favorites:
+            // A server's playlists, or every server's favorites, whole in page 0.
             loadGridPage(containing: 0)
         case .collection, .playlist:
             // Collection page: its members only. No hubs, hero or alphabet
@@ -1500,6 +1508,13 @@ final class PlexHomeViewController: UIViewController {
                 if let self, self.gridGeneration == generation { self.loadedPlaylists = lists }
                 return (lists.map(\.item), lists.count)
             }
+        } else if case .favorites = mode {
+            // Every server's favorites, merged by title, in page 0.
+            fetchPage = { start in
+                guard start == 0 else { return ([], nil) }
+                let items = await FavoritesFeed.load(from: PersonalHomeRows.providers)
+                return (items, items.count)
+            }
         } else if case .playlist(let playlist) = mode {
             // Every entry in page 0. Kept whole beside the grid, which has only their items.
             guard let provider = MediaProviderRegistry.shared.provider(for: playlist.ref.providerID) else { return }
@@ -1586,6 +1601,13 @@ final class PlexHomeViewController: UIViewController {
                 for (offset, item) in result.items.enumerated() where slots.contains(start + offset) {
                     self.gridItems[start + offset] = item
                 }
+                // Favorites show the list as two rows, not a grid of slots: rebuild and repaint them.
+                if case .favorites = self.mode {
+                    self.applySnapshot(animated: false)
+                    self.reconfigureFavoriteTiles()
+                    self.updateHomeState()
+                    return
+                }
                 // Same slot count: the identities are unchanged, so patch the page into the
                 // rendered sections instead of rebuilding a snapshot of every slot in the library.
                 if !countChanged, let grid = self.sectionsSnapshot.firstIndex(where: {
@@ -1613,6 +1635,17 @@ final class PlexHomeViewController: UIViewController {
 
     /// Re-vend the cells of a landed page. Slot identifiers never change, so
     /// `applySnapshot` alone leaves the placeholder cards on screen.
+    /// Repaints both favorites rows in place: a reload keeps their ids, not their tiles.
+    private func reconfigureFavoriteTiles() {
+        var snap = dataSource.snapshot()
+        let ids = [HomeSectionID.favoriteMovies, .favoriteShows]
+            .filter(snap.sectionIdentifiers.contains)
+            .flatMap { snap.itemIdentifiers(inSection: $0) }
+        guard !ids.isEmpty else { return }
+        snap.reconfigureItems(ids)
+        dataSource.apply(snap, animatingDifferences: false)
+    }
+
     private func reconfigureGridSlots(_ range: Range<Int>) {
         guard !range.isEmpty else { return }
         var snap = dataSource.snapshot()
@@ -2466,6 +2499,8 @@ final class PlexHomeViewController: UIViewController {
         switch mode {
         case .home, .search:
             return authManager.hasCredentials || ServerDataStore.shared.isSignedIn
+        case .favorites:
+            return PersonalHomeRows.offersFavorites
         case .collection(let item) where !item.ref.isPlex:
             return MediaProviderRegistry.shared.provider(for: item.ref.providerID) != nil
         case .playlist(let playlist):
@@ -2565,7 +2600,7 @@ final class PlexHomeViewController: UIViewController {
             // correctly either way (the watchlist really has nothing to show).
             hubsError = nil
             hubsEmpty = watchlistService.watchlistItems.isEmpty
-        case .collection, .playlist, .playlists:
+        case .collection, .playlist, .playlists, .favorites:
             // Page 0's own outcome: an empty grid reads the same while the
             // request is in flight, after it failed and after an empty answer.
             let state = pageZeroState
@@ -3332,7 +3367,7 @@ final class PlexHomeViewController: UIViewController {
                         self.reloadLoadedGridPages()
                         self.loadAlphabetIndex()
                         await self.refreshThisLibraryHubs()
-                    case .collection, .playlist, .playlists:
+                    case .collection, .playlist, .playlists, .favorites:
                         // Playback and detail-page watch changes: re-request
                         // the loaded pages so badges and progress repaint.
                         // A playlist page also picks up entry edits; the grid, created and deleted lists.
@@ -3370,7 +3405,7 @@ final class PlexHomeViewController: UIViewController {
                     self?.requestHeroUpgrade()
                 }
                 .store(in: &dataStoreObservers)
-        case .discover, .search, .watchlist, .collection, .playlists, .playlist:
+        case .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist:
             break
         }
 
@@ -4242,6 +4277,10 @@ final class PlexHomeViewController: UIViewController {
             }
             if sections.count > 1 { sections[1].append(action) } else { sections.append([action]) }
         }
+        if FavoritesFeed.canFavorite(item) {
+            let action = favoriteAction(for: item)
+            if sections.count > 1 { sections[1].append(action) } else { sections.append([action]) }
+        }
         if await provider.canDeleteMedia() {
             sections.append([deleteAction(for: item, provider: provider, from: presenter)])
         }
@@ -4261,6 +4300,18 @@ final class PlexHomeViewController: UIViewController {
         return item.kind == .episode || item.kind == .season
             ? TileMenuAction(title: "Add Show to Watchlist", systemImage: "plus.circle", handler: add)
             : TileMenuAction(title: "Add to Watchlist", systemImage: "plus.circle", handler: add)
+    }
+
+    /// Add to or remove from Favorites, from the item's own state. Every surface repaints after.
+    private static func favoriteAction(for item: MediaItem) -> TileMenuAction {
+        let isFavorite = item.userState.isFavorite
+        return TileMenuAction(title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                              systemImage: isFavorite ? "heart.slash" : "heart") {
+            Task { @MainActor in
+                try? await FavoritesFeed.set(!isFavorite, for: item)
+                NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
+            }
+        }
     }
 
     /// "Delete", behind a confirmation.
@@ -4428,6 +4479,17 @@ final class PlexHomeViewController: UIViewController {
         }
         if case .playlists = mode {
             return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems))]
+        }
+        // Every server's favorites as Home's rows: Movies, then Shows, each by title.
+        // A Recently Added-kind row, so tap, tile menu and captions are Home's.
+        if case .favorites = mode {
+            let items = gridItems.compactMap { $0 }
+            func row(_ id: HomeSectionID, _ title: String, _ items: [MediaItem]) -> [HomeSectionData] {
+                items.isEmpty ? [] : [.hub(id: id, title: title, items: items, isContinueWatching: false,
+                                           hubKey: nil, hubIdentifier: nil)]
+            }
+            return row(.favoriteMovies, String(localized: "Movies"), items.filter { $0.kind == .movie })
+                + row(.favoriteShows, String(localized: "Shows"), items.filter { $0.kind != .movie })
         }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
         if case .playlist(let playlist) = mode {
@@ -4942,7 +5004,7 @@ final class PlexHomeViewController: UIViewController {
         let cacheKey: String
         let sourceHubs: [PlexHub]
         switch mode {
-        case .discover, .search, .watchlist, .collection, .playlists, .playlist:
+        case .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist:
             return  // no Plex-hub hero on these surfaces
         case .home:
             // Other servers only, or showing a list: MediaItem hero. A list with
@@ -4979,7 +5041,7 @@ final class PlexHomeViewController: UIViewController {
         switch mode {
         case .home: isTMDBEligible = true
         case .library: isTMDBEligible = trendingHeroType() != nil
-        case .discover, .search, .watchlist, .collection, .playlists, .playlist: isTMDBEligible = false
+        case .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist: isTMDBEligible = false
         }
 
         if heroItems.isEmpty {
@@ -5042,7 +5104,7 @@ final class PlexHomeViewController: UIViewController {
                 items,
                 toLibraryKeys: dataStore.librariesPinnedToHome.map { $0.key }
             )
-        case .library, .discover, .search, .watchlist, .collection, .playlists, .playlist:
+        case .library, .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist:
             return items
         }
     }
@@ -5175,7 +5237,7 @@ final class PlexHomeViewController: UIViewController {
             guard let t = trendingHeroType() else { lastUpgradedIndexGeneration = -1; return }
             cacheKey = key
             heroType = t
-        case .discover, .search, .watchlist, .collection, .playlists, .playlist:
+        case .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist:
             return
         }
 
@@ -5275,7 +5337,7 @@ final class PlexHomeViewController: UIViewController {
         switch mode {
         case .home: sourceHubs = dataStore.hubs
         case .library(let key, _): sourceHubs = dataStore.libraryHubs[key] ?? []
-        case .discover, .search, .watchlist, .collection, .playlists, .playlist: return
+        case .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist: return
         }
         let fallback = computeHubBackedHero(from: sourceHubs)
         if !fallback.isEmpty {

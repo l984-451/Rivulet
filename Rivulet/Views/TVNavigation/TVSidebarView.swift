@@ -35,6 +35,7 @@ struct TVSidebarView: View {
     @AppStorage("combineLiveTVSources") private var combineLiveTVSources = true
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("showWatchlistTab") private var showWatchlistTab = true
+    @AppStorage("showFavoritesTab") private var showFavoritesTab = false
     @State private var selectedTab: SidebarTab = .home
     @State private var showProfilePicker = false
     /// A profile was entered through the picker; any other close re-presents it.
@@ -62,6 +63,13 @@ struct TVSidebarView: View {
     /// Home's welcome overlay stands down for any signed-in server.
     private var isSignedInToAnyServer: Bool {
         authManager.hasCredentials || serverStore.isSignedIn
+    }
+
+    /// Some signed-in server keeps favorites. Reads `serverStore.sources` so a sign-in or
+    /// sign-out re-renders the sidebar.
+    private var hasFavoritesServer: Bool {
+        _ = serverStore.sources
+        return PersonalHomeRows.offersFavorites
     }
 
     /// Signing out of everything brings the setup landing back.
@@ -111,6 +119,7 @@ struct TVSidebarView: View {
             // Both need a Plex account; a Jellyfin-only setup has neither (#478).
             showDiscover: showDiscoverTab && authManager.hasCredentials,
             showWatchlist: showWatchlistTab && authManager.hasCredentials,
+            showFavorites: showFavoritesTab && hasFavoritesServer,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
@@ -220,6 +229,11 @@ struct TVSidebarView: View {
         }
         .onChange(of: showWatchlistTab) { _, shown in
             if !shown && selectedTab == .watchlist {
+                selectedTab = .home
+            }
+        }
+        .onChange(of: showFavoritesTab && hasFavoritesServer) { _, shown in
+            if !shown && selectedTab == .favorites {
                 selectedTab = .home
             }
         }
@@ -615,6 +629,8 @@ struct TVSidebarView: View {
             return PlexHomeViewController(mode: .discover)
         case .watchlist:
             return PlexHomeViewController(mode: .watchlist)
+        case .favorites:
+            return PlexHomeViewController(mode: .favorites)
         case .playlists(let providerID):
             return PlexHomeViewController(mode: .playlists(providerID: providerID))
         case .search:
@@ -693,7 +709,7 @@ struct TVSidebarView: View {
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear
-            case .watchlist, .playlists, .nowPlaying:
+            case .watchlist, .favorites, .playlists, .nowPlaying:
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear

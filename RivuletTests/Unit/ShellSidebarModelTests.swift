@@ -15,6 +15,26 @@ final class ShellSidebarModelTests: XCTestCase {
             profileName: "Bain")
     }
 
+    func test_favorites_showWithAnyMediaServer_andLeadBesideTheWatchlist() {
+        func tabs(showFavorites: Bool, hasServer: Bool) -> [SidebarTab] {
+            ShellSidebarModel.sections(
+                libraries: [], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: true, showFavorites: showFavorites,
+                profileName: "Bain", hasMediaServer: hasServer)
+                .flatMap(\.items).map(\.tab)
+        }
+        XCTAssertEqual(tabs(showFavorites: true, hasServer: true),
+                       [.account, .search, .home, .watchlist, .favorites, .settings])
+        XCTAssertFalse(tabs(showFavorites: false, hasServer: true).contains(.favorites))
+        XCTAssertFalse(tabs(showFavorites: true, hasServer: false).contains(.favorites))
+    }
+
+    func test_favorites_areOffUnlessAskedFor() {
+        let rows = ShellSidebarModel.arrangeableRows(
+            libraries: [], liveTVSources: [], combineLiveTV: true, showDiscover: false, showWatchlist: false)
+        XCTAssertFalse(rows.contains { $0.key == SidebarArrangement.favorites })
+    }
+
     private func tabs(hasServer: Bool, liveTV: Bool, libraries: [PlexLibrary] = [],
                       playlistServers: [PlaylistServer] = []) -> [SidebarTab] {
         let source = LiveTVDataStore.LiveTVSourceInfo(

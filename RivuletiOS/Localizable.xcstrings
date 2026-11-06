@@ -2080,6 +2080,16 @@
         }
       }
     },
+    "Couldn't Update Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favoriten konnten nicht aktualisiert werden"
+          }
+        }
+      }
+    },
     "Couldn't load %@" : {
       "localizations" : {
         "de" : {
@@ -4366,6 +4376,16 @@
         }
       }
     },
+    "Lists your favorite movies and shows from every server under Library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt deine favorisierten Filme und Serien aller Server unter „Mediathek“."
+          }
+        }
+      }
+    },
     "Lists each server's video playlists under Library." : {
       "localizations" : {
         "de" : {
@@ -4878,6 +4898,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δεν υπάρχουν λήψεις"
+          }
+        }
+      }
+    },
+    "No Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Favoriten"
           }
         }
       }
@@ -7257,6 +7287,16 @@
         }
       }
     },
+    "Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sendungen"
+          }
+        }
+      }
+    },
     "Shows all" : {
       "localizations" : {
         "de" : {
@@ -8961,6 +9001,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Άγγιξε παρατεταμένα ένα κανάλι στη ζωντανή τηλεόραση για να το προσθέσεις."
+          }
+        }
+      }
+    },
+    "Touch and hold a movie or show, then choose Add to Favorites." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halte einen Film oder eine Serie gedrückt und wähle dann „Als Favoriten sichern“."
           }
         }
       }

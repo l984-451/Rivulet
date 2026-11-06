@@ -85,6 +85,8 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Home asks for them per movie or TV library while that kind's favorites
     /// row is on in Settings > Home > Rows. Default: none.
     func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem]
+    /// Marks a movie or show a favorite, or clears it. Plex: five stars, or no rating.
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
     /// The library's titles on `trending`, in its order, at most `limit`.
     /// Home's hero on a server with no TMDB index of its own. Default: none.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem]
@@ -253,6 +255,9 @@ extension MediaProvider {
     }
     var supportsFavorites: Bool { false }
     func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] { [] }
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        throw MediaProviderError.backendSpecific(underlying: "favorites not supported")
+    }
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] { [] }
     func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
         guard unwatchedOnly else { return try await items(in: library, sort: sort, page: page) }

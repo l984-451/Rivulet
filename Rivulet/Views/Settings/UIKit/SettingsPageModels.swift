@@ -1269,6 +1269,7 @@ enum SettingsContent {
             liveTVSources: LiveTVDataStore.shared.sources,
             combineLiveTV: SettingsStore.bool("combineLiveTVSources", default: true),
             showDiscover: PlexAuthManager.shared.hasCredentials, showWatchlist: PlexAuthManager.shared.hasCredentials,
+            showFavorites: PersonalHomeRows.offersFavorites,
             playlistServers: PlaylistServer.current(PlaylistAvailability.shared.providerIDs))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return SidebarArrangement.arrange(rows.map(\.key), order: LibrarySettingsManager.shared.libraryOrder)
@@ -1289,6 +1290,7 @@ enum SettingsContent {
                     LibrarySettingsManager.shared.resetSidebar()
                     SettingsStore.setBool("showDiscoverTab", true)
                     SettingsStore.setBool("showWatchlistTab", true)
+                    SettingsStore.setBool("showFavoritesTab", false)
                     (vc as? SettingsPageViewController)?.reloadRows()
                 }
             }))
@@ -1321,6 +1323,9 @@ enum SettingsContent {
             case SidebarArrangement.watchlist:
                 kind = .toggle(get: { SettingsStore.bool("showWatchlistTab", default: true) },
                                set: { SettingsStore.setBool("showWatchlistTab", $0) })
+            case SidebarArrangement.favorites:
+                kind = .toggle(get: { SettingsStore.bool("showFavoritesTab", default: false) },
+                               set: { SettingsStore.setBool("showFavoritesTab", $0) })
             case _ where SidebarArrangement.isLiveTV(key):
                 // Live TV leaves the sidebar only with its sources: no toggle, nothing
                 // to open, but focusable so it can be held and moved.

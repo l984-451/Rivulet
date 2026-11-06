@@ -9,7 +9,7 @@ final class SyncCatalogTests: XCTestCase {
     func test_tastePreferencesSync() {
         for key in ["showHomeHero", "autoplayLimit", "autoSkipIntro", "skipForwardSeconds", "skipBackSeconds",
                     "liveTVFavoriteChannelIds", "liveTVLayout", "contentFilter.enabled", "contentFilter.customWords",
-                    "plexDisabledServers", "useIntroDB"] {
+                    "plexDisabledServers", "useIntroDB", "showFavoritesTab"] {
             XCTAssertTrue(SyncCatalog.isSynced(key), key)
         }
     }

@@ -71,6 +71,9 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
 
     var favoritesSupported = false
     var supportsFavorites: Bool { favoritesSupported }
+    /// What `favorites(in:limit:)` answers, by library id.
+    var favoritesByLibrary: [String: [MediaItem]] = [:]
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] { favoritesByLibrary[library.id] ?? [] }
 
     var supportsPlaylists = false
     var playlistList: [MediaPlaylist] = []

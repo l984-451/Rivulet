@@ -33,6 +33,8 @@ final class IOSBrowseStore: ObservableObject {
     @Published private(set) var contentError: String?
     /// Bumped after a watched-state change so open grids and detail pages reload.
     @Published private(set) var watchStateRevision = 0
+    /// Favorites changed here this session, so menus and hearts are right before lists refetch.
+    @Published private(set) var favoriteOverrides: [MediaItemRef: Bool] = [:]
     /// Bumped on a server or profile switch; the tab stacks rebuild on it.
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
@@ -342,6 +344,17 @@ final class IOSBrowseStore: ObservableObject {
         let service = PlexWatchlistService.shared
         return WatchlistMembership.isListed(item, plexGUIDs: Set(service.watchlistItems.compactMap(\.plexGUID)),
                                             contains: { service.contains(guid: $0) })
+    }
+
+    /// The item's favorite state, as changed here or as its list said.
+    func isFavorite(_ item: MediaItem) -> Bool {
+        favoriteOverrides[item.ref] ?? item.userState.isFavorite
+    }
+
+    func setFavorite(_ on: Bool, item: MediaItem) async throws {
+        try await FavoritesFeed.set(on, for: item)
+        favoriteOverrides[item.ref] = on
+        await watchStateDidChange()
     }
 
     func setWatchlisted(_ on: Bool, item: MediaItem) async throws {

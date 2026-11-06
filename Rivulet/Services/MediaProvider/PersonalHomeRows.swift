@@ -25,13 +25,15 @@ final class PersonalHomeRows: ObservableObject {
     /// The rows Home draws; the rest are fetched for the hero only.
     var homeRows: CachedHomeRail { PersonalRows.homeRows(rows).map(Self.cached) }
 
-    /// Whether any signed-in server has favorites, so Settings offers the rows.
-    static var offersFavorites: Bool {
+    /// The servers Home shows: the selected Plex server and every other signed in.
+    static var providers: [any MediaProvider] {
         let registry = MediaProviderRegistry.shared
-        return PersonalRows.offersFavorites(
-            ([registry.plexProvider] + ServerDataStore.shared.sources.map { registry.provider(for: $0.providerID) })
-                .compactMap { $0 })
+        return ([registry.plexProvider] + ServerDataStore.shared.sources.map { registry.provider(for: $0.providerID) })
+            .compactMap { $0 }
     }
+
+    /// Whether any signed-in server has favorites, so Settings offers the rows and the Favorites page.
+    static var offersFavorites: Bool { PersonalRows.offersFavorites(providers) }
 
     private static func cached(_ row: PersonalRow) -> CachedHomeHub {
         var hub = CachedHomeHub(id: row.id, title: row.title, isContinueWatching: false, hubKey: nil,

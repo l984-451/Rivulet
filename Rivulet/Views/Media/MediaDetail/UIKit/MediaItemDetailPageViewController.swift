@@ -31,6 +31,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let onPlay: (MediaItem, String?) -> Void
 
     private let backdrop = UIImageView()
+    private let themeVideo = ThemeVideoBackdropView()
     private let scrim = ScrimGradientView()
     private let textColumn = UIStackView()
 
@@ -96,6 +97,10 @@ final class MediaItemDetailPageViewController: UIViewController {
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
         view.addSubview(backdrop)
+        themeVideo.frame = backdrop.bounds
+        themeVideo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        backdrop.addSubview(themeVideo)
+        themeVideo.configure(item: item.ref, host: self)
 
         // Transparent scroll view (driven by Down/Up, not the focus engine).
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -222,8 +227,14 @@ final class MediaItemDetailPageViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        themeVideo.setActive(true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        themeVideo.setActive(false)
     }
 
     @objc private func dismissSelf() { dismiss(animated: true) }

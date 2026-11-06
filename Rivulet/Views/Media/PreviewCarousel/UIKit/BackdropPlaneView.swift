@@ -38,6 +38,7 @@ final class BackdropPlaneView: UIView {
 
     /// Active panels keyed by movie index.
     private var panels: [Int: Panel] = [:]
+    private let themeVideo = ThemeVideoBackdropView()
 
     /// Current corner radius for the window containers. Lerped during morph.
     private var windowCornerRadius: CGFloat = PreviewCarouselGeometry.cornerRadius
@@ -154,6 +155,24 @@ final class BackdropPlaneView: UIView {
 
     /// The artwork already loaded for `index`, for the shelf flight's cards.
     func image(for index: Int) -> UIImage? { panels[index]?.imageView.image }
+
+    /// Only the expanded title plays; neighbouring cards stay still.
+    func playThemeVideo(at index: Int, host: UIViewController) {
+        guard items.indices.contains(index), let panel = panels[index] else { return }
+        if themeVideo.superview !== panel.container {
+            themeVideo.setActive(false)
+            panel.container.insertSubview(themeVideo, aboveSubview: panel.imageView)
+            themeVideo.frame = panel.container.bounds
+            themeVideo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        }
+        themeVideo.configure(item: items[index].ref, host: host)
+        themeVideo.setActive(true)
+    }
+
+    func stopThemeVideo() {
+        themeVideo.setActive(false)
+        themeVideo.removeFromSuperview()
+    }
 
     // MARK: - Morph hooks (driven by CarouselMorphController)
 

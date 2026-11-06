@@ -263,6 +263,8 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
     nonisolated struct DirectPlay: Encodable, Sendable {
         let type: String
         var container: String?
+        var videoCodec: String?
+        var audioCodec: String?
     }
     nonisolated struct Subtitle: Encodable, Sendable {
         let format: String
@@ -319,6 +321,23 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
 }
 
 extension JFPlaybackInfoRequest {
+    /// A backdrop clip: direct play on AVPlayer or nothing. No transcode, subtitles or resume.
+    static func themeVideo(userId: String) -> Self {
+        let bitrate = 20_000_000
+        return Self(
+            userId: userId, mediaSourceId: nil, maxStreamingBitrate: bitrate, startTimeTicks: 0,
+            audioStreamIndex: nil, subtitleStreamIndex: -1,
+            enableDirectPlay: true, enableDirectStream: true, enableTranscoding: false,
+            deviceProfile: Profile(
+                maxStreamingBitrate: bitrate,
+                directPlayProfiles: [DirectPlay(type: "Video", container: "mp4,m4v,mov",
+                                               videoCodec: "h264,hevc", audioCodec: "aac,ac3,eac3,alac,mp3")],
+                transcodingProfiles: [],
+                subtitleProfiles: []
+            )
+        )
+    }
+
     /// Music through AVPlayer: these containers play direct, anything else
     /// (ogg, opus, wma) comes back as an AAC HLS transcode.
     static func audio(userId: String) -> Self {

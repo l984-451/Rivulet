@@ -303,6 +303,8 @@ nonisolated struct EmbyPlaybackInfoRequest: Encodable, Sendable {
     nonisolated struct DirectPlay: Encodable, Sendable {
         let type: String
         var container: String?
+        var videoCodec: String?
+        var audioCodec: String?
     }
     nonisolated struct Transcoding: Encodable, Sendable {
         let container: String
@@ -361,6 +363,23 @@ nonisolated struct EmbyPlaybackInfoRequest: Encodable, Sendable {
 }
 
 extension EmbyPlaybackInfoRequest {
+    /// A backdrop clip: direct play on AVPlayer or nothing. No transcode, subtitles or resume.
+    static func themeVideo(userId: String) -> Self {
+        let bitrate = 20_000_000
+        return Self(
+            userId: userId, mediaSourceId: nil, maxStreamingBitrate: bitrate, startTimeTicks: 0,
+            audioStreamIndex: nil, subtitleStreamIndex: -1,
+            enableDirectPlay: true, enableDirectStream: true, enableTranscoding: false, allowVideoStreamCopy: nil,
+            deviceProfile: Profile(
+                maxStreamingBitrate: bitrate,
+                directPlayProfiles: [DirectPlay(type: "Video", container: "mp4,m4v,mov",
+                                               videoCodec: "h264,hevc", audioCodec: "aac,ac3,eac3,alac,mp3")],
+                transcodingProfiles: [],
+                subtitleProfiles: []
+            )
+        )
+    }
+
     /// Music through AVPlayer. Without a profile the reply has no URL at all. These containers play
     /// direct; anything else (ogg, opus, wma) comes back as an AAC HLS transcode, the only transcode
     /// form that seeks (the HTTP one is a raw ADTS stream).

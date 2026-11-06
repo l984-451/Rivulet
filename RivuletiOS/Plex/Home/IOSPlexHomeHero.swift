@@ -16,6 +16,10 @@ struct IOSPlexHomeHero: View {
     @Binding var selection: MediaItemRef?
     /// iPhone Duo's fold runs down the middle, so the dots sit at the leading margin.
     @State private var dotsLeading = false
+    /// Video plays only while the hero is on screen and its page is at rest.
+    @State private var onScreen = false
+    @State private var inView = true
+    @State private var isPaging = false
 
     /// Share of the page travel the artwork lags behind, as in `PreviewCarouselLayout`.
     private static let parallax: CGFloat = 0.3
@@ -43,6 +47,8 @@ struct IOSPlexHomeHero: View {
                 // Full bleed, so no neighbouring page shows under a side bar.
                 Group {
                     artworkPager
+                    IOSThemeVideoBackdrop(item: current.ref, isActive: onScreen && inView && !isPaging)
+                        .allowsHitTesting(false)
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0.35),
@@ -71,6 +77,9 @@ struct IOSPlexHomeHero: View {
                 }
             }
             .frame(height: heroHeight)
+            .onAppear { onScreen = true }
+            .onDisappear { onScreen = false }
+            .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
             .environment(\.colorScheme, .dark)
             // Keyed on the items too, so a refresh that drops the shown page restarts the rotation.
             .task(id: items.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(selection?.providerID ?? "")|\(selection?.itemID ?? "")"]) {
@@ -113,6 +122,7 @@ struct IOSPlexHomeHero: View {
             .scrollTargetBehavior(.paging)
             .scrollIndicators(.hidden)
             .scrollPosition(id: $selection)
+            .onScrollPhaseChange { _, phase in isPaging = phase != .idle }
             // A resize (rotation, opening or closing iPhone Duo) keeps the old offset; re-seat the shown page.
             .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, _ in
                 if let selection { reader.scrollTo(selection, anchor: .leading) }

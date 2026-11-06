@@ -19,6 +19,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private var provider: MediaProvider? { MediaProviderRegistry.shared.provider(for: season.ref.providerID) }
 
     private let background = UIImageView()
+    private let themeVideo = ThemeVideoBackdropView()
     private let poster = UIImageView()
     private var collectionView: FocusScrollControlledCollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
@@ -79,11 +80,12 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         background.contentMode = .scaleAspectFill
         background.clipsToBounds = true
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        for layer in [background, blur] as [UIView] {
+        for layer in [background, themeVideo, blur] as [UIView] {
             layer.frame = view.bounds
             layer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             view.addSubview(layer)
         }
+        themeVideo.configure(item: season.ref, host: self)
 
         poster.translatesAutoresizingMaskIntoConstraints = false
         poster.contentMode = .scaleAspectFill
@@ -125,6 +127,16 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.load() }
             .store(in: &refreshObservers)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        themeVideo.setActive(true)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        themeVideo.setActive(false)
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {

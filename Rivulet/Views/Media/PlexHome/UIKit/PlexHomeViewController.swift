@@ -1948,6 +1948,7 @@ final class PlexHomeViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        backdropView.setActive(true)
         if !hasMarkedFirstFrame {
             hasMarkedFirstFrame = true
             Perf.event(.homeFirstFrameOnScreen, message: "viewDidAppear")
@@ -1965,6 +1966,7 @@ final class PlexHomeViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        backdropView.setActive(false)
         // Stop taking Menu presses the moment the page leaves the screen, and
         // keep the handler list from growing by one per page visited. A fresh
         // appearance re-registers.
@@ -2157,8 +2159,8 @@ final class PlexHomeViewController: UIViewController {
     /// immediately so the startup splash doesn't wait for an image that isn't
     /// coming. The non-nil case is reported by `onFirstImageLoaded` once the
     /// image is on screen.
-    private func setHeroBackdrop(url: URL?, paging: Bool = false) {
-        backdropView.setBackdrop(url: url, paging: paging)
+    private func setHeroBackdrop(url: URL?, item: MediaItemRef? = nil, paging: Bool = false) {
+        backdropView.setBackdrop(url: url, item: item, host: self, paging: paging)
         // The ambient wash tracks the hero: same artwork, diffused by the
         // frosted material in front of it. Every hero page change lands here,
         // so this is the only place the wash needs driving.
@@ -2231,7 +2233,7 @@ final class PlexHomeViewController: UIViewController {
             return
         }
         let request = item.heroBackdropRequest()
-        setHeroBackdrop(url: request.backdropURL ?? request.thumbnailURL, paging: paging)
+        setHeroBackdrop(url: request.backdropURL ?? request.thumbnailURL, item: item.ref, paging: paging)
     }
 
     /// Discover hero Play, shown only for library-matched items: plays the match directly, falling back

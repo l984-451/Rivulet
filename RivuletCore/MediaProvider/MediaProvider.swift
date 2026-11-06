@@ -57,6 +57,10 @@ protocol MediaProvider: Sendable, Identifiable {
     // MARK: - Detail
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail
 
+    /// A direct-play URL for a title's theme video, used as a muted backdrop. Nil when the
+    /// server has none or it cannot direct play on AVPlayer; never a transcode. Default: nil (Plex).
+    func themeVideoURL(for itemRef: MediaItemRef) async throws -> URL?
+
     // MARK: - Home rails
     func continueWatching(limit: Int) async throws -> [MediaItem]
     func recentlyAdded(limit: Int) async throws -> [MediaItem]
@@ -209,6 +213,8 @@ protocol MediaProvider: Sendable, Identifiable {
 }
 
 extension MediaProvider {
+    func themeVideoURL(for itemRef: MediaItemRef) async throws -> URL? { nil }
+
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
                        startTime: TimeInterval) async throws -> StreamInfo {
         try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate)

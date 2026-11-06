@@ -262,6 +262,8 @@ private struct IOSPlexDetailHeader: View {
     @EnvironmentObject private var browse: IOSBrowseStore
     /// Asked of the server for the page's title; nil until it answers.
     @State private var onList: Bool?
+    @State private var onScreen = false
+    @State private var inView = true
 
     private var isWide: Bool { size.width > size.height }
 
@@ -274,6 +276,10 @@ private struct IOSPlexDetailHeader: View {
         ZStack(alignment: isWide ? .bottomLeading : .bottom) {
             // The fade is extended with the art, so the strip under a side bar darkens with it.
             IOSItemArtwork(item: item, kind: .backdrop, width: size.width, aspectRatio: 16 / 9)
+                .overlay {
+                    IOSThemeVideoBackdrop(item: item.ref, isActive: onScreen && inView)
+                        .allowsHitTesting(false)
+                }
                 .overlay {
                     LinearGradient(
                         stops: [
@@ -303,6 +309,9 @@ private struct IOSPlexDetailHeader: View {
                 .padding(.bottom, 20)
         }
         .frame(height: height)
+        .onAppear { onScreen = true }
+        .onDisappear { onScreen = false }
+        .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
     }
 
     private var metadataItems: [String] {

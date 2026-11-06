@@ -52,6 +52,7 @@ extension IOSBrowseStore {
 
     func deletePlaylist(_ playlist: MediaPlaylist) async throws {
         try await provider(for: playlist.item.ref).deletePlaylist(playlist.item.ref)
+        HomePlaylistPins.unpinEverywhere(playlist.item.ref)
         await refreshPlaylists()
     }
 }

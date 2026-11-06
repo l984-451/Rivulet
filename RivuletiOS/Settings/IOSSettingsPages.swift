@@ -3,37 +3,6 @@
 
 import SwiftUI
 
-/// Account > Home.
-struct IOSHomeSettingsView: View {
-    /// Same keys as the tvOS Home > Hero setting.
-    @AppStorage("showHomeHero") private var showHero = true
-    @AppStorage(heroContentKey) private var heroContent = "trending"
-
-    static let heroContentKey = "homeHeroContent"
-    private static let heroChoices = [("off", String(localized: "Off")), ("trending", String(localized: "Trending")),
-                                      ("continueWatching", String(localized: "Continue Watching")),
-                                      ("recentlyAdded", String(localized: "Recently Added")), ("watchlist", String(localized: "Watchlist"))]
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Hero", selection: Binding(
-                    get: { showHero ? heroContent : "off" },
-                    set: { choice in
-                        showHero = choice != "off"
-                        if choice != "off" { heroContent = choice }
-                    }
-                )) {
-                    ForEach(Self.heroChoices, id: \.0) { Text($0.1).tag($0.0) }
-                }
-            } footer: {
-                Text("What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending.")
-            }
-        }
-        .navigationTitle("Home")
-    }
-}
-
 /// Account > Library.
 struct IOSLibrarySettingsView: View {
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true

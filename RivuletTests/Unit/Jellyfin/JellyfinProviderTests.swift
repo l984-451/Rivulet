@@ -256,6 +256,20 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertFalse(server.requests.contains { $0.url?.query?.contains("lib-music") == true })
     }
 
+    func test_favorites_askForTheLibrarysFavoritesByName() async throws {
+        server.respond("/Items", body: #"{"Items":[],"TotalRecordCount":0}"#)
+        let library = MediaLibrary(id: "lib-m", providerID: "jellyfin:srv", title: "Movies", kind: .movies)
+        let p = provider()
+        XCTAssertTrue(p.supportsFavorites)
+        _ = try await p.favorites(in: library, limit: 25)
+        let query = URLComponents(url: try XCTUnwrap(server.requests.first?.url), resolvingAgainstBaseURL: false)?
+            .queryItems?.reduce(into: [String: String]()) { $0[$1.name.lowercased()] = $1.value } ?? [:]
+        XCTAssertEqual(query["filters"], "IsFavorite")
+        XCTAssertEqual(query["parentid"], "lib-m")
+        XCTAssertEqual(query["sortby"], "SortName")
+        XCTAssertEqual(query["limit"], "25")
+    }
+
     func test_fullDetail_series_fetchesNextUp() async throws {
         server.respond("/Items/show1", body: JellyfinFixtures.series)
         server.respond("/Shows/NextUp", body: #"{"Items":[\#(JellyfinFixtures.episode)],"TotalRecordCount":1}"#)

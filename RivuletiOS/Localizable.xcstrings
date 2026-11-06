@@ -1083,6 +1083,8 @@
         }
       }
     },
+    "Choose what appears on Home and in what order." : {},
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
     "Clear" : {
       "localizations" : {
         "de" : {
@@ -2199,6 +2201,7 @@
         }
       }
     },
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
     "Extra" : {
       "localizations" : {
         "de" : {
@@ -2219,6 +2222,8 @@
         }
       }
     },
+    "Favorite Movies" : {},
+    "Favorite TV Shows" : {},
     "FFmpeg Build Scripts and Sources" : {
       "localizations" : {
         "de" : {
@@ -2509,6 +2514,8 @@
         }
       }
     },
+    "Hero Playlists" : {},
+    "Hidden from Home" : {},
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -4015,6 +4022,11 @@
         }
       }
     },
+    "Reset" : {},
+    "Reset Hero" : {},
+    "Reset Home Rows?" : {},
+    "Reset the Hero?" : {},
+    "Rows" : {},
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -5185,6 +5197,7 @@
         }
       }
     },
+    "The hero shows Trending only, with no playlists." : {},
     "The server didn't accept the sign-in." : {
       "localizations" : {
         "de" : {
@@ -6253,16 +6266,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Am Wochenende"
-          }
-        }
-      }
-    },
-    "What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Was oben auf der Startseite gezeigt wird. „Angesagt“ zeigt, was diese Woche beliebt und in deiner Mediathek ist. Eine leere Liste zeigt „Angesagt“."
           }
         }
       }

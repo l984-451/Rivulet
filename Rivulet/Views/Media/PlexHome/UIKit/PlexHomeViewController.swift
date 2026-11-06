@@ -696,12 +696,12 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
-    /// Hero gate for every mode, despite the name: `showHomeHero` on Home, `showLibraryHero` (on when
+    /// Hero gate for every mode, despite the name: `HeroSources` on Home, `showLibraryHero` (on when
     /// never set) on a library page.
     private var showHomeHero: Bool {
         switch mode {
         case .home:
-            return UserDefaults.standard.bool(forKey: "showHomeHero")
+            return HeroSources.isEnabled
         case .library:
             return (UserDefaults.standard.object(forKey: "showLibraryHero") as? Bool) ?? true
         case .discover:
@@ -2278,7 +2278,7 @@ final class PlexHomeViewController: UIViewController {
         let canWatchlist = provider?.supportsWatchlist ?? false
         heroWatchlistRef = item.ref
         // A Watchlist hero slide starts bookmarked, so the lookup below does not flash the + first.
-        let likelyOnList = heroShowsList && Self.heroContent == .watchlist
+        let likelyOnList = heroShowsList && HeroSources.isOn(.watchlist)
             && watchlistHeroItems.contains { $0.ref == item.ref }
         cell?.overlay.setMediaItemPrimaryAction(matchedInLibrary: true, isOnWatchlist: likelyOnList,
                                                 canWatchlist: canWatchlist)
@@ -2512,8 +2512,11 @@ final class PlexHomeViewController: UIViewController {
             // "Empty" keys off `homeItems`, never `hubs`: on a cold sign-in `hubs` fills before the
             // projection, and a hubs-based check takes the content path with no rows, a blank unfocusable Home.
             // Visible rows only: rows that are all hidden must take the empty
-            // state, never the content path with nothing in it.
+            // state, never the content path with nothing in it. Favorites and
+            // playlist rows count as `homeRail` draws them.
             hubsEmpty = dataStore.homeItems.isEmpty && servers.visibleHomeRows.isEmpty
+                && Self.homeRail(plex: [], otherServers: [], personal: PersonalHomeRows.shared.homeRows,
+                                 libraryOrder: Self.sidebarLibraryOrder()).isEmpty
         case .library(let key, _):
             if providerLibrary != nil {
                 // Rows arrive with the provider fetch; until page 0 lands the
@@ -3369,13 +3372,14 @@ final class PlexHomeViewController: UIViewController {
             break
         }
 
-        // Other servers' rows, the sign-in that labels Plex's rows, Home Rows
-        // toggles and Sidebar Libraries changes (none of these move
-        // PlexDataStore's version when only another server is affected).
+        // Other servers' rows, favorites and pinned playlists, the sign-in that
+        // labels Plex's rows, Home Rows toggles and Sidebar Libraries changes
+        // (none of these move PlexDataStore's version when only another server is affected).
         if case .home = mode {
             let servers = ServerDataStore.shared
             servers.$homeRows.map { _ in () }
                 .merge(with: servers.$sources.map { _ in () },
+                       PersonalHomeRows.shared.$rows.dropFirst().map { _ in () },
                        servers.$isLoading.map { _ in () },
                        servers.$trending.dropFirst().map { _ in () },
                        ContinueWatchingRow.shared.$version.dropFirst().map { _ in () },
@@ -3393,43 +3397,60 @@ final class PlexHomeViewController: UIViewController {
     /// servers' mixed, or one of Home's lists).
     private var homeMediaHeroRefs: [MediaItemRef] = []
 
-    /// What Home's hero shows (#414): trending, or one of Home's own lists.
-    enum HeroContent: String, CaseIterable {
-        case trending, continueWatching, recentlyAdded, watchlist
-    }
-
-    static var heroContent: HeroContent {
-        HeroContent(rawValue: SettingsStore.string("homeHeroContent", default: "")) ?? .trending
+    /// What the hero shows (`HeroSources`), as a value that changes with any choice.
+    static var heroSourcesSignature: [String] {
+        HeroSources.Source.allCases.filter(HeroSources.isOn).map(\.rawValue) + HomePlaylistPins.pins(in: .hero).map(\.id)
     }
 
     /// The list the hero shows, as Home last built it.
     private var listHeroItems: [MediaItem] = []
-    private var lastHeroContent = PlexHomeViewController.heroContent
+    private var lastHeroSources = PlexHomeViewController.heroSourcesSignature
     /// The watchlist's first entries mapped to library or TMDB items, and the entry ids they came from.
     private var watchlistHeroItems: [MediaItem] = []
     private var watchlistHeroSourceIDs: [String]?
     private var watchlistHeroTask: Task<Void, Never>?
 
-    /// Home's hero shows a list instead of trending; an empty list keeps trending.
+    /// Home's hero shows lists, trending mixed in or not; an empty list keeps trending.
     private var heroShowsList: Bool {
-        guard case .home = mode, showHomeHero, Self.heroContent != .trending else { return false }
+        guard case .home = mode, showHomeHero, !HeroSources.isTrendingOnly else { return false }
         return !listHeroItems.isEmpty
     }
 
-    /// The hero's slides for a list choice, from Home's rows as just built.
+    /// The hero's slides when it shows lists (`HeroSources`), from Home's rows as
+    /// just built, hidden ones included, mixed by `HomeHero.mix`. Empty when only trending is on.
     private func heroItemsForList(from sections: [HomeSectionData], rail: [(row: CachedHomeHub, kind: MediaProviderKind)]) -> [MediaItem] {
-        switch Self.heroContent {
-        case .trending: return []
-        case .continueWatching: return sections.first { $0.kind == .continueWatching }?.items ?? []
-        case .recentlyAdded:
-            let rows = rail.filter { !$0.row.isContinueWatching && Self.isRecentlyAddedRow($0.row) }
-            return Array(Self.roundRobin(rows.map(\.row.items))
-                .filter(Self.isHeroCandidate)
-                .prefix(10))
-        case .watchlist:
-            refreshWatchlistHeroIfNeeded()
-            return watchlistHeroItems
+        guard !HeroSources.isTrendingOnly else { return [] }
+        let hasBackdrop = { (item: MediaItem) in (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop) != nil }
+        let personal = PersonalHomeRows.shared.rows
+        var lists: [[MediaItem]] = []
+        for source in HeroSources.Source.allCases where HeroSources.isOn(source) {
+            switch source {
+            case .trending:
+                lists.append(homeHeroSource == .plex ? heroItems.map(mediaItemMapper()) : homeMediaHeroItems())
+            case .continueWatching:
+                if let row = sections.first(where: { $0.kind == .continueWatching }) {
+                    lists.append(row.items)
+                    continue
+                }
+                // The row is hidden: merge the servers' rows as Home would have.
+                let rows = rail.filter(\.row.isContinueWatching).map(\.row.items)
+                lists.append(rows.count > 1
+                    ? ContinueWatchingRow.shared.cards(rows, identity: { $0.identity ?? [] }, showKey: \.showKey,
+                                                       watched: \.userState.lastViewedAt).map(\.item)
+                    : rows.first ?? [])
+            case .recentlyAdded:
+                let rows = rail.filter { !$0.row.isContinueWatching && Self.isRecentlyAddedRow($0.row) }
+                lists.append(Array(Self.roundRobin(rows.map(\.row.items)).filter(Self.isHeroCandidate).prefix(10)))
+            case .watchlist:
+                refreshWatchlistHeroIfNeeded()
+                lists.append(watchlistHeroItems)
+            case .favoriteMovies, .favoriteShows:
+                let kind: MediaLibrary.LibraryKind = source == .favoriteShows ? .shows : .movies
+                lists.append(Self.roundRobin(PersonalRows.favoriteItems(personal, kind)).filter(hasBackdrop))
+            }
         }
+        lists += HomePlaylistPins.pins(in: .hero).map { PersonalRows.playlistItems(personal, $0).filter(hasBackdrop) }
+        return HomeHero.mix(lists)
     }
 
     /// Plex's recently added hubs (`movie.recentlyadded`) and every other server's `<library>.recentlyAdded` row.
@@ -3491,7 +3512,7 @@ final class PlexHomeViewController: UIViewController {
         reconfigureHeroCell()
         updateBackdropForCurrentHeroItem()
         // The list hero emptied: trending takes the slot back.
-        if refs.isEmpty, Self.heroContent != .trending { selectHeroItemsIfNeeded() }
+        if refs.isEmpty, !HeroSources.isTrendingOnly { selectHeroItemsIfNeeded() }
     }
 
     private func otherServersHomeRowsChanged() {
@@ -3561,7 +3582,7 @@ final class PlexHomeViewController: UIViewController {
             .store(in: &dataStoreObservers)
     }
 
-    /// React to AppStorage-backed settings (`showHomeHero`,
+    /// React to AppStorage-backed settings (`HeroSources`,
     /// `enablePersonalizedRecommendations`) flipping while the home is on
     /// screen. `UserDefaults.didChangeNotification` fires once per change.
     /// We just re-evaluate the relevant subsystem; no need to filter by key.
@@ -3578,8 +3599,8 @@ final class PlexHomeViewController: UIViewController {
                 self.reprojectIfHomeLibrariesChanged()
                 self.selectHeroItemsIfNeeded()
                 if case .home = self.mode {
-                    if Self.heroContent != self.lastHeroContent {
-                        self.lastHeroContent = Self.heroContent
+                    if Self.heroSourcesSignature != self.lastHeroSources {
+                        self.lastHeroSources = Self.heroSourcesSignature
                         self.applySnapshot(animated: false)
                     }
                     let userID = UserDefaults.standard.integer(forKey: PlexProfileSession.contentUserIDKey)
@@ -4440,11 +4461,15 @@ final class PlexHomeViewController: UIViewController {
         // CW and per-library Recently Added rows come from `dataStore.homeItems`; each CachedHomeHub maps
         // straight to a HomeSectionData. Other servers' rows sit beside Plex's, paired by server (`homeRail`).
         // With more than one server, Continue Watching is one merged row under one id (#87).
+        // The order is the user's from Settings > Home > Rows (`HomeRowOrder`).
         let labelsServers = servers.labelsServers
-        let rail = Self.homeRail(plex: dataStore.homeItems, otherServers: servers.visibleHomeRows,
-                                 libraryOrder: Self.sidebarLibraryOrder(),
-                                 kindOf: { MediaProviderRegistry.shared.kind(of: $0) })
+        let rail = HomeRowOrder.arrange(
+            Self.homeRail(plex: dataStore.homeItems, otherServers: servers.visibleHomeRows,
+                          personal: PersonalHomeRows.shared.homeRows, libraryOrder: Self.sidebarLibraryOrder(),
+                          kindOf: { MediaProviderRegistry.shared.kind(of: $0) }),
+            key: { HomeRowOrder.key(for: $0.row) })
         var cwOthers: [MediaItemRef: [MediaItem]] = [:]
+        var mergedContinueWatching: HomeSectionData?
         if labelsServers {
             // A removal in flight hides the whole card, so another server's copy
             // does not stand in for the one just removed.
@@ -4454,12 +4479,18 @@ final class PlexHomeViewController: UIViewController {
                 .filter { card in !card.copies.contains { pendingCWRemovals.contains($0.ref.itemID) } }
             for card in cards where !card.others.isEmpty { cwOthers[card.item.ref] = card.others }
             if !cards.isEmpty {
-                sections.append(.hub(id: Self.mergedContinueWatchingID, title: String(localized: "Continue Watching"),
-                                     items: cards.map(\.item), isContinueWatching: true, hubKey: nil,
-                                     hubIdentifier: Self.mergedContinueWatchingID.raw))
+                mergedContinueWatching = .hub(id: Self.mergedContinueWatchingID, title: String(localized: "Continue Watching"),
+                                              items: cards.map(\.item), isContinueWatching: true, hubKey: nil,
+                                              hubIdentifier: Self.mergedContinueWatchingID.raw)
             }
         }
-        for (hub, kind) in rail where !(labelsServers && hub.isContinueWatching) {
+        for (hub, kind) in rail {
+            // The merged row takes the place of the first server's.
+            if labelsServers, hub.isContinueWatching {
+                if let row = mergedContinueWatching { sections.append(row) }
+                mergedContinueWatching = nil
+                continue
+            }
             let id = HomeSectionID(raw: hub.id)
             let merged = mergedItems(forSection: id, initial: hub.items)
             var items = merged.items
@@ -4492,7 +4523,13 @@ final class PlexHomeViewController: UIViewController {
             sections.insert(.yearInReview(), at: anchor.map { $0 + 1 } ?? 0)
         }
 
-        listHeroItems = heroItemsForList(from: sections, rail: rail)
+        // The hero reads every row, hidden ones included, so Settings > Home >
+        // Rows never changes it. A warm launch has only the cached visible rows.
+        let heroRail = Self.homeRail(
+            plex: dataStore.allHomeItems.isEmpty ? dataStore.homeItems : dataStore.allHomeItems,
+            otherServers: servers.homeRowsInSidebarOrder, libraryOrder: Self.sidebarLibraryOrder(),
+            kindOf: { MediaProviderRegistry.shared.kind(of: $0) })
+        listHeroItems = heroItemsForList(from: sections, rail: heroRail)
         if heroShowsList {
             sections.removeAll { $0.kind == .hero }
             sections.insert(.discoverHero(items: listHeroItems), at: 0)
@@ -4536,15 +4573,27 @@ final class PlexHomeViewController: UIViewController {
     /// the row before it (an older cached pin).
     /// Each row is tagged with its server's real kind (`kindOf` takes a provider
     /// id; Home passes the registry's), so an extra Plex server's rows are Plex's.
-    static func homeRail(plex: CachedHomeRail, otherServers: CachedHomeRail, libraryOrder: [String] = [],
+    /// `personal` (`PersonalHomeRows`): a favorites row follows its library's
+    /// rows, and is dropped with a library the sidebar hides; pinned playlists
+    /// come after every library row.
+    static func homeRail(plex: CachedHomeRail, otherServers: CachedHomeRail, personal: CachedHomeRail = [],
+                         libraryOrder: [String] = [],
                          kindOf: (String) -> MediaProviderKind? = { MediaProviderKind(providerID: $0) })
         -> [(row: CachedHomeHub, kind: MediaProviderKind)] {
         let tag = { (rows: [CachedHomeHub], kind: MediaProviderKind) in rows.map { (row: $0, kind: kind) } }
         func tagOther(_ rows: [CachedHomeHub]) -> [(row: CachedHomeHub, kind: MediaProviderKind)] {
             rows.map { (row: $0, kind: kindOf($0.providerID) ?? .plex) }
         }
+        // A favorites or playlist row's id carries no provider prefix; its items name the server.
+        func tagByItems(_ rows: [CachedHomeHub]) -> [(row: CachedHomeHub, kind: MediaProviderKind)] {
+            rows.map { (row: $0, kind: $0.items.first.flatMap { kindOf($0.ref.providerID) } ?? .plex) }
+        }
+        let favorites = personal.filter { row in
+            row.libraryKey.map { libraryOrder.isEmpty || libraryOrder.contains($0) } ?? false
+        }
         var libraryRows = tag(plex.filter { !$0.isContinueWatching }, .plex)
             + tagOther(otherServers.filter { !$0.isContinueWatching })
+            + tagByItems(favorites)
         if !libraryOrder.isEmpty {
             let rank = Dictionary(libraryOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
             var last = -1
@@ -4558,6 +4607,7 @@ final class PlexHomeViewController: UIViewController {
         return tag(plex.filter(\.isContinueWatching), .plex)
             + tagOther(otherServers.filter(\.isContinueWatching))
             + libraryRows
+            + tagByItems(personal.filter { $0.libraryKey == nil })
     }
 
     /// Every visible library's key in the sidebar's order across servers.
@@ -4649,7 +4699,8 @@ final class PlexHomeViewController: UIViewController {
     /// unavailable). Empty for a Plex-only Home, whose hero is `heroItems`.
     private func homeMediaHeroItems() -> [MediaItem] {
         let store = ServerDataStore.shared
-        let others = Self.heroItems(trending: store.visibleTrending, rows: store.visibleHomeRows)
+        // Every row, hidden ones included: Settings > Home > Rows never changes the hero.
+        let others = Self.heroItems(trending: store.visibleTrending, rows: store.homeRowsInSidebarOrder)
         switch homeHeroSource {
         case .plex: return []
         case .otherServers, .none: return others
@@ -4892,8 +4943,9 @@ final class PlexHomeViewController: UIViewController {
         case .discover, .search, .watchlist, .collection, .playlists, .playlist:
             return  // no Plex-hub hero on these surfaces
         case .home:
-            // Other servers only, or showing a list: MediaItem hero
-            guard authManager.hasCredentials, !heroShowsList else { return }
+            // Other servers only, or showing a list: MediaItem hero. A list with
+            // trending mixed in still needs Plex's trending titles.
+            guard authManager.hasCredentials, !heroShowsList || HeroSources.isOn(.trending) else { return }
             cacheKey = "home"
             sourceHubs = dataStore.hubs
         case .library(let key, _):

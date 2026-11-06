@@ -10,15 +10,14 @@ struct IOSPlexHomeView: View {
     @EnvironmentObject private var plex: IOSPlexSession
     @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.displayScale) private var displayScale
-    /// Same key as the tvOS Home > Hero setting.
-    @AppStorage("showHomeHero") private var showHero = true
-    /// Same key as the tvOS hero choice (#414): trending, continueWatching, recentlyAdded, watchlist.
-    @AppStorage(IOSHomeSettingsView.heroContentKey) private var heroContent = "trending"
     @State private var trending: [MediaItem] = []
     @State private var watchlist: [MediaItem] = []
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true
     @State private var heroSelection: MediaItemRef?
+
+    /// The hero's settings are `HeroSources`, as on tvOS; `browse.homeSettingsRevision` redraws on a change.
+    private var showHero: Bool { HeroSources.isEnabled }
 
     private var hasContent: Bool {
         browse.continueWatchingHub != nil || !browse.shelves.isEmpty || (!browse.failures.isEmpty && !browse.libraries.isEmpty)
@@ -39,10 +38,7 @@ struct IOSPlexHomeView: View {
                                                 selection: $heroSelection)
                             }
                             ForEach(browse.failedServers) { IOSServerFailureBanner(failure: $0) }
-                            if let continueWatching = browse.continueWatchingHub {
-                                IOSPlexShelfView(hub: continueWatching)
-                            }
-                            ForEach(browse.shelves) { IOSPlexShelfView(hub: $0) }
+                            ForEach(browse.homeRows) { IOSPlexShelfView(hub: $0) }
                         }
                         .padding(.bottom, 24)
                     }
@@ -71,13 +67,13 @@ struct IOSPlexHomeView: View {
         .toolbar {
             IOSAccountToolbarItem()
         }
-        .task(id: [String(showHero), heroContent] + browse.shelves.map(\.id)) {
+        .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)) {
             guard showHero else { return }
             trending = await browse.trendingHeroItems()
-            if heroContent == "watchlist" { watchlist = await browse.watchlistHeroItems() }
+            if HeroSources.isOn(.watchlist) { watchlist = await browse.watchlistHeroItems() }
         }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
-            guard showHero, heroContent == "watchlist" else { return }
+            guard showHero, HeroSources.isOn(.watchlist) else { return }
             Task { watchlist = await browse.watchlistHeroItems() }
         }
     }
@@ -105,10 +101,11 @@ struct IOSPlexHomeView: View {
         }
     }
 
-    /// The chosen list; an empty one shows trending, and no trending match shows Home's rows.
+    /// The chosen lists mixed; with nothing in them, trending, and with no trending match, Home's rows.
     private var heroItems: [MediaItem] {
-        HomeHero.items(content: heroContent, continueWatching: browse.continueWatching, shelves: browse.shelves,
-                       watchlist: watchlist, trending: trending)
+        HomeHero.items(sources: HeroSources.sources, continueWatching: browse.continueWatching, shelves: browse.shelves,
+                       watchlist: watchlist, trending: trending, personal: browse.personalRows,
+                       heroPins: HomePlaylistPins.pins(in: .hero))
     }
 
     private func heroPageWidth(_ proxy: GeometryProxy) -> CGFloat {

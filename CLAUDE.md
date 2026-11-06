@@ -65,6 +65,8 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   MusicProvider, registries; Plex/, Jellyfin/ and Emby/ implement
 │                       #   it, see "Media providers"), Models/Media, Models/Music,
 │                       #   Models/Photos (the agnostic item types).
+│                       #   Home/ (Home row visibility and order, playlist pins,
+│                       #   hero sources, favorites and playlist rows).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   navigation contract, IOSBrowseStore: every server's

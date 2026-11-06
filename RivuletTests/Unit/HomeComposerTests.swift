@@ -69,6 +69,9 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     var libraryList: [MediaLibrary] = []
     var librariesError: Error?
 
+    var favoritesSupported = false
+    var supportsFavorites: Bool { favoritesSupported }
+
     var supportsPlaylists = false
     var playlistList: [MediaPlaylist] = []
     /// Awaited before `videoPlaylists()` answers, so a test can hold a refresh open.

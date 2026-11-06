@@ -1,61 +1,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 //
-//  Which Home rows this device hides, and which collections it pins. The row set
-//  comes from the server (`PlexDataStore.projectHomeItems`); hiding can only remove
-//  rows. Rows are keyed by `hubIdentifier`, which carries the section id, so a key
-//  for a row no longer offered just stops matching.
+//  The collections this profile pins to Home. The hidden rows and the row order are in
+//  RivuletCore/Home.
 //
 
 import Foundation
-
-enum HomeRowSettings {
-
-    /// Posted after any change. `PlexDataStore` re-projects on it so Home
-    /// repaints without waiting for the next poll.
-    static let changedNotification = Notification.Name("homeRowVisibilityChanged")
-
-    private static let hiddenBaseKey = "hiddenHomeRowIdentifiers"
-
-    private static var defaults: UserDefaults { .standard }
-
-    /// Per Plex Home profile, keyed off `selectedPlexUserId`: identifiers carry the
-    /// section id, not the account, so one global list would cross profiles.
-    private static var hiddenKey: String {
-        guard let userId = defaults.object(forKey: "selectedPlexUserId") as? Int else {
-            return hiddenBaseKey
-        }
-        return "\(hiddenBaseKey)_user_\(userId)"
-    }
-
-    /// Identifiers the user has hidden. Empty by default: a fresh install shows
-    /// exactly what Plex says, and nothing here diverges until asked.
-    static var hiddenIdentifiers: Set<String> {
-        Set(defaults.stringArray(forKey: hiddenKey) ?? [])
-    }
-
-    static func isHidden(_ hubIdentifier: String?) -> Bool {
-        guard let hubIdentifier, !hubIdentifier.isEmpty else { return false }
-        return hiddenIdentifiers.contains(hubIdentifier)
-    }
-
-    static func setHidden(_ hidden: Bool, for hubIdentifier: String) {
-        guard !hubIdentifier.isEmpty else { return }
-        var ids = hiddenIdentifiers
-        if hidden { ids.insert(hubIdentifier) } else { ids.remove(hubIdentifier) }
-        write(ids)
-    }
-
-    /// Un-hide everything. The "Show All" bulk action.
-    static func showAll() {
-        write([])
-    }
-
-    private static func write(_ ids: Set<String>) {
-        defaults.set(ids.sorted(), forKey: hiddenKey)
-        NotificationCenter.default.post(name: changedNotification, object: nil)
-    }
-}
 
 /// Collections pinned to Home from a library's tile menu: the one way to add a row, and only
 /// inside a library Plex already puts on Home. Scoped by library uuid, because
@@ -92,8 +42,7 @@ enum HomeCollectionPins {
 
     private static var defaults: UserDefaults { .standard }
 
-    /// Per profile, for the same reason as `HomeRowSettings.hiddenKey`. Internal
-    /// so the pin loader can compare it before and after its fetch.
+    /// Per profile (`HomeSettingsScope`). Internal so the pin loader can compare it before and after its fetch.
     static var storageKey: String { storageKey(for: .home) }
 
     private static func storageKey(for destination: Destination) -> String {

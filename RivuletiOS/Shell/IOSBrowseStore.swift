@@ -23,6 +23,10 @@ final class IOSBrowseStore: ObservableObject {
     @Published private(set) var continueWatching: [MediaItem] = []
     /// Each server's video playlists by provider id; only servers that have any.
     @Published private(set) var playlists: [String: [MediaPlaylist]] = [:]
+    /// Favorites and playlist rows, for Home and the hero (`PersonalRows`).
+    @Published var personalRows: [PersonalRow] = []
+    /// Bumped when a Home or hero setting changes, so Home redraws from `UserDefaults`.
+    @Published var homeSettingsRevision = 0
     @Published private(set) var isLoadingContent = false
     /// Other servers still to answer; a tab on one of their libraries waits for this.
     @Published private(set) var isLoadingOtherServers = false
@@ -45,7 +49,7 @@ final class IOSBrowseStore: ObservableObject {
     /// Run after each refresh that reached a server (Plex sends its offline progress here).
     var afterRefresh: (() async -> Void)?
 
-    private let registry = MediaProviderRegistry.shared
+    let registry = MediaProviderRegistry.shared
     private let loader = HomeFeedLoader()
     private let heroSources = HomeHeroSources()
     private var cwRows: [[MediaItem]] = []
@@ -57,11 +61,16 @@ final class IOSBrowseStore: ObservableObject {
     private var checkedPermissions: Set<String> = []
     private var refreshBlocked: Set<String> = []
     private var logos: [MediaItemRef: URL] = [:]
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
+    var personalTask: Task<Void, Never>?
 
     init() {
         loader.onChange = { [weak self] home in self?.apply(home) }
-        loader.onSecondaryFinished = { [weak self] in self?.isLoadingOtherServers = false }
+        loader.onSecondaryFinished = { [weak self] in
+            self?.isLoadingOtherServers = false
+            self?.reloadPersonalRows()
+        }
+        observeHomeSettings()
         ContinueWatchingRow.shared.fetchShowKeys = { providerID, showIDs in
             await MediaProviderRegistry.shared.provider(for: providerID)?.showIdentityKeys(for: showIDs) ?? [:]
         }
@@ -73,12 +82,12 @@ final class IOSBrowseStore: ObservableObject {
     // MARK: - Providers
 
     /// The selected Plex server, then every other server a restricted profile may see.
-    private var providersInPlay: (selected: (any MediaProvider)?, secondary: [any MediaProvider]) {
+    var providersInPlay: (selected: (any MediaProvider)?, secondary: [any MediaProvider]) {
         let restricted = PlexUserProfileManager.shared.isRestrictedProfile
         return (registry.plexProvider, registry.secondaryProviders.filter { $0.kind == .plex || !restricted })
     }
 
-    private var allProviders: [any MediaProvider] {
+    var allProviders: [any MediaProvider] {
         let (selected, secondary) = providersInPlay
         return (selected.map { [$0] } ?? []) + secondary
     }
@@ -121,6 +130,7 @@ final class IOSBrowseStore: ObservableObject {
             let selectedLists = await lists
             guard generation == refreshGeneration else { return }
             applyPlaylists(selectedLists)
+            reloadPersonalRows()
             contentError = nil
             lastContentRefresh = .now
         } catch let error where isCancellationError(error) {
@@ -164,6 +174,7 @@ final class IOSBrowseStore: ObservableObject {
         shelves = []
         continueWatching = []
         playlists = [:]
+        personalRows = []
         hasServers = false
         labels = ServerLabels([])
         failures = [:]
@@ -176,6 +187,8 @@ final class IOSBrowseStore: ObservableObject {
     private func resetForNewSession() {
         loader.reset()
         heroSources.reset()
+        personalTask?.cancel()
+        personalRows = []
         cwRows = []
         cwCopies = [:]
         logos = [:]
@@ -259,6 +272,7 @@ final class IOSBrowseStore: ObservableObject {
     /// After a playlist edit: the Library rows and sidebar tabs follow the new lists.
     func refreshPlaylists() async {
         applyPlaylists(await playlistsOf(allProviders))
+        reloadPersonalRows()
     }
 
     func playlists(providerID: String) -> [MediaPlaylist] { playlists[providerID] ?? [] }

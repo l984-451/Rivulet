@@ -433,6 +433,22 @@ final class EmbyProviderTests: XCTestCase {
         XCTAssertEqual(rows, [])
     }
 
+    // MARK: - Favorites
+
+    func test_favorites_askForTheLibrarysFavoritesByName() async throws {
+        server.respond(items, body: EmbyBrowseFixtures.moviesPage)
+        let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
+        let p = provider()
+        XCTAssertTrue(p.supportsFavorites)
+        _ = try await p.favorites(in: library, limit: 25)
+        let q = query(try XCTUnwrap(server.requests.first))
+        XCTAssertEqual(q["Filters"], "IsFavorite")
+        XCTAssertEqual(q["ParentId"], "3")
+        XCTAssertEqual(q["Recursive"], "true")
+        XCTAssertEqual(q["SortBy"], "SortName")
+        XCTAssertEqual(q["Limit"], "25")
+    }
+
     // MARK: - Collections
 
     func test_collections_areTheLibrarysBoxSets() async throws {

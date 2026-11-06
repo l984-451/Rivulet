@@ -5,8 +5,8 @@
 //  HomeHero.swift
 //  Rivulet
 //
-//  The iOS Home hero's slides: which list the setting picks, the art filter and the cap of
-//  ten, and the trending and watchlist sources that look titles up on every server.
+//  The Home hero's slides: the mix of its lists (both apps), the art filter and the cap of
+//  ten, and the trending and watchlist sources that look titles up on every server (iOS).
 //
 
 import Foundation
@@ -19,16 +19,32 @@ nonisolated enum HomeHero {
         (item.artwork.backdrop ?? item.grandparentArtwork?.backdrop) != nil
     }
 
-    /// The chosen list; an empty one shows trending, and no trending match shows Home's rows.
-    static func items(content: String, continueWatching: [MediaItem], shelves: [MediaHub],
-                      watchlist: [MediaItem], trending: [MediaItem]) -> [MediaItem] {
-        let chosen: [MediaItem] = switch content {
-        case "continueWatching": continueWatching.prefix(HomeFeed.railLimit).filter(hasBackdrop)
-        case "recentlyAdded": recentlyAdded(shelves)
-        case "watchlist": watchlist
-        default: []
+    /// The hero's lists in turn, each title once, at most ten.
+    static func mix(_ lists: [[MediaItem]]) -> [MediaItem] {
+        var seen = Set<MediaItemRef>()
+        return Array(deduplicated(roundRobin(lists).filter { seen.insert($0.ref).inserted }).prefix(cap))
+    }
+
+    /// iOS's slides: the lists `sources` and the hero playlists name, mixed. With nothing in them,
+    /// trending, and with no trending match, Home's rows.
+    static func items(sources: Set<HeroSources.Source>, continueWatching: [MediaItem], shelves: [MediaHub],
+                      watchlist: [MediaItem], trending: [MediaItem], personal: [PersonalRow],
+                      heroPins: [HomePlaylistPins.Pin]) -> [MediaItem] {
+        var lists: [[MediaItem]] = []
+        for source in HeroSources.Source.allCases where sources.contains(source) {
+            switch source {
+            case .trending: lists.append(trending)
+            case .continueWatching: lists.append(continueWatching.prefix(HomeFeed.railLimit).filter(hasBackdrop))
+            case .recentlyAdded: lists.append(recentlyAdded(shelves))
+            case .watchlist: lists.append(watchlist)
+            case .favoriteMovies, .favoriteShows:
+                let kind: MediaLibrary.LibraryKind = source == .favoriteShows ? .shows : .movies
+                lists.append(roundRobin(PersonalRows.favoriteItems(personal, kind)).filter(hasBackdrop))
+            }
         }
-        if !chosen.isEmpty { return Array(deduplicated(chosen).prefix(cap)) }
+        lists += heroPins.map { PersonalRows.playlistItems(personal, $0).filter(hasBackdrop) }
+        let mixed = mix(lists)
+        if !mixed.isEmpty { return mixed }
         return trending.isEmpty ? rowItems(shelves) : trending
     }
 

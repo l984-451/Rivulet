@@ -26,41 +26,64 @@ final class HomeHeroTests: XCTestCase {
         MediaHub(id: id, providerID: "plex:a", title: id, style: .shelf, items: items)
     }
 
+    private func items(_ sources: Set<HeroSources.Source>, continueWatching: [MediaItem] = [], shelves: [MediaHub] = [],
+                       watchlist: [MediaItem] = [], trending: [MediaItem] = [], personal: [PersonalRow] = [],
+                       heroPins: [HomePlaylistPins.Pin] = []) -> [MediaItem] {
+        HomeHero.items(sources: sources, continueWatching: continueWatching, shelves: shelves, watchlist: watchlist,
+                       trending: trending, personal: personal, heroPins: heroPins)
+    }
+
     func test_trendingFillsWhenNothingElseIsChosen() {
-        let trending = [item("t1"), item("t2")]
-        let items = HomeHero.items(content: "trending", continueWatching: [item("c")], shelves: [shelf("recentlyadded", [item("r")])],
-                                   watchlist: [], trending: trending)
-        XCTAssertEqual(items.map(\.ref.itemID), ["t1", "t2"])
+        let result = items([.trending], continueWatching: [item("c")], shelves: [shelf("recentlyadded", [item("r")])],
+                           trending: [item("t1"), item("t2")])
+        XCTAssertEqual(result.map(\.ref.itemID), ["t1", "t2"])
     }
 
     func test_continueWatchingChoice_dropsItemsWithoutArt_andCapsAtTen() {
         let cw = (0..<14).map { item("c\($0)", art: $0 != 0) }
-        let items = HomeHero.items(content: "continueWatching", continueWatching: cw, shelves: [], watchlist: [], trending: [])
-        XCTAssertEqual(items.count, 10)
-        XCTAssertFalse(items.contains { $0.ref.itemID == "c0" })
+        let result = items([.continueWatching], continueWatching: cw)
+        XCTAssertEqual(result.count, 10)
+        XCTAssertFalse(result.contains { $0.ref.itemID == "c0" })
     }
 
     func test_recentlyAdded_takesOneFromEachRowInTurn() {
         let a = shelf("plex:a|movie.recentlyadded.1", [item("a1"), item("a2")])
         let b = shelf("jellyfin:s|m.recentlyAdded", [item("b1", provider: "jellyfin:s"), item("b2", provider: "jellyfin:s")])
         let other = shelf("plex:a|genre", [item("g1")])
-        let items = HomeHero.items(content: "recentlyAdded", continueWatching: [], shelves: [a, other, b], watchlist: [], trending: [])
-        XCTAssertEqual(items.map(\.ref.itemID), ["a1", "b1", "a2", "b2"])
+        let result = items([.recentlyAdded], shelves: [a, other, b])
+        XCTAssertEqual(result.map(\.ref.itemID), ["a1", "b1", "a2", "b2"])
     }
 
     func test_anEmptyChoiceFallsBackToTrending_thenToRows() {
         let rows = [shelf("a", [item("r1"), item("r2")])]
-        let viaTrending = HomeHero.items(content: "watchlist", continueWatching: [], shelves: rows, watchlist: [], trending: [item("t")])
-        XCTAssertEqual(viaTrending.map(\.ref.itemID), ["t"])
-        let viaRows = HomeHero.items(content: "watchlist", continueWatching: [], shelves: rows, watchlist: [], trending: [])
-        XCTAssertEqual(viaRows.map(\.ref.itemID), ["r1", "r2"])
+        XCTAssertEqual(items([.watchlist], shelves: rows, trending: [item("t")]).map(\.ref.itemID), ["t"])
+        XCTAssertEqual(items([.watchlist], shelves: rows).map(\.ref.itemID), ["r1", "r2"])
     }
 
     func test_rowItems_twoPerRow_onePerShow_upToSix() {
         let rows = (0..<5).map { shelf("row\($0)", [item("r\($0)a", show: $0 == 1 ? "s0" : "s\($0)"), item("r\($0)b"), item("r\($0)c")]) }
-        let items = HomeHero.items(content: "trending", continueWatching: [], shelves: rows, watchlist: [], trending: [])
-        XCTAssertEqual(items.map(\.ref.itemID), ["r0a", "r0b", "r1b", "r2a", "r2b", "r3a"],
+        let result = items([.trending], shelves: rows)
+        XCTAssertEqual(result.map(\.ref.itemID), ["r0a", "r0b", "r1b", "r2a", "r2b", "r3a"],
                        "two per row; row 1's first is a second episode of row 0's show")
+    }
+
+    func test_mix_takesTurnsAcrossSources_showsATitleOnce_andCapsAtTen() {
+        let shared = item("shared")
+        let lists = [[shared] + (0..<8).map { item("t\($0)") }, [shared] + (0..<8).map { item("w\($0)") }]
+        let result = HomeHero.mix(lists)
+        XCTAssertEqual(result.map(\.ref.itemID).prefix(5), ["shared", "t0", "w0", "t1", "w1"])
+        XCTAssertEqual(result.count, 10)
+        XCTAssertEqual(Set(result.map(\.ref)).count, 10, "the shared title shows once")
+    }
+
+    func test_items_mixSourcesFavoritesAndHeroPlaylists() {
+        let fav = PersonalRow(id: "plex:a|fav", providerID: "plex:a", title: "Favorite Movies",
+                              identifier: PersonalRows.favoritesIdentifier(.movies), libraryKey: "1", items: [item("f1"), item("f2")])
+        let pin = HomePlaylistPins.Pin(providerID: "jellyfin:s", playlistID: "p1", title: "Classics")
+        let list = PersonalRow(id: PersonalRows.playlistRowID(providerID: "jellyfin:s", playlistID: "p1"), providerID: "jellyfin:s",
+                               title: "Classics", identifier: "x", libraryKey: nil, items: [item("l1", provider: "jellyfin:s")])
+        let result = items([.trending, .favoriteMovies], trending: [item("t1"), item("t2")], personal: [fav, list], heroPins: [pin])
+        XCTAssertEqual(result.map(\.ref.itemID), ["t1", "f1", "l1", "t2", "f2"])
     }
 
     func test_roundRobin_interleavesProviders() {

@@ -155,6 +155,14 @@ enum MediaRowMetrics {
         return (artBelowHeader - half, shelfArtGap - half - headerHeight - artBelowHeader)
     }
 
+    /// Room under a Home shelf poster for its title and year line (`PosterCell.setCaption`).
+    static let posterCaptionHeight: CGFloat = 66
+    /// Settings → Appearance → Titles Under Posters (Home poster rows and library grids).
+    static let posterTitlesKey = "showPosterTitles"
+    static var showsPosterTitles: Bool {
+        (UserDefaults.standard.object(forKey: posterTitlesKey) as? Bool) ?? true
+    }
+
     /// Library poster grid: artwork top to the next row's artwork top (Apple's 55 between 390-tall tiles).
     static var posterGridPitch: CGFloat { poster.art.height + 55 }
 }

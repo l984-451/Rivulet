@@ -129,6 +129,10 @@ enum SettingsDescriptorStore {
             icon: "rectangle.expand.vertical",
             description: "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row."
         ),
+        "posterTitles": SettingDescriptor(
+            icon: "textformat",
+            description: "Shows each poster's title and year beneath it, on Home and in your libraries. Episodes show the series and episode number."
+        ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."

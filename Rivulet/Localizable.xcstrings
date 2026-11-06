@@ -8183,6 +8183,16 @@
         }
       }
     },
+    "Shows each poster's title and year beneath it, on Home and in your libraries. Episodes show the series and episode number." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt unter jedem Poster den Titel und das Jahr, auf der Startseite und in deinen Mediatheken. Bei Folgen stehen dort die Serie und die Folgennummer."
+          }
+        }
+      }
+    },
     "Shows every remote press on screen, how long it was held and which remote sent it. Useful when reporting a remote problem." : {
       "localizations" : {
         "de" : {
@@ -9827,6 +9837,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Titel"
+          }
+        }
+      }
+    },
+    "Titles Under Posters" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titel unter Postern"
           }
         }
       }

@@ -4316,7 +4316,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
-    private func currentTrackPicks() -> TrackPicks {
+    private func currentPlexTrackIDs() -> TrackPicks {
         if providerTracksRequireReplan {
             return TrackPicks(audio: currentAudioTrackId, subtitle: showsGeneratedSubtitles ? .off : SubtitlePick(currentSubtitleTrackId))
         }

@@ -34,6 +34,8 @@ struct IOSPlexDetailRoute: Hashable {
 struct IOSAccountButton: View {
     @Environment(\.openAccount) private var openAccount
     @EnvironmentObject private var plex: IOSPlexSession
+    /// Its libraries change on every Jellyfin or Emby sign-in and sign-out, which re-reads the name.
+    @EnvironmentObject private var browse: IOSBrowseStore
     @ObservedObject private var profiles = PlexUserProfileManager.shared
 
     var body: some View {
@@ -41,7 +43,15 @@ struct IOSAccountButton: View {
             IOSPlexAccountAvatar(url: profiles.selectedUser?.avatarURL ?? plex.profileImageURL, size: 34)
         }
         .accessibilityLabel("Account")
-        .accessibilityValue(profiles.selectedUser?.displayName ?? plex.profileDisplayName ?? "")
+        .accessibilityValue(accountName)
+    }
+
+    /// Same rule as the tvOS sidebar's profile row (`AccountName`).
+    private var accountName: String {
+        _ = browse.libraries
+        return AccountName.resolve(plexProfile: profiles.selectedUser?.displayName,
+                                   plexUser: plex.profileDisplayName,
+                                   otherServerUsers: AccountName.otherServerUsers) ?? ""
     }
 }
 

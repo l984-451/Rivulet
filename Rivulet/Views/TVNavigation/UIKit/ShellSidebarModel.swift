@@ -105,18 +105,17 @@ struct ShellSidebarSection: Hashable {
 /// user's order, Settings always last) stay unit-testable.
 enum ShellSidebarModel {
 
-    /// The name on the profile row: the Plex profile, then the Plex account, then the first
-    /// other server's signed-in user (Jellyfin, Emby, in `OtherServerKind.all` order).
+    /// The name on the profile row (`AccountName`), "Account" when nobody is signed in.
     static func profileName(plexProfile: String?, plexUser: String?, otherServerUsers: [String?]) -> String {
-        let candidates = [plexProfile, plexUser] + otherServerUsers
-        return candidates.lazy.compactMap { $0 }.first { !$0.isEmpty } ?? String(localized: "Account")
+        AccountName.resolve(plexProfile: plexProfile, plexUser: plexUser, otherServerUsers: otherServerUsers)
+            ?? String(localized: "Account")
     }
 
     /// The live value of `profileName(plexProfile:plexUser:otherServerUsers:)`.
     @MainActor static var currentProfileName: String {
         profileName(plexProfile: PlexUserProfileManager.shared.selectedUser?.displayName,
                     plexUser: PlexAuthManager.shared.username,
-                    otherServerUsers: OtherServerKind.all.map { $0.userName() })
+                    otherServerUsers: AccountName.otherServerUsers)
     }
 
     /// The order for a profile with none stored: today's default layout.

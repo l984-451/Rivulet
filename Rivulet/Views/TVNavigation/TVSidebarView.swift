@@ -73,7 +73,7 @@ struct TVSidebarView: View {
         _ = serverStore.sources
         return ShellSidebarModel.profileName(plexProfile: profileManager.selectedUser?.displayName,
                                              plexUser: authManager.username,
-                                             otherServerUsers: OtherServerKind.all.map { $0.userName() })
+                                             otherServerUsers: AccountName.otherServerUsers)
     }
 
     private var isMusicLibrarySelected: Bool {

@@ -72,6 +72,14 @@ final class HeroThemeVideoTests: XCTestCase {
     }
 
     func test_newArtworkStopsTheClipUntilItsOwnImageSettles() async throws {
+        try await expectClipWaitsForPage(.forward)
+    }
+
+    func test_backwardPageStopsTheClipUntilItsOwnImageSettles() async throws {
+        try await expectClipWaitsForPage(.backward)
+    }
+
+    private func expectClipWaitsForPage(_ direction: HeroPageDirection) async throws {
         let fixture = Fixture(clip: clip)
         fixture.hero.setBackdrop(url: nil, item: first, host: fixture.host)
         await settle()
@@ -79,7 +87,7 @@ final class HeroThemeVideoTests: XCTestCase {
 
         // An unreachable image: the page stays changing until the load fails.
         let url = try XCTUnwrap(URL(string: "https://hero-test.invalid/a.jpg"))
-        fixture.hero.setBackdrop(url: url, item: second, host: fixture.host, paging: true)
+        fixture.hero.setBackdrop(url: url, item: second, host: fixture.host, paging: direction)
         XCTAssertFalse(fixture.playing, "No theme during a page change")
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !fixture.playing, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(50)) }

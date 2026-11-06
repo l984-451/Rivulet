@@ -386,11 +386,15 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   the open sidebar's Right-to-close (#440). The
   player's info panes don't need it: a `UIFocusGuide` between the pills and
   the pane carries Up and Down.
-- **Right past the hero's Next button pages, as the TV app's does** (#440).
-  `HeroButtonRowView` takes the Right the engine declines from Next in
-  `pressesBegan`, plus a gated swipe; focus stays on Next. Not an invisible
-  focus stop past the row: paging rebuilt the row under it, focus stranded on
-  the stop and every arrow key went dead. Left from Play stays the sidebar.
+- **The hero pages both ways, as the TV app's does** (#440, #518).
+  `HeroButtonRowView` takes the Right the engine declines from Next and the
+  Left from Play in `pressesBegan`, plus gated swipes on the same predicates;
+  focus stays put. Not an invisible focus stop past the row: paging rebuilt the
+  row under it, focus stranded on the stop and every arrow key went dead. The
+  gesture that lands on Play or Next never pages, and one swipe is one page: a
+  gesture counter (`MenuPressInterceptor.remoteGestures`) holds the rest of it.
+  Left from Play pages back until the first item, where it opens the sidebar;
+  Up and Menu reach the sidebar from any page (#500).
 - **A focusless surface that hands some touches to another recognizer passes
   `swipeGate`.** The focusless binding claims its swipes unconditionally
   unless `swipeGate` is given; then each swipe asks it in

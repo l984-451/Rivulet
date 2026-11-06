@@ -76,7 +76,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     /// has entered the list once, `preferredFocusEnvironments` holds the row
     /// focus is on, so an edge press stops instead of bouncing to the selection.
     private var hasPinnedInitialFocus = false
-    /// The control focus is on: a track row or a stepper's -/+ button.
+    /// The control focus is on: a track row or a stepper row.
     private weak var lastFocusedControl: UIView?
 
     /// `audio` titles each row by language with a format line ("TrueHD 7.1 Atmos").
@@ -290,8 +290,8 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     }
 
     /// Adjustment steppers (delay / height) sit in their own section below a
-    /// separator. A press adjusts in place and leaves the popup up, so the
-    /// user can watch the subtitles move as they step.
+    /// separator. Left and Right adjust in place and leave the popup up, so
+    /// the user can watch the subtitles move as they step.
     private func buildSteppers() {
         if !steppers.isEmpty, !rowButtons.isEmpty {
             stack.addArrangedSubview(MenuSeparatorView())
@@ -425,10 +425,9 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         if let row = rowButtons.first(where: { next.isDescendant(of: $0) || next === $0 }) {
             hasPinnedInitialFocus = true
             lastFocusedControl = row
-        } else if stepperRows.contains(where: { next.isDescendant(of: $0) }) {
-            // The stepper row isn't focusable; its -/+ buttons are.
+        } else if let row = stepperRows.first(where: { $0 === next }) {
             hasPinnedInitialFocus = true
-            lastFocusedControl = next
+            lastFocusedControl = row
         }
     }
 }
@@ -476,6 +475,40 @@ private final class MenuSectionHeaderView: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
+// MARK: - MenuRowPill
+
+/// The white pill a focused menu row rises on: AVKit's 4pt growth and shadow.
+/// Shared by the track rows and the stepper rows so every row focuses alike.
+private final class MenuRowPill: UIView {
+    init() {
+        super.init(frame: .zero)
+        layer.cornerRadius = CardTrackListView.Metrics.rowRadius
+        layer.cornerCurve = .continuous
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOffset = CGSize(width: 0, height: 20)
+        layer.shadowRadius = 15
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// Sits on `rowBounds`, grown past it while focused; the shadow follows.
+    func layout(in rowBounds: CGRect, focused: Bool) {
+        let growth = focused ? CardTrackListView.Metrics.focusGrowth : 0
+        frame = rowBounds.insetBy(dx: -growth, dy: -growth)
+        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
+    }
+
+    /// Raises the pill (white, shadowed) or clears it.
+    func apply(focused: Bool, in rowBounds: CGRect) {
+        let growth = focused ? CardTrackListView.Metrics.focusGrowth : 0
+        layer.cornerRadius = CardTrackListView.Metrics.rowRadius + growth
+        layout(in: rowBounds, focused: focused)
+        backgroundColor = focused ? .white : .clear
+        layer.shadowOpacity = focused ? 0.3 : 0
+    }
+}
+
 // MARK: - CardChoiceConfig
 
 /// A one-of-N submenu: `selected` and `onSelect` use option indices.
@@ -519,7 +552,7 @@ struct CardToggleConfig {
 
 /// One adjustment stepper in the menu: a title, a formatted value provider,
 /// and a step handler (`-1` / `+1`). The row re-reads `value()` after every
-/// press, so the handler owns clamping and persistence.
+/// step, so the handler owns clamping and persistence.
 struct CardStepperConfig {
     let title: String
     let value: () -> String
@@ -534,118 +567,180 @@ struct CardStepperConfig {
 
 // MARK: - CardStepperRowView
 
-/// `Title        (-)  value  (+)` in a menu row. The -/+ buttons are focusable;
-/// the value updates on every press.
-final class CardStepperRowView: UIView {
+/// `Title            < value >` in a menu row. The row is the focus stop, and
+/// Left and Right step the value in place: an arrow press from any remote, or
+/// a touch swipe for the remotes that send no arrow presses. A held arrow
+/// keeps stepping (`PressRepeater`). The -/+ buttons this replaced cost two
+/// focus moves per adjustment and made every step a Select.
+final class CardStepperRowView: UIControl {
+
+    /// A held arrow's pace. One subtitle-delay step (0.1 s) every 0.1 s, so a
+    /// second held moves the delay a second.
+    static let repeatInterval: TimeInterval = 0.1
 
     private let config: CardStepperConfig
+    private let pill = MenuRowPill()
+    private let content = UIView()
+    private let titleLabel = UILabel()
     private let valueLabel = UILabel()
+    private let leftChevron = CardStepperRowView.chevron("chevron.backward")
+    private let rightChevron = CardStepperRowView.chevron("chevron.forward")
+    private let repeater = PressRepeater()
+    private var swipeBinding: DirectionalInputBinding?
 
     init(config: CardStepperConfig) {
         self.config = config
         super.init(frame: .zero)
+        typealias M = CardTrackListView.Metrics
 
-        let titleLabel = UILabel()
         titleLabel.text = config.title
-        titleLabel.font = CardTrackListView.Metrics.titleFont
-        titleLabel.textColor = .white
-
-        let minus = CardStepperButton(symbolName: "minus")
-        let plus = CardStepperButton(symbolName: "plus")
-        minus.onTap = { [weak self] in self?.step(-1) }
-        plus.onTap = { [weak self] in self?.step(+1) }
+        titleLabel.font = M.titleFont
 
         valueLabel.text = config.value()
         valueLabel.font = .monospacedDigitSystemFont(ofSize: 23, weight: .medium)
-        valueLabel.textColor = CardTrackListView.Metrics.secondaryColor
         valueLabel.textAlignment = .center
 
-        [titleLabel, minus, valueLabel, plus].forEach {
-            addSubview($0)
+        content.isUserInteractionEnabled = false
+        addSubview(pill)
+        addSubview(content)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        [titleLabel, leftChevron, valueLabel, rightChevron].forEach {
+            content.addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
 
-        let button: CGFloat = 52
+        let chevronGap: CGFloat = 10
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: CardTrackListView.Metrics.rowHeight),
+            heightAnchor.constraint(equalToConstant: M.rowHeight),
+            content.topAnchor.constraint(equalTo: topAnchor),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: CardTrackListView.Metrics.titleX),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: M.titleX),
+            titleLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor),
 
-            plus.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
-            plus.centerYAnchor.constraint(equalTo: centerYAnchor),
-            plus.widthAnchor.constraint(equalToConstant: button),
-            plus.heightAnchor.constraint(equalToConstant: button),
+            // The trailing chevron sits in the Language row's chevron column.
+            rightChevron.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -M.checkColumnX),
+            rightChevron.centerYAnchor.constraint(equalTo: content.centerYAnchor),
 
-            valueLabel.trailingAnchor.constraint(equalTo: plus.leadingAnchor, constant: -8),
-            valueLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            valueLabel.trailingAnchor.constraint(equalTo: rightChevron.leadingAnchor, constant: -chevronGap),
+            valueLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             valueLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 70),
 
-            minus.trailingAnchor.constraint(equalTo: valueLabel.leadingAnchor, constant: -8),
-            minus.centerYAnchor.constraint(equalTo: centerYAnchor),
-            minus.widthAnchor.constraint(equalToConstant: button),
-            minus.heightAnchor.constraint(equalToConstant: button),
-            minus.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 12),
+            leftChevron.trailingAnchor.constraint(equalTo: valueLabel.leadingAnchor, constant: -chevronGap),
+            leftChevron.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            leftChevron.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 12),
         ])
+        applyFocus(false)
+
+        // The press's touch twin. Not while the clickpad is down: an edge click
+        // (the press above) jolts the touch into a fake swipe.
+        swipeBinding = DirectionalInputBinding(
+            gatedSwipesOn: self, directions: [.left, .right],
+            shouldHandle: { [weak self] _ in self?.isFocused == true && !RemoteInputHandler.isClickpadDown },
+            onSwipe: { [weak self] direction in self?.step(direction == .right ? 1 : -1) })
+
+        // VoiceOver: one adjustable element, swiped up and down to step.
+        accessibilityTraits = .adjustable
+        accessibilityLabel = config.title
+        accessibilityValue = valueLabel.text
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private static func chevron(_ symbolName: String) -> UIImageView {
+        let view = UIImageView(image: UIImage(
+            systemName: symbolName,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)))
+        view.contentMode = .center
+        return view
+    }
 
     private func step(_ direction: Int) {
         config.onStep(direction)
         valueLabel.text = config.value()
-    }
-}
-
-// MARK: - CardStepperButton
-
-/// Round -/+ control: faint fill at rest, white with a black glyph when focused.
-final class CardStepperButton: UIControl {
-
-    var onTap: (() -> Void)?
-    private let symbolView: UIImageView
-
-    init(symbolName: String) {
-        symbolView = UIImageView(image: UIImage(
-            systemName: symbolName,
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
-        ))
-        super.init(frame: .zero)
-
-        symbolView.tintColor = .white
-        symbolView.contentMode = .center
-        addSubview(symbolView)
-        symbolView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            symbolView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            symbolView.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-
-        backgroundColor = UIColor.white.withAlphaComponent(0.1)
-        layer.cornerRadius = 26
+        accessibilityValue = valueLabel.text
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func accessibilityIncrement() { step(1) }
+    override func accessibilityDecrement() { step(-1) }
+
+    // MARK: Focus
 
     override var canBecomeFocused: Bool { true }
 
-    // Select does not fire .primaryActionTriggered on a plain UIControl on tvOS.
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses where press.type == .select {
-            onTap?()
-            return
-        }
-        super.pressesBegan(presses, with: event)
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        pill.layout(in: bounds, focused: isFocused)
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        let isFocused = context.nextFocusedView === self
-        coordinator.animateFocusChange(gained: isFocused) {
-            self.backgroundColor = isFocused ? .white : UIColor.white.withAlphaComponent(0.1)
-            self.symbolView.tintColor = isFocused ? .black : .white
-            self.transform = isFocused ? CGAffineTransform(scaleX: 1.1, y: 1.1) : .identity
+        let focused = context.nextFocusedView === self
+        if !focused { repeater.end() }
+        coordinator.animateFocusChange(gained: focused) {
+            self.applyFocus(focused)
         }
+    }
+
+    private func applyFocus(_ focused: Bool) {
+        typealias M = CardTrackListView.Metrics
+        pill.apply(focused: focused, in: bounds)
+        content.transform = focused ? CGAffineTransform(scaleX: M.focusScale, y: M.focusScale) : .identity
+        titleLabel.textColor = focused ? .black : .white
+        let secondary = focused ? UIColor.black.withAlphaComponent(0.6) : M.secondaryColor
+        valueLabel.textColor = secondary
+        leftChevron.tintColor = secondary
+        rightChevron.tintColor = secondary
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { repeater.end() }
+    }
+
+    // MARK: Presses
+    //
+    // Left and Right never move focus out of a menu row (the panel fences focus
+    // and the row spans it), so the engine declines them and they land here.
+    // Both phases are consumed: an Ended that bubbles without its Began gets the
+    // system's default handling.
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard let direction = Self.stepDirection(of: presses) else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
+        repeater.begin(interval: Self.repeatInterval) { [weak self] in self?.step(direction) }
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard Self.stepDirection(of: presses) != nil else {
+            super.pressesEnded(presses, with: event)
+            return
+        }
+        repeater.end()
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard Self.stepDirection(of: presses) != nil else {
+            super.pressesCancelled(presses, with: event)
+            return
+        }
+        repeater.end()
+    }
+
+    /// -1 for a Left arrow, +1 for Right, nil when `presses` holds neither.
+    private static func stepDirection(of presses: Set<UIPress>) -> Int? {
+        for press in presses {
+            switch press.type {
+            case .leftArrow: return -1
+            case .rightArrow: return 1
+            default: continue
+            }
+        }
+        return nil
     }
 }
 
@@ -663,7 +758,7 @@ final class CardTrackRowButton: UIControl {
         get { !checkmarkView.isHidden }
         set { checkmarkView.isHidden = !newValue }
     }
-    private let pill = UIView()
+    private let pill = MenuRowPill()
     private let content = UIView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
@@ -686,12 +781,6 @@ final class CardTrackRowButton: UIControl {
 
         let hasSubtitle = !(row.subtitle?.isEmpty ?? true)
 
-        pill.layer.cornerRadius = M.rowRadius
-        pill.layer.cornerCurve = .continuous
-        pill.layer.shadowColor = UIColor.black.cgColor
-        pill.layer.shadowOffset = CGSize(width: 0, height: 20)
-        pill.layer.shadowRadius = 15
-        pill.isUserInteractionEnabled = false
         content.isUserInteractionEnabled = false
 
         titleLabel.text = row.title
@@ -755,10 +844,7 @@ final class CardTrackRowButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let isFocused = self.isFocused
-        pill.frame = isFocused ? bounds.insetBy(dx: -CardTrackListView.Metrics.focusGrowth,
-                                                dy: -CardTrackListView.Metrics.focusGrowth) : bounds
-        pill.layer.shadowPath = UIBezierPath(roundedRect: pill.bounds, cornerRadius: pill.layer.cornerRadius).cgPath
+        pill.layout(in: bounds, focused: isFocused)
     }
 
     override var canBecomeFocused: Bool { true }
@@ -783,12 +869,7 @@ final class CardTrackRowButton: UIControl {
 
     private func applyFocus(_ focused: Bool) {
         typealias M = CardTrackListView.Metrics
-        let growth = focused ? M.focusGrowth : 0
-        pill.frame = bounds.insetBy(dx: -growth, dy: -growth)
-        pill.layer.cornerRadius = M.rowRadius + growth
-        pill.layer.shadowPath = UIBezierPath(roundedRect: pill.bounds, cornerRadius: pill.layer.cornerRadius).cgPath
-        pill.backgroundColor = focused ? .white : .clear
-        pill.layer.shadowOpacity = focused ? 0.3 : 0
+        pill.apply(focused: focused, in: bounds)
         content.transform = focused ? CGAffineTransform(scaleX: M.focusScale, y: M.focusScale) : .identity
         titleLabel.textColor = focused ? .black : .white
         subtitleLabel.textColor = focused ? UIColor.black.withAlphaComponent(0.6) : M.secondaryColor

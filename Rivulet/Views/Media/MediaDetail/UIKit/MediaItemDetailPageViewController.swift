@@ -557,7 +557,8 @@ final class MediaItemDetailPageViewController: UIViewController {
     /// The Extras row between the title and the info columns, only when the episode has some.
     private func showExtras(_ detail: MediaItemDetail) {
         let split = BelowFoldContentLoader.extraTiles(
-            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster)
+            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster,
+            youTubeVideoID: detail.youTubeTrailerID, providerID: item.ref.providerID)
         let tiles = split.trailers + split.extras
         guard !tiles.isEmpty, !hasExtras else { return }
         hasExtras = true

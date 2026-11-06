@@ -229,7 +229,8 @@ enum EmbyMediaMapper {
             mediaSources: (dto.mediaSources ?? []).compactMap {
                 mediaSource($0, itemID: dto.id.value, playSessionID: nil, baseURL: baseURL, token: nil)
             },
-            trailerURL: nil,
+            // The first internet trailer on YouTube; local trailer files ride `extras`.
+            trailerURL: YouTubeTrailer.firstLink((dto.remoteTrailers ?? []).map(\.url)),
             contentRating: dto.officialRating,
             regionOfOrigin: dto.productionLocations?.first,
             ratings: MediaRating.ordered([

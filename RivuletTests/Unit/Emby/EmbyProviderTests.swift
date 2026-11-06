@@ -265,7 +265,7 @@ final class EmbyProviderTests: XCTestCase {
         server.respond("\(items)/166", body: EmbyBrowseFixtures.movieDetail)
         let detail = try await provider().fullDetail(for: ref("166"))
         XCTAssertEqual(detail.item.title, "01 Sample Clip")
-        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Fields"], "ChildCount,RecursiveItemCount,Collections")
+        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Fields"], "ChildCount,RecursiveItemCount,Collections,RemoteTrailers")
         XCTAssertEqual(detail.chapters.count, 4)
         XCTAssertEqual(paths(), ["\(items)/166"], "no trailers counted, so no extras request")
     }

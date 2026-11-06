@@ -120,6 +120,14 @@ nonisolated struct JFItem: Decodable, Sendable {
     let localTrailerCount: Int?
     let specialFeatureCount: Int?
     let extraType: String?          // on a trailer or special feature: Trailer, Featurette, BehindTheScenes, ...
+    /// Internet trailers (YouTube links from TMDB); detail calls return them.
+    let remoteTrailers: [JFRemoteTrailer]?
+}
+
+/// One entry of `RemoteTrailers`: a link, usually YouTube, and its name.
+nonisolated struct JFRemoteTrailer: Decodable, Sendable {
+    let url: String?
+    let name: String?
 }
 
 nonisolated struct JFUserData: Decodable, Sendable {

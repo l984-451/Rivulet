@@ -152,9 +152,39 @@ struct IOSPlexExtrasRow: View {
     @Environment(\.plexActions) private var actions
     @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.openURL) private var openURL
+    /// The YouTube trailer awaiting its confirm.
+    @State private var youTubeID: String?
 
     private var extras: [MediaItemDetail.Extra] {
-        (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && ($0.providerID.hasPrefix("plex:") ? Int($0.id) != nil : true) }
+        var rows = (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && ($0.providerID.hasPrefix("plex:") ? Int($0.id) != nil : true) }
+        // A title with no trailer of its own gets its YouTube one (Jellyfin, Emby), on the title's artwork.
+        if let detail, let id = detail.youTubeTrailerID {
+            let art = detail.item.artwork
+            rows.insert(MediaItemDetail.Extra(
+                id: Self.youTubePrefix + id, title: ExtraSubtype.trailer.displayName,
+                thumbnailURL: art.thumbnail ?? art.backdrop ?? art.poster, duration: nil, playbackKey: nil,
+                providerID: detail.item.ref.providerID, subtype: .trailer), at: 0)
+        }
+        return rows
+    }
+
+    private static let youTubePrefix = "youtube:"
+
+    private func tapped(_ extra: MediaItemDetail.Extra) {
+        if extra.id.hasPrefix(Self.youTubePrefix) {
+            youTubeID = String(extra.id.dropFirst(Self.youTubePrefix.count))
+        } else {
+            actions.playExtra(extra)
+        }
+    }
+
+    /// The YouTube app, else the trailer on the web.
+    private func openYouTube(_ videoID: String) {
+        guard let app = YouTubeTrailer.appURL(videoID: videoID) else { return }
+        openURL(app) { opened in
+            if !opened, let web = YouTubeTrailer.webURL(videoID: videoID) { openURL(web) }
+        }
     }
 
     var body: some View {
@@ -163,7 +193,7 @@ struct IOSPlexExtrasRow: View {
             IOSShelfRow(kind: .landscape, items: extras) {
                 IOSPlexShelfHeader(title: String(localized: "Extras"))
             } tile: { extra, width in
-                Button { actions.playExtra(extra) } label: {
+                Button { tapped(extra) } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         IOSPlexImage(url: browse.imageURL(extra.thumbnailURL, providerID: extra.providerID,
                                                           width: Int(width * displayScale), height: Int(width * displayScale * 9 / 16)))
@@ -182,12 +212,20 @@ struct IOSPlexExtrasRow: View {
                 }
                 .buttonStyle(.plain)
             }
+            .confirmationDialog(String(localized: "Open in YouTube"), isPresented: Binding(
+                get: { youTubeID != nil }, set: { if !$0 { youTubeID = nil } }), titleVisibility: .visible) {
+                Button(String(localized: "Open in YouTube")) { youTubeID.map(openYouTube) }
+                Button(String(localized: "Cancel"), role: .cancel) {}
+            } message: {
+                Text("This trailer plays in the YouTube app.")
+            }
         }
     }
 }
 
 private extension MediaItemDetail.Extra {
     var runtimeText: String? {
+        if id.hasPrefix("youtube:") { return "YouTube" }
         guard let duration, duration > 0 else { return nil }
         let minutes = Int(duration / 60)
         return minutes >= 60 ? String(localized: "\(minutes / 60)h \(minutes % 60)m") : String(localized: "\(minutes)m")

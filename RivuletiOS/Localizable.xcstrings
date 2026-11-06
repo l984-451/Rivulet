@@ -5375,6 +5375,7 @@
         }
       }
     },
+    "Open in YouTube" : {},
     "Open Source Software" : {
       "localizations" : {
         "de" : {
@@ -8051,6 +8052,7 @@
         }
       }
     },
+    "This trailer plays in the YouTube app." : {},
     "TMDB users" : {
       "localizations" : {
         "de" : {
@@ -9861,6 +9863,7 @@
         }
       }
     },
+    "YouTube" : {},
     "Z-A" : {
       "localizations" : {
         "de" : {

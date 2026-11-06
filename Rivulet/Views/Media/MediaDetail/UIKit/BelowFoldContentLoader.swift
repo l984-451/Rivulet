@@ -43,6 +43,8 @@ struct BelowFoldTrailer: Hashable, Sendable {
     /// `/services/iva/assets/...` path, which 404s under /library/metadata.
     var playbackKey: String?
     var providerID: String
+    /// Set on the tile that opens a YouTube trailer instead of playing a file.
+    var youTubeVideoID: String?
 }
 
 @MainActor
@@ -70,7 +72,8 @@ final class BelowFoldContentLoader {
         // Real Plex extras, split into Trailers vs other Extras (behind the
         // scenes, featurettes, etc.) by the extra's type.
         let fallbackArt = item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster
-        let tiles = Self.extraTiles(from: resolvedDetail?.extras ?? [], fallbackArt: fallbackArt)
+        let tiles = Self.extraTiles(from: resolvedDetail?.extras ?? [], fallbackArt: fallbackArt,
+                                    youTubeVideoID: resolvedDetail?.youTubeTrailerID, providerID: item.ref.providerID)
         content.trailers = tiles.trailers
         content.extras = tiles.extras
 
@@ -127,7 +130,9 @@ final class BelowFoldContentLoader {
     }
 
     /// An item's extras as tiles, trailers split from the rest (behind the scenes, featurettes, ...).
-    static func extraTiles(from extras: [MediaItemDetail.Extra], fallbackArt: URL?)
+    /// A `youTubeVideoID` adds a trailer tile on the title's own artwork.
+    static func extraTiles(from extras: [MediaItemDetail.Extra], fallbackArt: URL?,
+                           youTubeVideoID: String? = nil, providerID: String = "")
         -> (trailers: [BelowFoldTrailer], extras: [BelowFoldTrailer]) {
         func tile(_ extra: MediaItemDetail.Extra) -> BelowFoldTrailer {
             BelowFoldTrailer(
@@ -140,7 +145,14 @@ final class BelowFoldContentLoader {
                 providerID: extra.providerID
             )
         }
-        return (extras.filter { $0.isTrailer }.map(tile), extras.filter { !$0.isTrailer }.map(tile))
+        var trailers = extras.filter { $0.isTrailer }.map(tile)
+        if let youTubeVideoID {
+            trailers.append(BelowFoldTrailer(
+                id: "youtube:\(youTubeVideoID)", title: ExtraSubtype.trailer.displayName, artworkURL: fallbackArt,
+                durationFormatted: "YouTube", subtype: .trailer, playbackKey: nil, providerID: providerID,
+                youTubeVideoID: youTubeVideoID))
+        }
+        return (trailers, extras.filter { !$0.isTrailer }.map(tile))
     }
 
     /// "1m" / "2m 30s" / "45s" — feeds the on-thumbnail ▶ duration badge.

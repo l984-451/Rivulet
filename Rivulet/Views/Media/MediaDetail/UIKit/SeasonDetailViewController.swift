@@ -329,7 +329,8 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
                 self.seasonDetail = detail; self.season = detail.item
                 let split = BelowFoldContentLoader.extraTiles(
                     from: detail.extras,
-                    fallbackArt: detail.item.artwork.backdrop ?? detail.item.parentArtwork?.backdrop ?? detail.item.artwork.thumbnail)
+                    fallbackArt: detail.item.artwork.backdrop ?? detail.item.parentArtwork?.backdrop ?? detail.item.artwork.thumbnail,
+                    youTubeVideoID: detail.youTubeTrailerID, providerID: detail.item.ref.providerID)
                 self.extrasShelf.configure(split.trailers + split.extras)
             }
             self.episodes = EpisodePicker.inPlaybackOrder(children)

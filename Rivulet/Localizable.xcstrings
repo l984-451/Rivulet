@@ -7259,6 +7259,7 @@
         }
       }
     },
+    "Install YouTube from the App Store to watch this trailer." : {},
     "Instant Resume" : {
       "localizations" : {
         "de" : {
@@ -9062,12 +9063,8 @@
         }
       }
     },
-    "Now Playing, %@" : {
-
-    },
-    "Now Playing, %@, %@" : {
-
-    },
+    "Now Playing, %@" : {},
+    "Now Playing, %@, %@" : {},
     "OK" : {
       "localizations" : {
         "de" : {
@@ -9324,6 +9321,7 @@
         }
       }
     },
+    "Open in YouTube" : {},
     "Optional" : {
       "localizations" : {
         "de" : {
@@ -14157,6 +14155,7 @@
         }
       }
     },
+    "This trailer plays in the YouTube app." : {},
     "TMDB users" : {
       "localizations" : {
         "de" : {
@@ -17461,6 +17460,8 @@
         }
       }
     },
+    "YouTube" : {},
+    "YouTube Isn't Installed" : {},
     "You’re a late-night watcher" : {
       "localizations" : {
         "de" : {

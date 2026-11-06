@@ -16090,6 +16090,16 @@
         }
       }
     },
+    "Unwatched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungesehen"
+          }
+        }
+      }
+    },
     "Up Next" : {
       "localizations" : {
         "de" : {

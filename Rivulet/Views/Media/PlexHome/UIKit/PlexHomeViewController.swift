@@ -616,6 +616,8 @@ final class PlexHomeViewController: UIViewController {
     /// Active sort for the grid. Initialized from LibrarySettingsManager in
     /// `init` for library mode; never read in home mode.
     private var gridSort: LibrarySortOption
+    /// The library grid's Filter: Unwatched only. For this visit, as on iOS.
+    private var gridUnwatchedOnly = false
     /// Pages (by `gridPageSize` index) fetched or in flight this generation.
     /// A page that fails is removed so scrolling back over it retries.
     private var gridPagesRequested: Set<Int> = []
@@ -1495,8 +1497,10 @@ final class PlexHomeViewController: UIViewController {
         if let library = providerLibrary {
             guard let provider = MediaProviderRegistry.shared.provider(for: library.providerID) else { return }
             let sort = Self.providerSort(gridSort)
+            let unwatchedOnly = gridUnwatchedOnly
             fetchPage = { start in
-                let page = try await provider.items(in: library, sort: sort, page: Page(offset: start, limit: pageSize))
+                let page = try await provider.items(in: library, sort: sort, unwatchedOnly: unwatchedOnly,
+                                                    page: Page(offset: start, limit: pageSize))
                 return (page.items, page.total)
             }
         } else if case .playlists(let providerID) = mode {
@@ -1542,6 +1546,8 @@ final class PlexHomeViewController: UIViewController {
             let map = mediaItemMapper()
             if case .library(let key, _) = mode {
                 let sort = gridSort.apiParameter
+                // Plex's own Unwatched filter, as `PlexProvider.items(unwatchedOnly:)` sends it.
+                let filters = gridUnwatchedOnly ? [URLQueryItem(name: "unwatched", value: "1")] : []
                 fetchPage = { start in
                     let result = try await network.getLibraryItemsWithTotal(
                         serverURL: serverURL,
@@ -1550,7 +1556,8 @@ final class PlexHomeViewController: UIViewController {
                         start: start,
                         size: pageSize,
                         sort: sort,
-                        followCollectionMode: true
+                        followCollectionMode: true,
+                        filters: filters
                     )
                     return (result.items.map(map), result.totalSize)
                 }
@@ -1682,8 +1689,9 @@ final class PlexHomeViewController: UIViewController {
         alphabetBarShown = false
         alphabetBar.setLetters([])
         alphabetBar.isHidden = true
+        // The letter counts are the whole library's, so a filtered grid has no bar.
         guard case .library(let key, _) = mode,
-              !gridShowsCollections,
+              !gridShowsCollections, !gridUnwatchedOnly,
               gridSort == .titleAsc || gridSort == .titleDesc else { return }
         let gen = gridGeneration
         let descending = gridSort == .titleDesc
@@ -1857,6 +1865,28 @@ final class PlexHomeViewController: UIViewController {
                 self?.applySort(option)
             }
         })
+    }
+
+    /// The filter menu: All or Unwatched, the active one checked.
+    private func filterMenu() -> UIMenu {
+        UIMenu(children: [false, true].map { unwatched in
+            UIAction(title: unwatched ? String(localized: "Unwatched") : String(localized: "All"),
+                     state: unwatched == gridUnwatchedOnly ? .on : .off) { [weak self] _ in
+                self?.applyUnwatchedFilter(unwatched)
+            }
+        })
+    }
+
+    /// Reloads the grid for the filter, as a sort change does.
+    private func applyUnwatchedFilter(_ unwatchedOnly: Bool) {
+        guard case .library = mode, unwatchedOnly != gridUnwatchedOnly else { return }
+        gridUnwatchedOnly = unwatchedOnly
+        resetGrid()
+        pageZero = .loading
+        applySnapshot(animated: false)
+        refreshSortHeaderCount()
+        loadGridPage(containing: 0)
+        loadAlphabetIndex()
     }
 
     /// Persists the new sort, resets the grid (bumping the generation token
@@ -3251,10 +3281,13 @@ final class PlexHomeViewController: UIViewController {
                 sortMenu: sortMenu(),
                 view: gridShowsCollections ? .collections : .titles,
                 viewMenu: viewMenu,
+                // Shuffle follows the filter, as on iOS.
                 onShuffle: shuffleLibrary.map { library in { [weak self] in
                     guard let self else { return }
-                    ShufflePlayback.shuffle(library, from: self)
-                } }
+                    ShufflePlayback.shuffle(library, unwatchedOnly: self.gridUnwatchedOnly, from: self)
+                } },
+                filterMenu: filterMenu(),
+                unwatchedOnly: gridUnwatchedOnly
             )
             return cell
 

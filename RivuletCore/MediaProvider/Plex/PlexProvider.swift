@@ -592,49 +592,6 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
-    // MARK: - Favorites
-
-    var supportsFavorites: Bool { true }
-
-    /// Each movie and show library's items rated above three stars, merged by title.
-    /// Plex has no account-wide list, so it is one request per library.
-    func favorites(limit: Int) async throws -> [MediaItem] {
-        let videoLibraries = try await libraries().filter { $0.kind == .movies || $0.kind == .shows }
-        return try await plexCall {
-            var found: [MediaItem] = []
-            for library in videoLibraries {
-                let result = try await networkManager.getLibraryItemsWithTotal(
-                    serverURL: serverURL, authToken: authToken,
-                    sectionId: library.id,
-                    start: 0, size: limit,
-                    sort: "titleSort:asc",
-                    type: library.kind == .movies ? 1 : 2,
-                    filters: [Self.favoriteFilter]
-                )
-                found += result.items.map {
-                    PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
-                }
-            }
-            return Array(FavoritesOrder.byTitle(found).prefix(limit))
-        }
-    }
-
-    /// ">>=" is Plex's "greater than"; the threshold matches `PlexUserRating.isFavorite`.
-    static let favoriteFilter = URLQueryItem(
-        name: "userRating>>",
-        value: "\(Int(PlexUserRating.favoriteStarThreshold * PlexUserRating.starScale))"
-    )
-
-    /// Favoriting rates five stars, unfavoriting clears the rating, as music does.
-    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
-        try await plexCall {
-            try await networkManager.setRating(
-                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID,
-                rating: favorite ? Int(5 * PlexUserRating.starScale) : nil
-            )
-        }
-    }
-
     // MARK: - Watchlist
 
     var supportsWatchlist: Bool { true }

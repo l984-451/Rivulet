@@ -69,8 +69,9 @@ struct IOSPlexLibrariesView: View {
                         NavigationLink(value: IOSLibrarySelection.downloads) {
                             Label("Downloads", systemImage: "arrow.down.circle")
                         }
-                        // Every server's favorite movies and shows, as the tvOS sidebar has them.
-                        if browse.hasServers {
+                        // Jellyfin's and Emby's favorite movies and shows, as the tvOS sidebar has them.
+                        // Plex has the watchlist instead. `libraries` changes with each sign-in.
+                        if !browse.libraries.isEmpty, FavoritesFeed.isAvailable {
                             NavigationLink(value: IOSLibrarySelection.favorites) {
                                 Label("Favorites", systemImage: "heart")
                             }

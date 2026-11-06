@@ -2495,9 +2495,11 @@ final class PlexHomeViewController: UIViewController {
             return MediaProviderRegistry.shared.provider(for: providerLibrary.providerID) != nil
         }
         switch mode {
-        case .home, .search, .favorites:
-            // Favorites gather every server's, so any signed-in one will do.
+        case .home, .search:
             return authManager.hasCredentials || ServerDataStore.shared.isSignedIn
+        case .favorites:
+            // Jellyfin and Emby keep favorites; Plex alone has none to show.
+            return FavoritesFeed.isAvailable
         case .collection(let item) where !item.ref.isPlex:
             return MediaProviderRegistry.shared.provider(for: item.ref.providerID) != nil
         case .playlist(let playlist):

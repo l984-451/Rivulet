@@ -64,6 +64,13 @@ struct TVSidebarView: View {
         authManager.hasCredentials || serverStore.isSignedIn
     }
 
+    /// A Jellyfin or Emby server is signed in. Reads `serverStore.sources` so a sign-in or
+    /// sign-out re-renders the sidebar.
+    private var hasFavoritesServer: Bool {
+        _ = serverStore.sources
+        return FavoritesFeed.isAvailable
+    }
+
     /// Signing out of everything brings the setup landing back.
     private var hasAnySource: Bool {
         isSignedInToAnyServer || liveTVDataStore.sources.contains { !$0.sourceType.followsServer }
@@ -108,8 +115,8 @@ struct TVSidebarView: View {
             // Both need a Plex account; a Jellyfin-only setup has neither (#478).
             showDiscover: showDiscoverTab && authManager.hasCredentials,
             showWatchlist: showWatchlistTab && authManager.hasCredentials,
-            // Every server keeps favorites, so any signed-in one shows the row.
-            showFavorites: showFavoritesTab,
+            // Jellyfin and Emby keep favorites; Plex has the watchlist instead.
+            showFavorites: showFavoritesTab && hasFavoritesServer,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
@@ -221,7 +228,7 @@ struct TVSidebarView: View {
                 selectedTab = .home
             }
         }
-        .onChange(of: showFavoritesTab) { _, shown in
+        .onChange(of: showFavoritesTab && hasFavoritesServer) { _, shown in
             if !shown && selectedTab == .favorites {
                 selectedTab = .home
             }

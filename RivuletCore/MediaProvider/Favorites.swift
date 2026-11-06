@@ -5,9 +5,9 @@
 //  Favorites.swift
 //  Rivulet
 //
-//  Favorite movies and shows across every signed-in server, for the tvOS
-//  sidebar's Favorites page and the iOS Favorites list. Each server keeps its
-//  own: Plex as a rating above three stars, Jellyfin and Emby as a flag.
+//  Favorite movies and shows across every signed-in Jellyfin and Emby server,
+//  for the tvOS sidebar's Favorites page and the iOS Favorites list. Each
+//  server keeps its own flag. Plex has the watchlist instead, so it has none.
 //
 
 import Foundation
@@ -31,10 +31,13 @@ enum FavoritesFeed {
     /// Per server; a favorites list is a hand-picked set, far below this.
     static let limit = 500
 
-    /// The servers that keep favorites: the selected Plex server, then every other one.
+    /// The servers that keep favorites (Jellyfin, Emby), in sidebar order.
     static func providers(in registry: MediaProviderRegistry = .shared) -> [any MediaProvider] {
         ([registry.plexProvider].compactMap { $0 } + registry.secondaryProviders).filter(\.supportsFavorites)
     }
+
+    /// Whether any signed-in server keeps favorites: the Favorites row shows only then.
+    static var isAvailable: Bool { !providers().isEmpty }
 
     /// Every server's favorites, merged by title. A server that fails drops out on its own.
     static func load(from providers: [any MediaProvider]? = nil) async -> [MediaItem] {

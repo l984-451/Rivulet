@@ -165,8 +165,8 @@ protocol MediaProvider: Sendable, Identifiable {
     func removeFromWatchlist(_ ref: MediaItemRef) async throws
 
     // MARK: - Favorites (movies and shows)
-    /// Plex has no favorite flag: a rating above three stars is one (`PlexUserRating`).
-    /// Jellyfin and Emby keep a per-user favorite flag.
+    /// Jellyfin and Emby keep a per-user favorite flag. Plex has none for video and keeps the
+    /// watchlist instead, so it leaves this off.
     var supportsFavorites: Bool { get }
     /// The user's favorite movies and shows across the server's video libraries, by title.
     func favorites(limit: Int) async throws -> [MediaItem]

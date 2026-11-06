@@ -10,6 +10,12 @@
             "state" : "translated",
             "value" : "%@ Live-TV"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Ζωντανή τηλεόραση"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ zeitversetzt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ πίσω από τη ζωντανή μετάδοση"
           }
         }
       }
@@ -50,6 +62,12 @@
             "state" : "translated",
             "value" : "%@ ist gerade nicht erreichbar."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν είναι δυνατή η σύνδεση με το %@ αυτή τη στιγμή."
+          }
         }
       }
     },
@@ -65,6 +83,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ of %2$@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ από %2$@"
           }
         }
       }
@@ -82,6 +106,12 @@
             "state" : "new",
             "value" : "%1$@ to %2$@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ έως %2$@"
+          }
         }
       }
     },
@@ -98,6 +128,12 @@
             "state" : "new",
             "value" : "%1$@%2$@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@"
+          }
         }
       }
     },
@@ -107,6 +143,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@, PIN erforderlich"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: απαιτείται PIN"
           }
         }
       }
@@ -126,6 +168,24 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld Kanäle"
+                }
+              }
+            }
+          }
+        },
+        "el" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld κανάλι"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld κανάλια"
                 }
               }
             }
@@ -170,6 +230,24 @@
               }
             }
           }
+        },
+        "el" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld κανάλι"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld κανάλια"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -206,6 +284,24 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld episodes"
+                }
+              }
+            }
+          }
+        },
+        "el" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld επεισόδιο"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld επεισόδια"
                 }
               }
             }
@@ -268,6 +364,54 @@
               }
             }
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@episodes@ σε %#@seasons@"
+          },
+          "substitutions" : {
+            "episodes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg επεισόδιο"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg επεισόδια"
+                    }
+                  }
+                }
+              }
+            },
+            "seasons" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg κύκλο"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg κύκλους"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -283,6 +427,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$lld hr %2$lld min left"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απομένουν %1$lld ώρες και %2$lld λεπτά"
           }
         }
       }
@@ -324,6 +474,24 @@
               }
             }
           }
+        },
+        "el" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld στοιχείο"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld στοιχεία"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -333,6 +501,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch %lld Min."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απομένουν %lld λεπτά"
           }
         }
       }
@@ -344,6 +518,12 @@
             "state" : "translated",
             "value" : "%lld Prozent gesehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παρακολουθήθηκε το %lld τοις εκατό"
+          }
         }
       }
     },
@@ -353,6 +533,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Sekunden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld δευτερόλεπτα"
           }
         }
       }
@@ -380,6 +566,12 @@
             "state" : "new",
             "value" : "%1$lldh %2$lldm"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld ώ. %2$lld λ."
+          }
         }
       }
     },
@@ -389,6 +581,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Min."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld λ."
           }
         }
       }
@@ -400,6 +598,12 @@
             "state" : "translated",
             "value" : "100 %"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100%"
+          }
         }
       }
     },
@@ -409,6 +613,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "4K zuerst"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προτεραιότητα στο 4K"
           }
         }
       }
@@ -420,6 +630,12 @@
             "state" : "translated",
             "value" : "Ein Senderprofil zeigt nur die Sender dieses Profils. Unter dem Namen erscheint diese Quelle in Live-TV."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ένα προφίλ καναλιών εμφανίζει μόνο τα δικά του κανάλια. Το όνομα καθορίζει πώς εμφανίζεται αυτή η πηγή στη ζωντανή τηλεόραση."
+          }
         }
       }
     },
@@ -429,6 +645,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Server, Benutzername und Passwort von deinem Anbieter"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διακομιστής, όνομα χρήστη και κωδικός πρόσβασης από τον πάροχό σας"
           }
         }
       }
@@ -440,6 +662,12 @@
             "state" : "translated",
             "value" : "A-Z"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Α–Ω"
+          }
         }
       }
     },
@@ -449,6 +677,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Über"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληροφορίες"
           }
         }
       }
@@ -460,6 +694,12 @@
             "state" : "translated",
             "value" : "Account"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λογαριασμός"
+          }
         }
       }
     },
@@ -469,6 +709,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Serie zur Watchlist hinzufügen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη σειράς στη λίστα παρακολούθησης"
           }
         }
       }
@@ -480,6 +726,12 @@
             "state" : "translated",
             "value" : "Quelle hinzufügen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη πηγής"
+          }
         }
       }
     },
@@ -489,6 +741,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quelle hinzufügen …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη πηγής…"
           }
         }
       }
@@ -500,6 +758,12 @@
             "state" : "translated",
             "value" : "Live-TV-Quelle hinzufügen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη πηγής ζωντανής τηλεόρασης"
+          }
         }
       }
     },
@@ -509,6 +773,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Füge Titel über ihr Menü mit „Zur Playlist hinzufügen“ hinzu."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθέστε τίτλους από το μενού τους με την επιλογή «Προσθήκη στη λίστα αναπαραγωγής»."
           }
         }
       }
@@ -520,6 +790,12 @@
             "state" : "translated",
             "value" : "Als Favoriten sichern"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη στα αγαπημένα"
+          }
         }
       }
     },
@@ -529,6 +805,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zur Playlist hinzufügen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη στη λίστα αναπαραγωγής"
           }
         }
       }
@@ -540,6 +822,12 @@
             "state" : "translated",
             "value" : "Zur Watchlist hinzufügen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη στη λίστα παρακολούθησης"
+          }
         }
       }
     },
@@ -550,12 +838,24 @@
             "state" : "translated",
             "value" : "Adresse"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διεύθυνση"
+          }
         }
       }
     },
     "AetherEngine" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AetherEngine"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "AetherEngine"
@@ -570,6 +870,12 @@
             "state" : "translated",
             "value" : "AirPlay"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AirPlay"
+          }
         }
       }
     },
@@ -579,6 +885,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Heute im TV"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προβάλλονται σήμερα"
           }
         }
       }
@@ -590,6 +902,12 @@
             "state" : "translated",
             "value" : "Alle"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όλα"
+          }
         }
       }
     },
@@ -599,6 +917,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Sender"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όλα τα κανάλια"
           }
         }
       }
@@ -610,6 +934,12 @@
             "state" : "translated",
             "value" : "Alle Folgen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όλα τα επεισόδια"
+          }
         }
       }
     },
@@ -619,6 +949,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Tuner sind belegt. Beende einen anderen Stream und versuche es erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όλοι οι δέκτες είναι απασχολημένοι. Σταματήστε κάποια άλλη ροή και δοκιμάστε ξανά."
           }
         }
       }
@@ -630,6 +966,12 @@
             "state" : "translated",
             "value" : "Immer"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πάντα"
+          }
         }
       }
     },
@@ -639,6 +981,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ein M3U-Link von deinem Anbieter"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεσμος M3U από τον πάροχό σας"
           }
         }
       }
@@ -650,6 +998,12 @@
             "state" : "translated",
             "value" : "Ein XMLTV-Link für das Programm. Lass das Feld leer, wenn die Playlist ihr eigenes Programm angibt."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεσμος XMLTV για το πρόγραμμα. Αφήστε το κενό αν η λίστα αναπαραγωγής περιέχει ήδη οδηγό."
+          }
         }
       }
     },
@@ -659,6 +1013,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "App-Symbol"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εικονίδιο εφαρμογής"
           }
         }
       }
@@ -670,6 +1030,12 @@
             "state" : "translated",
             "value" : "Audio"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ήχος"
+          }
         }
       }
     },
@@ -679,6 +1045,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Audio %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ήχος %lld"
           }
         }
       }
@@ -690,6 +1062,12 @@
             "state" : "translated",
             "value" : "Audio & Untertitel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ήχος και υπότιτλοι"
+          }
         }
       }
     },
@@ -699,6 +1077,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Audioverzögerung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Καθυστέρηση ήχου"
           }
         }
       }
@@ -710,6 +1094,12 @@
             "state" : "translated",
             "value" : "Audiobeschreibung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακουστική περιγραφή"
+          }
         }
       }
     },
@@ -719,6 +1109,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Audiosprache"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Γλώσσα ήχου"
           }
         }
       }
@@ -730,6 +1126,12 @@
             "state" : "translated",
             "value" : "Audio und Untertitel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ήχος και υπότιτλοι"
+          }
         }
       }
     },
@@ -739,6 +1141,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Authentifizierungsprüfung fehlgeschlagen: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο έλεγχος ταυτότητας απέτυχε: %@"
           }
         }
       }
@@ -750,6 +1158,12 @@
             "state" : "translated",
             "value" : "Authentifizierung fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η ταυτοποίηση απέτυχε"
+          }
         }
       }
     },
@@ -759,6 +1173,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Authentifizierung erforderlich"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απαιτείται ταυτοποίηση"
           }
         }
       }
@@ -770,6 +1190,12 @@
             "state" : "translated",
             "value" : "Automatisch"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτόματο"
+          }
         }
       }
     },
@@ -780,6 +1206,12 @@
             "state" : "translated",
             "value" : "Auto · %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτόματο · %@"
+          }
         }
       }
     },
@@ -789,6 +1221,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Automatisch"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτόματο"
           }
         }
       }
@@ -810,6 +1248,12 @@
             "state" : "translated",
             "value" : "Unterwegs"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εκτός σπιτιού"
+          }
         }
       }
     },
@@ -819,6 +1263,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„Unterwegs“ gilt für Mobilfunk, persönlichen Hotspot, Datensparmodus und Verbindungen außerhalb deines Heimnetzes. „Automatisch“ konvertiert nur, wenn die Datei für deine Verbindung zu groß ist."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η επιλογή «Εκτός σπιτιού» περιλαμβάνει δεδομένα κινητής, προσωπικό hotspot, λειτουργία χαμηλής κατανάλωσης δεδομένων και συνδέσεις έξω από το οικιακό δίκτυο. Το «Αυτόματο» μετατρέπει μόνο όταν το αρχείο δεν χωρά στη σύνδεση."
           }
         }
       }
@@ -830,6 +1280,12 @@
             "state" : "translated",
             "value" : "%lld Sekunden zurück"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πίσω %lld δευτερόλεπτα"
+          }
         }
       }
     },
@@ -840,6 +1296,12 @@
             "state" : "translated",
             "value" : "Hinter den Kulissen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παρασκήνια"
+          }
         }
       }
     },
@@ -849,6 +1311,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beste Qualität"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Καλύτερη ποιότητα"
           }
         }
       }
@@ -861,6 +1329,12 @@
             "state" : "translated",
             "value" : "„Manuell“ zeigt eine Schaltfläche zum Überspringen, „Automatisch“ überspringt von selbst und „Aus“ zeigt nichts."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Κουμπί» εμφανίζει κουμπί παράλειψης, «Αυτόματο» παραλείπει μόνο του και «Ανενεργό» δεν εμφανίζει τίποτα."
+          }
         }
       }
     },
@@ -870,6 +1344,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme nicht möglich"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αδυναμία εγγραφής"
           }
         }
       }
@@ -881,6 +1361,12 @@
             "state" : "translated",
             "value" : "Abbrechen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακύρωση"
+          }
         }
       }
     },
@@ -890,6 +1376,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Download abbrechen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακύρωση λήψης"
           }
         }
       }
@@ -901,6 +1393,12 @@
             "state" : "translated",
             "value" : "Aufnahme abbrechen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακύρωση εγγραφής"
+          }
         }
       }
     },
@@ -910,6 +1408,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Serienaufnahme abbrechen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακύρωση σειράς"
           }
         }
       }
@@ -921,6 +1425,12 @@
             "state" : "translated",
             "value" : "Keine Verbindung zum Plex-Server möglich"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν είναι δυνατή η σύνδεση με τον διακομιστή Plex"
+          }
         }
       }
     },
@@ -930,6 +1440,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Besetzung & Crew"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ηθοποιοί και συντελεστές"
           }
         }
       }
@@ -941,6 +1457,12 @@
             "state" : "translated",
             "value" : "Änderungsprotokoll"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ιστορικό αλλαγών"
+          }
         }
       }
     },
@@ -950,6 +1472,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sender %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κανάλι %@"
           }
         }
       }
@@ -961,6 +1489,12 @@
             "state" : "translated",
             "value" : "Senderprofil"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προφίλ καναλιών"
+          }
         }
       }
     },
@@ -970,6 +1504,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sender nicht gefunden: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το κανάλι δεν βρέθηκε: %@"
           }
         }
       }
@@ -981,6 +1521,12 @@
             "state" : "translated",
             "value" : "Sender"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κανάλια"
+          }
         }
       }
     },
@@ -990,6 +1536,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sender und Programm"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κανάλια και οδηγός προγράμματος"
           }
         }
       }
@@ -1001,6 +1553,12 @@
             "state" : "translated",
             "value" : "Sender, Programm und Aufnahmen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κανάλια, οδηγός και εγγραφές"
+          }
         }
       }
     },
@@ -1010,6 +1568,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kapitel %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κεφάλαιο %lld"
           }
         }
       }
@@ -1021,6 +1585,12 @@
             "state" : "translated",
             "value" : "Kapitel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κεφάλαια"
+          }
         }
       }
     },
@@ -1030,6 +1600,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Überprüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά."
           }
         }
       }
@@ -1041,6 +1617,12 @@
             "state" : "translated",
             "value" : "Wird geprüft …"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Έλεγχος…"
+          }
         }
       }
     },
@@ -1050,6 +1632,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Profil wählen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή προφίλ"
           }
         }
       }
@@ -1061,6 +1649,12 @@
             "state" : "translated",
             "value" : "Mediathek wählen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή βιβλιοθήκης"
+          }
         }
       }
     },
@@ -1071,6 +1665,12 @@
             "state" : "translated",
             "value" : "Server wählen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή διακομιστή"
+          }
         }
       }
     },
@@ -1080,6 +1680,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wähle ein Profil, um deine Plex-Mediatheken zu laden."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλέξτε προφίλ για να φορτωθούν οι βιβλιοθήκες Plex."
           }
         }
       }
@@ -1093,6 +1699,12 @@
             "state" : "translated",
             "value" : "Löschen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εκκαθάριση"
+          }
         }
       }
     },
@@ -1102,6 +1714,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schließen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κλείσιμο"
           }
         }
       }
@@ -1113,6 +1731,12 @@
             "state" : "translated",
             "value" : "College-Football"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κολεγιακό αμερικανικό ποδόσφαιρο"
+          }
         }
       }
     },
@@ -1122,6 +1746,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kommentar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σχολιασμός"
           }
         }
       }
@@ -1133,6 +1763,12 @@
             "state" : "translated",
             "value" : "Werbung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαφήμιση"
+          }
         }
       }
     },
@@ -1142,6 +1778,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Werbung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαφημίσεις"
           }
         }
       }
@@ -1153,6 +1795,12 @@
             "state" : "translated",
             "value" : "Community-Marker"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σημάνσεις κοινότητας"
+          }
         }
       }
     },
@@ -1162,6 +1810,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbinde Plex Live-TV, Dispatcharr oder eine Playlist deines Anbieters."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδέστε το Plex Live TV, το Dispatcharr ή μια λίστα αναπαραγωγής από τον πάροχό σας."
           }
         }
       }
@@ -1173,6 +1827,12 @@
             "state" : "translated",
             "value" : "Verbunden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδεδεμένο"
+          }
         }
       }
     },
@@ -1182,6 +1842,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbunden, aber keine Sender gefunden."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η σύνδεση έγινε, αλλά δεν βρέθηκαν κανάλια."
           }
         }
       }
@@ -1193,6 +1859,12 @@
             "state" : "translated",
             "value" : "Verbunden, aber dieses Senderprofil hat keine Sender. Überprüfe den Namen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η σύνδεση έγινε, αλλά το προφίλ καναλιών δεν περιέχει κανάλια. Ελέγξτε το όνομα."
+          }
         }
       }
     },
@@ -1202,6 +1874,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fortfahren"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια"
           }
         }
       }
@@ -1213,6 +1891,12 @@
             "state" : "translated",
             "value" : "Weiter ansehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια παρακολούθησης"
+          }
         }
       }
     },
@@ -1222,6 +1906,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mit „%@“ fortfahren"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια με «%@»"
           }
         }
       }
@@ -1233,6 +1923,12 @@
             "state" : "translated",
             "value" : "Code kopieren"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αντιγραφή κωδικού"
+          }
         }
       }
     },
@@ -1242,6 +1938,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Korrespondierender Quelltext"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αντίστοιχη πηγή"
           }
         }
       }
@@ -1253,6 +1955,12 @@
             "state" : "translated",
             "value" : "Keine Verbindung zum EPG-Server möglich"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αδύνατη η σύνδεση στον διακομιστή EPG"
+          }
         }
       }
     },
@@ -1262,6 +1970,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Verbindung zum Server möglich. Überprüfe dein Netzwerk."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αδύνατη η σύνδεση στον διακομιστή. Ελέγξτε το δίκτυό σας."
           }
         }
       }
@@ -1273,6 +1987,12 @@
             "state" : "translated",
             "value" : "M3U-Inhalt konnte nicht als UTF-8 dekodiert werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αδύνατη η αποκωδικοποίηση M3U ως UTF-8"
+          }
         }
       }
     },
@@ -1282,6 +2002,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quelle konnte nicht hinzugefügt werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η προσθήκη πηγής"
           }
         }
       }
@@ -1293,6 +2019,12 @@
             "state" : "translated",
             "value" : "Hinzufügen zur Playlist fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η προσθήκη στη λίστα αναπαραγωγής"
+          }
         }
       }
     },
@@ -1302,6 +2034,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist konnte nicht erstellt werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η δημιουργία λίστας αναπαραγωγής"
           }
         }
       }
@@ -1333,6 +2071,12 @@
             "state" : "translated",
             "value" : "Download der Staffel fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η λήψη της σεζόν"
+          }
         }
       }
     },
@@ -1342,6 +2086,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laden fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση"
           }
         }
       }
@@ -1363,6 +2113,12 @@
             "state" : "translated",
             "value" : "Startseite konnte nicht geladen werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση της αρχικής"
+          }
         }
       }
     },
@@ -1372,6 +2128,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mediatheken konnten nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση των βιβλιοθηκών"
           }
         }
       }
@@ -1383,6 +2145,12 @@
             "state" : "translated",
             "value" : "Mediathek konnte nicht geladen werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση της βιβλιοθήκης"
+          }
         }
       }
     },
@@ -1392,6 +2160,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist konnte nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση της λίστας αναπαραγωγής"
           }
         }
       }
@@ -1403,6 +2177,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergabe fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αναπαραγωγή"
           }
         }
       }
@@ -1444,6 +2224,12 @@
             "state" : "translated",
             "value" : "Aktualisierung fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση"
+          }
         }
       }
     },
@@ -1453,6 +2239,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Watchlist konnte nicht aktualisiert werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας παρακολούθησης"
           }
         }
       }
@@ -1464,6 +2256,12 @@
             "state" : "translated",
             "value" : "Playlist konnte nicht aktualisiert werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας αναπαραγωγής"
+          }
         }
       }
     },
@@ -1473,6 +2271,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server ist nicht erreichbar. Überprüfe Adresse und Port."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η επικοινωνία με τον διακομιστή. Ελέγξτε τη διεύθυνση και τη θύρα."
           }
         }
       }
@@ -1484,6 +2288,12 @@
             "state" : "translated",
             "value" : "Die Datei konnte nicht gespeichert werden: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αποθήκευση του αρχείου: %@"
+          }
         }
       }
     },
@@ -1493,6 +2303,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anmeldung bei Dispatcharr fehlgeschlagen. Versuche es erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η σύνδεση στο Dispatcharr απέτυχε. Δοκιμάστε ξανά."
           }
         }
       }
@@ -1504,6 +2320,12 @@
             "state" : "translated",
             "value" : "Dieser Sender konnte nicht eingestellt werden."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατός ο συντονισμός αυτού του καναλιού."
+          }
         }
       }
     },
@@ -1513,6 +2335,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Sender konnte nicht eingestellt werden. Möglicherweise sind alle Tuner belegt."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατός ο συντονισμός. Ίσως όλοι οι δέκτες να είναι απασχολημένοι."
           }
         }
       }
@@ -1524,6 +2352,12 @@
             "state" : "translated",
             "value" : "Watchlist konnte nicht aktualisiert werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας παρακολούθησης"
+          }
         }
       }
     },
@@ -1533,6 +2367,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verbindung fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση"
           }
         }
       }
@@ -1544,6 +2384,12 @@
             "state" : "translated",
             "value" : "Profile konnten nicht geladen werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση των προφίλ"
+          }
         }
       }
     },
@@ -1553,6 +2399,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Server konnten nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση των διακομιστών"
           }
         }
       }
@@ -1564,6 +2416,12 @@
             "state" : "translated",
             "value" : "Suche fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αναζήτηση"
+          }
         }
       }
     },
@@ -1573,6 +2431,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anmeldung fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση"
           }
         }
       }
@@ -1584,6 +2448,12 @@
             "state" : "translated",
             "value" : "Profilwechsel fehlgeschlagen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αλλαγή προφίλ"
+          }
         }
       }
     },
@@ -1593,6 +2463,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erstellen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημιουργία"
           }
         }
       }
@@ -1604,6 +2480,12 @@
             "state" : "translated",
             "value" : "Abspann"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τίτλοι τέλους"
+          }
         }
       }
     },
@@ -1613,6 +2495,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "DNS-Abfrage für EPG-Server fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναζήτηση DNS του διακομιστή EPG απέτυχε"
           }
         }
       }
@@ -1624,6 +2512,12 @@
             "state" : "translated",
             "value" : "Hinzugefügt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ημερομηνία προσθήκης"
+          }
         }
       }
     },
@@ -1633,6 +2527,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Standard"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προεπιλογή"
           }
         }
       }
@@ -1644,6 +2544,12 @@
             "state" : "translated",
             "value" : "Standardlayout"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προεπιλεγμένη διάταξη"
+          }
         }
       }
     },
@@ -1653,6 +2559,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Löschen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαγραφή"
           }
         }
       }
@@ -1664,6 +2576,12 @@
             "state" : "translated",
             "value" : "Alle Downloads löschen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαγραφή όλων των λήψεων"
+          }
         }
       }
     },
@@ -1673,6 +2591,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist löschen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαγραφή λίστας αναπαραγωγής"
           }
         }
       }
@@ -1684,6 +2608,12 @@
             "state" : "translated",
             "value" : "Regel löschen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαγραφή κανόνα"
+          }
         }
       }
     },
@@ -1693,6 +2623,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Downloads löschen?"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να διαγραφούν όλες οι λήψεις;"
           }
         }
       }
@@ -1704,6 +2640,12 @@
             "state" : "translated",
             "value" : "„%@“ löschen?"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να διαγραφεί το «%@»;"
+          }
         }
       }
     },
@@ -1713,6 +2655,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entfallene Szene"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κομμένη σκηνή"
           }
         }
       }
@@ -1724,6 +2672,12 @@
             "state" : "translated",
             "value" : "Details"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λεπτομέρειες"
+          }
         }
       }
     },
@@ -1734,12 +2688,24 @@
             "state" : "translated",
             "value" : "Schließen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κλείσιμο"
+          }
         }
       }
     },
     "Dispatcharr" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dispatcharr"
@@ -1754,6 +2720,12 @@
             "state" : "translated",
             "value" : "Dispatcharr-Anmeldung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο Dispatcharr"
+          }
         }
       }
     },
@@ -1763,6 +2735,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dispatcharr hat Benutzername und Passwort nicht akzeptiert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Dispatcharr δεν δέχτηκε το όνομα χρήστη και τον κωδικό πρόσβασης."
           }
         }
       }
@@ -1774,6 +2752,12 @@
             "state" : "translated",
             "value" : "Dispatcharr führt diesen Sender nicht und kann ihn daher nicht aufnehmen. Aktualisiere die Senderliste und versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Dispatcharr δεν έχει αυτό το κανάλι και δεν μπορεί να το εγγράψει. Ανανέωσε τη λίστα και δοκίμασε ξανά."
+          }
         }
       }
     },
@@ -1783,6 +2767,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dispatcharr-Endpunkt nicht gefunden: Prüfe die URL"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν βρέθηκε το σημείο σύνδεσης του Dispatcharr — ελέγξτε τη διεύθυνση URL"
           }
         }
       }
@@ -1794,6 +2784,12 @@
             "state" : "translated",
             "value" : "Dispatcharr-Serverfehler (%lld)"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα διακομιστή Dispatcharr (%lld)"
+          }
         }
       }
     },
@@ -1803,6 +2799,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dokumentationen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ντοκιμαντέρ"
           }
         }
       }
@@ -1814,6 +2816,12 @@
             "state" : "translated",
             "value" : "Laden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη"
+          }
         }
       }
     },
@@ -1823,6 +2831,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloadqualität"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ποιότητα λήψης"
           }
         }
       }
@@ -1834,6 +2848,12 @@
             "state" : "translated",
             "value" : "Staffel laden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη σεζόν"
+          }
         }
       }
     },
@@ -1843,6 +2863,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Über Mobilfunk laden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη μέσω δικτύου κινητής"
           }
         }
       }
@@ -1854,6 +2880,12 @@
             "state" : "translated",
             "value" : "Geladen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Έγινε λήψη"
+          }
         }
       }
     },
@@ -1863,6 +2895,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laden …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Γίνεται λήψη"
           }
         }
       }
@@ -1880,6 +2918,12 @@
             "state" : "new",
             "value" : "Downloading %1$lld of %2$lld"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη %1$lld από %2$lld"
+          }
         }
       }
     },
@@ -1889,6 +2933,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloads"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψεις"
           }
         }
       }
@@ -1900,6 +2950,12 @@
             "state" : "translated",
             "value" : "Downloads sind nur im Heimnetz oder über eine direkte Remote-Verbindung möglich"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Οι λήψεις απαιτούν το οικιακό δίκτυο ή απευθείας απομακρυσμένη σύνδεση"
+          }
         }
       }
     },
@@ -1909,6 +2965,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "F%lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "E%lld"
           }
         }
       }
@@ -1920,6 +2982,12 @@
             "state" : "translated",
             "value" : "EPG-Daten konnten nicht gelesen werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ανάλυση δεδομένων EPG"
+          }
         }
       }
     },
@@ -1929,6 +2997,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EPG-Daten sind nicht verfügbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν διαθέσιμα δεδομένα EPG"
           }
         }
       }
@@ -1940,6 +3014,12 @@
             "state" : "translated",
             "value" : "EPG-Daten sind zu groß"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τα δεδομένα EPG είναι υπερβολικά μεγάλα"
+          }
         }
       }
     },
@@ -1949,6 +3029,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EPG-Anfrage abgebrochen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αίτημα EPG ακυρώθηκε"
           }
         }
       }
@@ -1960,6 +3046,12 @@
             "state" : "translated",
             "value" : "Problem mit dem TLS-Zertifikat des EPG-Servers"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόβλημα πιστοποιητικού TLS του διακομιστή EPG"
+          }
         }
       }
     },
@@ -1969,6 +3061,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EPG-Server hat nicht rechtzeitig geantwortet"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG δεν απάντησε εγκαίρως"
           }
         }
       }
@@ -1980,6 +3078,12 @@
             "state" : "translated",
             "value" : "Hostname des EPG-Servers konnte nicht aufgelöst werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η εύρεση ονόματος του διακομιστή EPG"
+          }
         }
       }
     },
@@ -1989,6 +3093,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EPG-Server verlangt ein Client-Zertifikat"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG απαιτεί πιστοποιητικό πελάτη"
           }
         }
       }
@@ -2000,6 +3110,12 @@
             "state" : "translated",
             "value" : "EPG-Server hat HTTP %lld zurückgegeben"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG επέστρεψε HTTP %lld"
+          }
         }
       }
     },
@@ -2009,6 +3125,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EPG-Server hat ungültige Daten zurückgegeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG επέστρεψε μη έγκυρα δεδομένα"
           }
         }
       }
@@ -2020,6 +3142,12 @@
             "state" : "translated",
             "value" : "Früher"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νωρίτερα"
+          }
         }
       }
     },
@@ -2029,6 +3157,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Leere Playlist"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κενή λίστα αναπαραγωγής"
           }
         }
       }
@@ -2040,6 +3174,12 @@
             "state" : "translated",
             "value" : "PIN eingeben"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εισαγωγή PIN"
+          }
         }
       }
     },
@@ -2049,6 +3189,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gib entweder Benutzername und Passwort ein oder keins von beiden."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συμπληρώστε και το όνομα χρήστη και τον κωδικό πρόσβασης ή αφήστε και τα δύο κενά."
           }
         }
       }
@@ -2060,6 +3206,12 @@
             "state" : "translated",
             "value" : "Gib den Benutzernamen und das Passwort deines Anbieters ein."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληκτρολογήστε το όνομα χρήστη και τον κωδικό πρόσβασης του παρόχου."
+          }
         }
       }
     },
@@ -2070,6 +3222,12 @@
             "state" : "translated",
             "value" : "Gib zuerst die URL deiner Playlist ein."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληκτρολογήστε πρώτα τη διεύθυνση της λίστας αναπαραγωγής."
+          }
         }
       }
     },
@@ -2079,6 +3237,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gib zuerst die Serveradresse deines Anbieters ein."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληκτρολογήστε πρώτα τη διεύθυνση διακομιστή του παρόχου."
           }
         }
       }
@@ -2100,6 +3264,12 @@
             "state" : "translated",
             "value" : "Gib zuerst die Adresse deines Servers ein."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληκτρολογήστε πρώτα τη διεύθυνση του διακομιστή."
+          }
         }
       }
     },
@@ -2120,6 +3290,12 @@
             "state" : "translated",
             "value" : "Unterhaltung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ψυχαγωγία"
+          }
         }
       }
     },
@@ -2129,6 +3305,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Folge"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επεισόδιο"
           }
         }
       }
@@ -2140,6 +3322,12 @@
             "state" : "translated",
             "value" : "Folgen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επεισόδια"
+          }
         }
       }
     },
@@ -2149,6 +3337,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Löschen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διαγραφή"
           }
         }
       }
@@ -2160,6 +3354,12 @@
             "state" : "translated",
             "value" : "Gelerntes von „Für dich“ löschen?"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να διαγραφούν όσα έμαθε το «Για εσάς»;"
+          }
         }
       }
     },
@@ -2169,6 +3369,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fehler (%lld)"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα (%lld)"
           }
         }
       }
@@ -2180,6 +3386,12 @@
             "state" : "translated",
             "value" : "Täglich"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κάθε μέρα"
+          }
         }
       }
     },
@@ -2189,6 +3401,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle Downloads auf diesem Gerät werden für alle Profile entfernt."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Θα διαγραφούν όλες οι λήψεις από αυτή τη συσκευή, για όλα τα προφίλ."
           }
         }
       }
@@ -2211,6 +3429,12 @@
             "state" : "translated",
             "value" : "Extra"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιπλέον"
+          }
         }
       }
     },
@@ -2220,6 +3444,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Extras"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόσθετο υλικό"
           }
         }
       }
@@ -2233,6 +3463,12 @@
             "state" : "translated",
             "value" : "FFmpeg-Build-Skripte und -Quellen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σενάρια δημιουργίας και πηγαίος κώδικας FFmpeg"
+          }
         }
       }
     },
@@ -2242,6 +3478,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Server konnten nicht abgerufen werden: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία ανάκτησης διακομιστών: %@"
           }
         }
       }
@@ -2253,6 +3495,12 @@
             "state" : "translated",
             "value" : "PIN konnte nicht abgerufen werden: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία λήψης PIN: %@"
+          }
         }
       }
     },
@@ -2262,6 +3510,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Profile konnten nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία φόρτωσης προφίλ"
           }
         }
       }
@@ -2273,6 +3527,12 @@
             "state" : "translated",
             "value" : "XMLTV-Daten konnten nicht gelesen werden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία ανάλυσης δεδομένων XMLTV"
+          }
         }
       }
     },
@@ -2282,6 +3542,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Antwort konnte nicht gelesen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία ανάλυσης απόκρισης"
           }
         }
       }
@@ -2303,6 +3569,12 @@
             "state" : "translated",
             "value" : "Fehlgeschlagen: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία: %@"
+          }
         }
       }
     },
@@ -2312,6 +3584,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Favorit"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αγαπημένο"
           }
         }
       }
@@ -2323,6 +3601,12 @@
             "state" : "translated",
             "value" : "Favoriten"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αγαπημένα"
+          }
         }
       }
     },
@@ -2332,6 +3616,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Featurette"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μικρό αφιέρωμα"
           }
         }
       }
@@ -2343,6 +3633,12 @@
             "state" : "translated",
             "value" : "Datei fehlt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αρχείο λείπει"
+          }
         }
       }
     },
@@ -2352,6 +3648,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ergänzt Intro- und Abspannmarker, die in Plex fehlen, über introdb.app. Gesendet werden nur die IMDb-ID der Serie und die Folgennummer."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συμπληρώνει δείκτες εισαγωγής και τίτλων τέλους που λείπουν από το Plex μέσω introdb.app. Αποστέλλονται μόνο το IMDb ID της σειράς και ο αριθμός επεισοδίου."
           }
         }
       }
@@ -2363,6 +3665,12 @@
             "state" : "translated",
             "value" : "Filtern"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Φίλτρο"
+          }
         }
       }
     },
@@ -2372,6 +3680,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Finde Filme, TV-Sendungen und Folgen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναζητήστε ταινίες, σειρές και επεισόδια."
           }
         }
       }
@@ -2383,6 +3697,12 @@
             "state" : "translated",
             "value" : "Für dich"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Για εσάς"
+          }
         }
       }
     },
@@ -2392,6 +3712,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„Für dich“ wählt Sender danach aus, was du ansiehst. Es lernt nur auf diesem Gerät."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η ενότητα «Για εσένα» επιλέγει κανάλια με βάση όσα παρακολουθείς. Μαθαίνει μόνο σε αυτή τη συσκευή."
           }
         }
       }
@@ -2403,6 +3729,12 @@
             "state" : "translated",
             "value" : "Erzwungen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εξαναγκασμένοι"
+          }
         }
       }
     },
@@ -2412,6 +3744,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nur erzwungene"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μόνο εξαναγκασμένοι"
           }
         }
       }
@@ -2423,6 +3761,12 @@
             "state" : "translated",
             "value" : "Bei Fremdsprache"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ξενόγλωσσος ήχος"
+          }
         }
       }
     },
@@ -2432,6 +3776,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„Bei Fremdsprache“ zeigt Untertitel, wenn der Ton eines Titels in einer anderen Sprache ist, sonst nur erzwungene Untertitel. Wird für jedes Plex-Profil gespeichert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η επιλογή «Ξενόγλωσσος ήχος» εμφανίζει υπότιτλους όταν ο ήχος είναι σε άλλη γλώσσα και αλλιώς μόνο υποχρεωτικούς υπότιτλους. Αποθηκεύεται ανά προφίλ Plex."
           }
         }
       }
@@ -2443,6 +3793,12 @@
             "state" : "translated",
             "value" : "%lld Sekunden vor"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μπροστά %lld δευτερόλεπτα"
+          }
         }
       }
     },
@@ -2452,6 +3808,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Genre"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Είδος"
           }
         }
       }
@@ -2463,6 +3825,12 @@
             "state" : "translated",
             "value" : "Live ansehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση στη ζωντανή μετάδοση"
+          }
         }
       }
     },
@@ -2472,6 +3840,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zu den Downloads"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση στις λήψεις"
           }
         }
       }
@@ -2483,6 +3857,12 @@
             "state" : "translated",
             "value" : "Zur Staffel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση στον κύκλο"
+          }
         }
       }
     },
@@ -2492,6 +3872,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zur Serie"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση στη σειρά"
           }
         }
       }
@@ -2503,6 +3889,12 @@
             "state" : "translated",
             "value" : "Programm"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Οδηγός προγράμματος"
+          }
         }
       }
     },
@@ -2512,6 +3904,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Programmdaten nicht verfügbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν δεδομένα οδηγού προγράμματος"
           }
         }
       }
@@ -2525,6 +3923,12 @@
             "state" : "translated",
             "value" : "HTTP-Fehler %lld"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα HTTP %lld"
+          }
         }
       }
     },
@@ -2534,6 +3938,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "HTTP-Fehler: %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα HTTP: %lld"
           }
         }
       }
@@ -2545,6 +3955,12 @@
             "state" : "translated",
             "value" : "Hero-Banner"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κεντρική προβολή"
+          }
         }
       }
     },
@@ -2554,6 +3970,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Am besten bewertet"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υψηλότερη βαθμολογία"
           }
         }
       }
@@ -2565,6 +3987,12 @@
             "state" : "translated",
             "value" : "Startseite"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αρχική"
+          }
         }
       }
     },
@@ -2574,6 +4002,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "So erscheint diese Quelle in Live-TV."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πώς θα εμφανίζεται αυτή η πηγή στη ζωντανή τηλεόραση."
           }
         }
       }
@@ -2595,6 +4029,12 @@
             "state" : "translated",
             "value" : "Falsche PIN. Versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λανθασμένο PIN. Δοκιμάστε ξανά."
+          }
         }
       }
     },
@@ -2604,6 +4044,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Infos"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληροφορίες"
           }
         }
       }
@@ -2615,6 +4061,12 @@
             "state" : "translated",
             "value" : "Informationen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πληροφορίες"
+          }
         }
       }
     },
@@ -2624,6 +4076,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Interview"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέντευξη"
           }
         }
       }
@@ -2635,6 +4093,12 @@
             "state" : "translated",
             "value" : "Intro"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εισαγωγή"
+          }
         }
       }
     },
@@ -2644,6 +4108,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Intros"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εισαγωγές"
           }
         }
       }
@@ -2655,6 +4125,12 @@
             "state" : "translated",
             "value" : "Ungültiges M3U-Format: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη έγκυρη μορφή M3U: %@"
+          }
         }
       }
     },
@@ -2664,6 +4140,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ungültige URL"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη έγκυρη διεύθυνση URL"
           }
         }
       }
@@ -2675,6 +4157,12 @@
             "state" : "translated",
             "value" : "Ungültige Antwort vom Dispatcharr-Server"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη έγκυρη απόκριση από τον διακομιστή Dispatcharr"
+          }
         }
       }
     },
@@ -2685,6 +4173,12 @@
             "state" : "translated",
             "value" : "Ungültige Serverantwort"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη έγκυρη απόκριση διακομιστή"
+          }
         }
       }
     },
@@ -2694,6 +4188,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Objekt nicht gefunden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το στοιχείο δεν βρέθηκε"
           }
         }
       }
@@ -2725,6 +4225,12 @@
             "state" : "translated",
             "value" : "Zur aktuellen Zeit"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση στο τώρα"
+          }
         }
       }
     },
@@ -2734,6 +4240,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Behalten"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διατήρηση"
           }
         }
       }
@@ -2745,6 +4257,12 @@
             "state" : "translated",
             "value" : "Kinder"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παιδικά"
+          }
         }
       }
     },
@@ -2754,6 +4272,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "LIVE"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ΖΩΝΤΑΝΑ"
           }
         }
       }
@@ -2765,6 +4289,12 @@
             "state" : "translated",
             "value" : "Später"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αργότερα"
+          }
         }
       }
     },
@@ -2774,6 +4304,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Layout"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διάταξη"
           }
         }
       }
@@ -2795,6 +4331,12 @@
             "state" : "translated",
             "value" : "Weniger"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λιγότερα"
+          }
         }
       }
     },
@@ -2815,6 +4357,12 @@
             "state" : "translated",
             "value" : "Mediathek"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Βιβλιοθήκη"
+          }
         }
       }
     },
@@ -2824,6 +4372,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lizenzen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άδειες χρήσης"
           }
         }
       }
@@ -2835,6 +4389,12 @@
             "state" : "translated",
             "value" : "Zeigt die Video-Playlists jedes Servers unter „Mediathek“ an."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εμφανίζει τις λίστες αναπαραγωγής βίντεο κάθε διακομιστή στην ενότητα Βιβλιοθήκη."
+          }
         }
       }
     },
@@ -2844,6 +4404,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Live"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ζωντανά"
           }
         }
       }
@@ -2855,6 +4421,12 @@
             "state" : "translated",
             "value" : "Live-TV"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ζωντανή τηλεόραση"
+          }
         }
       }
     },
@@ -2864,6 +4436,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Niedrigste Qualität"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Χαμηλότερη ποιότητα"
           }
         }
       }
@@ -2875,6 +4453,12 @@
             "state" : "translated",
             "value" : "Manuell"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Χειροκίνητα"
+          }
         }
       }
     },
@@ -2885,6 +4469,12 @@
             "state" : "translated",
             "value" : "Als ungesehen markieren"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επισήμανση ως μη προβεβλημένου"
+          }
         }
       }
     },
@@ -2894,6 +4484,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als gesehen markieren"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επισήμανση ως προβεβλημένου"
           }
         }
       }
@@ -2915,6 +4511,12 @@
             "state" : "translated",
             "value" : "Mono"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μονοφωνικό"
+          }
         }
       }
     },
@@ -2924,6 +4526,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mehr"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Περισσότερα"
           }
         }
       }
@@ -2935,6 +4543,12 @@
             "state" : "translated",
             "value" : "Mehr davon"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Περισσότερα σαν αυτό"
+          }
         }
       }
     },
@@ -2944,6 +4558,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Film"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταινία"
           }
         }
       }
@@ -2955,6 +4575,12 @@
             "state" : "translated",
             "value" : "Filme"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταινίες"
+          }
         }
       }
     },
@@ -2964,6 +4590,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Filme und Folgen, die du herunterlädst, werden hier angezeigt und können offline angesehen werden."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Οι ταινίες και τα επεισόδια που κατεβάζετε εμφανίζονται εδώ, έτοιμα για προβολή χωρίς σύνδεση."
           }
         }
       }
@@ -2975,6 +4607,12 @@
             "state" : "translated",
             "value" : "Filme, TV-Sendungen und Folgen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταινίες, σειρές και επεισόδια"
+          }
         }
       }
     },
@@ -2984,6 +4622,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Musik"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μουσική"
           }
         }
       }
@@ -2995,6 +4639,12 @@
             "state" : "translated",
             "value" : "Ton aus"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σίγαση"
+          }
         }
       }
     },
@@ -3004,6 +4654,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Name"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όνομα"
           }
         }
       }
@@ -3015,6 +4671,12 @@
             "state" : "translated",
             "value" : "Netzwerkverbindung unterbrochen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η σύνδεση δικτύου διακόπηκε"
+          }
         }
       }
     },
@@ -3024,6 +4686,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Netzwerkfehler: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα δικτύου: %@"
           }
         }
       }
@@ -3035,6 +4703,12 @@
             "state" : "translated",
             "value" : "Neue Folgen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νέα επεισόδια"
+          }
         }
       }
     },
@@ -3044,6 +4718,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Neue Playlist"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νέα λίστα αναπαραγωγής"
           }
         }
       }
@@ -3055,6 +4735,12 @@
             "state" : "translated",
             "value" : "Neue Folgen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νέα επεισόδια"
+          }
         }
       }
     },
@@ -3064,6 +4750,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Neueste"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νεότερα"
           }
         }
       }
@@ -3075,6 +4767,12 @@
             "state" : "translated",
             "value" : "Neueste zuerst"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νεότερες κυκλοφορίες"
+          }
         }
       }
     },
@@ -3084,6 +4782,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nachrichten"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ειδήσεις"
           }
         }
       }
@@ -3095,6 +4799,12 @@
             "state" : "translated",
             "value" : "Weiter"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επόμενο"
+          }
         }
       }
     },
@@ -3104,6 +4814,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nächste Folge"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επόμενο επεισόδιο"
           }
         }
       }
@@ -3115,6 +4831,12 @@
             "state" : "translated",
             "value" : "Nächste Folge in %lld"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επόμενο επεισόδιο σε %lld"
+          }
         }
       }
     },
@@ -3124,6 +4846,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Weiter in %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επόμενο σε %lld"
           }
         }
       }
@@ -3135,6 +4863,12 @@
             "state" : "translated",
             "value" : "Keine Sender"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν κανάλια"
+          }
         }
       }
     },
@@ -3144,6 +4878,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Downloads"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν λήψεις"
           }
         }
       }
@@ -3155,6 +4895,12 @@
             "state" : "translated",
             "value" : "Noch keine Favoriten"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν ακόμη αγαπημένα"
+          }
         }
       }
     },
@@ -3164,6 +4910,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Objekte"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν στοιχεία"
           }
         }
       }
@@ -3175,6 +4927,12 @@
             "state" : "translated",
             "value" : "Keine Mediatheken"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν βιβλιοθήκες"
+          }
         }
       }
     },
@@ -3184,6 +4942,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Playlists"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν λίστες αναπαραγωγής"
           }
         }
       }
@@ -3195,6 +4959,12 @@
             "state" : "translated",
             "value" : "Kein Plex-Server verbunden."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν έχει συνδεθεί διακομιστής Plex."
+          }
         }
       }
     },
@@ -3204,6 +4974,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "In deinem Account wurden keine Plex-Server gefunden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν βρέθηκαν διακομιστές Plex στον λογαριασμό σας"
           }
         }
       }
@@ -3215,6 +4991,12 @@
             "state" : "translated",
             "value" : "Keine Sender gefunden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν βρέθηκαν κανάλια"
+          }
         }
       }
     },
@@ -3224,6 +5006,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine Programmdaten"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν δεδομένα οδηγού"
           }
         }
       }
@@ -3245,6 +5033,12 @@
             "state" : "translated",
             "value" : "Keine Internetverbindung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχει σύνδεση στο διαδίκτυο"
+          }
         }
       }
     },
@@ -3255,6 +5049,12 @@
             "state" : "translated",
             "value" : "Nicht genügend freier Speicher auf diesem Gerät"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχει αρκετός ελεύθερος χώρος στη συσκευή"
+          }
         }
       }
     },
@@ -3264,6 +5064,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gerade läuft nichts"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν μεταδίδεται τίποτα αυτή τη στιγμή"
           }
         }
       }
@@ -3276,6 +5082,12 @@
             "state" : "translated",
             "value" : "Alles gesehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν μη προβεβλημένα στοιχεία"
+          }
         }
       }
     },
@@ -3285,6 +5097,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nichts geplant. Drücke im Programm lange auf eine Sendung, um sie aufzunehmen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχει προγραμματισμένη εγγραφή. Πατήστε παρατεταμένα ένα πρόγραμμα στον οδηγό για να το εγγράψετε."
           }
         }
       }
@@ -3296,6 +5114,12 @@
             "state" : "translated",
             "value" : "Noch nichts auf der Startseite"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχει ακόμη περιεχόμενο στην αρχική"
+          }
         }
       }
     },
@@ -3305,6 +5129,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jetzt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τώρα"
           }
         }
       }
@@ -3316,6 +5146,12 @@
             "state" : "translated",
             "value" : "Jetzt läuft"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαραγωγή τώρα"
+          }
         }
       }
     },
@@ -3325,6 +5161,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εντάξει"
           }
         }
       }
@@ -3336,6 +5178,12 @@
             "state" : "translated",
             "value" : "Aus"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανενεργό"
+          }
         }
       }
     },
@@ -3345,6 +5193,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Offline"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εκτός σύνδεσης"
           }
         }
       }
@@ -3356,6 +5210,12 @@
             "state" : "translated",
             "value" : "Älteste"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παλαιότερα"
+          }
         }
       }
     },
@@ -3365,6 +5225,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuerst hinzugefügt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παλαιότερες προσθήκες"
           }
         }
       }
@@ -3376,6 +5242,12 @@
             "state" : "translated",
             "value" : "Älteste zuerst"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παλαιότερες κυκλοφορίες"
+          }
         }
       }
     },
@@ -3386,6 +5258,12 @@
             "state" : "translated",
             "value" : "Läuft jetzt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παίζει τώρα"
+          }
         }
       }
     },
@@ -3395,6 +5273,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktuell im TV"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Στον αέρα"
           }
         }
       }
@@ -3416,6 +5300,12 @@
             "state" : "translated",
             "value" : "Läuft jetzt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παίζεται τώρα"
+          }
         }
       }
     },
@@ -3426,6 +5316,12 @@
             "state" : "translated",
             "value" : "Nur nötig, wenn dein Server eine Anmeldung verlangt, und zum Aufnehmen. Lass beide Felder leer, um nur fernzusehen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απαιτείται μόνο αν ο διακομιστής ζητά σύνδεση ή για εγγραφή προγραμμάτων. Αφήστε και τα δύο κενά για απλή παρακολούθηση."
+          }
         }
       }
     },
@@ -3435,6 +5331,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nur zum Aufnehmen nötig. Lass beide Felder leer, um nur fernzusehen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απαιτείται μόνο για εγγραφή. Αφήστε και τα δύο κενά για απλή παρακολούθηση."
           }
         }
       }
@@ -3456,6 +5358,12 @@
             "state" : "translated",
             "value" : "Open-Source-Software"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λογισμικό ανοικτού κώδικα"
+          }
         }
       }
     },
@@ -3466,6 +5374,12 @@
             "state" : "translated",
             "value" : "plex.tv/link öffnen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άνοιγμα του plex.tv/link"
+          }
         }
       }
     },
@@ -3475,6 +5389,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Öffne plex.tv/link und melde dich an. Wenn ein Code abgefragt wird, gib diesen ein."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανοίξτε το plex.tv/link και συνδεθείτε. Αν σας ζητηθεί κωδικός, πληκτρολογήστε αυτόν."
           }
         }
       }
@@ -3506,6 +5426,12 @@
             "state" : "translated",
             "value" : "Optional"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προαιρετικό"
+          }
         }
       }
     },
@@ -3515,6 +5441,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Optionen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογές"
           }
         }
       }
@@ -3526,6 +5458,12 @@
             "state" : "translated",
             "value" : "Original"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρωτότυπο"
+          }
         }
       }
     },
@@ -3536,6 +5474,12 @@
             "state" : "translated",
             "value" : "„Original“ speichert die Datei so, wie sie auf dem Server liegt. Kleinere Größen konvertiert zuerst der Server. Wählst du eine Größe, die mindestens so groß ist wie die Datei, wird das Original geladen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το «Αρχικό» αποθηκεύει το αρχείο όπως είναι στον διακομιστή. Τα μικρότερα μεγέθη μετατρέπονται πρώτα από τον διακομιστή. Μέγεθος ίσο ή μεγαλύτερο από το αρχικό κατεβάζει το πρωτότυπο."
+          }
         }
       }
     },
@@ -3544,6 +5488,12 @@
     "PIN" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "PIN"
@@ -3558,6 +5508,12 @@
             "state" : "translated",
             "value" : "PIN abgelaufen. Bitte versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το PIN έληξε. Προσπαθήστε ξανά."
+          }
         }
       }
     },
@@ -3567,6 +5523,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "PIN für %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN για %@"
           }
         }
       }
@@ -3578,6 +5540,12 @@
             "state" : "translated",
             "value" : "Fehler beim Lesen: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα ανάλυσης: %@"
+          }
         }
       }
     },
@@ -3587,6 +5555,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Passwort"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κωδικός πρόσβασης"
           }
         }
       }
@@ -3598,6 +5572,12 @@
             "state" : "translated",
             "value" : "Pause"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παύση"
+          }
         }
       }
     },
@@ -3607,6 +5587,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pausiert"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σε παύση"
           }
         }
       }
@@ -3618,6 +5604,12 @@
             "state" : "translated",
             "value" : "Bild-in-Bild"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εικόνα εντός εικόνας"
+          }
         }
       }
     },
@@ -3627,6 +5619,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pinne in Plex eine Mediathek an die Startseite an und zieh dann zum Aktualisieren nach unten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Καρφίτσωσε τη βιβλιοθήκη στην Αρχική του Plex και μετά σύρε για ανανέωση."
           }
         }
       }
@@ -3638,6 +5636,12 @@
             "state" : "translated",
             "value" : "Pixel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εικονοστοιχείο"
+          }
         }
       }
     },
@@ -3647,6 +5651,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαραγωγή"
           }
         }
       }
@@ -3694,6 +5704,12 @@
             "state" : "translated",
             "value" : "Von vorne beginnen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαραγωγή από την αρχή"
+          }
         }
       }
     },
@@ -3703,6 +5719,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ab hier wiedergeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαραγωγή από εδώ"
           }
         }
       }
@@ -3714,6 +5736,12 @@
             "state" : "translated",
             "value" : "Wiedergabe"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαραγωγή"
+          }
         }
       }
     },
@@ -3723,6 +5751,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergabetempo"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταχύτητα αναπαραγωγής"
           }
         }
       }
@@ -3734,6 +5768,12 @@
             "state" : "translated",
             "value" : "Wiedergabe gestoppt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναπαραγωγή σταμάτησε"
+          }
         }
       }
     },
@@ -3743,6 +5783,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergabeposition"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Θέση αναπαραγωγής"
           }
         }
       }
@@ -3754,6 +5800,12 @@
             "state" : "translated",
             "value" : "Wiedergabetempo"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταχύτητα αναπαραγωγής"
+          }
         }
       }
     },
@@ -3763,6 +5815,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λίστα αναπαραγωγής"
           }
         }
       }
@@ -3774,6 +5832,12 @@
             "state" : "translated",
             "value" : "Playlistname"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όνομα λίστας αναπαραγωγής"
+          }
         }
       }
     },
@@ -3783,6 +5847,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist-URL"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διεύθυνση λίστας αναπαραγωγής"
           }
         }
       }
@@ -3794,6 +5864,12 @@
             "state" : "translated",
             "value" : "Playlists"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λίστες αναπαραγωγής"
+          }
         }
       }
     },
@@ -3803,6 +5879,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Startet die Wiedergabe"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαράγει"
           }
         }
       }
@@ -3814,6 +5896,12 @@
             "state" : "translated",
             "value" : "Gibt den Sender wieder"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαράγει το κανάλι"
+          }
         }
       }
     },
@@ -3823,6 +5911,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gibt die Folge wieder"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαράγει το επεισόδιο"
           }
         }
       }
@@ -3834,6 +5928,12 @@
             "state" : "translated",
             "value" : "Gibt die Playlist ab hier wieder"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναπαράγει τη λίστα από αυτό το σημείο"
+          }
         }
       }
     },
@@ -3843,6 +5943,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex-Account"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λογαριασμός Plex"
           }
         }
       }
@@ -3874,6 +5980,12 @@
             "state" : "translated",
             "value" : "Plex hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Plex δεν δέχτηκε τη σύνδεση. Συνδεθείτε ξανά και δοκιμάστε πάλι."
+          }
         }
       }
     },
@@ -3903,6 +6015,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex erfordert Plex Pass oder Remote Watch Pass für Downloads von unterwegs; lade zu Hause herunter"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Για απομακρυσμένες λήψεις το Plex απαιτεί Plex Pass ή Remote Watch Pass· κατέβασε από το οικιακό δίκτυο"
           }
         }
       }
@@ -3944,6 +6062,12 @@
             "state" : "translated",
             "value" : "Beliebte Filme"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημοφιλείς ταινίες"
+          }
         }
       }
     },
@@ -3953,6 +6077,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beliebte TV-Sendungen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημοφιλείς σειρές"
           }
         }
       }
@@ -3964,6 +6094,12 @@
             "state" : "translated",
             "value" : "Wird auf dem Server vorbereitet"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προετοιμασία στον διακομιστή"
+          }
         }
       }
     },
@@ -3973,6 +6109,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sendungsfortschritt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόοδος προγράμματος"
           }
         }
       }
@@ -3984,6 +6126,12 @@
             "state" : "translated",
             "value" : "Anbieter"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πάροχος"
+          }
         }
       }
     },
@@ -3993,6 +6141,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Qualität"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ποιότητα"
           }
         }
       }
@@ -4024,6 +6178,12 @@
             "state" : "translated",
             "value" : "REC"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ΕΓΓΡΑΦΗ"
+          }
         }
       }
     },
@@ -4050,6 +6210,12 @@
             "state" : "translated",
             "value" : "Freigegeben"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αξιολογήθηκε"
+          }
         }
       }
     },
@@ -4059,6 +6225,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bewertung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αξιολόγηση"
           }
         }
       }
@@ -4070,6 +6242,12 @@
             "state" : "translated",
             "value" : "Rückblick"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανακεφαλαίωση"
+          }
         }
       }
     },
@@ -4079,6 +6257,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rückblicke"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανακεφαλαιώσεις"
           }
         }
       }
@@ -4090,6 +6274,12 @@
             "state" : "translated",
             "value" : "Zuletzt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόσφατα"
+          }
         }
       }
     },
@@ -4100,6 +6290,12 @@
             "state" : "translated",
             "value" : "Letzte Sucheinträge"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόσφατες αναζητήσεις"
+          }
         }
       }
     },
@@ -4109,6 +6305,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuletzt hinzugefügt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προστέθηκαν πρόσφατα"
           }
         }
       }
@@ -4130,6 +6332,12 @@
             "state" : "translated",
             "value" : "Zuletzt gesehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόσφατες προβολές"
+          }
         }
       }
     },
@@ -4139,6 +6347,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnehmen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή"
           }
         }
       }
@@ -4150,6 +6364,12 @@
             "state" : "translated",
             "value" : "%@ aufnehmen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή: %@"
+          }
         }
       }
     },
@@ -4159,6 +6379,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Folge aufnehmen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή επεισοδίου"
           }
         }
       }
@@ -4170,6 +6396,12 @@
             "state" : "translated",
             "value" : "Neue Folgen aufnehmen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή νέων επεισοδίων"
+          }
         }
       }
     },
@@ -4179,6 +6411,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Serie aufnehmen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή σειράς"
           }
         }
       }
@@ -4190,6 +6428,12 @@
             "state" : "translated",
             "value" : "Aufnahme"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή σε εξέλιξη"
+          }
         }
       }
     },
@@ -4199,6 +6443,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme konnte nicht geändert werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η εγγραφή δεν άλλαξε"
           }
         }
       }
@@ -4210,6 +6460,12 @@
             "state" : "translated",
             "value" : "Aufnahme läuft"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Γίνεται εγγραφή τώρα"
+          }
         }
       }
     },
@@ -4219,6 +6475,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahmen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφές"
           }
         }
       }
@@ -4230,6 +6492,12 @@
             "state" : "translated",
             "value" : "Aufnehmen …"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή…"
+          }
         }
       }
     },
@@ -4239,6 +6507,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sender aktualisieren"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανανέωση καναλιών"
           }
         }
       }
@@ -4260,6 +6534,12 @@
             "state" : "translated",
             "value" : "Erscheinungsdatum"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ημερομηνία κυκλοφορίας"
+          }
         }
       }
     },
@@ -4269,6 +6549,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Veröffentlicht"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κυκλοφόρησε"
           }
         }
       }
@@ -4280,6 +6566,12 @@
             "state" : "translated",
             "value" : "PIN merken"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απομνημόνευση PIN"
+          }
         }
       }
     },
@@ -4289,6 +6581,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entfernen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση"
           }
         }
       }
@@ -4300,6 +6598,12 @@
             "state" : "translated",
             "value" : "Download entfernen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση λήψης"
+          }
         }
       }
     },
@@ -4309,6 +6613,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quelle entfernen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση πηγής"
           }
         }
       }
@@ -4320,6 +6630,12 @@
             "state" : "translated",
             "value" : "Quelle entfernen?"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να αφαιρεθεί η πηγή;"
+          }
         }
       }
     },
@@ -4329,6 +6645,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aus Favoriten entfernen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση από τα αγαπημένα"
           }
         }
       }
@@ -4340,6 +6662,12 @@
             "state" : "translated",
             "value" : "Aus Playlist entfernen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση από τη λίστα αναπαραγωγής"
+          }
         }
       }
     },
@@ -4349,6 +6677,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aus der Watchlist entfernen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση από τη λίστα παρακολούθησης"
           }
         }
       }
@@ -4360,6 +6694,12 @@
             "state" : "translated",
             "value" : "Umbenennen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετονομασία"
+          }
         }
       }
     },
@@ -4369,6 +6709,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playlist umbenennen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετονομασία λίστας αναπαραγωγής"
           }
         }
       }
@@ -4380,6 +6726,12 @@
             "state" : "translated",
             "value" : "Wiederkehrende Aufnahme"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επαναλαμβανόμενη εγγραφή"
+          }
         }
       }
     },
@@ -4389,6 +6741,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erforderlich"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υποχρεωτικό"
           }
         }
       }
@@ -4400,6 +6758,12 @@
             "state" : "translated",
             "value" : "Audioverzögerung zurücksetzen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επαναφορά καθυστέρησης ήχου"
+          }
         }
       }
     },
@@ -4409,6 +6773,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fortsetzen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια"
           }
         }
       }
@@ -4436,6 +6806,12 @@
             "state" : "translated",
             "value" : "Setzt den Download fort"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνεχίζει τη λήψη"
+          }
         }
       }
     },
@@ -4445,6 +6821,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Versucht den Download erneut"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επαναλαμβάνει τη λήψη"
           }
         }
       }
@@ -4456,6 +6838,12 @@
             "state" : "translated",
             "value" : "Erneut versuchen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νέα προσπάθεια"
+          }
         }
       }
     },
@@ -4466,12 +6854,24 @@
             "state" : "translated",
             "value" : "Download erneut versuchen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επανάληψη λήψης"
+          }
         }
       }
     },
     "Rivulet" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rivulet"
@@ -4501,6 +6901,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dauer"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διάρκεια"
           }
         }
       }
@@ -4534,6 +6940,12 @@
             "state" : "new",
             "value" : "S%1$lld E%2$lld"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κ%1$lld Ε%2$lld"
+          }
         }
       }
     },
@@ -4550,6 +6962,12 @@
             "state" : "new",
             "value" : "S%1$lld, E%2$lld"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κ%1$lld, Ε%2$lld"
+          }
         }
       }
     },
@@ -4559,6 +6977,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SD zuerst"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προτεραιότητα στην SD"
           }
         }
       }
@@ -4570,6 +6994,12 @@
             "state" : "translated",
             "value" : "SDH-Untertitel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υπότιτλοι για κωφούς και βαρήκοους"
+          }
         }
       }
     },
@@ -4579,6 +7009,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Szene"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σκηνή"
           }
         }
       }
@@ -4590,6 +7026,12 @@
             "state" : "translated",
             "value" : "Geplant"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προγραμματισμένο"
+          }
         }
       }
     },
@@ -4599,6 +7041,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suchen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναζήτηση"
           }
         }
       }
@@ -4620,6 +7068,12 @@
             "state" : "translated",
             "value" : "Staffel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κύκλος"
+          }
         }
       }
     },
@@ -4629,6 +7083,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Staffel %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κύκλος %lld"
           }
         }
       }
@@ -4640,6 +7100,12 @@
             "state" : "translated",
             "value" : "Staffel, %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κύκλος, %@"
+          }
         }
       }
     },
@@ -4649,6 +7115,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Segment"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τμήμα"
           }
         }
       }
@@ -4660,6 +7132,12 @@
             "state" : "translated",
             "value" : "Serie"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σειρές"
+          }
         }
       }
     },
@@ -4670,6 +7148,12 @@
             "state" : "translated",
             "value" : "Serien und Regeln"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σειρές και κανόνες"
+          }
         }
       }
     },
@@ -4679,6 +7163,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διακομιστής"
           }
         }
       }
@@ -4700,6 +7190,12 @@
             "state" : "translated",
             "value" : "Einstellungen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ρυθμίσεις"
+          }
         }
       }
     },
@@ -4709,6 +7205,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Geteilt von %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κοινοποιήθηκε από %@"
           }
         }
       }
@@ -4720,6 +7222,12 @@
             "state" : "translated",
             "value" : "Schärft Videos, die kleiner als dein Bildschirm sind, mit Apples Upscaler auf Basis von maschinellem Lernen. Verbraucht mehr Energie und stoppt von selbst, wenn das Gerät nicht mithalten kann. HDR und Dolby Vision werden wie bisher wiedergegeben."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Βελτιώνει την ευκρίνεια βίντεο μικρότερου από την οθόνη με την τεχνολογία μηχανικής μάθησης της Apple. Καταναλώνει περισσότερη ισχύ και σταματά αν δεν επαρκεί η απόδοση. HDR και Dolby Vision παίζουν όπως πριν."
+          }
         }
       }
     },
@@ -4729,6 +7237,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kurzfilm"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύντομο"
           }
         }
       }
@@ -4740,6 +7254,12 @@
             "state" : "translated",
             "value" : "Anzeigen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εμφάνιση"
+          }
         }
       }
     },
@@ -4749,6 +7269,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zeigt alle an"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εμφανίζει τα πάντα"
           }
         }
       }
@@ -4760,6 +7286,12 @@
             "state" : "translated",
             "value" : "Zeigt Details an"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εμφανίζει λεπτομέρειες"
+          }
         }
       }
     },
@@ -4769,6 +7301,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zufällige Wiedergabe"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τυχαία αναπαραγωγή"
           }
         }
       }
@@ -4780,6 +7318,12 @@
             "state" : "translated",
             "value" : "Anmelden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση"
+          }
         }
       }
     },
@@ -4789,6 +7333,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bei Plex anmelden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο Plex"
           }
         }
       }
@@ -4810,6 +7360,12 @@
             "state" : "translated",
             "value" : "Abmelden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποσύνδεση"
+          }
         }
       }
     },
@@ -4819,6 +7375,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Melde dich an, um die Watchlist zu nutzen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδέσου για να χρησιμοποιήσεις τη λίστα παρακολούθησης"
           }
         }
       }
@@ -4830,6 +7392,12 @@
             "state" : "translated",
             "value" : "Melde dich an, um deine Plex-Mediatheken auf dem iPhone und iPad anzusehen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδέσου για να παρακολουθήσεις τις βιβλιοθήκες Plex σε iPhone και iPad."
+          }
         }
       }
     },
@@ -4840,6 +7408,12 @@
             "state" : "translated",
             "value" : "Melde dich an, um deine Plex-Mediatheken anzusehen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδέσου για να παρακολουθήσεις τις βιβλιοθήκες Plex."
+          }
         }
       }
     },
@@ -4849,6 +7423,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Von Plex abmelden?"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποσύνδεση από το Plex;"
           }
         }
       }
@@ -4870,6 +7450,12 @@
             "state" : "translated",
             "value" : "Angemeldet"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνδεδεμένος"
+          }
         }
       }
     },
@@ -4879,6 +7465,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Angemeldet, aber dieser Account hat keine Live-Sender."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η σύνδεση ολοκληρώθηκε, αλλά ο λογαριασμός δεν διαθέτει ζωντανά κανάλια."
           }
         }
       }
@@ -4900,6 +7492,12 @@
             "state" : "translated",
             "value" : "Schlicht farbig"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απλό έγχρωμο"
+          }
         }
       }
     },
@@ -4909,6 +7507,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schlicht weiß"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απλό λευκό"
           }
         }
       }
@@ -4920,6 +7524,12 @@
             "state" : "translated",
             "value" : "%@ überspringen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παράλειψη %@"
+          }
         }
       }
     },
@@ -4929,6 +7539,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zurückspringen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση πίσω"
           }
         }
       }
@@ -4940,6 +7556,12 @@
             "state" : "translated",
             "value" : "Überspringen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πλήκτρα παράλειψης"
+          }
         }
       }
     },
@@ -4949,6 +7571,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vorspringen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετάβαση μπροστά"
           }
         }
       }
@@ -4960,6 +7588,12 @@
             "state" : "translated",
             "value" : "Marker überspringen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δείκτες παράλειψης"
+          }
         }
       }
     },
@@ -4969,6 +7603,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einige Sender wurden nicht geladen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ορισμένα κανάλια δεν φορτώθηκαν"
           }
         }
       }
@@ -4990,6 +7630,12 @@
             "state" : "translated",
             "value" : "Sortieren"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταξινόμηση"
+          }
         }
       }
     },
@@ -4999,6 +7645,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sortieren nach"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταξινόμηση κατά"
           }
         }
       }
@@ -5010,6 +7662,12 @@
             "state" : "translated",
             "value" : "Quelle"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πηγή"
+          }
         }
       }
     },
@@ -5019,6 +7677,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quelle ist nicht konfiguriert"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η πηγή δεν έχει ρυθμιστεί"
           }
         }
       }
@@ -5030,6 +7694,12 @@
             "state" : "translated",
             "value" : "Quelle ist nicht verbunden"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η πηγή δεν είναι συνδεδεμένη"
+          }
         }
       }
     },
@@ -5039,6 +7709,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quellen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πηγές"
           }
         }
       }
@@ -5050,6 +7726,12 @@
             "state" : "translated",
             "value" : "Specials"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ειδικά επεισόδια"
+          }
         }
       }
     },
@@ -5059,6 +7741,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sport"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αθλητικά"
           }
         }
       }
@@ -5070,6 +7758,12 @@
             "state" : "translated",
             "value" : "Start in Kürze"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ξεκινά σύντομα"
+          }
         }
       }
     },
@@ -5079,6 +7773,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beginn: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ξεκινά %@"
           }
         }
       }
@@ -5090,6 +7790,12 @@
             "state" : "translated",
             "value" : "Status"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κατάσταση"
+          }
         }
       }
     },
@@ -5099,6 +7805,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stereo"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Στερεοφωνικό"
           }
         }
       }
@@ -5110,6 +7822,12 @@
             "state" : "translated",
             "value" : "Stopp"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διακοπή"
+          }
         }
       }
     },
@@ -5119,6 +7837,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme stoppen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Διακοπή εγγραφής"
           }
         }
       }
@@ -5130,6 +7854,12 @@
             "state" : "translated",
             "value" : "Belegter Speicher"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Χρησιμοποιούμενος χώρος"
+          }
         }
       }
     },
@@ -5139,6 +7869,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Im Schlüsselbund dieses Geräts gespeichert, damit sich dieses Profil ohne Nachfrage öffnet."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποθηκεύεται στην Κλειδοθήκη αυτής της συσκευής ώστε το προφίλ να ανοίγει χωρίς ερώτηση."
           }
         }
       }
@@ -5150,6 +7886,12 @@
             "state" : "translated",
             "value" : "Streamingqualität"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ποιότητα μετάδοσης"
+          }
         }
       }
     },
@@ -5159,6 +7901,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Studio"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Στούντιο"
           }
         }
       }
@@ -5170,6 +7918,12 @@
             "state" : "translated",
             "value" : "Untertitelsprache"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Γλώσσα υποτίτλων"
+          }
         }
       }
     },
@@ -5179,6 +7933,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Untertitel"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υπότιτλοι"
           }
         }
       }
@@ -5190,6 +7950,12 @@
             "state" : "translated",
             "value" : "Vorschläge"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προτάσεις"
+          }
         }
       }
     },
@@ -5199,6 +7965,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Profil wechseln"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αλλαγή προφίλ"
           }
         }
       }
@@ -5262,6 +8034,12 @@
             "state" : "translated",
             "value" : "TV-Sendung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τηλεοπτική σειρά"
+          }
         }
       }
     },
@@ -5272,6 +8050,12 @@
             "state" : "translated",
             "value" : "TV-Sendungen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τηλεοπτικές σειρές"
+          }
         }
       }
     },
@@ -5281,6 +8065,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Adresse scheint nicht zu stimmen. Prüfe sie und versuche es erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η διεύθυνση δεν φαίνεται σωστή. Έλεγξέ την και δοκίμασε ξανά."
           }
         }
       }
@@ -5302,6 +8092,12 @@
             "state" : "translated",
             "value" : "Unter dieser Adresse läuft kein Tvheadend-Server. Prüfe Adresse und Port."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η διεύθυνση δεν αντιστοιχεί σε διακομιστή Tvheadend. Έλεγξε διεύθυνση και θύρα."
+          }
         }
       }
     },
@@ -5321,6 +8117,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unter dieser Adresse läuft kein Xtream-Codes-Server. Prüfe Adresse und Port."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η διεύθυνση δεν αντιστοιχεί σε διακομιστή Xtream Codes. Έλεγξε διεύθυνση και θύρα."
           }
         }
       }
@@ -5342,6 +8144,12 @@
             "state" : "translated",
             "value" : "Diese Playlist-URL scheint nicht zu stimmen. Prüfe sie und versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το URL λίστας δεν φαίνεται σωστό. Έλεγξέ το και δοκίμασε ξανά."
+          }
         }
       }
     },
@@ -5351,6 +8159,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Server hat keine Dispatcharr-Anmeldung. Lass Benutzername und Passwort leer."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν προσφέρει σύνδεση Dispatcharr. Διάγραψε όνομα χρήστη και κωδικό."
           }
         }
       }
@@ -5362,6 +8176,12 @@
             "state" : "translated",
             "value" : "Der Server hat Rivulet abgewiesen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής απέρριψε το Rivulet."
+          }
         }
       }
     },
@@ -5371,6 +8191,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der M3U-Link deines Anbieters."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο σύνδεσμος M3U από τον πάροχό σου."
           }
         }
       }
@@ -5382,6 +8208,12 @@
             "state" : "translated",
             "value" : "Der Download ist zu groß."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η λήψη είναι υπερβολικά μεγάλη."
+          }
         }
       }
     },
@@ -5391,6 +8223,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Download wurde abgebrochen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η λήψη διακόπηκε πρόωρα"
           }
         }
       }
@@ -5402,6 +8240,12 @@
             "state" : "translated",
             "value" : "Die heruntergeladene Datei stimmt nicht mit der Kopie auf dem Server überein"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το ληφθέν αρχείο δεν συμφωνεί με το αντίγραφο του διακομιστή"
+          }
         }
       }
     },
@@ -5411,6 +8255,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Datei ist nicht mehr auf dem Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αρχείο δεν υπάρχει πλέον στον διακομιστή"
           }
         }
       }
@@ -5448,6 +8298,12 @@
             "state" : "translated",
             "value" : "Die Programmdaten beschreiben diese Sendung nicht genau genug, um sie aufzunehmen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο οδηγός δεν αναγνωρίζει αρκετά καλά αυτή την εκπομπή για εγγραφή."
+          }
         }
       }
     },
@@ -5457,6 +8313,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Programmdaten sind zu groß"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο οδηγός προγράμματος είναι υπερβολικά μεγάλος"
           }
         }
       }
@@ -5468,6 +8330,12 @@
             "state" : "translated",
             "value" : "Der Server"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής"
+          }
         }
       }
     },
@@ -5477,6 +8345,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Serveradresse deines Anbieters mit Port. Du kannst auch einen get.php-Link einfügen: Rivulet übernimmt daraus Benutzername und Passwort."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η διεύθυνση και η θύρα του διακομιστή του παρόχου. Μπορείς να επικολλήσεις και σύνδεσμο get.php: το Rivulet συμπληρώνει τα στοιχεία σύνδεσης από αυτόν."
           }
         }
       }
@@ -5488,6 +8362,12 @@
             "state" : "translated",
             "value" : "Der Server konnte dieses Objekt nicht konvertieren"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπόρεσε να μετατρέψει αυτό το στοιχείο"
+          }
         }
       }
     },
@@ -5497,6 +8377,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat Benutzername und Passwort nicht akzeptiert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν δέχτηκε το όνομα χρήστη και τον κωδικό πρόσβασης."
           }
         }
       }
@@ -5518,6 +8404,12 @@
             "state" : "translated",
             "value" : "Der Server nimmt gerade keine neuen Streams an. Warte einen Moment und versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής απορρίπτει προς το παρόν νέες ροές. Περίμενε λίγο και δοκίμασε ξανά."
+          }
         }
       }
     },
@@ -5527,6 +8419,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat diese Konvertierung nicht mehr"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η μετατροπή δεν υπάρχει πλέον στον διακομιστή"
           }
         }
       }
@@ -5538,6 +8436,12 @@
             "state" : "translated",
             "value" : "Der Server bietet keine Möglichkeit, diese Sendung aufzunehmen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν προσέφερε τρόπο εγγραφής αυτού του προγράμματος."
+          }
         }
       }
     },
@@ -5547,6 +8451,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat den Download abgelehnt (HTTP %lld)"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής απέρριψε τη λήψη (HTTP %lld)"
           }
         }
       }
@@ -5558,6 +8468,12 @@
             "state" : "translated",
             "value" : "Der Server hat diesen Stream abgelehnt. Vielleicht wurde er verschoben oder dein Zugriff hat sich geändert."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής απέρριψε αυτή τη ροή. Ίσως μετακινήθηκε ή άλλαξαν τα δικαιώματά σου."
+          }
         }
       }
     },
@@ -5567,6 +8483,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Antwort des Servers: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μήνυμα διακομιστή: %@"
           }
         }
       }
@@ -5578,6 +8500,12 @@
             "state" : "translated",
             "value" : "Der Server hat eine Antwort gesendet, die Rivulet nicht lesen konnte"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής έστειλε μια απάντηση που το Rivulet δεν μπόρεσε να διαβάσει"
+          }
         }
       }
     },
@@ -5587,6 +8515,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Sicherheitszertifikat des Servers wurde nicht akzeptiert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το πιστοποιητικό ασφαλείας του διακομιστή δεν έγινε αποδεκτό."
           }
         }
       }
@@ -5598,6 +8532,12 @@
             "state" : "translated",
             "value" : "Diese Werte legen auch fest, wie weit ein Doppeltippen springt."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτά καθορίζουν επίσης το διάστημα μετακίνησης με διπλό πάτημα."
+          }
         }
       }
     },
@@ -5607,6 +8547,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Dolby-Vision-Datei hat keine Ersatzebene, die dieses Gerät decodieren kann."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το αρχείο Dolby Vision δεν έχει εναλλακτικό επίπεδο που να μπορεί να αποκωδικοποιήσει η συσκευή."
           }
         }
       }
@@ -5618,6 +8564,12 @@
             "state" : "translated",
             "value" : "Dieser Tvheadend-Server benötigt Benutzername und Passwort."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτός ο διακομιστής Tvheadend χρειάζεται όνομα χρήστη και κωδικό."
+          }
         }
       }
     },
@@ -5627,6 +8579,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Tvheadend-Benutzer darf nicht aufnehmen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτός ο χρήστης Tvheadend δεν έχει δικαίωμα εγγραφής."
           }
         }
       }
@@ -5638,6 +8596,12 @@
             "state" : "translated",
             "value" : "Dieser Account ist abgelaufen. Wende dich an deinen Anbieter, um ihn zu verlängern."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο λογαριασμός έληξε. Επικοινώνησε με τον πάροχό σου για ανανέωση."
+          }
         }
       }
     },
@@ -5647,6 +8611,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Account ist deaktiviert. Wende dich an deinen Anbieter."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο λογαριασμός είναι απενεργοποιημένος. Επικοινώνησε με τον πάροχό σου."
           }
         }
       }
@@ -5658,6 +8628,12 @@
             "state" : "translated",
             "value" : "Dieser Sender hat keinen Stream."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το κανάλι δεν διαθέτει ροή."
+          }
         }
       }
     },
@@ -5667,6 +8643,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieser Sender antwortet gerade nicht."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το κανάλι δεν αποκρίνεται αυτή τη στιγμή."
           }
         }
       }
@@ -5678,6 +8660,12 @@
             "state" : "translated",
             "value" : "Dieses Objekt hat keine herunterladbare Datei"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχει διαθέσιμο αρχείο για λήψη σε αυτό το στοιχείο"
+          }
         }
       }
     },
@@ -5687,6 +8675,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dieses Objekt hat keine abspielbare Datei."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το στοιχείο δεν διαθέτει αρχείο που να αναπαράγεται."
           }
         }
       }
@@ -5698,6 +8692,12 @@
             "state" : "translated",
             "value" : "Diese Sendung ist bereits vorbei."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το πρόγραμμα έχει ήδη τελειώσει."
+          }
         }
       }
     },
@@ -5707,6 +8707,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Damit wird die Playlist von deinem Server entfernt. Die Titel bleiben in deiner Mediathek."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαιρεί τη λίστα αναπαραγωγής από τον διακομιστή. Οι τίτλοι μένουν στη βιβλιοθήκη."
           }
         }
       }
@@ -5754,6 +8760,12 @@
             "state" : "translated",
             "value" : "Diese Quelle kann nicht aufnehmen."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η πηγή δεν υποστηρίζει εγγραφή."
+          }
         }
       }
     },
@@ -5763,6 +8775,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Version ist in Teile aufgeteilt; wähle eine konvertierte Qualität"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτή η έκδοση αποτελείται από τμήματα· διάλεξε ποιότητα μετατροπής"
           }
         }
       }
@@ -5774,6 +8792,12 @@
             "state" : "translated",
             "value" : "Dieses Video konnte nicht wiedergegeben werden. Prüfe deine Verbindung und versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αναπαραγωγή του βίντεο. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά."
+          }
         }
       }
     },
@@ -5784,12 +8808,24 @@
             "state" : "translated",
             "value" : "Dadurch werden „%@“ und alle zugehörigen Sender aus Live-TV entfernt."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Θα αφαιρεθεί το «%@» και όλα τα κανάλια του από τη ζωντανή τηλεόραση."
+          }
         }
       }
     },
     "Threadfin" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Threadfin"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Threadfin"
@@ -5804,6 +8840,12 @@
             "state" : "translated",
             "value" : "Titel"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τίτλος"
+          }
         }
       }
     },
@@ -5813,6 +8855,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Titel A-Z"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τίτλος Α–Ω"
           }
         }
       }
@@ -5824,6 +8872,12 @@
             "state" : "translated",
             "value" : "Titel Z-A"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τίτλος Ω–Α"
+          }
         }
       }
     },
@@ -5833,6 +8887,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Heute"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σήμερα"
           }
         }
       }
@@ -5854,6 +8914,12 @@
             "state" : "translated",
             "value" : "Zu viele Anmeldeversuche. Warte eine Minute und versuche es erneut."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πάρα πολλές προσπάθειες σύνδεσης. Περίμενε ένα λεπτό και δοκίμασε ξανά."
+          }
         }
       }
     },
@@ -5863,6 +8929,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bestbewertete Filme"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταινίες με την υψηλότερη βαθμολογία"
           }
         }
       }
@@ -5874,6 +8946,12 @@
             "state" : "translated",
             "value" : "Bestbewertete TV-Sendungen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σειρές με την υψηλότερη βαθμολογία"
+          }
         }
       }
     },
@@ -5883,6 +8961,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Halte einen Sender in Live-TV gedrückt, um ihn hinzuzufügen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άγγιξε παρατεταμένα ένα κανάλι στη ζωντανή τηλεόραση για να το προσθέσεις."
           }
         }
       }
@@ -5894,6 +8978,12 @@
             "state" : "translated",
             "value" : "Spur %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κομμάτι %@"
+          }
         }
       }
     },
@@ -5903,6 +8993,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Spur %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κομμάτι %lld"
           }
         }
       }
@@ -5914,6 +9010,12 @@
             "state" : "translated",
             "value" : "Trailer"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τρέιλερ"
+          }
         }
       }
     },
@@ -5923,6 +9025,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Angesagt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημοφιλή"
           }
         }
       }
@@ -5934,6 +9042,12 @@
             "state" : "translated",
             "value" : "Angesagte Filme"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημοφιλείς ταινίες"
+          }
         }
       }
     },
@@ -5943,6 +9057,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Angesagte TV-Sendungen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δημοφιλείς σειρές"
           }
         }
       }
@@ -5954,6 +9074,12 @@
             "state" : "translated",
             "value" : "Erneut versuchen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δοκίμασε ξανά"
+          }
         }
       }
     },
@@ -5963,6 +9089,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sieh im Programm nach, was als Nächstes läuft."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δοκίμασε τον οδηγό προγράμματος για να δεις τι ακολουθεί."
           }
         }
       }
@@ -5974,12 +9106,24 @@
             "state" : "translated",
             "value" : "Tuner-Fehler: %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία συντονισμού: %@"
+          }
         }
       }
     },
     "Tvheadend" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tvheadend"
@@ -5994,6 +9138,12 @@
             "state" : "translated",
             "value" : "Tvheadend-Anmeldung"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο Tvheadend"
+          }
         }
       }
     },
@@ -6003,6 +9153,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tvheadend hat Benutzername und Passwort nicht akzeptiert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Tvheadend δεν δέχτηκε αυτό το όνομα χρήστη και τον κωδικό."
           }
         }
       }
@@ -6014,6 +9170,12 @@
             "state" : "translated",
             "value" : "Tvheadend hat Rivulet für diesen Benutzer keinen Stream geliefert. Prüfe seine Streaming-Rechte oder aktualisiere Tvheadend."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Tvheadend δεν έδωσε ροή στο Rivulet για αυτόν τον χρήστη. Έλεγξε τα δικαιώματα μετάδοσης ή ενημέρωσε το Tvheadend."
+          }
         }
       }
     },
@@ -6023,6 +9185,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tvheadend hat diesen Benutzer abgewiesen. Prüfe sein Passwort und seine Rechte in Tvheadend."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Tvheadend απέρριψε αυτόν τον χρήστη. Έλεγξε κωδικό και δικαιώματα στο Tvheadend."
           }
         }
       }
@@ -6034,6 +9202,12 @@
             "state" : "translated",
             "value" : "Plex ist nicht erreichbar. Prüfe deine Netzwerkverbindung."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν είναι δυνατή η επικοινωνία με το Plex. Έλεγξε τη σύνδεση δικτύου."
+          }
         }
       }
     },
@@ -6043,6 +9217,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht autorisiert: Prüfe die Dispatcharr-Anmeldung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη εξουσιοδοτημένη πρόσβαση — έλεγξε τα στοιχεία σύνδεσης στο Dispatcharr"
           }
         }
       }
@@ -6054,6 +9234,12 @@
             "state" : "translated",
             "value" : "Unbekannt"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άγνωστο"
+          }
         }
       }
     },
@@ -6063,6 +9249,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unbekannte Sprache"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άγνωστη γλώσσα"
           }
         }
       }
@@ -6074,6 +9266,12 @@
             "state" : "translated",
             "value" : "Ton an"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κατάργηση σίγασης"
+          }
         }
       }
     },
@@ -6083,6 +9281,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ohne Titel"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Χωρίς τίτλο"
           }
         }
       }
@@ -6094,6 +9298,12 @@
             "state" : "translated",
             "value" : "Ungesehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη προβεβλημένα"
+          }
         }
       }
     },
@@ -6103,6 +9313,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als Nächstes"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ακολουθούν"
           }
         }
       }
@@ -6114,6 +9330,12 @@
             "state" : "translated",
             "value" : "Demnächst"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσεχώς"
+          }
         }
       }
     },
@@ -6123,6 +9345,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SD und 720p hochskalieren"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναβάθμιση ανάλυσης SD και 720p"
           }
         }
       }
@@ -6144,6 +9372,12 @@
             "state" : "translated",
             "value" : "Benutzername"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Όνομα χρήστη"
+          }
         }
       }
     },
@@ -6153,6 +9387,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Έκδοση"
           }
         }
       }
@@ -6164,6 +9404,12 @@
             "state" : "translated",
             "value" : "Version %@"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Έκδοση %@"
+          }
         }
       }
     },
@@ -6173,6 +9419,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Warten auf Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναμονή διακομιστή"
           }
         }
       }
@@ -6184,6 +9436,12 @@
             "state" : "translated",
             "value" : "Warten auf WLAN"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναμονή Wi-Fi"
+          }
         }
       }
     },
@@ -6193,6 +9451,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Warten auf deine Anmeldung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναμονή σύνδεσης"
           }
         }
       }
@@ -6204,6 +9468,12 @@
             "state" : "translated",
             "value" : "Ansehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παρακολούθηση"
+          }
         }
       }
     },
@@ -6214,6 +9484,12 @@
             "state" : "translated",
             "value" : "%@ ansehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παρακολούθηση: %@"
+          }
         }
       }
     },
@@ -6223,6 +9499,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ live ansehen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ζωντανή παρακολούθηση: %@"
           }
         }
       }
@@ -6244,6 +9526,12 @@
             "state" : "translated",
             "value" : "Gesehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παρακολουθήθηκε"
+          }
         }
       }
     },
@@ -6253,6 +9541,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Watchlist"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λίστα παρακολούθησης"
           }
         }
       }
@@ -6264,6 +9558,12 @@
             "state" : "translated",
             "value" : "Wochentags"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Καθημερινές"
+          }
         }
       }
     },
@@ -6273,6 +9573,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Am Wochenende"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σαββατοκύριακα"
           }
         }
       }
@@ -6284,6 +9590,12 @@
             "state" : "translated",
             "value" : "Neuigkeiten"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τι νέο υπάρχει"
+          }
         }
       }
     },
@@ -6293,6 +9605,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jetzt im TV"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τι παίζει τώρα"
           }
         }
       }
@@ -6304,6 +9622,12 @@
             "state" : "translated",
             "value" : "Wenn diese Option deaktiviert ist, warten Downloads bei Mobilfunk, einem persönlichen Hotspot oder im Datensparmodus auf WLAN."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ανενεργό, οι λήψεις περιμένουν Wi-Fi όταν χρησιμοποιούνται δεδομένα κινητής, προσωπικό hotspot ή λειτουργία χαμηλής κατανάλωσης δεδομένων."
+          }
         }
       }
     },
@@ -6314,12 +9638,24 @@
             "state" : "translated",
             "value" : "Wer schaut zu?"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ποιος παρακολουθεί;"
+          }
         }
       }
     },
     "Xtream Codes" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xtream Codes"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Xtream Codes"
@@ -6333,6 +9669,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du kannst dich jederzeit wieder anmelden."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μπορείς να συνδεθείς ξανά οποιαδήποτε στιγμή."
           }
         }
       }
@@ -6354,6 +9696,12 @@
             "state" : "translated",
             "value" : "Die Adresse deines Dispatcharr-Servers in deinem Netzwerk, mit Port."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η διεύθυνση του Dispatcharr στο δίκτυό σου, με θύρα."
+          }
         }
       }
     },
@@ -6363,6 +9711,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine Live-TV-Quellen haben keine Sender geliefert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Οι πηγές ζωντανής τηλεόρασης δεν επέστρεψαν κανένα κανάλι."
           }
         }
       }
@@ -6374,6 +9728,12 @@
             "state" : "translated",
             "value" : "Dein Plex-Server hat diesen Stream beendet."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής Plex διέκοψε αυτή τη ροή."
+          }
         }
       }
     },
@@ -6383,6 +9743,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dein Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής σου"
           }
         }
       }
@@ -6394,6 +9760,12 @@
             "state" : "translated",
             "value" : "Die Adresse deines Threadfin-Servers in deinem Netzwerk, mit Port."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η διεύθυνση του Threadfin στο δίκτυό σου, με θύρα."
+          }
         }
       }
     },
@@ -6403,6 +9775,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Adresse deines Tvheadend-Servers in deinem Netzwerk, mit Port."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η διεύθυνση του Tvheadend στο δίκτυό σου, με θύρα."
           }
         }
       }
@@ -6414,6 +9792,12 @@
             "state" : "translated",
             "value" : "Dein Anbieter hat diesen Account gesperrt."
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο πάροχός σου έχει αποκλείσει αυτόν τον λογαριασμό."
+          }
         }
       }
     },
@@ -6423,6 +9807,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine gespeicherte PIN funktioniert nicht mehr. Gib sie erneut ein."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αποθηκευμένο PIN δεν λειτουργεί πλέον. Πληκτρολόγησέ το ξανά."
           }
         }
       }
@@ -6434,6 +9824,12 @@
             "state" : "translated",
             "value" : "Z-A"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ω–Α"
+          }
         }
       }
     },
@@ -6444,12 +9840,24 @@
             "state" : "translated",
             "value" : "http://provider.example/playlist.m3u"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example/playlist.m3u"
+          }
         }
       }
     },
     "http://provider.example:8080" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example:8080"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "http://provider.example:8080"
@@ -6471,6 +9879,12 @@
             "state" : "new",
             "value" : "Home"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σπίτι"
+          }
         }
       }
     },
@@ -6488,12 +9902,24 @@
             "state" : "new",
             "value" : "Now Playing"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παίζονται τώρα"
+          }
         }
       }
     },
     "•" : {
       "localizations" : {
         "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "•"
+          }
+        },
+        "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "•"

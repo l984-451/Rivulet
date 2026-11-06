@@ -936,12 +936,20 @@ extension ShellSidebarViewController {
         while let presented = top.presentedViewController { top = presented }
         guard top.presentedViewController == nil, !(top is TileMenuPopupViewController) else { return }
         let frame = collectionView.cellForItem(at: indexPath).map { $0.convert($0.bounds, to: nil) }
-        top.present(TileMenuPopupViewController(sections: rowMenu(for: key), sourceFrame: frame), animated: false)
+        top.present(TileMenuPopupViewController(sections: rowMenu(for: key, tab: item.tab), sourceFrame: frame),
+                    animated: false)
     }
 
-    private func rowMenu(for key: String) -> [[TileMenuAction]] {
+    private func rowMenu(for key: String, tab: SidebarTab) -> [[TileMenuAction]] {
         let move = TileMenuAction(title: "Move", systemImage: "arrow.up.arrow.down") { [weak self] in
             self?.beginRowMove(key)
+        }
+        // A video library also shuffles, unfiltered. After Move, so a stray Select on a fresh menu plays nothing.
+        let shuffle = ShufflePlayback.library(for: tab).map { library in
+            TileMenuAction(title: "Shuffle", systemImage: "shuffle") { [weak self] in
+                guard let self else { return }
+                ShufflePlayback.shuffle(library, from: self)
+            }
         }
         if SidebarArrangement.isLiveTV(key) {
             let current = LiveTVLayout(rawValue: UserDefaults.standard.string(forKey: "liveTVLayout") ?? "") ?? .fallback
@@ -957,7 +965,7 @@ extension ShellSidebarViewController {
         let hide = TileMenuAction(title: "Hide from Sidebar", systemImage: "eye.slash") { [weak self] in
             self?.hideRow(key)
         }
-        return [[move], [hide]]
+        return [[move, shuffle].compactMap { $0 }, [hide]]
     }
 
     private func hideRow(_ key: String) {

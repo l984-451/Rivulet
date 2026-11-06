@@ -362,6 +362,19 @@ private struct IOSPlexDetailHeader: View {
             // Play shows only where `IOSPlaybackGate` allows it.
             if canPlay { playButton.layoutPriority(1) }
             HStack(spacing: 12) {
+                if canPlay, item.kind == .show {
+                    Button { actions.shuffleShow(item) } label: {
+                        if actions.preparingID == IOSPlexActions.shuffleID(providerID: item.ref.providerID,
+                                                                           itemID: item.ref.itemID) {
+                            ProgressView().frame(width: 22, height: 22)
+                        } else {
+                            Image(systemName: "shuffle").frame(width: 22, height: 22)
+                        }
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Shuffle")
+                }
                 if browse.supportsWatchlist(item) {
                     let onList = onList ?? false
                     circleButton(onList ? "checkmark" : "plus", label: onList ? "Remove from Watchlist" : "Add to Watchlist") {

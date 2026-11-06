@@ -108,7 +108,7 @@ enum ProviderPlayer {
     }
 
     @MainActor
-    private static func presentError(_ error: Error, from presenter: UIViewController) {
+    static func presentError(_ error: Error, from presenter: UIViewController) {
         let popup = ConfirmationPopupViewController(
             title: String(localized: "Couldn't Play"), message: errorMessage(for: error),
             confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})

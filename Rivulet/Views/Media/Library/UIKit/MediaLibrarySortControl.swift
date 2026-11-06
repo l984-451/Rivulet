@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-//  The library grid's header: title and item count on the left, the Sort and View
-//  (Titles, Collections, Folders) menu buttons on the right. Only the buttons take focus,
+//  The library grid's header: title and item count on the left, Shuffle and the Sort
+//  and View (Titles, Collections, Folders) menu buttons on the right. Only the buttons take focus,
 //  and Up and Down reach them only from beneath.
 
 import UIKit
@@ -218,6 +218,18 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         return b
     }()
 
+    /// Plays the library shuffled; shows beside Sort when the page has a handler.
+    private let shuffleButton: SortButton = {
+        let b = SortButton()
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.configure(sortName: String(localized: "Shuffle"), symbol: "shuffle")
+        return b
+    }()
+    private var onShuffle: (() -> Void)?
+    /// Off while Shuffle is hidden, so a hidden button never squeezes the title.
+    private lazy var shuffleClearsTitle: NSLayoutConstraint = shuffleButton.leadingAnchor.constraint(
+        greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16)
+
     /// The sort button's trailing edge: beside the View button while both
     /// show, otherwise at the cell edge. Not a UIStackView: its hiding
     /// constraint (width 0, required) fights SortButton's required internal
@@ -235,7 +247,10 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setup()
-        for button in [sortButton, viewButton] { button.isReachable = { [weak self] in self?.buttonsReachable() ?? true } }
+        for button in [shuffleButton, sortButton, viewButton] {
+            button.isReachable = { [weak self] in self?.buttonsReachable() ?? true }
+        }
+        shuffleButton.addAction(UIAction { [weak self] _ in self?.onShuffle?() }, for: .primaryActionTriggered)
     }
 
     @available(*, unavailable)
@@ -249,8 +264,14 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         contentView.addSubview(countLabel)
         contentView.addSubview(sortButton)
         contentView.addSubview(viewButton)
+        contentView.addSubview(shuffleButton)
 
         NSLayoutConstraint.activate([
+            // Shuffle: left of Sort, and shown only with it.
+            shuffleButton.trailingAnchor.constraint(equalTo: sortButton.leadingAnchor, constant: -16),
+            shuffleButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            shuffleButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
+
             // Title: left-aligned, vertically centered on the top text cluster.
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
@@ -285,16 +306,19 @@ final class MediaLibrarySortControl: UICollectionViewCell {
 
     // MARK: - Configure
 
-    /// In Collections the count reads "N collections" and the sort button
-    /// hides, which also takes it out of the focus graph.
+    /// In Collections the count reads "N collections" and the sort and shuffle
+    /// buttons hide, which also takes them out of the focus graph.
     func configure(title: String, count: Int, sortName: String, sortMenu: UIMenu,
-                   view: LibraryViewMode, viewMenu: UIMenu?) {
+                   view: LibraryViewMode, viewMenu: UIMenu?, onShuffle: (() -> Void)? = nil) {
         titleLabel.text = title
         countLabel.text = view == .collections ? String(localized: "\(count) collections") : String(localized: "\(count) items")
         sortButton.configure(sortName: sortName)
         sortButton.menu = sortMenu
         sortButton.showsMenuAsPrimaryAction = true
         sortButton.isHidden = view == .collections
+        self.onShuffle = onShuffle
+        shuffleButton.isHidden = sortButton.isHidden || onShuffle == nil
+        shuffleClearsTitle.isActive = !shuffleButton.isHidden
         viewButton.configure(view: view, menu: viewMenu)
         // Deactivate before activate, so the two are never active together.
         let beside = !viewButton.isHidden
@@ -310,7 +334,7 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     private func buttonsReachable() -> Bool {
         guard let window, let focused = UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView else { return true }
         if focused.isDescendant(of: self) { return true }
-        let left = [sortButton, viewButton].filter { !$0.isHidden }.map { $0.convert($0.bounds, to: window).minX }.min()
+        let left = [shuffleButton, sortButton, viewButton].filter { !$0.isHidden }.map { $0.convert($0.bounds, to: window).minX }.min()
         guard let left else { return false }
         return focused.convert(focused.bounds, to: window).maxX > left
     }
@@ -319,6 +343,6 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     // this section rather than skipping past it entirely). A hidden sort button
     // is not focusable, so a programmatic request falls through to the View button.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        [sortButton, viewButton]
+        [sortButton, viewButton, shuffleButton]
     }
 }

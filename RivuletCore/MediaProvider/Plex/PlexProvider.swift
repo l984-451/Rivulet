@@ -107,6 +107,29 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         )
     }
 
+    /// `/all` sorted `random`; `libraryItemsURL` sends Start with Size, without which Plex ignores Size.
+    func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem] {
+        try await plexCall {
+            let result = try await networkManager.getLibraryItemsWithTotal(
+                serverURL: serverURL, authToken: authToken, sectionId: library.id, start: 0, size: limit,
+                sort: "random", type: Self.shuffleType(for: library.kind),
+                filters: unwatchedOnly ? [URLQueryItem(name: "unwatched", value: "1")] : []
+            )
+            return result.items.map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
+        }
+    }
+
+    /// The Plex type a shuffle plays: movies (Other Videos items are movies too), or a TV library's episodes.
+    nonisolated static func shuffleType(for kind: MediaLibrary.LibraryKind) -> Int? {
+        switch kind {
+        case .movies: 1
+        case .shows: 4
+        default: nil
+        }
+    }
+
     /// One page of a row's See All, through the hub key: its own query is the row's definition and
     /// `getHubItems` appends Start and Size. A row with no key is its own only page.
     func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {

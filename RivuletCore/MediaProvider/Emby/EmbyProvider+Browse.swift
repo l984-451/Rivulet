@@ -87,6 +87,30 @@ extension EmbyProvider {
         return query
     }
 
+    func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem] {
+        var query = [
+            URLQueryItem(name: "ParentId", value: library.id),
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "IncludeItemTypes", value: Self.shuffleItemTypes(for: library.kind)),
+            URLQueryItem(name: "SortBy", value: "Random"),
+            URLQueryItem(name: "Limit", value: "\(limit)"),
+            // A Virtual location is an unaired placeholder; dropped here too, as `episodes(of:)` does.
+            URLQueryItem(name: "ExcludeLocationTypes", value: "Virtual"),
+            Self.listFields
+        ]
+        if unwatchedOnly { query.append(URLQueryItem(name: "Filters", value: "IsUnplayed")) }
+        return map((try await self.query(query).items ?? []).filter { $0.locationType != "Virtual" })
+    }
+
+    /// What a shuffle plays: a TV library's episodes rather than its series. A mixed library holds episodes too.
+    nonisolated static func shuffleItemTypes(for kind: MediaLibrary.LibraryKind) -> String {
+        switch kind {
+        case .movies: "Movie"
+        case .shows: "Episode"
+        default: "Movie,Video,MusicVideo,Episode"
+        }
+    }
+
     private func listing(_ query: [URLQueryItem], page: Page) async throws -> PagedResult<MediaItem> {
         let result = try await self.query(query + [
             URLQueryItem(name: "StartIndex", value: "\(page.offset)"),

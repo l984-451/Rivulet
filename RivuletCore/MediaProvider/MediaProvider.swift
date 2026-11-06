@@ -34,6 +34,9 @@ protocol MediaProvider: Sendable, Identifiable {
     /// `unwatchedOnly` is off, and a refusal when it is on, since a provider must not pretend to filter.
     func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem>
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem]
+    /// At most `limit` playable titles of a video library (movies, videos, a TV library's episodes) in
+    /// an order the server randomizes. Default: a refusal.
+    func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem]
     func search(_ query: String) async throws -> [MediaItem]
     /// Search limited to these libraries' ids. Default: all libraries.
     func search(_ query: String, inLibraries libraryIDs: [String]) async throws -> [MediaItem]
@@ -239,6 +242,9 @@ extension MediaProvider {
     func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
         guard unwatchedOnly else { return try await items(in: library, sort: sort, page: page) }
         throw MediaProviderError.backendSpecific(underlying: "unwatched filter not supported")
+    }
+    func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem] {
+        throw MediaProviderError.backendSpecific(underlying: "shuffle not supported")
     }
     func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem> {
         PagedResult(items: page.offset == 0 ? hub.items : [], total: hub.items.count, nextPage: nil)

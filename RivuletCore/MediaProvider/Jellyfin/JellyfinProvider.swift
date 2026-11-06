@@ -95,6 +95,31 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return query
     }
 
+    func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem] {
+        var query = [
+            URLQueryItem(name: "parentId", value: library.id),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: Self.shuffleItemTypes(for: library.kind)),
+            URLQueryItem(name: "sortBy", value: "Random"),
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            // No unaired placeholder episodes.
+            URLQueryItem(name: "isMissing", value: "false"),
+            Self.listFields
+        ]
+        if unwatchedOnly { query.append(URLQueryItem(name: "filters", value: "IsUnplayed")) }
+        let result: JFQueryResult = try await client.get("Items", query)
+        return map(result.items)
+    }
+
+    /// What a shuffle plays: a TV library's episodes rather than its series.
+    static func shuffleItemTypes(for kind: MediaLibrary.LibraryKind) -> String {
+        switch kind {
+        case .movies: "Movie"
+        case .shows: "Episode"
+        default: "Movie,Video,MusicVideo,Episode"
+        }
+    }
+
     private func listing(_ query: [URLQueryItem], page: Page, path: String = "Items") async throws -> PagedResult<MediaItem> {
         let result: JFQueryResult = try await client.get(path, query + [
             URLQueryItem(name: "startIndex", value: "\(page.offset)"),

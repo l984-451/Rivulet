@@ -133,6 +133,7 @@ struct IOSPlexLibraryView: View {
     /// Only a tab root shows the avatar; a grid pushed from the Library list does not.
     var showsAccount = false
     @EnvironmentObject private var browse: IOSBrowseStore
+    @Environment(\.plexActions) private var actions
     @AppStorage private var sortRaw: String
     @State private var unwatchedOnly = false
     /// Every item's place, filled page by page as the grid scrolls, so the
@@ -196,6 +197,16 @@ struct IOSPlexLibraryView: View {
         .navigationTitle(browse.labels.title(library.title, providerID: library.providerID))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
+            // Shuffle follows the Unwatched filter.
+            if library.canShuffle {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if actions.preparingID == IOSPlexActions.shuffleID(providerID: library.providerID, itemID: library.id) {
+                        ProgressView()
+                    } else {
+                        Button("Shuffle", systemImage: "shuffle") { actions.shuffleLibrary(library, unwatchedOnly) }
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Picker("Sort By", selection: $sortRaw) {

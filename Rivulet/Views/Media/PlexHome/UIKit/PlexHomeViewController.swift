@@ -1806,6 +1806,13 @@ final class PlexHomeViewController: UIViewController {
         return dataStore.libraries.first(where: { $0.key == key })?.type
     }
 
+    /// The library the header's Shuffle plays: this page's provider library or Plex section, when it is video.
+    private var shuffleLibrary: MediaLibrary? {
+        guard case .library(let key, _) = mode else { return nil }
+        if let providerLibrary { return providerLibrary.canShuffle ? providerLibrary : nil }
+        return ShufflePlayback.library(for: .library(key: key))
+    }
+
     /// The sort menu: this library's options, the active one checked.
     private func sortMenu() -> UIMenu {
         let options = providerLibrary.map { library in
@@ -3203,7 +3210,11 @@ final class PlexHomeViewController: UIViewController {
                 sortName: gridSort.displayName,
                 sortMenu: sortMenu(),
                 view: gridShowsCollections ? .collections : .titles,
-                viewMenu: viewMenu
+                viewMenu: viewMenu,
+                onShuffle: shuffleLibrary.map { library in { [weak self] in
+                    guard let self else { return }
+                    ShufflePlayback.shuffle(library, from: self)
+                } }
             )
             return cell
 
@@ -4171,6 +4182,14 @@ final class PlexHomeViewController: UIViewController {
                                             shelfLocation: shelfLocation, canRefreshMetadata: canRefresh)
             if let provider {
                 sections = await Self.addingServerEntries(to: sections, for: item, provider: provider, from: self)
+            }
+            // A show shuffles every episode, beside Watch from Beginning.
+            if item.kind == .show, provider != nil, !sections.isEmpty {
+                let shuffle = TileMenuAction(title: "Shuffle", systemImage: "shuffle") { [weak self] in
+                    guard let self else { return }
+                    ShufflePlayback.shuffle(show: item, from: self)
+                }
+                sections[0].insert(shuffle, at: min(1, sections[0].count))
             }
             if let gridIndex, let entryGroup = playlistEntryActions(at: gridIndex, item: item) {
                 sections.insert(entryGroup, at: 0)

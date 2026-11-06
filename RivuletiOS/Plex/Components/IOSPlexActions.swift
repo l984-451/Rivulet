@@ -10,6 +10,10 @@ struct IOSPlexActions {
     var playFromBeginning: (MediaItem) -> Void = { _ in }
     /// Plays a playlist from its current entry, then on through the rest.
     var playQueue: (PlayQueue<MediaItem>) -> Void = { _ in }
+    /// Plays a video library's titles at random, unwatched only when the flag is set.
+    var shuffleLibrary: (MediaLibrary, Bool) -> Void = { _, _ in }
+    /// Plays every episode of a show at random.
+    var shuffleShow: (MediaItem) -> Void = { _ in }
     /// Adds to `playlist`, or asks for a name and makes a new one seeded with the item when nil.
     var addToPlaylist: (MediaItem, MediaPlaylist?) -> Void = { _, _ in }
     var open: (MediaItem) -> Void = { _ in }
@@ -24,6 +28,9 @@ struct IOSPlexActions {
     var delete: (MediaItem) -> Void = { _ in }
     /// `MediaItemRef.actionKey` of the item whose playback is being prepared, for a spinner.
     var preparingID: String?
+
+    /// `preparingID` while a shuffle of this library or show loads its titles.
+    static func shuffleID(providerID: String, itemID: String) -> String { "shuffle:\(providerID)/\(itemID)" }
 }
 
 extension EnvironmentValues {
@@ -56,6 +63,15 @@ private struct IOSPlexActionHost: ViewModifier {
                 play: { play($0) },
                 playFromBeginning: { play($0, fromBeginning: true) },
                 playQueue: playQueue,
+                shuffleLibrary: { library, unwatchedOnly in
+                    shuffle(providerID: library.providerID, itemID: library.id) {
+                        try await $0.shuffleQueue(for: library, unwatchedOnly: unwatchedOnly)
+                    }
+                },
+                shuffleShow: { show in
+                    let ref = show.ref
+                    shuffle(providerID: ref.providerID, itemID: ref.itemID) { try await $0.shuffleQueue(forShow: ref) }
+                },
                 addToPlaylist: { item, playlist in
                     if let playlist {
                         run(String(localized: "Couldn't Add to Playlist")) { try await browse.addToPlaylist(playlist, item: item) }
@@ -191,6 +207,27 @@ private struct IOSPlexActionHost: ViewModifier {
         }
     }
 
+    /// Loads a shuffle's titles, then plays them as a playlist. An empty result plays nothing.
+    /// `preparingID` holds while they load, so a second tap does nothing.
+    private func shuffle(providerID: String, itemID: String,
+                         _ load: @escaping @Sendable (any MediaProvider) async throws -> PlayQueue<MediaItem>?) {
+        guard preparingID == nil, let provider = browse.provider(for: providerID) else { return }
+        preparingID = IOSPlexActions.shuffleID(providerID: providerID, itemID: itemID)
+        Task {
+            do {
+                let queue = try await load(provider)
+                // Cleared first: playQueue refuses while anything is preparing, and sets its own.
+                preparingID = nil
+                if let queue { playQueue(queue) }
+            } catch let error where isCancellationError(error) {
+                preparingID = nil
+            } catch {
+                preparingID = nil
+                failure = (String(localized: "Couldn't Play"), error.localizedDescription)
+            }
+        }
+    }
+
     private func download(_ item: MediaItem) {
         guard IOSDownloadGate.canDownload(item.ref) else {
             failure = (String(localized: "Couldn't Download"), MediaProviderError.unreachable.localizedDescription)
@@ -266,6 +303,10 @@ struct IOSPlexItemMenu: View {
         }
         if isTitle, canPlay {
             Button("Watch from Beginning", systemImage: "arrow.counterclockwise") { actions.playFromBeginning(item) }
+        }
+        // The show page has its own Shuffle button and passes showsPlay false.
+        if showsPlay, canPlay, item.kind == .show {
+            Button("Shuffle", systemImage: "shuffle") { actions.shuffleShow(item) }
         }
         if showsDetails {
             Button("Details", systemImage: "info.circle") { actions.open(item) }

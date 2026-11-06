@@ -44,11 +44,11 @@ enum JellyfinPhotoMapper {
     }
 
     /// A photo's PremiereDate is the camera's wall clock stamped Z: read its
-    /// day in the device's zone. A clip's, and DateCreated, are instants.
-    static func date(_ dto: JFItem, kind: PhotoItem.Kind) -> Date? {
+    /// day in `zone`, the device's. A clip's, and DateCreated, are instants.
+    static func date(_ dto: JFItem, kind: PhotoItem.Kind, in zone: TimeZone = .current) -> Date? {
         if kind == .photo, let taken = dto.premiereDate,
            let day = try? Date(String(taken.prefix(10)),
-                               strategy: Date.ISO8601FormatStyle(timeZone: .current).year().month().day()) {
+                               strategy: Date.ISO8601FormatStyle(timeZone: zone).year().month().day()) {
             return day
         }
         return (dto.premiereDate ?? dto.dateCreated).flatMap(JellyfinMediaMapper.parseDate)

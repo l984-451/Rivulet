@@ -6,15 +6,15 @@ import XCTest
 
 /// Fixtures are entries from a photo section on PMS 1.43.4, trimmed of file paths.
 final class PlexPhotoMapperTests: XCTestCase {
-    private var zone: TimeZone!
-
-    // West of UTC, where a date parsed at UTC midnight shows as the day before.
-    override func setUp() {
-        zone = NSTimeZone.default
-        NSTimeZone.default = TimeZone(identifier: "America/Chicago")!
+    /// West of UTC, where a date parsed at UTC midnight shows as the day before. Passed in rather
+    /// than set as the default zone: the date parser and `Calendar.current` don't both follow
+    /// `NSTimeZone.default`, so that only held on a machine already in Chicago.
+    private static let chicago = TimeZone(identifier: "America/Chicago")!
+    private static var chicagoCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = chicago
+        return calendar
     }
-
-    override func tearDown() { NSTimeZone.default = zone }
 
     private func map(_ json: String) throws -> PhotoItem? {
         let meta = try JSONDecoder().decode(PlexMetadata.self, from: Data(json.utf8))
@@ -80,6 +80,10 @@ final class PlexPhotoMapperTests: XCTestCase {
         XCTAssertNil(photo.playable)
         let taken = Calendar.current.dateComponents([.year, .month, .day], from: try XCTUnwrap(photo.date))
         XCTAssertEqual([taken.year, taken.month, taken.day], [2024, 3, 2], "the day taken, in the device's zone")
+        let meta = try JSONDecoder().decode(PlexMetadata.self, from: Data(Self.photo.utf8))
+        let west = Self.chicagoCalendar.dateComponents([.year, .month, .day],
+                                                       from: try XCTUnwrap(PlexPhotoMapper.date(meta, in: Self.chicago)))
+        XCTAssertEqual([west.year, west.month, west.day], [2024, 3, 2], "and west of UTC")
 
         let thumb = query(photo.thumbnail)
         XCTAssertEqual(photo.thumbnail?.path, "/photo/:/transcode")

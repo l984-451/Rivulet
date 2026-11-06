@@ -10,15 +10,15 @@ import XCTest
 final class JellyfinPhotoMapperTests: XCTestCase {
     private let server = FakeJellyfinServer()
     private let library = MediaLibrary(id: "lib", providerID: "jellyfin:srv", title: "Photos", kind: .photos)
-    private var zone: TimeZone!
-
-    // West of UTC, where a wall-clock time read as UTC shows as the day before.
-    override func setUp() {
-        zone = NSTimeZone.default
-        NSTimeZone.default = TimeZone(identifier: "America/Chicago")!
+    /// West of UTC, where a wall-clock time read as UTC shows as the day before. Passed in rather
+    /// than set as the default zone: the date parser and `Calendar.current` don't both follow
+    /// `NSTimeZone.default`, so that only held on a machine already in Chicago.
+    private static let chicago = TimeZone(identifier: "America/Chicago")!
+    private static var chicagoCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = chicago
+        return calendar
     }
-
-    override func tearDown() { NSTimeZone.default = zone }
 
     // A sub-folder is a PhotoAlbum with no image; the library's own path is a Folder.
     private static let album = #"{"Name":"Trip","Id":"trip","DateCreated":"2001-07-17T18:31:23.0000000Z","IsFolder":true,"Type":"PhotoAlbum","RecursiveItemCount":6,"ImageTags":{},"MediaType":"Unknown"}"#
@@ -81,6 +81,9 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         let taken = map(Self.photo)?.date
         XCTAssertEqual(taken.map { Calendar.current.dateComponents([.year, .month, .day], from: $0) },
                        DateComponents(year: 2001, month: 1, day: 3))
+        let west = JellyfinPhotoMapper.date(JellyfinFixtures.decode(Self.photo), kind: .photo, in: Self.chicago)
+        XCTAssertEqual(west.map { Self.chicagoCalendar.dateComponents([.year, .month, .day], from: $0) },
+                       DateComponents(year: 2001, month: 1, day: 3), "and west of UTC")
     }
 
     func test_date_withoutEXIF_andForAClip_isAnInstant() {

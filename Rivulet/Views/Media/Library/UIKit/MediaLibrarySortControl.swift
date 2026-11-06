@@ -230,6 +230,20 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     private lazy var shuffleClearsTitle: NSLayoutConstraint = shuffleButton.leadingAnchor.constraint(
         greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16)
 
+    /// All or Unwatched, left of Sort: the iOS library's Filter menu. Shown with Sort.
+    private let filterButton: SortButton = {
+        let b = SortButton()
+        b.translatesAutoresizingMaskIntoConstraints = false
+        return b
+    }()
+    private lazy var filterClearsTitle: NSLayoutConstraint = filterButton.leadingAnchor.constraint(
+        greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 16)
+    /// Shuffle sits left of Filter while it shows, else left of Sort.
+    private lazy var shuffleBesideFilter: NSLayoutConstraint = shuffleButton.trailingAnchor.constraint(
+        equalTo: filterButton.leadingAnchor, constant: -16)
+    private lazy var shuffleBesideSort: NSLayoutConstraint = shuffleButton.trailingAnchor.constraint(
+        equalTo: sortButton.leadingAnchor, constant: -16)
+
     /// The sort button's trailing edge: beside the View button while both
     /// show, otherwise at the cell edge. Not a UIStackView: its hiding
     /// constraint (width 0, required) fights SortButton's required internal
@@ -247,7 +261,7 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setup()
-        for button in [shuffleButton, sortButton, viewButton] {
+        for button in [shuffleButton, filterButton, sortButton, viewButton] {
             button.isReachable = { [weak self] in self?.buttonsReachable() ?? true }
         }
         shuffleButton.addAction(UIAction { [weak self] _ in self?.onShuffle?() }, for: .primaryActionTriggered)
@@ -265,12 +279,18 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         contentView.addSubview(sortButton)
         contentView.addSubview(viewButton)
         contentView.addSubview(shuffleButton)
+        contentView.addSubview(filterButton)
 
         NSLayoutConstraint.activate([
-            // Shuffle: left of Sort, and shown only with it.
-            shuffleButton.trailingAnchor.constraint(equalTo: sortButton.leadingAnchor, constant: -16),
+            // Shuffle: left of Filter (or of Sort), and shown only with Sort.
+            shuffleBesideSort,
             shuffleButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             shuffleButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
+
+            // Filter: left of Sort, and shown only with it.
+            filterButton.trailingAnchor.constraint(equalTo: sortButton.leadingAnchor, constant: -16),
+            filterButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            filterButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
 
             // Title: left-aligned, vertically centered on the top text cluster.
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -306,16 +326,26 @@ final class MediaLibrarySortControl: UICollectionViewCell {
 
     // MARK: - Configure
 
-    /// In Collections the count reads "N collections" and the sort and shuffle
-    /// buttons hide, which also takes them out of the focus graph.
+    /// In Collections the count reads "N collections" and the sort, filter and shuffle
+    /// buttons hide, which also takes them out of the focus graph. `filterMenu` nil
+    /// leaves the filter out.
     func configure(title: String, count: Int, sortName: String, sortMenu: UIMenu,
-                   view: LibraryViewMode, viewMenu: UIMenu?, onShuffle: (() -> Void)? = nil) {
+                   view: LibraryViewMode, viewMenu: UIMenu?, onShuffle: (() -> Void)? = nil,
+                   filterMenu: UIMenu? = nil, unwatchedOnly: Bool = false) {
         titleLabel.text = title
         countLabel.text = view == .collections ? String(localized: "\(count) collections") : String(localized: "\(count) items")
         sortButton.configure(sortName: sortName)
         sortButton.menu = sortMenu
         sortButton.showsMenuAsPrimaryAction = true
         sortButton.isHidden = view == .collections
+        filterButton.configure(sortName: unwatchedOnly ? String(localized: "Unwatched") : String(localized: "All"),
+                               symbol: "line.3.horizontal.decrease")
+        filterButton.menu = filterMenu
+        filterButton.showsMenuAsPrimaryAction = true
+        filterButton.isHidden = sortButton.isHidden || filterMenu == nil
+        filterClearsTitle.isActive = !filterButton.isHidden
+        NSLayoutConstraint.deactivate([filterButton.isHidden ? shuffleBesideFilter : shuffleBesideSort])
+        NSLayoutConstraint.activate([filterButton.isHidden ? shuffleBesideSort : shuffleBesideFilter])
         self.onShuffle = onShuffle
         shuffleButton.isHidden = sortButton.isHidden || onShuffle == nil
         shuffleClearsTitle.isActive = !shuffleButton.isHidden
@@ -334,7 +364,7 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     private func buttonsReachable() -> Bool {
         guard let window, let focused = UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView else { return true }
         if focused.isDescendant(of: self) { return true }
-        let left = [shuffleButton, sortButton, viewButton].filter { !$0.isHidden }.map { $0.convert($0.bounds, to: window).minX }.min()
+        let left = [shuffleButton, filterButton, sortButton, viewButton].filter { !$0.isHidden }.map { $0.convert($0.bounds, to: window).minX }.min()
         guard let left else { return false }
         return focused.convert(focused.bounds, to: window).maxX > left
     }
@@ -343,6 +373,6 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     // this section rather than skipping past it entirely). A hidden sort button
     // is not focusable, so a programmatic request falls through to the View button.
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        [sortButton, viewButton, shuffleButton]
+        [sortButton, viewButton, filterButton, shuffleButton]
     }
 }

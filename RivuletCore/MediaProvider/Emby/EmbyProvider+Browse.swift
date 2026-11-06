@@ -165,7 +165,7 @@ extension EmbyProvider {
         switch parent.type {
         case "Series":
             let result: EmbyQueryResult = try await client.get("Shows/\(itemRef.itemID)/Seasons", [userQuery, Self.listFields])
-            return map(result.items)
+            return SeasonOrder.specialsLast(map(result.items), seasonNumber: \.seasonNumber)
         case "Season":
             guard let seriesID = parent.seriesId else { return [] }
             return try await episodes(of: seriesID.value, seasonID: itemRef.itemID)
@@ -175,12 +175,12 @@ extension EmbyProvider {
     }
 
     func allEpisodes(of showRef: MediaItemRef) async throws -> [MediaItem] {
-        try await episodes(of: showRef.itemID, seasonID: nil)
+        SeasonOrder.specialsLast(try await episodes(of: showRef.itemID, seasonID: nil), seasonNumber: \.seasonNumber)
     }
 
     private var userQuery: URLQueryItem { URLQueryItem(name: "UserId", value: userID) }
 
-    /// Season 0 comes first from the server. A `Virtual` location is an unaired placeholder.
+    /// A `Virtual` location is an unaired placeholder.
     private func episodes(of seriesID: String, seasonID: String?) async throws -> [MediaItem] {
         var params = [userQuery, Self.listFields]
         if let seasonID { params.append(URLQueryItem(name: "SeasonId", value: seasonID)) }

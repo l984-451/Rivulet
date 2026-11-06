@@ -193,10 +193,10 @@ final class EmbyProviderTests: XCTestCase {
         XCTAssertEqual(members.map(\.title), ["12 Years a Slave", "28 Years Later"])
     }
 
-    func test_allEpisodes_keepSeasonZeroFirst() async throws {
+    func test_allEpisodes_putSeasonZeroLast() async throws {
         server.respond("/Shows/13/Episodes", body: EmbyTestJSON.merged([EmbyBrowseFixtures.specialsEpisodes, EmbyBrowseFixtures.episodesAbbott]))
         let episodes = try await provider().allEpisodes(of: ref("13"))
-        XCTAssertEqual(episodes.map(\.seasonNumber), [0, 1, 1, 1])
+        XCTAssertEqual(episodes.map(\.seasonNumber), [1, 1, 1, 0])
         XCTAssertNil(query(try XCTUnwrap(server.requests.first))["SeasonId"])
     }
 

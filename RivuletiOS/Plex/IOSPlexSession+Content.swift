@@ -30,8 +30,10 @@ extension IOSPlexSession {
     func children(of item: PlexMetadata) async throws -> [PlexMetadata] {
         guard let key = item.ratingKey else { return [] }
         let (serverURL, token) = try configuration(serverID: item.serverID)
-        return Self.onServer(try await network.getChildren(serverURL: serverURL, authToken: token, ratingKey: key), item.serverID)
+        let kids = Self.onServer(try await network.getChildren(serverURL: serverURL, authToken: token, ratingKey: key), item.serverID)
             .sorted { ($0.index ?? 0) < ($1.index ?? 0) }
+        // A show's seasons: Specials after the last season (#534).
+        return SeasonOrder.specialsLast(kids) { $0.type == "season" ? $0.index : nil }
     }
 
     /// The episode Play should start for a show or season: On Deck when Plex

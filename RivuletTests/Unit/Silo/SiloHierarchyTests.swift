@@ -63,7 +63,7 @@ final class SiloHierarchyTests: XCTestCase {
         let season = try XCTUnwrap(detail.item.parentRef)
         let episodes = try await provider.children(of: season)
 
-        let next = UniversalPlayerViewModel.nextEpisode(after: detail.item, in: episodes, nextSeasonEpisodes: nil)
+        let next = EpisodePicker.nextEpisode(after: detail.item, in: episodes, nextSeasonEpisodes: nil)
 
         XCTAssertEqual(next?.ref, MediaItemRef(providerID: provider.id, itemID: "episode-b"),
                        "A fresh episode detail, not just a season listing, must support the player's Up Next lookup")

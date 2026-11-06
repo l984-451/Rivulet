@@ -853,6 +853,7 @@
         }
       }
     },
+    "Browse" : {},
     "Button shows a skip button, Automatic skips on its own, and Off shows nothing." : {
       "localizations" : {
         "de" : {
@@ -1395,6 +1396,7 @@
         }
       }
     },
+    "Couldn't Load Recommended" : {},
     "Couldn't Play" : {
       "localizations" : {
         "de" : {
@@ -3266,6 +3268,7 @@
         }
       }
     },
+    "Nothing Recommended" : {},
     "Nothing Unwatched" : {
       "localizations" : {
         "de" : {
@@ -3536,6 +3539,8 @@
         }
       }
     },
+    "Page" : {},
+    "Page, %@" : {},
     "PIN" : {
       "localizations" : {
         "de" : {
@@ -4022,6 +4027,7 @@
         }
       }
     },
+    "Recommended" : {},
     "Reset" : {},
     "Reset Hero" : {},
     "Reset Home Rows?" : {},
@@ -5197,6 +5203,7 @@
         }
       }
     },
+    "Switch to Browse to see every title." : {},
     "The hero shows Trending only, with no playlists." : {},
     "The server didn't accept the sign-in." : {
       "localizations" : {

@@ -33,6 +33,12 @@ final class HomeHeroTests: XCTestCase {
                        trending: trending, personal: personal, heroPins: heroPins)
     }
 
+    func test_libraryItems_skipContinueWatchingRows() {
+        let rows = [shelf("m.continueWatching", [item("c")]), shelf("movie.inprogress", [item("p")]),
+                    shelf("m.recentlyAdded", [item("r1"), item("r2"), item("r3")])]
+        XCTAssertEqual(HomeHero.libraryItems(rows).map(\.ref.itemID), ["r1", "r2"])
+    }
+
     func test_trendingFillsWhenNothingElseIsChosen() {
         let result = items([.trending], continueWatching: [item("c")], shelves: [shelf("recentlyadded", [item("r")])],
                            trending: [item("t1"), item("t2")])

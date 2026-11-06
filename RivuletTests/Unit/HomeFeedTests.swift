@@ -29,6 +29,16 @@ final class HomeFeedTests: XCTestCase {
                  items: items.map { item($0, provider: provider) }, pagingKey: "/hubs/\(id)", isPromoted: promoted)
     }
 
+    // MARK: - libraryRows
+
+    func test_libraryRows_keepsTheServersOrderAndDropsEmptyRows() async throws {
+        let jf = StubMediaProvider(id: "jellyfin:s", kind: .jellyfin)
+        jf.hubsByLibrary = ["m": [hub("m.recentlyAdded", provider: "jellyfin:s"), hub("m.empty", provider: "jellyfin:s", items: []),
+                                  hub("m.continueWatching", provider: "jellyfin:s")]]
+        let rows = try await HomeFeed.libraryRows(jf, library("m", provider: "jellyfin:s"))
+        XCTAssertEqual(rows.map(\.id), ["m.recentlyAdded", "m.continueWatching"])
+    }
+
     // MARK: - fetch
 
     func test_fetchSelected_keepsPromotedHubsOfPinnedLibrariesOnly() async throws {

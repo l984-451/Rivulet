@@ -374,7 +374,8 @@ struct IOSPlexHubRoute: Hashable {
     /// fixed set, so neither pages (`MediaHub.pagingKey`).
     var pages: Bool { hub.pagingKey != nil }
 
-    var isContinueWatching: Bool { hub.id == IOSBrowseStore.continueWatchingID }
+    /// Only the merged row, which has no server; a library's own in-progress row keeps its items.
+    var isContinueWatching: Bool { hub.id == IOSBrowseStore.continueWatchingID && hub.providerID.isEmpty }
 }
 
 /// "Title ›" heading that pushes the full grid.
@@ -558,9 +559,10 @@ struct IOSPlexShelfView: View {
 
     var body: some View {
         let route = IOSPlexHubRoute(hub: hub)
-        if route.isContinueWatching {
-            // One row across every server, so no badge.
-            IOSPlexRail(title: hub.title, route: route, kind: .landscape, items: items) { item, width in
+        if route.isContinueWatching || hub.isContinueWatchingFamily {
+            // The merged row spans every server, so no badge.
+            IOSPlexRail(title: hub.title, route: route, kind: .landscape, items: items,
+                        badge: route.isContinueWatching ? nil : browse.labels.badge(providerID: hub.providerID)) { item, width in
                 IOSPlexContinueCard(item: item, width: width)
                     .task(id: width) { await prefetchAhead(of: item, width: width) }
             }

@@ -104,6 +104,11 @@ nonisolated enum HomeFeed {
         }
     }
 
+    /// A library's own page of rows (its Recommended), in the server's order, empty rows dropped.
+    static func libraryRows(_ provider: any MediaProvider, _ library: MediaLibrary) async throws -> [MediaHub] {
+        try await provider.hubs(in: library).filter { !$0.items.isEmpty }
+    }
+
     /// The merged Continue Watching row: one card per title across servers.
     @MainActor
     static func continueWatchingCards(_ rows: [[MediaItem]], row: ContinueWatchingRow = .shared) -> [ContinueWatchingMerge.Card<MediaItem>] {

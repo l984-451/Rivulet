@@ -380,11 +380,23 @@ final class EmbyProviderTests: XCTestCase {
         server.respond("\(items)/Latest", body: EmbyBrowseFixtures.latestGrouped)
         let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
         let hubs = try await p.hubs(in: library)
-        XCTAssertEqual(hubs.map(\.id), ["3.recentlyAdded"])
+        XCTAssertEqual(hubs.map(\.id), ["3.recentlyAdded"], "no Resume answer costs only that row")
         XCTAssertEqual(hubs.first?.items.count, 6)
         let one = try await p.recentlyAddedHub(in: library)
         XCTAssertEqual(one?.id, "3.recentlyAdded")
-        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Limit"], "24")
+        let latest = try XCTUnwrap(server.requests.first { $0.url!.path == "\(items)/Latest" })
+        XCTAssertEqual(query(latest)["Limit"], "24")
+    }
+
+    func test_libraryHubs_putsTheLibrarysResumeRowFirst() async throws {
+        server.respond("\(items)/Resume", body: EmbyBrowseFixtures.resume)
+        server.respond("\(items)/Latest", body: EmbyBrowseFixtures.latestGrouped)
+        let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
+        let hubs = try await provider().hubs(in: library)
+        XCTAssertEqual(hubs.map(\.id), ["3.continueWatching", "3.recentlyAdded"])
+        let resume = try XCTUnwrap(server.requests.first { $0.url!.path == "\(items)/Resume" })
+        XCTAssertEqual(query(resume)["ParentId"], "3")
+        XCTAssertEqual(query(resume)["MediaTypes"], "Video")
     }
 
     func test_recentlyAddedHub_emptyLibraryHasNoHub() async throws {

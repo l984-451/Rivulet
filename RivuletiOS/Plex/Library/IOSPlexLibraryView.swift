@@ -127,11 +127,126 @@ struct IOSPlexLibrariesView: View {
     }
 }
 
-/// One library as a paged poster grid with Sort and Filter menus.
+/// One library: Recommended (its own rows under a hero, like Home) or Browse (every title).
+/// The page is remembered per library.
 struct IOSPlexLibraryView: View {
     let library: MediaLibrary
-    /// Only a tab root shows the avatar; a grid pushed from the Library list does not.
+    /// Only a tab root shows the avatar; a library pushed from the Library list does not.
     var showsAccount = false
+    @EnvironmentObject private var browse: IOSBrowseStore
+    @AppStorage private var pageRaw: String
+    /// Same key as the tvOS library hero setting.
+    @AppStorage("showLibraryHero") private var showHero = true
+    @State private var rows: [MediaHub] = []
+
+    enum Page: String, CaseIterable {
+        case recommended, browse
+
+        var title: String {
+            switch self {
+            case .recommended: String(localized: "Recommended")
+            case .browse: String(localized: "Browse")
+            }
+        }
+    }
+
+    init(library: MediaLibrary, showsAccount: Bool = false) {
+        self.library = library
+        self.showsAccount = showsAccount
+        _pageRaw = AppStorage(wrappedValue: Page.recommended.rawValue, "iosLibraryPage.\(library.settingKey)")
+    }
+
+    private var page: Page { Page(rawValue: pageRaw) ?? .recommended }
+    private var heroItems: [MediaItem] { page == .recommended && showHero ? HomeHero.libraryItems(rows) : [] }
+
+    var body: some View {
+        let heroItems = heroItems
+        Group {
+            switch page {
+            case .recommended: IOSPlexLibraryRecommendedView(library: library, rows: $rows, heroItems: heroItems)
+            case .browse: IOSPlexLibraryBrowseView(library: library)
+            }
+        }
+        .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID))
+        .toolbar {
+            // A pill beside Back naming the page; it opens the other.
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Picker("Page", selection: $pageRaw) {
+                        ForEach(Page.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(page.title)
+                        Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                    }
+                    .fontWeight(.semibold)
+                }
+                .accessibilityLabel(Text("Page, \(page.title)"))
+            }
+            if showsAccount { IOSAccountToolbarItem() }
+        }
+    }
+}
+
+/// Recommended: the library's own rows from its server. They live in the parent,
+/// so switching pages and back keeps them.
+private struct IOSPlexLibraryRecommendedView: View {
+    let library: MediaLibrary
+    @Binding var rows: [MediaHub]
+    let heroItems: [MediaItem]
+    @EnvironmentObject private var browse: IOSBrowseStore
+    @State private var isLoading = false
+    @State private var error: String?
+    @State private var loadedRevision: Int?
+
+    var body: some View {
+        Group {
+            if !rows.isEmpty {
+                IOSPlexHeroFeed(rows: rows, heroItems: heroItems) { await reload() }
+            } else {
+                ScrollView {
+                    placeholder.containerRelativeFrame([.horizontal, .vertical])
+                }
+                .refreshable { await reload() }
+            }
+        }
+        .task(id: browse.watchStateRevision) {
+            guard loadedRevision != browse.watchStateRevision else { return }
+            await reload()
+        }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if let error {
+            IOSPlexErrorView(title: "Couldn't Load Recommended", message: error, offersDownloads: true) { await reload() }
+        } else if isLoading || loadedRevision == nil {
+            ProgressView()
+        } else {
+            ContentUnavailableView("Nothing Recommended", systemImage: library.icon,
+                                   description: Text("Switch to Browse to see every title."))
+        }
+    }
+
+    private func reload() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            guard let provider = browse.provider(for: library.providerID) else { throw MediaProviderError.unreachable }
+            rows = try await HomeFeed.libraryRows(provider, library)
+            error = nil
+            loadedRevision = browse.watchStateRevision
+        } catch let error where isCancellationError(error) {
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// Browse: the whole library as a paged poster grid with Sort and Filter menus.
+private struct IOSPlexLibraryBrowseView: View {
+    let library: MediaLibrary
     @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.plexActions) private var actions
     @AppStorage private var sortRaw: String
@@ -154,9 +269,8 @@ struct IOSPlexLibraryView: View {
         (.ratingDesc, String(localized: "Rating"))
     ]
 
-    init(library: MediaLibrary, showsAccount: Bool = false) {
+    init(library: MediaLibrary) {
         self.library = library
-        self.showsAccount = showsAccount
         _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.settingKey)")
     }
 
@@ -194,8 +308,6 @@ struct IOSPlexLibraryView: View {
                 .refreshable { await refetchLoaded() }
             }
         }
-        .navigationTitle(browse.labels.title(library.title, providerID: library.providerID))
-        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             // Shuffle follows the Unwatched filter.
             if library.canShuffle {
@@ -227,7 +339,6 @@ struct IOSPlexLibraryView: View {
                 }
                 .tint(unwatchedOnly ? .accentColor : nil)
             }
-            if showsAccount { IOSAccountToolbarItem() }
         }
         .task(id: "\(queryKey)|\(browse.watchStateRevision)") {
             // Nothing claimed and nothing shown: a first page that was cancelled when the view left.

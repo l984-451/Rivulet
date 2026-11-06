@@ -65,6 +65,11 @@ nonisolated enum HomeHero {
             .prefix(6))
     }
 
+    /// A library page's slides: its rows' leading titles, Continue Watching left out.
+    static func libraryItems(_ rows: [MediaHub]) -> [MediaItem] {
+        rowItems(rows.filter { !$0.isContinueWatchingFamily })
+    }
+
     /// Each title once, the first copy standing (the selected server's, since it comes first).
     /// Two copies are one title when they share an external id (per kind: a movie and a show can share a
     /// TMDB number) or, failing that, a kind, a normalized title and a year.

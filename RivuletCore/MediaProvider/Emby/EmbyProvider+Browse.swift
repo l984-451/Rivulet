@@ -359,8 +359,17 @@ extension EmbyProvider {
     /// Emby has no curated hubs. HomeComposer synthesizes rails from continueWatching + recentlyAdded.
     func hubs() async throws -> [MediaHub] { [] }
 
+    /// The library page's rows: its Resume entries (a failure costs only that row), then Recently Added.
     func hubs(in library: MediaLibrary) async throws -> [MediaHub] {
-        try await recentlyAddedHub(in: library).map { [$0] } ?? []
+        async let resumed = try? await resumeItems(parentID: library.id, limit: 24)
+        let added = try await recentlyAddedHub(in: library)
+        var hubs: [MediaHub] = []
+        if let resumed = await resumed, !resumed.isEmpty {
+            hubs.append(MediaHub(id: "\(library.id).continueWatching", providerID: id,
+                                 title: String(localized: "Continue Watching"), style: .shelf, items: map(resumed)))
+        }
+        if let added { hubs.append(added) }
+        return hubs
     }
 
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {

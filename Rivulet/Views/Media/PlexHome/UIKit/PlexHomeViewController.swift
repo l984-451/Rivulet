@@ -24,7 +24,7 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// button) and the paginated poster grid below the hub rows.
     static let sortHeader = HomeSectionID(raw: "sortHeader")
     static let grid = HomeSectionID(raw: "grid")
-    /// Favorites-mode-only: the two titled grids, movies then shows.
+    /// Favorites-mode-only: the two rows, movies then shows.
     static let favoriteMovies = HomeSectionID(raw: "favorites.movies")
     static let favoriteShows = HomeSectionID(raw: "favorites.shows")
     /// Library-mode-only: the library's Collections shelf. Each library key
@@ -356,9 +356,9 @@ struct HomeSectionData {
     /// passes no title (its sort header names the library); the collection
     /// page passes the collection's title, drawn in the Watchlist page's
     /// title style.
-    static func grid(items: [MediaItem], title: String? = nil, id: HomeSectionID = .grid) -> HomeSectionData {
+    static func grid(items: [MediaItem], title: String? = nil) -> HomeSectionData {
         HomeSectionData(
-            id: id,
+            id: .grid,
             kind: .grid,
             title: title,
             headerStyle: title == nil ? .swiftUIInfiniteRow : .swiftUIWatchlist,
@@ -1601,7 +1601,7 @@ final class PlexHomeViewController: UIViewController {
                 for (offset, item) in result.items.enumerated() where slots.contains(start + offset) {
                     self.gridItems[start + offset] = item
                 }
-                // Favorites split one list into two grids keyed by item: rebuild and repaint them.
+                // Favorites show the list as two rows, not a grid of slots: rebuild and repaint them.
                 if case .favorites = self.mode {
                     self.applySnapshot(animated: false)
                     self.reconfigureFavoriteTiles()
@@ -1635,7 +1635,7 @@ final class PlexHomeViewController: UIViewController {
 
     /// Re-vend the cells of a landed page. Slot identifiers never change, so
     /// `applySnapshot` alone leaves the placeholder cards on screen.
-    /// Repaints every favorites tile in place: a reload keeps the ids, not the watch state.
+    /// Repaints both favorites rows in place: a reload keeps their ids, not their tiles.
     private func reconfigureFavoriteTiles() {
         var snap = dataSource.snapshot()
         let ids = [HomeSectionID.favoriteMovies, .favoriteShows]
@@ -3743,9 +3743,6 @@ final class PlexHomeViewController: UIViewController {
                 // change this identity; applySnapshot pushes new counts to
                 // visible rows afterward (updateVisibleShelfRows).
                 ids = [HomeItemID(sectionID: section.id, itemID: Self.shelfRowItemToken)]
-            case .grid where section.id == .favoriteMovies || section.id == .favoriteShows:
-                // Whole lists split by kind: an item's own id, so a removal deletes exactly its tile.
-                ids = section.items.map { HomeItemID(sectionID: section.id, itemID: "\($0.ref.providerID)|\($0.ref.itemID)") }
             case .grid:
                 // Positional identity: slot N is "grid-N" whether it holds an
                 // item or a placeholder, so a page landing under the focused
@@ -4467,13 +4464,16 @@ final class PlexHomeViewController: UIViewController {
         if case .playlists = mode {
             return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems))]
         }
-        // Every server's favorites: a Movies grid, then a Shows grid, each by title.
+        // Every server's favorites as Home's rows: Movies, then Shows, each by title.
+        // A Recently Added-kind row, so tap, tile menu and captions are Home's.
         if case .favorites = mode {
             let items = gridItems.compactMap { $0 }
-            let movies = items.filter { $0.kind == .movie }
-            let shows = items.filter { $0.kind != .movie }
-            return (movies.isEmpty ? [] : [.grid(items: movies, title: String(localized: "Movies"), id: .favoriteMovies)])
-                + (shows.isEmpty ? [] : [.grid(items: shows, title: String(localized: "Shows"), id: .favoriteShows)])
+            func row(_ id: HomeSectionID, _ title: String, _ items: [MediaItem]) -> [HomeSectionData] {
+                items.isEmpty ? [] : [.hub(id: id, title: title, items: items, isContinueWatching: false,
+                                           hubKey: nil, hubIdentifier: nil)]
+            }
+            return row(.favoriteMovies, String(localized: "Movies"), items.filter { $0.kind == .movie })
+                + row(.favoriteShows, String(localized: "Shows"), items.filter { $0.kind != .movie })
         }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
         if case .playlist(let playlist) = mode {

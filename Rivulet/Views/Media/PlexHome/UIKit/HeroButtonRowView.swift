@@ -149,8 +149,22 @@ final class HeroButtonRowView: UIView {
         nextButton.isFocusEnabled = on
     }
 
+    /// When focus last landed on Next. The engine moves focus before the press or
+    /// swipe reaches us, so the Right that arrived on Next looks like one past it.
+    private var nextFocusedAt: CFTimeInterval = 0
+    private static let nextArrivalSettle: CFTimeInterval = 0.3
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedView === nextButton { nextFocusedAt = CACurrentMediaTime() }
+    }
+
     /// Next is the last button, so the engine has no Right move from it to make.
-    private var pagesOnRight: Bool { nextButton.isFocused && !nextButton.isHidden }
+    private var pagesOnRight: Bool {
+        nextButton.isFocused && !nextButton.isHidden
+            && CACurrentMediaTime() - nextFocusedAt > Self.nextArrivalSettle
+    }
 
     // A Right the engine declined (nothing past Next) reaches here; focus stays on Next.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

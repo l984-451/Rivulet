@@ -39,10 +39,18 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
 
     // MARK: - Plex paths
 
-    func test_isJellyfin() {
-        XCTAssertTrue(MediaItemRef(providerID: "jellyfin:srv", itemID: "x").isJellyfin)
-        XCTAssertFalse(MediaItemRef(providerID: "plex:abc", itemID: "1").isJellyfin)
-        XCTAssertFalse(MediaItemRef(providerID: "tmdb", itemID: "1").isJellyfin)
+    func test_kindOfAProviderID_comesFromTheRegistry_elseTheIDsOwnPrefix() {
+        let registry = MediaProviderRegistry.shared
+        let extra = StubMediaProvider(id: "plex:office", kind: .plex)
+        registry.register(extra)
+        defer { registry.unregister(providerID: extra.id) }
+
+        XCTAssertEqual(registry.kind(of: "plex:office"), .plex)
+        XCTAssertEqual(registry.kind(of: "jellyfin:gone"), .jellyfin, "a signed-out server's tiles keep their kind")
+        XCTAssertNil(registry.kind(of: "tmdb"))
+        XCTAssertEqual(MediaProviderKind(providerID: "jellyfin:srv"), .jellyfin)
+        XCTAssertNil(MediaProviderKind(providerID: "jellyfinish:srv"))
+        XCTAssertNil(MediaProviderKind(providerID: "plex"))
     }
 
     // MARK: - Tile menu
@@ -87,13 +95,23 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
 
     // MARK: - Library page
 
-    func test_providerSortOptions_matchPlexMinusResolution() {
-        XCTAssertEqual(PlexHomeViewController.providerSortOptions(for: .movies),
+    /// Jellyfin takes the seam's default: Plex's list minus resolution.
+    func test_sortOptions_jellyfinMatchesPlexMinusResolution() {
+        let jellyfin = JellyfinProvider(serverID: "srv", displayName: "NAS", userID: "u",
+                                        client: JellyfinClient(baseURL: JellyfinFixtures.baseURL, token: "t"))
+        XCTAssertEqual(jellyfin.sortOptions(for: .movies),
                        LibrarySortOption.options(for: "movie").filter { $0 != .resolutionDesc && $0 != .resolutionAsc })
-        XCTAssertEqual(PlexHomeViewController.providerSortOptions(for: .shows),
-                       LibrarySortOption.options(for: "show"))
-        XCTAssertEqual(PlexHomeViewController.providerSortOptions(for: .mixed),
-                       LibrarySortOption.options(for: nil))
+        XCTAssertEqual(jellyfin.sortOptions(for: .shows), LibrarySortOption.options(for: "show"))
+        XCTAssertEqual(jellyfin.sortOptions(for: .mixed), LibrarySortOption.options(for: nil))
+    }
+
+    /// The views ask the provider through the protocol, so a server that can
+    /// sort differently takes its own list.
+    func test_sortOptions_aProviderCanOverrideTheDefault() {
+        let custom = StubMediaProvider(id: "x:1", kind: .jellyfin)
+        custom.sortOverride = [.titleAsc, .resolutionDesc]
+        let asProtocol: any MediaProvider = custom
+        XCTAssertEqual(asProtocol.sortOptions(for: .movies), [.titleAsc, .resolutionDesc])
     }
 
     func test_providerSort_mapsEveryOfferedOption() {
@@ -194,7 +212,7 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         }
         let rail = PlexHomeViewController.homeRail(
             plex: [row("plex-cw", cw: true), lib("angel-movies", "1"), lib("pin", nil), lib("angel-tv", "2")],
-            jellyfin: [lib("test-movies", "plex:test/1")],
+            otherServers: [lib("test-movies", "plex:test/1")],
             libraryOrder: ["1", "plex:test/1", "2"])
         XCTAssertEqual(rail.map(\.row.id), ["plex-cw", "angel-movies", "pin", "test-movies", "angel-tv"])
     }
@@ -202,20 +220,31 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     func test_homeRail_pairsContinueWatching_thenEachServersLibraryRows_pinsInPlace() {
         let rail = PlexHomeViewController.homeRail(
             plex: [row("plex-cw", cw: true), row("plex-movies"), row("plex-tv"), row("pin", pin: true)],
-            jellyfin: [row("jf-cw", cw: true), row("jf-movies")])
+            otherServers: [row("jellyfin:srv|cw", cw: true), row("jellyfin:srv|movies")])
 
-        XCTAssertEqual(rail.map(\.row.id), ["plex-cw", "jf-cw", "plex-movies", "plex-tv", "pin", "jf-movies"])
+        XCTAssertEqual(rail.map(\.row.id),
+                       ["plex-cw", "jellyfin:srv|cw", "plex-movies", "plex-tv", "pin", "jellyfin:srv|movies"])
         XCTAssertEqual(rail.map(\.kind), [.plex, .jellyfin, .plex, .plex, .plex, .jellyfin])
+    }
+
+    /// An extra Plex server's rows are Plex's, not tagged with the one other kind that exists.
+    func test_homeRail_tagsEachRowWithItsServersRealKind() {
+        let rail = PlexHomeViewController.homeRail(
+            plex: [row("plex-movies")],
+            otherServers: [row("plex:office|1.recentlyAdded"), row("jellyfin:srv|2.recentlyAdded"),
+                           row("plex:gone|3.recentlyAdded")],
+            kindOf: { $0 == "plex:gone" ? nil : MediaProviderKind(providerID: $0) })
+        XCTAssertEqual(rail.map(\.kind), [.plex, .plex, .jellyfin, .plex])
     }
 
     func test_homeRail_plexOnly_keepsEachLibrarysPinsAfterItsRows() {
         let plex = [row("plex-cw", cw: true), row("plex-movies"), row("pin", pin: true), row("plex-tv")]
-        let rail = PlexHomeViewController.homeRail(plex: plex, jellyfin: [])
+        let rail = PlexHomeViewController.homeRail(plex: plex, otherServers: [])
         XCTAssertEqual(rail.map(\.row.id), ["plex-cw", "plex-movies", "pin", "plex-tv"])
     }
 
     func test_homeRail_jellyfinOnly() {
-        let rail = PlexHomeViewController.homeRail(plex: [], jellyfin: [row("jf-cw", cw: true), row("jf-movies")])
+        let rail = PlexHomeViewController.homeRail(plex: [], otherServers: [row("jf-cw", cw: true), row("jf-movies")])
         XCTAssertEqual(rail.map(\.row.id), ["jf-cw", "jf-movies"])
     }
 
@@ -246,6 +275,22 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         let ref = MediaItemRef(providerID: provider.id, itemID: "1")
         XCTAssertEqual(PlexHomeViewController.sourceBadge(for: ref, labelsServers: true), "Stub")
         XCTAssertEqual(PlexHomeViewController.serverName(providerID: nil, kind: .jellyfin), "Stub")
+    }
+
+    /// Without an id, a kind with several servers must not name an arbitrary one.
+    func test_serverName_withoutAnID_doesNotPickBlindlyAmongSeveral() {
+        let registry = MediaProviderRegistry.shared
+        let first = StubMediaProvider(id: "jellyfin:one", kind: .jellyfin)
+        let second = StubMediaProvider(id: "jellyfin:two", kind: .jellyfin)
+        registry.register(first)
+        registry.register(second)
+        defer { registry.unregister(providerID: first.id); registry.unregister(providerID: second.id) }
+
+        XCTAssertEqual(PlexHomeViewController.serverName(providerID: nil, kind: .jellyfin), "Jellyfin")
+        XCTAssertEqual(PlexHomeViewController.serverName(providerID: "jellyfin:two", kind: .jellyfin), "Stub (Jellyfin)",
+                       "two servers with one name say their type")
+        XCTAssertEqual(PlexHomeViewController.serverName(providerID: "jellyfin:missing", kind: .jellyfin), "Jellyfin",
+                       "a server no longer registered is not swapped for another of its kind")
     }
 
     // MARK: - Settings server headers
@@ -288,29 +333,29 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         let down: Result<[PlexMetadata], Error> = .failure(URLError(.timedOut))
         let found: Result<[MediaItem], Error> = .success([JellyfinFixtures.mediaItem("m1")])
         let none: Result<[MediaItem], Error> = .success([])
-        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: down, jellyfin: found),
+        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: found),
                      "one server down must not hide the other's results")
-        XCTAssertNotNil(PlexHomeViewController.searchErrorMessage(plex: down, jellyfin: none),
+        XCTAssertNotNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: none),
                         "'No results' would be a lie while a server is down")
-        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success([]), jellyfin: none))
+        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success([]), otherServers: none))
     }
 
     // MARK: - Home hero
 
     func test_homeHeroSource() {
-        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: true, jellyfinSignedIn: false), .plex)
-        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: false, jellyfinSignedIn: true), .jellyfin)
-        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: true, jellyfinSignedIn: true), .both)
-        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: false, jellyfinSignedIn: false), .none)
+        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: true, otherServersSignedIn: false), .plex)
+        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: false, otherServersSignedIn: true), .otherServers)
+        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: true, otherServersSignedIn: true), .both)
+        XCTAssertEqual(PlexHomeViewController.homeHeroSource(plexSignedIn: false, otherServersSignedIn: false), .none)
     }
 
     func test_mixedHeroItems_alternatesAndCaps() {
         let plex = (1...6).map { JellyfinFixtures.mediaItem("p\($0)", providerID: "plex:a") }
         let jellyfin = (1...6).map { JellyfinFixtures.mediaItem("j\($0)") }
-        let mixed = PlexHomeViewController.mixedHeroItems(plex: plex, jellyfin: jellyfin, cap: 10)
+        let mixed = PlexHomeViewController.mixedHeroItems(plex: plex, otherServers: jellyfin, cap: 10)
         XCTAssertEqual(mixed.prefix(4).map(\.ref.itemID), ["p1", "j1", "p2", "j2"])
         XCTAssertEqual(mixed.count, 10)
-        XCTAssertEqual(PlexHomeViewController.mixedHeroItems(plex: [], jellyfin: jellyfin, cap: 10).map(\.ref.itemID),
+        XCTAssertEqual(PlexHomeViewController.mixedHeroItems(plex: [], otherServers: jellyfin, cap: 10).map(\.ref.itemID),
                        jellyfin.map(\.ref.itemID))
     }
 }

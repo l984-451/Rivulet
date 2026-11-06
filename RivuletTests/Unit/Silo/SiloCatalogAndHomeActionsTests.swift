@@ -3,6 +3,47 @@ import XCTest
 
 @MainActor
 final class SiloCatalogAndHomeActionsTests: XCTestCase {
+    func testGenericDownloadPermissionsRefuseSiloWithoutPlanningPlayback() async throws {
+        let server = SiloAuthTestServer()
+        let client = SiloClient(baseURL: URL(string: "https://silo.invalid")!, profileID: "profile-a",
+                                transport: server.transport)
+        let provider: any MediaProvider = SiloProvider(
+            serverID: "server-a", displayName: "Synthetic", profileID: "profile-a", client: client)
+        var permissions = DownloadPermissions()
+        await permissions.ask([provider])
+        XCTAssertTrue(permissions.answered.contains(provider.id))
+        XCTAssertFalse(permissions.allowed.contains(provider.id))
+        do {
+            _ = try await provider.downloadSource(
+                for: MediaItemRef(providerID: provider.id, itemID: "movie:one"), sourceID: nil)
+            XCTFail("Silo must not offer a playback plan as an offline download.")
+        } catch let error as MediaProviderError {
+            guard case .backendSpecific = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        let requests = await server.requests()
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    func testGenericHubPagingUsesNativeKeyInsteadOfDisplayIdentifier() async throws {
+        let server = SiloAuthTestServer()
+        await server.respond("GET", "/api/v2/library/library-a/layout", [.init(body: #"{"sections":[]}"#)])
+        await server.respond("GET", "/api/v2/catalog", [.init(body:
+            #"{"items":[],"total":0,"page":{"has_more":false,"next_cursor":null}}"#)])
+        let client = SiloClient(baseURL: URL(string: "https://silo.invalid")!, profileID: "profile-a",
+                                transport: server.transport)
+        let provider = SiloProvider(serverID: "server-a", displayName: "Synthetic", profileID: "profile-a", client: client)
+        let key = try SiloHubRoute(scope: "library", sectionId: "recent", libraryId: "library-a").identifier()
+        let hub = MediaHub(id: "\(provider.id)|display-row", providerID: provider.id, title: "Recent",
+                           style: .shelf, items: [], pagingKey: key)
+        _ = try await provider.hubPage(hub, page: Page(offset: 20, limit: 20, cursor: "opaque+cursor"))
+        let requests = await server.requests()
+        let request = try XCTUnwrap(requests.last)
+        let query = try XCTUnwrap(URLComponents(url: XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "section_id" }?.value, "recent")
+        XCTAssertEqual(query.first { $0.name == "library_id" }?.value, "library-a")
+        XCTAssertEqual(query.first { $0.name == "cursor" }?.value, "opaque+cursor")
+    }
+
     func testSavedFiltersAreIsolatedByAccountProfileAndLibraryAndReconciled() throws {
         let suite = "SiloCatalogAndHomeActionsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

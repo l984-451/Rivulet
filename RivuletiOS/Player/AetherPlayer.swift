@@ -99,6 +99,7 @@ final class AetherPlayer: ObservableObject {
         let isDefault: Bool
         /// "srt", "ass", "vtt": Plex stream keys carry no extension.
         let formatHint: String?
+        var httpHeaders: [String: String]? = nil
     }
 
     /// The live rewind window on the session axis, the one `seekLive` takes.
@@ -171,9 +172,20 @@ final class AetherPlayer: ObservableObject {
     private var tornDownAt: Date?
     private var foregroundReloadTask: Task<Void, Never>?
     private var lastLoad: LoadRequest?
+    /// Source-time seeks that require a new negotiated server anchor.
+    var providerSeek: ((TimeInterval) async throws -> Void)?
+    private var vodTimelineOffset: TimeInterval = 0
+    private var vodSourceDuration: TimeInterval?
+
+    private struct VODConfiguration {
+        var timelineOffset: TimeInterval = 0
+        var sourceDuration: TimeInterval?
+        var forceEngineDemux = false
+        var initialAudioOrdinal: Int?
+    }
 
     private enum LoadRequest {
-        case vod(url: URL, headers: [String: String], subtitles: [SidecarSubtitle])
+        case vod(url: URL, headers: [String: String], subtitles: [SidecarSubtitle], configuration: VODConfiguration)
         case live(url: URL, headers: [String: String], forceEngineDemux: Bool)
     }
 
@@ -250,7 +262,7 @@ final class AetherPlayer: ObservableObject {
             .sink { [weak self] in
                 guard let self else { return }
                 if let source = self.engine.softwarePiPSource { self.softwarePiPBridge.update(timeRange: source.timeRange()) }
-                self.duration = $0
+                self.duration = self.vodSourceDuration ?? max(0, $0 + self.vodTimelineOffset)
             }
             .store(in: &cancellables)
 
@@ -300,7 +312,13 @@ final class AetherPlayer: ObservableObject {
         engine.clock.$sourceTime
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.sourceTime = $0 }
+            .sink { [weak self] time in
+                guard let self else { return }
+                let external = self.engine.subtitleTracks.contains {
+                    $0.id == self.currentSubtitleTrackId && $0.isExternal
+                }
+                self.sourceTime = time + (external ? self.vodTimelineOffset : 0)
+            }
             .store(in: &cancellables)
 
         engine.seekEvents
@@ -399,7 +417,7 @@ final class AetherPlayer: ObservableObject {
     }
 
     private func clockTicked(_ time: Double) {
-        currentTime = time
+        currentTime = max(0, time + vodTimelineOffset)
         if isStarting, time > 0 {
             isStarting = false
             pendingSeekTarget = nil
@@ -435,6 +453,8 @@ final class AetherPlayer: ObservableObject {
 
     private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool) async throws {
         beginLoad()
+        vodTimelineOffset = 0
+        vodSourceDuration = nil
         let isNativeHLS = Self.isHLSURL(url) && !forceEngineDemux
         // Forced onto the engine demuxer AND a playlist: the Plex direct-play grant.
         let usesHLSIngest = !isNativeHLS && Self.isHLSURL(url)
@@ -509,12 +529,18 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String]? = nil,
         startTime: TimeInterval? = nil,
         externalSubtitles: [SidecarSubtitle] = [],
-        keepingTransport: Bool = false
+        keepingTransport: Bool = false,
+        timelineOffset: TimeInterval = 0,
+        sourceDuration: TimeInterval? = nil,
+        forceEngineDemux: Bool = false,
+        initialAudioOrdinal: Int? = nil
     ) async throws {
-        lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles)
+        let configuration = VODConfiguration(timelineOffset: timelineOffset, sourceDuration: sourceDuration,
+                                             forceEngineDemux: forceEngineDemux, initialAudioOrdinal: initialAudioOrdinal)
+        lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles, configuration: configuration)
         try await performVODLoad(
             url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles,
-            keepingTransport: keepingTransport
+            keepingTransport: keepingTransport, configuration: configuration
         )
     }
 
@@ -523,11 +549,22 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String],
         startTime: TimeInterval?,
         subtitles: [SidecarSubtitle],
-        keepingTransport: Bool = false
+        keepingTransport: Bool = false,
+        configuration: VODConfiguration
     ) async throws {
         beginLoad(keepingTransport: keepingTransport)
-        pendingSeekTarget = startTime
+        vodTimelineOffset = configuration.timelineOffset
+        vodSourceDuration = configuration.sourceDuration
+        currentTime = max(0, (startTime ?? 0) + vodTimelineOffset)
+        duration = vodSourceDuration ?? 0
+        pendingSeekTarget = currentTime
         isStarting = true
+        let sidecars = subtitles.map {
+            ExternalSubtitleTrack(
+                url: $0.url, name: $0.name, language: $0.language,
+                isForced: $0.isForced, isHearingImpaired: $0.isHearingImpaired,
+                isDefault: $0.isDefault, httpHeaders: $0.httpHeaders, formatHint: $0.formatHint)
+        }
         var options = LoadOptions(
             suppressDisplayCriteria: false,
             httpHeaders: headers,
@@ -536,33 +573,32 @@ final class AetherPlayer: ObservableObject {
             audioBridgeMode: .lossless,
             isLive: false,
             dvrWindowSeconds: 0,
-            nativeRemoteHLS: Self.isHLSURL(url),
+            nativeRemoteHLS: Self.isHLSURL(url) && !configuration.forceEngineDemux,
             preserveASSMarkup: false,
             probesize: 8 * 1024 * 1024,
             maxAnalyzeDuration: 8_000_000,
             preferredAudioLanguages: [],
             preferredSubtitleLanguages: [],
-            externalSubtitles: subtitles.map {
-                ExternalSubtitleTrack(
-                    url: $0.url,
-                    name: $0.name,
-                    language: $0.language,
-                    isForced: $0.isForced,
-                    isHearingImpaired: $0.isHearingImpaired,
-                    isDefault: $0.isDefault,
-                    httpHeaders: nil,
-                    formatHint: $0.formatHint
-                )
-            },
+            externalSubtitles: vodTimelineOffset == 0 ? sidecars : [],
             teletextPage: Self.regionTeletextPage()
         )
-        options.autoplay = userIntendsToPlay
+        options.autoplay = userIntendsToPlay && configuration.initialAudioOrdinal == nil
         options.audioDelaySeconds = AudioSync.seconds()
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
+            // Native audio indices are audio-only ordinals, not container stream indices.
+            // Select before autoplay, including non-default tracks with the same language.
+            if let ordinal = configuration.initialAudioOrdinal {
+                guard engine.audioTracks.indices.contains(ordinal) else { throw MediaProviderError.notPlayable }
+                engine.selectAudioTrack(index: engine.audioTracks[ordinal].id)
+            }
+            if vodTimelineOffset != 0 {
+                for sidecar in sidecars { engine.addExternalSubtitleTrack(sidecar) }
+            }
+            if configuration.initialAudioOrdinal != nil, userIntendsToPlay { engine.play() }
             if userIntendsToPlay, rate != 1 { engine.setRate(rate) }
             seedVideoSize()
         } catch {
@@ -576,8 +612,15 @@ final class AetherPlayer: ObservableObject {
         guard let lastLoad else { return }
         let position = currentTime
         switch lastLoad {
-        case .vod(let url, let headers, let subtitles):
-            try? await performVODLoad(url: url, headers: headers, startTime: position > 1 ? position : nil, subtitles: subtitles)
+        case .vod(let url, let headers, let subtitles, let configuration):
+            if let providerSeek {
+                do { try await providerSeek(position) }
+                catch { state = .failed(error.localizedDescription) }
+                return
+            }
+            try? await performVODLoad(url: url, headers: headers,
+                                     startTime: max(0, position - configuration.timelineOffset),
+                                     subtitles: subtitles, configuration: configuration)
         case .live(let url, let headers, let forceEngineDemux):
             try? await performLiveLoad(url: url, headers: headers, forceEngineDemux: forceEngineDemux)
         }
@@ -661,7 +704,16 @@ final class AetherPlayer: ObservableObject {
     func seek(to time: TimeInterval, exact: Bool = false) async {
         let upper = duration > 0 ? duration : .greatestFiniteMagnitude
         let target = min(max(0, time), upper)
-        await performSeek(to: target, exact: exact)
+        if let providerSeek {
+            pendingSeekTarget = target
+            do { try await providerSeek(target) }
+            catch {
+                pendingSeekTarget = nil
+                state = .failed(error.localizedDescription)
+            }
+            return
+        }
+        await performSeek(to: max(0, target - vodTimelineOffset), exact: exact)
     }
 
     /// Skip relative to where the last skip was headed, so rapid taps stack.
@@ -691,10 +743,11 @@ final class AetherPlayer: ObservableObject {
     private func performSeek(to target: Double, exact: Bool = false) async {
         // A user seek owns the pending target from here; its seek event clears it.
         isStarting = false
-        pendingSeekTarget = target
+        let sourceTarget = target + vodTimelineOffset
+        pendingSeekTarget = sourceTarget
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
-            if self?.pendingSeekTarget == target { self?.pendingSeekTarget = nil }
+            if self?.pendingSeekTarget == sourceTarget { self?.pendingSeekTarget = nil }
         }
         await engine.seek(to: target, exact: exact)
     }
@@ -736,6 +789,7 @@ final class AetherPlayer: ObservableObject {
         tornDownAt = nil
         userIntendsToPlay = false
         lastLoad = nil
+        providerSeek = nil
         clearNativeMediaSelection()
         nativeVideoSizeObservation = nil
         videoSize = .zero
@@ -757,7 +811,7 @@ final class AetherPlayer: ObservableObject {
     func still(atSeconds seconds: TimeInterval, maxWidth: Int = 480) async -> CGImage? {
         if frameExtractor == nil { frameExtractor = engine.makeFrameExtractor() }
         guard let extractor = frameExtractor else { return nil }
-        return await extractor.thumbnail(at: seconds, maxWidth: maxWidth)
+        return await extractor.thumbnail(at: max(0, seconds - vodTimelineOffset), maxWidth: maxWidth)
     }
 
     private func dropFrameExtractor() {

@@ -507,7 +507,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 return
             }
             if Task.isCancelled {
-                if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+                if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
                 finishJoinTelemetry { $0.abandoned() }
                 return
             }
@@ -2252,6 +2252,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// faults, so busy is the likely reason, not a certain one.
     private static func notice(forResolveError error: Error) -> String? {
         if error is PlexLiveTuneError { return String(localized: "Couldn't tune this channel. All tuners may be busy.") }
+        if let live = error as? LiveTVProviderError, case .tunersBusy = live { return live.errorDescription }
         return (error as? TvheadendError)?.errorDescription
     }
 
@@ -2300,7 +2301,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 return
             }
             if Task.isCancelled {
-                if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+                if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
                 return
             }
             guard let freshURL = resolved else { dismissPlayer(); return }
@@ -2382,7 +2383,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     // MARK: - Live session keepalive (Plex tuner grabs)
 
     private func startLiveSessionKeepAlive(for url: URL) {
-        liveKeepalive.start(url: url)
+        liveKeepalive.start(url: url, sourceID: channel.sourceId)
     }
 
     private func stopLiveSessionKeepAlive() {

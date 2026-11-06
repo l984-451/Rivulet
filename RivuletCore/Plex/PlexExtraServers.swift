@@ -60,6 +60,15 @@ final class PlexExtraServers {
         !(UserDefaults.standard.stringArray(forKey: disabledKey) ?? []).contains(machineID)
     }
 
+    /// iCloud changed the list of servers turned off: apply it as a tap in Settings would.
+    func syncedPreferencesChanged(_ keys: Set<String>) {
+        guard keys.contains(disabledKey) else { return }
+        Self.onChanged?()
+        LiveTVDataStore.shared.plexContentTokenChanged()
+        lastRefresh = nil
+        refreshForAccount()
+    }
+
     func setEnabled(_ enabled: Bool, machineID: String) {
         var disabled = Set(UserDefaults.standard.stringArray(forKey: disabledKey) ?? [])
         if enabled { disabled.remove(machineID) } else { disabled.insert(machineID) }

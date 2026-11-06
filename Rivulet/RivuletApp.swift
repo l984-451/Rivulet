@@ -19,6 +19,12 @@ struct RivuletApp: App {
     init() {
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
+        // Other servers' library settings belong to their own users, so they load with the sign-in.
+        MediaProviderRegistry.shared.onSecondaryProvidersChanged = { providers in
+            LibrarySettingsManager.shared.setProviderScopes(providers
+                .sorted { $0.id < $1.id }
+                .map { .init(providerID: $0.id, accountID: $0.accountID) })
+        }
         #if DEBUG
         TVScreenshotMode.seedSession()
         TVScreenshotMode.runFocusMovesIfRequested()
@@ -31,6 +37,7 @@ struct RivuletApp: App {
         // which returns false for an unset key, so register the default here
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
+        SkipLengthKeys.migrateLegacyKeys()
         // Every surface is dark artwork, so menus, popups and alerts stay dark in Light mode
         // too; Settings alone follows the system. On the window: SwiftUI's preferredColorScheme
         // never reached UIKit's presented popups.
@@ -67,14 +74,15 @@ struct RivuletApp: App {
             do { try await SiloSession.restore() }
             catch { DiagLog.error(.servers, "Silo session restoration failed: \(DiagLog.describe(error))") }
         }
-        PlexLiveTimelineKeepalive.releaseOtherSession = { JellyfinLiveTVProvider.closeLiveStream($0) }
+        EmbySession.onChanged = { ServerDataStore.shared.reload() }
+        OtherServerKind.installLiveSessionClosers()
         PlexUserProfileManager.onProfileChanged = {
             // The queue reports progress with whichever token is current.
             MusicQueue.shared.stop()
             MusicQueue.shared.clear()
             await PlexDataStore.shared.onProfileSwitched()
             // The previous profile's other Plex servers go now; a restricted
-            // profile does not see the Jellyfin server.
+            // profile does not see the other kinds' servers.
             MediaProviderRegistry.shared.populateFromCurrentAuth()
             ServerDataStore.shared.reload()
         }
@@ -93,6 +101,7 @@ struct RivuletApp: App {
             LibrarySettingsManager.shared.onProfileSwitched()
             ServerDataStore.shared.reload()
         }
+        Self.startCloudSync()
 
         #if !DEBUG
         // Sentry starts 3 s after launch: in init() its uploads beat the network
@@ -116,6 +125,30 @@ struct RivuletApp: App {
         Task { @MainActor in
             Perf.event(.appLaunch, message: "init")
         }
+    }
+
+    /// iCloud sync: stores that cache a synced key reload when the cloud changes it.
+    private static func startCloudSync() {
+        CloudSync.onPreferencesApplied = { keys in
+            func touched(_ prefixes: [String]) -> Bool { keys.contains { key in prefixes.contains { key.hasPrefix($0) } } }
+            if touched(["hiddenLibraryKeys", "hiddenLibraryServerIDs", "libraryOrder", "librarySortOptions"]) {
+                LibrarySettingsManager.shared.reloadFromDefaults()
+            }
+            if touched(["hiddenHomeRowIdentifiers"]) {
+                NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
+            }
+            if touched(["homeCollectionPins", "libraryCollectionPins"]) {
+                NotificationCenter.default.post(name: HomeCollectionPins.changedNotification, object: nil)
+            }
+        }
+        // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish before the
+        // first sync pass, or a playlist URL with its login could be uploaded as a channel id.
+        _ = LiveTVDataStore.shared
+        // Sources that arrive from iCloud finish the setup landing, so a new Apple TV opens on Home.
+        CloudSync.onAccountsChanged = {
+            if SetupLandingViewController.hasAnySource { UserDefaults.standard.set(true, forKey: "setupComplete") }
+        }
+        CloudSync.shared.start()
     }
 
     #if !DEBUG
@@ -159,7 +192,9 @@ struct RivuletApp: App {
         let modelConfiguration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,
-            allowsSave: true
+            allowsSave: true,
+            // With the CloudKit entitlement SwiftData would sync on its own and reject these models. Sync is ours.
+            cloudKitDatabase: .none
         )
 
         do {

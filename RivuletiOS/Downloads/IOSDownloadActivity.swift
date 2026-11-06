@@ -94,9 +94,9 @@ final class IOSDownloadActivity {
         let open = items.filter { !$0.state.isSettled }
         let current = open.first { $0.state == .downloading } ?? open.first ?? items.first
         let name = current.map { record in
-            let item = record.metadata
-            guard item.type == "episode" else { return item.displayTitle }
-            return [item.grandparentTitle, item.index.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
+            let item = record.item
+            guard item.kind == .episode else { return item.displayTitle }
+            return [item.seriesTitle, item.episodeNumber.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
         } ?? ""
         guard items.count > 1 else { return (String(localized: "Downloading"), name) }
         let done = items.count - open.count

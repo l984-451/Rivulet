@@ -29,6 +29,8 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
     private let folderTitle: String?
     private let listing: FolderListing
     private let viewMenu: (() -> UIMenu?)?
+    /// The library the header's Shuffle plays; nil shows no Shuffle.
+    private let shuffleLibrary: (() -> MediaLibrary?)?
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
     private var dataSource: UICollectionViewDiffableDataSource<Int, Item>!
     private let preview = FolderPreviewView()
@@ -43,11 +45,13 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
     private var sources: [MediaItemRef: MediaSource] = [:]
     private var observers = Set<AnyCancellable>()
 
-    init(libraryTitle: String, folderTitle: String?, listing: FolderListing, viewMenu: (() -> UIMenu?)? = nil) {
+    init(libraryTitle: String, folderTitle: String?, listing: FolderListing, viewMenu: (() -> UIMenu?)? = nil,
+         shuffleLibrary: (() -> MediaLibrary?)? = nil) {
         self.libraryTitle = libraryTitle
         self.folderTitle = folderTitle
         self.listing = listing
         self.viewMenu = viewMenu
+        self.shuffleLibrary = shuffleLibrary
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -139,7 +143,11 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
         elementKind: UICollectionView.elementKindSectionHeader) { [unowned self] header, _, _ in
         // At the library root the library's own title is the heading, with nothing above it.
         header.configure(breadcrumb: folderTitle == nil ? nil : libraryTitle, title: folderTitle ?? libraryTitle,
-                         viewMenu: viewMenu)
+                         viewMenu: viewMenu,
+                         onShuffle: shuffleLibrary?().map { library in { [weak self] in
+                             guard let self else { return }
+                             ShufflePlayback.shuffle(library, from: self)
+                         } })
     }
 
     private func configureDataSource() {
@@ -195,7 +203,7 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
     }
 
     // Back from a deeper level, focus goes to the row that opened it; otherwise the
-    // first row, never the header's View button. Only if the cell exists now.
+    // first row, never the header's buttons. Only if the cell exists now.
     func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
         let path = focusedRef.flatMap { dataSource.indexPath(for: .entry($0)) } ?? IndexPath(item: 0, section: 0)
         return collectionView.cellForItem(at: path) != nil ? path : nil
@@ -402,8 +410,8 @@ private struct SinglePhotoProvider: PhotoProvider {
 
 // MARK: - Header
 
-/// The library name over the folder name, clear of the shell's pill, with an
-/// optional View button on the trailing edge.
+/// The library name over the folder name, clear of the shell's pill, with
+/// optional Shuffle and View buttons on the trailing edge.
 private final class FolderHeaderView: UICollectionReusableView {
     private static let breadcrumbFont = UIFont.systemFont(ofSize: 29, weight: .regular)
     private static let titleFont = UIFont.systemFont(ofSize: 48, weight: .bold)
@@ -417,8 +425,14 @@ private final class FolderHeaderView: UICollectionReusableView {
     private let breadcrumb = UILabel()
     private let title = UILabel()
     private let viewButton = SortButton()
+    private let shuffleButton = SortButton()
     private var viewMenu: (() -> UIMenu?)?
+    private var onShuffle: (() -> Void)?
     private lazy var viewCenterY = viewButton.centerYAnchor.constraint(equalTo: topAnchor)
+    /// Shuffle's trailing edge: beside View while it shows, else the header's edge. Swapped in configure.
+    private lazy var shuffleBesideView = shuffleButton.trailingAnchor.constraint(equalTo: viewButton.leadingAnchor,
+                                                                                 constant: -16)
+    private lazy var shuffleAtEdge = shuffleButton.trailingAnchor.constraint(equalTo: trailingAnchor)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -427,24 +441,38 @@ private final class FolderHeaderView: UICollectionReusableView {
         title.font = Self.titleFont
         title.textColor = .white
         [breadcrumb, title].forEach(addSubview)
-        viewButton.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(viewButton)
+        shuffleButton.configure(sortName: String(localized: "Shuffle"), symbol: "shuffle")
+        shuffleButton.addAction(UIAction { [weak self] _ in self?.onShuffle?() }, for: .primaryActionTriggered)
+        for button in [viewButton, shuffleButton] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(button)
+        }
         NSLayoutConstraint.activate([
             viewButton.trailingAnchor.constraint(equalTo: trailingAnchor),
             viewButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
             viewCenterY,
+            shuffleButton.centerYAnchor.constraint(equalTo: viewButton.centerYAnchor),
+            shuffleButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
+            shuffleAtEdge,
         ])
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(breadcrumb text: String?, title titleText: String, viewMenu: (() -> UIMenu?)?) {
+    func configure(breadcrumb text: String?, title titleText: String, viewMenu: (() -> UIMenu?)?,
+                   onShuffle: (() -> Void)? = nil) {
         breadcrumb.text = text
         breadcrumb.isHidden = text == nil
         title.text = titleText
         self.viewMenu = viewMenu
         viewButton.configure(view: .folders, menu: viewMenu?())
+        self.onShuffle = onShuffle
+        shuffleButton.isHidden = onShuffle == nil
+        // Deactivate before activate, so the two are never active together.
+        let beside = !viewButton.isHidden
+        NSLayoutConstraint.deactivate([beside ? shuffleAtEdge : shuffleBesideView])
+        NSLayoutConstraint.activate([beside ? shuffleBesideView : shuffleAtEdge])
         setNeedsLayout()
     }
 
@@ -462,8 +490,10 @@ private final class FolderHeaderView: UICollectionReusableView {
             breadcrumb.frame = CGRect(x: 0, y: y, width: bounds.width, height: ceil(Self.breadcrumbFont.lineHeight))
             y = breadcrumb.frame.maxY
         }
-        let viewWidth = viewButton.isHidden ? 0 : viewButton.frame.width + 24
-        title.frame = CGRect(x: 0, y: y, width: bounds.width - viewWidth, height: ceil(Self.titleFont.lineHeight))
+        // The title stops short of the leftmost visible button.
+        let buttonsLeft = [shuffleButton, viewButton].filter { !$0.isHidden }.map(\.frame.minX).min()
+        let titleWidth = buttonsLeft.map { $0 - 24 } ?? bounds.width
+        title.frame = CGRect(x: 0, y: y, width: titleWidth, height: ceil(Self.titleFont.lineHeight))
         viewCenterY.constant = title.frame.midY
     }
 }

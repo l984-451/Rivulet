@@ -8,6 +8,15 @@ import XCTest
 final class SiloDetailMetadataTests: XCTestCase {
     private let baseURL = URL(string: "https://silo.invalid")!
 
+    func testSharedArtworkTiersPreserveProviderRequestSizes() {
+        let query = Dictionary(uniqueKeysWithValues: SiloProvider.artworkQuery.map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(query["poster_width"], "900")
+        XCTAssertEqual(query["backdrop_width"], "3840")
+        XCTAssertEqual(query["still_width"], "3840")
+        XCTAssertEqual(query["logo_width"], "900")
+        XCTAssertEqual(ImageQuality.logo.maxPixelSize, 256)
+    }
+
     private func version(_ fields: String = "", hdr: Bool = false) throws -> MediaSource {
         let json = """
         {"file_id":"file-a","resolution":"2160p","codec_video":"hevc","codec_audio":"truehd",

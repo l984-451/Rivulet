@@ -199,9 +199,3 @@ actor PlexProgressReporter {
         }
     }
 }
-
-/// A Plex server's base URL and the token for it.
-struct PlexServerAddress: Sendable {
-    let address: String
-    let token: String
-}

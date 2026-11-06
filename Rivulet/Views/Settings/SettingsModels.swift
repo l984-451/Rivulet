@@ -47,7 +47,7 @@ enum CrossfadeOption: String, CaseIterable, Hashable, CustomStringConvertible {
 enum SettingsPage: Hashable, CaseIterable {
     case root
     case appearance, playback, music, liveTV, servers, about
-    case plex, plexServerDetail, jellyfin, iptv, libraries, cache
+    case plex, plexServerDetail, jellyfin, emby, iptv, libraries, cache
     case silo, siloProfiles, siloProfilePIN, siloSubtitleLanguagePicker
     case homeRows
     case liveTVSourceDetail, liveTVFavorites
@@ -81,6 +81,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .siloProfiles: return String(localized: "Silo Profiles")
         case .siloProfilePIN: return String(localized: "Profile PIN")
         case .siloSubtitleLanguagePicker: return String(localized: "Subtitle Language")
+        case .emby: return String(localized: "Emby Server")
         case .iptv: return String(localized: "Live TV Sources")
         case .liveTVSourceDetail: return String(localized: "Source Details")
         case .liveTVFavorites: return String(localized: "Favorites")
@@ -162,11 +163,12 @@ enum SkipInterval: Int, CaseIterable, CustomStringConvertible {
     case tenSeconds = 10
     case fifteenSeconds = 15
     case thirtySeconds = 30
+    case sixtySeconds = 60
 
     /// UserDefaults key backing the Skip Length setting.
-    static let storageKey = "skipSeconds"
+    static let storageKey = SkipLengthKeys.forward
     /// Backs Skip Back Length; unset means "same as forward".
-    static let backStorageKey = "skipBackSeconds"
+    static let backStorageKey = SkipLengthKeys.back
     static let defaultValue: SkipInterval = .thirtySeconds
 
     var description: String { String(localized: "\(rawValue) seconds") }

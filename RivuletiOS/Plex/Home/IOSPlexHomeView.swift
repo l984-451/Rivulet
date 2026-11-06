@@ -8,24 +8,27 @@ import SwiftUI
 /// library's promoted rows. The root supplies the NavigationStack.
 struct IOSPlexHomeView: View {
     @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.displayScale) private var displayScale
     /// Same key as the tvOS Home > Hero setting.
     @AppStorage("showHomeHero") private var showHero = true
     /// Same key as the tvOS hero choice (#414): trending, continueWatching, recentlyAdded, watchlist.
     @AppStorage(IOSHomeSettingsView.heroContentKey) private var heroContent = "trending"
-    @State private var trending: [PlexMetadata] = []
-    @State private var watchlist: [PlexMetadata] = []
+    @State private var trending: [MediaItem] = []
+    @State private var watchlist: [MediaItem] = []
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true
-    @State private var heroSelection: String?
+    @State private var heroSelection: MediaItemRef?
 
-    private var hasContent: Bool { plex.continueWatching != nil || !plex.shelves.isEmpty }
+    private var hasContent: Bool {
+        browse.continueWatchingHub != nil || !browse.shelves.isEmpty || (!browse.failures.isEmpty && !browse.libraries.isEmpty)
+    }
 
     var body: some View {
         // No eligible items means no hero, so keep the title and safe area.
         let hero = showHero && !heroItems.isEmpty
         Group {
-            if !plex.isConfigured {
+            if !browse.hasServers {
                 IOSPlexConnectView()
             } else if hasContent {
                 GeometryReader { proxy in
@@ -35,10 +38,11 @@ struct IOSPlexHomeView: View {
                                 IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), bleed: proxy.safeAreaInsets,
                                                 selection: $heroSelection)
                             }
-                            if let continueWatching = plex.continueWatching {
+                            ForEach(browse.failedServers) { IOSServerFailureBanner(failure: $0) }
+                            if let continueWatching = browse.continueWatchingHub {
                                 IOSPlexShelfView(hub: continueWatching)
                             }
-                            ForEach(plex.shelves) { IOSPlexShelfView(hub: $0) }
+                            ForEach(browse.shelves) { IOSPlexShelfView(hub: $0) }
                         }
                         .padding(.bottom, 24)
                     }
@@ -47,17 +51,17 @@ struct IOSPlexHomeView: View {
                         scroll.contentOffset.y + scroll.contentInsets.top < IOSPlexHomeHero.height(for: fullSize(proxy)) - 120
                     } action: { _, under in heroUnderBar = under }
                     .scrollEdgeEffectHidden(hero && heroUnderBar, for: .top)
-                    .refreshable { await plex.refresh() }
-                    .task(id: hero ? heroItems.map(\.id) + ["\(heroPageWidth(proxy))"] : []) {
+                    .refreshable { await browse.refresh() }
+                    .task(id: hero ? heroItems.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(heroPageWidth(proxy))"] : []) {
                         if hero { await prefetchHero(width: heroPageWidth(proxy)) }
                     }
-                    .iosPlexAmbient(hero ? heroItems.first { $0.id == heroSelection } ?? heroItems.first : nil)
+                    .iosPlexAmbient(hero ? heroItems.first { $0.ref == heroSelection } ?? heroItems.first : nil)
                 }
             } else {
                 ScrollView {
                     placeholder.containerRelativeFrame([.horizontal, .vertical])
                 }
-                .refreshable { await plex.refresh() }
+                .refreshable { await browse.refresh() }
             }
         }
         .navigationTitle(hero ? "" : "Home")
@@ -67,31 +71,31 @@ struct IOSPlexHomeView: View {
         .toolbar {
             IOSAccountToolbarItem()
         }
-        .task(id: [String(showHero), heroContent] + plex.shelves.map(\.id)) {
+        .task(id: [String(showHero), heroContent] + browse.shelves.map(\.id)) {
             guard showHero else { return }
-            trending = await plex.trendingHeroItems()
-            if heroContent == "watchlist" { watchlist = await plex.watchlistHeroItems() }
+            trending = await browse.trendingHeroItems()
+            if heroContent == "watchlist" { watchlist = await browse.watchlistHeroItems() }
         }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
             guard showHero, heroContent == "watchlist" else { return }
-            Task { watchlist = await plex.watchlistHeroItems() }
+            Task { watchlist = await browse.watchlistHeroItems() }
         }
     }
 
     /// Warms the hero pages' logos and art at the size the hero requests.
     /// Continue Watching cards warm their own look-ahead as they appear.
     private func prefetchHero(width: CGFloat) async {
-        await plex.prefetchArtwork(heroItems.map {
-            ($0, IOSPlexArtwork.url(plex, item: $0, kind: .backdrop, width: width, aspectRatio: 16 / 9, scale: displayScale))
+        await browse.prefetchArtwork(heroItems.map {
+            ($0, IOSItemArtwork.url(browse, item: $0, kind: .backdrop, width: width, aspectRatio: 16 / 9, scale: displayScale))
         })
     }
 
     @ViewBuilder
     private var placeholder: some View {
-        if plex.isLoadingContent {
+        if browse.isLoadingContent {
             ProgressView()
-        } else if let error = plex.contentError {
-            IOSPlexErrorView(title: "Couldn't Load Home", message: error, offersDownloads: true) { await plex.refresh() }
+        } else if let error = browse.contentError ?? browse.failedServers.first?.message {
+            IOSPlexErrorView(title: "Couldn't Load Home", message: error, offersDownloads: true) { await browse.refresh() }
         } else {
             ContentUnavailableView(
                 "Nothing on Home Yet",
@@ -102,34 +106,9 @@ struct IOSPlexHomeView: View {
     }
 
     /// The chosen list; an empty one shows trending, and no trending match shows Home's rows.
-    private var heroItems: [PlexMetadata] {
-        let chosen: [PlexMetadata] = switch heroContent {
-        case "continueWatching": (plex.continueWatching?.items ?? []).filter { ($0.art ?? $0.grandparentArt) != nil }
-        case "recentlyAdded": recentlyAdded
-        case "watchlist": watchlist
-        default: []
-        }
-        if !chosen.isEmpty { return Array(chosen.prefix(10)) }
-        return trending.isEmpty ? rowItems : trending
-    }
-
-    /// One item from each recently added row in turn, so no library's additions bury another's.
-    private var recentlyAdded: [PlexMetadata] {
-        let rows = plex.shelves.filter { ($0.hubIdentifier ?? "").lowercased().contains("recentlyadded") }.map(\.items)
-        let mixed = (0..<(rows.map(\.count).max() ?? 0)).flatMap { i in rows.compactMap { i < $0.count ? $0[i] : nil } }
-        return mixed.filter { ($0.art ?? $0.grandparentArt) != nil }
-    }
-
-    /// Up to six featured items, two per row, one per show.
-    private var rowItems: [PlexMetadata] {
-        var seen = Set<String>()
-        return Array(
-            plex.shelves
-                .flatMap { $0.items.prefix(2) }
-                .filter { ($0.art ?? $0.grandparentArt) != nil }
-                .filter { seen.insert($0.grandparentRatingKey ?? $0.id).inserted }
-                .prefix(6)
-        )
+    private var heroItems: [MediaItem] {
+        HomeHero.items(content: heroContent, continueWatching: browse.continueWatching, shelves: browse.shelves,
+                       watchlist: watchlist, trending: trending)
     }
 
     private func heroPageWidth(_ proxy: GeometryProxy) -> CGFloat {

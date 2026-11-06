@@ -76,29 +76,82 @@ extension PlexMetadata {
     var posterPath: String? { grandparentThumb ?? thumb ?? parentThumb }
 }
 
-extension PlexLibrary {
+extension MediaLibrary {
     /// SF Symbol for the library's content type.
     var icon: String {
-        switch type {
-        case "movie": "film.stack"
-        case "show": "tv"
-        case "artist": "music.note.list"
+        switch kind {
+        case .movies: "film.stack"
+        case .shows: "tv"
         default: "rectangle.stack"
         }
     }
+
+    /// The key a per-library setting (sort order) is stored under. The selected Plex server keeps the
+    /// bare section id the setting has always used; every other server's library is told apart by its server.
+    var settingKey: String {
+        MediaItemRef(providerID: providerID, itemID: "").isPlex ? id : "\(providerID)|\(id)"
+    }
 }
 
-extension PlexHub {
-    var displayTitle: String { title ?? "" }
+// The same display accessors as PlexMetadata's, over the agnostic item the browse screens hold.
+// Resume and watched decisions go through MediaItem.isInProgress / isWatched (WatchProgressPolicy).
+extension MediaItem {
+    var displayTitle: String { title.isEmpty ? String(localized: "Untitled") : title }
 
-    /// Rails stop at 20; the header's See All pages the rest.
-    var items: [PlexMetadata] { Array((Metadata ?? []).prefix(20)) }
+    /// One-line supporting text: episode coordinates and show for an episode, year for everything else.
+    var subtitle: String? {
+        if kind == .episode {
+            return [episodeCode, seriesTitle].compactMap { $0 }.joined(separator: " · ")
+        }
+        return year.map(String.init)
+    }
 
-    /// Matched on identifier like tvOS `PlexDataStore.isContinueWatchingFamily`,
-    /// never on the localized title. On Deck is in the family.
-    var isContinueWatching: Bool {
-        let id = (hubIdentifier ?? "").lowercased()
-        return id.contains("continue") || id.contains("inprogress") || id.contains("ondeck")
+    /// "S2, E5", the TV app's episode label.
+    var episodeCode: String? {
+        guard kind == .episode, let season = seasonNumber, let episode = episodeNumber else { return nil }
+        return String(localized: "S\(season), E\(episode)")
+    }
+
+    /// The show for an episode or season, the item itself otherwise.
+    var showTitle: String {
+        switch kind {
+        case .episode, .season: seriesTitle ?? displayTitle
+        default: displayTitle
+        }
+    }
+
+    /// A movie or episode: what Play starts directly.
+    var isPlayable: Bool { kind == .movie || kind == .episode }
+
+    /// Music tiles are 1:1, not 2:3, because album and artist art is square.
+    var isMusicItem: Bool { isMusic == true }
+
+    /// Fraction for a drawn progress bar. Its own render rule (0 < f < 1), not
+    /// the resume threshold; it wins over the watched glyph.
+    var progressBarFraction: Double? {
+        guard let fraction = watchProgress, fraction > 0, fraction < 1 else { return nil }
+        return fraction
+    }
+
+    /// "12 min left" / "1 hr 5 min left" while a resume point exists.
+    var timeLeftText: String? {
+        guard isInProgress, let runtime, runtime > userState.viewOffset else { return nil }
+        let minutes = max(1, Int((runtime - userState.viewOffset) / 60))
+        return minutes >= 60 ? String(localized: "\(minutes / 60) hr \(minutes % 60) min left") : String(localized: "\(minutes) min left")
+    }
+
+    /// "1h 52m" runtime.
+    var runtimeText: String? {
+        guard let runtime, runtime > 0 else { return nil }
+        let minutes = Int(runtime / 60)
+        return minutes >= 60 ? String(localized: "\(minutes / 60)h \(minutes % 60)m") : String(localized: "\(minutes)m")
+    }
+
+    /// VoiceOver value for a tile's watch state.
+    var watchStateDescription: String {
+        if let left = timeLeftText { return left }
+        if let fraction = progressBarFraction { return String(localized: "\(Int(fraction * 100)) percent watched") }
+        return countsAsWatched ? String(localized: "Watched") : ""
     }
 }
 

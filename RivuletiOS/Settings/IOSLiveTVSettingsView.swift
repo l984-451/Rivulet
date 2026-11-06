@@ -68,6 +68,14 @@ private struct IOSLiveSourceDetailView: View {
     @State private var isRefreshing = false
 
     private var source: LiveTVDataStore.LiveTVSourceInfo? { store.sources.first { $0.id == sourceId } }
+    private var synced: Bool { CloudSync.shared.isSynced(accountID: LiveTVDataStore.syncID(forSource: sourceId)) }
+
+    private func remove(_ scope: SignOutScope?) {
+        Task {
+            await store.removeSource(id: sourceId, scope: scope)
+            dismiss()
+        }
+    }
 
     var body: some View {
         Form {
@@ -103,14 +111,16 @@ private struct IOSLiveSourceDetailView: View {
                     Section {
                         Button("Remove Source", role: .destructive) { confirmingRemove = true }
                             .confirmationDialog("Remove Source?", isPresented: $confirmingRemove, titleVisibility: .visible) {
-                                Button("Remove", role: .destructive) {
-                                    Task {
-                                        await store.removeSource(id: sourceId)
-                                        dismiss()
-                                    }
+                                if synced {
+                                    Button("This Device Only") { remove(.thisDevice) }
+                                    Button("All Devices", role: .destructive) { remove(.everywhere) }
+                                } else {
+                                    Button("Remove", role: .destructive) { remove(nil) }
                                 }
                             } message: {
-                                Text("This will remove \"\(source.displayName)\" and all its channels from Live TV.")
+                                Text(synced
+                                     ? "\"\(source.displayName)\" is shared through iCloud. Remove it from this device only, or from every device?"
+                                     : "This will remove \"\(source.displayName)\" and all its channels from Live TV.")
                             }
                     }
                 }
@@ -509,7 +519,7 @@ private struct IOSLivePlaylistForm: View {
 
 /// A labelled form row, the way Settings and Mail lay out an account: the label
 /// stays put once the field has text, so what was typed is never ambiguous.
-private struct IOSFormField: View {
+struct IOSFormField: View {
     enum Kind { case text, url, username, password }
 
     let label: LocalizedStringKey

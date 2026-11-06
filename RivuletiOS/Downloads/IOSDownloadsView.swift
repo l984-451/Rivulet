@@ -19,17 +19,18 @@ struct IOSDownloadsView: View {
 
     private var groups: [Shelf] {
         let records = downloads.visibleRecords
-        let movies = records.filter { $0.metadata.type != "episode" }
-            .sorted { $0.metadata.displayTitle.localizedStandardCompare($1.metadata.displayTitle) == .orderedAscending }
-        let seasons = Dictionary(grouping: records.filter { $0.metadata.type == "episode" }) {
-            "\($0.metadata.grandparentRatingKey ?? $0.metadata.showTitle)|\($0.metadata.parentIndex ?? 0)"
+        let movies = records.filter { $0.item.kind != .episode }
+            .sorted { $0.item.displayTitle.localizedStandardCompare($1.item.displayTitle) == .orderedAscending }
+        let seasons = Dictionary(grouping: records.filter { $0.item.kind == .episode }) {
+            "\($0.providerID)|\($0.item.grandparentRef?.itemID ?? $0.item.seriesTitle ?? "")|\($0.item.seasonNumber ?? 0)"
         }
         let shows = seasons.map { key, records in
-            let episodes = records.sorted { ($0.metadata.index ?? 0) < ($1.metadata.index ?? 0) }
-            let first = episodes[0].metadata
-            let season = first.parentIndex.map { $0 == 0 ? String(localized: "Specials") : String(localized: "Season \($0)") }
-            return (show: first.showTitle, season: first.parentIndex ?? 0, group: Shelf(
-                id: key, title: [first.showTitle, season].compactMap { $0 }.joined(separator: " · "), records: episodes))
+            let episodes = records.sorted { ($0.item.episodeNumber ?? 0) < ($1.item.episodeNumber ?? 0) }
+            let first = episodes[0].item
+            let showTitle = first.seriesTitle ?? first.displayTitle
+            let season = first.seasonNumber.map { $0 == 0 ? String(localized: "Specials") : String(localized: "Season \($0)") }
+            return (show: showTitle, season: first.seasonNumber ?? 0, group: Shelf(
+                id: key, title: [showTitle, season].compactMap { $0 }.joined(separator: " · "), records: episodes))
         }
         .sorted { lhs, rhs in
             let order = lhs.show.localizedStandardCompare(rhs.show)
@@ -72,13 +73,13 @@ struct IOSDownloadsView: View {
             switch record.state {
             // By record: its ratingKey may name another item on the current server.
             case .completed:
-                if let request = downloads.localPlayback(record: record) { playback.play(request) }
+                playback.play(download: record)
             case .failed: downloads.retry(recordID: record.id)
             case .pausedByUser: downloads.resume(recordID: record.id)
             default: break
             }
         } label: {
-            IOSDownloadRow(record: record, isPreparing: actions.preparingID == record.metadata.id)
+            IOSDownloadRow(record: record, isPreparing: actions.preparingID == record.item.ref.actionKey)
         }
         .buttonStyle(.plain)
         .swipeActions {
@@ -101,16 +102,17 @@ private struct IOSDownloadRow: View {
     let isPreparing: Bool
     @EnvironmentObject private var plex: IOSPlexSession
 
-    private var item: PlexMetadata { record.metadata }
+    private var item: MediaItem { record.item }
 
+    /// The saved poster; failing that, a Plex server's art by path, or another server's own image URL.
     private var posterURL: URL? {
         record.posterFileName.map { IOSDownloadTransfer.directory.appending(path: $0) }
-            ?? plex.artworkURL(for: item, kind: .poster, width: 180, height: 270)
+            ?? (record.isPlex ? plex.artworkURL(for: record.metadata, kind: .poster, width: 180, height: 270) : item.artwork.poster)
     }
 
     private var title: String {
-        guard item.type == "episode" else { return item.displayTitle }
-        return [item.index.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
+        guard item.kind == .episode else { return item.displayTitle }
+        return [item.episodeNumber.map { String(localized: "E\($0)") }, item.displayTitle].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var isFailed: Bool {
@@ -164,13 +166,14 @@ private struct IOSDownloadRow: View {
 
 /// The detail page's download circle: Download, a progress ring, or a filled arrow with Play and Remove.
 struct IOSDownloadButton: View {
-    let item: PlexMetadata
+    let item: MediaItem
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.plexActions) private var actions
 
     var body: some View {
-        if let key = item.ratingKey, let record = downloads.record(for: key) {
+        if let record = downloads.record(for: item.ref) {
             Menu {
                 Section(record.statusText) {
                     switch record.state {
@@ -199,7 +202,7 @@ struct IOSDownloadButton: View {
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
-            .disabled(!plex.isConfigured)
+            .disabled(!browse.canDownload(item))
             .accessibilityLabel("Download")
         }
     }

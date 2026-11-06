@@ -54,6 +54,8 @@ class PlayerContainerViewController: UIViewController {
     private var postVideoOverlay: PostVideoOverlayView?
     /// Darkens the video behind the Up Next card, as `chromeScrim` does behind the rail.
     private var postVideoScrim: SideScrimView?
+    /// The Up Next pill's frame when it was selected: the page grows back out of it.
+    private var upNextGrowOrigin: CGRect?
     /// Snapshot of the last `$insightsCast` emission, read when the rail's
     /// Insights panel is presented.
     private var insightsCastCache: [MediaPerson] = []
@@ -219,7 +221,13 @@ class PlayerContainerViewController: UIViewController {
             // makes the pill non-focusable, so it can't steal focus while hidden.
             pill.alpha = 0
             pill.onSelect = { [weak self] in
-                Task { await self?.viewModel?.skipActiveMarker() }
+                guard let self, let vm = self.viewModel else { return }
+                if vm.upNextCollapsed {
+                    self.upNextGrowOrigin = self.skipPill?.frame
+                    vm.reopenUpNext()
+                } else {
+                    Task { await vm.skipActiveMarker() }
+                }
             }
             // Up/Down while the pill owns focus (chrome hidden) surfaces the
             // controls; while the chrome is up, let the engine move focus back
@@ -426,7 +434,7 @@ class PlayerContainerViewController: UIViewController {
             // had to restart the episode. A second press then exits, through
             // the checks below.
             if vm.postVideoState != .hidden {
-                vm.dismissPostVideo()
+                vm.closePostVideo()
                 return
             }
             if vm.isScrubbing {
@@ -871,8 +879,8 @@ class PlayerContainerViewController: UIViewController {
     }
 
     /// Handle Menu button press with priority:
-    /// 1. Cancel auto-skip countdown if active
-    /// 2. Dismiss post-video overlay if showing
+    /// 1. Fold the Up Next page into its pill if showing
+    /// 2. Cancel auto-skip countdown if active
     /// 3. Cancel scrubbing if active
     /// 4. Close an open pill popup (Subtitles/Audio/Info) if any
     /// 5. Hide controls if visible
@@ -886,6 +894,14 @@ class PlayerContainerViewController: UIViewController {
 
         if descriptionOverlay != nil {
             dismissDescription()
+            blockDismissTemporarily()
+            return
+        }
+
+        // Up Next folds into its pill. The block matters: the system's own dismiss for this
+        // press lands after the page is gone, finds nothing to close, and exits the player.
+        if vm.postVideoState != .hidden {
+            vm.closePostVideo()
             blockDismissTemporarily()
             return
         }
@@ -908,13 +924,7 @@ class PlayerContainerViewController: UIViewController {
         }
 
         if inputCoordinator.target == nil {
-            if vm.postVideoState != .hidden {
-                // Return to the still-playing fullscreen video rather than
-                // exiting the player (see handleInputAction(.back)). This is
-                // the target-less fallback; the primary path routes .back
-                // through the coordinator to the same behavior.
-                vm.dismissPostVideo()
-            } else if vm.isScrubbing {
+            if vm.isScrubbing {
                 vm.cancelScrub()
             } else if let panel = activeRailPanel {
                 // Edge case only: while focus is inside the panel, Menu is
@@ -947,8 +957,8 @@ class PlayerContainerViewController: UIViewController {
         // returning to the paused frame, and by the time the fallback dismiss
         // fires the poster flag is already cleared — without this term the
         // fallback would exit the player anyway.
-        let shouldBlockDismiss = vm.postVideoState == .hidden
-            && (vm.isScrubbing || vm.backReturnsToPausedFrame || (vm.showControls && !vm.showPausedPoster))
+        let shouldBlockDismiss = vm.isScrubbing || vm.backReturnsToPausedFrame
+            || (vm.showControls && !vm.showPausedPoster)
         if shouldBlockDismiss {
             blockDismissTemporarily()
         }
@@ -1254,7 +1264,7 @@ class PlayerContainerViewController: UIViewController {
         // Pill title + visibility + focus-ownership all react to the skip
         // button toggling and to the live countdown ticking.
         vm.$showSkipButton
-            .combineLatest(vm.$skipCountdownSeconds)
+            .combineLatest(vm.$skipCountdownSeconds, vm.$upNextCollapsed)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshSkipPill() }
             .store(in: &cancellables)
@@ -1272,7 +1282,8 @@ class PlayerContainerViewController: UIViewController {
                     self?.applyPostVideoState(state)
                     self?.applyChromeVisibility()
                 } else {
-                    self?.applyChromeVisibility()
+                    // Also takes the pill's label, held while the page was up.
+                    self?.refreshSkipPill()
                     self?.applyPostVideoState(state)
                 }
             }
@@ -2161,7 +2172,9 @@ class PlayerContainerViewController: UIViewController {
                     overlay.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PlayerRailView.sideInset),
                     overlay.centerYAnchor.constraint(equalTo: view.centerYAnchor),
                 ])
+                overlay.growOrigin = upNextGrowOrigin
             }
+            upNextGrowOrigin = nil
             refreshPostVideoContent()
         } else if let overlay = postVideoOverlay {
             // A departing card is not the focus owner; the next presentation builds a new one.
@@ -2170,9 +2183,23 @@ class PlayerContainerViewController: UIViewController {
             postVideoScrim = nil
             UIView.animate(withDuration: 0.35, animations: { scrim?.alpha = 0 },
                            completion: { _ in scrim?.removeFromSuperview() })
-            overlay.slideOut { [weak self] in
+            let refocus = { [weak self] in
                 self?.setNeedsFocusUpdate()
                 self?.updateFocusIfNeeded()
+            }
+            if viewModel?.upNextCollapsed == true, let pill = skipPill {
+                // The card shrinks into the pill, which shows up as it arrives.
+                view.layoutIfNeeded()
+                let target = pill.frame
+                if pill.alpha > 0 {
+                    // Model alpha stays 1 so the pill takes focus now; the delay hides it until then.
+                    pill.layer.removeAllAnimations()
+                    pill.alpha = 0
+                    UIView.animate(withDuration: 0.2, delay: PostVideoOverlayView.morphDuration - 0.15) { pill.alpha = 1 }
+                }
+                overlay.shrink(into: target, completion: refocus)
+            } else {
+                overlay.slideOut(completion: refocus)
             }
         }
         setNeedsFocusUpdate()
@@ -2188,11 +2215,11 @@ class PlayerContainerViewController: UIViewController {
         overlay.onDismiss = { [weak self] in
             guard let vm = self?.viewModel else { return }
             // Mid-countdown the button stops the countdown and leaves the page
-            // up; with no countdown it returns to fullscreen video.
+            // up; with no countdown it folds into the Up Next pill.
             if vm.countdownSeconds > 0 && !vm.isCountdownPaused {
                 vm.cancelCountdown()
             } else {
-                vm.dismissPostVideo()
+                vm.closePostVideo()
             }
         }
         overlay.onUserFocusMove = { [weak self] in
@@ -2205,8 +2232,6 @@ class PlayerContainerViewController: UIViewController {
 
     private func refreshPostVideoContent() {
         guard let vm = viewModel, let overlay = postVideoOverlay, overlay.superview != nil else { return }
-        // Reads the live state, already past `.loading` if the fetch finished: only a real card slides in.
-        overlay.setLoading(vm.postVideoState != .showingEpisodeSummary)
         overlay.configure(
             nextEpisode: vm.nextEpisode,
             serverURL: vm.serverURL,
@@ -2219,6 +2244,9 @@ class PlayerContainerViewController: UIViewController {
             total: vm.countdownTotalSeconds,
             isPaused: vm.isCountdownPaused
         )
+        // After the content, which sets the card's size for a grow from the pill. Reads the live
+        // state, already past `.loading` if the fetch finished: only a real card comes in.
+        overlay.setLoading(vm.postVideoState != .showingEpisodeSummary)
     }
 
     /// Single writer for every chrome alpha and focus gate, so no two sinks fight
@@ -2285,7 +2313,7 @@ class PlayerContainerViewController: UIViewController {
         }
 
         // The skip pill shows whenever a marker is active, independent of the rail.
-        let skipVisible = vm.showSkipButton && !isLoading && !ambient && vm.postVideoState == .hidden
+        let skipVisible = vm.showsSkipPill && !isLoading && !ambient && vm.postVideoState == .hidden
             && !chromeVisible
 
         // Whether the pill owns focus. Re-resolved after the alpha write below.
@@ -2372,7 +2400,10 @@ class PlayerContainerViewController: UIViewController {
     /// visibility and focus ownership. A mid-countdown re-show fills from the
     /// remaining seconds so the sweep still ends with the skip.
     private func refreshSkipPill() {
-        skipPill?.setTitle(viewModel?.skipButtonDisplayLabel, for: .normal)
+        // Held while Up Next is up, so the pill it grew from doesn't change its label as it fades.
+        if viewModel?.postVideoState == .hidden {
+            skipPill?.setTitle(viewModel?.skipButtonDisplayLabel, for: .normal)
+        }
         // Apply visibility BEFORE measuring for the fill: beginFill reads the
         // pill's laid-out width, which is only correct once it's on screen.
         applyChromeVisibility()

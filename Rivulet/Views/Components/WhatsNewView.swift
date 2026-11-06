@@ -157,6 +157,7 @@ struct WhatsNewView: View {
     static let changelogs: [(version: String, features: [String])] = [
         ("1.2.0 (122)", [
             "> I removed Dolby Vision FEL and Height Speakers because of licensing uncertainty. Profile 7 now plays as 8.1 on a Dolby Vision TV, and TrueHD and DTS-HD play as lossless 7.1. Sorry if this is what brought you to Rivulet.",
+            "Updated AetherEngine to 7.58.0",
         ]),
         ("1.2.0 (121)", [
             "> Thanks for the bugs, support, and PRs! I'm on vacation this week, so these are tested on a simulator but not a real Apple TV.",

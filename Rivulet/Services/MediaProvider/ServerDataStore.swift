@@ -6,7 +6,7 @@
 //  Rivulet
 //
 //  What the browse surfaces show from every server beside the selected Plex
-//  one (the account's other Plex servers, Jellyfin): their libraries (sidebar,
+//  one (the account's other Plex servers, each other kind's server): their libraries (sidebar,
 //  Settings) and their Home rows. The counterpart of PlexDataStore's library
 //  list and Home projection, without disk caches. Rows are never merged across
 //  servers; each server's sit together, in `sources` order.
@@ -25,7 +25,7 @@ final class ServerDataStore: ObservableObject {
         let name: String
     }
 
-    /// The servers shown, in order: extra Plex servers by name, then Jellyfin.
+    /// The servers shown, in order: extra Plex servers by name, then each other kind's.
     @Published private(set) var sources: [Source] = []
     /// Every browsable library, server by server in server order. The sidebar
     /// and Home use `visibleLibraries`; Settings > Sidebar Libraries lists these.
@@ -118,13 +118,10 @@ final class ServerDataStore: ObservableObject {
 
     init(observesRefresh: Bool = true) {
         guard observesRefresh else { return }
-        // Before the first sidebar render, so a Jellyfin-only launch never
-        // flashes the signed-out welcome.
-        if !PlexUserProfileManager.shared.isRestrictedProfile, let account = JellyfinSession.account {
-            sources = [Source(providerID: account.providerID, name: account.serverName)]
-        }
-        if !PlexUserProfileManager.shared.isRestrictedProfile, let account = SiloSession.account {
-            sources.append(Source(providerID: account.providerID, name: account.serverName))
+        // Before the first sidebar render, so a launch with only another
+        // server never flashes the signed-out welcome.
+        if !PlexUserProfileManager.shared.isRestrictedProfile {
+            sources = OtherServerKind.all.compactMap { $0.account().map { Source(providerID: $0.providerID, name: $0.name) } }
         }
         // Watch-state changes (detail page, tile menus, playback) post this.
         refreshObserver = NotificationCenter.default.addObserver(
@@ -138,9 +135,6 @@ final class ServerDataStore: ObservableObject {
     }
 
     var isSignedIn: Bool { !sources.isEmpty }
-
-    /// The signed-in Jellyfin server, which owns Live TV and the restricted-profile rule.
-    var jellyfinSource: Source? { sources.first { $0.providerID.hasPrefix("jellyfin:") } }
 
     /// The sidebar's server sections, in the user's order.
     var visibleLibraries: [MediaLibrary] {
@@ -302,7 +296,7 @@ final class ServerDataStore: ObservableObject {
     }
 
     /// Re-reads the signed-in servers and refetches each. Called at launch,
-    /// from `JellyfinSession.onChanged`, when the extra Plex servers change,
+    /// from each server session's `onChanged`, when the extra Plex servers change,
     /// on `.plexDataNeedsRefresh`, and on foreground.
     // ponytail: no timed poll; content added on a server shows on the next
     // foreground or watch-state change. Add one like PlexDataStore's 30s
@@ -315,18 +309,17 @@ final class ServerDataStore: ObservableObject {
         let loadGeneration = generation
         // The sidebar's Playlists rows follow every server reload, the selected Plex server's included.
         if self === Self.shared { Task { await PlaylistAvailability.shared.refresh() } }
-        // A restricted profile does not see the Jellyfin server; a signed-out one is gone.
-        let jellyfinID = PlexUserProfileManager.shared.isRestrictedProfile ? nil : JellyfinSession.account?.providerID
-        let providers = MediaProviderRegistry.shared.secondaryProviders.filter {
-            ($0.kind != .jellyfin || $0.id == jellyfinID)
-                && ($0.kind != .silo || (!PlexUserProfileManager.shared.isRestrictedProfile
-                    && $0.id == SiloSession.account?.providerID))
-        }
+        // A restricted profile does not see the other kinds' servers; a signed-out one is gone.
+        let restricted = PlexUserProfileManager.shared.isRestrictedProfile
+        let accountIDs = Dictionary(uniqueKeysWithValues: restricted ? [] : OtherServerKind.all.compactMap { other in
+            other.account().map { (other.kind, $0.providerID) }
+        })
+        let providers = Self.shown(MediaProviderRegistry.shared.secondaryProviders, accountIDs: accountIDs)
         // Assigned only on change: Plex-only users reach here on every launch,
         // foreground and watch-state change, and each publish redraws Home.
         update(\.sources, providers.map { Source(providerID: $0.id, name: $0.displayName) })
-        // The server's Live TV follows the account into and out of Live TV.
-        JellyfinLiveTVProvider.sync(providers.first { $0.kind == .jellyfin } as? JellyfinProvider)
+        // The server's Live TV follows the account into and out of Live TV (shared with iOS).
+        OtherServerKind.configureLiveTV(restricted: restricted)
         let gone = Set(slices.compactMap { id, slice in
             providers.contains { $0.id == id && slice.isOwned(by: $0) } ? nil : id
         })
@@ -348,6 +341,10 @@ final class ServerDataStore: ObservableObject {
             // Shared store only: tests load providers without reaching TMDB.
             if self === Self.shared { await self.loadTrending(from: providers, generation: loadGeneration) }
         }
+    }
+
+    static func shown(_ providers: [any MediaProvider], accountIDs: [MediaProviderKind: String]) -> [any MediaProvider] {
+        OtherServerKind.shown(providers, accountIDs: accountIDs)
     }
 
     private func update<Value: Equatable>(_ keyPath: ReferenceWritableKeyPath<ServerDataStore, Value>, _ value: Value) {
@@ -391,7 +388,7 @@ final class ServerDataStore: ObservableObject {
         var browsable = fetched.filter { Self.browsableKinds.contains($0.kind) }
         // Music plays through the selected server only (MusicProviderRegistry).
         if provider.kind == .plex { browsable.removeAll { $0.kind == .music } }
-        if provider.kind != .plex && provider.kind != .jellyfin {
+        if provider.kind == .silo {
             guard expected == generation, !Task.isCancelled else { return }
             // Sidebar/library access must not depend on the independent Home feed succeeding.
             slices[provider.id] = Slice(provider, libraries: browsable, rows: previous?.rows ?? [])
@@ -530,7 +527,7 @@ final class ServerDataStore: ObservableObject {
     }
 }
 
-private extension CachedHomeHub {
+extension CachedHomeHub {
     /// The server a row came from: its id is "<providerID>|<hub id>".
     var providerID: String { String(id.prefix { $0 != "|" }) }
 }

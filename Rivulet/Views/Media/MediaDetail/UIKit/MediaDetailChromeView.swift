@@ -769,6 +769,16 @@ final class MediaDetailChromeView: UIView {
         }
 
         actionButtonsStack.addArrangedSubview(play)
+        // A show shuffles every episode.
+        if item.kind == .show {
+            let shuffle = makeCircleButton(systemImage: "shuffle")
+            shuffle.accessibilityLabel = String(localized: "Shuffle")
+            shuffle.onPrimaryAction = { [weak self] in
+                guard let self, let host = self.hostViewController else { return }
+                ShufflePlayback.shuffle(show: item, from: host)
+            }
+            actionButtonsStack.addArrangedSubview(shuffle)
+        }
         actionButtonsStack.addArrangedSubview(watched)
         // Jellyfin has no watchlist: its add throws, so the button would flip
         // and snap back. Nil provider keeps today's behaviour.
@@ -1299,7 +1309,7 @@ struct ShowWatchPrompt: Equatable {
     let choices: [Choice]
 
     init(progress: ChildProgress?) {
-        guard let progress, progress.total > 0 else {
+        guard let progress, progress.total > 0, progress.unplayedOnly != true else {
             message = nil
             choices = [Self.markWatched, Self.markUnwatched]
             return

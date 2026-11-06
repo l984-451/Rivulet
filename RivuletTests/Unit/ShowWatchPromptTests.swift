@@ -32,6 +32,12 @@ final class ShowWatchPromptTests: XCTestCase {
         XCTAssertEqual(ShowWatchPrompt(progress: ChildProgress(played: 0, total: 24)).choices, [watched])
     }
 
+    func test_unplayedCountAlone_offersBoth_withoutMessage() {
+        let prompt = ShowWatchPrompt(progress: ChildProgress(played: 0, total: 6, unplayedOnly: true))
+        XCTAssertNil(prompt.message)
+        XCTAssertEqual(prompt.choices, [watched, unwatched])
+    }
+
     func test_noCounts_offersBoth_withoutMessage() {
         let prompt = ShowWatchPrompt(progress: nil)
         XCTAssertNil(prompt.message)

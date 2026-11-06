@@ -8,7 +8,7 @@ final class OfflineProgressLogTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_790_000_000)
 
     private func entry(_ key: String = "971", profile: String? = "1", offset: Int, watched: Bool = false, at seconds: TimeInterval) -> OfflineProgressLog.Entry {
-        .init(serverID: "srv", profileID: profile, ratingKey: key, offsetMs: offset, durationMs: 1_320_778,
+        .init(providerID: "plex:srv", profileID: profile, itemID: key, offsetMs: offset, durationMs: 1_320_778,
               watched: watched, at: t0.addingTimeInterval(seconds))
     }
 
@@ -67,11 +67,11 @@ final class OfflineProgressLogTests: XCTestCase {
         let sent = await OfflineProgressLog.replay(
             entries,
             serverLastViewedAt: { e in
-                if e.ratingKey == "2" { throw PlexAPIError.notFound }
-                return e.ratingKey == "3" ? self.t0.addingTimeInterval(500) : nil
+                if e.itemID == "2" { throw PlexAPIError.notFound }
+                return e.itemID == "3" ? self.t0.addingTimeInterval(500) : nil
             },
-            send: { sentKeys.append($0.ratingKey) },
-            remove: { removed.append($0.ratingKey) })
+            send: { sentKeys.append($0.itemID) },
+            remove: { removed.append($0.itemID) })
         XCTAssertTrue(sent)
         XCTAssertEqual(sentKeys, ["1"])
         XCTAssertEqual(removed, ["1", "2", "3"])
@@ -85,14 +85,14 @@ final class OfflineProgressLogTests: XCTestCase {
             entries,
             serverLastViewedAt: { _ in nil },
             send: { e in
-                switch e.ratingKey {
+                switch e.itemID {
                 case "403": throw PlexAPIError.httpError(statusCode: 403, data: nil)
                 case "500": throw PlexAPIError.httpError(statusCode: 500, data: nil)
                 case "offline": throw URLError(.notConnectedToInternet)
                 default: break
                 }
             },
-            remove: { removed.append($0.ratingKey) })
+            remove: { removed.append($0.itemID) })
         XCTAssertTrue(sent)
         XCTAssertEqual(removed, ["403", "ok"])
     }

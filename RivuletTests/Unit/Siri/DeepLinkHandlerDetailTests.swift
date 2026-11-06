@@ -6,6 +6,7 @@
 //  RivuletTests
 //
 
+import Synchronization
 import XCTest
 @testable import Rivulet
 
@@ -95,6 +96,33 @@ final class DeepLinkHandlerDetailTests: XCTestCase {
             XCTAssertNil(handler.handle(RivuletLink(.detail, ratingKey: key)))
             XCTAssertNil(handler.heldLink, key)
         }
+    }
+
+    /// The provider prefixes come from `MediaProviderKind`, so a new kind needs no edit here.
+    func testEveryOtherServerKindIsAProviderLink() {
+        let handler = makeHandler { key, _ in self.metadata(key) }
+        for kind in MediaProviderKind.otherServerKinds {
+            let server = "\(kind.rawValue):srv"
+            XCTAssertEqual(handler.providerID(of: RivuletLink(.detail, ratingKey: "1", server: server)), server, "\(kind)")
+        }
+        MediaItemRef.extraPlexIDs.withLock { $0 = ["plex:office"] }
+        defer { MediaItemRef.extraPlexIDs.withLock { $0 = [] } }
+        XCTAssertEqual(handler.providerID(of: RivuletLink(.detail, ratingKey: "1", server: "plex:office")), "plex:office")
+        XCTAssertNil(handler.providerID(of: RivuletLink(.detail, ratingKey: "1", server: "plex:main")),
+                     "the selected server resolves through its own path")
+        XCTAssertNil(handler.providerID(of: RivuletLink(.detail, ratingKey: "1", server: "unknown:srv")))
+        XCTAssertNil(handler.providerID(of: RivuletLink(.detail, ratingKey: "1")))
+    }
+
+    func testSignedOutOfPlex_onlyAKnownKindsLinkIsKept() {
+        let handler = makeHandler { key, _ in self.metadata(key) }
+        handler.isSignedIn = { false }
+        handler.credentials = { nil }
+        handler.handle(RivuletLink(.detail, ratingKey: "1", server: "jellyfin:srv"))
+        XCTAssertEqual(handler.heldLink?.ratingKey, "1", "another server needs no Plex sign-in")
+        handler.dropHeldLink()
+        handler.handle(RivuletLink(.detail, ratingKey: "2", server: "unknown:srv"))
+        XCTAssertNil(handler.heldLink)
     }
 
     func testLinkBeforeShellReadyIsHeldThenDelivered() async {

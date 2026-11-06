@@ -54,6 +54,10 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     let connectionState = ConnectionState.connected
     let supportsWatchlist = false
+    var sortOverride: [LibrarySortOption]?
+    func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption] {
+        sortOverride ?? LibrarySortOption.expressible(for: kind)
+    }
 
     var continueWatchingItems: [MediaItem] = []
     var continueWatchingError: Error?
@@ -82,7 +86,18 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     var searchItems: [MediaItem] = []
-    func search(_ query: String) async throws -> [MediaItem] { searchItems }
+    var searchError: Error?
+    func search(_ query: String) async throws -> [MediaItem] {
+        if let searchError { throw searchError }
+        return searchItems
+    }
+    /// What `ownedItems(matching:limit:)` answers, and the titles it was asked for.
+    var ownedItemsResult: [MediaItem] = []
+    private(set) var ownedRequests: [[TitleMatch]] = []
+    func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
+        ownedRequests.append(titles)
+        return Array(ownedItemsResult.prefix(limit))
+    }
     /// What `related(for:kind:)` answers, and the kinds it was asked for.
     var relatedContent = RelatedContent(items: [], collection: nil)
     private(set) var relatedKinds: [MediaKind] = []
@@ -106,8 +121,11 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     /// `maxBitrate` of each `resolveStream`, in order.
     var resolveBitrates: [Int?] { callLock.withLock { recordedBitrates } }
     private func recordCall(_ call: String) { callLock.withLock { recordedCalls.append(call) } }
+    /// Answers `fullDetail` per item when set.
+    var detailResultFor: (@Sendable (MediaItemRef) throws -> MediaItemDetail)?
     func fullDetail(for itemRef: MediaItemRef) async throws -> MediaItemDetail {
         recordCall("detail(\(itemRef.itemID))")
+        if let detailResultFor { return try detailResultFor(itemRef) }
         guard let detailResult else { throw MediaProviderError.notFound }
         return detailResult
     }
@@ -123,8 +141,11 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     func hubs() async throws -> [MediaHub] { [] }
     var hubsByLibrary: [String: [MediaHub]] = [:]
     var hubsError: Error?
+    /// Libraries whose `hubs(in:)` throws, the others answering.
+    var failingHubLibraries: Set<String> = []
     func hubs(in library: MediaLibrary) async throws -> [MediaHub] {
         if let hubsError { throw hubsError }
+        if failingHubLibraries.contains(library.id) { throw MediaProviderError.unreachable }
         return hubsByLibrary[library.id] ?? []
     }
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {
@@ -136,6 +157,14 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         }
         guard let streamResult else { throw MediaProviderError.notFound }
         return streamResult
+    }
+    /// `startTime` of each `resolveStream`, in order.
+    private var recordedStarts: [TimeInterval] = []
+    var resolveStartTimes: [TimeInterval] { callLock.withLock { recordedStarts } }
+    func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
+                       startTime: TimeInterval) async throws -> StreamInfo {
+        callLock.withLock { recordedStarts.append(startTime) }
+        return try await resolveStream(for: itemRef, sourceID: sourceID, maxBitrate: maxBitrate)
     }
     /// What `transcodeStream` answers, and what it was asked for.
     var transcodeResult: StreamInfo?
@@ -159,14 +188,34 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     func setSelectedSubtitleTrack(_ trackID: String?, source sourceID: String, of itemRef: MediaItemRef) async throws {}
     private(set) var markedPlayed: [MediaItemRef] = []
     private(set) var markedUnplayed: [MediaItemRef] = []
-    func markPlayed(_ itemRef: MediaItemRef) async throws { markedPlayed.append(itemRef) }
+    var markPlayedError: Error?
+    func markPlayed(_ itemRef: MediaItemRef) async throws {
+        if let markPlayedError { throw markPlayedError }
+        markedPlayed.append(itemRef)
+    }
     func markUnplayed(_ itemRef: MediaItemRef) async throws { markedUnplayed.append(itemRef) }
     private(set) var refreshed: [MediaItemRef] = []
     func refreshMetadata(_ itemRef: MediaItemRef) async throws { refreshed.append(itemRef) }
     private(set) var progressUpdates: [(MediaItemRef, TimeInterval)] = []
+    var progressError: Error?
+    /// Fails `updateProgress` for some items only.
+    var progressErrorFor: (@Sendable (MediaItemRef) -> Error?)?
     func updateProgress(_ itemRef: MediaItemRef, position: TimeInterval) async throws {
+        if let progressError { throw progressError }
+        if let error = progressErrorFor?(itemRef) { throw error }
         progressUpdates.append((itemRef, position))
     }
+    /// What `canDownloadMedia` answers in turn (the last repeats), and how often it was asked.
+    var downloadAnswers: [Result<Bool, Error>] = []
+    private(set) var downloadAsks = 0
+    func canDownloadMedia() async throws -> Bool {
+        downloadAsks += 1
+        guard !downloadAnswers.isEmpty else { return false }
+        let answer = downloadAnswers.count > 1 ? downloadAnswers.removeFirst() : downloadAnswers[0]
+        return try answer.get()
+    }
+    var accountIDValue: String?
+    var accountID: String? { accountIDValue }
     func isOnWatchlist(_ ref: MediaItemRef) async -> Bool { false }
     func addToWatchlist(_ ref: MediaItemRef) async throws {}
     func removeFromWatchlist(_ ref: MediaItemRef) async throws {}

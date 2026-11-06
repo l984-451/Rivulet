@@ -38,6 +38,39 @@ enum TrackMerge {
         }
     }
 
+    // MARK: - Picks across the two lists
+
+    /// The server stream id for an engine track, joined as the merge joins them. Sidecars pair
+    /// only when every one was registered: a download that lost one would shift the rest.
+    static func serverID(forEngine id: Int, engine: [MediaTrack], server: [MediaTrack]) -> Int? {
+        guard let track = engine.first(where: { $0.id == id }) else { return nil }
+        if track.isExternal {
+            let sidecars = server.filter { $0.subtitleKey != nil }
+            let registered = engine.filter(\.isExternal)
+            guard registered.count == sidecars.count,
+                  let ordinal = registered.firstIndex(where: { $0.id == id }) else { return nil }
+            return sidecars[ordinal].id
+        }
+        return track.streamIndex.flatMap { index in
+            server.first { $0.subtitleKey == nil && $0.streamIndex == index }?.id
+        }
+    }
+
+    /// The engine track for a server stream id: the inverse of `serverID(forEngine:)`.
+    static func engineTrack(forServer id: Int, engine: [MediaTrack], server: [MediaTrack]) -> MediaTrack? {
+        guard let position = server.firstIndex(where: { $0.id == id }) else { return nil }
+        let stream = server[position]
+        if stream.subtitleKey != nil {
+            let ordinal = server[..<position].count { $0.subtitleKey != nil }
+            let registered = engine.filter(\.isExternal)
+            guard registered.count == server.count(where: { $0.subtitleKey != nil }) else { return nil }
+            return registered[ordinal]
+        }
+        return stream.streamIndex.flatMap { index in
+            engine.first { !$0.isExternal && $0.streamIndex == index }
+        }
+    }
+
     /// Plex streams keyed by container stream index. Streams with no index are
     /// dropped; duplicate indices keep the first.
     private static func indexPlexStreams(_ plex: [MediaTrack]) -> [Int: MediaTrack] {

@@ -442,11 +442,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return (container.MediaContainer.Metadata ?? [], container.MediaContainer.totalSize)
     }
 
-    /// Library items with the section's total, for pagination.
-    /// `sort` is a Plex sort key such as "-addedAt" or "titleSort".
-    func getLibraryItemsWithTotal(
+    /// URL for one page of a section's items. Start and Size go together: Plex ignores Size without Start.
+    nonisolated static func libraryItemsURL(
         serverURL: String,
-        authToken: String,
         sectionId: String,
         start: Int = 0,
         size: Int = 100,
@@ -455,9 +453,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         includeGuids: Bool = false,
         followCollectionMode: Bool = false,
         filters: [URLQueryItem] = []
-    ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
+    ) -> URL? {
         guard var components = URLComponents(string: "\(serverURL)/library/sections/\(sectionId)/all") else {
-            throw PlexAPIError.invalidURL
+            return nil
         }
 
         var queryItems = [
@@ -490,8 +488,27 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         components.queryItems = queryItems + filters
+        return components.url
+    }
 
-        guard let url = components.url else {
+    /// Library items with the section's total, for pagination.
+    /// `sort` is a Plex sort key such as "-addedAt" or "titleSort".
+    func getLibraryItemsWithTotal(
+        serverURL: String,
+        authToken: String,
+        sectionId: String,
+        start: Int = 0,
+        size: Int = 100,
+        sort: String? = nil,
+        type: Int? = nil,
+        includeGuids: Bool = false,
+        followCollectionMode: Bool = false,
+        filters: [URLQueryItem] = []
+    ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
+        guard let url = Self.libraryItemsURL(
+            serverURL: serverURL, sectionId: sectionId, start: start, size: size, sort: sort, type: type,
+            includeGuids: includeGuids, followCollectionMode: followCollectionMode, filters: filters
+        ) else {
             throw PlexAPIError.invalidURL
         }
 
@@ -1343,6 +1360,14 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         guard let url = URL(string: serverURL) else { return false }
         let root: PlexServerRootWrapper? = try? await request(url, headers: plexHeaders(authToken: authToken))
         return root?.MediaContainer.allowMediaDeletion == true
+    }
+
+    /// Whether `authToken` may delete media: the owner, with "Allow media deletion" on.
+    func canDeleteMedia(serverURL: String, authToken: String) async -> Bool {
+        async let admin = canAdministerServer(serverURL: serverURL, authToken: authToken)
+        async let allowed = allowsMediaDeletion(serverURL: serverURL, authToken: authToken)
+        let (isAdmin, isAllowed) = await (admin, allowed)
+        return isAdmin && isAllowed
     }
 
     /// Deletes an item and its files from the server.

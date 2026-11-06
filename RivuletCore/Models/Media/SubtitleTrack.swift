@@ -29,7 +29,7 @@ struct SubtitleTrack: Hashable, Sendable, Identifiable {
     let isEmbedded: Bool           // native in-band delivery, not the subtitle's original storage location
     let externalURL: URL?          // populated only when this delivery mounts a sidecar
     /// Backend-side "this is the user's current pick" flag. See `AudioTrack.isSelected`.
-    let isSelected: Bool
+    var isSelected: Bool
     /// Nil inherits legacy source headers; an explicit empty dictionary sends no credentials.
     var externalHTTPHeaders: [String: String]? = nil
     /// Exact native demuxer identity, distinct from the provider's selection ordinal.

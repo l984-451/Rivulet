@@ -6,7 +6,7 @@
 //  RivuletTests
 //
 //  The Skip Length setting (#233): the SkipInterval enum, and the wiring from
-//  the `skipSeconds` default through InputConfig.tapSeekSeconds into an actual
+//  the `skipForwardSeconds` default through InputConfig.tapSeekSeconds into an actual
 //  coalesced seek.
 //
 
@@ -52,7 +52,7 @@ final class SkipIntervalSettingTests: XCTestCase {
     // MARK: Enum integrity
 
     func testSkipIntervalOptionsAreNumberedGlyphMagnitudes() {
-        XCTAssertEqual(SkipInterval.allCases.map(\.rawValue), [5, 10, 15, 30])
+        XCTAssertEqual(SkipInterval.allCases.map(\.rawValue), [5, 10, 15, 30, 60])
     }
 
     func testSkipIntervalDescriptionRendersSeconds() {

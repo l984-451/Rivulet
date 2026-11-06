@@ -6,7 +6,7 @@
 
 **Built for simplicity.**
 
-A native Apple TV app for Plex, Jellyfin, Silo, and Live TV.
+A native Apple TV app for Plex, Jellyfin, Emby, Silo, and Live TV.
 
 <a href="https://apps.apple.com/us/app/rivulet-for-plex/id6756892857">
   <img src="https://img.shields.io/badge/Download_on_the-App_Store-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download on the App Store">
@@ -92,12 +92,16 @@ Silo's current native rating contract does not include Certified Fresh or Verifi
 
 Use a trusted HTTPS certificate, or HTTP on a trusted local network. Reverse-proxy path prefixes are supported. Accounts requiring a password change must complete it in Silo's web app first.
 
-Silo support is tvOS-only. Silo music/books, editable native playlists, and multipart-only playback are not supported. Calendar, personal collection editing, presentation-preference synchronization, companion control/handoff/nearby pairing, and Watch Party are outside this integration. The still-undefined `header_refresh=session` transport mode is not advertised; this does not prevent current bearer-auth refresh or supported playback-session renewal.
+Silo's native account/profile selection, catalog browsing and playback use the shared provider on tvOS and iOS. The detailed discovery, requests, metadata-translation controls and subtitle search/sync operations described above remain tvOS surfaces. Profile selection is explicit on both apps, including PIN verification; Silo credentials and profile proofs stay on the device and are not synchronized through iCloud.
+
+On iOS, native audio/subtitle selections and offered quality choices use the negotiated playback session. Subtitle changes reload at the current source position; tvOS retains its atomic text-caption-only swap when the server proves the video is unchanged.
+
+Silo offline downloads, music/books, editable native playlists, and multipart-only playback are not supported. Calendar, personal collection editing, presentation-preference synchronization, companion control/handoff/nearby pairing, and Watch Party are outside this integration. The still-undefined `header_refresh=session` transport mode is not advertised; this does not prevent current bearer-auth refresh or supported playback-session renewal.
 
 <br></br>
 ## Live TV
 
-Rivulet works with several kinds of Live TV source. You don't need a Plex, Jellyfin, or Silo server. Add just a Live TV source and the app opens straight to Live TV.
+Rivulet works with several kinds of Live TV source. You don't need a Plex, Jellyfin, Emby, or Silo server. Add just a Live TV source and the app opens straight to Live TV.
 
 - **What's On**: what's airing now, what starts soon, and a For You row that learns what you watch.
 - **Guide**: standard guide layout if you want.
@@ -223,6 +227,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 - [Plex](https://plex.tv/): media server platform
 - [Jellyfin](https://jellyfin.org/): open source media server
 - [Silo](https://siloserver.org/): native media server
+- [Emby](https://emby.media/): media server platform
 - [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr): IPTV management
 - [TMDB](https://www.themoviedb.org/): artwork and metadata for Discover
 - [Simple Icons 11.15.0](https://github.com/simple-icons/simple-icons/tree/11.15.0) ([CC0](https://github.com/simple-icons/simple-icons/blob/11.15.0/LICENSE.md)): IMDb, TMDB, Letterboxd, Metacritic, Trakt, and Kinopoisk rating marks.
@@ -233,7 +238,7 @@ Third-party components retain their original licenses. FFmpeg is included under 
 
 <div align="center">
 
-Rivulet is not affiliated with or endorsed by Plex, Inc., the Jellyfin project, or Silo.
+Rivulet is not affiliated with or endorsed by Plex, Inc., the Jellyfin project, Emby LLC, or Silo.
 
 Media used in the README is AI generated for copyright reasons.
 

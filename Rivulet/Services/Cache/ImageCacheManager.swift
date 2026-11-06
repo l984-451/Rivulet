@@ -12,24 +12,7 @@ import UIKit
 import Foundation
 import ImageIO
 
-/// Decode size for a cached image; the disk keeps the original bytes. tvOS renders at 1080p
-/// and upscales to 4K, so 3840 px (2x the screen width) is the ceiling; `thumb` is 2x a ~444 pt poster.
-enum ImageQuality: Sendable {
-    /// Small UI: poster rows, continue-watching, cast, episode stills, logos, blurred backdrops.
-    case thumb
-    /// Large surfaces that fill much of the screen: home hero, carousel, detail backdrops.
-    case full
-    /// Channel logos drawn at under 128 pt. A 900 px decode of each was about 1 MB per logo.
-    case logo
-
-    nonisolated var maxPixelSize: CGFloat {
-        switch self {
-        case .thumb: return 900
-        case .full:  return 3840
-        case .logo:  return 256
-        }
-    }
-
+extension ImageQuality {
     nonisolated fileprivate var keySuffix: String {
         switch self {
         case .thumb: return "t"

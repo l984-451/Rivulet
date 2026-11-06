@@ -583,7 +583,7 @@ extension PlexMetadata {
 
     /// Relative path of the clearLogo image from the Plex `Image` array, if present.
     /// Returns a server-relative path that still needs the server URL + X-Plex-Token to fetch.
-    var clearLogoPath: String? {
+    nonisolated var clearLogoPath: String? {
         Image?.first(where: { $0.type == "clearLogo" })?.url
     }
 
@@ -970,11 +970,6 @@ extension PlexMetadata {
     /// Credits/outro markers if available (can have multiple, e.g., mid-credits and post-credits)
     var creditsMarkers: [PlexMarker] {
         Marker?.filter { $0.isCredits } ?? []
-    }
-
-    /// First credits marker (for post-video trigger timing)
-    var firstCreditsMarker: PlexMarker? {
-        creditsMarkers.first
     }
 
     /// Commercial markers if available

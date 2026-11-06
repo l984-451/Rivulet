@@ -40,6 +40,16 @@ final class MusicProviderRegistryTests: XCTestCase {
         XCTAssertNil(registry.primaryProvider)
     }
 
+    func test_signedInProviders_plexFirst_thenOtherKindsSortedByID() {
+        let registry = MusicProviderRegistry()
+        registry.register(StubMusicProvider(id: "jellyfin:b", kind: .jellyfin))
+        registry.register(StubMusicProvider(id: "plex:old"))
+        registry.register(StubMusicProvider(id: "jellyfin:a", kind: .jellyfin))
+        registry.register(StubMusicProvider(id: "plex:new"))
+        XCTAssertEqual(registry.signedInProviders.map(\.id), ["plex:new", "jellyfin:a", "jellyfin:b"],
+                       "stale Plex ids stay out; the order does not follow registration")
+    }
+
     func test_missing_id_returns_nil() {
         let registry = MusicProviderRegistry()
         XCTAssertNil(registry.provider(for: "nope"))

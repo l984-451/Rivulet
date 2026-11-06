@@ -5,10 +5,9 @@
 //  IOSPlexSession.swift
 //  Rivulet iOS
 //
-//  The iOS content store over the shared Plex stack, the counterpart of tvOS's
-//  PlexDataStore. No endpoint code: it shapes shared results for the views,
-//  caches clear logos, and composes the playback URL (iOS has no ContentRouter).
-//  Content fetches live in IOSPlexSession+Content.swift.
+//  Plex sign-in, profile and server choice for the iOS app, plus the Plex playback pieces
+//  (iOS has no ContentRouter, so this composes the playback URL). What the browse screens
+//  show lives in IOSBrowseStore, over MediaProviderRegistry.
 //
 
 import Combine
@@ -30,78 +29,61 @@ final class IOSPlexSession: ObservableObject {
     @Published private(set) var pinCode: String?
     @Published private(set) var authenticationURL: URL?
     @Published private(set) var availableServers: [PlexDevice] = []
-    @Published private(set) var libraries: [PlexLibrary] = []
-    /// Each server's video playlists, keyed by `serverID ?? ""`; only servers that have any.
-    @Published private(set) var videoPlaylists: [String: [PlexPlaylist]] = [:]
-    /// Home rows after Continue Watching: promoted hubs of the pinned libraries.
-    @Published private(set) var shelves: [PlexHub] = []
-    /// One row across every server (#87): the same title on two servers is one card.
-    @Published private(set) var continueWatching: PlexHub?
-    /// Home hero slides (#414): trending for an hour, the watchlist's per list of entries.
-    private var trendingHero: (items: [PlexMetadata], at: Date)?
-    private var watchlistHero: (ids: [String], items: [PlexMetadata])?
-    @Published private(set) var isLoadingContent = false
-    /// Other servers still to answer; a tab on one of their libraries waits for this.
-    @Published private(set) var isLoadingOtherServers = false
-    @Published private(set) var contentError: String?
-    /// Bumped after a watched-state change so open grids and detail pages reload.
-    @Published private(set) var watchStateRevision = 0
-    /// Bumped on a server or profile switch; the tab stacks rebuild on it.
-    @Published private(set) var sessionGeneration = 0
+    /// What the browse screens show, for every server.
+    let browse = IOSBrowseStore()
     @Published private(set) var selectedServerName: String?
     @Published private(set) var profileImageURL: URL?
     @Published private(set) var profileDisplayName: String?
 
     let auth = PlexAuthManager.shared
     let network = PlexNetworkManager.shared
-    private var lastContentRefresh: Date?
-    private var refreshGeneration = 0
-    /// Last good hubs per pinned library, kept when a later fetch of one fails.
-    private var libraryHubs: [String: [PlexHub]] = [:]
-    private var libraryHubsSession: (serverURL: String, token: String)?
-    /// Each server's latest Home, so a server answering re-merges with the others.
-    private var selectedServerHome: IOSPlexHome?
-    private var otherServerHomes: [String: IOSPlexHome] = [:]
     private var cancellables = Set<AnyCancellable>()
-    /// Each server's own Continue Watching items, the selected server first, kept
-    /// so the row re-merges when show identities arrive.
-    private var continueWatchingRows: [[PlexMetadata]] = []
-    private var primaryContinueWatching: PlexHub?
-    /// A merged card's copies on other servers, by the card's id: watched and
-    /// remove reach every copy, or the one left behind brings the card back.
-    private(set) var continueWatchingCopies: [String: [PlexMetadata]] = [:]
-    private var logoURLCache: [String: URL] = [:]
-    private var missingLogoKeys = Set<String>()
-    private var logoResolutionTasks: [String: Task<URL?, Never>] = [:]
+    /// The registry is being rebuilt by `authChanged()`, which refreshes itself.
+    private var repopulating = false
+    private var secondaryIDs: [String] = []
 
     init() {
         // The auth manager owns identity and hands content off to the host's
         // store: on iOS, this object. Mirrors RivuletApp.init on tvOS.
         PlexAuthManager.onAuthenticated = { [weak self] in
             PlexExtraServers.shared.refreshForAccount()
-            await self?.refresh()
+            await self?.authChanged()
         }
         PlexAuthManager.onSignedOut = { [weak self] in
             PlexExtraServers.shared.clear()
             self?.clearContent()
+            // The registry drops the Plex servers, and Home shows whatever else is signed in.
+            Task { await self?.authChanged() }
         }
         // The account's other Plex servers (#87): their list and tokens follow the profile.
-        PlexExtraServers.onChanged = { [weak self] in Task { await self?.refresh() } }
+        PlexExtraServers.onChanged = { [weak self] in Task { await self?.authChanged() } }
+        SiloSession.onChanged = { [weak self] in
+            MediaProviderRegistry.shared.populateFromCurrentAuth()
+            NotificationCenter.default.post(name: .mediaProviderAccountsChanged, object: nil)
+            self?.contentSessionChanged()
+            Task { await self?.refresh() }
+        }
         PlexUserProfileManager.onProfileEntered = { token in
             Task { await PlexExtraServers.shared.refresh(plexToken: token) }
         }
-        ContinueWatchingRow.shared.fetchIdentityKeys = { [weak self] serverID, itemIDs in
-            guard let self, let (serverURL, token) = try? self.configuration(serverID: self.extraServerID(serverID)),
-                  let items = try? await self.network.getGuids(serverURL: serverURL, authToken: token, ratingKeys: itemIDs)
-            else { return [:] }
-            return Dictionary(items.compactMap { item in
-                item.ratingKey.map { ($0, item.type == "movie" ? ContinueWatchingMerge.plexKeys(item) : ContinueWatchingMerge.plexShowKeys(item)) }
-            },
-                              uniquingKeysWith: { first, _ in first })
+        // Jellyfin and Emby sign in and out through the registry; follow it.
+        secondaryIDs = MediaProviderRegistry.shared.secondaryProviders.map(\.id)
+        MediaProviderRegistry.shared.onSecondaryProvidersChanged = { [weak self] providers in
+            // The servers' Live TV follows every sign-in, sign-out and profile change (shared with tvOS).
+            OtherServerKind.configureLiveTV(secondary: providers, restricted: PlexUserProfileManager.shared.isRestrictedProfile)
+            guard let self else { return }
+            let ids = providers.map(\.id)
+            defer { secondaryIDs = ids }
+            guard !repopulating, ids != secondaryIDs else { return }
+            Task { await self.refresh() }
         }
-        ContinueWatchingRow.shared.$version.dropFirst()
-            .sink { [weak self] _ in self?.mergeContinueWatching() }
-            .store(in: &cancellables)
+        // The registry was filled before this ran, so the first pass is ours.
+        OtherServerKind.configureLiveTV(restricted: PlexUserProfileManager.shared.isRestrictedProfile)
+        // Progress logged while the server was unreachable goes out once it answers.
+        browse.afterRefresh = { [weak self] in
+            guard let self, await flushOfflineProgress() else { return }
+            Task { await self.watchStateDidChange() }
+        }
 
         auth.$state
             .sink { [weak self] in self?.apply(authState: $0) }
@@ -118,8 +100,8 @@ final class IOSPlexSession: ObservableObject {
         if isConfigured {
             state = .connected
             PlexExtraServers.shared.refreshForAccount()
-            Task { await refresh() }
         }
+        Task { await refresh() }
     }
 
     /// Signed in with a server chosen. Content may still wait on a Home profile.
@@ -136,9 +118,9 @@ final class IOSPlexSession: ObservableObject {
 
     func selectServer(_ server: PlexDevice) async { await auth.selectServer(server) }
 
-    func signOut() {
+    func signOut(scope: SignOutScope? = nil) {
         // clearContent() runs via the onSignedOut handoff.
-        auth.signOut()
+        auth.signOut(scope: scope)
     }
 
     /// Maps the shared auth state machine onto the iOS view states.
@@ -183,129 +165,24 @@ final class IOSPlexSession: ObservableObject {
 
     // MARK: - Content
 
+    /// Pull to refresh and the stale-return refresh.
     func refresh() async {
-        guard let session = try? configuration() else { return }
-        refreshGeneration += 1
-        let generation = refreshGeneration
-        // A newer refresh, a sign-out or a server/profile switch owns the UI once this one returns.
-        func isCurrent() -> Bool {
-            generation == refreshGeneration && (try? configuration()).map { $0 == session } == true
-        }
-        isLoadingContent = true
-        defer { if generation == refreshGeneration { isLoadingContent = false } }
-        if libraryHubsSession.map({ $0 != session }) ?? true {
-            selectedServerHome = nil
-            otherServerHomes = [:]
-            libraryHubs = [:]
-            primaryContinueWatching = nil
-            continueWatchingRows = []
-            libraryHubsSession = session
-        }
-        // The other servers fill in behind: one that can't be reached must not hold back the rest (#474).
-        isLoadingOtherServers = true
-        let otherServers = Task {
-            await loadOtherServers(while: isCurrent)
-            if generation == refreshGeneration { isLoadingOtherServers = false }
-        }
-        do {
-            // The selected server's failure is the page's; another server's only drops its rows.
-            async let playlists = fetchPlaylists(serverID: nil)
-            let home = try await fetchHome()
-            let lists = await playlists
-            guard isCurrent() else { return }
-            // Before the libraries, which re-check the sidebar tabs these back.
-            applyPlaylists(lists, serverID: nil)
-            selectedServerHome = home
-            publishHome()
-            selectedServerName = auth.selectedServer?.name ?? auth.savedServerName
-            contentError = nil
-            lastContentRefresh = .now
-            state = .connected
-        } catch let error where isCancellationError(error) {
-            otherServers.cancel()
-            return
-        } catch {
-            otherServers.cancel()
-            guard isCurrent() else { return }
-            contentError = error.localizedDescription
-            return await PlexWatchlistService.shared.fetchWatchlist()
-        }
-        await PlexWatchlistService.shared.fetchWatchlist()
-        // The server answered: send progress made offline, then repaint with it.
-        if await flushOfflineProgress() { Task { await watchStateDidChange() } }
+        await browse.refresh()
+        selectedServerName = auth.selectedServer?.name ?? auth.savedServerName
     }
 
-    /// Fetches each other server, publishing as it answers. A server that fails drops its rows.
-    private func loadOtherServers(while isCurrent: @escaping @MainActor () -> Bool) async {
-        let ids = PlexExtraServers.shared.current.map(\.machineID)
-        videoPlaylists = videoPlaylists.filter { $0.key.isEmpty || ids.contains($0.key) }
-        await withTaskGroup(of: (String, IOSPlexHome?, [PlexPlaylist]?).self) { group in
-            for id in ids {
-                group.addTask {
-                    async let home = try? self.fetchHome(serverID: id)
-                    async let lists = self.fetchPlaylists(serverID: id)
-                    return await (id, home, lists)
-                }
-            }
-            for await (id, home, lists) in group {
-                guard isCurrent() else { return group.cancelAll() }
-                applyPlaylists(lists, serverID: id)
-                otherServerHomes[id] = home
-                publishHome()
-            }
-        }
-    }
-
-    /// Nil keeps the server's last answer.
-    private func applyPlaylists(_ lists: [PlexPlaylist]?, serverID: String?) {
-        guard let lists else { return }
-        videoPlaylists[serverID ?? ""] = lists.isEmpty ? nil : lists
-    }
-
-    /// Home and the libraries from every server's latest answer. Waits for the selected server's first.
-    private func publishHome() {
-        guard let home = selectedServerHome else { return }
-        let others = PlexExtraServers.shared.current.compactMap { otherServerHomes[$0.machineID] }
-        libraries = home.libraries + others.flatMap(\.libraries)
-        if let cw = home.continueWatching { primaryContinueWatching = cw }
-        let pinned = libraries.filter(\.isPinnedToHome)
-        libraryHubs = Dictionary(uniqueKeysWithValues: pinned.compactMap { library in
-            let fetched = home.hubsByLibrary[library.id] ?? others.lazy.compactMap { $0.hubsByLibrary[library.id] }.first
-            return (fetched ?? libraryHubs[library.id]).map { (library.id, $0) }
-        })
-        shelves = pinned.flatMap { libraryHubs[$0.id] ?? [] }.filter {
-            $0.promoted == true && !$0.isContinueWatching && !$0.items.isEmpty
-        }
-        continueWatchingRows = [primaryContinueWatching?.Metadata ?? []]
-            + others.map { ($0.continueWatching ?? nil)?.Metadata ?? [] }
-        mergeContinueWatching()
-    }
-
-    /// Foreground return: refetch only when Home is more than five minutes old.
-    func refreshIfStale() async {
-        guard let lastContentRefresh, Date.now.timeIntervalSince(lastContentRefresh) > 300 else { return }
+    /// Plex sign-in, profile, server or connection changed: the registry's providers follow, then Home.
+    func authChanged() async {
+        repopulating = true
+        MediaProviderRegistry.shared.populateFromCurrentAuth()
+        repopulating = false
         await refresh()
     }
 
-    /// After a playlist edit: the Library rows and sidebar tabs follow the new lists.
-    func refreshPlaylists() async {
-        let ids: [String?] = [nil] + PlexExtraServers.shared.current.map(\.machineID)
-        await withTaskGroup(of: (String?, [PlexPlaylist]?).self) { group in
-            for id in ids {
-                group.addTask { await (id, self.fetchPlaylists(serverID: id)) }
-            }
-            for await (id, lists) in group { applyPlaylists(lists, serverID: id) }
-        }
-    }
-
-    /// A server or profile switch: open pages belong to the old one, so the tab stacks reset.
-    func contentSessionChanged() { sessionGeneration += 1 }
+    func contentSessionChanged() { browse.contentSessionChanged() }
 
     /// Called after playback or a watched toggle: repaint open pages, then Home.
-    func watchStateDidChange() async {
-        watchStateRevision += 1
-        await refresh()
-    }
+    func watchStateDidChange() async { await browse.watchStateDidChange() }
 
     // MARK: - Artwork
 
@@ -349,141 +226,28 @@ final class IOSPlexSession: ObservableObject {
         )
     }
 
-    /// Resolves the same logo source as tvOS: episodes use their show's full
-    /// metadata, while movies and shows use their own. Hub responses omit the
-    /// Image array, so results (including misses) are cached per source key.
-    func logoURL(for item: PlexMetadata) async -> URL? {
-        guard let (serverURL, token) = try? configuration(serverID: item.serverID) else { return nil }
-        let sourceKey: String?
-        switch item.type {
-        case "episode":
-            sourceKey = item.grandparentRatingKey
-        case "season":
-            sourceKey = item.parentRatingKey ?? item.ratingKey
-        default:
-            sourceKey = item.ratingKey
-        }
-        guard let sourceKey else { return nil }
-        // Rating keys repeat across servers, so the cache is per server.
-        let cacheKey = "\(serverURL)|\(sourceKey)"
-
-        if let cached = logoURLCache[cacheKey] { return cached }
-        if missingLogoKeys.contains(cacheKey) { return nil }
-
-        if item.type != "episode", item.type != "season",
-           let direct = Self.directResourceURL(serverURL: serverURL, token: token, path: item.clearLogoPath) {
-            logoURLCache[cacheKey] = direct
-            return direct
-        }
-
-        if let existing = logoResolutionTasks[cacheKey] {
-            return await existing.value
-        }
-
-        let task = Task<URL?, Never> { [network] in
-            guard let metadata = try? await network.getMetadata(
-                serverURL: serverURL,
-                authToken: token,
-                ratingKey: sourceKey
-            ) else { return nil }
-            return Self.directResourceURL(serverURL: serverURL, token: token, path: metadata.clearLogoPath)
-        }
-        logoResolutionTasks[cacheKey] = task
-        let resolved = await task.value
-        logoResolutionTasks[cacheKey] = nil
-        if let resolved {
-            logoURLCache[cacheKey] = resolved
-        } else {
-            missingLogoKeys.insert(cacheKey)
-        }
-        return resolved
-    }
-
-    /// The logo URL if `logoURL(for:)` already resolved it, so a view can draw it on its first frame.
-    func cachedLogoURL(for item: PlexMetadata) -> URL? {
-        guard let serverURL = try? configuration(serverID: item.serverID).serverURL,
-              let sourceKey = item.type == "episode" ? item.grandparentRatingKey
-                : item.type == "season" ? (item.parentRatingKey ?? item.ratingKey) : item.ratingKey
-        else { return nil }
-        return logoURLCache["\(serverURL)|\(sourceKey)"]
-    }
-
-    /// Resolves logos and downloads them with the art, in row order, four at a
-    /// time, so cards scrolled into view are already complete. Each `art` must
-    /// be the URL the card itself requests.
-    func prefetchArtwork(_ jobs: [(item: PlexMetadata, art: URL?)]) async {
-        await withTaskGroup(of: Void.self) { group in
-            for (index, job) in jobs.enumerated() {
-                if Task.isCancelled { break }
-                if index >= 4 { await group.next() }
-                group.addTask {
-                    if let logo = await self.logoURL(for: job.item) { _ = await IOSArtworkCache.shared.image(for: logo) }
-                    if let art = job.art { _ = await IOSArtworkCache.shared.image(for: art) }
-                }
-            }
-        }
-    }
-
-    /// Direct, authenticated URL for transparent assets such as clear logos.
-    /// The photo transcoder can flatten their alpha channel, so these skip it.
-    private static func directResourceURL(serverURL: String, token: String, path: String?) -> URL? {
-        guard let path, !path.isEmpty,
-              let base = URL(string: serverURL),
-              let absolute = URL(string: path, relativeTo: base)?.absoluteURL,
-              var components = URLComponents(url: absolute, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        // An absolute path on another host (a metadata CDN) must not receive the token.
-        guard absolute.host == base.host else { return absolute }
-        var queryItems = components.queryItems ?? []
-        if !queryItems.contains(where: { $0.name == "X-Plex-Token" }) {
-            queryItems.append(URLQueryItem(name: "X-Plex-Token", value: token))
-        }
-        components.queryItems = queryItems
-        return components.url
-    }
-
     // MARK: - Playback
 
     /// `quality` overrides the Home or Away setting; `previous` lends its fresh throughput reading.
     func playback(
         for item: PlexMetadata,
+        fromBeginning: Bool = false,
         quality: StreamingQuality? = nil,
-        previous: IOSPlexPlaybackRequest? = nil
+        previous: IOSPlexPlaybackRequest? = nil,
+        version: VersionChoice = .best
     ) async throws -> IOSPlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
-        if let local = IOSDownloadCenter.shared.localPlayback(for: item, serverID: item.serverID ?? previous?.downloadServerID) {
+        if var local = IOSDownloadCenter.shared.localPlayback(
+            for: item, serverID: item.serverID ?? previous?.downloadProviderID.flatMap(DownloadIdentity.plexMachineID(of:))) {
+            if fromBeginning { local.startTime = nil }
             return local
         }
         let full = try await metadata(for: item)
         let (serverURL, token) = try configuration(serverID: full.serverID)
         guard full.streamKey != nil else { throw IOSPlexSessionError.noPlayableURL }
 
-        var markers = full.Marker ?? []
-        if UserDefaults.standard.bool(forKey: "useIntroDB"),
-           full.type == "episode",
-           let showKey = full.grandparentRatingKey,
-           let season = full.parentIndex,
-           let episode = full.index {
-            // The show's IMDb id lives on the SHOW's guids; an episode's own
-            // Guid array carries episode-level ids that IntroDB rejects.
-            let show = try? await network.getMetadata(
-                serverURL: serverURL,
-                authToken: token,
-                ratingKey: showKey,
-                includeGuids: true
-            )
-            let guidStrings = (show?.Guid ?? []).compactMap(\.id) + [show?.guid].compactMap { $0 }
-            if let imdbID = guidStrings.compactMap(PlexMetadata.extractImdbId(from:)).first {
-                let community = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode)
-                let existingKinds = Set(markers.compactMap(\.type))
-                markers.append(contentsOf: community.filter { marker in
-                    guard let type = marker.type else { return false }
-                    return !existingKinds.contains(type)
-                })
-            }
-        }
+        let markers = await PlexPlaybackMarkers.markers(for: full, serverURL: serverURL, token: token, network: network)
 
         let resume = full.resumeSeconds
         let resumes = full.durationSeconds > 0
@@ -491,14 +255,14 @@ final class IOSPlexSession: ObservableObject {
             : WatchProgressPolicy.hasResumePoint(offsetSeconds: resume)
         return try await stream(
             full,
-            markers: markers.sorted { ($0.startTimeOffset ?? 0) < ($1.startTimeOffset ?? 0) },
+            markers: markers,
             serverURL: serverURL,
             token: token,
-            version: .best,
+            version: version,
             quality: quality,
             plan: nil,
             measurement: previous?.freshMeasurement,
-            startTime: resumes ? resume : nil
+            startTime: resumes && !fromBeginning ? resume : nil
         )
     }
 
@@ -572,7 +336,7 @@ final class IOSPlexSession: ObservableObject {
                 throw IOSPlexSessionError.noPlayableURL
             }
             url = direct
-            headers = Self.playbackHeaders(token: token)
+            headers = PlexProvider.directPlayHeaders(token: token)
         case .transcode(let step):
             guard let ratingKey = full.ratingKey,
                   let built = network.buildHLSDirectPlayURL(
@@ -619,7 +383,7 @@ final class IOSPlexSession: ObservableObject {
         let at = Date()
         let offsetMs = Int(time * 1000)
         if request.isLocal {
-            IOSDownloadCenter.shared.noteProgress(ratingKey: key, serverID: request.downloadServerID, offsetMs: offsetMs, watched: false, persist: state != "playing")
+            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
         guard !request.serverURL.isEmpty else { return nil }
         do {
@@ -632,12 +396,22 @@ final class IOSPlexSession: ObservableObject {
                 duration: request.item.duration,
                 sessionIdentifier: request.directPlaySessionID
             )
-            IOSOfflineProgress.reached(key, at: at)
+            if let owner = plexProviderID(of: request) { IOSOfflineProgress.reached(owner, itemID: key, at: at) }
             return terminated
         } catch {
-            IOSOfflineProgress.failed(key, offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
+            if let owner = plexProviderID(of: request) {
+                IOSOfflineProgress.record(providerID: owner, itemID: key, offsetMs: offsetMs,
+                                          durationMs: request.item.duration, watched: false, at: at)
+            }
             return nil
         }
+    }
+
+    /// The download key of the Plex server a request reports to: a download's own server (its metadata
+    /// carries none), else the item's, else the current one. Nil when no server is known.
+    func plexProviderID(of request: IOSPlexPlaybackRequest) -> String? {
+        DownloadIdentity.reportingKey(isLocal: request.isLocal, downloadProviderID: request.downloadProviderID,
+                                      itemServerID: request.item.serverID, currentMachineID: IOSDownloadCenter.shared.currentServerID)
     }
 
     private static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
@@ -654,66 +428,12 @@ final class IOSPlexSession: ObservableObject {
         return components.url
     }
 
-    private static func playbackHeaders(token: String) -> [String: String] {
-        [
-            "X-Plex-Token": token,
-            "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
-            "X-Plex-Platform": PlexAPI.platform,
-            "X-Plex-Product": PlexAPI.productName,
-            "User-Agent": "\(PlexAPI.productName)/\(PlexAPI.platform)",
-            "X-Playback-Session-Id": UUID().uuidString
-        ]
-    }
-
-    // MARK: - Home hero
-
-    /// TMDB's trending titles this server owns.
-    func trendingHeroItems() async -> [PlexMetadata] {
-        if let trendingHero, Date.now.timeIntervalSince(trendingHero.at) < 3600 { return trendingHero.items }
-        guard let (serverURL, token) = try? configuration(), let account = auth.authToken else { return [] }
-        let items = await PlexTrendingHero.items(serverURL: serverURL, serverToken: token, accountToken: account)
-        if !items.isEmpty { trendingHero = (items, .now) }
-        return items
-    }
-
-    /// The watchlist's first ten entries that this server owns, in watchlist order.
-    func watchlistHeroItems() async -> [PlexMetadata] {
-        let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
-        let ids = entries.map(\.id)
-        if let watchlistHero, watchlistHero.ids == ids { return watchlistHero.items }
-        let guids = entries.compactMap(\.plexGUID)
-        guard let (serverURL, token) = try? configuration(),
-              let owned = try? await network.findByGuids(serverURL: serverURL, authToken: token, guids: guids) else { return [] }
-        let items = PlexTrendingHero.ordered(owned, by: guids, limit: 10)
-        watchlistHero = (ids, items)
-        return items
-    }
-
     // MARK: - Private
 
     func clearContent() {
-        trendingHero = nil
-        watchlistHero = nil
-        libraries = []
-        videoPlaylists = [:]
-        shelves = []
-        continueWatching = nil
-        contentError = nil
-        lastContentRefresh = nil
-        PlexWatchlistService.shared.reset()
+        browse.clearContent()
         availableServers = []
         selectedServerName = nil
-        libraryHubs = [:]
-        libraryHubsSession = nil
-        selectedServerHome = nil
-        otherServerHomes = [:]
-        primaryContinueWatching = nil
-        continueWatchingRows = []
-        continueWatchingCopies = [:]
-        logoURLCache = [:]
-        missingLogoKeys = []
-        logoResolutionTasks.values.forEach { $0.cancel() }
-        logoResolutionTasks = [:]
     }
 
     func configuration() throws -> (serverURL: String, token: String) {
@@ -733,58 +453,6 @@ final class IOSPlexSession: ObservableObject {
         return (server.url, token)
     }
 
-    /// The other servers' names, by machineIdentifier.
-    var otherServerNames: [String: String] {
-        Dictionary(PlexExtraServers.shared.current.map { ($0.machineID, $0.name) }, uniquingKeysWith: { first, _ in first })
-    }
-
-    /// A row's server name for its badge, every row's alike, once more than one server is in play.
-    func serverBadge(serverID: String?) -> String? {
-        guard !PlexExtraServers.shared.current.isEmpty else { return nil }
-        return serverID.flatMap { otherServerNames[$0] } ?? auth.savedServerName ?? "Plex"
-    }
-
-    /// A title as lists show it: with its server's name once more than one server is in play.
-    func displayTitle(_ title: String, serverID: String?) -> String {
-        guard !PlexExtraServers.shared.current.isEmpty else { return title }
-        let name = serverID.flatMap { otherServerNames[$0] } ?? auth.savedServerName ?? "Plex"
-        return "\(title) (\(name))"
-    }
-
-    // MARK: - Continue Watching across servers
-
-    /// The selected server's machineIdentifier stands in for nil, so show keys never collide.
-    private var primaryServerKey: String { auth.selectedServerMachineID ?? "selected" }
-
-    /// Maps a show key's server part back to `serverID` (nil for the selected server).
-    func extraServerID(_ serverKey: String) -> String? {
-        serverKey == primaryServerKey ? nil : serverKey
-    }
-
-    /// Re-merges the servers' rows; the selected server's hub stays the row's shell.
-    func mergeContinueWatching() {
-        let contributing = continueWatchingRows.filter { !$0.isEmpty }.count
-        let cards = ContinueWatchingRow.shared.cards(
-            continueWatchingRows,
-            identity: ContinueWatchingMerge.plexKeys,
-            lookupKey: { [primaryServerKey] item in
-                let target = item.type == "episode" ? item.grandparentRatingKey : item.type == "season" ? item.parentRatingKey :
-                    (item.type == "movie" || item.type == "show") && ContinueWatchingMerge.plexKeys(item).isEmpty ? item.ratingKey : nil
-                return target.map { "\(item.serverID ?? primaryServerKey)|\($0)" }
-            },
-            watched: { $0.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) } })
-        continueWatchingCopies = Dictionary(cards.filter { !$0.others.isEmpty }.map { ($0.item.id, $0.others) },
-                                            uniquingKeysWith: { first, _ in first })
-        guard !cards.isEmpty else { return continueWatching = nil }
-        var hub = primaryContinueWatching ?? PlexHub(hubIdentifier: "continueWatching", title: String(localized: "Continue Watching"))
-        hub.Metadata = cards.map(\.item)
-        // A merged row has no one server to page from.
-        if contributing > 1 {
-            hub.key = nil
-            hub.hubKey = nil
-        }
-        continueWatching = hub
-    }
 }
 
 nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
@@ -805,14 +473,16 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     let transcodeSessionID: String?
     var measuredKbps: Int?
     var measuredAt: Date?
-    let startTime: TimeInterval?
+    var startTime: TimeInterval?
     /// The Plex play session a direct-play file's timeline carries, so the dashboard shows it (#423).
     var directPlaySessionID: String? = nil
     /// Set for a downloaded file: its saved subtitles and poster.
     var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
     var localArtworkURL: URL? = nil
-    /// The server a downloaded file came from, which may not be the current one.
-    var downloadServerID: String? = nil
+    /// The server a downloaded file came from (`DownloadRecord.providerID`), which may not be the current one.
+    var downloadProviderID: String? = nil
+    /// Set for a Jellyfin or Emby item: `item` is then a display shim and this is the real stream.
+    var providerPlayback: ProviderPlayback? = nil
 
     /// A throughput reading young enough for Up Next and reloads to reuse.
     var freshMeasurement: (kbps: Int?, at: Date)? {
@@ -824,13 +494,11 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
 nonisolated enum IOSPlexSessionError: LocalizedError {
     case notConfigured
     case noPlayableURL
-    case watchlistUnavailable
 
     var errorDescription: String? {
         switch self {
         case .notConfigured: String(localized: "No Plex server is connected.")
         case .noPlayableURL: String(localized: "This item has no playable file.")
-        case .watchlistUnavailable: String(localized: "Couldn't update your Watchlist.")
         }
     }
 }

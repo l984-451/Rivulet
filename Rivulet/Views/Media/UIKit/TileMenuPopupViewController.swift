@@ -14,6 +14,10 @@ struct TileMenuAction {
     let systemImage: String
     var destructive: Bool = false
     let handler: () -> Void
+    /// Set on a row that waits on the server: it shows a spinner until this answers with the real row.
+    private(set) var resolve: (@MainActor @Sendable () async -> TileMenuAction)?
+    /// Every title the row may end up with, so the panel is wide enough before it knows.
+    private(set) var sizingTitles: [String] = []
 
     /// A literal `title` is extracted to the string catalog; a server's text goes through `verbatim:`.
     init(title: String.LocalizationValue, systemImage: String, destructive: Bool = false, handler: @escaping () -> Void) {
@@ -25,6 +29,15 @@ struct TileMenuAction {
         self.systemImage = systemImage
         self.destructive = destructive
         self.handler = handler
+    }
+
+    /// A row that shows `title` and a spinner until `resolve` returns the real action.
+    static func pending(title: String.LocalizationValue, sizedFor titles: [String],
+                        resolve: @escaping @MainActor @Sendable () async -> TileMenuAction) -> TileMenuAction {
+        var action = TileMenuAction(title: title, systemImage: "", handler: {})
+        action.resolve = resolve
+        action.sizingTitles = titles
+        return action
     }
 }
 
@@ -88,6 +101,33 @@ enum TileLongPress {
             view = current.superview
         }
         return nil
+    }
+}
+
+/// Where the tile menu sits: beside the tile, right of it when there is room. Top edges line up, or,
+/// when the panel would run off the bottom, bottom edges, so it grows upward like the system menu.
+enum TileMenuPlacement {
+    static func place(panel: CGSize, beside tile: CGRect?, in bounds: CGRect)
+        -> (frame: CGRect, anchor: CGPoint) {
+        let safe = bounds.insetBy(dx: 80, dy: 50)
+        let gap: CGFloat = 16
+        guard let tile else {
+            let origin = CGPoint(x: bounds.midX - panel.width / 2, y: bounds.midY - panel.height / 2)
+            return (CGRect(origin: origin, size: panel), CGPoint(x: 0.5, y: 0.5))
+        }
+        var origin = CGPoint(x: tile.maxX + gap, y: tile.minY)
+        var anchor = CGPoint(x: 0, y: 0)
+        if origin.x + panel.width > safe.maxX {
+            origin.x = tile.minX - gap - panel.width
+            anchor.x = 1
+        }
+        if origin.y + panel.height > safe.maxY {
+            origin.y = tile.maxY - panel.height
+            anchor.y = 1
+        }
+        origin.x = min(max(origin.x, safe.minX), safe.maxX - panel.width)
+        origin.y = min(max(origin.y, safe.minY), safe.maxY - panel.height)
+        return (CGRect(origin: origin, size: panel), anchor)
     }
 }
 
@@ -191,31 +231,13 @@ final class TileMenuPopupViewController: UIViewController {
             + headerHeight
             + panelInset * 2
 
-        // Beside the tile, top edges aligned: right of it when there's
-        // room, else left. Clamped into the overscan-safe region.
-        let safe = view.bounds.insetBy(dx: 80, dy: 50)
-        let gap: CGFloat = 16
-        var origin: CGPoint
-        var growsFromLeftEdge = true  // panel's tile-adjacent top corner
-        if let sourceFrame {
-            origin = CGPoint(x: sourceFrame.maxX + gap, y: sourceFrame.minY)
-            if origin.x + panelWidth > safe.maxX {
-                origin.x = sourceFrame.minX - gap - panelWidth
-                growsFromLeftEdge = false
-            }
-        } else {
-            origin = CGPoint(x: view.bounds.midX - panelWidth / 2,
-                             y: view.bounds.midY - panelHeight / 2)
-        }
-        origin.x = min(max(origin.x, safe.minX), safe.maxX - panelWidth)
-        origin.y = min(max(origin.y, safe.minY), safe.maxY - panelHeight)
-        panel.frame = CGRect(origin: origin, size: CGSize(width: panelWidth, height: panelHeight))
+        let placement = TileMenuPlacement.place(panel: CGSize(width: panelWidth, height: panelHeight),
+                                                beside: sourceFrame, in: view.bounds)
+        panel.frame = placement.frame
         view.addSubview(panel)
 
-        // The system menu grows out of the tile's top corner and shrinks
-        // back into it. Anchor the scale at the panel's tile-adjacent top
-        // corner (re-deriving position so the frame stays put).
-        let anchor = CGPoint(x: growsFromLeftEdge ? 0 : 1, y: 0)
+        // The system menu grows out of the tile-side corner and shrinks back into it.
+        let anchor = placement.anchor
         let frame = panel.frame
         panel.layer.anchorPoint = anchor
         panel.layer.position = CGPoint(x: frame.minX + frame.width * anchor.x,
@@ -278,8 +300,8 @@ final class TileMenuPopupViewController: UIViewController {
     private static func widestRowWidth(for sections: [[TileMenuAction]]) -> CGFloat {
         let font = MenuRowButton.titleFont
         var widest: CGFloat = 0
-        for action in sections.joined() {
-            let text = (action.title as NSString).size(withAttributes: [.font: font]).width
+        for title in sections.joined().flatMap({ [$0.title] + $0.sizingTitles }) {
+            let text = (title as NSString).size(withAttributes: [.font: font]).width
             widest = max(widest, MenuRowButton.contentWidth(forTitleWidth: text))
         }
         return ceil(widest)
@@ -368,10 +390,12 @@ private final class MenuRowButton: UIView {
     private static let highlightHeight: CGFloat = 74
     private let highlight = UIView()
     private let iconView = UIImageView()
+    private let spinner = UIActivityIndicatorView(style: .medium)
     private let labelView = UILabel()
-    private let destructive: Bool
+    private var destructive: Bool
     private let onPress: (@escaping () -> Void) -> Void
-    private let handler: () -> Void
+    private var handler: () -> Void
+    private var isPending: Bool
 
     override var canBecomeFocused: Bool { true }
 
@@ -379,6 +403,7 @@ private final class MenuRowButton: UIView {
         self.destructive = action.destructive
         self.onPress = onPress
         self.handler = action.handler
+        self.isPending = action.resolve != nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         // The focus capsule is 74pt tall, taller than the 66pt row pitch.
@@ -393,6 +418,16 @@ private final class MenuRowButton: UIView {
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
+
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(spinner)
+        if let resolve = action.resolve {
+            spinner.startAnimating()
+            Task { [weak self] in
+                let resolved = await resolve()
+                self?.apply(resolved)
+            }
+        }
 
         labelView.text = action.title
         labelView.font = Self.titleFont
@@ -412,6 +447,8 @@ private final class MenuRowButton: UIView {
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.leadingPad),
             iconView.widthAnchor.constraint(equalToConstant: Self.iconWidth),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            spinner.centerXAnchor.constraint(equalTo: iconView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: centerYAnchor),
             labelView.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: Self.iconTitleGap),
             labelView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.trailingPad),
             labelView.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -424,26 +461,43 @@ private final class MenuRowButton: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    @objc private func pressed() { onPress(handler) }
+    @objc private func pressed() {
+        guard !isPending else { return }
+        onPress(handler)
+    }
+
+    /// The pending row becomes the real one in place.
+    private func apply(_ action: TileMenuAction) {
+        isPending = false
+        handler = action.handler
+        destructive = action.destructive
+        spinner.stopAnimating()
+        iconView.image = UIImage(systemName: action.systemImage)
+        labelView.text = action.title
+        isFocused ? applyFocusedAppearance() : applyUnfocusedAppearance()
+    }
 
     private func applyUnfocusedAppearance() {
         highlight.backgroundColor = .clear
         let content: UIColor = destructive ? .systemRed : .white
-        labelView.textColor = content
+        labelView.textColor = content.withAlphaComponent(isPending ? 0.5 : 1)
         iconView.tintColor = content
+        spinner.color = content
+    }
+
+    private func applyFocusedAppearance() {
+        highlight.backgroundColor = destructive ? .systemRed : .white
+        let content: UIColor = destructive ? .white : .black
+        labelView.textColor = content.withAlphaComponent(isPending ? 0.5 : 1)
+        iconView.tintColor = content
+        spinner.color = content
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext,
                                  with coordinator: UIFocusAnimationCoordinator) {
         let focused = context.nextFocusedView === self
         coordinator.animateFocusChange(gained: focused) {
-            if focused {
-                self.highlight.backgroundColor = self.destructive ? .systemRed : .white
-                self.labelView.textColor = self.destructive ? .white : .black
-                self.iconView.tintColor = self.destructive ? .white : .black
-            } else {
-                self.applyUnfocusedAppearance()
-            }
+            focused ? self.applyFocusedAppearance() : self.applyUnfocusedAppearance()
         }
     }
 }

@@ -13,16 +13,17 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     @Published private(set) var nextEpisode: PlexMetadata?
     @Published private(set) var upNextCountdown: Int?
     @Published private(set) var upNextDismissed = false
-    /// Plex stream ids picked on a transcode; subtitle 0 is Off.
+    /// Server stream ids picked on a transcode.
     @Published private(set) var chosenAudioID: Int?
-    @Published private(set) var chosenSubtitleID: Int?
+    @Published private(set) var chosenSubtitle: SubtitlePick?
     var onItemChange: (() -> Void)?
     /// A playlist plays through this instead of the show's next episode.
     @Published private(set) var queue: PlayQueue<PlexMetadata>?
     /// The server's reason when it ended this play session (dashboard Stop, paused too long; #403).
     @Published private(set) var serverStopReason: String?
+    @Published var playbackChangeError: String?
 
-    private let plex: IOSPlexSession
+    private let plex: any IOSPlayerBackend
     private var skippedMarkerIDs: Set<String> = []
     private var lastReportBucket = -1
     private var reportedStopped = false
@@ -36,9 +37,9 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var stallTracker = StallTracker()
     /// The player-menu pick; nil follows the Home or Away setting, item by item.
     private var sessionQuality: StreamingQuality?
-    /// Plex stream ids a fresh load still has to select on the engine; subtitle 0 is Off.
+    /// Server stream ids a fresh load still has to select on the engine.
     private var pendingEngineAudio: Int?
-    private var pendingEngineSubtitle: Int?
+    private var pendingEngineSubtitle: SubtitlePick?
     private var hasPlayed = false
     private var didFallBack = false
     /// Subtitles turned off in the player hold for this title, whatever the saved mode.
@@ -46,8 +47,12 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// A direct-play title still to pick its starting tracks once the engine lists them.
     private var needsStartingTracks = false
     private var cancellables = Set<AnyCancellable>()
+    private var nativeChangeInFlight = false
+    private var nativeTracksReady = false
+    private var needsNativeSubtitle = false
+    private var hasEnded = false
 
-    init(request: IOSPlexPlaybackRequest, plex: IOSPlexSession, queue: PlayQueue<PlexMetadata>? = nil) {
+    init(request: IOSPlexPlaybackRequest, plex: any IOSPlayerBackend, queue: PlayQueue<PlexMetadata>? = nil) {
         self.request = request
         self.plex = plex
         self.queue = queue
@@ -69,6 +74,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     func end() {
+        hasEnded = true
         countdownTask?.cancel()
         nextLookupTask?.cancel()
         nextTask?.cancel()
@@ -84,7 +90,11 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             await finish?.value
             await plex.watchStateDidChange()
         }
-        Task { await plex.stopTranscode(request) }
+        // After the stopped report, so a provider's stop carries the real position.
+        Task {
+            await finish?.value
+            await plex.stopTranscode(request)
+        }
     }
 
     func screen(_ controller: IOSPlaybackController) -> AnyView {
@@ -95,34 +105,64 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     /// `startsItem` picks the title's starting tracks from Plex's per-item picks and the saved intents.
     private func load(keepingTransport: Bool = false, startsItem: Bool = false) async {
+        guard !hasEnded else { return }
         hasPlayed = false
         stallTracker.noteSeekOrLoad(at: .now)
-        if startsItem {
+        nativeTracksReady = false
+        if request.nativeStream != nil {
+            needsStartingTracks = false
+            needsNativeSubtitle = true
+        } else if startsItem {
             subtitlesPickedOff = false
             needsStartingTracks = !isTranscoding
             // Plex reads the part's selection when a transcode session starts.
             if isTranscoding {
                 let start = TrackIntentResolver.startingPlexSelection(streams: plexStreams)
                 if start.audio != request.selectedPlexStreamID(streamType: 2)
-                    || start.subtitle != request.selectedPlexStreamID(streamType: 3) ?? 0 {
-                    await plex.selectStream(audioID: start.audio, subtitleID: start.subtitle, in: request)
+                    || start.subtitle != SubtitlePick(request.selectedPlexStreamID(streamType: 3)) {
+                    await plex.selectStream(start, in: request)
                 }
                 chosenAudioID = start.audio
-                chosenSubtitleID = start.subtitle
+                chosenSubtitle = start.subtitle
             }
         }
         // A transcode's text subtitle arrives as a WebVTT rendition nothing selects; the file
         // opens on its default tracks, so picks made on a transcode carry back.
-        pendingEngineAudio = isTranscoding ? nil : chosenAudioID
-        pendingEngineSubtitle = isTranscoding ? selectedSubtitleID : chosenSubtitleID
+        pendingEngineAudio = request.nativeStream == nil && !isTranscoding ? chosenAudioID : nil
+        pendingEngineSubtitle = request.nativeStream == nil
+            ? (isTranscoding ? selectedSubtitleID.map(SubtitlePick.track) : chosenSubtitle) : nil
+        player.providerSeek = nil
+        if request.nativeStream?.canSeekAnywhere == false {
+            player.providerSeek = { [weak self] time in
+                guard let self, !self.hasEnded, let backend = self.plex as? IOSProviderBackend else {
+                    throw CancellationError()
+                }
+                guard !self.nativeChangeInFlight else {
+                    throw MediaProviderError.backendSpecific(underlying: "A playback change is already in progress.")
+                }
+                self.nativeChangeInFlight = true
+                defer { self.nativeChangeInFlight = false }
+                guard let next = try await backend.seekPlayback(self.request, at: time) else { return }
+                await self.installNativeRequest(next)
+            }
+        }
         await plex.openPlaySession(request)
         try? await player.load(
             url: request.url,
             headers: request.headers,
-            startTime: request.startTime,
+            startTime: request.playerStartTime,
             externalSubtitles: request.sidecarSubtitles,
-            keepingTransport: keepingTransport
+            keepingTransport: keepingTransport,
+            timelineOffset: request.nativeStream?.timelineOffset ?? 0,
+            sourceDuration: request.nativeStream.map { $0.source.duration },
+            forceEngineDemux: request.nativeStream?.prefersAetherPlayback == true,
+            initialAudioOrdinal: request.nativeStream.flatMap { stream in
+                stream.negotiatedStatus?.delivery == .original
+                    ? stream.source.audioTracks.firstIndex(where: \.isSelected) : nil
+            }
         )
+        nativeTracksReady = true
+        applyPendingEngineTracks()
         if player.audioIsDropped { fallBackToTranscode() }
     }
 
@@ -133,6 +173,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     // MARK: - Quality
 
     var qualityLabel: String {
+        if let status = request.nativeStream?.negotiatedStatus {
+            return status.availableQualities.first { $0.id == status.activeQualityID }?.displayName
+                ?? String(localized: "Auto")
+        }
         let playing = request.plan.step?.label ?? String(localized: "Original")
         return request.quality == .auto ? String(localized: "Auto · \(playing)") : playing
     }
@@ -143,14 +187,64 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         reload(quality: quality)
     }
 
+    func switchNativeQuality(_ quality: MediaQualityPreference) {
+        guard let backend = plex as? IOSProviderBackend else { return }
+        let previous = request
+        let time = player.pendingSeekTarget ?? player.currentTime
+        changeNativeStream {
+            try await backend.nativeQualityPlayback(previous, quality: quality, at: time)
+        }
+    }
+
+    private func changeNativeStream(_ operation: @escaping @MainActor () async throws -> IOSPlexPlaybackRequest) {
+        guard !nativeChangeInFlight, !hasEnded else { return }
+        nativeChangeInFlight = true
+        reloadTask = Task { [weak self] in
+            guard let self else { return }
+            defer { nativeChangeInFlight = false }
+            do {
+                let next = try await operation()
+                await installNativeRequest(next)
+            } catch is CancellationError {
+            } catch {
+                if !hasEnded { playbackChangeError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func installNativeRequest(_ next: IOSPlexPlaybackRequest) async {
+        if hasEnded || Task.isCancelled {
+            if let playback = next.providerPlayback {
+                await ProviderPlayback.discardUnplayedStream(playback.stream, provider: playback.provider)
+            }
+            return
+        }
+        let previous = request
+        // Replans commonly reuse the reservation: stopping it would revoke the new media URLs.
+        if previous.providerPlayback?.stream.playSessionID != next.providerPlayback?.stream.playSessionID {
+            await plex.stopTranscode(previous)
+        }
+        request = next
+        await load(keepingTransport: true)
+    }
+
     /// Swaps the stream in place: no `onItemChange`, so PiP and Now Playing stay.
     /// `plan` skips the decision. A transcode starts on `streams`, else on the file's playing tracks.
     private func reload(
         quality: StreamingQuality,
         plan: StreamPlan? = nil,
         at time: TimeInterval? = nil,
-        streams: (audio: Int?, subtitle: Int?)? = nil
+        streams: TrackPicks? = nil
     ) {
+        if request.nativeStream != nil {
+            let previous = request
+            let time = time ?? player.pendingSeekTarget ?? player.currentTime
+            let backend = plex
+            changeNativeStream {
+                try await backend.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: streams)
+            }
+            return
+        }
         reloadTask?.cancel()
         longStallTask?.cancel()
         let previous = request
@@ -159,7 +253,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         // A file that never listed its tracks (a failed start) has no picks to carry.
         let picks = streams ?? (previous.plan == .original && !player.audioTracks.isEmpty ? enginePicksAsPlexIDs() : nil)
         reloadTask = Task { [weak self] in
-            guard let next = try? await plex.playback(reloading: previous, quality: quality, plan: plan, at: time),
+            guard let next = try? await plex.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: picks),
                   let self, !Task.isCancelled else { return }
             // Same plan from a menu change: only the choice moves.
             if plan == nil, streams == nil, next.plan == previous.plan {
@@ -172,10 +266,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             }
             // Plex reads the part's selection when the session starts, which is the first fetch.
             if next.plan != .original, let picks {
-                await plex.selectStream(audioID: picks.audio, subtitleID: picks.subtitle, in: previous)
+                await plex.selectStream(picks, in: previous)
                 guard !Task.isCancelled else { return }
                 if let audio = picks.audio { chosenAudioID = audio }
-                if let subtitle = picks.subtitle { chosenSubtitleID = subtitle }
+                if let subtitle = picks.subtitle { chosenSubtitle = subtitle }
             }
             Task { await plex.stopTranscode(previous) }
             request = next
@@ -186,7 +280,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// Auto only: two stalls in a minute, or one that lasts, drops a step.
     private func stallChanged(_ stalled: Bool) {
         longStallTask?.cancel()
-        guard stalled, request.quality == .auto else { return }
+        guard request.nativeStream == nil, stalled, request.quality == .auto else { return }
         switch stallTracker.bufferingStarted(at: .now) {
         case .ignored:
             break
@@ -210,7 +304,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     /// A direct-play file that never starts gets one retry as a transcode, as on tvOS.
     private func fallBackToTranscode() {
-        guard !hasPlayed, !didFallBack, request.plan == .original, !request.isLocal else { return }
+        guard request.nativeStream == nil, !hasPlayed, !didFallBack, request.plan == .original, !request.isLocal else { return }
         didFallBack = true
         let kbps = request.quality == .auto
             ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000
@@ -221,7 +315,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     // MARK: - Tracks
 
-    private var isTranscoding: Bool { request.plan != .original }
+    private var isTranscoding: Bool { request.nativeStream == nil && request.plan != .original }
 
     /// The Plex part whose BIF is held, released when the item changes or playback ends.
     private var thumbnailPartID: Int?
@@ -230,7 +324,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// a frame decoded from the file. A transcode has no file to decode from.
     func scrubStill(at time: Double) async -> UIImage? {
         let parts = request.item.Media.flatMap { $0.indices.contains(request.mediaIndex) ? $0[request.mediaIndex] : nil }?.Part
-        if !request.isLocal, parts?.count == 1, let partID = parts?.first?.id,
+        if !request.isLocal, !request.serverURL.isEmpty, parts?.count == 1, let partID = parts?.first?.id,
            !PlexThumbnailService.shared.isUnavailable(partId: partID) {
             if partID != thumbnailPartID { releaseThumbnails() }
             thumbnailPartID = partID
@@ -249,6 +343,14 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     /// By language over `MediaTrack.audioMenuSubtitle`.
     var audioTracks: [AetherPlayer.Track] {
+        // Native menus use the server's audio-only inventory indices.
+        if let source = request.nativeStream?.source {
+            return source.audioTracks.map { track in
+                AetherPlayer.Track(id: track.index, name: track.extendedTitle ?? track.title ?? String(localized: "Track \(track.index + 1)"),
+                                   codec: track.codec, language: track.language, channels: track.channels ?? 0,
+                                   isDefault: track.isDefault, isForced: track.isForced, isHearingImpaired: false)
+            }
+        }
         let tracks = mediaAudio
         return tracks.map { track in
             AetherPlayer.Track(id: track.id, name: track.audioMenuTitle, codec: "", language: nil, channels: 0,
@@ -280,22 +382,38 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     var selectedAudioID: Int? {
-        isTranscoding ? chosenAudioID ?? request.selectedPlexStreamID(streamType: 2) : player.currentAudioTrackId
+        if let source = request.nativeStream?.source { return source.audioTracks.first(where: \.isSelected)?.index }
+        return isTranscoding ? chosenAudioID ?? request.selectedPlexStreamID(streamType: 2) : player.currentAudioTrackId
     }
 
     var subtitleTracks: [AetherPlayer.Track] {
-        isTranscoding ? request.plexTracks(streamType: 3) : player.subtitleTracks
+        if let source = request.nativeStream?.source {
+            return source.subtitleTracks.map { track in
+                AetherPlayer.Track(id: track.index, name: track.extendedTitle ?? track.title ?? String(localized: "Track \(track.index + 1)"),
+                                   codec: track.codec, language: track.language, channels: 0,
+                                   isDefault: track.isDefault, isForced: track.isForced, isHearingImpaired: track.isHearingImpaired)
+            }
+        }
+        return isTranscoding ? request.plexTracks(streamType: 3) : player.subtitleTracks
     }
 
     var selectedSubtitleID: Int? {
+        if let stream = request.nativeStream {
+            if case .track(_, let index) = stream.authoritativeSubtitleSelection { return index }
+            return nil
+        }
         guard isTranscoding else { return player.currentSubtitleTrackId }
-        guard let chosenSubtitleID else { return request.selectedPlexStreamID(streamType: 3) }
-        return chosenSubtitleID == 0 ? nil : chosenSubtitleID
+        guard let chosenSubtitle else { return request.selectedPlexStreamID(streamType: 3) }
+        return chosenSubtitle.trackID
     }
 
     /// On a transcode the server renders the tracks, so a change restarts it at the playhead.
     /// A pick other than what the saved intent resolves to becomes the new intent.
     func selectAudio(_ id: Int) {
+        if request.nativeStream != nil {
+            reload(quality: request.quality, streams: TrackPicks(audio: id, subtitle: nil))
+            return
+        }
         let tracks = mediaAudio
         if let track = tracks.first(where: { $0.id == id }),
            TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: tracks)?.id != id {
@@ -304,24 +422,28 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         let subtitle = foreignAudioSubtitle(forAudio: tracks.first { $0.id == id })
         guard isTranscoding else {
             player.selectAudioTrack(id: id)
-            if let subtitle { player.selectSubtitleTrack(id: subtitle == 0 ? nil : subtitle) }
+            if let subtitle { player.selectSubtitleTrack(id: subtitle.trackID) }
             return
         }
         chosenAudioID = id
-        if let subtitle { chosenSubtitleID = subtitle }
-        reload(quality: request.quality, plan: request.plan, streams: (id, subtitle))
+        if let subtitle { chosenSubtitle = subtitle }
+        reload(quality: request.quality, plan: request.plan, streams: TrackPicks(audio: id, subtitle: subtitle))
     }
 
     /// Foreign Audio follows a new audio language unless subtitles were turned off for this
-    /// title: the subtitle to switch to, 0 for off, nil to leave them.
-    private func foreignAudioSubtitle(forAudio audio: MediaTrack?) -> Int? {
+    /// title: the subtitle to switch to, nil to leave them.
+    private func foreignAudioSubtitle(forAudio audio: MediaTrack?) -> SubtitlePick? {
         let intent = TrackIntentStore.effectiveSubtitleIntent
         guard case .foreignAudio = intent, !subtitlesPickedOff, let audio else { return nil }
-        return TrackIntentResolver.resolveSubtitle(intent: intent, in: mediaSubtitles,
-                                                   audioLanguage: audio.languageCode ?? audio.language)?.id ?? 0
+        return SubtitlePick(TrackIntentResolver.resolveSubtitle(intent: intent, in: mediaSubtitles,
+                                                                audioLanguage: audio.languageCode ?? audio.language)?.id)
     }
 
     func selectSubtitle(_ id: Int?) {
+        if request.nativeStream != nil {
+            reload(quality: request.quality, streams: TrackPicks(audio: nil, subtitle: id.map(SubtitlePick.track) ?? .off))
+            return
+        }
         subtitlesPickedOff = id == nil
         let audio = mediaAudio.first { $0.id == selectedAudioID }
         TrackIntentStore.subtitleIntent = .afterPick(
@@ -329,28 +451,32 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             replacing: TrackIntentStore.effectiveSubtitleIntent,
             audioLanguage: audio?.languageCode ?? audio?.language)
         guard isTranscoding else { return player.selectSubtitleTrack(id: id) }
-        chosenSubtitleID = id ?? 0
-        reload(quality: request.quality, plan: request.plan, streams: (nil, id ?? 0))
+        chosenSubtitle = SubtitlePick(id)
+        reload(quality: request.quality, plan: request.plan, streams: TrackPicks(audio: nil, subtitle: SubtitlePick(id)))
     }
 
     private var plexStreams: [PlexStream] { request.item.Media?.first?.Part?.first?.Stream ?? [] }
 
-    /// The engine's playing tracks as Plex stream ids. Embedded tracks join on the container
-    /// stream index, sidecars on language. Subtitle 0 is Off.
-    private func enginePicksAsPlexIDs() -> (audio: Int?, subtitle: Int?) {
+    /// The engine's playing tracks as server stream ids, joined as `TrackMerge` joins them.
+    private func enginePicksAsPlexIDs() -> TrackPicks {
         let streams = plexStreams
-        let audio = player.currentAudioTrackId.flatMap { id in streams.first { $0.isAudio && $0.index == id }?.id }
-        guard let subtitleID = player.currentSubtitleTrackId else { return (audio, 0) }
-        let embedded = streams.first { $0.isSubtitle && $0.key == nil && $0.index == subtitleID }
-        let language = player.subtitleTracks.first { $0.id == subtitleID }?.language
-        let sidecar = streams.first {
-            $0.isSubtitle && $0.key != nil && Self.sameLanguage($0.languageCode ?? $0.language, language)
+        let audio = player.currentAudioTrackId.flatMap {
+            TrackMerge.serverID(forEngine: $0, engine: player.audioTracks.map(Self.mediaTrack),
+                                server: streams.filter(\.isAudio).map { MediaTrack(from: $0) })
         }
-        return (audio, (embedded ?? sidecar)?.id)
+        guard let subtitleID = player.currentSubtitleTrackId else { return TrackPicks(audio: audio, subtitle: .off) }
+        let subtitle = TrackMerge.serverID(forEngine: subtitleID, engine: player.subtitleTracks.map(Self.mediaTrack),
+                                           server: streams.filter(\.isSubtitle).map { MediaTrack(from: $0) })
+        return TrackPicks(audio: audio, subtitle: subtitle.map(SubtitlePick.track))
     }
 
     /// Selects the pending Plex picks once the engine lists tracks they can map to.
     private func applyPendingEngineTracks() {
+        if let stream = request.nativeStream {
+            guard nativeTracksReady else { return }
+            applyNativeTracks(stream)
+            return
+        }
         if needsStartingTracks, !player.audioTracks.isEmpty { pickStartingTracks() }
         let streams = plexStreams
         if let id = pendingEngineAudio, let index = streams.first(where: { $0.id == id })?.index,
@@ -358,22 +484,50 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             pendingEngineAudio = nil
             player.selectAudioTrack(id: index)
         }
-        guard let id = pendingEngineSubtitle, !player.subtitleTracks.isEmpty else { return }
-        guard id != 0, let stream = streams.first(where: { $0.id == id }) else {
+        guard let pick = pendingEngineSubtitle, !player.subtitleTracks.isEmpty else { return }
+        guard let id = pick.trackID, let stream = streams.first(where: { $0.id == id }) else {
             pendingEngineSubtitle = nil
-            if id == 0 { player.selectSubtitleTrack(id: nil) }
+            if pick == .off { player.selectSubtitleTrack(id: nil) }
             return
         }
         let tracks = player.subtitleTracks
-        let language = stream.languageCode ?? stream.language
-        let match: AetherPlayer.Track? = if isTranscoding || stream.key != nil {
-            tracks.first { Self.sameLanguage($0.language, language) } ?? (tracks.count == 1 ? tracks.first : nil)
+        // A transcode's renditions carry only a language; the file's tracks join as the merge does.
+        let match: Int? = if isTranscoding {
+            (tracks.first { Self.sameLanguage($0.language, stream.languageCode ?? stream.language) }
+                ?? (tracks.count == 1 ? tracks.first : nil))?.id
         } else {
-            tracks.first { $0.id == stream.index }
+            TrackMerge.engineTrack(forServer: id, engine: tracks.map(Self.mediaTrack),
+                                   server: streams.filter(\.isSubtitle).map { MediaTrack(from: $0) })?.id
         }
         guard let match else { return }
         pendingEngineSubtitle = nil
+        player.selectSubtitleTrack(id: match)
+    }
+
+    /// Native inventory indices are provider identities, not FFmpeg stream indices or Plex shim IDs.
+    private func applyNativeTracks(_ stream: StreamInfo) {
+        guard needsNativeSubtitle else { return }
+        guard case .track(let id, _) = stream.authoritativeSubtitleSelection,
+              let selected = stream.source.subtitleTracks.first(where: { $0.id == id }),
+              stream.subtitleDelivery != .video else {
+            player.selectSubtitleTrack(id: nil)
+            needsNativeSubtitle = false
+            return
+        }
+        let match: AetherPlayer.Track?
+        if selected.externalURL != nil {
+            let sidecars = stream.source.subtitleTracks.filter { !$0.isEmbedded && $0.externalURL != nil }
+            let external = player.subtitleTracks.filter(\.isExternal)
+            match = sidecars.firstIndex(where: { $0.id == id }).flatMap { external.indices.contains($0) ? external[$0] : nil }
+        } else if selected.isEmbedded, let index = selected.nativeStreamIndex {
+            match = player.subtitleTracks.first { $0.id == index }
+        } else {
+            match = player.subtitleTracks.first { Self.sameLanguage($0.language, selected.language) }
+                ?? (player.subtitleTracks.count == 1 ? player.subtitleTracks.first : nil)
+        }
+        guard let match else { return }
         player.selectSubtitleTrack(id: match.id)
+        needsNativeSubtitle = false
     }
 
     /// Direct play: Plex's per-item picks, else the saved intents, resolved on the engine's
@@ -391,7 +545,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
         let intent = TrackIntentStore.effectiveSubtitleIntent
         if let chosen = TrackIntentResolver.plexChosenSubtitleStreamID(in: streams, intent: intent) {
-            pendingEngineSubtitle = chosen
+            pendingEngineSubtitle = .track(chosen)
             return
         }
         let subtitle = TrackIntentResolver.resolveSubtitle(
@@ -645,14 +799,20 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         nextTask = Task { [weak self] in
             // Up Next keeps the player-menu pick, else decides Home or Away again; a fresh reading is reused.
             guard let self,
-                  let nextRequest = try? await self.plex.playback(for: next, quality: self.sessionQuality, previous: previous),
-                  !Task.isCancelled else { return }
+                  let nextRequest = try? await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous)
+            else { return }
+            guard !Task.isCancelled, !self.hasEnded else {
+                if let playback = nextRequest.providerPlayback {
+                    await ProviderPlayback.discardUnplayedStream(playback.stream, provider: playback.provider)
+                }
+                return
+            }
             let plex = plex
             Task { await plex.stopTranscode(previous) }
             request = nextRequest
             if let queueIndex { queue?.jump(to: queueIndex) }
             chosenAudioID = nil
-            chosenSubtitleID = nil
+            chosenSubtitle = nil
             didFallBack = false
             stallTracker = StallTracker()
             nextEpisode = nil
@@ -690,7 +850,7 @@ private struct IOSPlexPlayerScreen: View {
             ),
             rate: player.rate,
             // A downloaded file has one quality: the one on disk.
-            quality: session.request.isLocal ? nil : IOSPlayerQuality(
+            quality: session.request.isLocal || session.request.nativeStream != nil ? nil : IOSPlayerQuality(
                 choices: StreamingQuality.allChoices,
                 selected: session.request.quality,
                 label: session.qualityLabel
@@ -733,6 +893,17 @@ private struct IOSPlexPlayerScreen: View {
                 )
             }
         } trailing: {
+            if let status = session.request.nativeStream?.negotiatedStatus {
+                Menu {
+                    Button("Auto") { session.switchNativeQuality(.automatic) }
+                    ForEach(status.availableQualities, id: \.id) { quality in
+                        Button(quality.displayName ?? quality.id) { session.switchNativeQuality(.offered(id: quality.id)) }
+                    }
+                } label: {
+                    Text(session.qualityLabel).font(.caption.weight(.semibold))
+                }
+                .accessibilityLabel("Quality")
+            }
             if !session.chapters.isEmpty {
                 Button { showsChapters = true } label: {
                     Image(systemName: "list.bullet.rectangle")
@@ -762,6 +933,14 @@ private struct IOSPlexPlayerScreen: View {
                     session.playEntry(at: index)
                 }
             }
+        }
+        .alert("Playback Change Failed", isPresented: Binding(
+            get: { session.playbackChangeError != nil },
+            set: { if !$0 { session.playbackChangeError = nil } }
+        )) {
+            Button("OK", role: .cancel) { session.playbackChangeError = nil }
+        } message: {
+            Text(session.playbackChangeError ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()

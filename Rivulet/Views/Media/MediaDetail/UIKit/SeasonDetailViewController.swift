@@ -520,23 +520,30 @@ enum EpisodeMenu {
                         moreInfo: @escaping () -> Void) {
         guard host.presentedViewController == nil,
               let provider = MediaProviderRegistry.shared.provider(for: episode.ref.providerID) else { return }
-        let sections = PlexHomeViewController.providerTileMenuSections(
-            for: episode, provider: provider, isContinueWatching: false,
-            onWatchFromBeginning: { play(nil, true) },
-            onMoreInfo: moreInfo,
-            onPlayVersion: { [weak host] in
-                Task { @MainActor in
-                    guard let host, let detail = try? await provider.fullDetail(for: episode.ref) else { return }
-                    VersionPicker.present(VersionPicker.versions(in: detail), from: host, sourceFrame: sourceFrame) {
-                        play($0, false)
+        Task { @MainActor [weak host] in
+            let refresh = await provider.canRefreshMetadata()
+            guard let host, host.presentedViewController == nil else { return }
+            var sections = PlexHomeViewController.providerTileMenuSections(
+                for: episode, provider: provider, isContinueWatching: false, canRefreshMetadata: refresh,
+                onWatchFromBeginning: { play(nil, true) },
+                onMoreInfo: moreInfo,
+                onPlayVersion: { [weak host] in
+                    Task { @MainActor in
+                        guard let host, let detail = try? await provider.fullDetail(for: episode.ref) else { return }
+                        VersionPicker.present(VersionPicker.versions(in: detail), from: host, sourceFrame: sourceFrame) {
+                            play($0, false)
+                        }
                     }
-                }
-            },
-            onAddToPlaylist: { [weak host] in
-                guard let host else { return }
-                PlaylistMenus.presentAddToPlaylist(for: episode, from: host, sourceFrame: sourceFrame)
-            })
-        // animated: false; the popup runs its own entrance from the thumb.
-        host.present(TileMenuPopupViewController(sections: sections, sourceFrame: sourceFrame), animated: false)
+                },
+                onAddToPlaylist: { [weak host] in
+                    guard let host else { return }
+                    PlaylistMenus.presentAddToPlaylist(for: episode, from: host, sourceFrame: sourceFrame)
+                })
+            sections = await PlexHomeViewController.addingServerEntries(to: sections, for: episode,
+                                                                        provider: provider, from: host)
+            guard host.presentedViewController == nil else { return }
+            // animated: false; the popup runs its own entrance from the thumb.
+            host.present(TileMenuPopupViewController(sections: sections, sourceFrame: sourceFrame), animated: false)
+        }
     }
 }

@@ -13,12 +13,32 @@
         }
       }
     },
+    "%@ Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@-Server"
+          }
+        }
+      }
+    },
     "%@ behind live" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ zeitversetzt"
+          }
+        }
+      }
+    },
+    "%@ didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat diesen Benutzernamen und dieses Passwort nicht akzeptiert."
           }
         }
       }
@@ -333,6 +353,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Sekunden"
+          }
+        }
+      }
+    },
+    "%lldh" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Std."
           }
         }
       }
@@ -759,6 +789,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Automatisch"
+          }
+        }
+      }
+    },
+    "Average rating" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durchschnittsbewertung"
           }
         }
       }
@@ -1263,6 +1303,26 @@
         }
       }
     },
+    "Couldn't Delete" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Download" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download fehlgeschlagen"
+          }
+        }
+      }
+    },
     "Couldn't Download Season" : {
       "localizations" : {
         "de" : {
@@ -1279,6 +1339,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Laden fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't load %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ konnte nicht geladen werden"
           }
         }
       }
@@ -1329,6 +1399,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergabe fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't reach the server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server ist nicht erreichbar."
+          }
+        }
+      }
+    },
+    "Couldn't Refresh Metadata" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisieren der Metadaten fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn't Sign In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung fehlgeschlagen"
           }
         }
       }
@@ -1419,16 +1519,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Watchlist konnte nicht aktualisiert werden"
-          }
-        }
-      }
-    },
-    "Couldn't update your Watchlist." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Watchlist konnte nicht aktualisiert werden."
           }
         }
       }
@@ -1989,12 +2079,32 @@
         }
       }
     },
+    "Enter your server's address and your username." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib die Adresse deines Servers und deinen Benutzernamen ein."
+          }
+        }
+      }
+    },
     "Enter your server's address first." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gib zuerst die Adresse deines Servers ein."
+          }
+        }
+      }
+    },
+    "Enter your server's address." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib die Adresse deines Servers ein."
           }
         }
       }
@@ -2079,6 +2189,16 @@
         }
       }
     },
+    "Every episode's files will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Dateien aller Folgen werden von %@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        }
+      }
+    },
     "Extra" : {
       "localizations" : {
         "de" : {
@@ -2155,6 +2275,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Antwort konnte nicht gelesen werden"
+          }
+        }
+      }
+    },
+    "Failed to write credential to Keychain" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zugangsdaten konnten nicht im Schlüsselbund gespeichert werden"
           }
         }
       }
@@ -2439,6 +2569,16 @@
         }
       }
     },
+    "IMDb users" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IMDb-Nutzer:innen"
+          }
+        }
+      }
+    },
     "Incorrect PIN. Try again." : {
       "localizations" : {
         "de" : {
@@ -2549,6 +2689,26 @@
         }
       }
     },
+    "Jellyfin didn't accept that username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jellyfin hat diesen Benutzernamen und dieses Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "Jellyfin has no watchlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jellyfin hat keine Watchlist"
+          }
+        }
+      }
+    },
     "Jump to Now" : {
       "localizations" : {
         "de" : {
@@ -2609,12 +2769,32 @@
         }
       }
     },
+    "Leave the password empty if the user has none." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lass das Passwort leer, wenn der Benutzer keins hat."
+          }
+        }
+      }
+    },
     "Less" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Weniger"
+          }
+        }
+      }
+    },
+    "Letterboxd members" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letterboxd-Mitglieder"
           }
         }
       }
@@ -2705,6 +2885,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als gesehen markieren"
+          }
+        }
+      }
+    },
+    "Metascore, critics" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metascore, Kritiker:innen"
           }
         }
       }
@@ -3029,6 +3219,16 @@
         }
       }
     },
+    "None" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine"
+          }
+        }
+      }
+    },
     "Not connected to the internet" : {
       "localizations" : {
         "de" : {
@@ -3189,6 +3389,16 @@
         }
       }
     },
+    "On a device signed in to %@, open Settings, choose Quick Connect and enter this code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne auf einem bei %@ angemeldeten Gerät die Einstellungen, wähle Quick Connect und gib diesen Code ein."
+          }
+        }
+      }
+    },
     "On now" : {
       "localizations" : {
         "de" : {
@@ -3219,6 +3429,16 @@
         }
       }
     },
+    "Only Plex converts. Jellyfin and Emby always download the original file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Plex konvertiert. Jellyfin und Emby laden immer die Originaldatei herunter."
+          }
+        }
+      }
+    },
     "Open Source Software" : {
       "localizations" : {
         "de" : {
@@ -3245,6 +3465,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Öffne plex.tv/link und melde dich an. Wenn ein Code abgefragt wird, gib diesen ein."
+          }
+        }
+      }
+    },
+    "Opens the episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet die Folge"
+          }
+        }
+      }
+    },
+    "Opens the item" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet den Eintrag"
           }
         }
       }
@@ -3395,6 +3635,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wiedergeben"
+          }
+        }
+      }
+    },
+    "Play Again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut wiedergeben"
+          }
+        }
+      }
+    },
+    "Play First Episode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erste Folge wiedergeben"
+          }
+        }
+      }
+    },
+    "Play S%lld, E%lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld wiedergeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Play S%1$lld, E%2$lld"
           }
         }
       }
@@ -3559,6 +3835,26 @@
         }
       }
     },
+    "Plex HTTP %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex HTTP %lld"
+          }
+        }
+      }
+    },
+    "Plex URL malformed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex-URL fehlerhaft"
+          }
+        }
+      }
+    },
     "Plex didn't accept the sign-in; sign in again, then retry" : {
       "localizations" : {
         "de" : {
@@ -3569,12 +3865,62 @@
         }
       }
     },
+    "Plex rejected the watchlist add" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex hat das Hinzufügen zur Watchlist abgelehnt"
+          }
+        }
+      }
+    },
+    "Plex rejected the watchlist remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex hat das Entfernen aus der Watchlist abgelehnt"
+          }
+        }
+      }
+    },
     "Plex requires Plex Pass or Remote Watch Pass for remote downloads; download at home" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex erfordert Plex Pass oder Remote Watch Pass für Downloads von unterwegs; lade zu Hause herunter"
+          }
+        }
+      }
+    },
+    "Plex response unparseable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex-Antwort nicht lesbar"
+          }
+        }
+      }
+    },
+    "Plex returned an invalid response" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex hat eine ungültige Antwort zurückgegeben"
+          }
+        }
+      }
+    },
+    "Popcornmeter, audience" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Popcornmeter, Publikum"
           }
         }
       }
@@ -3639,12 +3985,42 @@
         }
       }
     },
+    "Quick Connect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Connect"
+          }
+        }
+      }
+    },
+    "Quick Connect is off on this server. Turn it on in the Jellyfin dashboard, under General." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Connect ist auf diesem Server deaktiviert. Aktiviere es im Jellyfin-Dashboard unter „Allgemein“."
+          }
+        }
+      }
+    },
     "REC" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "REC"
+          }
+        }
+      }
+    },
+    "RT Audience" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RT-Publikum"
           }
         }
       }
@@ -3715,6 +4091,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuletzt hinzugefügt"
+          }
+        }
+      }
+    },
+    "Recently Added in %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt hinzugefügt in %@"
           }
         }
       }
@@ -3835,6 +4221,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sender aktualisieren"
+          }
+        }
+      }
+    },
+    "Refresh Metadata" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metadaten aktualisieren"
           }
         }
       }
@@ -3999,6 +4395,22 @@
         }
       }
     },
+    "Resume S%lld, E%lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld fortsetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Resume S%1$lld, E%2$lld"
+          }
+        }
+      }
+    },
     "Resumes the download" : {
       "localizations" : {
         "de" : {
@@ -4049,12 +4461,44 @@
         }
       }
     },
+    "Rivulet needs %@ Server %lld.%lld.%lld or newer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet benötigt %1$@-Server %2$lld.%3$lld.%4$lld oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet needs %1$@ Server %2$lld.%3$lld.%4$lld or newer."
+          }
+        }
+      }
+    },
     "Runtime" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dauer"
+          }
+        }
+      }
+    },
+    "S%@E%@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$@F%2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$@E%2$@"
           }
         }
       }
@@ -4141,12 +4585,12 @@
         }
       }
     },
-    "Search Your Plex Libraries" : {
+    "Search Your Libraries" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deine Plex-Mediatheken durchsuchen"
+            "value" : "Deine Mediatheken durchsuchen"
           }
         }
       }
@@ -4212,6 +4656,16 @@
       }
     },
     "Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server"
+          }
+        }
+      }
+    },
+    "Servers" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4321,6 +4775,16 @@
         }
       }
     },
+    "Sign in to the server to play this download." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich beim Server an, um diesen Download abzuspielen."
+          }
+        }
+      }
+    },
     "Sign Out" : {
       "localizations" : {
         "de" : {
@@ -4371,6 +4835,16 @@
         }
       }
     },
+    "Sign out of %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von %@ abmelden?"
+          }
+        }
+      }
+    },
     "Signed In" : {
       "localizations" : {
         "de" : {
@@ -4387,6 +4861,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Angemeldet, aber dieser Account hat keine Live-Sender."
+          }
+        }
+      }
+    },
+    "Signing In…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmelden …"
           }
         }
       }
@@ -4467,6 +4951,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einige Sender wurden nicht geladen"
+          }
+        }
+      }
+    },
+    "Something went wrong starting playback." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Starten der Wiedergabe ist etwas schiefgelaufen."
           }
         }
       }
@@ -4691,6 +5185,56 @@
         }
       }
     },
+    "The server didn't accept the sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server didn't accept the sign-in; sign in again, then retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
+          }
+        }
+      }
+    },
+    "The server doesn't have that." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat das nicht."
+          }
+        }
+      }
+    },
+    "This account isn't allowed to download from the server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Konto darf vom Server nichts herunterladen"
+          }
+        }
+      }
+    },
+    "TMDB users" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TMDB-Nutzer:innen"
+          }
+        }
+      }
+    },
     "TV Show" : {
       "localizations" : {
         "de" : {
@@ -4721,6 +5265,16 @@
         }
       }
     },
+    "That address isn't a Jellyfin server. Check the port. An Emby server signs in under Emby Server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dieser Adresse läuft kein Jellyfin-Server. Prüfe den Port. Ein Emby-Server wird unter „Emby-Server“ angemeldet."
+          }
+        }
+      }
+    },
     "That address isn't a Tvheadend server. Check the address and port." : {
       "localizations" : {
         "de" : {
@@ -4731,12 +5285,32 @@
         }
       }
     },
+    "That address isn't an %@ server. Check the port. A Jellyfin server signs in under Jellyfin Server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dieser Adresse läuft kein %@-Server. Prüfe den Port. Ein Jellyfin-Server wird unter „Jellyfin-Server“ angemeldet."
+          }
+        }
+      }
+    },
     "That address isn't an Xtream Codes server. Check the address and port." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unter dieser Adresse läuft kein Xtream-Codes-Server. Prüfe Adresse und Port."
+          }
+        }
+      }
+    },
+    "That code expired. Try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Code ist abgelaufen. Versuche es erneut."
           }
         }
       }
@@ -4821,6 +5395,32 @@
         }
       }
     },
+    "The files will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Dateien werden von %@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        }
+      }
+    },
+    "The folder “%@” and everything in it will be deleted from %@. This cannot be undone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Ordner „%1$@“ und alles darin wird von %2$@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The folder “%1$@” and everything in it will be deleted from %2$@. This cannot be undone."
+          }
+        }
+      }
+    },
     "The guide doesn't identify this programme well enough to record it." : {
       "localizations" : {
         "de" : {
@@ -4877,6 +5477,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat Benutzername und Passwort nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server didn't accept your sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat deine Anmeldung nicht akzeptiert."
           }
         }
       }
@@ -5081,6 +5691,42 @@
         }
       }
     },
+    "This server can't stream this title to this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Server kann diesen Titel nicht auf dieses Gerät streamen."
+          }
+        }
+      }
+    },
+    "This server runs Jellyfin %@. Rivulet needs %lld.%lld or newer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Server läuft Jellyfin %@. Rivulet benötigt %lld.%lld oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This server runs Jellyfin %1$@. Rivulet needs %2$lld.%3$lld or newer."
+          }
+        }
+      }
+    },
+    "This server's HTTPS certificate isn't trusted. Try its http:// address." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das HTTPS-Zertifikat dieses Servers ist nicht vertrauenswürdig. Versuche es mit seiner http://-Adresse."
+          }
+        }
+      }
+    },
     "This source can't record." : {
       "localizations" : {
         "de" : {
@@ -5167,6 +5813,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Heute"
+          }
+        }
+      }
+    },
+    "Tomatometer, critics" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomatometer, Kritiker:innen"
           }
         }
       }
@@ -5391,6 +6047,16 @@
         }
       }
     },
+    "Unlock Profile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock Profile"
+          }
+        }
+      }
+    },
     "Unmute" : {
       "localizations" : {
         "de" : {
@@ -5447,6 +6113,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SD und 720p hochskalieren"
+          }
+        }
+      }
+    },
+    "User" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzer"
           }
         }
       }
@@ -5537,6 +6213,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ live ansehen"
+          }
+        }
+      }
+    },
+    "Watch from Beginning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von vorne beginnen"
           }
         }
       }
@@ -5647,6 +6333,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du kannst dich jederzeit wieder anmelden."
+          }
+        }
+      }
+    },
+    "Your %@ server's address, with its port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Adresse deines %@-Servers, mit Port."
           }
         }
       }
@@ -5801,6 +6497,96 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "•"
+          }
+        }
+      }
+    },
+    "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ wird über iCloud geteilt. Nur von diesem Gerät entfernen oder von allen Geräten?"
+          }
+        }
+      }
+    },
+    "All Devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Geräte"
+          }
+        }
+      }
+    },
+    "iCloud has a different Plex account." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud hat ein anderes Plex-Konto."
+          }
+        }
+      }
+    },
+    "iCloud Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud-Synchronisierung"
+          }
+        }
+      }
+    },
+    "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone and iPad. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf Apple TV, iPhone und iPad gleich. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
+          }
+        }
+      }
+    },
+    "Sign in to iCloud in the Settings app to sync." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich in der Einstellungen-App bei iCloud an, um zu synchronisieren."
+          }
+        }
+      }
+    },
+    "This Device Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur dieses Gerät"
+          }
+        }
+      }
+    },
+    "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Plex-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
+          }
+        }
+      }
+    },
+    "Your %@ sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine %@-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
           }
         }
       }

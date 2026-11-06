@@ -193,18 +193,41 @@ final class JellyfinLiveTVTests: XCTestCase {
     /// second stop must not close again (it would end someone else's stream).
     func test_keepalive_releasesAnOtherServerSessionOncePerStart() {
         var released: [URL] = []
-        PlexLiveTimelineKeepalive.releaseOtherSession = { released.append($0) }
-        defer { PlexLiveTimelineKeepalive.releaseOtherSession = nil }
+        let saved = PlexLiveTimelineKeepalive.otherSessionClosers
+        PlexLiveTimelineKeepalive.otherSessionClosers = ["jellyfin": { released.append($0) }]
+        defer { PlexLiveTimelineKeepalive.otherSessionClosers = saved }
         let url = URL(string: "http://jf.local:8096/Videos/abc/stream.ts?liveStreamId=ls1&ApiKey=tok")!
 
         let keepalive = PlexLiveTimelineKeepalive(transport: { _ in })
-        keepalive.start(url: url)
+        keepalive.start(url: url, sourceID: "jellyfin:srv")
         keepalive.stop()
         keepalive.stop()
         XCTAssertEqual(released, [url])
 
-        PlexLiveTimelineKeepalive.release(url)
+        PlexLiveTimelineKeepalive.release(url, sourceID: "jellyfin:srv")
         XCTAssertEqual(released, [url, url], "an abandoned resolve is released too")
+    }
+
+    /// Two servers share the `/videos/` + liveStreamId URL shape, so the
+    /// session's source id, not the URL, picks the closer.
+    func test_keepalive_routesTheReleaseBySourceKind() {
+        var closed: [String] = []
+        let saved = PlexLiveTimelineKeepalive.otherSessionClosers
+        PlexLiveTimelineKeepalive.otherSessionClosers = [
+            "jellyfin": { _ in closed.append("jellyfin") },
+            "other": { _ in closed.append("other") }
+        ]
+        defer { PlexLiveTimelineKeepalive.otherSessionClosers = saved }
+        let url = URL(string: "http://host/videos/abc/stream.ts?liveStreamId=ls1&ApiKey=tok")!
+
+        PlexLiveTimelineKeepalive.release(url, sourceID: "other:srv")
+        XCTAssertEqual(closed, ["other"])
+        PlexLiveTimelineKeepalive.release(url, sourceID: "jellyfin:srv")
+        XCTAssertEqual(closed, ["other", "jellyfin"])
+        PlexLiveTimelineKeepalive.release(url, sourceID: "m3u:abc")
+        XCTAssertEqual(closed, ["other", "jellyfin"], "a source with no closer releases nothing")
+        PlexLiveTimelineKeepalive.release(url)
+        XCTAssertEqual(Set(closed.suffix(2)), ["jellyfin", "other"], "no source id offers it to every closer")
     }
 
     // MARK: - DVR
@@ -296,8 +319,20 @@ final class JellyfinLiveTVTests: XCTestCase {
         XCTAssertFalse(store.channels.contains { $0.sourceType == .jellyfin })
     }
 
+    func test_sync_signOutDuringTheProbe_installsNothing() async {
+        server.respond("/LiveTv/Channels", body: #"{"Items":[],"TotalRecordCount":3}"#)
+        server.respond("/Users/Me", body: #"{"Policy":{"IsAdministrator":true}}"#)
+        let signedIn = JellyfinProvider(serverID: "srv", displayName: "NAS", userID: "user-1",
+                                        client: JellyfinClient(baseURL: base, token: "tok", transport: server.transport))
+        let probe = JellyfinLiveTVProvider.sync(signedIn)
+        JellyfinLiveTVProvider.sync(nil)
+        await probe?.value
+        XCTAssertFalse(LiveTVDataStore.shared.hasSource(id: "jellyfin:srv"))
+        LiveTVDataStore.shared.setServerSource(nil, of: .jellyfin)
+    }
+
     func test_followsServer_onlyForMediaServers() {
-        XCTAssertEqual(LiveTVSourceType.allCases.filter(\.followsServer), [.plex, .jellyfin])
+        XCTAssertEqual(LiveTVSourceType.allCases.filter(\.followsServer), [.plex, .jellyfin, .emby])
     }
 
     func test_plexSourceKey_needsServerAndToken() {

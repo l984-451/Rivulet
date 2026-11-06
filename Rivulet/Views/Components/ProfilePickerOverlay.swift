@@ -30,46 +30,55 @@ struct ProfilePickerOverlay: View {
                 .fill(.background)
                 .ignoresSafeArea()
 
-            VStack(spacing: 50) {
-                // Header
-                VStack(spacing: 12) {
-                    Text("Who's Watching?")
-                        .font(.system(size: 64, weight: .bold))
-                        .foregroundStyle(Color.primary)
-
-                    Text("Select a profile to continue")
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color.primary.opacity(0.6))
-                }
-                .padding(.top, 80)
-
-                Spacer()
-
-                // Profile grid
-                LazyVGrid(columns: gridColumns, spacing: 40) {
-                    ForEach(profileManager.homeUsers) { user in
-                        ProfileAvatarButton(
-                            user: user,
-                            isLoading: isLoading && selectedUserForPin?.id == user.id,
-                            isFocused: focusedUserId == user.id,
-                            hasRememberedPin: profileManager.usersWithRememberedPins.contains(user.uuid)
-                        ) {
-                            selectProfile(user)
+            GeometryReader { proxy in
+                VStack(spacing: 50) {
+                    // Header
+                    VStack(spacing: 12) {
+                        Text("Who's Watching?")
+                            .font(.system(size: 64, weight: .bold))
+                            .foregroundStyle(Color.primary)
+    
+                        Text("Select a profile to continue")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Color.primary.opacity(0.6))
+                    }
+                    .padding(.top, 80)
+    
+                    Spacer()
+    
+                    // Profile grid. Hugs its rows and scrolls once they pass the header's room.
+                    ScrollView {
+                        LazyVGrid(columns: gridColumns, spacing: 40) {
+                            ForEach(profileManager.homeUsers) { user in
+                                ProfileAvatarButton(
+                                    user: user,
+                                    isLoading: isLoading && selectedUserForPin?.id == user.id,
+                                    isFocused: focusedUserId == user.id,
+                                    hasRememberedPin: profileManager.usersWithRememberedPins.contains(user.uuid)
+                                ) {
+                                    selectProfile(user)
+                                }
+                                .focused($focusedUserId, equals: user.id)
+                            }
                         }
-                        .focused($focusedUserId, equals: user.id)
+                        .padding(.horizontal, 120)
+                        // Room for the focus grow inside the scroll view's clip.
+                        .padding(.vertical, 20)
                     }
-                }
-                .padding(.horizontal, 120)
-
-                // The profile list did not load (plex.tv unreachable): nothing to pick yet.
-                if profileManager.homeUsers.isEmpty {
-                    Button("Try Again") {
-                        Task { await profileManager.fetchHomeUsers() }
+                    .frame(maxHeight: max(0, proxy.size.height - 320))
+                    .fixedSize(horizontal: false, vertical: true)
+    
+                    // The profile list did not load (plex.tv unreachable): nothing to pick yet.
+                    if profileManager.homeUsers.isEmpty {
+                        Button("Try Again") {
+                            Task { await profileManager.fetchHomeUsers() }
+                        }
+                        .disabled(profileManager.isLoadingUsers)
                     }
-                    .disabled(profileManager.isLoadingUsers)
+    
+                    Spacer()
                 }
-
-                Spacer()
+                .frame(width: proxy.size.width, height: proxy.size.height)
             }
         }
         .sheet(isPresented: $showPinEntry) {

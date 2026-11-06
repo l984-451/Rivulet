@@ -56,10 +56,17 @@ final class FolderLibraryViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
+    /// The library the root's Shuffle plays, all of it, when it is a video library.
+    static func shuffleLibrary(from source: FolderListing.Source) -> MediaLibrary? {
+        source().flatMap { $0.1.canShuffle ? $0.1 : nil }
+    }
+
     private func push(folder: MediaItemRef?, title: String?) {
+        let source = source
         let level = FolderListViewController(libraryTitle: libraryTitle, folderTitle: title,
                                              listing: FolderListing(folder: folder, source: source),
-                                             viewMenu: folder == nil ? viewMenu : nil)
+                                             viewMenu: folder == nil ? viewMenu : nil,
+                                             shuffleLibrary: folder == nil ? { Self.shuffleLibrary(from: source) } : nil)
         level.onOpenFolder = { [weak self] in self?.push(folder: $0, title: $1) }
         addChild(level)
         level.view.frame = view.bounds

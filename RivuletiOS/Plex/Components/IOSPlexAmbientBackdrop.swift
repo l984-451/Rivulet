@@ -43,13 +43,13 @@ struct IOSPlexAmbientBackdrop: View {
 /// The wash from an item's backdrop, requested as the Home hero requests it
 /// (full width, 16:9), so the hero's page is already in the cache.
 private struct IOSPlexItemAmbient: View {
-    let item: PlexMetadata
-    @EnvironmentObject private var plex: IOSPlexSession
+    let item: MediaItem
+    @EnvironmentObject private var browse: IOSBrowseStore
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { proxy in
-            IOSPlexAmbientBackdrop(url: IOSPlexArtwork.url(plex, item: item, kind: .backdrop, width: proxy.size.width,
+            IOSPlexAmbientBackdrop(url: IOSItemArtwork.url(browse, item: item, kind: .backdrop, width: proxy.size.width,
                                                            aspectRatio: 16 / 9, scale: displayScale))
         }
         .ignoresSafeArea()
@@ -59,7 +59,7 @@ private struct IOSPlexItemAmbient: View {
 extension View {
     /// Puts the ambient wash behind the page, made from `item`'s backdrop. Only a
     /// page whose header shows that art gets one; nil leaves the page's own background.
-    func iosPlexAmbient(_ item: PlexMetadata?) -> some View {
+    func iosPlexAmbient(_ item: MediaItem?) -> some View {
         background { if let item { IOSPlexItemAmbient(item: item) } }
     }
 }

@@ -75,7 +75,7 @@ final class MultiStreamViewModel: ObservableObject {
             let forceEngineDemux = url.path.hasPrefix("/livetv/sessions/")
             // Start the keepalive before the load, or a failed load leaves its
             // Plex grab held for 300s.
-            liveKeepalive.start(url: url)
+            liveKeepalive.start(url: url, sourceID: channel.sourceId)
             do {
                 try await aetherPlayer.loadLive(url: url, headers: headers,
                                                 forceEngineDemux: forceEngineDemux,
@@ -266,7 +266,7 @@ final class MultiStreamViewModel: ObservableObject {
         // Release what it tuned instead of playing it where nobody sees it.
         guard !intentionallyStoppedSlots.contains(slot.id),
               let slotIndex = streams.firstIndex(where: { $0.id == slot.id }) else {
-            if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+            if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
             return
         }
         // The stall clock starts after the tune. Started before it, a tune
@@ -574,7 +574,7 @@ final class MultiStreamViewModel: ObservableObject {
         // and the stall clock waits for the tune to finish.
         guard !intentionallyStoppedSlots.contains(newSlot.id),
               streams.contains(where: { $0.id == newSlot.id }) else {
-            if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+            if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
             return
         }
         stalledStateSince[newSlot.id] = Date()
@@ -810,7 +810,7 @@ final class MultiStreamViewModel: ObservableObject {
         // index taken before it crashed or wrote to the wrong tile.
         guard !Task.isCancelled, !intentionallyStoppedSlots.contains(slotId),
               let slotIndex = streams.firstIndex(where: { $0.id == slotId }) else {
-            if let resolved { PlexLiveTimelineKeepalive.release(resolved) }
+            if let resolved { PlexLiveTimelineKeepalive.release(resolved, sourceID: channel.sourceId) }
             return nil
         }
         guard let url = resolved else { return "no-url" }

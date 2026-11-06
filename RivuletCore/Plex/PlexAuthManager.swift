@@ -78,6 +78,8 @@ class PlexAuthManager: ObservableObject {
     private let networkManager = PlexNetworkManager.shared
     private var pollingTask: Task<Void, Never>?
     private var serverSelectionTask: Task<Bool, Never>?
+    /// The server a synced sign-in prefers, used while that sign-in picks its first server.
+    private var syncedPreferredServerID: String?
     private let userDefaults = UserDefaults.standard
 
     // UserDefaults keys (non-sensitive data only)
@@ -272,6 +274,7 @@ class PlexAuthManager: ObservableObject {
                 // conditional TabSection can latch to "empty" and not recover when
                 // libraries load asynchronously later.
                 await Self.onAuthenticated?()
+                CloudSync.shared.accountsChanged()
 
                 return true
             } else if selectedServerURL != nil {
@@ -682,14 +685,18 @@ class PlexAuthManager: ObservableObject {
         return nil
     }
 
-    /// Sign out and clear credentials
-    func signOut() {
+    /// Sign out and clear credentials. With iCloud Sync the token is shared, so revoking it signs
+    /// every device out: only `.everywhere` does. A caller that does not ask gets this device only.
+    func signOut(scope: SignOutScope? = nil) {
+        let scope = scope ?? .thisDevice
+        let shared = CloudSync.shared.wasShared(accountID: Self.syncID)
+        let identity = syncAccountUserID.map(String.init)
         DiagLog.notice(.auth, "Signed out of Plex")
         pollingTask?.cancel()
         pollingTask = nil
 
         // A token left valid at plex.tv would outlive the sign-out.
-        if let token = authToken {
+        if let token = authToken, scope.revokesToken(everShared: shared) {
             Task { await networkManager.revokeToken(token) }
         }
         authToken = nil
@@ -731,6 +738,42 @@ class PlexAuthManager: ObservableObject {
         Self.onSignedOut?()
 
         state = .idle
+        if scope != .syncedRemoval { CloudSync.shared.signedOut(accountID: Self.syncID, identity: identity, scope: scope) }
+    }
+
+    /// The vault entry id for the one Plex account.
+    static let syncID = "plex"
+
+    /// The plex.tv account id, which says whose account a synced token is.
+    var syncAccountUserID: Int? { userDefaults.object(forKey: accountUserIDKey) as? Int }
+
+    /// Signs in with a token another device holds. Goes through the normal sign-in path, which sets the
+    /// fresh-install sentinel; writing the token straight to the Keychain would be wiped on the next launch.
+    /// False without touching anything when the token is not accepted or a sign-in already exists.
+    func adoptSyncedSession(token: String, preferredServerMachineID: String?) async -> AdoptOutcome {
+        guard authToken == nil else { return .refused }
+        switch await tokenCheck(token) {
+        case .adopted: break
+        case let other: return other
+        }
+        syncedPreferredServerID = preferredServerMachineID
+        await handleSuccessfulAuth(token: token)
+        syncedPreferredServerID = nil
+        return authToken != nil ? .adopted : .unavailable
+    }
+
+    /// `.adopted` here means "the token works".
+    private func tokenCheck(_ token: String) async -> AdoptOutcome {
+        let url = URL(string: "https://plex.tv/api/v2/user")!
+        let headers = ["X-Plex-Token": token, "X-Plex-Client-Identifier": PlexAPI.clientIdentifier, "Accept": "application/json"]
+        do {
+            _ = try await networkManager.requestData(url, headers: headers)
+            return .adopted
+        } catch PlexAPIError.httpError(let status, _) where status == 401 || status == 403 {
+            return .refused
+        } catch {
+            return .unavailable
+        }
     }
 
     /// Reset error state
@@ -1060,6 +1103,7 @@ class PlexAuthManager: ObservableObject {
 
         // Fetch available servers
         await resumeServerSelection()
+        CloudSync.shared.accountsChanged()
     }
 
     /// Fetches the account's servers and enters selection (or auto-selects a
@@ -1073,6 +1117,8 @@ class PlexAuthManager: ObservableObject {
             if servers.isEmpty {
                 state = .error(message: String(localized: "No Plex servers found on your account"))
                 scheduleErrorDismissal()
+            } else if let wanted = syncedPreferredServerID, let preferred = servers.first(where: { $0.machineIdentifier == wanted }) {
+                await selectServer(preferred)
             } else if servers.count == 1 {
                 // Auto-select if only one server - await to ensure connection is established
                 await selectServer(servers[0])

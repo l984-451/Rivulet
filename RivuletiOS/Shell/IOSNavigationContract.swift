@@ -16,16 +16,17 @@ extension EnvironmentValues {
 
 /// A detail push that remembers its source tile, so push and pop zoom from the tile tapped.
 struct IOSPlexDetailRoute: Hashable {
-    let item: PlexMetadata
+    let item: MediaItem
     let sourceID: String
 
-    init(item: PlexMetadata, scope: String) {
+    init(item: MediaItem, scope: String) {
         self.item = item
         sourceID = Self.sourceID(item, scope: scope)
     }
 
-    static func sourceID(_ item: PlexMetadata, scope: String) -> String {
-        scope.isEmpty ? item.id : "\(scope)|\(item.id)"
+    static func sourceID(_ item: MediaItem, scope: String) -> String {
+        let id = "\(item.ref.providerID)|\(item.ref.itemID)"
+        return scope.isEmpty ? id : "\(scope)|\(id)"
     }
 }
 
@@ -55,11 +56,11 @@ struct IOSAccountToolbarItem: ToolbarContent {
 }
 
 extension View {
-    /// Registers the Plex routes once at the root of a tab's NavigationStack.
+    /// Registers the browse routes once at the root of a tab's NavigationStack.
     func iosPlexDestinations() -> some View { modifier(IOSPlexDestinations()) }
 
     /// Marks a tile as the source of the zoom into its detail page.
-    func plexZoomSource(_ item: PlexMetadata) -> some View { modifier(IOSPlexZoomSource(item: item)) }
+    func plexZoomSource(_ item: MediaItem) -> some View { modifier(IOSPlexZoomSource(item: item)) }
 }
 
 private struct IOSPlexDestinations: ViewModifier {
@@ -68,15 +69,15 @@ private struct IOSPlexDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .iosPlexActionHost()
-            .navigationDestination(for: PlexMetadata.self) { detail($0, sourceID: $0.id) }
+            .navigationDestination(for: MediaItem.self) { detail($0, sourceID: IOSPlexDetailRoute.sourceID($0, scope: "")) }
             .navigationDestination(for: IOSPlexDetailRoute.self) { detail($0.item, sourceID: $0.sourceID) }
-            .navigationDestination(for: PlexLibrary.self) { IOSPlexLibraryView(library: $0).iosPlexActionHost() }
+            .navigationDestination(for: MediaLibrary.self) { IOSPlexLibraryView(library: $0).iosPlexActionHost() }
             .navigationDestination(for: IOSPlexHubRoute.self) { IOSPlexHubGridView(route: $0).iosPlexActionHost() }
             .navigationDestination(for: IOSPlexPlaylistRoute.self) { IOSPlexPlaylistView(route: $0).iosPlexActionHost() }
     }
 
     @ViewBuilder
-    private func detail(_ item: PlexMetadata, sourceID: String) -> some View {
+    private func detail(_ item: MediaItem, sourceID: String) -> some View {
         if let namespace {
             IOSPlexDetailView(item: item)
                 .iosPlexActionHost()
@@ -88,7 +89,7 @@ private struct IOSPlexDestinations: ViewModifier {
 }
 
 private struct IOSPlexZoomSource: ViewModifier {
-    let item: PlexMetadata
+    let item: MediaItem
     @Environment(\.plexZoomNamespace) private var namespace
     @Environment(\.plexZoomScope) private var scope
 

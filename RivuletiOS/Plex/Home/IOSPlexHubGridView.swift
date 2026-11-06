@@ -6,8 +6,8 @@ import SwiftUI
 /// See All for one Home or detail row, paged through the hub's own key.
 struct IOSPlexHubGridView: View {
     let route: IOSPlexHubRoute
-    @EnvironmentObject private var plex: IOSPlexSession
-    @State private var items: [PlexMetadata]
+    @EnvironmentObject private var browse: IOSBrowseStore
+    @State private var items: [MediaItem]
     @State private var total: Int?
     @State private var isLoading = false
     @State private var error: String?
@@ -17,12 +17,12 @@ struct IOSPlexHubGridView: View {
 
     init(route: IOSPlexHubRoute) {
         self.route = route
-        _items = State(initialValue: route.hub.Metadata ?? [])
+        _items = State(initialValue: route.hub.items)
     }
 
-    /// Continue Watching follows the session's own cache-busted copy.
-    private var shown: [PlexMetadata] {
-        route.hub.isContinueWatching ? (plex.continueWatching?.Metadata ?? items) : items
+    /// Continue Watching follows the store's own merged copy.
+    private var shown: [MediaItem] {
+        route.isContinueWatching ? (browse.continueWatching.nilIfEmpty ?? items) : items
     }
 
     var body: some View {
@@ -35,14 +35,14 @@ struct IOSPlexHubGridView: View {
                     if isLoading { ProgressView().padding() }
                 }
                 .refreshable {
-                    if route.hub.isContinueWatching { await plex.refresh() } else { await reload() }
+                    if route.isContinueWatching { await browse.refresh() } else { await reload() }
                 }
             }
         }
-        .navigationTitle(route.hub.displayTitle)
+        .navigationTitle(route.hub.title)
         .navigationBarTitleDisplayMode(.large)
-        .task(id: plex.watchStateRevision) {
-            guard route.pages, loadedRevision != plex.watchStateRevision else { return }
+        .task(id: browse.watchStateRevision) {
+            guard route.pages, loadedRevision != browse.watchStateRevision else { return }
             await reload()
         }
     }
@@ -52,11 +52,13 @@ struct IOSPlexHubGridView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await plex.hubPage(route.hub, start: 0, size: max(Self.pageSize, items.count))
+            let page = try await browse.provider(for: route.hub.providerID)?.hubPage(
+                route.hub, page: Page(offset: 0, limit: max(Self.pageSize, items.count)))
+                ?? PagedResult(items: route.hub.items, total: route.hub.items.count, nextPage: nil)
             items = page.items.uniqued()
-            total = page.totalSize
+            total = page.total
             error = nil
-            loadedRevision = plex.watchStateRevision
+            loadedRevision = browse.watchStateRevision
         } catch let error where isCancellationError(error) {
         } catch {
             self.error = error.localizedDescription
@@ -68,18 +70,19 @@ struct IOSPlexHubGridView: View {
         isLoading = true
         Task {
             defer { isLoading = false }
-            guard let page = try? await plex.hubPage(route.hub, start: items.count, size: Self.pageSize) else { return }
+            guard let page = try? await browse.provider(for: route.hub.providerID)?.hubPage(
+                route.hub, page: Page(offset: items.count, limit: Self.pageSize)) else { return }
             items = (items + page.items).uniqued()
             // An empty page means the server's count overstated; stop paging.
-            self.total = page.items.isEmpty ? items.count : page.totalSize
+            self.total = page.items.isEmpty ? items.count : page.total
         }
     }
 }
 
-extension Array where Element == PlexMetadata {
+extension Array where Element == MediaItem {
     /// Drops repeats by id, keeping the first; ForEach needs unique ids.
-    func uniqued() -> [PlexMetadata] {
-        var seen = Set<String>()
+    func uniqued() -> [MediaItem] {
+        var seen = Set<MediaItemRef>()
         return filter { seen.insert($0.id).inserted }
     }
 }

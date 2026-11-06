@@ -26,6 +26,8 @@ struct SettingDescriptor {
 // MARK: - Descriptor Store
 
 enum SettingsDescriptorStore {
+    private static let embyName = MediaProviderKind.emby.displayName
+
     static func descriptor(for id: String) -> SettingDescriptor? {
         if let exact = descriptors[id] { return exact }
         // Rows built per item at runtime carry the item's identity in their id,
@@ -67,7 +69,7 @@ enum SettingsDescriptorStore {
         ),
         "cat_servers": SettingDescriptor(
             icon: "server.rack",
-            description: "Manage your Plex server connection and user profiles."
+            description: "Manage your Plex, Jellyfin and Emby server connections and user profiles."
         ),
         "cat_about": SettingDescriptor(
             icon: "info.circle.fill",
@@ -277,6 +279,10 @@ enum SettingsDescriptorStore {
             icon: "internaldrive",
             description: "View storage usage and manage cached images, metadata, and other temporary data."
         ),
+        "iCloudSync": SettingDescriptor(
+            icon: "icloud",
+            description: "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone and iPad signed in to your Apple Account. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this."
+        ),
         "forceRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
             description: "Clear metadata cache and reload all library content from your Plex server. Images will be kept."
@@ -304,6 +310,10 @@ enum SettingsDescriptorStore {
             description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
         ),
         "jellyfinLiveTV": SettingDescriptor(
+            icon: "tv.and.mediabox",
+            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+        ),
+        "embyLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
             description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
         ),
@@ -391,6 +401,42 @@ enum SettingsDescriptorStore {
         ),
         "siloProfiles": SettingDescriptor(icon: "person.2", description: "Choose the Silo profile whose libraries, Home and watch state you want to use."),
         "siloProfilePIN": SettingDescriptor(icon: "lock", description: "Enter this Silo profile's PIN. The PIN is not saved."),
+        "embyServer": SettingDescriptor(
+            icon: "server.rack",
+            description: "Sign in to your \(embyName) server."
+        ),
+        "embyServerInfo": SettingDescriptor(
+            icon: "server.rack",
+            description: "The \(embyName) server you are signed in to."
+        ),
+        "embyUserInfo": SettingDescriptor(
+            icon: "person",
+            description: "The \(embyName) user you are signed in as."
+        ),
+        "embyURL": SettingDescriptor(
+            icon: "globe",
+            description: "Your \(embyName) server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser."
+        ),
+        "embyUsername": SettingDescriptor(
+            icon: "person",
+            description: "Your \(embyName) username."
+        ),
+        "embyPassword": SettingDescriptor(
+            icon: "key",
+            description: "Used once, to sign in. Rivulet keeps the access token \(embyName) returns, not the password. Leave it empty if your user has none."
+        ),
+        "embySignIn": SettingDescriptor(
+            icon: "link",
+            description: "Check the server and sign in."
+        ),
+        "embyRefresh": SettingDescriptor(
+            icon: "arrow.clockwise",
+            description: "Reload this server's libraries and Home rows now."
+        ),
+        "embySignOut": SettingDescriptor(
+            icon: "rectangle.portrait.and.arrow.right",
+            description: "Sign out of this \(embyName) server and remove its saved credentials."
+        ),
         "connectPlex": SettingDescriptor(
             icon: "link",
             description: "Connect to your Plex server to browse and stream your media library."
@@ -626,6 +672,7 @@ enum SettingsDescriptorStore {
         case .siloProfiles: return ("person.2.fill", .systemTeal)
         case .siloProfilePIN: return ("lock.fill", .systemTeal)
         case .siloSubtitleLanguagePicker: return ("captions.bubble", .systemTeal)
+        case .emby: return ("server.rack", .systemGreen)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)

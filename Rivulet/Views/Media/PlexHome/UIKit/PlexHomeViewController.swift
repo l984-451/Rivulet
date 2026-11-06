@@ -2056,7 +2056,7 @@ final class PlexHomeViewController: UIViewController {
     /// Last value posted on `.contentFocusBelowTopChanged`, so the SwiftUI
     /// shell only hears about crossings of the top-row boundary, not every
     /// focus move.
-    private var focusBelowTop = false
+    private var focusBelowTop: Bool?
 
     private func postFocusBelowTop(_ below: Bool) {
         guard below != focusBelowTop else { return }
@@ -7480,10 +7480,10 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             stripIdleWork?.cancel()
             setAlphabetBarVisible(false)
             updateLeftEdgeGuide(for: nil)
-            // Focus left the page (sidebar, modal). Chrome must be back
-            // before the sidebar can be interacted with.
-            postFocusBelowTop(false)
-            // ...unless focus is inside the page and only the section lookup failed (a tile in a shelf row's
+            // Preserve the shell's chrome while focus is away, and report the
+            // page's position again on return, even if it has not changed.
+            focusBelowTop = nil
+            // Focus may still be inside the page if the section lookup failed (a tile in a shelf row's
             // nested collection). Nothing else scrolls for us, so reveal it from its own frame.
             if let next = context.nextFocusedView, next.isDescendant(of: collectionView) {
                 revealFocusedView(next)
@@ -7621,7 +7621,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
 
 // MARK: - Staged Menu back (issue #19)
 
-extension PlexHomeViewController: MenuBackHandling {
+extension PlexHomeViewController: MenuBackHandling, SidebarTabReselecting {
     /// A Menu press below the top row snaps the page back to it. At the top row this declines, so the
     /// system reveals the sidebar, and `TVSidebarView.onExitCommand` returns to Home from there.
     func handleMenuBack() -> Bool {
@@ -7696,46 +7696,22 @@ extension PlexHomeViewController: MenuBackHandling {
         }
     }
 
-    /// Snaps to the top row and focuses it. The jump is deliberate: animating loses to the engine, which
-    /// re-resolves mid-flight onto a passing row. `playReturnToTopSlide` draws the visible scroll after.
+    func reselectSidebarTab() {
+        returnToTopRow()
+    }
+
     private func returnToTopRow() {
-        let travel = collectionView.contentOffset.y + collectionView.adjustedContentInset.top
-        let before = collectionView.snapshotView(afterScreenUpdates: false)
-        aimFocusAtTopRow()
-        setNeedsFocusUpdate()
-        updateFocusIfNeeded()
-        playReturnToTopSlide(from: before, travel: travel)
+        ScrollToTopTransition.perform(in: collectionView) {
+            aimFocusAtTopRow()
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        } completion: { [weak self] in
+            self?.nudgeInitialHeroFocusIfNeeded()
+        }
         // The hero's buttons may not be focusable until the next runloop turn; re-assert once they are.
         DispatchQueue.main.async { [weak self] in
             self?.nudgeInitialHeroFocusIfNeeded()
         }
-    }
-
-    /// Draws the trip back up as a quick scroll. The page has already jumped
-    /// and focus has landed; this only slides the old picture down and the top
-    /// in after it, on presentation layers, so neither layout nor focus moves.
-    private func playReturnToTopSlide(from snapshot: UIView?, travel: CGFloat) {
-        let distance = min(travel, collectionView.bounds.height)
-        guard let snapshot, distance > 1, !UIAccessibility.isReduceMotionEnabled else { return }
-        snapshot.frame = collectionView.frame
-        view.insertSubview(snapshot, aboveSubview: collectionView)
-        CATransaction.begin()
-        // The snapshot can sit over the hero's buttons, which blocks focus
-        // geometrically, so the hero nudge runs again once it is gone.
-        CATransaction.setCompletionBlock { [weak self] in
-            snapshot.removeFromSuperview()
-            self?.nudgeInitialHeroFocusIfNeeded()
-        }
-        for (layer, from, to) in [(collectionView.layer, -distance, 0), (snapshot.layer, 0, distance)] {
-            let slide = CABasicAnimation(keyPath: "transform.translation.y")
-            slide.fromValue = from
-            slide.toValue = to
-            slide.duration = 0.35
-            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.33, 1, 0.68, 1)  // ease-out cubic
-            layer.add(slide, forKey: "returnToTop")
-        }
-        snapshot.layer.transform = CATransform3DMakeTranslation(0, distance, 0)
-        CATransaction.commit()
     }
 }
 

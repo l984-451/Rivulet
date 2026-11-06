@@ -908,7 +908,20 @@ final class EPGContainerView: UIView {
     }
 }
 
-extension EPGContainerView: MenuBackHandling {
+extension EPGContainerView: MenuBackHandling, SidebarTabReselecting {
+    func reselectSidebarTab() {
+        guard let collectionView else { return }
+        ScrollToTopTransition.perform(in: collectionView) {
+            scrollGridToTop()
+            pendingMiniPlayerFocus = !miniPlayer.isHidden
+            pendingCategoryFocusTarget = categoryBar.preferredFocusTarget()
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            pendingMiniPlayerFocus = false
+            pendingCategoryFocusTarget = nil
+        }
+    }
+
     /// Menu returns the grid to its top, as below a library's top row, and
     /// focuses the corner player, or the pills when there is none. From the
     /// corner player or the pills it declines, so the sidebar opens.
@@ -1385,7 +1398,7 @@ final class EPGLayout: UICollectionViewLayout {
 
 // MARK: - Cells
 
-final class ProgramCellView: UICollectionViewCell {
+final class ProgramCellView: UICollectionViewCell, KeepsUpAtTop {
     static let reuseID = "ProgramCellView"
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()

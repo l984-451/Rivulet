@@ -54,6 +54,19 @@ private enum Metrics {
     /// three-phase timing from 120fps frame analysis looked worse on screen.
     static let morphDuration: TimeInterval = 0.45
     static let morphDamping: CGFloat = 0.9
+    /// The chevron trails the morph by this fraction of it and slides in 12pt.
+    static let chevronDelayFactor: Double = 0.3
+    static let chevronSlide: CGFloat = 12
+    /// Profile avatar, pill glyph and pill label scales at the far end of a morph.
+    static let collapsedAvatarScale: CGFloat = 1.25
+    static let expandedPillIconScale: CGFloat = 0.75
+    static let expandedPillLabelScale: CGFloat = 0.9
+    /// Notch hide and reveal (collapsed pill, below the top row).
+    static let notchHideDuration: TimeInterval = 0.18
+    static let notchRevealDuration: TimeInterval = 0.5
+    static let notchRevealDelay: TimeInterval = 0.4
+    static let notchRevealScale: CGFloat = 0.65
+    static let notchRevealRise: CGFloat = 6
     /// Profile header, measured on device (tvOS 27): avatar centre 26pt below
     /// the list top, clock right edge 12.5pt inside it, name 8.5pt further
     /// right while focused.
@@ -94,27 +107,40 @@ private func emphasizedFont(_ style: UIFont.TextStyle) -> UIFont {
 }
 
 /// A round profile picture drawn over a glyph, which shows until it loads.
-private final class SidebarAvatarView: UIImageView {
+private final class SidebarAvatarView: UIView {
+    private let imageView = UIImageView()
+
+    func setImageScale(_ scale: CGFloat) {
+        imageView.transform = CGAffineTransform(scaleX: scale, y: scale)
+    }
+
     var url: URL? {
         didSet {
             guard url != oldValue else { return }
-            image = url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
-            guard let url, image == nil else { return }
+            imageView.image = url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
+            guard let url, imageView.image == nil else { return }
             Task { [weak self] in
                 let loaded = await ImageCacheManager.shared.image(for: url)
-                if self?.url == url { self?.image = loaded }
+                if self?.url == url { self?.imageView.image = loaded }
             }
         }
     }
 
     init(diameter: CGFloat) {
         super.init(frame: .zero)
-        contentMode = .scaleAspectFill
+        imageView.contentMode = .scaleAspectFill
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(imageView)
+        isUserInteractionEnabled = false
         clipsToBounds = true
         layer.cornerRadius = diameter / 2
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: diameter),
-                                     heightAnchor.constraint(equalToConstant: diameter)])
+                                     heightAnchor.constraint(equalToConstant: diameter),
+                                     imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                                     imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+                                     imageView.topAnchor.constraint(equalTo: topAnchor),
+                                     imageView.bottomAnchor.constraint(equalTo: bottomAnchor)])
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -331,6 +357,10 @@ final class ShellSidebarProfileCell: UICollectionViewCell {
         clockTimer = timer
     }
 
+    func setAvatarImageScale(_ scale: CGFloat) {
+        avatarView.setImageScale(scale)
+    }
+
     func configure(item: ShellSidebarItem) {
         iconView.image = UIImage(systemName: item.icon)
         avatarView.url = item.avatarURL
@@ -441,7 +471,7 @@ final class ShellSidebarViewController: UIViewController {
     private var orderBeforeMove: [String] = []
     /// The row focus follows to once the next sections arrive (a step or a cancel).
     private var pendingFocusKey: String?
-    /// Right swipe closes the open sidebar, the touch twin of the Right press below.
+    /// Horizontal swipes close the open sidebar, the touch twin of the arrow presses below.
     private var closeSwipe: DirectionalInputBinding?
 
     var isExpanded: Bool { state == .expanded }
@@ -509,11 +539,45 @@ final class ShellSidebarViewController: UIViewController {
 
     /// Collapsed-state pill visibility, driven by the below-top focus signal.
     func setPillHidden(_ hidden: Bool) {
+        guard hidden != pillHidden else { return }
         pillHidden = hidden
         guard state == .collapsed, transitionAnimator == nil else { return }
-        UIView.animate(withDuration: 0.18) {
-            self.cardView.alpha = hidden ? 0 : 1
-            self.pillChevron.alpha = hidden ? 0 : 1
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let duration = hidden || reduceMotion ? Metrics.notchHideDuration : Metrics.notchRevealDuration
+        let startTime = CACurrentMediaTime()
+        pillStack.alpha = 1
+        for part in [cardView, pillChevron] {
+            let layer = part.layer
+            let visibleOpacity = layer.presentation()?.opacity ?? layer.opacity
+            var start = layer.presentation()?.transform ?? CATransform3DIdentity
+            let revealing = !hidden && visibleOpacity < 0.01
+            if revealing, !reduceMotion {
+                let scale = Metrics.notchRevealScale
+                start = CATransform3DMakeScale(scale, scale, 1)
+                // Scale the capsule and chevron around the same centre while rising into place.
+                start.m41 = (cardView.center.x - part.center.x) * (1 - scale)
+                start.m42 = (cardView.center.y - part.center.y) * (1 - scale) + Metrics.notchRevealRise
+            }
+            let motion = CABasicAnimation(keyPath: "transform")
+            motion.fromValue = start
+            motion.toValue = CATransform3DIdentity
+            motion.duration = duration
+            motion.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = visibleOpacity
+            fade.toValue = hidden ? 0 : 1
+            fade.duration = Metrics.notchHideDuration
+            fade.fillMode = .forwards
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+            let visibility = CAAnimationGroup()
+            visibility.animations = reduceMotion ? [fade] : [motion, fade]
+            visibility.duration = duration
+            visibility.beginTime = layer.convertTime(startTime, from: nil) + (revealing && !reduceMotion ? Metrics.notchRevealDelay : 0)
+            visibility.fillMode = .backwards
+            part.alpha = hidden ? 0 : 1
+            layer.add(visibility, forKey: "pillVisibility")
         }
     }
 
@@ -527,12 +591,12 @@ final class ShellSidebarViewController: UIViewController {
         configurePill()
         applyState(expanded: true, animated: false)
         closeSwipe = DirectionalInputBinding(
-            gatedSwipesOn: view, directions: [.right],
+            gatedSwipesOn: view, directions: [.left, .right],
             shouldHandle: { [weak self] _ in self?.state == .expanded && self?.rowMove?.isMoving != true },
-            onSwipe: { [weak self] _ in self?.collapseFromRight() })
+            onSwipe: { [weak self] _ in self?.requestCollapse() })
     }
 
-    private func collapseFromRight() {
+    private func requestCollapse() {
         if embedded { onCollapseRequested?() } else { setState(.collapsed) }
     }
 
@@ -555,8 +619,8 @@ final class ShellSidebarViewController: UIViewController {
         guard rowMove?.isMoving != true else { return }
         for press in presses {
             switch (press.type, state) {
-            case (.rightArrow, .expanded):
-                collapseFromRight()
+            case (.leftArrow, .expanded), (.rightArrow, .expanded):
+                requestCollapse()
                 return
             case (.leftArrow, .collapsed) where !embedded:
                 setState(.expanded)
@@ -589,20 +653,45 @@ final class ShellSidebarViewController: UIViewController {
         applyState(expanded: newState == .expanded, animated: true)
     }
 
+    private var profileToPillOffset: CGPoint {
+        CGPoint(x: Metrics.contentLeading + Metrics.iconCenterX - Metrics.pillDiscInset - Metrics.pillDiscSize / 2,
+                y: Metrics.contentTop + Metrics.headerCenterY - Metrics.pillHeight / 2)
+    }
+
     private func applyState(expanded: Bool, animated: Bool) {
+        cardView.layer.removeAnimation(forKey: "pillVisibility")
+        pillChevron.layer.removeAnimation(forKey: "pillVisibility")
         let targetFrame = expanded ? panelFrame : pillFrame
         let targetRadius = expanded ? Metrics.panelCornerRadius : Metrics.pillHeight / 2
+        let pillTransform = expanded
+            ? CGAffineTransform(translationX: profileToPillOffset.x, y: profileToPillOffset.y)
+            : .identity
         collectionView.isHidden = false
+        collectionView.layoutIfNeeded()
+        let profileCell = collectionView.visibleCells.compactMap { $0 as? ShellSidebarProfileCell }.first
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let chevronTransform = expanded && !reduceMotion
+            ? CGAffineTransform(translationX: Metrics.chevronSlide, y: 0)
+            : .identity
+        let applyArtworkState: (Bool) -> Void = { expanded in
+            profileCell?.setAvatarImageScale(expanded || reduceMotion ? 1 : Metrics.collapsedAvatarScale)
+            let iconScale: CGFloat = expanded && !reduceMotion ? Metrics.expandedPillIconScale : 1
+            self.pillIcon.transform = CGAffineTransform(scaleX: iconScale, y: iconScale)
+            let labelScale: CGFloat = expanded && !reduceMotion ? Metrics.expandedPillLabelScale : 1
+            self.pillLabel.transform = CGAffineTransform(scaleX: labelScale, y: labelScale)
+        }
         cardView.alpha = 1
-        // The chevron belongs to the collapsed pill only; it never shows while
-        // the panel is open.
-        let chevronTarget: CGFloat = expanded ? 0 : (pillHidden ? 0 : 1)
+        let pillContentAlpha: CGFloat = !expanded && !pillHidden ? 1 : 0
         guard animated else {
+            applyArtworkState(expanded)
             cardView.frame = targetFrame
             cardView.layer.cornerRadius = targetRadius
+            layoutListInCard()
+            pillStack.transform = pillTransform
             collectionView.alpha = expanded ? 1 : 0
-            pillStack.alpha = expanded ? 0 : 1
-            pillChevron.alpha = chevronTarget
+            pillStack.alpha = pillContentAlpha
+            pillChevron.alpha = pillContentAlpha
+            pillChevron.transform = chevronTransform
             collectionView.isHidden = !expanded
             if !expanded, pillHidden { cardView.alpha = 0 }
             view.setNeedsLayout()
@@ -610,14 +699,22 @@ final class ShellSidebarViewController: UIViewController {
             updateFocusIfNeeded()
             return
         }
+        applyArtworkState(!expanded)
         let animator = UIViewPropertyAnimator(duration: Metrics.morphDuration,
                                               dampingRatio: Metrics.morphDamping) {
             self.cardView.frame = targetFrame
             self.cardView.layer.cornerRadius = targetRadius
+            self.layoutListInCard()
+            self.pillStack.transform = pillTransform
+            self.cardView.alpha = expanded || !self.pillHidden ? 1 : 0
             self.collectionView.alpha = expanded ? 1 : 0
-            self.pillStack.alpha = expanded ? 0 : 1
-            self.pillChevron.alpha = chevronTarget
+            self.pillStack.alpha = pillContentAlpha
+            applyArtworkState(expanded)
         }
+        animator.addAnimations({
+            self.pillChevron.alpha = pillContentAlpha
+            self.pillChevron.transform = chevronTransform
+        }, delayFactor: expanded || reduceMotion ? 0 : Metrics.chevronDelayFactor)
         animator.addCompletion { _ in
             self.transitionAnimator = nil
             // The pill's title can change mid-morph (Menu to Home): fit it now.
@@ -627,10 +724,11 @@ final class ShellSidebarViewController: UIViewController {
                 self.collectionView.isHidden = true
                 // pillHidden can flip mid-morph: a below-top focus change posts
                 // while this animator is in flight, and setPillHidden bails on a
-                // live transition. Reconcile BOTH the card and its chevron here,
-                // or the chevron is left stranded visible over a hidden pill.
+                // live transition. Reconcile the card, contents and chevron
+                // together so they reflect the latest visibility request.
                 let pillAlpha: CGFloat = self.pillHidden ? 0 : 1
                 self.cardView.alpha = pillAlpha
+                self.pillStack.alpha = pillAlpha
                 self.pillChevron.alpha = pillAlpha
             }
             self.setNeedsFocusUpdate()
@@ -676,7 +774,7 @@ final class ShellSidebarViewController: UIViewController {
         // outside the glass, and fades with the pill.
         pillChevron.tintColor = .white
         pillChevron.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(pillChevron)
+        view.insertSubview(pillChevron, belowSubview: cardView)
 
         pillIcon.tintColor = .white
         pillIcon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .caption1)
@@ -710,7 +808,7 @@ final class ShellSidebarViewController: UIViewController {
             // Chevron sits just left of the collapsed pill, vertically centered
             // on it. The pill's left edge is at pillOrigin.x.
             pillChevron.trailingAnchor.constraint(equalTo: view.leadingAnchor,
-                                                  constant: Metrics.pillOrigin.x - 12),
+                                                  constant: Metrics.pillOrigin.x - 4),
             pillChevron.centerYAnchor.constraint(equalTo: view.topAnchor,
                                                  constant: Metrics.pillOrigin.y + Metrics.pillHeight / 2),
         ])
@@ -720,9 +818,11 @@ final class ShellSidebarViewController: UIViewController {
     /// CLIP it (with a fade), matching the portal look of the system morph;
     /// resizing the list itself would squish rows mid-animation.
     private func layoutListInCard() {
+        // Keep the fading profile centred on the pill icon throughout the card morph.
+        let offset = state == .expanded ? CGPoint.zero : profileToPillOffset
         collectionView.frame = CGRect(
-            x: Metrics.contentLeading,
-            y: Metrics.contentTop,
+            x: Metrics.contentLeading - offset.x,
+            y: Metrics.contentTop - offset.y,
             width: Metrics.panelWidth - Metrics.contentLeading - Metrics.contentTrailing,
             height: panelFrame.height - Metrics.contentTop - Metrics.contentBottom)
     }

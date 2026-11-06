@@ -15,7 +15,7 @@ import UIKit
 import Combine
 
 @MainActor
-final class MusicBrowseViewController: UIViewController, UICollectionViewDelegate {
+final class MusicBrowseViewController: UIViewController, UICollectionViewDelegate, SidebarTabReselecting {
     private nonisolated enum Item: Hashable, Sendable {
         case header
         case entry(MediaItemRef)
@@ -136,6 +136,11 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { [collectionView] }
+
+    func reselectSidebarTab() {
+        aimEntry()
+        SidebarReselection.returnToTop(in: collectionView, focusing: collectionView.preferredFocusIndexPath)
+    }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)

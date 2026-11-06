@@ -1824,7 +1824,6 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func startPlayback() async {
         await beginCinemaExtrasIfNeeded()
-        Task { await resolveSubtitleSearchAccess() }
         // Fetch detailed metadata if markers or chapters are missing
         let hasMarkers = !(metadata.Marker ?? []).isEmpty
         let hasChapters = !(metadata.Chapter ?? []).isEmpty
@@ -4556,23 +4555,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Subtitle Search
 
-    /// Plex writes the file next to the media, which only the server's admin may
-    /// do. `selectedServer` (and its `owned`) is nil after a warm launch, so ask the server.
-    private(set) var canSearchSubtitles = false
-    /// Admin answers per server URL + token, for the session.
-    private static var serverAdminAnswers: [String: Bool] = [:]
-
-    private func resolveSubtitleSearchAccess() async {
-        guard case .plex = source, metadata.ratingKey != nil,
-              PlexUserProfileManager.shared.selectedUser?.restricted != true else { return }
-        let key = serverURL + authToken
-        if let known = Self.serverAdminAnswers[key] {
-            canSearchSubtitles = known
-            return
-        }
-        let isAdmin = await PlexNetworkManager.shared.canAdministerServer(serverURL: serverURL, authToken: authToken)
-        Self.serverAdminAnswers[key] = isAdmin
-        canSearchSubtitles = isAdmin
+    /// PMS lets any non-restricted user search and download, not just the admin (measured).
+    var canSearchSubtitles: Bool {
+        guard case .plex = source else { return false }
+        return metadata.ratingKey != nil && PlexUserProfileManager.shared.selectedUser?.restricted != true
     }
 
     /// The subtitle preference's language, else the device's, as ISO 639-1.

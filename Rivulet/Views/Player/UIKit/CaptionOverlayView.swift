@@ -800,6 +800,9 @@ private final class CaptionBoxView: UIView {
                 let contentColor = style.allowsContentColor ? run.color : nil
                 attributes[.foregroundColor] =
                     contentColor.map { scaled($0).withAlphaComponent(style.foregroundOpacity) } ?? userColor
+                if style.allowsContentBackground, let background = run.backgroundColor {
+                    attributes[.backgroundColor] = background
+                }
                 if style.allowsContentFont {
                     if run.isUnderlined {
                         attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue

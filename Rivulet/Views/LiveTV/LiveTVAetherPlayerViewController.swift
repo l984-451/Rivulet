@@ -1709,7 +1709,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// One legible-output attributed string: its styled runs plus the
     /// placement the cue asked for.
-    private struct StyledLine: Equatable {
+    struct StyledLine: Equatable {
         let runs: [AetherSubtitleCue.StyledRun]
         var placement: AetherSubtitleCue.TextPlacement?
     }
@@ -1717,10 +1717,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Converts a legible-output attributed string into styled runs, the only
     /// source of styling on the remote-HLS path since the engine never sees the
     /// rendition. Whitespace-only strings return nil; edges are trimmed.
-    private static func styledLine(from attr: NSAttributedString) -> StyledLine? {
+    static func styledLine(from attr: NSAttributedString) -> StyledLine? {
         guard !attr.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let colorKey = NSAttributedString.Key(kCMTextMarkupAttribute_ForegroundColorARGB as String)
+        let backgroundKey = NSAttributedString.Key(kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String)
         let boldKey = NSAttributedString.Key(kCMTextMarkupAttribute_BoldStyle as String)
         let italicKey = NSAttributedString.Key(kCMTextMarkupAttribute_ItalicStyle as String)
         let underlineKey = NSAttributedString.Key(kCMTextMarkupAttribute_UnderlineStyle as String)
@@ -1738,6 +1739,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                                 blue: CGFloat(argb[3].doubleValue),
                                 alpha: CGFloat(argb[0].doubleValue))
             }
+            var backgroundColor: UIColor?
+            if let argb = attrs[backgroundKey] as? [NSNumber], argb.count == 4 {
+                backgroundColor = UIColor(red: CGFloat(argb[1].doubleValue),
+                                          green: CGFloat(argb[2].doubleValue),
+                                          blue: CGFloat(argb[3].doubleValue),
+                                          alpha: CGFloat(argb[0].doubleValue))
+            }
             // Relative size is a PERCENTAGE of the default cue size; the
             // renderer wants ASS play-resolution points, so convert through
             // the same nominal 16pt the engine's synthesised lines use.
@@ -1749,6 +1757,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             runs.append(AetherSubtitleCue.StyledRun(
                 text: text,
                 color: color,
+                backgroundColor: backgroundColor,
                 isBold: (attrs[boldKey] as? NSNumber)?.boolValue ?? false,
                 isItalic: (attrs[italicKey] as? NSNumber)?.boolValue ?? false,
                 isUnderlined: (attrs[underlineKey] as? NSNumber)?.boolValue ?? false,

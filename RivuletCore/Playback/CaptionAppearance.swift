@@ -29,6 +29,10 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
 
     /// The background drawn behind each line of text.
     var backgroundColor: UIColor
+
+    /// True when the content's own per-run background may win (Video Override).
+    var allowsContentBackground: Bool
+
     var backgroundOpacity: Double
 
     /// The window drawn behind the whole cue.
@@ -103,6 +107,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
         allowsContentColor: true,
         foregroundOpacity: 1.0,
         backgroundColor: .black,
+        allowsContentBackground: true,
         backgroundOpacity: 0,
         windowColor: .black,
         windowOpacity: 0.5,
@@ -120,6 +125,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
             && lhs.allowsContentColor == rhs.allowsContentColor
             && lhs.foregroundOpacity == rhs.foregroundOpacity
             && lhs.backgroundColor == rhs.backgroundColor
+            && lhs.allowsContentBackground == rhs.allowsContentBackground
             && lhs.backgroundOpacity == rhs.backgroundOpacity
             && lhs.windowColor == rhs.windowColor
             && lhs.windowOpacity == rhs.windowOpacity
@@ -193,6 +199,7 @@ enum CaptionAppearance {
         let foregroundOpacity = rawFgOpacity > 0 ? min(rawFgOpacity, 1.0) : 1.0
 
         let bgCG = MACaptionAppearanceCopyBackgroundColor(.user, &behavior).takeRetainedValue()
+        let allowsContentBackground = contentMayOverride()
         let bgOpacity = Double(MACaptionAppearanceGetBackgroundOpacity(.user, &behavior))
         let windowCG = MACaptionAppearanceCopyWindowColor(.user, &behavior).takeRetainedValue()
         let windowOpacity = Double(MACaptionAppearanceGetWindowOpacity(.user, &behavior))
@@ -224,6 +231,7 @@ enum CaptionAppearance {
             allowsContentColor: allowsContentColor,
             foregroundOpacity: foregroundOpacity,
             backgroundColor: UIColor(cgColor: bgCG),
+            allowsContentBackground: allowsContentBackground,
             backgroundOpacity: bgOpacity,
             windowColor: UIColor(cgColor: windowCG),
             windowOpacity: windowOpacity,

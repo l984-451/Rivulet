@@ -169,7 +169,11 @@ struct IOSAetherSubtitleOverlay: View {
         case .styledText(let runs):
             return runs.reduce(Text("")) { result, run in
                 let runColor = style.allowsContentColor ? run.color : nil
-                var text = Text(run.text)
+                var base = AttributedString(run.text)
+                if style.allowsContentBackground, let background = run.backgroundColor {
+                    base.backgroundColor = background
+                }
+                var text = Text(base)
                     .font(Font(font(for: run, baseSize: pointSize)))
                     .foregroundColor(
                         runColor.map {

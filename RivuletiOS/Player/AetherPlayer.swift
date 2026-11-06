@@ -69,6 +69,7 @@ final class AetherPlayer: ObservableObject {
             let isStruckThrough: Bool
             let fontName: String?
             let fontSize: Int?
+            var backgroundColor: UIColor?
         }
 
         struct TextPlacement: Hashable {
@@ -1153,6 +1154,7 @@ final class AetherPlayer: ObservableObject {
         }
 
         let colorKey = NSAttributedString.Key(kCMTextMarkupAttribute_ForegroundColorARGB as String)
+        let backgroundKey = NSAttributedString.Key(kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String)
         let boldKey = NSAttributedString.Key(kCMTextMarkupAttribute_BoldStyle as String)
         let italicKey = NSAttributedString.Key(kCMTextMarkupAttribute_ItalicStyle as String)
         let underlineKey = NSAttributedString.Key(kCMTextMarkupAttribute_UnderlineStyle as String)
@@ -1167,6 +1169,16 @@ final class AetherPlayer: ObservableObject {
             var color: UIColor?
             if let argb = attributes[colorKey] as? [NSNumber], argb.count == 4 {
                 color = UIColor(
+                    red: CGFloat(argb[1].doubleValue),
+                    green: CGFloat(argb[2].doubleValue),
+                    blue: CGFloat(argb[3].doubleValue),
+                    alpha: CGFloat(argb[0].doubleValue)
+                )
+            }
+
+            var backgroundColor: UIColor?
+            if let argb = attributes[backgroundKey] as? [NSNumber], argb.count == 4 {
+                backgroundColor = UIColor(
                     red: CGFloat(argb[1].doubleValue),
                     green: CGFloat(argb[2].doubleValue),
                     blue: CGFloat(argb[3].doubleValue),
@@ -1190,7 +1202,8 @@ final class AetherPlayer: ObservableObject {
                     isUnderlined: (attributes[underlineKey] as? NSNumber)?.boolValue ?? false,
                     isStruckThrough: false,
                     fontName: attributes[faceKey] as? String,
-                    fontSize: fontSize
+                    fontSize: fontSize,
+                    backgroundColor: backgroundColor
                 )
             )
         }
@@ -1275,7 +1288,8 @@ final class AetherPlayer: ObservableObject {
 private extension AetherPlayer.SubtitleCue.StyledRun {
     func replacingText(_ text: String) -> Self {
         Self(text: text, color: color, isBold: isBold, isItalic: isItalic, isUnderlined: isUnderlined,
-             isStruckThrough: isStruckThrough, fontName: fontName, fontSize: fontSize)
+             isStruckThrough: isStruckThrough, fontName: fontName, fontSize: fontSize,
+             backgroundColor: backgroundColor)
     }
 }
 

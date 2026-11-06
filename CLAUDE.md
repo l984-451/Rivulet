@@ -913,7 +913,7 @@ owner steps (developer portal, CloudKit schema deploy, profiles) are in
 - **Sign-out asks "this device only" or "all devices" when the account is shared**
   (`CloudSync.isSynced(accountID:)`); a token that was ever shared is revoked only
   by "all devices". A tombstone makes the other devices sign out without revoking.
-- **One per-device switch, `iCloudSyncEnabled`, on by default**, never itself synced.
+- **One per-device switch, `iCloudSyncEnabled`, off by default**, never itself synced.
   Order at launch: the Live TV store (it re-keys old M3U ids) and the provider registry
   populate first, then `CloudSync.shared.start()`.
 - **Adoption reaches the UI through the existing paths**: Plex through

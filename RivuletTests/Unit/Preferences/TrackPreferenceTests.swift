@@ -767,21 +767,31 @@ final class TrackPreferenceTests: XCTestCase {
              {"id":3,"streamType":3,"index":3,"languageCode":"eng","codec":"srt"}]
             """#))
         XCTAssertEqual(start.audio, 2)
-        XCTAssertEqual(start.subtitle, 3)
+        XCTAssertEqual(start.subtitle, .track(3))
     }
 
-    /// A deliberate Plex subtitle pick overrides a stored Off; nothing selected resolves to off (0).
+    /// A deliberate Plex subtitle pick overrides a stored Off; nothing selected resolves to off.
     func testStartingSelectionSubtitleOverrideAndOff() {
         TrackIntentStore.subtitleIntent = .off
         let picked = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
             [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
              {"id":3,"streamType":3,"index":3,"languageCode":"spa","selected":true}]
             """#))
-        XCTAssertEqual(picked.subtitle, 3)
+        XCTAssertEqual(picked.subtitle, .track(3))
         let off = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
             [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
              {"id":3,"streamType":3,"index":3,"languageCode":"spa"}]
             """#))
-        XCTAssertEqual(off.subtitle, 0)
+        XCTAssertEqual(off.subtitle, .off)
+    }
+
+    /// A provider's shim numbers a stream 0 (a Jellyfin sidecar); the intent can pick it.
+    func testStartingSelectionCanPickStreamZero() {
+        TrackIntentStore.subtitleIntent = .track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        let start = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
+            [{"id":0,"streamType":3,"languageCode":"eng","codec":"srt","key":"/s/0"},
+             {"id":5,"streamType":2,"index":5,"languageCode":"eng","default":true,"selected":true}]
+            """#))
+        XCTAssertEqual(start.subtitle, .track(0))
     }
 }

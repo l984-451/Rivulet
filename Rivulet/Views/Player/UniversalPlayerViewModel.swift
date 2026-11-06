@@ -591,7 +591,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var isReloadingStream = false
     private var trackReloadQueued = false
     /// The picks a Plex transcode was started with, when Rivulet PUT them; seeds the HLS track ids.
-    private var transcodeTrackIDs: PlexTrackIDs?
+    private var transcodeTrackIDs: TrackPicks?
     /// `.provider`: the version the next quality reload plays, when the cap moved off the playing one.
     private var providerTargetSourceID: String?
 
@@ -3243,16 +3243,16 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// server wants (Plex's token and client profile).
     /// `maxBitrate` (bps) caps it; nil leaves the bitrate to the server.
     func switchToProviderTranscode(resumeTime: TimeInterval, maxBitrate: Int? = nil,
-                                   tracks: PlexTrackIDs = PlexTrackIDs()) async throws -> (url: URL, headers: [String: String])? {
+                                   tracks: TrackPicks = TrackPicks()) async throws -> (url: URL, headers: [String: String])? {
         guard case .provider(var playback) = source else { return nil }
         playback.stream = try await playback.provider.transcodeStream(
             for: playback.item.ref,
             sourceID: providerTargetSourceID ?? playback.stream.source.id,
             startTime: resumeTime,
             maxBitrate: maxBitrate,
-            // A shim stream id is the provider's index; Plex's 0 (off) is -1 there.
+            // A shim stream id is the provider's index.
             audioStreamIndex: tracks.audio,
-            subtitleStreamIndex: tracks.subtitle.map { $0 == 0 ? -1 : $0 }
+            subtitleStreamIndex: tracks.subtitle?.providerStreamIndex
         )
         try Task.checkCancellation()
         providerTargetSourceID = nil
@@ -3458,7 +3458,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Reloads at the playhead on the file or on a transcode at `activeStreamPlan`'s step,
     /// keeping the paused state and the audio and subtitle picks.
     /// A provider that will not transcode leaves the old stream playing and the plan as `snapshot` had it.
-    private func reloadStream(toOriginal: Bool, reason: String, tracks: PlexTrackIDs,
+    private func reloadStream(toOriginal: Bool, reason: String, tracks: TrackPicks,
                               restoring snapshot: PlanSnapshot) async {
         let resumeTime = playheadForReload
         let resume = playbackState != .paused
@@ -3501,7 +3501,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         return currentTime
     }
 
-    private func reloadTranscode(at time: TimeInterval, tracks: PlexTrackIDs) async throws {
+    private func reloadTranscode(at time: TimeInterval, tracks: TrackPicks) async throws {
         let hls: (url: URL, headers: [String: String], sessionId: String?)
         if case .provider = source {
             guard let switched = try await switchToProviderTranscode(
@@ -3534,7 +3534,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// Back to the untouched file at `time`, through the same start a fresh play uses.
-    private func reloadOriginal(at time: TimeInterval, tracks: PlexTrackIDs) async throws {
+    private func reloadOriginal(at time: TimeInterval, tracks: TrackPicks) async throws {
         let plan: PlaybackPlan?
         if case .provider = source {
             plan = try await resolveProviderOriginal(at: time)
@@ -3561,7 +3561,11 @@ final class UniversalPlayerViewModel: ObservableObject {
         hasAttemptedRivuletHLSFallback = false
         // Engine ids differ from Plex ids, so the picks re-apply once the engine lists its tracks.
         initialAudioTrackId = tracks.audio
-        initialSubtitleSelection = tracks.subtitle.map { $0 == 0 ? .off : .track(id: $0) } ?? .auto
+        switch tracks.subtitle {
+        case .off: initialSubtitleSelection = .off
+        case .track(let id): initialSubtitleSelection = .track(id: id)
+        case nil: initialSubtitleSelection = .auto
+        }
         hasAppliedAudioPreference = false
         hasAppliedSubtitlePreference = false
         subtitlesPickedOff = false
@@ -3571,51 +3575,36 @@ final class UniversalPlayerViewModel: ObservableObject {
         try await startWithFallback(plan: plan, startTime: time)
     }
 
-    /// Audio and subtitle picks as Plex stream ids, which survive a route change.
-    /// `subtitle` 0 is off; nil leaves the server's choice alone.
-    struct PlexTrackIDs {
-        var audio: Int?
-        var subtitle: Int?
-    }
-
-    private func currentPlexTrackIDs() -> PlexTrackIDs {
+    /// The playing picks as server stream ids, which survive a route change.
+    private func currentPlexTrackIDs() -> TrackPicks {
         guard aetherPlayer != nil else {
-            return PlexTrackIDs(audio: currentAudioTrackId, subtitle: currentSubtitleTrackId ?? 0)
+            return TrackPicks(audio: currentAudioTrackId, subtitle: SubtitlePick(currentSubtitleTrackId))
         }
-        let audio = currentAudioTrackId
-            .flatMap { id in audioTracks.first { $0.id == id }?.streamIndex }
-            .flatMap { index in plexAudioTracksFromMetadata().first { $0.streamIndex == index }?.id }
+        let audio = currentAudioTrackId.flatMap {
+            TrackMerge.serverID(forEngine: $0, engine: audioTracks, server: plexAudioTracksFromMetadata())
+        }
         guard let subtitleId = currentSubtitleTrackId, subtitleId != Self.generatedSubtitleId else {
-            return PlexTrackIDs(audio: audio, subtitle: 0)
+            return TrackPicks(audio: audio, subtitle: .off)
         }
-        guard let track = subtitleTracks.first(where: { $0.id == subtitleId }) else {
-            return PlexTrackIDs(audio: audio, subtitle: nil)
-        }
-        let plexSubs = plexSubtitleTracksFromMetadata()
-        let subtitle: Int?
-        if track.isExternal {
-            // Sidecars pair by registration order, as in `subtitleTrackMatchingPlexStreamId`.
-            let ordinal = subtitleTracks.filter(\.isExternal).firstIndex { $0.id == subtitleId } ?? -1
-            subtitle = plexSubs.filter { $0.subtitleKey != nil }[safe: ordinal]?.id
-        } else {
-            subtitle = track.streamIndex.flatMap { index in plexSubs.first { $0.streamIndex == index }?.id }
-        }
-        return PlexTrackIDs(audio: audio, subtitle: subtitle)
+        // A track the server can't name leaves its choice alone.
+        let subtitle = TrackMerge.serverID(forEngine: subtitleId, engine: subtitleTracks,
+                                           server: plexSubtitleTracksFromMetadata())
+        return TrackPicks(audio: audio, subtitle: subtitle.map(SubtitlePick.track))
     }
 
     /// What `applyAudioPreference` and `applySubtitlePreference` will pick on the Plex list, so a
     /// transcode starts on those tracks instead of restarting once they load. nil leaves the server's choice.
-    private var startingTrackSelection: PlexTrackIDs {
+    private var startingTrackSelection: TrackPicks {
         let override = initialAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
         let start = TrackIntentResolver.startingPlexSelection(streams: metadata.Media?.first?.Part?.first?.Stream ?? [],
                                                               audioOverride: override)
         switch initialSubtitleSelection {
         case .off:
-            return PlexTrackIDs(audio: start.audio, subtitle: 0)
+            return TrackPicks(audio: start.audio, subtitle: .off)
         case .track(let id) where plexSubtitleTracksFromMetadata().contains(where: { $0.id == id }):
-            return PlexTrackIDs(audio: start.audio, subtitle: id)
+            return TrackPicks(audio: start.audio, subtitle: .track(id))
         default:
-            return PlexTrackIDs(audio: start.audio, subtitle: start.subtitle)
+            return start
         }
     }
 
@@ -3626,14 +3615,14 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// `picks` matched by language and kind onto the version `metadata` now carries.
-    private func plexTrackIDs(carrying picks: (audio: MediaTrack?, subtitle: MediaTrack?)) -> PlexTrackIDs {
+    private func plexTrackIDs(carrying picks: (audio: MediaTrack?, subtitle: MediaTrack?)) -> TrackPicks {
         let audio = picks.audio.flatMap {
             TrackIntentResolver.resolveAudio(intent: AudioIntent(from: $0), in: plexAudioTracksFromMetadata())?.id
         }
-        let subtitle = picks.subtitle.map {
-            TrackIntentResolver.resolveSubtitle(intent: SubtitleIntent(from: $0), in: plexSubtitleTracksFromMetadata())?.id ?? 0
-        } ?? 0
-        return PlexTrackIDs(audio: audio, subtitle: subtitle)
+        let subtitle = picks.subtitle.flatMap {
+            TrackIntentResolver.resolveSubtitle(intent: SubtitleIntent(from: $0), in: plexSubtitleTracksFromMetadata())?.id
+        }
+        return TrackPicks(audio: audio, subtitle: SubtitlePick(subtitle))
     }
 
     /// What a quality reload restores when a provider will not serve the new plan.
@@ -3656,7 +3645,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// Plex reads the part's selected streams when a transcode session starts.
-    private func putTrackSelection(_ tracks: PlexTrackIDs) async {
+    private func putTrackSelection(_ tracks: TrackPicks) async {
         guard case .plex = source, let partId = metadata.Media?.first?.Part?.first?.id else { return }
         let network = PlexNetworkManager.shared
         if let audio = tracks.audio {
@@ -3665,7 +3654,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
         if let subtitle = tracks.subtitle {
             await network.setSelectedSubtitleStream(serverURL: serverURL, authToken: authToken,
-                                                    partId: partId, subtitleStreamID: subtitle)
+                                                    partId: partId, subtitleStreamID: subtitle.plexStreamID)
         }
     }
 
@@ -4626,7 +4615,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 TrackIntentStore.subtitleIntent = .afterPick(
                     MediaTrack(from: added), replacing: TrackIntentStore.effectiveSubtitleIntent,
                     audioLanguage: playingAudioLanguage)
-                tracks.subtitle = added.id
+                tracks.subtitle = .track(added.id)
                 hideCompatibilityNotice()
                 enqueueStreamWork { vm in
                     await vm.reloadStream(toOriginal: vm.aetherPlayer != nil, reason: "subtitle_download",
@@ -4711,7 +4700,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
             if previousSubtitleCount == 0 {
                 if let subtitle = transcodeTrackIDs?.subtitle {
-                    currentSubtitleTrackId = subtitle == 0 ? nil : subtitle
+                    currentSubtitleTrackId = subtitle.trackID
                 } else {
                     currentSubtitleTrackId = plexStreams.first(where: { $0.isSubtitle && $0.selected == true })?.id
                         ?? plexSubs.first(where: { $0.isForced })?.id
@@ -4902,17 +4891,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard aetherPlayer != nil else {
             return subtitleTracks.first { $0.id == id }
         }
-        let plex = plexSubtitleTracksFromMetadata()
-        guard let plexIndex = plex.firstIndex(where: { $0.id == id }) else { return nil }
-        let plexTrack = plex[plexIndex]
-
-        // Sidecars have no stream index — they pair by registration order.
-        if plexTrack.subtitleKey != nil {
-            let ordinal = plex[..<plexIndex].count(where: { $0.subtitleKey != nil })
-            return subtitleTracks.filter(\.isExternal)[safe: ordinal]
-        }
-        guard let streamIndex = plexTrack.streamIndex else { return nil }
-        return subtitleTracks.first { $0.streamIndex == streamIndex }
+        return TrackMerge.engineTrack(forServer: id, engine: subtitleTracks, server: plexSubtitleTracksFromMetadata())
     }
 
     // MARK: - Controls Visibility

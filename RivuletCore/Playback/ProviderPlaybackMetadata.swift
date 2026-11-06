@@ -105,14 +105,16 @@ enum ProviderPlaybackMetadata {
     }
 
     /// The source with the audio and subtitle tracks marked selected, as a transcode started on
-    /// them plays. Ids are the shim's stream ids; subtitle 0 is off.
-    static func applying(audio: Int?, subtitle: Int?, to source: MediaSource) -> MediaSource {
+    /// them plays. Ids are the shim's stream ids.
+    static func applying(_ picks: TrackPicks, to source: MediaSource) -> MediaSource {
         var source = source
-        if let audio {
+        if let audio = picks.audio {
             for i in source.audioTracks.indices { source.audioTracks[i].isSelected = Int(source.audioTracks[i].id) == audio }
         }
-        if let subtitle {
-            for i in source.subtitleTracks.indices { source.subtitleTracks[i].isSelected = Int(source.subtitleTracks[i].id) == subtitle }
+        if let subtitle = picks.subtitle {
+            for i in source.subtitleTracks.indices {
+                source.subtitleTracks[i].isSelected = subtitle.trackID.map { Int(source.subtitleTracks[i].id) == $0 } ?? false
+            }
         }
         return source
     }

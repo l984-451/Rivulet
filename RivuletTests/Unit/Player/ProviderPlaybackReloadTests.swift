@@ -59,15 +59,22 @@ final class ProviderPlaybackReloadTests: XCTestCase {
     func test_reload_forcedTranscode_startsAtTheTimeUnderTheStepsBitrate() async throws {
         let stub = provider()
         let next = try await playback(stub).reloaded(quality: .auto, plan: .transcode(step4), at: 125,
-                                                     tracks: (audio: 2, subtitle: 0))
+                                                     tracks: TrackPicks(audio: 2, subtitle: .off))
         XCTAssertEqual(stub.transcodeRequests.first?.startTime, 125)
         XCTAssertEqual(stub.transcodeRequests.first?.sourceID, "src")
         XCTAssertEqual(stub.transcodeBitrates, [4_000_000])
         XCTAssertEqual(stub.transcodeTracks.first?.audio, 2)
-        XCTAssertEqual(stub.transcodeTracks.first?.subtitle, -1, "Plex's 0 for off is -1 on a provider")
+        XCTAssertEqual(stub.transcodeTracks.first?.subtitle, -1, "off is -1 on a provider")
         XCTAssertEqual(next.stream.playSessionID, "ps2")
         XCTAssertEqual(next.quality.plan, .transcode(step4))
         XCTAssertEqual(next.quality.choice, .auto)
+    }
+
+    func test_reload_subtitleStreamZeroIsATrackNotOff() async throws {
+        let stub = provider()
+        _ = try await playback(stub).reloaded(quality: .auto, plan: .transcode(step4), at: 0,
+                                              tracks: TrackPicks(audio: nil, subtitle: .track(0)))
+        XCTAssertEqual(stub.transcodeTracks.first?.subtitle, 0)
     }
 
     func test_reload_forcedOriginal_asksForTheUncappedFile() async throws {
@@ -133,10 +140,25 @@ final class ProviderPlaybackReloadTests: XCTestCase {
     func test_applyingPicks_marksTheChosenStreamsSelected() {
         let detail = playback(provider()).detail
         let picked = ProviderPlaybackMetadata.make(
-            detail: detail, source: ProviderPlaybackMetadata.applying(audio: 2, subtitle: 0, to: source()),
+            detail: detail, source: ProviderPlaybackMetadata.applying(TrackPicks(audio: 2, subtitle: .off), to: source()),
             extras: PlaybackExtras())
         let streams = picked.Media?.first?.Part?.first?.Stream ?? []
         XCTAssertEqual(streams.filter { $0.isAudio && $0.selected == true }.map(\.id), [2])
         XCTAssertTrue(streams.filter(\.isSubtitle).allSatisfy { $0.selected != true })
+    }
+
+    func test_applyingPicks_subtitleStreamZeroIsSelectable() {
+        var withSubs = source()
+        withSubs.subtitleTracks = [subtitle("0", index: 0), subtitle("3", index: 3)]
+        let picked = ProviderPlaybackMetadata.applying(TrackPicks(audio: nil, subtitle: .track(0)), to: withSubs)
+        XCTAssertEqual(picked.subtitleTracks.filter(\.isSelected).map(\.id), ["0"])
+        let off = ProviderPlaybackMetadata.applying(TrackPicks(audio: nil, subtitle: .off), to: picked)
+        XCTAssertTrue(off.subtitleTracks.allSatisfy { !$0.isSelected })
+    }
+
+    private func subtitle(_ id: String, index: Int) -> SubtitleTrack {
+        SubtitleTrack(id: id, index: index, codec: "srt", language: "eng", title: nil, extendedTitle: nil,
+                      isDefault: false, isForced: false, isHearingImpaired: false, isEmbedded: false,
+                      externalURL: URL(string: "http://s/sub\(id).srt"), isSelected: false)
     }
 }

@@ -54,7 +54,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     }
 
     func reloadedPlayback(of request: IOSPlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
-                          at time: TimeInterval, streams: (audio: Int?, subtitle: Int?)?) async throws -> IOSPlexPlaybackRequest {
+                          at time: TimeInterval, streams: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
         guard let playback = request.providerPlayback else { throw MediaProviderError.notFound }
         let next = try await playback.reloaded(quality: quality, plan: plan, at: time, tracks: streams)
         return try await self.request(from: next, startTime: time > 1 ? time : nil, picks: streams)
@@ -63,7 +63,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     /// The player's request for `playback`. A transcode starts on the tracks the saved intents pick
     /// (`picks` when the player made a choice), since a provider burns or selects them at session start.
     private func request(from playback: ProviderPlayback, startTime: TimeInterval?,
-                         picks: (audio: Int?, subtitle: Int?)?) async throws -> IOSPlexPlaybackRequest {
+                         picks: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
         var playback = playback
         var source = playback.stream.source
         var picks = picks
@@ -74,15 +74,15 @@ final class IOSProviderBackend: IOSPlayerBackend {
                 let streams = shim.Media?.first?.Part?.first?.Stream ?? []
                 let wanted = TrackIntentResolver.startingPlexSelection(streams: streams)
                 let audio = streams.first { $0.isAudio && $0.selected == true }?.id
-                let subtitle = streams.first { $0.isSubtitle && $0.selected == true }?.id ?? 0
+                let subtitle = SubtitlePick(streams.first { $0.isSubtitle && $0.selected == true }?.id)
                 if wanted.audio != audio || wanted.subtitle != subtitle {
                     playback = try await playback.reloaded(quality: playback.quality.choice, plan: plan,
-                                                           at: startTime ?? 0, tracks: (wanted.audio, wanted.subtitle))
+                                                           at: startTime ?? 0, tracks: wanted)
                     source = playback.stream.source
-                    picks = (wanted.audio, wanted.subtitle)
+                    picks = wanted
                 }
             }
-            if let picks { source = ProviderPlaybackMetadata.applying(audio: picks.audio, subtitle: picks.subtitle, to: source) }
+            if let picks { source = ProviderPlaybackMetadata.applying(picks, to: source) }
         }
         guard let url = source.streamURL else { throw MediaProviderError.notPlayable }
         register([playback.detail.item])
@@ -180,7 +180,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     }
 
     /// The transcode reads its picks from the URL it was built with, so there is nothing to write.
-    func selectStream(audioID: Int?, subtitleID: Int?, in request: IOSPlexPlaybackRequest) async {}
+    func selectStream(_ picks: TrackPicks, in request: IOSPlexPlaybackRequest) async {}
 
     func artworkURL(for item: PlexMetadata, kind: IOSPlexSession.ArtworkKind, width: Int, height: Int) -> URL? {
         guard let key = item.ratingKey, let known = items[key] else { return nil }

@@ -26,10 +26,10 @@ extension ProviderPlayback {
     }
 
     /// The same version as a new play session. `plan` nil decides from `quality`; a transcode
-    /// starts at `time` on `tracks` (a provider's own stream ids, subtitle 0 being off), and a server
+    /// starts at `time` on `tracks` (a provider's own stream ids), and a server
     /// that won't transcode plays the file.
     func reloaded(quality choice: StreamingQuality, plan forced: StreamPlan?, at time: TimeInterval,
-                  tracks: (audio: Int?, subtitle: Int?)? = nil) async throws -> ProviderPlayback {
+                  tracks: TrackPicks? = nil) async throws -> ProviderPlayback {
         var next = self
         let sourceID = stream.source.id
         var settled = quality
@@ -53,7 +53,7 @@ extension ProviderPlayback {
             do {
                 next.stream = try await provider.transcodeStream(
                     for: item.ref, sourceID: sourceID, startTime: time, maxBitrate: step.kbps * 1000,
-                    audioStreamIndex: tracks?.audio, subtitleStreamIndex: tracks?.subtitle.map { $0 == 0 ? -1 : $0 })
+                    audioStreamIndex: tracks?.audio, subtitleStreamIndex: tracks?.subtitle?.providerStreamIndex)
             } catch MediaProviderError.transcodeRequired {
                 settled.plan = .original
                 next.stream = try await provider.resolveStream(for: item.ref, sourceID: sourceID)

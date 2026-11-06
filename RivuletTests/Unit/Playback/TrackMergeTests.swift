@@ -297,4 +297,54 @@ final class TrackMergeTests: XCTestCase {
         )
         XCTAssertEqual(merged[0].name, "English")
     }
+
+    // MARK: - Picks across the two lists
+
+    /// Four unlabeled sidecars (28 Years Later): pairing by language would send every one to the first.
+    private var sidecarFile: (engine: [MediaTrack], server: [MediaTrack]) {
+        let engine = [engine(id: 3), engine(id: 100_000, lang: nil, external: true),
+                      engine(id: 100_001, lang: nil, external: true)]
+        let server = [plex(id: 0, streamIndex: nil, lang: nil, key: "/s/a"),
+                      plex(id: 7, streamIndex: 3),
+                      plex(id: 1, streamIndex: nil, lang: nil, key: "/s/b")]
+        return (engine, server)
+    }
+
+    func testServerIDForEngine_embeddedByIndex_sidecarsByOrder() {
+        let (engine, server) = sidecarFile
+        XCTAssertEqual(TrackMerge.serverID(forEngine: 3, engine: engine, server: server), 7)
+        XCTAssertEqual(TrackMerge.serverID(forEngine: 100_000, engine: engine, server: server), 0)
+        XCTAssertEqual(TrackMerge.serverID(forEngine: 100_001, engine: engine, server: server), 1)
+        XCTAssertNil(TrackMerge.serverID(forEngine: 99, engine: engine, server: server))
+    }
+
+    func testEngineTrackForServer_isTheInverse() {
+        let (engine, server) = sidecarFile
+        XCTAssertEqual(TrackMerge.engineTrack(forServer: 7, engine: engine, server: server)?.id, 3)
+        XCTAssertEqual(TrackMerge.engineTrack(forServer: 0, engine: engine, server: server)?.id, 100_000)
+        XCTAssertEqual(TrackMerge.engineTrack(forServer: 1, engine: engine, server: server)?.id, 100_001)
+        XCTAssertNil(TrackMerge.engineTrack(forServer: 42, engine: engine, server: server))
+    }
+
+    /// A download that failed to save one sidecar registers fewer: no ordinal pairing, no wrong track.
+    func testSidecarsDoNotPairWhenOneIsMissing() {
+        let (engine, server) = sidecarFile
+        let short = Array(engine.dropLast())
+        XCTAssertNil(TrackMerge.serverID(forEngine: 100_000, engine: short, server: server))
+        XCTAssertNil(TrackMerge.engineTrack(forServer: 1, engine: short, server: server))
+        XCTAssertEqual(TrackMerge.serverID(forEngine: 3, engine: short, server: server), 7)
+    }
+}
+
+/// A subtitle pick in server ids, with Off as its own case: Jellyfin and Emby number a real stream 0.
+final class SubtitlePickTests: XCTestCase {
+    func testOffAndTrackZeroAreDifferentOnTheWire() {
+        XCTAssertEqual(SubtitlePick.off.plexStreamID, 0)
+        XCTAssertEqual(SubtitlePick.off.providerStreamIndex, -1)
+        XCTAssertEqual(SubtitlePick.track(0).providerStreamIndex, 0)
+        XCTAssertEqual(SubtitlePick.track(0).trackID, 0)
+        XCTAssertNil(SubtitlePick.off.trackID)
+        XCTAssertEqual(SubtitlePick(nil), .off)
+        XCTAssertEqual(SubtitlePick(0), .track(0))
+    }
 }

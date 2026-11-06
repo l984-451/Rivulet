@@ -109,16 +109,15 @@ extension IOSPlexSession {
     }
 
     /// Sets the part's audio or subtitle stream, which a new transcode session reads.
-    /// A subtitle id of 0 turns subtitles off.
-    func selectStream(audioID: Int? = nil, subtitleID: Int? = nil, in request: IOSPlexPlaybackRequest) async {
+    func selectStream(_ picks: TrackPicks, in request: IOSPlexPlaybackRequest) async {
         guard let part = request.item.Media?.first?.Part?.first?.id else { return }
-        if let audioID {
+        if let audioID = picks.audio {
             await network.setSelectedAudioStream(
                 serverURL: request.serverURL, authToken: request.token, partId: part, audioStreamID: audioID)
         }
-        if let subtitleID {
+        if let subtitle = picks.subtitle {
             await network.setSelectedSubtitleStream(
-                serverURL: request.serverURL, authToken: request.token, partId: part, subtitleStreamID: subtitleID)
+                serverURL: request.serverURL, authToken: request.token, partId: part, subtitleStreamID: subtitle.plexStreamID)
         }
     }
 }

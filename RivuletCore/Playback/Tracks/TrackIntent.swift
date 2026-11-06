@@ -679,9 +679,9 @@ extension TrackIntentResolver {
         return track.id
     }
 
-    /// The Plex stream ids a title starts on, subtitle 0 being off: Plex's per-item picks,
-    /// then the stored intents. `audioOverride` is a pick made before playback.
-    static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> (audio: Int?, subtitle: Int) {
+    /// The stream ids a title starts on: Plex's per-item picks, then the stored intents.
+    /// The subtitle is always decided. `audioOverride` is a pick made before playback.
+    static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> TrackPicks {
         let audio = streams.filter(\.isAudio).map { MediaTrack(from: $0) }
         let subtitles = streams.filter(\.isSubtitle).map { MediaTrack(from: $0) }
         let chosenAudio = audioOverride
@@ -689,11 +689,13 @@ extension TrackIntentResolver {
         let audioID = chosenAudio.flatMap { id in audio.contains { $0.id == id } ? id : nil }
             ?? resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
         let intent = TrackIntentStore.effectiveSubtitleIntent
-        if let chosen = plexChosenSubtitleStreamID(in: streams, intent: intent) { return (audioID, chosen) }
+        if let chosen = plexChosenSubtitleStreamID(in: streams, intent: intent) {
+            return TrackPicks(audio: audioID, subtitle: .track(chosen))
+        }
         let playing = audio.first { $0.id == audioID }
         let subtitle = resolveSubtitle(intent: intent, in: subtitles,
                                        audioLanguage: playing?.languageCode ?? playing?.language)
-        return (audioID, subtitle?.id ?? 0)
+        return TrackPicks(audio: audioID, subtitle: SubtitlePick(subtitle?.id))
     }
 }
 

@@ -8,6 +8,19 @@ import SwiftUI
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.0.7 (85)", [
+            "Jellyfin and Emby: sign in, browse, play, download and watch Live TV",
+            "Libraries open on a Recommended page with a hero",
+            "Arrange Home rows, add favorites and playlists, and mix hero sources",
+            "Mark favorites on any server, with an optional Favorites page",
+            "Runs on Apple silicon Macs, with iPad keyboard and pointer support",
+            "Theme videos play behind Jellyfin and Emby titles",
+            "Scrubbing shows previews, including on downloads",
+            "Rivulet is now available in German and Greek",
+            "Shuffle libraries and shows, and delete from long-press menus",
+            "Updated AetherEngine to 7.57.0",
+            "Other small changes and fixes",
+        ]),
         ("1.0.7 (84)", [
             "Continue Watching no longer adds a title to artwork that already shows one",
             "Live TV guides now show film release years and mark new airings from Plex",

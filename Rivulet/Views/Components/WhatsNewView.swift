@@ -155,6 +155,21 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.2.0 (123)", [
+            "> Thank you to everyone who sent a PR!",
+            "Emby support, next to Plex and Jellyfin",
+            "Arrange Home: reorder and hide rows, add favorites and playlists. @DIYtechie",
+            "The hero can mix several sources, and Left goes back a title. @danieldjupvik",
+            "Mark favorites on any server, with an optional Favorites page. @DennisR-git",
+            "Jellyfin and Emby theme videos play behind the hero and details. @smidley",
+            "Sidebar: Now Playing next to your profile, and Up opens it. @DIYtechie",
+            "Live TV can rewind through a channel's window, with past shows. @tresby",
+            "Shuffle libraries and shows, and delete episodes from long-press menus",
+            "Specials now come after the last season. @priyanshuppal",
+            "Greek is available. @Camthalion77",
+            "Updated AetherEngine to 7.57.0",
+            "Other small changes and fixes",
+        ]),
         ("1.2.0 (122)", [
             "> I removed Dolby Vision FEL and Height Speakers because of licensing uncertainty. Profile 7 now plays as 8.1 on a Dolby Vision TV, and TrueHD and DTS-HD play as lossless 7.1. Sorry if this is what brought you to Rivulet.",
         ]),

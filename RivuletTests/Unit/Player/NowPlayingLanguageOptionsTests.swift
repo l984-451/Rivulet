@@ -67,4 +67,46 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
                                                    displayName: "", identifier: "99")
         XCTAssertNil(NowPlayingLanguageOptions.trackId(for: stale, in: audio))
     }
+    func test_siloOriginalAudioRolesKeepProviderSelectionIDs() {
+        let provider = [
+            MediaTrack(id: -10_000_001, name: "English", languageCode: "eng", codec: "ac3", streamIndex: 0),
+            MediaTrack(id: -10_000_002, name: "English", languageCode: "eng", codec: "ac3", streamIndex: 1),
+        ]
+        let engine = [
+            MediaTrack(id: 2, name: "English", streamIndex: 2),
+            MediaTrack(id: 4, name: "English", isAudioDescription: true, streamIndex: 4),
+        ]
+        let projected = UniversalPlayerViewModel.projectNativeAudioRoles(provider: provider, engine: engine)
+        XCTAssertEqual(projected.map(\.id), provider.map(\.id))
+        XCTAssertFalse(projected[0].describesVideo)
+        XCTAssertTrue(projected[1].describesVideo)
+        let option = NowPlayingLanguageOptions.option(projected[1], type: .audible, among: projected)
+        XCTAssertEqual(option.identifier, "-10000002")
+        XCTAssertEqual(option.languageOptionCharacteristics, [MPLanguageOptionCharacteristicDescribesVideo])
+        XCTAssertTrue(option.displayName?.contains("Audio Description") == true)
+        XCTAssertEqual(NowPlayingLanguageOptions.selection(for: option, enable: true, audio: projected, subtitles: []),
+                       .audio(-10_000_002))
+        XCTAssertEqual(UniversalPlayerViewModel.projectNativeAudioRoles(provider: provider, engine: [engine[1]]), provider)
+    }
+
+    func test_remoteSiloSelectionAndOffUseShimIDs() {
+        let tracks = [
+            MediaTrack(id: -10_000_003, name: "English", languageCode: "eng"),
+            MediaTrack(id: -10_000_004, name: "English", languageCode: "eng"),
+        ]
+        let chosen = NowPlayingLanguageOptions.option(tracks[1], type: .legible, among: tracks)
+        XCTAssertEqual(NowPlayingLanguageOptions.selection(for: chosen, enable: true, audio: [], subtitles: tracks),
+                       .subtitle(-10_000_004))
+        XCTAssertEqual(NowPlayingLanguageOptions.selection(for: chosen, enable: false, audio: [], subtitles: tracks),
+                       .subtitle(nil))
+        let stale = MPNowPlayingInfoLanguageOption(type: .legible, languageTag: "en", characteristics: nil,
+                                                  displayName: "", identifier: "-10000009")
+        XCTAssertNil(NowPlayingLanguageOptions.selection(for: stale, enable: true, audio: [], subtitles: tracks))
+        let noID = MPNowPlayingInfoLanguageOption(type: .legible, languageTag: "en", characteristics: nil,
+                                                 displayName: "", identifier: "")
+        XCTAssertEqual(NowPlayingLanguageOptions.selection(for: noID, enable: true, audio: [], subtitles: tracks),
+                       .subtitle(-10_000_003))
+        let audible = NowPlayingLanguageOptions.option(tracks[0], type: .audible, among: tracks)
+        XCTAssertNil(NowPlayingLanguageOptions.selection(for: audible, enable: false, audio: tracks, subtitles: []))
+    }
 }

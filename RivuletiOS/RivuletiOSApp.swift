@@ -25,11 +25,12 @@ struct RivuletiOSApp: App {
         PlexAPI.deviceName = UIDevice.current.model   // "iPhone" / "iPad"
         // The iOS library grid lists titles; tvOS also lists a library's collections.
         MediaProviderRegistry.plexIncludesCollections = false
-        // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
+        // Native servers are rebuilt from their device-local stored accounts.
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         let session = IOSPlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)
+        Task { try? await SiloSession.restore() }
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
         // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish before the

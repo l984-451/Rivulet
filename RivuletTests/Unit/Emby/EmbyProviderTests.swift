@@ -471,25 +471,25 @@ final class EmbyProviderTests: XCTestCase {
 
     // MARK: - Identity
 
-    func test_showIdentityKeys_readsProviderIDsInAnyCase() async {
+    func test_itemIdentityKeys_readsProviderIDsInAnyCase() async {
         server.respond(items, body: EmbyBrowseFixtures.seriesList4_8_11)
-        let keys = await provider().showIdentityKeys(for: ["113"])
+        let keys = await provider().itemIdentityKeys(for: ["113"])
         XCTAssertEqual(keys["113"], ["s:imdb:tt14218830", "s:tmdb:125935", "s:tvdb:402910"])
         let q = query(server.requests[0])
         XCTAssertEqual(q["Ids"], "113")
-        XCTAssertEqual(q["IncludeItemTypes"], "Series")
+        XCTAssertNil(q["IncludeItemTypes"], "Catalog identity lookup must also accept movies.")
         XCTAssertEqual(q["Fields"], "ProviderIds")
     }
 
-    func test_showIdentityKeys_batchesAtFourHundredIds() async {
+    func test_itemIdentityKeys_batchesAtFourHundredIds() async {
         server.respond(items, body: #"{"Items":[],"TotalRecordCount":0}"#)
-        _ = await provider().showIdentityKeys(for: (1...950).map(String.init))
+        _ = await provider().itemIdentityKeys(for: (1...950).map(String.init))
         let sizes = server.requests.map { query($0)["Ids"]!.split(separator: ",").count }
         XCTAssertEqual(sizes, [400, 400, 150])
     }
 
-    func test_showIdentityKeys_failureIsEmptyNotAThrow() async {
-        let keys = await provider().showIdentityKeys(for: ["1"])
+    func test_itemIdentityKeys_failureIsEmptyNotAThrow() async {
+        let keys = await provider().itemIdentityKeys(for: ["1"])
         XCTAssertEqual(keys, [:])
     }
 

@@ -9,6 +9,8 @@ import SwiftUI
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.0.7 (84)", [
+            "Add Silo servers, choose a household profile and browse and play their libraries",
+            "Updated AetherEngine to 7.58.0",
             "Continue Watching no longer adds a title to artwork that already shows one",
             "Live TV guides now show film release years and mark new airings from Plex",
             "Home and detail pages now sit on a soft blur of the artwork",

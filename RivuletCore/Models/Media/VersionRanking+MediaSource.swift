@@ -15,9 +15,9 @@ extension VersionRanking {
         switch range {
         case .dolbyVision: 4
         case .hdr10Plus: 3
-        case .hdr10: 2
+        case .hdr10, .hdr: 2
         case .hlg: 1
-        case .sdr: 0
+        case .sdr, .unknown: 0
         }
     }
 

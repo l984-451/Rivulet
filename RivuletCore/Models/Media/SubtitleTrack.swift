@@ -10,6 +10,12 @@
 
 import Foundation
 
+/// A server-published identity, never reconstructed from a label, ordinal or sidecar URL.
+nonisolated struct SiloSubtitleSyncTarget: Hashable, Sendable {
+    let fileID: String
+    let key: String
+}
+
 struct SubtitleTrack: Hashable, Sendable, Identifiable {
     let id: String
     let index: Int
@@ -20,8 +26,15 @@ struct SubtitleTrack: Hashable, Sendable, Identifiable {
     let isDefault: Bool
     let isForced: Bool
     let isHearingImpaired: Bool
-    let isEmbedded: Bool           // false = external file; externalURL populated
-    let externalURL: URL?
+    let isEmbedded: Bool           // native in-band delivery, not the subtitle's original storage location
+    let externalURL: URL?          // populated only when this delivery mounts a sidecar
     /// Backend-side "this is the user's current pick" flag. See `AudioTrack.isSelected`.
     var isSelected: Bool
+    /// Nil inherits legacy source headers; an explicit empty dictionary sends no credentials.
+    var externalHTTPHeaders: [String: String]? = nil
+    /// Exact native demuxer identity, distinct from the provider's selection ordinal.
+    /// Only populated when the playback plan explicitly selects an embedded stream.
+    var nativeStreamIndex: Int? = nil
+    /// Silo's canonical sync identity survives host-side delivery projection.
+    var siloSyncTarget: SiloSubtitleSyncTarget? = nil
 }

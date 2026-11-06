@@ -61,6 +61,12 @@ extension IOSPlaybackController {
         } else {
             request = try await backend.firstPlayback(of: target, fromBeginning: fromBeginning, sourceID: sourceID)
         }
+        if Task.isCancelled {
+            if let playback = request.providerPlayback {
+                await ProviderPlayback.discardUnplayedStream(playback.stream, provider: playback.provider)
+            }
+            throw CancellationError()
+        }
         let shimQueue = entries.flatMap {
             PlayQueue(entries: $0.items.map(ProviderPlaybackMetadata.listing(item:)), startingAt: $0.queue.index)
         }

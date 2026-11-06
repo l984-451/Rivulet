@@ -186,6 +186,16 @@ extension IOSPlexPlaybackRequest {
     /// A downloaded file rather than a server stream.
     var isLocal: Bool { url.isFileURL }
 
+    /// Native negotiated plans own their transport, timeline and track choices.
+    var nativeStream: StreamInfo? {
+        guard let stream = providerPlayback?.stream, stream.negotiatedStatus != nil else { return nil }
+        return stream
+    }
+
+    var playerStartTime: TimeInterval? {
+        nativeStream.map { $0.playerStartTime ?? max(0, (startTime ?? 0) - $0.timelineOffset) } ?? startTime
+    }
+
     /// Plex external subtitle streams (the ones with a `key`), registered with
     /// the engine at load. Mirrors tvOS UniversalPlayerViewModel.aetherExternalSubtitles.
     /// None on a transcode, which carries the server's own subtitle rendition.
@@ -193,13 +203,14 @@ extension IOSPlexPlaybackRequest {
         if let localSidecars { return localSidecars }
         if let providerPlayback {
             // A provider's sidecars are its external tracks, with their own URL and auth.
-            guard plan == .original else { return [] }
+            guard plan == .original || nativeStream != nil else { return [] }
             return providerPlayback.stream.source.subtitleTracks.filter { !$0.isEmbedded }.compactMap { track in
                 guard let url = track.externalURL else { return nil }
                 return AetherPlayer.SidecarSubtitle(
                     url: url, name: track.extendedTitle ?? track.title, language: track.language,
                     isForced: track.isForced, isHearingImpaired: track.isHearingImpaired,
-                    isDefault: track.isDefault, formatHint: track.codec)
+                    isDefault: nativeStream == nil ? track.isDefault : track.isSelected,
+                    formatHint: track.codec, httpHeaders: track.externalHTTPHeaders)
             }
         }
         guard plan == .original, let streams = item.Media?.first?.Part?.first?.Stream else { return [] }

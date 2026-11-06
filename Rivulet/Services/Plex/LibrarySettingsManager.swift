@@ -26,6 +26,19 @@ class LibrarySettingsManager: ObservableObject {
         }
     }
 
+    /// Server-wide library visibility, separate from each library's own choice.
+    @Published var hiddenLibraryServerIDs: Set<String> = [] {
+        didSet {
+            guard !isLoading else { return }
+            userDefaults.set(Array(hiddenLibraryServerIDs.filter { $0.hasPrefix("plex:") }),
+                             forKey: currentKey(hiddenLibraryServersBaseKey))
+            for scope in providerScopes where !scope.providerID.hasPrefix("plex:") {
+                userDefaults.set(hiddenLibraryServerIDs.contains(scope.providerID),
+                                 forKey: providerKey(hiddenLibraryServersBaseKey, scope))
+            }
+        }
+    }
+
     /// Ordered list of library keys (libraries not in this list appear at the end in default order)
     @Published var libraryOrder: [String] {
         didSet {
@@ -48,6 +61,7 @@ class LibrarySettingsManager: ObservableObject {
 
     private let userDefaults = UserDefaults.standard
     private let hiddenLibrariesBaseKey = "hiddenLibraryKeys"
+    private let hiddenLibraryServersBaseKey = "hiddenLibraryServerIDs"
     private let libraryOrderBaseKey = "libraryOrder"
     private let sortOptionsBaseKey = "librarySortOptions"
     /// The order across every server, per Plex profile. Each server's own list
@@ -153,6 +167,12 @@ class LibrarySettingsManager: ObservableObject {
     private func loadSettingsForCurrentUser() {
         isLoading = true
         defer { isLoading = false }
+        let plexServers = userDefaults.array(forKey: currentKey(hiddenLibraryServersBaseKey)) as? [String] ?? []
+        let nativeServers = providerScopes.filter {
+            !$0.providerID.hasPrefix("plex:")
+                && userDefaults.bool(forKey: providerKey(hiddenLibraryServersBaseKey, $0))
+        }.map(\.providerID)
+        hiddenLibraryServerIDs = Set(plexServers + nativeServers)
         self.hiddenLibraryKeys = Set(storedKeys(hiddenLibrariesBaseKey))
         let combined = userDefaults.array(forKey: currentKey(combinedOrderBaseKey)) as? [String] ?? []
         self.libraryOrder = Self.arrange(storedKeys(libraryOrderBaseKey), key: { $0 }, savedOrder: combined)
@@ -196,7 +216,23 @@ class LibrarySettingsManager: ObservableObject {
     /// and plex.tv expose no pin list, and `/hubs/promoted` ignores `pinnedContentDirectoryID`.
     /// `PlexLibrary.hidden` is the Home pin, independent of the sidebar.
     func isLibraryVisible(_ libraryKey: String) -> Bool {
-        !hiddenLibraryKeys.contains(libraryKey)
+        guard !hiddenLibraryKeys.contains(libraryKey) else { return false }
+        if Self.isProviderKey(libraryKey) {
+            return areServerLibrariesVisible(Self.providerID(ofKey: libraryKey))
+        }
+        guard !SidebarArrangement.isAppRow(libraryKey),
+              let providerID = MediaProviderRegistry.shared.plexProvider?.id else { return true }
+        return areServerLibrariesVisible(providerID)
+    }
+
+    func areServerLibrariesVisible(_ providerID: String) -> Bool {
+        !hiddenLibraryServerIDs.contains(providerID)
+    }
+
+    /// Does not rewrite library hide choices or order; new libraries inherit this gate.
+    func setServerLibrariesVisible(_ visible: Bool, providerID: String) {
+        if visible { hiddenLibraryServerIDs.remove(providerID) }
+        else { hiddenLibraryServerIDs.insert(providerID) }
     }
 
     /// Toggle library visibility in the sidebar, and so on Home too.

@@ -257,7 +257,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     headerHeight: 72,
                     headerBaseline: BelowFoldSectionHeader.castBaseline
                 )
-            case .about: return self.fullWidthSection(height: 370, topInset: isPrimary ? peek : 0)
+            case .about:
+                return self.fullWidthSection(height: AboutCollectionCell.height(for: self.showDetail ?? self.detail),
+                                             topInset: isPrimary ? peek : 0)
             case .info:
                 // Sized to its rows, so a short title leaves no empty band below them.
                 let columnsWidth = env.container.contentSize.width - Self.rowLeading - Self.rowTrailing
@@ -572,6 +574,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             guard snapshot.sectionIdentifiers.contains(.about) else { return }
             snapshot.reconfigureItems([.about])
             await self.dataSource.apply(snapshot, animatingDifferences: false)
+            // Branded source marks wrap to their card width. Newly added
+            // sources can increase the About section's measured height.
+            self.collectionView.collectionViewLayout.invalidateLayout()
         }
     }
 

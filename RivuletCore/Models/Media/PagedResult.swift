@@ -10,9 +10,16 @@
 
 import Foundation
 
-struct Page: Sendable, Hashable {
+nonisolated struct Page: Sendable, Hashable, Codable {
     let offset: Int
     let limit: Int
+    let cursor: String?
+
+    init(offset: Int, limit: Int, cursor: String? = nil) {
+        self.offset = offset
+        self.limit = limit
+        self.cursor = cursor
+    }
 }
 
 struct PagedResult<T: Sendable>: Sendable {

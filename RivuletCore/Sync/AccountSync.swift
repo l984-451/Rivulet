@@ -26,8 +26,8 @@ nonisolated enum CloudSyncStatus: Equatable { case off, on, noAccount }
 
 nonisolated enum SyncAvailability {
     /// Whether an account or source is shared with the other devices right now: only then does signing out ask.
-    static func isSynced(enabled: Bool, status: CloudSyncStatus, suppressed: Bool, blocked: Bool) -> Bool {
-        enabled && status == .on && !suppressed && !blocked
+    static func isSynced(enabled: Bool, status: CloudSyncStatus, suppressed: Bool, blocked: Bool, kindSupported: Bool) -> Bool {
+        kindSupported && enabled && status == .on && !suppressed && !blocked
     }
 }
 

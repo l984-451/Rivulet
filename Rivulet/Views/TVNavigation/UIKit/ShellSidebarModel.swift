@@ -37,12 +37,14 @@ struct PlaylistServer: Hashable {
         let plexID = MediaProviderRegistry.shared.plexProvider?.id
         let labels = SidebarLibrary.serverLabels()
         var servers: [PlaylistServer] = []
-        if let plexID, providerIDs.contains(plexID) {
+        if let plexID, providerIDs.contains(plexID),
+           LibrarySettingsManager.shared.areServerLibrariesVisible(plexID) {
             servers.append(PlaylistServer(providerID: plexID, name: labels.plex, serverID: ""))
         }
         for source in ServerDataStore.shared.sources
         where source.providerID != plexID && providerIDs.contains(source.providerID)
-            && !servers.contains(where: { $0.providerID == source.providerID }) {
+            && !servers.contains(where: { $0.providerID == source.providerID })
+            && LibrarySettingsManager.shared.areServerLibrariesVisible(source.providerID) {
             servers.append(PlaylistServer(providerID: source.providerID,
                                           name: labels.others[source.providerID] ?? source.name, serverID: source.providerID))
         }
@@ -108,6 +110,11 @@ enum ShellSidebarModel {
     /// The order for a profile with none stored: today's default layout.
     static let defaultOrder = SidebarArrangement.seed(libraryOrder: [], discoverAbove: true, liveTVAbove: false)
 
+    /// Plex supplies curated Discover and watchlist; Silo supplies native equivalents.
+    static func hasDiscoverAndWatchlist(plexSignedIn: Bool, providerIDs: [String]) -> Bool {
+        plexSignedIn || providerIDs.contains { $0.hasPrefix("silo:") }
+    }
+
     // swiftlint:disable:next function_parameter_count
     static func sections(
         libraries: [SidebarLibrary],
@@ -121,7 +128,8 @@ enum ShellSidebarModel {
         profileAvatar: URL? = nil,
         canSwitchProfile: Bool = false,
         hasMediaServer: Bool = true,
-        playlistServers: [PlaylistServer] = []
+        playlistServers: [PlaylistServer] = [],
+        requestsServer: PlaylistServer? = nil
     ) -> [ShellSidebarSection] {
         var sections: [ShellSidebarSection] = []
 
@@ -146,6 +154,8 @@ enum ShellSidebarModel {
                                    showDiscover: showDiscover && hasMediaServer,
                                    showWatchlist: showWatchlist && hasMediaServer,
                                    hiddenKeys: hiddenKeys, playlistServers: playlistServers)
+        let labelsServers = Set(libraries.map { LibrarySettingsManager.serverID(ofKey: $0.key) }).count > 1
+        let libraryKeys = Set(libraries.map(\.key))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let (arranged, grouped) = SidebarArrangement.sections(
             SidebarArrangement.arrange(rows.map(\.key), order: order))
@@ -167,11 +177,19 @@ enum ShellSidebarModel {
                 var item = row.item
                 item.arrangeKey = key
                 // Mixed servers: no header can name the server, so the row does.
-                if !grouped, let server = row.serverName { item.badge = server }
+                if !grouped, labelsServers || !libraryKeys.contains(key),
+                   let server = row.serverName { item.badge = server }
                 return item
             }
-            let title = section.server == nil ? nil : section.keys.first.flatMap { byKey[$0]?.serverName }
+            let namesServer = labelsServers || !section.keys.contains(where: libraryKeys.contains)
+            let title = !namesServer || section.server == nil ? nil : section.keys.first.flatMap { byKey[$0]?.serverName }
             sections.append(ShellSidebarSection(title: title, items: items))
+        }
+        if let requestsServer {
+            var item = ShellSidebarItem(tab: .requests(providerID: requestsServer.providerID),
+                                        title: "Requests", icon: "tray.full.fill")
+            item.badge = requestsServer.name
+            sections.append(ShellSidebarSection(title: nil, items: [item]))
         }
         sections.append(ShellSidebarSection(
             title: nil,

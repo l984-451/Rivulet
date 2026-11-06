@@ -88,6 +88,26 @@ final class PersonDetailViewController: UIViewController {
         transitioningDelegate = blurFade
     }
 
+    /// Native Silo entry point. The result's opaque identity is validated by
+    /// the injected provider; it never reaches the default Plex adapter.
+    static func silo(result: MediaPersonResult, provider: SiloProvider,
+                     inLibraries libraryIDs: [String]) throws -> PersonDetailViewController {
+        guard result.providerID == provider.id,
+              SiloPersonContext.personID(result.person.id, provider: provider) != nil else {
+            throw SiloPeopleError.staleAuthority
+        }
+        return PersonDetailViewController(
+            person: result.person,
+            provider: provider.personFilmographyProvider(inLibraries: libraryIDs))
+    }
+
+    /// Cast and crew IDs from a Silo detail page use this same native route.
+    static func silo(cast person: MediaPerson, provider: SiloProvider,
+                     inLibraries libraryIDs: [String]) throws -> PersonDetailViewController {
+        try silo(result: MediaPersonResult(person: person, providerID: provider.id),
+                 provider: provider, inLibraries: libraryIDs)
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("PersonDetailViewController is not Storyboard-backed") }
 

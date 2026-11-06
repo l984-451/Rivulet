@@ -222,6 +222,10 @@ enum SettingsContent {
         case .plex:        return plex
         case .plexServerDetail: return plexServerDetail
         case .jellyfin:    return jellyfin
+        case .silo:        return silo
+        case .siloProfiles: return siloProfiles
+        case .siloProfilePIN: return siloProfilePIN
+        case .siloSubtitleLanguagePicker: return SiloPlaybackSettingsContent.siloSubtitleLanguagePicker
         case .emby:        return emby
         case .libraries:   return libraries
         case .homeRows:    return homeRows
@@ -755,6 +759,8 @@ enum SettingsContent {
                 kind: .navigationAction(.jellyfin,
                                         value: { JellyfinSession.account?.serverName ?? "" },
                                         prepare: { addSourceDraft = AddSourceDraft() })),
+            SettingsRowItem(id: "siloServer", title: "Silo Server",
+                            kind: .navigationValue(.silo, value: { SiloSession.account?.serverName ?? "" })),
             SettingsRowItem(
                 id: "embyServer", title: "Emby Server",
                 kind: .navigationAction(.emby,
@@ -859,6 +865,9 @@ enum SettingsContent {
             let kind = connection.relay ? String(localized: "Relay") : connection.local ? String(localized: "Local") : String(localized: "connection.remote", defaultValue: "Remote")
             rows.append(info("plexServerConnection", "Connection", connection.protocolType == "https" ? String(localized: "\(kind), Secure") : kind))
         }
+        if let machineID = server.machineIdentifier {
+            rows.insert(serverLibrariesToggle(id: "plexServerLibraries", providerID: "plex:\(machineID)"), at: 1)
+        }
         let ds = LiveTVDataStore.shared
         if let id = server.machineIdentifier, ds.plexMachineIDs.values.contains(id) {
             rows.insert(plexLiveTVToggle(id: "plexServerLiveTV", machineID: id), at: 1)
@@ -879,6 +888,13 @@ enum SettingsContent {
             }
         })))
         return rows
+    }
+
+    static func serverLibrariesToggle(id: String, providerID: String) -> SettingsRowItem {
+        SettingsRowItem(id: id, title: "Show Libraries", kind: .toggle(
+            get: { LibrarySettingsManager.shared.areServerLibrariesVisible(providerID) },
+            set: { LibrarySettingsManager.shared.setServerLibrariesVisible($0, providerID: providerID) },
+            didChange: { _, vc in (vc as? SettingsPageViewController)?.reloadRows() }))
     }
 
     /// Shows or hides a Plex server's DVR in Live TV (#406), from either settings page.
@@ -1104,11 +1120,14 @@ enum SettingsContent {
 
     /// Every arrangeable sidebar row, hidden ones included, in the sidebar's order.
     private static func sidebarSettingsRows() -> [ShellSidebarModel.Row] {
+        let hasDiscoverAndWatchlist = ShellSidebarModel.hasDiscoverAndWatchlist(
+            plexSignedIn: PlexAuthManager.shared.hasCredentials,
+            providerIDs: ServerDataStore.shared.sources.map(\.providerID))
         let rows = ShellSidebarModel.arrangeableRows(
             libraries: SidebarLibrary.current(includeHidden: true),
             liveTVSources: LiveTVDataStore.shared.sources,
             combineLiveTV: SettingsStore.bool("combineLiveTVSources", default: true),
-            showDiscover: PlexAuthManager.shared.hasCredentials, showWatchlist: PlexAuthManager.shared.hasCredentials,
+            showDiscover: hasDiscoverAndWatchlist, showWatchlist: hasDiscoverAndWatchlist,
             playlistServers: PlaylistServer.current(PlaylistAvailability.shared.providerIDs))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return SidebarArrangement.arrange(rows.map(\.key), order: LibrarySettingsManager.shared.libraryOrder)
@@ -1169,7 +1188,7 @@ enum SettingsContent {
                 kind = .toggle(get: { LibrarySettingsManager.shared.isPlaylistsRowVisible(key) },
                                set: { LibrarySettingsManager.shared.setPlaylistsRow(key, visible: $0, allKeys: playlistKeys) })
             default:
-                kind = .toggle(get: { LibrarySettingsManager.shared.isLibraryVisible(key) },
+                kind = .toggle(get: { !LibrarySettingsManager.shared.hiddenLibraryKeys.contains(key) },
                                set: { _ in LibrarySettingsManager.shared.toggleVisibility(for: key) })
             }
             // Hold Select to grab + reorder (Apple-Home style). The page VC

@@ -144,6 +144,7 @@ final class SettingsLeftPanelView: UIView {
     /// Set the page icon (matching `pageInfo(for:)`). Crossfades when animated
     /// (on a page change), like the SwiftUI panel's symbol-replace transition.
     func configure(page: SettingsPage, section: String? = nil, animated: Bool = false) {
+        show(id: nil)
         let info = SettingsDescriptorStore.pageInfo(for: page)
         let color = info.color
         let icon = SettingsDescriptorStore.sectionIcon(for: page, section: section) ?? info.icon

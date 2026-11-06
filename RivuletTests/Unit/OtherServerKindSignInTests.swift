@@ -19,4 +19,12 @@ final class OtherServerKindSignInTests: XCTestCase {
                        JellyfinSession.quickConnectFailureMessage(for: error))
         XCTAssertEqual(OtherServerKind.emby.failureMessage(error), EmbySession.failureMessage(for: error))
     }
+
+    func test_siloParticipatesOnceWithoutAdvertisingUnsupportedAccountServices() {
+        XCTAssertEqual(OtherServerKind.all.filter { $0.kind == .silo }.count, 1)
+        XCTAssertNotNil(OtherServerKind.entry(for: .silo))
+        XCTAssertNil(OtherServerKind.silo.quickConnect, "Device approval uses Silo's staged profile flow, not Quick Connect.")
+        XCTAssertNil(OtherServerKind.silo.storedMusicProvider())
+        XCTAssertEqual(MediaProviderKind(providerID: "silo:server:profile"), .silo)
+    }
 }

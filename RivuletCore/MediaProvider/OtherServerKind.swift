@@ -22,10 +22,11 @@ struct OtherServerKind {
     /// Whether two music providers are one account, so its caches stay.
     let isSameMusicAccount: (any MusicProvider, any MusicProvider) -> Bool
     /// Puts the server's Live TV in or out of Live TV, given the signed-in provider or nil.
-    let syncLiveTV: ((any MediaProvider)?) -> Void
+    /// Nil when this server kind has no supported Live TV backend.
+    let syncLiveTV: (((any MediaProvider)?) -> Void)?
     /// The signed-in user's name, for an account page.
     let userName: () -> String?
-    /// Address, username, password. Registers the provider on success.
+    /// Address, username, password. Registers the provider, or stages Silo's explicit profile selection.
     let signIn: (URL, String, String) async throws -> Void
     /// Sign-in by a code approved on another device; nil where the server has none. Hands the code to the closure.
     let quickConnect: ((URL, (String) -> Void) async throws -> Void)?
@@ -35,7 +36,7 @@ struct OtherServerKind {
     let failureMessage: (Error) -> String
     let quickConnectFailureMessage: (Error) -> String
 
-    static let all: [OtherServerKind] = [.jellyfin, .emby]
+    static let all: [OtherServerKind] = [.jellyfin, .emby, .silo]
 
     static func entry(for kind: MediaProviderKind) -> OtherServerKind? {
         all.first { $0.kind == kind }
@@ -69,5 +70,20 @@ struct OtherServerKind {
         signOut: { await EmbySession.signOut(scope: $0) },
         failureMessage: EmbySession.failureMessage,
         quickConnectFailureMessage: EmbySession.failureMessage
+    )
+
+    static let silo = OtherServerKind(
+        kind: .silo,
+        account: { SiloSession.account.map { ($0.providerID, $0.serverName) } },
+        storedProvider: { SiloSession.storedProvider() },
+        storedMusicProvider: { nil },
+        isSameMusicAccount: { _, _ in false },
+        syncLiveTV: nil,
+        userName: { SiloSession.account?.profileName },
+        signIn: { _ = try await SiloSession.signIn(serverURL: $0, username: $1, password: $2) },
+        quickConnect: nil,
+        signOut: { _ in await SiloSession.signOut() },
+        failureMessage: { $0.localizedDescription },
+        quickConnectFailureMessage: { $0.localizedDescription }
     )
 }

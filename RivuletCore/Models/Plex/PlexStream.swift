@@ -63,6 +63,8 @@ nonisolated struct PlexStream: Codable, Identifiable, Sendable {
     let channels: Int?
     let bitrate: Int?
     let samplingRate: Int?
+    /// Explicit per-track object-audio evidence from a non-Plex provider.
+    let hasAtmos: Bool?
 
     // Subtitle-specific
     let format: String?
@@ -98,6 +100,7 @@ nonisolated struct PlexStream: Codable, Identifiable, Sendable {
         case HDR10PlusPresent
         case frameRate, height, width, level, profile, refFrames, scanType
         case audioChannelLayout, channels, bitrate, samplingRate
+        case hasAtmos
         case format, key, extendedDisplayTitle, hearingImpaired
     }
 

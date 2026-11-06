@@ -3,8 +3,7 @@
 
 import SwiftUI
 
-/// Account > a Jellyfin or Emby server. Signed out: address, username and password
-/// (and Quick Connect where the server has it). Signed in: the server, the user and Sign Out.
+/// Account sign-in, with explicit profile/PIN selection for staged native accounts.
 struct IOSServerSignInView: View {
     let server: OtherServerKind
     @State private var address = ""
@@ -17,18 +16,29 @@ struct IOSServerSignInView: View {
     /// Bumped after a sign-in or sign-out, so the page re-reads the stored account.
     @State private var revision = 0
     @State private var confirmingSignOut = false
+    @State private var profiles: [SiloProfile]?
+    @State private var selectedProfile: SiloProfile?
+    @State private var profilePIN = ""
+    @State private var signInTask: Task<Void, Never>?
 
     private var name: String { server.kind.displayName }
 
     var body: some View {
         let _ = revision
         Form {
-            if let account = server.account() {
+            if let profiles {
+                profileSections(profiles)
+            } else if let account = server.account() {
                 let synced = CloudSync.shared.isSynced(accountID: account.providerID)
                 Section {
                     LabeledContent("Server", value: account.name)
                     if let user = server.userName(), !user.isEmpty {
                         LabeledContent("User", value: user)
+                    }
+                }
+                if server.kind == .silo {
+                    Section {
+                        Button("Switch Profile") { loadProfiles() }
                     }
                 }
                 Section {
@@ -65,7 +75,14 @@ struct IOSServerSignInView: View {
         } message: {
             Text("On a device signed in to \(name), open Settings, choose Quick Connect and enter this code.")
         }
-        .onDisappear { quickConnectTask?.cancel() }
+        .onDisappear {
+            quickConnectTask?.cancel()
+            signInTask?.cancel()
+            if server.kind == .silo {
+                SiloSession.cancelPendingSignIn()
+                SiloSession.cancelProfileSelection()
+            }
+        }
     }
 
     @ViewBuilder private var signInSections: some View {
@@ -101,6 +118,65 @@ struct IOSServerSignInView: View {
         }
     }
 
+    @ViewBuilder private func profileSections(_ profiles: [SiloProfile]) -> some View {
+        Section("Choose Profile") {
+            ForEach(profiles, id: \.id) { profile in
+                Button {
+                    profilePIN = ""
+                    selectedProfile = profile
+                    if !profile.hasPIN { selectProfile(profile) }
+                } label: {
+                    Label(profile.name, systemImage: profile.hasPIN ? "lock.fill" : "person.fill")
+                }
+            }
+        }
+        if let profile = selectedProfile, profile.hasPIN {
+            Section(profile.name) {
+                SecureField("PIN", text: $profilePIN)
+                    .keyboardType(.numberPad)
+                Button("Unlock Profile") { selectProfile(profile) }
+                    .disabled(profilePIN.isEmpty)
+            }
+        }
+        Section {
+            Button("Cancel", role: .cancel) {
+                SiloSession.cancelPendingSignIn()
+                SiloSession.cancelProfileSelection()
+                self.profiles = nil
+                selectedProfile = nil
+                profilePIN = ""
+            }
+        }
+    }
+
+    private func loadProfiles() {
+        isChecking = true
+        signInTask = Task {
+            defer { isChecking = false }
+            do { profiles = try await SiloSession.profiles() }
+            catch where isCancellationError(error) {}
+            catch { failure = server.failureMessage(error) }
+        }
+    }
+
+    private func selectProfile(_ profile: SiloProfile) {
+        isChecking = true
+        signInTask = Task {
+            defer { isChecking = false }
+            do {
+                try await SiloSession.selectProfile(profile, pin: profile.hasPIN ? profilePIN : nil)
+                profiles = nil
+                selectedProfile = nil
+                profilePIN = ""
+                revision += 1
+            } catch where isCancellationError(error) {
+            } catch {
+                profilePIN = ""
+                failure = server.failureMessage(error)
+            }
+        }
+    }
+
     private func signOut(_ scope: SignOutScope?) {
         Task {
             await server.signOut(scope)
@@ -117,12 +193,14 @@ struct IOSServerSignInView: View {
             return
         }
         isChecking = true
-        Task {
+        signInTask = Task {
             defer { isChecking = false }
             do {
                 try await server.signIn(url, user, password)
+                if server.kind == .silo { profiles = try await SiloSession.profiles() }
                 password = ""
                 revision += 1
+            } catch where isCancellationError(error) {
             } catch {
                 failure = server.failureMessage(error)
             }

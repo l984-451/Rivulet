@@ -12,6 +12,23 @@ import XCTest
 
 @MainActor
 final class MediaProviderRegistryTests: XCTestCase {
+    private var savedSiloAccount: Data?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        savedSiloAccount = UserDefaults.standard.data(forKey: SiloSession.accountKey)
+        UserDefaults.standard.removeObject(forKey: SiloSession.accountKey)
+    }
+
+    override func tearDown() async throws {
+        if let savedSiloAccount {
+            UserDefaults.standard.set(savedSiloAccount, forKey: SiloSession.accountKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: SiloSession.accountKey)
+        }
+        try await super.tearDown()
+    }
+
     /// Browse surfaces mint refs for Plex hubs from `plexProvider`. With a
     /// second backend registered, "first provider in the dictionary" could
     /// hand them the Jellyfin id.

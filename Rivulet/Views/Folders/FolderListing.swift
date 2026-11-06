@@ -102,7 +102,7 @@ final class FolderListing {
             var seen = Set<MediaItemRef>()
             entries = result.entries.filter { seen.insert($0.id).inserted }
             self.seen = seen
-            nextPage = result.nextPage.map { Page(offset: $0.offset, limit: Self.pageSize) }
+            nextPage = result.nextPage.map { Page(offset: $0.offset, limit: Self.pageSize, cursor: $0.cursor) }
             error = nil
             onChange?(.reloaded)
         }

@@ -6,6 +6,7 @@
 //  RivuletTests
 //
 
+import MediaPlayer
 import XCTest
 @testable import Rivulet
 
@@ -184,6 +185,17 @@ final class ProviderPlaybackMetadataTests: XCTestCase {
         XCTAssertEqual(streams.map(\.index), [nil, nil, nil])
         XCTAssertEqual(Set(streams.map(\.id)).count, 3)
         XCTAssertEqual(streams[2].id, 12)
+        let tracks = streams.map { MediaTrack(from: $0) }
+        let groups = NowPlayingLanguageOptions.groups(audio: [], subtitles: tracks)
+        let options = try XCTUnwrap(groups.first?.languageOptions)
+        XCTAssertEqual(options.count, src.subtitleTracks.count)
+        for (ordinal, option) in options.enumerated() {
+            let pickedID = try XCTUnwrap(NowPlayingLanguageOptions.trackId(for: option, in: tracks))
+            XCTAssertEqual(tracks.firstIndex(where: { $0.id == pickedID }), ordinal)
+            XCTAssertEqual(src.subtitleTracks[ordinal].id, ["sub-a", "sub-b", "12"][ordinal])
+        }
+        XCTAssertTrue(NowPlayingLanguageOptions.current(audio: [], subtitles: tracks,
+                                                        audioId: nil, subtitleId: nil).isEmpty)
     }
 
     func test_markersAndChapters() throws {

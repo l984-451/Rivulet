@@ -13,6 +13,15 @@
 
 import Foundation
 
+/// Native Home action anchor. The timestamp remains the server's exact string.
+nonisolated struct MediaItemDismissalMetadata: Hashable, Sendable, Codable {
+    let rail: MediaDismissalRail
+    let contentID: String
+    let progressUpdatedAt: String?
+    let seriesID: String?
+    let providerIdentity: String
+    let authorityRevision: UInt64
+}
 nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     var id: MediaItemRef { ref }
     let ref: MediaItemRef
@@ -21,6 +30,8 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let title: String
     let sortTitle: String?
     let overview: String?
+    /// Optional so saved items encoded before provenance existed still decode.
+    var overviewIsMachineTranslated: Bool? = nil
     let year: Int?
     let releaseDate: String?
     let contentRating: String?
@@ -56,12 +67,17 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     /// Keys naming the same title on any server (`ContinueWatchingMerge`); set
     /// on Continue Watching items only. Optional so cached items still decode.
     var identity: [String]?
+    /// False for catalog titles that are saved but not present on their server.
+    /// Nil keeps existing cached library cards available.
+    let isAvailable: Bool?
     /// List-level genre names; nil when the list did not carry them.
     let genres: [String]?
     /// External ids keyed lowercase ("tmdb", "imdb", "tvdb", Plex's own as "plex"); nil when the list had none.
     let externalIDs: [String: String]?
-    /// The library the item sits in, when the list said (Plex `librarySectionID`).
+    /// Owning library where the server supplies one; external catalog titles have none.
     let libraryID: String?
+    /// Only populated from an authorized native Home row.
+    var dismissalMetadata: MediaItemDismissalMetadata? = nil
 
     init(
         ref: MediaItemRef,
@@ -69,6 +85,7 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         title: String,
         sortTitle: String?,
         overview: String?,
+        overviewIsMachineTranslated: Bool? = nil,
         year: Int?,
         releaseDate: String? = nil,
         contentRating: String? = nil,
@@ -87,15 +104,18 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         versionCount: Int? = nil,
         editionTitle: String? = nil,
         identity: [String]? = nil,
+        isAvailable: Bool? = nil,
         genres: [String]? = nil,
         externalIDs: [String: String]? = nil,
-        libraryID: String? = nil
+        libraryID: String? = nil,
+        dismissalMetadata: MediaItemDismissalMetadata? = nil
     ) {
         self.ref = ref
         self.kind = kind
         self.title = title
         self.sortTitle = sortTitle
         self.overview = overview
+        self.overviewIsMachineTranslated = overviewIsMachineTranslated
         self.year = year
         self.releaseDate = releaseDate
         self.contentRating = contentRating
@@ -114,13 +134,29 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
         self.versionCount = versionCount
         self.editionTitle = editionTitle
         self.identity = identity
+        self.isAvailable = isAvailable
         self.genres = genres
         self.externalIDs = externalIDs
         self.libraryID = libraryID
+        self.dismissalMetadata = dismissalMetadata
     }
 }
 
 extension MediaItem {
+    /// Only a card from a native Home rail can supply a versioned action.
+    func dismissalAction() -> MediaDismissal? {
+        guard let anchor = dismissalMetadata, anchor.providerIdentity == ref.providerID,
+              anchor.contentID == ref.itemID else { return nil }
+        switch anchor.rail {
+        case .continueWatching where anchor.progressUpdatedAt?.isEmpty != false: return nil
+        case .nextUp where anchor.seriesID?.isEmpty != false: return nil
+        default: break
+        }
+        return MediaDismissal(item: ref, rail: anchor.rail, providerIdentity: anchor.providerIdentity,
+                              progressUpdatedAt: anchor.progressUpdatedAt, seriesID: anchor.seriesID,
+                              authorityRevision: anchor.authorityRevision)
+    }
+
     /// Stand-in for a library-grid slot whose page has not loaded. The empty
     /// itemID is the marker: cells draw a blank card for it and tap / menu /
     /// play paths ignore it.
@@ -145,15 +181,16 @@ extension MediaItem {
 
     var isGridPlaceholder: Bool { ref.itemID.isEmpty }
 
-    /// An episode's or season's show as `ContinueWatchingRow` keys it, "<providerID>|<show id>".
-    var showKey: String? {
-        let show: MediaItemRef? = switch kind {
+    /// Catalog lookup needed to merge a movie or the owning show across servers.
+    var lookupKey: String? {
+        let target: MediaItemRef? = switch kind {
+        case .movie, .show: identity?.isEmpty == false ? nil : ref
         case .episode: grandparentRef
         case .season: parentRef
         default: nil
         }
-        guard let show, !show.itemID.isEmpty else { return nil }
-        return "\(show.providerID)|\(show.itemID)"
+        guard let target, !target.itemID.isEmpty else { return nil }
+        return "\(target.providerID)|\(target.itemID)"
     }
 }
 
@@ -170,6 +207,7 @@ extension MediaItem {
             title: title,
             sortTitle: sortTitle,
             overview: overview,
+            overviewIsMachineTranslated: overviewIsMachineTranslated,
             year: year,
             releaseDate: releaseDate,
             contentRating: contentRating,
@@ -192,9 +230,12 @@ extension MediaItem {
             grandparentArtwork: grandparentArtwork,
             versionCount: versionCount,
             editionTitle: editionTitle,
+            identity: identity,
+            isAvailable: isAvailable,
             genres: genres,
             externalIDs: externalIDs,
-            libraryID: libraryID
+            libraryID: libraryID,
+            dismissalMetadata: dismissalMetadata
         )
     }
 }

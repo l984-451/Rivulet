@@ -495,20 +495,19 @@ extension EmbyProvider {
 
     // MARK: - Cross-server identity
 
-    /// Show ids to identity keys (`ContinueWatchingMerge`), at most 400 ids a request.
+    /// Catalog ids to movie/show identity keys (`ContinueWatchingMerge`), at most 400 ids a request.
     /// `ProviderIds` keys vary in case on one server (`Imdb`, `IMDB`); the merge reads them lowercased.
-    func showIdentityKeys(for showIDs: [String]) async -> [String: [String]] {
+    func itemIdentityKeys(for itemIDs: [String]) async -> [String: [String]] {
         var keys: [String: [String]] = [:]
-        for start in stride(from: 0, to: showIDs.count, by: Self.idBatch) {
-            let batch = showIDs[start..<min(start + Self.idBatch, showIDs.count)]
+        for start in stride(from: 0, to: itemIDs.count, by: Self.idBatch) {
+            let batch = itemIDs[start..<min(start + Self.idBatch, itemIDs.count)]
             let result: EmbyQueryResult? = try? await client.get(itemsPath, [
                 URLQueryItem(name: "Ids", value: batch.joined(separator: ",")),
-                URLQueryItem(name: "IncludeItemTypes", value: "Series"),
                 URLQueryItem(name: "Fields", value: "ProviderIds"),
                 URLQueryItem(name: "EnableImages", value: "false")
             ])
-            for show in result?.items ?? [] {
-                keys[show.id.value] = ContinueWatchingMerge.providerIDKeys(show.providerIds ?? [:], scope: "s")
+            for item in result?.items ?? [] {
+                keys[item.id.value] = ContinueWatchingMerge.providerIDKeys(item.providerIds ?? [:], scope: item.type == "Movie" ? "m" : "s")
             }
         }
         return keys

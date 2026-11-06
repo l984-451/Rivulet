@@ -129,7 +129,7 @@ final class ContinueWatchingMergeTests: XCTestCase {
         let a = item("a", on: "jellyfin:x", kind: .episode, identity: [])
         let b = item("b", on: "jellyfin:x", kind: .episode, identity: [])
         let cards = ContinueWatchingRow.shared.cards([[a, b]], identity: { $0.identity ?? [] },
-                                                     showKey: { _ in "jellyfin:x|show" }, watched: \.userState.lastViewedAt)
+                                                     lookupKey: { _ in "jellyfin:x|show" }, watched: \.userState.lastViewedAt)
         XCTAssertEqual(cards.map(\.item.ref.itemID), ["a", "b"])
     }
 

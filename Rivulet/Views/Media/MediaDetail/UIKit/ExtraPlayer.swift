@@ -51,6 +51,12 @@ enum ExtraPlayer {
     /// 404s under `/library/metadata` (#255); it plays directly through a synthetic PlexMetadata.
     /// `server` defaults to the one the extra's own provider lives on.
     static func play(_ trailer: BelowFoldTrailer, server: PlexServerAddress? = nil, from presenter: UIViewController) {
+        if let url = trailer.externalURL {
+            guard let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID),
+                  MediaProviderRegistry.shared.isCurrentAuthority(provider) else { return }
+            openRemoteVideo(url, from: presenter)
+            return
+        }
         let key = trailer.playbackKey ?? trailer.id
         // Off Plex an extra is a library item of its own provider.
         if let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID), provider.kind != .plex {
@@ -89,6 +95,30 @@ enum ExtraPlayer {
         }
     }
 
+    /// Hosted videos are watch pages rather than playable streams.
+    private static func openRemoteVideo(_ url: URL, from presenter: UIViewController) {
+        var destination = url
+        if url.host == "www.youtube.com", var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.scheme = "youtube"
+            destination = components.url ?? url
+        }
+        let options: [UIApplication.OpenExternalURLOptionsKey: Any] = destination.scheme == "https"
+            ? [.universalLinksOnly: true] : [:]
+        UIApplication.shared.open(destination, options: options) { [weak presenter] opened in
+            guard !opened else { return }
+            Task { @MainActor [weak presenter] in
+                guard let presenter else { return }
+                let message = url.host == "www.youtube.com"
+                    ? "Install or update YouTube on this Apple TV, then try again. Silo provides a YouTube link, not a video stream Rivulet can play."
+                    : "No installed Apple TV app can open this Vimeo video. Open it in Vimeo on another device."
+                let popup = ConfirmationPopupViewController(
+                    title: "Couldn't Open Video", message: message,
+                    confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                presenter.present(popup, animated: true)
+            }
+        }
+    }
+
     private static func playProviderExtra(_ ref: MediaItemRef, provider: any MediaProvider, from presenter: UIViewController) {
         Task { [weak presenter] in
             do {
@@ -97,6 +127,11 @@ enum ExtraPlayer {
                 ProviderPlayer.play(detail.item, fromBeginning: false, from: presenter, onDismiss: nil)
             } catch {
                 extraPlayerLog.error("extra play: \(error.localizedDescription, privacy: .public)")
+                guard let presenter else { return }
+                let popup = ConfirmationPopupViewController(
+                    title: "Couldn't Play", message: ProviderPlayer.errorMessage(for: error),
+                    confirmTitle: "OK", cancelTitle: nil, onConfirm: {})
+                presenter.present(popup, animated: true)
             }
         }
     }

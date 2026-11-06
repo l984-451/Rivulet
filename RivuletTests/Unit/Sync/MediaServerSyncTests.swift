@@ -28,6 +28,13 @@ final class MediaServerSyncTests: XCTestCase {
         XCTAssertEqual(CloudSync.accountKinds.map(\.kind), ["plex", "livetv", "jellyfin", "emby"])
     }
 
+    func test_siloSignInStaysLocalEvenWhenCloudSyncIsOn() {
+        let supported = CloudSync.accountKinds.contains { $0.kind == MediaProviderKind.silo.rawValue }
+        XCTAssertFalse(supported)
+        XCTAssertFalse(SyncAvailability.isSynced(
+            enabled: true, status: .on, suppressed: false, blocked: false, kindSupported: supported))
+    }
+
     func test_jellyfinExportsAccountAndToken() async throws {
         let account = JellyfinSession.Account(serverURL: URL(string: "http://nas:8096")!, serverID: "srv",
                                               serverName: "NAS", userID: "u1", userName: "bain")

@@ -42,18 +42,21 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     }
 
     struct Row {
-        let title: String
-        let subtitle: String?
-        let trackId: Int?
-        let isSelected: Bool
+        var title: String
+        var subtitle: String?
+        var trackId: Int?
+        var isSelected: Bool
+        var isEnabled = true
+        var wrapsSubtitle = false
     }
 
-    private let rows: [Row]
+    private var rows: [Row]
     private let actions: [CardActionConfig]
     private let choices: [CardChoiceConfig]
     private let toggles: [CardToggleConfig]
     private let steppers: [CardStepperConfig]
     private let onSelect: (Int?) -> Void
+    private let onBack: (() -> Void)?
     private let header: String
     private let headerLabel = UILabel()
     /// The choice whose options are showing in place of the menu, AVKit's submenu.
@@ -62,14 +65,15 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     private let scrollView = UIScrollView()
     private let stack = UIStackView()
     private var rowButtons: [CardTrackRowButton] = []
+    private var actionButtons: [CardTrackRowButton] = []
     /// The rows built from `rows` (tracks and Off), wherever they sit in the menu.
     private var trackButtons: [CardTrackRowButton] = []
     /// Set: the adjustments lead under `header`, the tracks follow under this.
     private let trackHeader: String?
     private var stepperRows: [CardStepperRowView] = []
     /// AVKit's Language submenu: the tracks, one level in from On and Off. Empty: tracks list in place.
-    private let languageRows: [Row]
-    private let languageValue: String?
+    private var languageRows: [Row]
+    private var languageValue: String?
     private var showsLanguages = false
     private weak var languageButton: CardTrackRowButton?
     /// Pin focus to the selected row only for the FIRST landing. After focus
@@ -147,6 +151,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     init(header: String, rows: [Row], actions: [CardActionConfig] = [], choices: [CardChoiceConfig] = [],
          toggles: [CardToggleConfig] = [], steppers: [CardStepperConfig] = [],
          trackHeader: String? = nil, languageRows: [Row] = [], languageValue: String? = nil,
+         onBack: (() -> Void)? = nil,
          onSelect: @escaping (Int?) -> Void) {
         self.rows = rows
         self.languageRows = languageRows
@@ -157,6 +162,7 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         self.toggles = toggles
         self.steppers = steppers
         self.onSelect = onSelect
+        self.onBack = onBack
         self.header = header
         super.init(frame: .zero)
         setupViews()
@@ -210,18 +216,63 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     }
 
     /// Change a track row in place (a download's progress, a pick that keeps the menu open).
-    func updateTrack(_ trackId: Int, subtitle: String) {
-        trackButtons.first { $0.row.trackId == trackId }?.setSubtitle(subtitle)
+    func updateTrack(_ trackId: Int, title: String? = nil, subtitle: String) {
+        if languageRows.isEmpty {
+            for index in rows.indices where rows[index].trackId == trackId {
+                rows[index].subtitle = subtitle
+                if let title { rows[index].title = title }
+            }
+        } else {
+            for index in languageRows.indices where languageRows[index].trackId == trackId {
+                languageRows[index].subtitle = subtitle
+                if let title { languageRows[index].title = title }
+            }
+        }
+        if let button = trackButtons.first(where: { $0.row.trackId == trackId }) {
+            if let title { button.setTitle(title) }
+            button.setSubtitle(subtitle)
+        }
+    }
+
+    func refreshActionAvailability() {
+        for (config, button) in zip(actions, actionButtons) {
+            let enabled = config.isEnabled?() ?? true
+            button.isEnabled = enabled
+            button.alpha = enabled ? 1 : 0.4
+        }
     }
 
     func checkTrack(_ trackId: Int?) {
-        trackButtons.forEach { $0.isChecked = $0.row.trackId == trackId }
+        for index in rows.indices {
+            if languageRows.isEmpty {
+                rows[index].isSelected = rows[index].trackId == trackId
+            } else {
+                let isOn = rows[index].trackId != nil
+                rows[index].isSelected = isOn == (trackId != nil)
+                if isOn, let trackId { rows[index].trackId = trackId }
+            }
+        }
+        for index in languageRows.indices {
+            languageRows[index].isSelected = languageRows[index].trackId == trackId
+        }
+        if let selected = languageRows.first(where: { $0.trackId == trackId }) {
+            languageValue = selected.title
+            languageButton?.setSubtitle(selected.title)
+        }
+        if !languageRows.isEmpty, !showsLanguages, openChoice == nil {
+            for button in rowButtons.prefix(rows.count) {
+                button.isChecked = (button.row.trackId != nil) == (trackId != nil)
+            }
+        } else {
+            trackButtons.forEach { $0.isChecked = $0.row.trackId == trackId }
+        }
     }
 
     private func buildRows() {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         rowButtons = []
         trackButtons = []
+        actionButtons = []
         stepperRows = []
         hasPinnedInitialFocus = false
         // The rows below are a different length; an offset left over from a long
@@ -279,13 +330,19 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
             stack.addArrangedSubview(MenuSeparatorView())
         }
         for config in actions {
-            let button = CardTrackRowButton(row: Row(title: config.title, subtitle: nil, trackId: nil, isSelected: false))
+            let button = CardTrackRowButton(
+                row: Row(title: config.title, subtitle: config.subtitle, trackId: nil, isSelected: false),
+                showsChevron: config.showsChevron)
             button.onTap = { [weak button] in
                 guard let button else { return }
                 config.run(button)
             }
             stack.addArrangedSubview(button)
             rowButtons.append(button)
+            actionButtons.append(button)
+            let enabled = config.isEnabled?() ?? true
+            button.isEnabled = enabled
+            button.alpha = enabled ? 1 : 0.4
         }
     }
 
@@ -345,6 +402,8 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
     /// `checkTrack` and `updateTrack` address once the tracks sit in Language.
     private func addTrackButton(_ row: Row) {
         let button = CardTrackRowButton(row: row)
+        button.isEnabled = row.isEnabled
+        button.alpha = row.isEnabled || row.wrapsSubtitle ? 1 : 0.4
         button.onTap = { [weak self] in
             self?.onSelect(row.trackId)
         }
@@ -394,7 +453,11 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
             showLanguages(false)
             return true
         }
-        guard openChoice != nil else { return false }
+        guard openChoice != nil else {
+            guard let onBack else { return false }
+            onBack()
+            return true
+        }
         showChoice(nil)
         return true
     }
@@ -411,11 +474,11 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
         if hasPinnedInitialFocus {
             return lastFocusedControl.map { [$0] } ?? []
         }
-        if let first = trackButtons.first(where: { $0.row.isSelected })
-            ?? rowButtons.first(where: { $0.row.isSelected }) {
+        if let first = trackButtons.first(where: { $0.isEnabled && $0.row.isSelected })
+            ?? rowButtons.first(where: { $0.isEnabled && $0.row.isSelected }) {
             return [first]
         }
-        if let firstRow = rowButtons.first { return [firstRow] }
+        if let firstRow = rowButtons.first(where: \.isEnabled) { return [firstRow] }
         return stepperRows.isEmpty ? [self] : [stepperRows[0]]
     }
 
@@ -504,6 +567,9 @@ extension CardChoiceConfig {
 /// A row that runs `run`, which receives the row so it can retitle it.
 struct CardActionConfig {
     let title: String
+    var subtitle: String? = nil
+    var showsChevron = false
+    var isEnabled: (() -> Bool)? = nil
     let run: (CardTrackRowButton) -> Void
 }
 
@@ -661,7 +727,11 @@ final class CardTrackRowButton: UIControl {
     var onTap: (() -> Void)?
     var isChecked: Bool {
         get { !checkmarkView.isHidden }
-        set { checkmarkView.isHidden = !newValue }
+        set {
+            checkmarkView.isHidden = !newValue
+            if newValue { accessibilityTraits.insert(.selected) }
+            else { accessibilityTraits.remove(.selected) }
+        }
     }
     private let pill = UIView()
     private let content = UIView()
@@ -702,6 +772,11 @@ final class CardTrackRowButton: UIControl {
         subtitleLabel.font = M.secondaryFont
         subtitleLabel.textColor = M.secondaryColor
         subtitleLabel.isHidden = !hasSubtitle
+        subtitleLabel.numberOfLines = row.wrapsSubtitle ? 0 : 1
+        isAccessibilityElement = true
+        accessibilityLabel = row.title
+        accessibilityValue = row.subtitle
+        accessibilityTraits = row.isSelected ? [.button, .selected] : .button
 
         checkmarkView.tintColor = .white
         checkmarkView.isHidden = !row.isSelected
@@ -717,7 +792,9 @@ final class CardTrackRowButton: UIControl {
 
         [content, checkmarkView, titleLabel, subtitleLabel].forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
         var constraints = [
-            heightAnchor.constraint(equalToConstant: hasSubtitle ? M.twoLineRowHeight : M.rowHeight),
+            row.wrapsSubtitle
+                ? heightAnchor.constraint(greaterThanOrEqualToConstant: M.twoLineRowHeight)
+                : heightAnchor.constraint(equalToConstant: hasSubtitle ? M.twoLineRowHeight : M.rowHeight),
             content.topAnchor.constraint(equalTo: topAnchor),
             content.bottomAnchor.constraint(equalTo: bottomAnchor),
             content.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -728,9 +805,11 @@ final class CardTrackRowButton: UIControl {
             checkmarkView.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
 
             titleLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: M.titleX),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -M.checkColumnX),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor,
+                                                 constant: -M.checkColumnX - (showsChevron ? 34 : 0)),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -M.checkColumnX),
+            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor,
+                                                    constant: -M.checkColumnX - (showsChevron ? 34 : 0)),
             chevronView.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -M.checkColumnX),
             chevronView.centerYAnchor.constraint(equalTo: content.centerYAnchor),
         ]
@@ -739,6 +818,9 @@ final class CardTrackRowButton: UIControl {
                 titleLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 13),
                 subtitleLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 45),
             ]
+            if row.wrapsSubtitle {
+                constraints.append(subtitleLabel.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -13))
+            }
         } else {
             constraints.append(titleLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor))
         }
@@ -750,8 +832,15 @@ final class CardTrackRowButton: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setTitle(_ title: String) { titleLabel.text = title }
-    func setSubtitle(_ subtitle: String) { subtitleLabel.text = subtitle }
+    func setTitle(_ title: String) {
+        titleLabel.text = title
+        accessibilityLabel = title
+    }
+
+    func setSubtitle(_ subtitle: String) {
+        subtitleLabel.text = subtitle
+        accessibilityValue = subtitle
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -761,11 +850,12 @@ final class CardTrackRowButton: UIControl {
         pill.layer.shadowPath = UIBezierPath(roundedRect: pill.bounds, cornerRadius: pill.layer.cornerRadius).cgPath
     }
 
-    override var canBecomeFocused: Bool { true }
+    override var canBecomeFocused: Bool { isEnabled }
 
     // Select does not fire .primaryActionTriggered on a plain UIControl
     // on tvOS; handle the press directly.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard isEnabled else { return }
         for press in presses where press.type == .select {
             onTap?()
             return

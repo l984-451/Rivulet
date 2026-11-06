@@ -48,6 +48,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case root
     case appearance, playback, music, liveTV, servers, about
     case plex, plexServerDetail, jellyfin, emby, iptv, libraries, cache
+    case silo, siloProfiles, siloProfilePIN, siloSubtitleLanguagePicker
     case homeRows
     case liveTVSourceDetail, liveTVFavorites
     case addLiveTVSource, addXtream, addDispatcharr, addTvheadend, addThreadfin, addPlaylistURL
@@ -56,6 +57,13 @@ enum SettingsPage: Hashable, CaseIterable {
     case homeQualityPicker, awayQualityPicker
     case audioLanguagePicker, subtitleLanguagePicker
     case contentFilter, contentFilterStrength, contentFilterWords
+
+    var isSiloFlow: Bool {
+        switch self {
+        case .silo, .siloProfiles, .siloProfilePIN, .siloSubtitleLanguagePicker: true
+        default: false
+        }
+    }
 
     var title: String {
         switch self {
@@ -69,6 +77,10 @@ enum SettingsPage: Hashable, CaseIterable {
         case .plex: return String(localized: "Plex")
         case .plexServerDetail: return String(localized: "Server")
         case .jellyfin: return String(localized: "Jellyfin Server")
+        case .silo: return String(localized: "Silo Server")
+        case .siloProfiles: return String(localized: "Silo Profiles")
+        case .siloProfilePIN: return String(localized: "Profile PIN")
+        case .siloSubtitleLanguagePicker: return String(localized: "Subtitle Language")
         case .emby: return String(localized: "Emby Server")
         case .iptv: return String(localized: "Live TV Sources")
         case .liveTVSourceDetail: return String(localized: "Source Details")

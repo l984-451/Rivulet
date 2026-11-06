@@ -6047,6 +6047,16 @@
         }
       }
     },
+    "Unlock Profile" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock Profile"
+          }
+        }
+      }
+    },
     "Unmute" : {
       "localizations" : {
         "de" : {

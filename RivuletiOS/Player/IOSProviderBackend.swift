@@ -13,6 +13,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     /// Titles the player can be asked about again (Up Next, playlist entries), by item id.
     private var items: [String: MediaItem] = [:]
     private let ledger = ProviderReportLedger()
+    private var startedNativeSessions: Set<String> = []
 
     init(provider: any MediaProvider, onWatchStateChange: @escaping @MainActor () async -> Void = {}) {
         self.provider = provider
@@ -56,19 +57,58 @@ final class IOSProviderBackend: IOSPlayerBackend {
     func reloadedPlayback(of request: IOSPlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
                           at time: TimeInterval, streams: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
         guard let playback = request.providerPlayback else { throw MediaProviderError.notFound }
+        if let silo = provider as? SiloProvider {
+            var next = playback
+            guard let stream = try await silo.replaceStream(
+                for: playback.item.ref, current: playback.stream, sourceID: nil, position: time,
+                maxBitrate: plan?.step.map { $0.kbps * 1000 },
+                audioStreamIndex: streams?.audio,
+                subtitleStreamIndex: streams?.subtitle?.providerStreamIndex,
+                forceTranscode: false) else { throw MediaProviderError.notPlayable }
+            next.stream = stream
+            next.quality.choice = quality
+            return try await self.request(from: next, startTime: time, picks: nil, previousStream: playback.stream)
+        }
         let next = try await playback.reloaded(quality: quality, plan: plan, at: time, tracks: streams)
         return try await self.request(from: next, startTime: time > 1 ? time : nil, picks: streams)
+    }
+
+    func seekPlayback(_ request: IOSPlexPlaybackRequest, at time: TimeInterval) async throws -> IOSPlexPlaybackRequest? {
+        guard var playback = request.providerPlayback,
+              let stream = try await provider.seekStream(
+                for: playback.item.ref, sourceID: playback.stream.source.id,
+                playSessionID: playback.stream.playSessionID, position: time) else { return nil }
+        playback.stream = stream
+        return try await self.request(from: playback, startTime: time, picks: nil)
+    }
+
+    func nativeQualityPlayback(_ request: IOSPlexPlaybackRequest, quality: MediaQualityPreference,
+                               at time: TimeInterval) async throws -> IOSPlexPlaybackRequest {
+        guard var playback = request.providerPlayback, let silo = provider as? SiloProvider else {
+            throw MediaProviderError.notPlayable
+        }
+        playback.stream = try await silo.restoreQuality(for: playback.item.ref, current: playback.stream,
+                                                        position: time, quality: quality)
+        playback.nativeRequestedQuality = quality
+        return try await self.request(from: playback, startTime: time, picks: nil,
+                                      previousStream: request.providerPlayback?.stream)
     }
 
     /// The player's request for `playback`. A transcode starts on the tracks the saved intents pick
     /// (`picks` when the player made a choice), since a provider burns or selects them at session start.
     private func request(from playback: ProviderPlayback, startTime: TimeInterval?,
-                         picks: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
+                         picks: TrackPicks?, previousStream: StreamInfo? = nil) async throws -> IOSPlexPlaybackRequest {
         var playback = playback
+        if let previousStream, let startTime,
+           ProviderStreamTransition.between(previousStream, playback.stream) == .cuesOnly {
+            // iOS remounts the selected sidecar with its source. An unchanged video plan's
+            // original start anchor is not the current playhead.
+            playback.stream.playerStartTime = max(0, startTime - playback.stream.timelineOffset)
+        }
         var source = playback.stream.source
         var picks = picks
         let plan = playback.effectivePlan
-        if plan != .original {
+        if plan != .original, playback.stream.negotiatedStatus == nil {
             if picks == nil {
                 let shim = ProviderPlaybackMetadata.make(detail: playback.detail, source: source, extras: playback.extras)
                 let streams = shim.Media?.first?.Part?.first?.Stream ?? []
@@ -87,7 +127,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
         guard let url = source.streamURL else { throw MediaProviderError.notPlayable }
         register([playback.detail.item])
         let shim = ProviderPlaybackMetadata.make(detail: playback.detail, source: source, extras: playback.extras)
-        let isTranscode = playback.stream.source.streamKind != .directPlay
+        let isTranscode = playback.stream.negotiatedStatus == nil && playback.stream.source.streamKind != .directPlay
         let sessionID = playback.stream.playSessionID
         let file = playback.detail.mediaSources.first { $0.id == source.id } ?? source
         return IOSPlexPlaybackRequest(
@@ -124,12 +164,21 @@ final class IOSProviderBackend: IOSPlayerBackend {
             return nil
         }
         guard let playback = request.providerPlayback else { return nil }
+        if request.nativeStream != nil {
+            let key = reportKey(request)
+            if state == "stopped", !startedNativeSessions.contains(key) {
+                await ledger.stop(key, make: { reporter(for: playback) }, fallback: time)
+                return nil
+            }
+            startedNativeSessions.insert(key)
+        }
         await ledger.report(reportKey(request), make: { reporter(for: playback) }, state: state, time: time)
         return nil
     }
 
     func openPlaySession(_ request: IOSPlexPlaybackRequest) async {
-        guard let playback = request.providerPlayback else { return }
+        // Native reservations are already open. Start reporting only once media actually plays.
+        guard let playback = request.providerPlayback, request.nativeStream == nil else { return }
         await ledger.open(reportKey(request), make: { reporter(for: playback) }, position: request.startTime ?? 0)
     }
 

@@ -51,12 +51,35 @@ enum NowPlayingLanguageOptions {
             identifier: String(track.id))
     }
 
-    /// The track a remote picked: by identifier, else the first full track in the option's language.
+    /// Resolve published identifiers exactly; unrecognizable identifiers may
+    /// fall back to language, but a stale numeric ID must not select another track.
     static func trackId(for option: MPNowPlayingInfoLanguageOption, in tracks: [MediaTrack]) -> Int? {
-        if let id = option.identifier.flatMap(Int.init), tracks.contains(where: { $0.id == id }) { return id }
+        if let id = option.identifier.flatMap(Int.init) {
+            return tracks.contains(where: { $0.id == id }) ? id : nil
+        }
         guard let tag = option.languageTag else { return nil }
         let matching = tracks.filter { languageTag($0) == tag }
         return (matching.first { !$0.isForced } ?? matching.first)?.id
+    }
+
+    enum Selection: Equatable {
+        case audio(Int)
+        case subtitle(Int?)
+    }
+
+    static func selection(for option: MPNowPlayingInfoLanguageOption, enable: Bool,
+                          audio: [MediaTrack], subtitles: [MediaTrack]) -> Selection? {
+        switch option.languageOptionType {
+        case .audible:
+            guard enable, let id = trackId(for: option, in: audio) else { return nil }
+            return .audio(id)
+        case .legible:
+            guard enable else { return .subtitle(nil) }
+            guard let id = trackId(for: option, in: subtitles) else { return nil }
+            return .subtitle(id)
+        @unknown default:
+            return nil
+        }
     }
 
     /// BCP 47 for the option: "en" from "eng" or "English", "und" when unknown.

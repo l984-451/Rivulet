@@ -22,6 +22,7 @@ enum EpisodePicker {
     static func resolvePlayTarget(
         for item: MediaItem, provider: MediaProvider
     ) async -> MediaItem? {
+        guard item.isAvailable != false else { return nil }
         switch item.kind {
         case .movie, .episode:
             return item

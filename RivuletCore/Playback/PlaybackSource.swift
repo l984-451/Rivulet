@@ -23,6 +23,8 @@ struct ProviderPlayback: Sendable {
     /// True when `prepare` left the extras to the caller, who applies them as they arrive.
     var extrasPending = false
     var quality = ProviderQuality()
+    var nativeRequestedQuality: MediaQualityPreference? = nil
+    var nativeBufferingPolicy: BufferingQualityPolicy? = nil
 }
 
 /// The streaming quality `prepare` settled on for a provider stream.
@@ -40,4 +42,11 @@ struct ProviderQuality: Sendable {
 enum PlaybackSource {
     case plex                              // legacy path, unchanged
     case provider(ProviderPlayback)
+}
+
+extension PlaybackSource {
+    var isSilo: Bool {
+        if case .provider(let playback) = self { return playback.provider is SiloProvider }
+        return false
+    }
 }

@@ -55,6 +55,8 @@ struct TVSidebarView: View {
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
     @State private var showWhatsNew = false
     @State private var didApplyDebugLaunch = false
+    @State private var requestsAuthority: String?
+    @State private var requestsProbe = 0
 
     @Namespace private var contentNamespace
 
@@ -69,7 +71,19 @@ struct TVSidebarView: View {
     }
 
     private var profileName: String {
-        profileManager.selectedUser?.displayName ?? authManager.username ?? String(localized: "Account")
+        if authManager.hasCredentials {
+            return profileManager.selectedUser?.displayName ?? authManager.username ?? String(localized: "Account")
+        }
+        if let account = SiloSession.account,
+           serverStore.sources.contains(where: { $0.providerID == account.providerID }) {
+            return account.profileName
+        }
+        return String(localized: "Account")
+    }
+
+    private var hasDiscoverAndWatchlist: Bool {
+        ShellSidebarModel.hasDiscoverAndWatchlist(
+            plexSignedIn: authManager.hasCredentials, providerIDs: serverStore.sources.map(\.providerID))
     }
 
     private var isMusicLibrarySelected: Bool {
@@ -100,20 +114,38 @@ struct TVSidebarView: View {
     /// into the shell. The old snapshot dance existed only because the system
     /// sidebar wedged on live mutation; ours does not.
     private var shellSections: [ShellSidebarSection] {
-        ShellSidebarModel.sections(
+        return ShellSidebarModel.sections(
             libraries: SidebarLibrary.current(),
             liveTVSources: liveTVDataStore.sources,
             combineLiveTV: combineLiveTVSources,
-            // Both need a Plex account; a Jellyfin-only setup has neither (#478).
-            showDiscover: showDiscoverTab && authManager.hasCredentials,
-            showWatchlist: showWatchlistTab && authManager.hasCredentials,
+            showDiscover: showDiscoverTab && hasDiscoverAndWatchlist,
+            showWatchlist: showWatchlistTab && hasDiscoverAndWatchlist,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
             profileAvatar: profileManager.selectedUser?.thumb.flatMap { URL(string: $0) },
             canSwitchProfile: profileManager.hasMultipleProfiles,
             hasMediaServer: isSignedInToAnyServer,
-            playlistServers: PlaylistServer.current(visiblePlaylistProviders))
+            playlistServers: PlaylistServer.current(visiblePlaylistProviders),
+            requestsServer: currentRequestsServer)
+    }
+
+    private var currentRequestsProvider: SiloProvider? {
+        guard !profileManager.isRestrictedProfile,
+              let provider = SiloSession.storedProvider(),
+              serverStore.sources.contains(where: { $0.providerID == provider.id }),
+              librarySettings.areServerLibrariesVisible(provider.id) else { return nil }
+        return provider
+    }
+
+    private var requestsAuthorityKey: String? {
+        currentRequestsProvider.map { "\($0.id):\($0.authorityRevision)" }
+    }
+
+    private var currentRequestsServer: PlaylistServer? {
+        guard requestsAuthority == requestsAuthorityKey,
+              let provider = currentRequestsProvider else { return nil }
+        return PlaylistServer(providerID: provider.id, name: provider.displayName, serverID: provider.id)
     }
 
     /// Servers that get a Playlists row: those with playlists, less the rows Settings hides.
@@ -163,6 +195,25 @@ struct TVSidebarView: View {
         .ignoresSafeArea()
         .onChange(of: selectedTab) { _, newTab in
             nestedNavState.isNested = false
+        }
+        .task(id: "\(requestsAuthorityKey ?? "none"):\(requestsProbe)") {
+            if requestsAuthority != requestsAuthorityKey { requestsAuthority = nil }
+            guard let key = requestsAuthorityKey, let provider = currentRequestsProvider else { return }
+            do {
+                let status = try await SiloRequests(provider: provider).status()
+                guard !Task.isCancelled, requestsAuthorityKey == key else { return }
+                requestsAuthority = status.isAvailable ? key : nil
+            } catch {
+                requestsAuthority = nil
+            }
+        }
+        .onChange(of: currentRequestsServer) { _, server in
+            if case .requests = selectedTab, server == nil { selectedTab = .home }
+        }
+        .onChange(of: serverStore.isLoading) { _, loading in
+            if loading {
+                requestsProbe += 1
+            }
         }
         .onChange(of: authManager.hasCredentials) { old, new in
             // Clear watchlist state on logout.
@@ -218,8 +269,8 @@ struct TVSidebarView: View {
                 selectedTab = .home
             }
         }
-        .onChange(of: authManager.hasCredentials) { _, signedIn in
-            if !signedIn && (selectedTab == .discover || selectedTab == .watchlist) {
+        .onChange(of: hasDiscoverAndWatchlist) { _, available in
+            if !available && (selectedTab == .discover || selectedTab == .watchlist) {
                 selectedTab = .home
             }
         }
@@ -612,6 +663,12 @@ struct TVSidebarView: View {
             return PlexHomeViewController(mode: .watchlist)
         case .playlists(let providerID):
             return PlexHomeViewController(mode: .playlists(providerID: providerID))
+        case .requests(let providerID):
+            if let provider = currentRequestsProvider, provider.id == providerID,
+               requestsAuthority == requestsAuthorityKey {
+                return SiloRequestsViewController(provider: provider)
+            }
+            return UIViewController()
         case .search:
             let search = SearchContainerViewController()
             search.onNestedChange = { [nestedNavState] isNested in
@@ -688,7 +745,7 @@ struct TVSidebarView: View {
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear
-            case .watchlist, .playlists:
+            case .watchlist, .playlists, .requests:
                 // Unreachable: mounted directly as a UIKit VC above. Kept so
                 // this switch stays exhaustive over SidebarTab.
                 Color.clear

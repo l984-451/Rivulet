@@ -44,21 +44,14 @@ enum TopShelfFeed {
         let sources = serverStore.sources
         let otherRows = serverStore.visibleHomeRows.filter(\.isContinueWatching).map(\.items)
         var others = otherRows.flatMap { TopShelfMapper.items(from: $0, limit: limit * 2) }
-        // The same title on two servers or in two libraries is one card, as in Home's row.
-        if let primaryID = MediaProviderRegistry.shared.plexProvider?.id {
-            let primaryRow = PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []
-            let cards = ContinueWatchingRow.shared.cards([primaryRow] + otherRows, identity: { $0.identity ?? [] },
-                                                         showKey: \.showKey, watched: \.userState.lastViewedAt)
-            if otherRows.isEmpty {
-                // The hub can hold more than Home's row, so one server only drops the merged copies.
-                let copies = Set(cards.flatMap(\.others).map(\.ref))
-                plex.removeAll { copies.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
-            } else {
-                let shown = Set(cards.map(\.item.ref))
-                plex.removeAll { !shown.contains(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
-                others.removeAll { !shown.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
-            }
-        }
+        let primaryID = MediaProviderRegistry.shared.plexProvider?.id
+        let primaryVisible = primaryID != nil && serverURL != nil && token != nil && !HomeRowSettings.isHidden(cwHub?.hubIdentifier)
+        let primaryRow = primaryVisible ? (PlexDataStore.shared.homeItems.first(where: \.isContinueWatching)?.items ?? []) : []
+        let rows = [primaryRow] + otherRows
+        let cards = ContinueWatchingRow.shared.cards(rows, identity: { $0.identity ?? [] },
+                                                     lookupKey: \.lookupKey, watched: \.userState.lastViewedAt)
+        filterCopies(plex: &plex, others: &others, cards: cards,
+                     contributingRows: rows.filter { !$0.isEmpty }.count, primaryID: primaryID)
 
         var row = TopShelfMapper.merge(plex, others, limit: limit)
         let source = row.isEmpty ? "Recently Added" : "Continue Watching"
@@ -68,8 +61,7 @@ enum TopShelfFeed {
             row = recent
             recent = []
         }
-        let cwKeys = Set(row.map(\.ratingKey))
-        recent.removeAll { cwKeys.contains($0.ratingKey) }
+        removeRecentlyWatched(&recent, row: row)
         let items = await TopShelfComposer.composite(items: row, serverURL: serverURL, token: token)
         // A profile changed, locked or signed out during the composite.
         guard auth.selectedServerToken == token, serverStore.sources == sources else {
@@ -78,6 +70,27 @@ enum TopShelfFeed {
         }
         DiagLog.notice(.topShelf, "Refresh: \(items.count) items from \(source), \(recent.count) recently added (plex cw \(plex.count), other cw \(others.count)), \(items.filter { $0.compositeFileName != nil }.count) composites")
         TopShelfCache.shared.writeItems(items, sectionTitle: source, recent: recent)
+    }
+
+    static func removeRecentlyWatched(_ recent: inout [TopShelfItem], row: [TopShelfItem]) {
+        let refs = Set(row.map { MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey) })
+        recent.removeAll { refs.contains(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
+    }
+
+    /// A single server's hub may be longer than its Home row. Only remove known
+    /// copies in that case; across servers, match the Home row's chosen cards.
+    static func filterCopies(plex: inout [TopShelfItem], others: inout [TopShelfItem],
+                             cards: [ContinueWatchingMerge.Card<MediaItem>], contributingRows: Int,
+                             primaryID: String?) {
+        let singleRow = contributingRows <= 1
+        let refs = Set(singleRow ? cards.flatMap(\.others).map(\.ref) : cards.map(\.item.ref))
+        func remove(_ ref: MediaItemRef) -> Bool {
+            singleRow ? refs.contains(ref) : !refs.contains(ref)
+        }
+        if let primaryID {
+            plex.removeAll { remove(MediaItemRef(providerID: primaryID, itemID: $0.ratingKey)) }
+        }
+        others.removeAll { remove(MediaItemRef(providerID: $0.serverIdentifier, itemID: $0.ratingKey)) }
     }
 
     /// Newest unwatched titles from the selected Plex server's loaded library hubs and the

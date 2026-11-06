@@ -33,11 +33,11 @@ nonisolated enum VersionRanking {
     /// The provider's label wins over pixel height, which crops below nominal.
     static func tier(label: String?, height: Int?) -> Int {
         switch label?.lowercased() {
-        case "4k", "2160": return 2160
-        case "1080": return 1080
-        case "720": return 720
-        case "576": return 576
-        case "480", "sd": return 480
+        case "4k", "2160", "2160p": return 2160
+        case "1080", "1080p": return 1080
+        case "720", "720p": return 720
+        case "576", "576p": return 576
+        case "480", "480p", "sd": return 480
         default: break
         }
         guard let height else { return 0 }

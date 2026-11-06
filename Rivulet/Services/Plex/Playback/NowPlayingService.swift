@@ -308,16 +308,13 @@ final class NowPlayingService: ObservableObject {
     private func handleLanguageOption(_ event: MPRemoteCommandEvent, enable: Bool) -> MPRemoteCommandHandlerStatus {
         guard let selectTrack else { return .noActionableNowPlayingItem }
         guard let option = (event as? MPChangeLanguageOptionCommandEvent)?.languageOption else { return .commandFailed }
-        let type = option.languageOptionType
-        guard enable else {
-            // Only subtitles can be turned off.
-            guard type == .legible else { return .commandFailed }
-            selectTrack(.legible, nil)
-            return .success
+        guard let selection = NowPlayingLanguageOptions.selection(
+            for: option, enable: enable, audio: publishedAudioTracks, subtitles: publishedSubtitleTracks
+        ) else { return .commandFailed }
+        switch selection {
+        case .audio(let id): selectTrack(.audible, id)
+        case .subtitle(let id): selectTrack(.legible, id)
         }
-        let tracks = type == .audible ? publishedAudioTracks : publishedSubtitleTracks
-        guard let id = NowPlayingLanguageOptions.trackId(for: option, in: tracks) else { return .commandFailed }
-        selectTrack(type, id)
         return .success
     }
 

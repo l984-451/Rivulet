@@ -76,9 +76,11 @@ final class CloudSync: ObservableObject {
 
     /// Whether this account or source is shared with the other devices now. Sign-out asks only then.
     func isSynced(accountID: String) -> Bool {
-        SyncAvailability.isSynced(enabled: isEnabled, status: status,
+        let kind = accountID.prefix { $0 != ":" }
+        return SyncAvailability.isSynced(enabled: isEnabled, status: status,
                                   suppressed: coordinator.isSuppressed(accountID),
-                                  blocked: blockedAccountIDs.contains(accountID))
+                                  blocked: blockedAccountIDs.contains(accountID),
+                                  kindSupported: Self.accountKinds.contains(where: { $0.kind == kind }))
     }
 
     /// Whether this was signed out here only, and stays out until signed in here again.

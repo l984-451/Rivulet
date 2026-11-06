@@ -87,10 +87,11 @@ final class SignOutScopeTests: XCTestCase {
     }
 
     func test_choiceIsAskedOnlyWhenTheItemIsActuallySynced() {
-        XCTAssertTrue(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: false, blocked: false))
-        XCTAssertFalse(SyncAvailability.isSynced(enabled: false, status: .off, suppressed: false, blocked: false))
-        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .noAccount, suppressed: false, blocked: false))
-        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: true, blocked: false))
-        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: false, blocked: true))
+        XCTAssertTrue(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: false, blocked: false, kindSupported: true))
+        XCTAssertFalse(SyncAvailability.isSynced(enabled: false, status: .off, suppressed: false, blocked: false, kindSupported: true))
+        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .noAccount, suppressed: false, blocked: false, kindSupported: true))
+        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: true, blocked: false, kindSupported: true))
+        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: false, blocked: true, kindSupported: true))
+        XCTAssertFalse(SyncAvailability.isSynced(enabled: true, status: .on, suppressed: false, blocked: false, kindSupported: false))
     }
 }

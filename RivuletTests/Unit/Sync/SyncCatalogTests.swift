@@ -37,6 +37,8 @@ final class SyncCatalogTests: XCTestCase {
             // Credentials, identity and anything that can embed access.
             "plexAuthToken", "selectedServerToken", "plexProfileSession", "plexPin_abc", "server.token.jellyfin:x",
             "jellyfinAccount", "embyAccount", "liveTVSourceConfigurations", "liveTVSourceToken_x",
+            "siloAccount", "silo.localPlaybackPolicy.v2",
+            "silo.themeAudio.login.silo:server:profile",
             "contentFilter.listSourceURL", "selectedServerURL", "selectedServerMachineID", "plexExtraServers",
             "plexUsername", "plexHasPersistedSession",
             // Per device.

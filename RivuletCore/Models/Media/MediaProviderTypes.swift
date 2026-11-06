@@ -14,6 +14,7 @@ enum MediaProviderKind: String, Sendable, Hashable, Codable, CaseIterable {
     case plex
     case jellyfin
     case emby
+    case silo
 }
 
 enum ConnectionState: Sendable, Hashable {
@@ -59,6 +60,7 @@ extension MediaProviderKind {
         case .plex: "Plex"
         case .jellyfin: "Jellyfin"
         case .emby: "Emby"
+        case .silo: "Silo"
         }
     }
 }

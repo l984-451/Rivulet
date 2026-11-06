@@ -19,7 +19,7 @@ final class EmbyKindTests: XCTestCase {
         let data = try JSONEncoder().encode([MediaProviderKind.emby])
         XCTAssertEqual(String(decoding: data, as: UTF8.self), #"["emby"]"#)
         XCTAssertEqual(try JSONDecoder().decode([MediaProviderKind].self, from: data), [.emby])
-        XCTAssertEqual(MediaProviderKind.otherServerKinds, [.jellyfin, .emby])
+        XCTAssertEqual(MediaProviderKind.otherServerKinds, [.jellyfin, .emby, .silo])
         XCTAssertEqual(OtherServerKind.all.map(\.kind), MediaProviderKind.otherServerKinds)
     }
 

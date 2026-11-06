@@ -33,6 +33,7 @@ actor RatingsClient {
 
     /// Scores for a movie or show; empty for other kinds or without a TMDB id.
     func ratings(for detail: MediaItemDetail) async -> [MediaRating] {
+        guard detail.ratingPresentation != .allAvailable else { return [] }
         let type: String
         switch detail.item.kind {
         case .movie: type = "movie"

@@ -46,6 +46,7 @@ struct RivuletApp: App {
             let window = note.object as? UIWindow
             MainActor.assumeIsolated { window?.overrideUserInterfaceStyle = .dark }
         }
+
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
 
@@ -64,6 +65,15 @@ struct RivuletApp: App {
             Task { await ImageCacheManager.shared.clearAll() }
         }
         JellyfinSession.onChanged = { ServerDataStore.shared.reload() }
+        SiloSession.onChanged = {
+            MediaProviderRegistry.shared.populateFromCurrentAuth()
+            NotificationCenter.default.post(name: .mediaProviderAccountsChanged, object: nil)
+            ServerDataStore.shared.reload()
+        }
+        Task { @MainActor in
+            do { try await SiloSession.restore() }
+            catch { DiagLog.error(.servers, "Silo session restoration failed: \(DiagLog.describe(error))") }
+        }
         EmbySession.onChanged = { ServerDataStore.shared.reload() }
         OtherServerKind.installLiveSessionClosers()
         PlexUserProfileManager.onProfileChanged = {
@@ -76,8 +86,8 @@ struct RivuletApp: App {
             MediaProviderRegistry.shared.populateFromCurrentAuth()
             ServerDataStore.shared.reload()
         }
-        ContinueWatchingRow.shared.fetchShowKeys = { providerID, showIDs in
-            await MediaProviderRegistry.shared.provider(for: providerID)?.showIdentityKeys(for: showIDs) ?? [:]
+        ContinueWatchingRow.shared.fetchIdentityKeys = { providerID, itemIDs in
+            await MediaProviderRegistry.shared.provider(for: providerID)?.itemIdentityKeys(for: itemIDs) ?? [:]
         }
         ContinueWatchingRow.shared.onResolved = { await TopShelfFeed.refresh() }
         PlexExtraServers.onChanged = {
@@ -121,7 +131,7 @@ struct RivuletApp: App {
     private static func startCloudSync() {
         CloudSync.onPreferencesApplied = { keys in
             func touched(_ prefixes: [String]) -> Bool { keys.contains { key in prefixes.contains { key.hasPrefix($0) } } }
-            if touched(["hiddenLibraryKeys", "libraryOrder", "librarySortOptions"]) {
+            if touched(["hiddenLibraryKeys", "hiddenLibraryServerIDs", "libraryOrder", "librarySortOptions"]) {
                 LibrarySettingsManager.shared.reloadFromDefaults()
             }
             if touched(["hiddenHomeRowIdentifiers"]) {

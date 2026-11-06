@@ -57,6 +57,11 @@ final class IOSPlexSession: ObservableObject {
         }
         // The account's other Plex servers (#87): their list and tokens follow the profile.
         PlexExtraServers.onChanged = { [weak self] in Task { await self?.authChanged() } }
+        SiloSession.onChanged = { [weak self] in
+            MediaProviderRegistry.shared.populateFromCurrentAuth()
+            self?.contentSessionChanged()
+            Task { await self?.refresh() }
+        }
         PlexUserProfileManager.onProfileEntered = { token in
             Task { await PlexExtraServers.shared.refresh(plexToken: token) }
         }
@@ -446,6 +451,7 @@ final class IOSPlexSession: ObservableObject {
               let token = extras.token(for: server) else { throw IOSPlexSessionError.notConfigured }
         return (server.url, token)
     }
+
 }
 
 nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {

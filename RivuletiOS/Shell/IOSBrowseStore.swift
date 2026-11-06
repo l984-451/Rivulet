@@ -62,8 +62,8 @@ final class IOSBrowseStore: ObservableObject {
     init() {
         loader.onChange = { [weak self] home in self?.apply(home) }
         loader.onSecondaryFinished = { [weak self] in self?.isLoadingOtherServers = false }
-        ContinueWatchingRow.shared.fetchShowKeys = { providerID, showIDs in
-            await MediaProviderRegistry.shared.provider(for: providerID)?.showIdentityKeys(for: showIDs) ?? [:]
+        ContinueWatchingRow.shared.fetchIdentityKeys = { providerID, itemIDs in
+            await MediaProviderRegistry.shared.provider(for: providerID)?.itemIdentityKeys(for: itemIDs) ?? [:]
         }
         ContinueWatchingRow.shared.$version.dropFirst()
             .sink { [weak self] _ in self?.mergeContinueWatching() }
@@ -190,10 +190,13 @@ final class IOSBrowseStore: ObservableObject {
         failures = [:]
     }
 
-    /// The servers and the Plex token: a change of either means different rows, not a refresh.
+    /// Server/account authority changes discard cached rows, including a renewed native profile.
     private static func signature(selected: (any MediaProvider)?, secondary: [any MediaProvider]) -> String {
         let plex = (selected as? PlexProvider).map { "\($0.id)|\($0.serverURL)|\($0.authToken)" } ?? ""
-        return ([plex] + secondary.map { ($0 as? PlexProvider).map { "\($0.id)|\($0.authToken)" } ?? $0.id }).joined(separator: ",")
+        return ([plex] + secondary.map {
+            ($0 as? PlexProvider).map { "\($0.id)|\($0.authToken)" }
+                ?? "\($0.id)|\($0.accountID ?? "")|\($0.authorityRevision)"
+        }).joined(separator: ",")
     }
 
     private func apply(_ assembled: HomeFeed.Assembled) {

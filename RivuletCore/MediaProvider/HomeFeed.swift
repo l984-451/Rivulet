@@ -100,14 +100,15 @@ nonisolated enum HomeFeed {
         // Two servers can share a hub id, so a row's id names its server.
         return hubs.map {
             MediaHub(id: "\(provider.id)|\($0.id)", providerID: $0.providerID, title: $0.title, style: $0.style,
-                     items: $0.items, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
+                     items: $0.items, total: $0.total, nextPage: $0.nextPage, canBrowse: $0.canBrowse,
+                     pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
         }
     }
 
     /// The merged Continue Watching row: one card per title across servers.
     @MainActor
     static func continueWatchingCards(_ rows: [[MediaItem]], row: ContinueWatchingRow = .shared) -> [ContinueWatchingMerge.Card<MediaItem>] {
-        row.cards(rows, identity: { $0.identity ?? [] }, showKey: { $0.showKey }, watched: { $0.userState.lastViewedAt })
+        row.cards(rows, identity: { $0.identity ?? [] }, lookupKey: { $0.lookupKey }, watched: { $0.userState.lastViewedAt })
     }
 }
 

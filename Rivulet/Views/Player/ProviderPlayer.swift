@@ -11,6 +11,7 @@
 
 import UIKit
 
+
 enum ProviderPlayer {
     /// True while a play is preparing. A second press in that window is
     /// ignored, so one press presents one player.
@@ -59,6 +60,7 @@ enum ProviderPlayer {
             // The loading screen's art, fetched while the stream is resolved.
             async let loadingImages = HeroBackdropResolver.shared.playerLoadingImages(
                 for: target.heroBackdropRequest())
+            SiloThemeMusicController.shared.suspend()
             // Another Plex server's item takes the full Plex player with its own
             // server: markers, transcode fallback, content filter, BIF (#87).
             if let plex = provider as? PlexProvider {
@@ -66,13 +68,20 @@ enum ProviderPlayer {
                     let metadata = try await PlexNetworkManager.shared.getFullMetadata(
                         serverURL: plex.serverURL, authToken: plex.authToken, ratingKey: target.ref.itemID)
                     let (art, thumb) = await loadingImages
+                    guard MediaProviderRegistry.shared.isCurrentAuthority(provider), !Task.isCancelled else {
+                        SiloThemeMusicController.shared.resume()
+                        return
+                    }
                     let viewModel = UniversalPlayerViewModel(
                         metadata: metadata, serverURL: plex.serverURL, authToken: plex.authToken,
                         startOffset: plexStartOffset(metadata, fromBeginning: fromBeginning),
                         playQueue: playQueue,
                         loadingArtImage: art, loadingThumbImage: thumb, preferredMediaID: sourceID)
-                    PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
+                    if !PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss) {
+                        SiloThemeMusicController.shared.resume()
+                    }
                 } catch {
+                    SiloThemeMusicController.shared.resume()
                     presentError(MediaProviderError.mapping(error), from: presenter)
                 }
                 return
@@ -82,6 +91,11 @@ enum ProviderPlayer {
                     item: target, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best,
                     fromBeginning: fromBeginning, awaitingExtras: false)
                 let (art, thumb) = await loadingImages
+                guard MediaProviderRegistry.shared.isCurrentAuthority(provider), !Task.isCancelled else {
+                    await ProviderPlayback.discardUnplayedStream(playback.stream, provider: provider)
+                    SiloThemeMusicController.shared.resume()
+                    return
+                }
                 let viewModel = UniversalPlayerViewModel(
                     providerPlayback: playback,
                     startOffset: startOffset(detailOffset: playback.detail.item.userState.viewOffset,
@@ -92,6 +106,7 @@ enum ProviderPlayer {
                     preferredMediaID: sourceID)
                 PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
             } catch {
+                SiloThemeMusicController.shared.resume()
                 presentError(error, from: presenter)
             }
         }

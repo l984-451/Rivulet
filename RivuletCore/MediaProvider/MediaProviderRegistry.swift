@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// The active MediaProvider instances (the Plex servers and one server per other kind), keyed by id.
+// Active media provider instances, keyed by stable server/profile identity.
 
 import Foundation
 import Synchronization
@@ -21,6 +21,13 @@ final class MediaProviderRegistry {
 
     func provider(for id: String) -> (any MediaProvider)? {
         providers[id]
+    }
+
+    /// Stable ids can recur after signout or profile switches; a prepared stream
+    /// may only cross the presentation boundary under the same captured authority.
+    func isCurrentAuthority(_ provider: any MediaProvider) -> Bool {
+        guard let current = providers[provider.id] else { return false }
+        return current.authorityRevision == provider.authorityRevision && current.accountID == provider.accountID
     }
 
     func enabledProviders() -> [any MediaProvider] {
@@ -101,7 +108,7 @@ final class MediaProviderRegistry {
         populate(
             plexServerURL: auth.selectedServerURL,
             plexToken: auth.selectedServerToken,
-            plexMachineID: auth.selectedServer?.machineIdentifier,
+            plexMachineID: auth.selectedServerMachineID,
             plexName: auth.selectedServer?.name
                 ?? UserDefaults.standard.string(forKey: "selectedServerName")
                 ?? "Plex",

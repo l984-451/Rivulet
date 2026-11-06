@@ -379,7 +379,8 @@ enum JellyfinMediaMapper {
             mediaSources: (dto.mediaSources ?? []).map {
                 mediaSource($0, itemID: itemID, playSessionID: nil, baseURL: baseURL, token: token)
             },
-            trailerURL: nil,
+            // The first internet trailer on YouTube; local trailer files ride `extras`.
+            trailerURL: YouTubeTrailer.firstLink((dto.remoteTrailers ?? []).map(\.url)),
             contentRating: dto.officialRating,
             regionOfOrigin: dto.productionLocations?.first,
             ratings: MediaRating.ordered([

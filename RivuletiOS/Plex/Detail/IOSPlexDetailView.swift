@@ -259,6 +259,7 @@ private struct IOSPlexDetailHeader: View {
     let size: CGSize
     @Environment(\.plexActions) private var actions
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var browse: IOSBrowseStore
     /// Asked of the server for the page's title; nil until it answers.
     @State private var onList: Bool?
@@ -381,6 +382,10 @@ private struct IOSPlexDetailHeader: View {
                         actions.setWatchlisted(item, !onList)
                     }
                 }
+                // Jellyfin's and Emby's internet trailer: the YouTube app, else the web.
+                if let videoID = detail?.trailerURL.flatMap(YouTubeTrailer.videoID(from:)) {
+                    circleButton("film", label: "Trailer") { openTrailer(videoID) }
+                }
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
@@ -405,6 +410,13 @@ private struct IOSPlexDetailHeader: View {
 
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
     private var canDownload: Bool { browse.canDownload(item) }
+
+    private func openTrailer(_ videoID: String) {
+        guard let app = YouTubeTrailer.appURL(videoID: videoID) else { return }
+        openURL(app) { opened in
+            if !opened, let web = YouTubeTrailer.webURL(videoID: videoID) { openURL(web) }
+        }
+    }
 
     /// Plex answers from its watchlist; an episode or season stands for its show.
     private func loadWatchlistState() async {

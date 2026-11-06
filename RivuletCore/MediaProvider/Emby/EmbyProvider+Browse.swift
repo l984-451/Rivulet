@@ -22,7 +22,7 @@ extension EmbyProvider {
     /// `ProviderIds` is absent on lists unless asked for (cross-server identity, trending); `listFields` asks for it too.
     static let identityFields = listFields
     /// Detail needs no Fields for its sources, people or chapters; these three are the extras.
-    static let detailFields = URLQueryItem(name: "Fields", value: "ChildCount,RecursiveItemCount,Collections")
+    static let detailFields = URLQueryItem(name: "Fields", value: "ChildCount,RecursiveItemCount,Collections,RemoteTrailers")
 
     /// Ids per `Ids=` request: the request line tops out near 8 KB.
     nonisolated static let idBatch = 400

@@ -576,6 +576,7 @@ final class MediaDetailChromeView: UIView {
     /// detail fields. Called only when the fetch lands and the load
     /// token still matches.
     private func applyDetail(item: MediaItem, detail: MediaItemDetail) {
+        addTrailerButton(for: detail)
         rebuildGenreRow(item: item, detail: detail)
         rebuildQualityRow(item: item, detail: detail)
         if let s = item.seasonNumber, let e = item.episodeNumber,
@@ -786,6 +787,8 @@ final class MediaDetailChromeView: UIView {
     private weak var watchedButton: FocusableActionButton?
     private weak var watchlistButton: FocusableActionButton?
     private weak var infoButton: FocusableActionButton?
+    /// The internet trailer (Jellyfin, Emby), added once the detail names one.
+    private weak var trailerButton: FocusableActionButton?
     private weak var versionsButton: FocusableActionButton?
     private var heroWatched = false
     private var heroOnWatchlist = false
@@ -842,6 +845,35 @@ final class MediaDetailChromeView: UIView {
                     self.updateWatchlistIcon()
                 }
             }
+        }
+    }
+
+    /// A YouTube trailer from the server's `RemoteTrailers`, before Info. The row was just rebuilt
+    /// for this item, so a button left from the last one is gone. Plex's `trailerURL` is a server
+    /// file, not YouTube, so Plex titles get none.
+    private func addTrailerButton(for detail: MediaItemDetail) {
+        guard trailerButton?.superview == nil,
+              let url = detail.trailerURL, let videoID = YouTubeTrailer.videoID(from: url) else { return }
+        let button = makeCircleButton(systemImage: "film")
+        button.accessibilityLabel = String(localized: "Trailer")
+        button.onPrimaryAction = { [weak self] in self?.openTrailer(videoID) }
+        let stack = actionButtonsStack.arrangedSubviews
+        let index = infoButton.flatMap { stack.firstIndex(of: $0) } ?? stack.count
+        actionButtonsStack.insertArrangedSubview(button, at: index)
+        trailerButton = button
+    }
+
+    /// YouTube plays in its own app; Menu there comes back here.
+    private func openTrailer(_ videoID: String) {
+        guard let url = YouTubeTrailer.appURL(videoID: videoID) else { return }
+        UIApplication.shared.open(url) { [weak self] opened in
+            guard !opened, let self, let host = self.hostViewController else { return }
+            let alert = UIAlertController(
+                title: String(localized: "YouTube Needed"),
+                message: String(localized: "This trailer plays in the YouTube app. Install YouTube from the App Store to watch it."),
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: String(localized: "OK"), style: .default))
+            host.present(alert, animated: true)
         }
     }
 

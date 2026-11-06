@@ -9711,6 +9711,16 @@
         }
       }
     },
+    "This trailer plays in the YouTube app. Install YouTube from the App Store to watch it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Trailer läuft in der YouTube-App. Installiere YouTube aus dem App Store, um ihn anzusehen."
+          }
+        }
+      }
+    },
     "This version is split into parts; choose a converted quality" : {
       "localizations" : {
         "de" : {
@@ -10805,6 +10815,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Du hast alle verfügbaren Folgen gesehen"
+          }
+        }
+      }
+    },
+    "YouTube Needed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YouTube erforderlich"
           }
         }
       }

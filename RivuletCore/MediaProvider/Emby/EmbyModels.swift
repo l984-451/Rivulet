@@ -113,6 +113,8 @@ nonisolated struct EmbyItem: Decodable, Sendable {
     let container: String?
     let localTrailerCount: Int?
     let specialFeatureCount: Int?
+    /// Internet trailers (YouTube links from TMDB), asked for by `detailFields`.
+    let remoteTrailers: [EmbyRemoteTrailer]?
 
     let seriesId: EmbyID?
     let seriesName: String?
@@ -461,4 +463,10 @@ nonisolated enum EmbyTicks {
         let value = (seconds * perSecond).rounded()
         return value.isFinite && abs(value) < Double(Int64.max) ? Int64(value) : 0
     }
+}
+
+/// One entry of `RemoteTrailers`: a link, usually YouTube, and its name.
+nonisolated struct EmbyRemoteTrailer: Decodable, Sendable {
+    let url: String?
+    let name: String?
 }

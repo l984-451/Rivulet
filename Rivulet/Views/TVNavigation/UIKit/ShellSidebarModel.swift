@@ -119,6 +119,19 @@ struct ShellSidebarSection: Hashable {
 /// user's order, Settings always last) stay unit-testable.
 enum ShellSidebarModel {
 
+    /// The name on the profile row (`AccountName`), "Account" when nobody is signed in.
+    static func profileName(plexProfile: String?, plexUser: String?, otherServerUsers: [String?]) -> String {
+        AccountName.resolve(plexProfile: plexProfile, plexUser: plexUser, otherServerUsers: otherServerUsers)
+            ?? String(localized: "Account")
+    }
+
+    /// The live value of `profileName(plexProfile:plexUser:otherServerUsers:)`.
+    @MainActor static var currentProfileName: String {
+        profileName(plexProfile: PlexUserProfileManager.shared.selectedUser?.displayName,
+                    plexUser: PlexAuthManager.shared.username,
+                    otherServerUsers: AccountName.otherServerUsers)
+    }
+
     /// The order for a profile with none stored: today's default layout.
     static let defaultOrder = SidebarArrangement.seed(libraryOrder: [], discoverAbove: true, liveTVAbove: false)
 

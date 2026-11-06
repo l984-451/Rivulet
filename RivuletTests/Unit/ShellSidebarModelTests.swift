@@ -28,6 +28,22 @@ final class ShellSidebarModelTests: XCTestCase {
             .flatMap(\.items).map(\.tab)
     }
 
+    func test_profileName_prefersPlexProfileThenPlexAccount() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: "Kids", plexUser: "bain", otherServerUsers: ["jf"]), "Kids")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: "bain", otherServerUsers: ["jf"]), "bain")
+    }
+
+    func test_profileName_withoutPlex_namesTheOtherServersUser() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: [nil, "emby-user"]), "emby-user")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: ["jf", "emby-user"]), "jf")
+    }
+
+    func test_profileName_skipsEmptyNames_andFallsBackToAccount() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: "", plexUser: nil, otherServerUsers: ["", "emby-user"]), "emby-user")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: [nil, nil]),
+                       String(localized: "Account"))
+    }
+
     private let movies = PlexLibrary(
         key: "1", type: "movie", title: "Movies", agent: nil, scanner: nil, language: nil, uuid: "u",
         updatedAt: nil, createdAt: nil, scannedAt: nil, Location: nil)

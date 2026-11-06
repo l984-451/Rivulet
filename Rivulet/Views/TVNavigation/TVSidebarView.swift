@@ -68,8 +68,12 @@ struct TVSidebarView: View {
         isSignedInToAnyServer || liveTVDataStore.sources.contains { !$0.sourceType.followsServer }
     }
 
+    /// Reads `serverStore.sources` so a Jellyfin or Emby sign-in re-renders the profile row.
     private var profileName: String {
-        profileManager.selectedUser?.displayName ?? authManager.username ?? String(localized: "Account")
+        _ = serverStore.sources
+        return ShellSidebarModel.profileName(plexProfile: profileManager.selectedUser?.displayName,
+                                             plexUser: authManager.username,
+                                             otherServerUsers: OtherServerKind.all.map { $0.userName() })
     }
 
     private var isMusicLibrarySelected: Bool {

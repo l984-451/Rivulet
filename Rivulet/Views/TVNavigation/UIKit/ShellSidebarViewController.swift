@@ -778,9 +778,7 @@ final class ShellSidebarViewController: UIViewController {
         func flag(_ key: String, default fallback: Bool) -> Bool {
             defaults.object(forKey: key) as? Bool ?? fallback
         }
-        let profileName = PlexUserProfileManager.shared.selectedUser?.displayName
-            ?? PlexAuthManager.shared.username
-            ?? String(localized: "Account")
+        let profileName = ShellSidebarModel.currentProfileName
         return ShellSidebarModel.sections(
             libraries: SidebarLibrary.current(),
             liveTVSources: LiveTVDataStore.shared.sources,

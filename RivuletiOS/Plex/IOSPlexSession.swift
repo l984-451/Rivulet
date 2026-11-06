@@ -59,7 +59,6 @@ final class IOSPlexSession: ObservableObject {
         PlexExtraServers.onChanged = { [weak self] in Task { await self?.authChanged() } }
         SiloSession.onChanged = { [weak self] in
             MediaProviderRegistry.shared.populateFromCurrentAuth()
-            NotificationCenter.default.post(name: .mediaProviderAccountsChanged, object: nil)
             self?.contentSessionChanged()
             Task { await self?.refresh() }
         }

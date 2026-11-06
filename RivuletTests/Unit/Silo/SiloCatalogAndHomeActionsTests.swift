@@ -28,20 +28,30 @@ final class SiloCatalogAndHomeActionsTests: XCTestCase {
         let server = SiloAuthTestServer()
         await server.respond("GET", "/api/v2/library/library-a/layout", [.init(body: #"{"sections":[]}"#)])
         await server.respond("GET", "/api/v2/catalog", [.init(body:
-            #"{"items":[],"total":0,"page":{"has_more":false,"next_cursor":null}}"#)])
+            #"{"items":[],"total":0,"total_exact":true,"window_cursor":"window-a","page":{"has_more":false,"next_cursor":null}}"#)])
         let client = SiloClient(baseURL: URL(string: "https://silo.invalid")!, profileID: "profile-a",
                                 transport: server.transport)
-        let provider = SiloProvider(serverID: "server-a", displayName: "Synthetic", profileID: "profile-a", client: client)
+        let provider: any MediaProvider = SiloProvider(
+            serverID: "server-a", displayName: "Synthetic", profileID: "profile-a", client: client)
         let key = try SiloHubRoute(scope: "library", sectionId: "recent", libraryId: "library-a").identifier()
         let hub = MediaHub(id: "\(provider.id)|display-row", providerID: provider.id, title: "Recent",
                            style: .shelf, items: [], pagingKey: key)
-        _ = try await provider.hubPage(hub, page: Page(offset: 20, limit: 20, cursor: "opaque+cursor"))
+        let result = try await provider.hubPage(hub, page: Page(offset: 20, limit: 20, cursor: "opaque+cursor"))
+        XCTAssertTrue(result.items.isEmpty)
+        XCTAssertEqual(result.total, 0)
+        XCTAssertNil(result.nextPage)
         let requests = await server.requests()
         let request = try XCTUnwrap(requests.last)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.path, "/api/v2/catalog")
         let query = try XCTUnwrap(URLComponents(url: XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "source" }?.value, "section")
+        XCTAssertEqual(query.first { $0.name == "scope" }?.value, "library")
         XCTAssertEqual(query.first { $0.name == "section_id" }?.value, "recent")
         XCTAssertEqual(query.first { $0.name == "library_id" }?.value, "library-a")
         XCTAssertEqual(query.first { $0.name == "cursor" }?.value, "opaque+cursor")
+        XCTAssertEqual(query.first { $0.name == "limit" }?.value, "20")
+        XCTAssertNil(query.first { $0.name == "seek" })
     }
 
     func testSavedFiltersAreIsolatedByAccountProfileAndLibraryAndReconciled() throws {

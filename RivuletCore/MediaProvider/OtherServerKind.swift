@@ -22,7 +22,8 @@ struct OtherServerKind {
     /// Whether two music providers are one account, so its caches stay.
     let isSameMusicAccount: (any MusicProvider, any MusicProvider) -> Bool
     /// Puts the server's Live TV in or out of Live TV, given the signed-in provider or nil.
-    let syncLiveTV: ((any MediaProvider)?) -> Void
+    /// Nil when this server kind has no supported Live TV backend.
+    let syncLiveTV: (((any MediaProvider)?) -> Void)?
     /// The signed-in user's name, for an account page.
     let userName: () -> String?
     /// Address, username, password. Registers the provider, or stages Silo's explicit profile selection.
@@ -77,7 +78,7 @@ struct OtherServerKind {
         storedProvider: { SiloSession.storedProvider() },
         storedMusicProvider: { nil },
         isSameMusicAccount: { _, _ in false },
-        syncLiveTV: { _ in },
+        syncLiveTV: nil,
         userName: { SiloSession.account?.profileName },
         signIn: { _ = try await SiloSession.signIn(serverURL: $0, username: $1, password: $2) },
         quickConnect: nil,

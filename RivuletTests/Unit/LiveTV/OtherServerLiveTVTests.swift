@@ -58,6 +58,15 @@ final class OtherServerLiveTVTests: XCTestCase {
         XCTAssertEqual(seen, ["jellyfin": "none", "emby": "none"])
     }
 
+    func test_siloRemainsBrowsableWithoutConfiguringLiveTV() {
+        let silo = StubMediaProvider(id: "silo:a", kind: .silo)
+        let accounts: [MediaProviderKind: String] = [.silo: silo.id]
+        XCTAssertNotNil(OtherServerKind.entry(for: .silo))
+        XCTAssertEqual(OtherServerKind.shown([silo], accountIDs: accounts).map(\.id), [silo.id])
+        XCTAssertNil(run([silo], accounts: accounts)["silo"])
+        XCTAssertNil(run([silo], accounts: accounts, restricted: true)["silo"])
+    }
+
     func test_shown_keepsExtraPlexAndTheSignedInAccounts() {
         let shown = OtherServerKind.shown([extraPlex, jelly, emby], accountIDs: [.jellyfin: "jellyfin:a"])
         XCTAssertEqual(shown.map(\.id), ["plex:x", "jellyfin:a"])

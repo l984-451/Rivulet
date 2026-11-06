@@ -19,19 +19,21 @@ extension OtherServerKind {
     }
 
     /// Both apps call this at launch and after every sign-in, sign-out and profile change. It installs the
-    /// stream closers and puts each signed-in server's Live TV in or out of Live TV; a restricted profile
-    /// sees none. `secondary` and `accounts` default to the registry and the stored accounts.
+    /// stream closers and puts each supported signed-in server's Live TV in or out of Live TV; a restricted
+    /// profile sees none. `secondary` and `accounts` default to the registry and the stored accounts.
     @MainActor
     static func configureLiveTV(
         secondary: [any MediaProvider]? = nil,
         accounts: [MediaProviderKind: String]? = nil,
         restricted: Bool,
-        sync: (OtherServerKind, (any MediaProvider)?) -> Void = { $0.syncLiveTV($1) }
+        sync: (OtherServerKind, (any MediaProvider)?) -> Void = { $0.syncLiveTV?($1) }
     ) {
         installLiveSessionClosers()
         let accountIDs: [MediaProviderKind: String] = restricted ? [:] : accounts ?? Dictionary(
             uniqueKeysWithValues: all.compactMap { other in other.account().map { (other.kind, $0.providerID) } })
         let shown = shown(secondary ?? MediaProviderRegistry.shared.secondaryProviders, accountIDs: accountIDs)
-        for other in all { sync(other, shown.first { $0.kind == other.kind }) }
+        for other in all where other.syncLiveTV != nil {
+            sync(other, shown.first { $0.kind == other.kind })
+        }
     }
 }

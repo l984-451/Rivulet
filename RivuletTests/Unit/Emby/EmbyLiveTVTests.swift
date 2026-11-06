@@ -156,13 +156,14 @@ final class EmbyLiveTVTests: XCTestCase {
     func test_seam_syncLiveTV_installsAndRemoves() async throws {
         server.respond("/LiveTv/Channels", body: channels_unverified)
         let entry = try XCTUnwrap(OtherServerKind.entry(for: .emby))
-        entry.syncLiveTV(embyProvider())
+        let syncLiveTV = try XCTUnwrap(entry.syncLiveTV)
+        syncLiveTV(embyProvider())
         for _ in 0..<100 where !LiveTVDataStore.shared.hasSource(id: sourceID) {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertTrue(LiveTVDataStore.shared.hasSource(id: sourceID))
 
-        entry.syncLiveTV(nil)
+        syncLiveTV(nil)
         XCTAssertFalse(LiveTVDataStore.shared.hasSource(id: sourceID))
     }
 

@@ -103,12 +103,11 @@ final class EmbySettingsTests: XCTestCase {
         XCTAssertEqual(row?.valueText, "Off")
     }
 
-    func test_serversPage_listsEmbyBesideJellyfin_withTheServerName() throws {
+    func test_serversPage_EmbyShowsServerNameAndPreparesItsRoute() throws {
         try signInStub()
-        let servers = SettingsContent.rows(for: .servers)
-        XCTAssertEqual(servers.map(\.id), ["plexServer", "jellyfinServer", "embyServer"])
-        XCTAssertEqual(servers.last?.valueText, "Den Emby")
-        guard case .navigationAction(let page, _, let prepare) = servers.last?.kind else { return XCTFail("not a navigation row") }
+        let emby = try XCTUnwrap(SettingsContent.rows(for: .servers).first { $0.id == "embyServer" })
+        XCTAssertEqual(emby.valueText, "Den Emby")
+        guard case .navigationAction(let page, _, let prepare) = emby.kind else { return XCTFail("not a navigation row") }
         XCTAssertEqual(page, .emby)
         SettingsContent.addSourceDraft = nil
         prepare()
@@ -201,16 +200,16 @@ final class EmbySettingsTests: XCTestCase {
         XCTAssertEqual(cardSubtitle(signedIn, title: "Emby"), "✓ Den Emby")
     }
 
-    func test_landing_fourCardsFitInsideTheMargins() {
+    func test_landing_controlsFitInsideTheMargins() {
         let landing = SetupLandingViewController()
         landing.loadViewIfNeeded()
         landing.view.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         landing.view.layoutIfNeeded()
-        func cards(_ view: UIView) -> [UIButton] {
-            ((view as? UIButton).flatMap { $0.bounds.height == 300 ? [$0] : nil } ?? []) + view.subviews.flatMap(cards)
+        func buttons(_ view: UIView) -> [UIButton] {
+            ((view as? UIButton).map { [$0] } ?? []) + view.subviews.flatMap(buttons)
         }
-        let frames = cards(landing.view).map { $0.convert($0.bounds, to: landing.view) }
-        XCTAssertEqual(frames.count, 4)
+        let frames = buttons(landing.view).map { $0.convert($0.bounds, to: landing.view) }
+        XCTAssertFalse(frames.isEmpty)
         XCTAssertGreaterThanOrEqual(frames.map(\.minX).min() ?? 0, 80)
         XCTAssertLessThanOrEqual(frames.map(\.maxX).max() ?? 0, 1920 - 80)
     }

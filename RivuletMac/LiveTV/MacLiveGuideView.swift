@@ -69,6 +69,7 @@ struct MacLiveGuideView: View {
             .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
         }
         .scrollPosition($position)
+        .scrollTargetBehavior(HalfHourSnap(column: 30 * pointsPerMinute))
         .onScrollGeometryChange(for: Viewport.self, of: Self.viewport(of:)) { _, new in
             viewport = new
             guard !hasPositioned, new.size.width > 0, new.size.height > 0 else { return }
@@ -258,6 +259,16 @@ struct MacLiveGuideView: View {
             .offset(x: x - 1, y: rulerHeight)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Settles horizontal scrolling on half-hour columns, like the ruler (and iOS).
+private struct HalfHourSnap: ScrollTargetBehavior {
+    let column: CGFloat
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let maxX = max(0, context.contentSize.width - context.containerSize.width)
+        target.rect.origin.x = min((target.rect.origin.x / column).rounded() * column, maxX)
     }
 }
 

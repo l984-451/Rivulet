@@ -1031,14 +1031,8 @@ final class AetherPlayer: ObservableObject {
         ensureNativeLegibleOutput(on: item)
 
         Task { @MainActor [weak self, weak item] in
-            guard let item else { return }
-            if item.status == .unknown {
-                for await status in item.publisher(for: \.status).values where status != .unknown {
-                    guard status == .readyToPlay else { return }
-                    break
-                }
-            }
-            guard let self, self.nativeMediaItem === item else { return }
+            // No wait for item.status: it can stay .unknown while the origin plays, and the asset loads its groups on its own.
+            guard let self, let item, self.nativeMediaItem === item else { return }
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
                   !group.options.isEmpty,
                   self.engine.audioTracks.isEmpty || !self.engineAudioTracksAreSelectable else { return }

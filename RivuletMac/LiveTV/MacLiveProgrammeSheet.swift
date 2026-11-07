@@ -16,31 +16,36 @@ struct MacLiveProgrammeSheet: View {
     private var channel: UnifiedChannel { selection.channel }
     private var program: UnifiedProgram? { selection.program }
 
+    @State private var contentHeight: CGFloat = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
                     if let url = wideArt ?? program?.posterURL {
                         MacImage(url: url)
                             .aspectRatio(16 / 9, contentMode: .fit)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     header
+                    actions
                     if let description = program?.description, !description.isEmpty {
                         Text(description).foregroundStyle(.secondary).textSelection(.enabled)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
-            actions
+            .frame(height: contentHeight > 0 ? min(contentHeight, 560) : nil)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
         }
         .padding(20)
-        .frame(width: 480, height: 520)
+        .frame(width: 460)
         .modifier(MacLiveWideArt(program: program, url: $wideArt))
         .liveRecorder(recorder)
-        .overlay(alignment: .topTrailing) {
-            Button("Done") { dismiss() }.keyboardShortcut(.cancelAction).hidden()
-        }
     }
 
     private var header: some View {

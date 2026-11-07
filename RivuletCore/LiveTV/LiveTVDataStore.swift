@@ -11,7 +11,6 @@
 import Foundation
 import Combine
 import CryptoKit
-import UIKit
 
 @MainActor
 class LiveTVDataStore: ObservableObject {
@@ -328,7 +327,7 @@ class LiveTVDataStore: ObservableObject {
     /// for long stretches, so this is the most common way the grid goes stale.
     private func observeAppLifecycle() {
         NotificationCenter.default.addObserver(
-            forName: UIApplication.willEnterForegroundNotification,
+            forName: HostPlatform.willEnterForeground,
             object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in

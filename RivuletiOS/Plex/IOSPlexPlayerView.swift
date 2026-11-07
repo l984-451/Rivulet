@@ -240,7 +240,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             thumbnailPartID = partID
             let still = await PlexThumbnailService.shared.getThumbnail(
                 partId: partID, time: time, serverURL: request.serverURL, authToken: request.token)
-            if let still { return still }
+            if let still { return UIImage(cgImage: still) }
         }
         guard !isTranscoding, let frame = await player.still(atSeconds: time, maxWidth: 320) else { return nil }
         return UIImage(cgImage: frame)

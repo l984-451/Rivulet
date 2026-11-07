@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-import UIKit
+import CoreGraphics
 import CoreText
 import MediaAccessibility
 
@@ -13,7 +13,7 @@ import MediaAccessibility
 struct CaptionStyle: Equatable, @unchecked Sendable {
 
     /// Text/foreground color.
-    var foreground: UIColor
+    var foreground: CGColor
 
     /// True when the system lets the CONTENT's own colour win — the "Video
     /// Override" state in tvOS caption settings, reported as
@@ -28,7 +28,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     var foregroundOpacity: Double
 
     /// The background drawn behind each line of text.
-    var backgroundColor: UIColor
+    var backgroundColor: CGColor
 
     /// True when the content's own per-run background may win (Video Override).
     var allowsContentBackground: Bool
@@ -36,7 +36,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     var backgroundOpacity: Double
 
     /// The window drawn behind the whole cue.
-    var windowColor: UIColor
+    var windowColor: CGColor
     var windowOpacity: Double
 
     /// The cue box's insets and corner, by caption style.
@@ -59,7 +59,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     }
 
     /// One box per cue: the window, or the line background where there is no window.
-    var boxColor: UIColor { backgroundOpacity <= 0.01 && windowOpacity > 0.01 ? windowColor : backgroundColor }
+    var boxColor: CGColor { backgroundOpacity <= 0.01 && windowOpacity > 0.01 ? windowColor : backgroundColor }
     var boxOpacity: Double { backgroundOpacity <= 0.01 && windowOpacity > 0.01 ? windowOpacity : backgroundOpacity }
 
     /// Font size multiplier derived from the system relative-character-size preference.
@@ -93,23 +93,30 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     }
 
     /// Builds the caption font for the system settings at a concrete point size.
-    /// Uses the configured caption font descriptor when available. `CTFont` and
-    /// `UIFont` are toll-free bridged, so the descriptor path costs no copy.
-    func font(ofSize size: CGFloat) -> UIFont {
+    /// Uses the configured caption font descriptor when available, else the medium
+    /// system font. `CTFont` is toll-free bridged to `UIFont` and `NSFont`.
+    func font(ofSize size: CGFloat) -> CTFont {
         if let fontDescriptor {
-            return CTFontCreateWithFontDescriptor(fontDescriptor, size, nil) as UIFont
+            return CTFontCreateWithFontDescriptor(fontDescriptor, size, nil)
         }
-        return .systemFont(ofSize: size, weight: .medium)
+        let system = CTFontCreateUIFontForLanguage(.system, size, nil) ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
+        // 0.23 is UIFont.Weight.medium / NSFont.Weight.medium.
+        let attributes = [
+            kCTFontFamilyNameAttribute: CTFontCopyFamilyName(system),
+            kCTFontTraitsAttribute: [kCTFontWeightTrait: 0.23]
+        ] as CFDictionary
+        let medium = CTFontDescriptorCreateWithAttributes(attributes)
+        return CTFontCreateWithFontDescriptor(medium, size, nil)
     }
 
     static let `default` = CaptionStyle(
-        foreground: .white,
+        foreground: CGColor(gray: 1, alpha: 1),
         allowsContentColor: true,
         foregroundOpacity: 1.0,
-        backgroundColor: .black,
+        backgroundColor: CGColor(gray: 0, alpha: 1),
         allowsContentBackground: true,
         backgroundOpacity: 0,
-        windowColor: .black,
+        windowColor: CGColor(gray: 0, alpha: 1),
         windowOpacity: 0.5,
         box: Box.builtIn[CaptionAppearance.systemDefaultProfileID] ?? .edited,
         fontScale: 1.0,
@@ -193,7 +200,7 @@ enum CaptionAppearance {
         func contentMayOverride() -> Bool { behavior == .useContentIfAvailable }
 
         let fgUnmanaged = MACaptionAppearanceCopyForegroundColor(.user, &behavior)
-        let foreground = UIColor(cgColor: fgUnmanaged.takeRetainedValue())
+        let foreground = fgUnmanaged.takeRetainedValue()
         let allowsContentColor = contentMayOverride()
         let rawFgOpacity = Double(MACaptionAppearanceGetForegroundOpacity(.user, &behavior))
         let foregroundOpacity = rawFgOpacity > 0 ? min(rawFgOpacity, 1.0) : 1.0
@@ -230,10 +237,10 @@ enum CaptionAppearance {
             foreground: foreground,
             allowsContentColor: allowsContentColor,
             foregroundOpacity: foregroundOpacity,
-            backgroundColor: UIColor(cgColor: bgCG),
+            backgroundColor: bgCG,
             allowsContentBackground: allowsContentBackground,
             backgroundOpacity: bgOpacity,
-            windowColor: UIColor(cgColor: windowCG),
+            windowColor: windowCG,
             windowOpacity: windowOpacity,
             box: CaptionStyle.Box.builtIn[profileID] ?? .edited,
             fontScale: scale,

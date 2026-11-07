@@ -3,6 +3,7 @@
 
 import SwiftUI
 import UIKit
+import Sentry
 
 @main
 struct RivuletiOSApp: App {
@@ -10,6 +11,7 @@ struct RivuletiOSApp: App {
     @StateObject private var plex: IOSPlexSession
 
     init() {
+        HostPlatform.installUIKit()
         // Order matters: identity and migration must land before anything
         // touches PlexAuthManager.shared (the session does) or builds a request.
         // The manager reads Keychain and UserDefaults in its init, and PlexAPI
@@ -59,7 +61,10 @@ struct RivuletiOSApp: App {
         Task.detached(priority: .utility) {
             guard !Secrets.sentryDSN.isEmpty else { return }
             try? await Task.sleep(for: .seconds(3))
-            await SentryStartup.start(platform: isMac ? .macOS : .iOS)
+            await SentryStartup.start(platform: isMac ? .macOS : .iOS) { options in
+                // Partial stalls were a third of all hang events and never led to a fix.
+                options.enableReportNonFullyBlockingAppHangs = false
+            }
         }
         #endif
     }

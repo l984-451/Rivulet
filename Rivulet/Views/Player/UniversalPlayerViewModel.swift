@@ -3041,7 +3041,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         if currentScrubThumbnailSource == .server, let partId = metadata.Media?.first?.Part?.first?.id,
            let image = await PlexThumbnailService.shared.getThumbnail(
                partId: partId, time: time, serverURL: serverURL, authToken: authToken) {
-            return image
+            return UIImage(cgImage: image)
         }
         guard let frame = await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640) else { return nil }
         return UIImage(cgImage: frame)
@@ -4407,7 +4407,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 self.loadEngineThumbnail(for: time)
                 return
             }
-            self.scrubThumbnail = thumbnail
+            self.scrubThumbnail = thumbnail.map(UIImage.init(cgImage:))
         }
     }
 

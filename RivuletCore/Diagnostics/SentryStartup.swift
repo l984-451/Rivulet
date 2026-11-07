@@ -28,7 +28,8 @@ public enum SentryStartup {
     /// installs swizzling plus session / app-hang tracking. Called off the main
     /// actor it trips the Main Thread Checker on every launch.
     @MainActor
-    public static func start(platform: Platform) {
+    /// `configure` sets options that only exist on the caller's platform.
+    public static func start(platform: Platform, configure: @escaping (Options) -> Void = { _ in }) {
         SentrySDK.start { options in
             options.dsn = Secrets.sentryDSN
             options.debug = false
@@ -70,8 +71,7 @@ public enum SentryStartup {
             // <unknown> in-app frames mean missing dSYMs for that build.
             options.enableAppHangTracking = true
             options.appHangTimeoutInterval = 2
-            // Partial stalls were a third of all hang events and never led to a fix.
-            options.enableReportNonFullyBlockingAppHangs = false
+            configure(options)
 
             options.beforeSend = { event in
                 // Two non-fatal hangs per launch; "Fatal App Hang" (watchdog kills) always goes.

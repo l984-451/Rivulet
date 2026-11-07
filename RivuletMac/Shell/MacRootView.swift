@@ -13,7 +13,12 @@ struct MacRootView: View {
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @State private var selection: MacSidebarItem? = .home
     /// Each row's pushed pages, so switching rows and back keeps them.
-    @State private var paths: [MacSidebarItem: NavigationPath] = [:]
+    @State private var paths: [MacSidebarItem: [MacRoute]] = [:]
+    /// Pages popped by Back or the back button, for Forward. A new push clears them.
+    @State private var forwardPaths: [MacSidebarItem: [MacRoute]] = [:]
+    @SceneStorage("macSelectedRow") private var storedRow = "home"
+    @State private var restoredRow = false
+    @State private var pendingLink: RivuletLink?
     @State private var showingAccount = false
     @State private var showingWhatsNew = false
     @State private var choosingProfile = false
@@ -29,10 +34,17 @@ struct MacRootView: View {
         } detail: {
             detailStack
         }
-        .environment(\.macOpen) { route in paths[current, default: NavigationPath()].append(route) }
+        .environment(\.macOpen) { push($0) }
         .environment(\.macSelect) { selection = $0 }
         .environment(\.macOpenAccount) { showingAccount = true }
         .focusedSceneValue(\.macSelection, $selection)
+        .focusedSceneValue(\.macHistory, history)
+        .onOpenURL { if let link = RivuletLink(url: $0) { pendingLink = link } }
+        .task(id: linkDeliveryKey) { await deliverLink() }
+        .onChange(of: selection) { _, row in
+            restoredRow = true
+            storedRow = row?.storageKey ?? "home"
+        }
         .sheet(isPresented: $showingAccount) { MacAccountView(showsDone: true) }
         .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(version: MacChangelog.currentVersion, showsContinue: true) }
         .sheet(isPresented: $choosingProfile) { MacProfilePickerSheet() }
@@ -70,9 +82,11 @@ struct MacRootView: View {
         // A server or profile switch drops every open page: they hold the old one's items.
         .onChange(of: browse.sessionGeneration) {
             paths = [:]
+            forwardPaths = [:]
             selection = .home
         }
-        .onChange(of: browse.libraries) { _, libraries in
+        .onChange(of: browse.libraries, initial: true) { _, libraries in
+            restoreRow()
             if case .library(let library) = selection, !libraries.isEmpty, !browse.isLoadingOtherServers,
                !libraries.contains(library) {
                 selection = .home
@@ -110,13 +124,6 @@ struct MacRootView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                MacAccountButton()
-                Spacer()
-            }
-            .padding(10)
-        }
     }
 
     /// One section per server, under its name once there are several.
@@ -132,15 +139,8 @@ struct MacRootView: View {
     // MARK: Detail
 
     private var detailStack: some View {
-        NavigationStack(path: Binding(get: { paths[current] ?? NavigationPath() }, set: { paths[current] = $0 })) {
+        NavigationStack(path: Binding(get: { paths[current] ?? [] }, set: setPath)) {
             root
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { Task { await browse.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                            .help("Refresh")
-                            .disabled(browse.isLoadingContent)
-                    }
-                }
                 .navigationDestination(for: MacRoute.self) { route in
                     switch route {
                     case .detail(let item): MacDetailView(item: item)
@@ -149,6 +149,14 @@ struct MacRootView: View {
                     case .library(let library): MacLibraryView(library: library)
                     }
                 }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { Task { await browse.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                    .help("Refresh")
+                    .disabled(browse.isLoadingContent)
+                MacAccountButton()
+            }
         }
         .macActionHost()
         // A new row or a server switch is a new stack: pages keep their items in view state.
@@ -167,6 +175,93 @@ struct MacRootView: View {
         case .favorites: MacFavoritesView()
         case .library(let library): MacLibraryView(library: library)
         case .playlists(let providerID): MacPlaylistsView(providerID: providerID)
+        }
+    }
+
+    // MARK: History
+
+    private var history: MacHistory {
+        let canBack = paths[current]?.isEmpty == false
+        let canForward = forwardPaths[current]?.isEmpty == false
+        return MacHistory(back: canBack ? { goBack() } : nil, forward: canForward ? { goForward() } : nil)
+    }
+
+    private func push(_ route: MacRoute) {
+        paths[current, default: []].append(route)
+        forwardPaths[current] = nil
+    }
+
+    /// The back button and swipe pop through here; what they drop becomes Forward.
+    private func setPath(_ new: [MacRoute]) {
+        let old = paths[current] ?? []
+        if new.count < old.count {
+            forwardPaths[current, default: []].append(contentsOf: old[new.count...].reversed())
+        } else if new.count > old.count {
+            forwardPaths[current] = nil
+        }
+        paths[current] = new
+    }
+
+    private func goBack() {
+        guard let last = paths[current]?.popLast() else { return }
+        forwardPaths[current, default: []].append(last)
+    }
+
+    private func goForward() {
+        guard let next = forwardPaths[current]?.popLast() else { return }
+        paths[current, default: []].append(next)
+    }
+
+    // MARK: Window restoration
+
+    /// Reopens the row this window had. A library row waits for the libraries to load.
+    private func restoreRow() {
+        guard !restoredRow else { return }
+        if !["home", "search", "live-tv"].contains(storedRow) {
+            guard !browse.libraries.isEmpty, !browse.isLoadingOtherServers else { return }
+        }
+        restoredRow = true
+        guard let row = MacSidebarItem.restore(storedRow, libraries: browse.libraries) else { return }
+        switch row {
+        case .favorites where !(showFavorites && browse.offersFavorites): return
+        case .playlists(let id) where !showPlaylists || browse.playlists[id] == nil: return
+        default: selection = row
+        }
+    }
+
+    // MARK: Links
+
+    /// Changes when a link arrives or something it waits on (profile, servers) does.
+    private var linkDeliveryKey: String {
+        "\(pendingLink?.url?.absoluteString ?? "")|\(profiles.needsProfileSelection)|\(browse.hasServers)|\(browse.sessionGeneration)"
+    }
+
+    /// Opens or plays a held link once a profile is entered and a server is there to ask.
+    private func deliverLink() async {
+        guard let link = pendingLink, !profiles.needsProfileSelection else { return }
+        guard !browse.allProviders.isEmpty else {
+            // Signed out there is nothing to wait for: holding it would fire at the next sign-in.
+            if !plex.isConfigured { pendingLink = nil }
+            return
+        }
+        var item = await RivuletLinkResolver.item(for: link, in: browse)
+        if item == nil {
+            // A saved server address that stopped answering (cold launch): reconnect, retry once.
+            await plex.verifyConnection()
+            item = await RivuletLinkResolver.item(for: link, in: browse)
+        }
+        // The key changed while fetching (profile prompt, switch): the new task fetches again.
+        guard !Task.isCancelled else { return }
+        pendingLink = nil
+        guard let item else {
+            DiagLog.error(.deepLink, "Could not resolve \(link.ratingKey)")
+            return
+        }
+        switch link.action {
+        case .play: playback.play(item)
+        case .detail:
+            playback.close()
+            push(.detail(item))
         }
     }
 

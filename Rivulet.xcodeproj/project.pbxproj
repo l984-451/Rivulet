@@ -88,10 +88,10 @@
 			);
 			target = A70B44382F05AF3200DEF5ED /* TopShelfExtension */;
 		};
-		A70B44492F05B00000DEF5ED /* Exceptions for "Rivulet" folder in "TopShelfExtension" target */ = {
+		A70B444A2F05B00000DEF5ED /* Exceptions for "RivuletCore" folder in "TopShelfExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Models/Shared/RivuletLink.swift,
+				Links/RivuletLink.swift,
 			);
 			target = A70B44382F05AF3200DEF5ED /* TopShelfExtension */;
 		};
@@ -138,7 +138,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				A72E03E72EDA297E003A73DA /* Exceptions for "Rivulet" folder in "Rivulet" target */,
-				A70B44492F05B00000DEF5ED /* Exceptions for "Rivulet" folder in "TopShelfExtension" target */,
 			);
 			path = Rivulet;
 			sourceTree = "<group>";
@@ -158,6 +157,9 @@
 		};
 		B30000200000000000000020 /* RivuletCore */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A70B444A2F05B00000DEF5ED /* Exceptions for "RivuletCore" folder in "TopShelfExtension" target */,
+			);
 			path = RivuletCore;
 			sourceTree = "<group>";
 		};

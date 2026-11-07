@@ -20,6 +20,8 @@ extension HostPlatform {
             UserDefaults.standard.set(name, forKey: iconKey)
             applySavedIcon()
         }
+        // NSApp does not exist yet during App.init; restore the saved Dock icon once it does.
+        DispatchQueue.main.async { applySavedIcon() }
     }
 
     /// Dock icon for the saved choice; nil restores the bundle's own.

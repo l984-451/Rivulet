@@ -65,5 +65,5 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 - Strings: `String(localized:)` / SwiftUI literals; `RivuletMac/Localizable.xcstrings` (source `en`).
 - New settings keys that should sync must be added to `RivuletCore/Sync/SyncCatalog`. Mac-only keys: `MacSettingsKeys`.
 - Logic that is not view code goes to `RivuletCore/`, not here. No Downloads UI (`BrowseStore.canDownload` is true for Plex; ignore it).
-- Not done: `rivulet://` links (`RivuletLink` lives in the tvOS folder and is shared with Top Shelf), so the Mac has no deep links yet.
+- `rivulet://` links: `RivuletLink` is in `RivuletCore/Links/` (also compiled into Top Shelf); `MacRootView` resolves them with `RivuletLinkResolver`.
 - Offline progress is dropped on the Mac (`NoOfflineHost`).

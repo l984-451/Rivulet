@@ -54,6 +54,8 @@ struct RivuletMacApp: App {
                 .environmentObject(playback)
                 .frame(minWidth: 1000, minHeight: 640)
         }
+        // A rivulet:// link goes to the open window instead of making a new one.
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             MacShellCommands(browse: plex.browse)
             MacPlaybackCommands(playback: playback)

@@ -1,42 +1,295 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Bain Gurley
 
+import AppKit
+import AVKit
 import Combine
 import SwiftUI
 
-/// A title to play. The player view turns it into a session (Plex session or provider backend,
-/// local or remote), the way `IOSPlaybackController.startItem` does on iOS.
-struct MacPlayRequest: Identifiable {
-    let id = UUID()
-    let item: MediaItem
-    var fromBeginning = false
-    /// A version to play instead of the best one.
-    var sourceID: String?
-    /// A playlist, which replaces Up Next.
-    var queue: PlayQueue<PlaylistEntry>?
-}
-
-/// Owns "what is playing". Anything that plays a title calls `play`; `macPlaybackHost` shows
-/// the player full-window while `request` is set. The player agent owns the session behind it.
+/// App-level owner of the active player, Picture in Picture and Now Playing, so PiP outlives the
+/// player view. Starting PiP hides the player, PiP's restore button shows it again, and closing
+/// PiP ends playback. Mirrors `IOSPlaybackController`.
 @MainActor
-final class MacPlaybackController: ObservableObject {
-    @Published private(set) var request: MacPlayRequest?
+final class MacPlaybackController: NSObject, ObservableObject {
+    @Published private(set) var session: MacPlexPlayback?
+    /// False while the picture is in a PiP window.
+    @Published private(set) var isPresented = false
+    /// True while a play is preparing; a second request in that window is ignored.
+    @Published private(set) var isPreparing = false
+    @Published private(set) var isPictureInPicturePossible = false
+    @Published private(set) var isPictureInPictureActive = false
     /// Shown in an alert by the host when playback fails to start.
     @Published var playbackError: String?
 
-    var isPresented: Bool { request != nil }
+    /// Needed by Plex titles; the host modifier supplies it.
+    weak var plex: PlexSession?
 
-    /// The one way to play a title from any server.
+    /// The engine surface, kept here so it survives the view while PiP runs.
+    private(set) var surface: NSView?
+    private var pip: AVPictureInPictureController?
+    private var pipPossibleObservation: AnyCancellable?
+    private var isRestoring = false
+    private let nowPlaying = MacNowPlaying()
+    private var cancellables = Set<AnyCancellable>()
+    private var displayActivity: NSObjectProtocol?
+    /// The subtitle the C key turns back on.
+    private var lastSubtitleID: Int?
+    private static let volumeKey = "macPlayerVolume"
+
+    /// The player is up and the Playback menu has something to drive.
+    var isActive: Bool { session != nil && isPresented }
+
+    // MARK: - Caller API
+
+    /// The one way to play a title from any server. A show or season plays the episode Play
+    /// means; `sourceID` picks a version; a `queue` (a playlist) replaces Up Next. Failure shows
+    /// in the host's alert; a second call while one prepares is ignored.
     func play(_ item: MediaItem, fromBeginning: Bool = false, sourceID: String? = nil,
               queue: PlayQueue<PlaylistEntry>? = nil) {
-        request = MacPlayRequest(item: item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue)
+        guard !isPreparing else { return }
+        isPreparing = true
+        Task {
+            defer { isPreparing = false }
+            do {
+                let prepared = try await PlaybackStart.prepare(
+                    item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex)
+                start(MacPlexPlayback(request: prepared.request, plex: prepared.backend, queue: prepared.queue))
+            } catch is CancellationError {
+            } catch {
+                playbackError = PlaybackFailure.message(for: error)
+            }
+        }
     }
 
-    func close() { request = nil }
+    func start(_ newSession: MacPlexPlayback) {
+        end()
+        session = newSession
+        let player = newSession.player
+        let surface = AetherPlayer.makeRenderSurface()
+        player.bind(surface: surface)
+        self.surface = surface
+        player.setVolume((UserDefaults.standard.object(forKey: Self.volumeKey) as? Float) ?? 1)
+        newSession.onItemChange = { [weak self] in self?.startNowPlaying() }
+        observe(newSession)
+        startNowPlaying()
+        isPresented = true
+        Task { await newSession.begin() }
+    }
+
+    /// Close button: ends playback and leaves the screen.
+    func close() {
+        end()
+        isPresented = false
+    }
+
+    /// Esc: leaves full screen first, then closes.
+    func escape() {
+        if let window = NSApp.keyWindow, window.styleMask.contains(.fullScreen) {
+            window.toggleFullScreen(nil)
+        } else {
+            close()
+        }
+    }
+
+    func toggleFullScreen() { NSApp.keyWindow?.toggleFullScreen(nil) }
+
+    func startPictureInPicture() { pip?.startPictureInPicture() }
+
+    /// Ends the session: final reports, player stop, PiP and Now Playing torn down.
+    func end() {
+        guard let session else { return }
+        session.end()
+        if let surface { session.player.unbind(surface: surface) }
+        session.player.stop()
+        surface = nil
+        pip?.stopPictureInPicture()
+        pip?.delegate = nil
+        pip = nil
+        pipPossibleObservation = nil
+        isPictureInPicturePossible = false
+        isPictureInPictureActive = false
+        nowPlaying.stop()
+        cancellables.removeAll()
+        setKeepsDisplayAwake(false)
+        self.session = nil
+    }
+
+    // MARK: - Transport (the Playback menu and the player's keys)
+
+    func togglePlayPause() { session?.player.togglePlayPause() }
+
+    func skip(forward: Bool) {
+        let defaults = UserDefaults.standard
+        let seconds = forward
+            ? Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
+            : Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
+        guard let player = session?.player else { return }
+        Task { await player.skip(by: forward ? seconds : -seconds) }
+    }
+
+    func adjustVolume(by delta: Float) {
+        guard let player = session?.player else { return }
+        setVolume(player.volume + delta)
+    }
+
+    func setVolume(_ volume: Float) {
+        guard let player = session?.player else { return }
+        player.setVolume(volume)
+        UserDefaults.standard.set(player.volume, forKey: Self.volumeKey)
+    }
+
+    func toggleMute() {
+        guard let player = session?.player else { return }
+        player.setMuted(!player.isMuted)
+    }
+
+    /// C: subtitles off, or back to the last track (else the first one).
+    func toggleSubtitles() {
+        guard let session else { return }
+        if let current = session.selectedSubtitleID {
+            lastSubtitleID = current
+            session.selectSubtitle(nil)
+        } else if let id = lastSubtitleID ?? session.subtitleTracks.first?.id {
+            session.selectSubtitle(id)
+        }
+    }
+
+    // MARK: - Observation
+
+    private func observe(_ session: MacPlexPlayback) {
+        let player = session.player
+        player.$pictureInPictureSource
+            .sink { [weak self] source in self?.updatePictureInPicture(source) }
+            .store(in: &cancellables)
+
+        // Now Playing and display sleep follow transport changes, not clock ticks.
+        Publishers.Merge4(
+            player.$state.map { _ in () },
+            player.$rate.map { _ in () },
+            player.$pendingSeekTarget.map { _ in () },
+            player.$duration.map { _ in () }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.transportChanged() }
+        .store(in: &cancellables)
+
+        // The Playback menu lists the tracks and marks the speed and mute, so it follows them.
+        Publishers.MergeMany([
+            player.$audioTracks.map { _ in () }.eraseToAnyPublisher(),
+            player.$subtitleTracks.map { _ in () }.eraseToAnyPublisher(),
+            player.$currentAudioTrackId.map { _ in () }.eraseToAnyPublisher(),
+            player.$currentSubtitleTrackId.map { _ in () }.eraseToAnyPublisher(),
+            player.$isMuted.map { _ in () }.eraseToAnyPublisher(),
+            player.$fillsScreen.map { _ in () }.eraseToAnyPublisher(),
+            player.$rate.map { _ in () }.eraseToAnyPublisher(),
+            session.objectWillChange.map { _ in () }.eraseToAnyPublisher()
+        ])
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.objectWillChange.send() }
+        .store(in: &cancellables)
+    }
+
+    private func transportChanged() {
+        guard let player = session?.player else { return }
+        let playing = player.state == .playing
+        setKeepsDisplayAwake(playing)
+        nowPlaying.update(
+            elapsed: player.pendingSeekTarget ?? player.currentTime,
+            duration: player.duration,
+            rate: playing ? player.rate : 0
+        )
+        // Sample-buffer PiP re-reads paused state and range only when told.
+        if let pip, pip.contentSource?.sampleBufferDisplayLayer != nil { pip.invalidatePlaybackState() }
+    }
+
+    private func setKeepsDisplayAwake(_ awake: Bool) {
+        if awake, displayActivity == nil {
+            displayActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.idleDisplaySleepDisabled, .userInitiated], reason: "Playing video")
+        } else if !awake, let activity = displayActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            displayActivity = nil
+        }
+    }
+
+    private func startNowPlaying() {
+        guard let session else { return }
+        let player = session.player
+        let defaults = UserDefaults.standard
+        let back = Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
+        let forward = Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
+        let item = session.nowPlayingItem
+        nowPlaying.start(
+            item,
+            commands: MacNowPlaying.Commands(
+                play: { [weak player] in player?.play() },
+                pause: { [weak player] in player?.pause() },
+                skip: { [weak player] seconds in Task { await player?.skip(by: seconds) } },
+                seek: item.isLive ? nil : { [weak player] time in Task { await player?.seek(to: time) } }
+            ),
+            skipBackward: back,
+            skipForward: forward
+        )
+        transportChanged()
+    }
+
+    // MARK: - Picture in Picture
+
+    private func updatePictureInPicture(_ source: AVPictureInPictureController.ContentSource?) {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        if let pip {
+            // Keep a live window through the teardown's transient nil; a new layer replaces a dead one.
+            if source != nil || !pip.isPictureInPictureActive { pip.contentSource = source }
+            return
+        }
+        guard let source else { return }
+        let controller = AVPictureInPictureController(contentSource: source)
+        controller.delegate = self
+        pipPossibleObservation = controller.publisher(for: \.isPictureInPicturePossible)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.isPictureInPicturePossible = $0 }
+        pip = controller
+    }
+}
+
+extension MacPlaybackController: AVPictureInPictureControllerDelegate {
+    func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
+        isPictureInPictureActive = true
+        session?.player.setPictureInPictureActive(true)
+        isPresented = false
+    }
+
+    func pictureInPictureController(
+        _ controller: AVPictureInPictureController,
+        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+    ) {
+        isRestoring = true
+        isPresented = true
+        // Let the player view mount so the window animates into it.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            completionHandler(true)
+        }
+    }
+
+    func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+        isPictureInPictureActive = false
+        session?.player.setPictureInPictureActive(false)
+        // Re-apply anything withheld while the window was up.
+        controller.contentSource = session?.player.pictureInPictureSource
+        defer { isRestoring = false }
+        guard !isRestoring else { return }
+        // The window's close button: end playback, or pause if the player is still on screen.
+        if !isPresented {
+            end()
+        } else {
+            session?.player.pause()
+        }
+    }
 }
 
 extension View {
-    /// Covers the window with the player while a request is set.
+    /// Covers the window with the player while a session is presented.
     func macPlaybackHost(_ controller: MacPlaybackController) -> some View {
         modifier(MacPlaybackHost(controller: controller))
     }
@@ -44,17 +297,18 @@ extension View {
 
 private struct MacPlaybackHost: ViewModifier {
     @ObservedObject var controller: MacPlaybackController
+    @EnvironmentObject private var plex: PlexSession
 
     func body(content: Content) -> some View {
         content
+            .onAppear { controller.plex = plex }
             .overlay {
-                if let request = controller.request {
-                    MacPlayerView(request: request) { controller.close() }
-                        .id(request.id)
+                if controller.isPresented, let session = controller.session {
+                    MacPlayerView(session: session, player: session.player, controller: controller)
                         .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: controller.request?.id)
+            .animation(.easeInOut(duration: 0.2), value: controller.isPresented)
             .alert(
                 "Couldn't Play",
                 isPresented: Binding(get: { controller.playbackError != nil },

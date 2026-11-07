@@ -4,24 +4,29 @@
 import SwiftUI
 
 /// The Settings window (Cmd-,). One tab per iOS settings page. Parity sources, all in
-/// RivuletiOS/Settings/: IOSAccountView (Account), IOSHomeSettings (Home, Library),
-/// IOSSettingsPages (Playback), IOSLiveTVSettingsView (Live TV), IOSServerSignInView
-/// (server accounts). iCloud sync and the app icon are rows of IOSAccountView.
+/// RivuletiOS/Settings/: IOSAccountView (Account, General), IOSHomeSettings (Home, Library),
+/// IOSSettingsPages (Playback), IOSLiveTVSettingsView (Live TV). Downloads is iOS only.
 struct MacSettingsView: View {
+    @ObservedObject private var profiles = PlexUserProfileManager.shared
+
     var body: some View {
         TabView {
             MacAccountView()
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
-            pane("Home", symbol: "house", source: "IOSHomeSettings.swift")
-            pane("Library", symbol: "rectangle.stack", source: "IOSHomeSettings.swift (IOSLibrarySettingsView)")
-            pane("Playback", symbol: "play.rectangle", source: "IOSSettingsPages.swift")
-            pane("Live TV", symbol: "play.tv", source: "IOSLiveTVSettingsView.swift")
+            MacHomeSettingsView()
+                .tabItem { Label("Home", systemImage: "house") }
+            MacLibrarySettingsView()
+                .tabItem { Label("Library", systemImage: "rectangle.stack") }
+            MacPlaybackSettingsView()
+                .tabItem { Label("Playback", systemImage: "play.rectangle") }
+            // Sources and server choice are the owner's, not a restricted profile's.
+            if !profiles.isRestrictedProfile {
+                MacLiveTVSettingsView()
+                    .tabItem { Label("Live TV", systemImage: "play.tv") }
+            }
+            MacGeneralSettingsView()
+                .tabItem { Label("General", systemImage: "gearshape") }
         }
-        .frame(width: 560, height: 420)
-    }
-
-    private func pane(_ title: LocalizedStringKey, symbol: String, source: String) -> some View {
-        MacFeaturePlaceholder(title: title, symbol: symbol, source: "RivuletiOS/Settings/\(source)")
-            .tabItem { Label(title, systemImage: symbol) }
+        .frame(minWidth: 560, idealWidth: 600, minHeight: 440, idealHeight: 520)
     }
 }

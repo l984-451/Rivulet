@@ -23,6 +23,33 @@ enum MacSidebarItem: Hashable {
     case playlists(providerID: String)
 }
 
+extension MacSidebarItem {
+    /// The row as a string, for window restoration.
+    var storageKey: String {
+        switch self {
+        case .home: "home"
+        case .search: "search"
+        case .liveTV: "live-tv"
+        case .favorites: "favorites"
+        case .library(let library): "library:\(library.providerID)|\(library.id)"
+        case .playlists(let providerID): "playlists:\(providerID)"
+        }
+    }
+
+    /// The row a stored key names, or nil while the libraries it points at have not loaded.
+    static func restore(_ key: String, libraries: [MediaLibrary]) -> MacSidebarItem? {
+        switch key {
+        case "home": return .home
+        case "search": return .search
+        case "live-tv": return .liveTV
+        case "favorites": return .favorites
+        default:
+            if key.hasPrefix("playlists:") { return .playlists(providerID: String(key.dropFirst("playlists:".count))) }
+            return libraries.first { "library:\($0.providerID)|\($0.id)" == key }.map(MacSidebarItem.library)
+        }
+    }
+}
+
 extension EnvironmentValues {
     /// Pushes a page on the current detail stack.
     @Entry var macOpen: (MacRoute) -> Void = { _ in }
@@ -41,6 +68,23 @@ extension FocusedValues {
     var macSelection: Binding<MacSidebarItem?>? {
         get { self[MacSelectionKey.self] }
         set { self[MacSelectionKey.self] = newValue }
+    }
+}
+
+/// Back and forward through the pages pushed on the current row, published by the window for the Go menu.
+struct MacHistory {
+    var back: (() -> Void)?
+    var forward: (() -> Void)?
+}
+
+struct MacHistoryKey: FocusedValueKey {
+    typealias Value = MacHistory
+}
+
+extension FocusedValues {
+    var macHistory: MacHistory? {
+        get { self[MacHistoryKey.self] }
+        set { self[MacHistoryKey.self] = newValue }
     }
 }
 

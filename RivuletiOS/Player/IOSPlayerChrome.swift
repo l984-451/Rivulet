@@ -1032,9 +1032,15 @@ private struct IOSPlayerInputSurface: UIViewRepresentable {
                     self?.recheckPending = false
                     self?.syncKeyboardOwnership()
                 }
-            } else if !isFirstResponder {
+            } else if !isFirstResponder, !Self.keyboardHeldElsewhere {
                 becomeFirstResponder()
             }
+        }
+
+        /// An open menu holds first responder; taking it back drops the menu's pick.
+        private static var keyboardHeldElsewhere: Bool {
+            let holder = UIResponder.currentFirstResponder
+            return holder is UIView && !(holder is UIWindow)
         }
 
         private var isCovered: Bool {
@@ -1123,4 +1129,17 @@ private struct IOSRoutePicker: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+
+private extension UIResponder {
+    private static weak var found: UIResponder?
+
+    /// The app's first responder: an action sent to nil goes to it (the key window when there is none).
+    static var currentFirstResponder: UIResponder? {
+        found = nil
+        UIApplication.shared.sendAction(#selector(recordFirstResponder), to: nil, from: nil, for: nil)
+        return found
+    }
+
+    @objc private func recordFirstResponder() { UIResponder.found = self }
 }

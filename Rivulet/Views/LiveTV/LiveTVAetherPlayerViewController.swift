@@ -537,7 +537,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             joinTelemetry = LiveJoinTelemetry()
             let resolved: URL?
             do {
-                resolved = try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+                resolved = try await LiveResolveTiming.$begin.withValue(joinTelemetry?.phaseHook) {
+                    try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+                }
             } catch {
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
                 finishJoinTelemetry { $0.failed(reason: "resolve_failed") }

@@ -113,3 +113,9 @@ nonisolated enum SentryBridge {
         #endif
     }
 }
+
+/// Lets the host time phases inside a Live TV resolve without core importing
+/// its telemetry. `begin(name)` returns the closure that ends the phase.
+enum LiveResolveTiming {
+    @TaskLocal static var begin: (@Sendable (String) -> (@Sendable () -> Void))?
+}

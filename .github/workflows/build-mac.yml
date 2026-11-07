@@ -55,13 +55,13 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('Rivulet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
-      - name: Build Rivulet Mac (Debug)
+      - name: Build Rivulet Mac (Release, so #if !DEBUG code compiles)
         run: |
           set -o pipefail
           xcodebuild \
             -project Rivulet.xcodeproj \
             -scheme "Rivulet Mac" \
-            -configuration Debug \
+            -configuration Release \
             -destination 'platform=macOS,arch=arm64' \
             -clonedSourcePackagesDirPath SourcePackages \
             -onlyUsePackageVersionsFromResolvedFile \

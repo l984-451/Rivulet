@@ -42,9 +42,7 @@ struct RivuletMacApp: App {
         Task.detached(priority: .utility) {
             guard !Secrets.sentryDSN.isEmpty else { return }
             try? await Task.sleep(for: .seconds(3))
-            await SentryStartup.start(platform: .macOS) { options in
-                options.enableReportNonFullyBlockingAppHangs = false
-            }
+            await SentryStartup.start(platform: .macOS)
         }
         #endif
     }

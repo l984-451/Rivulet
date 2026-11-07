@@ -204,6 +204,7 @@ nonisolated struct JFMediaStream: Decodable, Sendable {
     let isHearingImpaired: Bool?
     let isExternal: Bool?
     let isTextSubtitleStream: Bool?
+    let path: String?
     let isInterlaced: Bool?
     let width: Int?
     let height: Int?

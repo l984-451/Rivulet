@@ -5,7 +5,6 @@ import CloudKit
 import Combine
 import CryptoKit
 import Foundation
-import UIKit
 
 /// iCloud sync for both apps. Preferences ride `NSUbiquitousKeyValueStore` through `PreferenceMirror`;
 /// `UserDefaults` stays the source of truth. Accounts and Live TV sources ride one encrypted CloudKit
@@ -63,7 +62,7 @@ final class CloudSync: ObservableObject {
         center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.scheduleReconcile() }
         }
-        center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+        center.addObserver(forName: HostPlatform.willEnterForeground, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.foregrounded() }
         }
         center.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in

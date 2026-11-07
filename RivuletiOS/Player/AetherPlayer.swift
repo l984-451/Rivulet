@@ -49,7 +49,9 @@ final class AetherPlayer: ObservableObject {
             if let menuDetail { return menuDetail }
             var parts: [String] = []
             if let language, !language.isEmpty {
-                parts.append(Locale.current.localizedString(forLanguageCode: language) ?? language)
+                let languageName = Locale.current.localizedString(forLanguageCode: language) ?? language
+                // A name that already says the language ("English (SDH)") does not repeat it.
+                if !name.localizedCaseInsensitiveContains(languageName) { parts.append(languageName) }
             }
             if !codec.isEmpty { parts.append(codec.uppercased()) }
             if channels > 0 { parts.append(channels == 2 ? String(localized: "Stereo") : String(localized: "\(channels) ch")) }
@@ -90,17 +92,7 @@ final class AetherPlayer: ObservableObject {
         let placement: TextPlacement?
     }
 
-    /// A sidecar subtitle file registered at load (Plex external streams).
-    struct SidecarSubtitle {
-        let url: URL
-        let name: String?
-        let language: String?
-        let isForced: Bool
-        let isHearingImpaired: Bool
-        let isDefault: Bool
-        /// "srt", "ass", "vtt": Plex stream keys carry no extension.
-        let formatHint: String?
-    }
+    typealias SidecarSubtitle = SubtitleSidecar
 
     /// The live rewind window on the session axis, the one `seekLive` takes.
     /// Never `sourceTime`: on the software live path that axis is offset.
@@ -1041,14 +1033,8 @@ final class AetherPlayer: ObservableObject {
         ensureNativeLegibleOutput(on: item)
 
         Task { @MainActor [weak self, weak item] in
-            guard let item else { return }
-            if item.status == .unknown {
-                for await status in item.publisher(for: \.status).values where status != .unknown {
-                    guard status == .readyToPlay else { return }
-                    break
-                }
-            }
-            guard let self, self.nativeMediaItem === item else { return }
+            // No wait for item.status: it can stay .unknown while the origin plays, and the asset loads its groups on its own.
+            guard let self, let item, self.nativeMediaItem === item else { return }
             guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible),
                   !group.options.isEmpty,
                   self.engine.audioTracks.isEmpty || !self.engineAudioTracksAreSelectable else { return }

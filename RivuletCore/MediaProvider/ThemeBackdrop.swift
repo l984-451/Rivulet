@@ -11,7 +11,6 @@
 //
 
 import AVFoundation
-import UIKit
 
 /// One lookup per title, with late answers for a title that has since changed dropped.
 @MainActor
@@ -63,7 +62,7 @@ final class ThemeVideoSession {
 final class ThemeBackdrop {
     /// The system's video-preview and Reduce Motion settings.
     static var systemAllowsVideo: Bool {
-        UIAccessibility.isVideoAutoplayEnabled && !UIAccessibility.isReduceMotionEnabled
+        HostPlatform.allowsVideoPreviews()
     }
 
     /// Which title should be playing, or nil. Every condition must hold.
@@ -106,7 +105,7 @@ final class ThemeBackdrop {
             try await MediaProviderRegistry.shared.provider(for: ref.providerID)?.themeVideoURL(for: ref)
         },
         systemAllows: @escaping @MainActor () -> Bool = { ThemeBackdrop.systemAllowsVideo },
-        isForeground: @escaping @MainActor () -> Bool = { UIApplication.shared.applicationState == .active }
+        isForeground: @escaping @MainActor () -> Bool = { HostPlatform.isForeground() }
     ) {
         session = ThemeVideoSession(resolve: resolve)
         self.systemAllows = systemAllows
@@ -115,12 +114,7 @@ final class ThemeBackdrop {
         layer.opacity = 0
         session.onChange = { [weak self] in self?.play($0) }
         let center = NotificationCenter.default
-        let names: [Notification.Name] = [
-            UIAccessibility.videoAutoplayStatusDidChangeNotification,
-            UIAccessibility.reduceMotionStatusDidChangeNotification,
-            UIApplication.willResignActiveNotification, UIApplication.didBecomeActiveNotification
-        ]
-        notifications = names.map { name in
+        notifications = HostPlatform.appearanceChangeNotifications.map { name in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.refresh() }
             }
@@ -202,15 +196,5 @@ final class ThemeBackdrop {
             guard let self, self.generation == generation else { return }
             self.session.playbackFailed()
         }
-    }
-
-    /// True when `host`, or any controller above it, has something presented over it.
-    static func isCovered(_ host: UIViewController?) -> Bool {
-        var controller = host
-        while let current = controller {
-            if current.presentedViewController != nil || current.isBeingDismissed { return true }
-            controller = current.parent
-        }
-        return false
     }
 }

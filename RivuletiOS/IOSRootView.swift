@@ -5,8 +5,8 @@ import SwiftUI
 
 /// Tab bar on iPhone, sidebar on iPad (with each video library listed under Library).
 struct IOSRootView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var plex: PlexSession
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
@@ -291,7 +291,7 @@ struct IOSRootView: View {
 }
 
 #Preview {
-    let session = IOSPlexSession()
+    let session = PlexSession()
     IOSRootView()
         .environmentObject(session)
         .environmentObject(session.browse)

@@ -101,6 +101,9 @@ final class PlayerRailView: UIView {
     private let subtitleLabel = UILabel()
     private let titleLabel = UILabel()
     private let toolRow = UIStackView()
+    /// Holds the tool row's room for the host's skip pill while the controls are up (#556).
+    /// The pill is the host's view, laid over this; the slot itself draws nothing.
+    let skipPillSlot = UIView()
     private let pillRow = UIStackView()
     /// Insights' sub-tabs, right-aligned on the pill row while its pane is open.
     private let insightsTabRow = UIStackView()
@@ -124,7 +127,9 @@ final class PlayerRailView: UIView {
         toolRow.axis = .horizontal
         toolRow.spacing = Metrics.toolGap
         toolRow.alignment = .center
-        [multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, filterButton, qualityButton].forEach {
+        skipPillSlot.isHidden = true
+        skipPillSlot.isUserInteractionEnabled = false
+        [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, filterButton, qualityButton].forEach {
             toolRow.addArrangedSubview($0)
         }
 
@@ -406,7 +411,7 @@ final class PlayerRailView: UIView {
     func setFocusLanding(_ button: UIView) { lastFocusedButton = button }
 
     /// The leftmost tool button on screen, where AVKit lands Up from the video.
-    var firstToolButton: UIView? { toolRow.arrangedSubviews.first { !$0.isHidden } }
+    var firstToolButton: UIView? { toolRow.arrangedSubviews.first { !$0.isHidden && $0 !== skipPillSlot } }
 
     /// Drop the remembered button so the next chrome appearance starts on the
     /// scrubber again. Called when controls-focus mode ends — "where you left

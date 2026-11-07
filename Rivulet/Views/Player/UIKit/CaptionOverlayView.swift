@@ -641,14 +641,14 @@ private final class CaptionBoxView: UIView {
         label.attributedText = text
         strokeLabel?.attributedText = stroked(text, pointSize: pointSize)
         layer.cornerRadius = (pointSize * style.box.cornerRadius).rounded(.down)
-        backgroundColor = scaled(style.windowColor).withAlphaComponent(style.windowOpacity)
+        backgroundColor = scaled(UIColor(cgColor: style.windowColor)).withAlphaComponent(style.windowOpacity)
         lineBackgrounds.forEach { $0.removeFromSuperview() }
         lineBackgrounds = []
     }
 
     /// Inset from the box's edge to the text, whole points as Apple's are.
     private var padding: (h: CGFloat, v: CGFloat) {
-        let edge = CaptionOverlayView.Metrics.edgeInset(for: style.font(ofSize: appliedPointSize), edge: style.edge)
+        let edge = CaptionOverlayView.Metrics.edgeInset(for: style.uiFont(ofSize: appliedPointSize), edge: style.edge)
         let vertical = appliedPointSize * style.box.vertical / 2 + edge
         return ((appliedPointSize * style.box.horizontal / 2 + edge).rounded(),
                 edge > 0 ? ceil(vertical) : vertical.rounded())
@@ -669,7 +669,7 @@ private final class CaptionBoxView: UIView {
             context: nil
         )
         // CoreText's line box takes whole points of ascent and descent; the slack sits under the text.
-        let font = style.font(ofSize: appliedPointSize)
+        let font = style.uiFont(ofSize: appliedPointSize)
         let lineBox = ceil(font.ascender) + ceil(-font.descender) - (font.ascender - font.descender)
         return CGSize(width: ceil(rect.width) + pad.h * 2,
                       height: (rect.height + lineBox).rounded() + pad.v * 2)
@@ -701,8 +701,8 @@ private final class CaptionBoxView: UIView {
         storage.addLayoutManager(manager)
         manager.addTextContainer(container)
 
-        let font = style.font(ofSize: appliedPointSize)
-        let color = scaled(style.backgroundColor).withAlphaComponent(style.backgroundOpacity)
+        let font = style.uiFont(ofSize: appliedPointSize)
+        let color = scaled(UIColor(cgColor: style.backgroundColor)).withAlphaComponent(style.backgroundOpacity)
         let string = text.string as NSString
         manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { rect, _, _, range, _ in
             var characters = manager.characterRange(forGlyphRange: range, actualGlyphRange: nil)
@@ -772,8 +772,8 @@ private final class CaptionBoxView: UIView {
     /// A gated-off or content-silent attribute renders the system value. The
     /// system foreground opacity applies either way.
     private func attributedText(pointSize: CGFloat) -> NSAttributedString {
-        let userColor = scaled(style.foreground).withAlphaComponent(style.foregroundOpacity)
-        let baseFont = style.font(ofSize: pointSize)
+        let userColor = scaled(UIColor(cgColor: style.foreground)).withAlphaComponent(style.foregroundOpacity)
+        let baseFont = style.uiFont(ofSize: pointSize)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
@@ -851,7 +851,7 @@ private final class CaptionBoxView: UIView {
            let named = UIFont(name: name, size: size) {
             font = named
         } else {
-            font = style.font(ofSize: size)
+            font = style.uiFont(ofSize: size)
         }
 
         if style.allowsContentFont {

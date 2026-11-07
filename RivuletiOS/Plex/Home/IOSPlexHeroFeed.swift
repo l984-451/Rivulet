@@ -8,9 +8,9 @@ import SwiftUI
 struct IOSPlexHeroFeed: View {
     let rows: [MediaHub]
     let heroItems: [MediaItem]
-    var banners: [IOSBrowseStore.FailedServer] = []
+    var banners: [BrowseStore.FailedServer] = []
     let refresh: () async -> Void
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true

@@ -11,7 +11,6 @@
 import Foundation
 import Combine
 import CryptoKit
-import UIKit
 
 @MainActor
 class LiveTVDataStore: ObservableObject {
@@ -328,7 +327,7 @@ class LiveTVDataStore: ObservableObject {
     /// for long stretches, so this is the most common way the grid goes stale.
     private func observeAppLifecycle() {
         NotificationCenter.default.addObserver(
-            forName: UIApplication.willEnterForegroundNotification,
+            forName: HostPlatform.willEnterForeground,
             object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
@@ -364,17 +363,26 @@ class LiveTVDataStore: ObservableObject {
             m3uURL: m3uURL,
             epgURL: epgURL,
             sourceId: sourceId,
-            displayName: name
+            displayName: uniqueName(name, replacing: sourceId)
         )
         providers[sourceId] = provider
         saveSources()
         await updateSourceInfo()
     }
 
+    /// A second source with a taken name becomes "IPTV 2", so the two stay apart in lists.
+    private func uniqueName(_ name: String, replacing id: String) -> String {
+        let taken = Set(providers.filter { $0.key != id }.map(\.value.displayName))
+        var candidate = name
+        var n = 2
+        while taken.contains(candidate) { candidate = "\(name) \(n)"; n += 1 }
+        return candidate
+    }
+
     /// Add an Xtream Codes source. Re-adding the same login replaces it.
     func addXtreamSource(account: XtreamAccount, name: String) async {
         let sourceId = Self.xtreamSourceId(for: account)
-        providers[sourceId] = IPTVProvider(xtream: account, sourceId: sourceId, displayName: name)
+        providers[sourceId] = IPTVProvider(xtream: account, sourceId: sourceId, displayName: uniqueName(name, replacing: sourceId))
         saveSources()
         await updateSourceInfo()
     }

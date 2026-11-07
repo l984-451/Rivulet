@@ -25,15 +25,15 @@ private enum IOSLiveWhatsOnFeed {
 /// What's On: the tvOS rows as Home-style rails of 16:9 cards.
 struct IOSLiveWhatsOnView<Header: View>: View {
     let onWatch: (UnifiedChannel) -> Void
-    let onDetails: (IOSLiveProgrammeSelection) -> Void
+    let onDetails: (LiveProgrammeSelection) -> Void
     @ViewBuilder let header: () -> Header
-    @EnvironmentObject private var recorder: IOSLiveRecorder
+    @EnvironmentObject private var recorder: LiveRecorder
     @ObservedObject private var store = LiveTVDataStore.shared
     @State private var shelves: [LiveShelf] = []
     @State private var now = Date()
 
     init(onWatch: @escaping (UnifiedChannel) -> Void,
-         onDetails: @escaping (IOSLiveProgrammeSelection) -> Void,
+         onDetails: @escaping (LiveProgrammeSelection) -> Void,
          @ViewBuilder header: @escaping () -> Header) {
         self.onWatch = onWatch
         self.onDetails = onDetails
@@ -91,12 +91,12 @@ struct IOSLiveWhatsOnView<Header: View>: View {
                     if item.kind == .channel {
                         onWatch(channel)
                     } else {
-                        onDetails(IOSLiveProgrammeSelection(channel: channel, program: item.program))
+                        onDetails(LiveProgrammeSelection(channel: channel, program: item.program))
                     }
                 } label: { tile }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    IOSLiveMenuContent(sections: IOSLiveMenu.sections(
+                    IOSLiveMenuContent(sections: LiveMenu.sections(
                         channel: channel, program: item.program, recorder: recorder,
                         watch: onWatch, details: onDetails
                     ))

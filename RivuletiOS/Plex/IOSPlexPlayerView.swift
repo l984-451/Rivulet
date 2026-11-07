@@ -9,7 +9,7 @@ import SwiftUI
 @MainActor
 final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     let player = AetherPlayer()
-    @Published private(set) var request: IOSPlexPlaybackRequest
+    @Published private(set) var request: PlexPlaybackRequest
     @Published private(set) var nextEpisode: PlexMetadata?
     @Published private(set) var upNextCountdown: Int?
     @Published private(set) var upNextDismissed = false
@@ -22,7 +22,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// The server's reason when it ended this play session (dashboard Stop, paused too long; #403).
     @Published private(set) var serverStopReason: String?
 
-    private let plex: any IOSPlayerBackend
+    private let plex: any PlayerBackend
     private var skippedMarkerIDs: Set<String> = []
     private var lastReportBucket = -1
     private var reportedStopped = false
@@ -47,7 +47,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var needsStartingTracks = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(request: IOSPlexPlaybackRequest, plex: any IOSPlayerBackend, queue: PlayQueue<PlexMetadata>? = nil) {
+    init(request: PlexPlaybackRequest, plex: any PlayerBackend, queue: PlayQueue<PlexMetadata>? = nil) {
         self.request = request
         self.plex = plex
         self.queue = queue
@@ -240,7 +240,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             thumbnailPartID = partID
             let still = await PlexThumbnailService.shared.getThumbnail(
                 partId: partID, time: time, serverURL: request.serverURL, authToken: request.token)
-            if let still { return still }
+            if let still { return UIImage(cgImage: still) }
         }
         guard !isTranscoding, let frame = await player.still(atSeconds: time, maxWidth: 320) else { return nil }
         return UIImage(cgImage: frame)

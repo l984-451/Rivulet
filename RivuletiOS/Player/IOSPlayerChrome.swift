@@ -103,6 +103,8 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     @AppStorage(AudioSync.key) private var audioDelayMs = 0
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var chromeVisible = true
+    /// The capsule its close button hid; it still shows with the controls (#556).
+    @State private var hiddenAction: String?
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubValue: Double?
     @State private var ripple: Ripple?
@@ -186,7 +188,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 ProgressView().controlSize(.large)
             }
 
-            if let contextualAction, failure == nil {
+            if let contextualAction, failure == nil, chromeVisible || hiddenAction != contextualAction.title {
                 contextualCapsule(contextualAction)
             }
 
@@ -214,6 +216,9 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         }
         .onChange(of: failure) { _, failure in
             if failure != nil { chromeVisible = true }
+        }
+        .onChange(of: contextualAction?.title) { _, title in
+            if title == nil { hiddenAction = nil }
         }
     }
 
@@ -576,6 +581,8 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                     HStack(spacing: 8) {
                         if let cancel = item.cancel {
                             glassButton("Cancel", systemImage: "xmark", action: cancel)
+                        } else if !chromeVisible {
+                            glassButton("Hide", systemImage: "xmark") { hiddenAction = item.title }
                         }
                         Button {
                             interact(item.action)

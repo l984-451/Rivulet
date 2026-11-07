@@ -46,7 +46,7 @@ class PlexAuthManager: ObservableObject {
     static let shared = PlexAuthManager()
 
     /// Handoffs to the platform's content store (tvOS `PlexDataStore`, iOS
-    /// `IOSPlexSession`), set by the host at launch. `onAuthenticated` is awaited
+    /// `PlexSession`), set by the host at launch. `onAuthenticated` is awaited
     /// so the sidebar has its library tabs on its first build.
     static var onAuthenticated: (@MainActor () async -> Void)?
     static var onSignedOut: (@MainActor () -> Void)?

@@ -3,13 +3,20 @@
 
 import SwiftUI
 import UIKit
+import Sentry
 
 @main
 struct RivuletiOSApp: App {
     @UIApplicationDelegateAdaptor(IOSAppDelegate.self) private var appDelegate
-    @StateObject private var plex: IOSPlexSession
+    @StateObject private var plex: PlexSession
 
     init() {
+        HostPlatform.installUIKit()
+        ClientHost.offline = IOSOfflineHost()
+        ClientHost.prefetchImage = { _ = await IOSArtworkCache.shared.image(for: $0) }
+        #if DEBUG
+        ClientHost.transformHome = { IOSScreenshotMode.isOn ? IOSScreenshotMode.demo($0) : $0 }
+        #endif
         // Order matters: identity and migration must land before anything
         // touches PlexAuthManager.shared (the session does) or builds a request.
         // The manager reads Keychain and UserDefaults in its init, and PlexAPI
@@ -30,7 +37,7 @@ struct RivuletiOSApp: App {
         MediaProviderRegistry.plexIncludesCollections = false
         // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
         MediaProviderRegistry.shared.populateFromCurrentAuth()
-        let session = IOSPlexSession()
+        let session = PlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)
         // Start the path monitor now; its first reading arrives after a delay.
@@ -59,7 +66,10 @@ struct RivuletiOSApp: App {
         Task.detached(priority: .utility) {
             guard !Secrets.sentryDSN.isEmpty else { return }
             try? await Task.sleep(for: .seconds(3))
-            await SentryStartup.start(platform: isMac ? .macOS : .iOS)
+            await SentryStartup.start(platform: isMac ? .macOS : .iOS) { options in
+                // Partial stalls were a third of all hang events and never led to a fix.
+                options.enableReportNonFullyBlockingAppHangs = false
+            }
         }
         #endif
     }

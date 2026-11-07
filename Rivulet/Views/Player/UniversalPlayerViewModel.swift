@@ -200,15 +200,21 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var pendingEngineThumbnailTime: TimeInterval?
 
     // MARK: - Skip Marker State
-    @Published private(set) var activeMarker: PlexMarker?
+    @Published private(set) var activeMarker: PlexMarker? {
+        didSet { if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
+    }
     @Published private(set) var showSkipButton = false
+    /// Menu hid the pill for this marker or this Up Next fold; it still shows in the controls (#556).
+    @Published private(set) var skipPillDismissed = false
     private var hasSkippedIntro = false
     private var skippedCreditsIds: Set<Int> = []  // Track skipped credits by ID (can have multiple)
     private var skippedCommercialIds: Set<Int> = []  // Track skipped commercials by ID
     private var skippedRecapIds: Set<Int> = []  // Track skipped recaps by ID (IntroDB backup)
     private var hasTriggeredPostVideo = false
     /// Up Next was closed with a next episode waiting: the skip pill stands in for it, labelled "Up Next".
-    @Published private(set) var upNextCollapsed = false
+    @Published private(set) var upNextCollapsed = false {
+        didSet { if upNextCollapsed != oldValue { skipPillDismissed = false } }
+    }
 
     // MARK: - Auto-Skip Countdown State
     /// Current countdown value (5...4...3...2...1), 0 means no countdown active.
@@ -3041,7 +3047,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         if currentScrubThumbnailSource == .server, let partId = metadata.Media?.first?.Part?.first?.id,
            let image = await PlexThumbnailService.shared.getThumbnail(
                partId: partId, time: time, serverURL: serverURL, authToken: authToken) {
-            return image
+            return UIImage(cgImage: image)
         }
         guard let frame = await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640) else { return nil }
         return UIImage(cgImage: frame)
@@ -4407,7 +4413,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 self.loadEngineThumbnail(for: time)
                 return
             }
-            self.scrubThumbnail = thumbnail
+            self.scrubThumbnail = thumbnail.map(UIImage.init(cgImage:))
         }
     }
 
@@ -5242,6 +5248,11 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Cancel the auto-skip countdown (user pressed Menu during the countdown).
     /// Leaves the manual pill up but declines auto-skip for the current marker.
+    /// Menu on the floating pill: hide it until the next marker; the controls still offer it.
+    func dismissSkipPill() {
+        skipPillDismissed = true
+    }
+
     func cancelSkipCountdown() {
         guard skipCountdownTimer != nil || skipCountdownSeconds > 0 else { return }
 
@@ -5439,6 +5450,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// focus and `PlayerContainerViewController` routes it to the pill.
     var skipPillOwnsFocus: Bool {
         showsSkipPill
+            && !skipPillDismissed
             && !showControls
             && !isScrubbing
             && postVideoState == .hidden

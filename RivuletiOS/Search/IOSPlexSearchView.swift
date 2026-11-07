@@ -27,7 +27,7 @@ struct IOSPlexSearchView: View {
         }
     }
 
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @AppStorage("iosRecentSearches") private var recentsRaw = ""
     @State private var query = ""
     @State private var scope = Scope.all
@@ -165,7 +165,7 @@ struct IOSPlexSearchView: View {
 
 /// A search result like the TV app's: artwork, title, then kind and year or episode.
 struct IOSPlexSearchRow: View {
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     let item: MediaItem
 
     private var isEpisode: Bool { item.kind == .episode }

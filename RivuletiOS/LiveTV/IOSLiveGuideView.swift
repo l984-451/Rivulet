@@ -10,7 +10,7 @@ import UIKit
 struct IOSLiveGuideView: UIViewRepresentable {
     struct Actions {
         let play: (UnifiedChannel) -> Void
-        let details: (IOSLiveProgrammeSelection) -> Void
+        let details: (LiveProgrammeSelection) -> Void
         let menu: (UnifiedChannel, UnifiedProgram?) -> UIMenu
     }
 
@@ -282,7 +282,7 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
         if program?.isCurrentlyAiring ?? true {
             guide.actions.play(channel)
         } else {
-            guide.actions.details(IOSLiveProgrammeSelection(channel: channel, program: program))
+            guide.actions.details(LiveProgrammeSelection(channel: channel, program: program))
         }
     }
 

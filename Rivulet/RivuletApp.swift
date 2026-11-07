@@ -17,6 +17,7 @@ import Sentry
 @main
 struct RivuletApp: App {
     init() {
+        HostPlatform.installUIKit()
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
         // Other servers' library settings belong to their own users, so they load with the sign-in.
@@ -150,7 +151,10 @@ struct RivuletApp: App {
     /// start call is hoisted — the 3s deferral that keeps launch logs clean stays.
     @MainActor
     private static func startSentry() {
-        SentryStartup.start(platform: .tvOS)
+        SentryStartup.start(platform: .tvOS) { options in
+            // Partial stalls were a third of all hang events and never led to a fix.
+            options.enableReportNonFullyBlockingAppHangs = false
+        }
 
         // Seed the App Hang triage scope so the very first hang event after
         // launch already carries a screen tag. Updated thereafter via

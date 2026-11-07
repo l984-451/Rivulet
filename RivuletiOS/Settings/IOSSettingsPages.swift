@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Account > Library.
 struct IOSLibrarySettingsView: View {
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     /// The tvOS sidebar's key, so sync and a shared profile agree.
     @AppStorage("showFavoritesTab") private var showFavorites = false

@@ -1,0 +1,70 @@
+name: Mac Build
+
+# Compiles the "Rivulet Mac" scheme: without it, a RivuletCore change that
+# breaks only the Mac target stays invisible until someone builds it locally.
+#
+# Build-check only. macOS runners are free on public repos.
+
+on:
+  pull_request:
+    paths:
+      - 'RivuletCore/**'
+      - 'RivuletMac/**'
+      - 'Rivulet.xcodeproj/**'
+      - 'codemagic.yaml'
+      - '.github/workflows/build-mac.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'RivuletCore/**'
+      - 'RivuletMac/**'
+      - 'Rivulet.xcodeproj/**'
+      - 'codemagic.yaml'
+      - '.github/workflows/build-mac.yml'
+
+concurrency:
+  group: build-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same Xcode as the TestFlight archive: codemagic.yaml's `xcode:` pin.
+      # runs-on must name the image that carries it (xcode-27 for 27.x).
+      - name: Select Codemagic's Xcode
+        run: |
+          VERSION="$(awk '/^ *xcode:/ {print $2; exit}' codemagic.yaml)"
+          sudo xcode-select -s "/Applications/Xcode_$VERSION.app/Contents/Developer"
+          xcodebuild -version
+
+      # Both app targets read Secrets.swift; placeholders compile fine.
+      - name: Generate placeholder Secrets.swift
+        run: cp RivuletCore/Config/Secrets.swift.template RivuletCore/Config/Secrets.swift
+
+      # AetherEngine pulls FFmpeg as binary artifacts — the checkout is the
+      # slow part, so cache it keyed on the pin.
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Rivulet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build Rivulet Mac (Release, so #if !DEBUG code compiles)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Rivulet.xcodeproj \
+            -scheme "Rivulet Mac" \
+            -configuration Release \
+            -destination 'platform=macOS,arch=arm64' \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            build

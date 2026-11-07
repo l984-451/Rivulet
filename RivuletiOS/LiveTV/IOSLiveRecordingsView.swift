@@ -6,7 +6,7 @@ import SwiftUI
 /// Upcoming recordings and the rules behind them, across every source that records.
 struct IOSLiveRecordingsView: View {
     @ObservedObject private var store = LiveTVDataStore.shared
-    @StateObject private var recorder = IOSLiveRecorder()
+    @StateObject private var recorder = LiveRecorder()
     @State private var rules: [LiveTVRecordingRule] = []
     @State private var isLoading = true
 

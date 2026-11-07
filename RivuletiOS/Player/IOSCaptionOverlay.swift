@@ -54,7 +54,7 @@ struct IOSAetherSubtitleOverlay: View {
             let pointSize = Metrics.pointSize(
                 videoHeight: captionSizingHeight(in: proxy.size),
                 reported: style.fontScale,
-                font: style.font(ofSize: 100)
+                font: style.uiFont(ofSize: 100)
             )
             let picture = pictureRect(in: proxy.size)
             let osdBoundary = captionMaxY(in: picture)
@@ -149,7 +149,7 @@ struct IOSAetherSubtitleOverlay: View {
             .background(
                 style.edge == .uniform
                     ? Color.clear
-                    : Color(uiColor: style.boxColor).opacity(style.boxOpacity),
+                    : Color(cgColor: style.boxColor).opacity(style.boxOpacity),
                 in: RoundedRectangle(cornerRadius: pointSize * 0.25)
             )
             .modifier(IOSCaptionEdgeModifier(style: style.edge, pointSize: pointSize))
@@ -159,11 +159,11 @@ struct IOSAetherSubtitleOverlay: View {
         _ body: AetherPlayer.SubtitleCue.Body,
         pointSize: CGFloat
     ) -> Text {
-        let userColor = Color(uiColor: style.foreground).opacity(style.foregroundOpacity)
+        let userColor = Color(cgColor: style.foreground).opacity(style.foregroundOpacity)
         switch body {
         case .text(let string):
             return Text(string)
-                .font(Font(style.font(ofSize: pointSize)))
+                .font(Font(style.uiFont(ofSize: pointSize)))
                 .foregroundColor(userColor)
         case .styledText(let runs):
             return runs.reduce(Text("")) { result, run in
@@ -206,7 +206,7 @@ struct IOSAetherSubtitleOverlay: View {
            let named = UIFont(name: name, size: size) {
             font = named
         } else {
-            font = style.font(ofSize: size)
+            font = style.uiFont(ofSize: size)
         }
 
         guard style.allowsContentFont else { return font }

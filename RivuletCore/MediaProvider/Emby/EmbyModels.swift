@@ -75,6 +75,15 @@ nonisolated struct EmbyQueryResult: Decodable, Sendable {
     let totalRecordCount: Int?
 }
 
+/// `Genres` and `Years` rows: a genre has an `Id`; a year is `{"Name":"1991"}` alone.
+nonisolated struct EmbyNamedResult: Decodable, Sendable {
+    struct Row: Decodable, Sendable {
+        let id: EmbyID?
+        let name: String?
+    }
+    let items: [Row]?
+}
+
 /// `Items/Prefixes` rows: `{"Name":"#"}` with no counts.
 nonisolated struct EmbyPrefix: Decodable, Sendable {
     let name: String?

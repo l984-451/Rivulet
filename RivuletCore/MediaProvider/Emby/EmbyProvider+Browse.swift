@@ -66,15 +66,44 @@ extension EmbyProvider {
     /// A movie library's `ParentId` read returns `Folder` wrappers, so every listing is
     /// recursive with explicit types. `GroupItemsIntoCollections` is never sent: it injects box sets.
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
-        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+        try await items(in: library, sort: sort, filter: .none, page: page)
     }
 
-    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
-        try await listing(libraryQuery(library, sort: sort, unwatchedOnly: unwatchedOnly), page: page)
+    func items(in library: MediaLibrary, sort: SortOption, filter: LibraryFilter, page: Page) async throws -> PagedResult<MediaItem> {
+        try await listing(libraryQuery(library, sort: sort, filter: filter), page: page)
+    }
+
+    /// Genres by item id (`GenreIds`) and the years present (`Years`, rows with a name only), grouped
+    /// into decades. Emby has no `Items/Filters` (404 on 4.10).
+    func filterOptions(in library: MediaLibrary) async throws -> LibraryFilterOptions {
+        let scope = [userQuery,
+                     URLQueryItem(name: "ParentId", value: library.id),
+                     URLQueryItem(name: "IncludeItemTypes", value: Self.itemTypes(for: library.kind)),
+                     URLQueryItem(name: "Recursive", value: "true")]
+        async let genres: EmbyNamedResult = client.get("Genres", scope)
+        async let years: EmbyNamedResult = client.get("Years", scope)
+        return try await LibraryFilterOptions(
+            genres: (genres.items ?? []).compactMap { row in
+                guard let id = row.id?.value, let name = row.name, !name.isEmpty else { return nil }
+                return LibraryGenre(id: id, name: name)
+            },
+            decades: LibraryFilterOptions.decades(fromYears: (years.items ?? []).compactMap { $0.name.flatMap(Int.init) })
+        )
+    }
+
+    /// The `Items` parameters for a filter: `Filters=IsUnplayed`, `GenreIds`, and a `Years` list for the decade.
+    nonisolated static func filterQuery(_ filter: LibraryFilter) -> [URLQueryItem] {
+        var query: [URLQueryItem] = []
+        if filter.unwatchedOnly { query.append(URLQueryItem(name: "Filters", value: "IsUnplayed")) }
+        if let genre = filter.genre { query.append(URLQueryItem(name: "GenreIds", value: genre.id)) }
+        if filter.decade != nil {
+            query.append(URLQueryItem(name: "Years", value: filter.decadeYears.map(String.init).joined(separator: ",")))
+        }
+        return query
     }
 
     /// The query that defines a library listing, without its page.
-    private func libraryQuery(_ library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool = false) -> [URLQueryItem] {
+    private func libraryQuery(_ library: MediaLibrary, sort: SortOption, filter: LibraryFilter = .none) -> [URLQueryItem] {
         let (sortBy, order) = Self.sortParameters(sort)
         var query = [
             URLQueryItem(name: "ParentId", value: library.id),
@@ -83,8 +112,7 @@ extension EmbyProvider {
             URLQueryItem(name: "SortBy", value: sortBy),
             URLQueryItem(name: "SortOrder", value: order)
         ]
-        if unwatchedOnly { query.append(URLQueryItem(name: "Filters", value: "IsUnplayed")) }
-        return query
+        return query + Self.filterQuery(filter)
     }
 
     func shuffledItems(in library: MediaLibrary, unwatchedOnly: Bool, limit: Int) async throws -> [MediaItem] {

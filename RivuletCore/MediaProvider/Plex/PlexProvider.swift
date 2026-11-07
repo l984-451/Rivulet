@@ -76,13 +76,13 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
-        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+        try await items(in: library, sort: sort, filter: .none, page: page)
     }
 
-    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
+    func items(in library: MediaLibrary, sort: SortOption, filter: LibraryFilter, page: Page) async throws -> PagedResult<MediaItem> {
         try await plexCall {
             let result = try await libraryMetadataPage(
-                sectionID: library.id, sort: plexSortString(for: sort), unwatchedOnly: unwatchedOnly,
+                sectionID: library.id, sort: plexSortString(for: sort), filter: filter,
                 start: page.offset, size: page.limit, followCollections: includesCollections
             )
             let mapped = result.items.map {
@@ -98,13 +98,27 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// One page of a section's raw items; `sort` is a Plex sort key. iOS's library grid reads these too.
     /// `followCollections` applies the library's Collections setting, which only a title sort honors.
     func libraryMetadataPage(
-        sectionID: String, sort: String?, unwatchedOnly: Bool, start: Int, size: Int, followCollections: Bool
+        sectionID: String, sort: String?, filter: LibraryFilter, start: Int, size: Int, followCollections: Bool
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         try await networkManager.getLibraryItemsWithTotal(
             serverURL: serverURL, authToken: authToken, sectionId: sectionID, start: start, size: size, sort: sort,
-            followCollectionMode: followCollections,
-            filters: unwatchedOnly ? [URLQueryItem(name: "unwatched", value: "1")] : []
+            followCollectionMode: followCollections, filters: Self.filterQuery(filter)
         )
+    }
+
+    /// `/all`'s `unwatched`, `genre` (tag id) and `decade` (first year) parameters.
+    nonisolated static func filterQuery(_ filter: LibraryFilter) -> [URLQueryItem] {
+        var query: [URLQueryItem] = []
+        if filter.unwatchedOnly { query.append(URLQueryItem(name: "unwatched", value: "1")) }
+        if let genre = filter.genre { query.append(URLQueryItem(name: "genre", value: genre.id)) }
+        if let decade = filter.decade { query.append(URLQueryItem(name: "decade", value: "\(decade)")) }
+        return query
+    }
+
+    func filterOptions(in library: MediaLibrary) async throws -> LibraryFilterOptions {
+        try await plexCall {
+            try await networkManager.getLibraryFilterOptions(serverURL: serverURL, authToken: authToken, sectionId: library.id)
+        }
     }
 
     /// `/all` sorted `random`; `libraryItemsURL` sends Start with Size, without which Plex ignores Size.

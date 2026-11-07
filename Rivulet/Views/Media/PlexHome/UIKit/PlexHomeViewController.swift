@@ -469,6 +469,7 @@ final class PlexHomeViewController: UIViewController {
         // Library mode restores the persisted per-library sort; Home never reads gridSort.
         if case .library(let key, _) = mode {
             self.gridSort = LibrarySettingsManager.shared.getSortOption(for: key)
+            self.libraryFilter = Self.sessionFilters[key] ?? .none
         } else {
             self.gridSort = .addedAtDesc
         }
@@ -639,6 +640,11 @@ final class PlexHomeViewController: UIViewController {
     /// The Collections view. While on, `gridItems` is `libraryCollections`
     /// in server order.
     private var gridShowsCollections = false
+    /// Genre, Decade and Unwatched on the Titles grid of a video library, kept per library for the
+    /// session (never persisted).
+    private var libraryFilter = LibraryFilter.none
+    private var filterOptions = LibraryFilterOptions()
+    private static var sessionFilters: [String: LibraryFilter] = [:]
     private let alphabetBar = LibraryAlphabetBarView()
     private let letterIndicator = LibraryLetterIndicatorView()
     /// Desired bar state; the fade's completion reads it so an interrupted
@@ -859,6 +865,7 @@ final class PlexHomeViewController: UIViewController {
             }
             loadGridPage(containing: 0)
             loadAlphabetIndex()
+            loadFilterOptions()
         case .discover:
             // Discover page: the 8 TMDB curated sections, For You and the hero.
             Task { @MainActor in
@@ -1495,8 +1502,9 @@ final class PlexHomeViewController: UIViewController {
         if let library = providerLibrary {
             guard let provider = MediaProviderRegistry.shared.provider(for: library.providerID) else { return }
             let sort = Self.providerSort(gridSort)
+            let filter = libraryFilter
             fetchPage = { start in
-                let page = try await provider.items(in: library, sort: sort, page: Page(offset: start, limit: pageSize))
+                let page = try await provider.items(in: library, sort: sort, filter: filter, page: Page(offset: start, limit: pageSize))
                 return (page.items, page.total)
             }
         } else if case .playlists(let providerID) = mode {
@@ -1542,6 +1550,7 @@ final class PlexHomeViewController: UIViewController {
             let map = mediaItemMapper()
             if case .library(let key, _) = mode {
                 let sort = gridSort.apiParameter
+                let filters = PlexProvider.filterQuery(libraryFilter)
                 fetchPage = { start in
                     let result = try await network.getLibraryItemsWithTotal(
                         serverURL: serverURL,
@@ -1550,7 +1559,8 @@ final class PlexHomeViewController: UIViewController {
                         start: start,
                         size: pageSize,
                         sort: sort,
-                        followCollectionMode: true
+                        followCollectionMode: true,
+                        filters: filters
                     )
                     return (result.items.map(map), result.totalSize)
                 }
@@ -1683,7 +1693,7 @@ final class PlexHomeViewController: UIViewController {
         alphabetBar.setLetters([])
         alphabetBar.isHidden = true
         guard case .library(let key, _) = mode,
-              !gridShowsCollections,
+              !gridShowsCollections, !libraryFilter.isActive,   // letter counts ignore filters
               gridSort == .titleAsc || gridSort == .titleDesc else { return }
         let gen = gridGeneration
         let descending = gridSort == .titleDesc
@@ -1874,6 +1884,54 @@ final class PlexHomeViewController: UIViewController {
         refreshSortHeaderCount()
         loadGridPage(containing: 0)
         loadAlphabetIndex()
+    }
+
+    // MARK: - Library grid filter
+
+    /// Movie and TV libraries filter their Titles grid; music, mixed and the rest do not.
+    private var offersFilters: Bool {
+        guard case .library = mode, !gridShowsCollections else { return false }
+        if let providerLibrary { return providerLibrary.kind == .movies || providerLibrary.kind == .shows }
+        return currentLibraryType == "movie" || currentLibraryType == "show"
+    }
+
+    /// The View menu's filter group, nil where the library has none.
+    private func filterMenu() -> UIMenu? {
+        guard offersFilters else { return nil }
+        return LibraryFilterMenu.menu(libraryFilter, options: filterOptions) { [weak self] in self?.applyFilter($0) }
+    }
+
+    /// Reloads page 1 under the new filter, the way a sort change does; the header cell is
+    /// re-vended in place, so focus stays on the View button.
+    private func applyFilter(_ filter: LibraryFilter) {
+        guard case .library(let key, _) = mode, filter != libraryFilter else { return }
+        libraryFilter = filter
+        Self.sessionFilters[key] = filter.isActive ? filter : nil
+        resetGrid()
+        pageZero = .loading
+        applySnapshot(animated: false)
+        refreshSortHeaderCount()
+        loadGridPage(containing: 0)
+        loadAlphabetIndex()
+        updateHomeState()
+    }
+
+    /// Fetches the genres and decades once per page; the menu shows the Unwatched toggle until they land.
+    private func loadFilterOptions() {
+        guard case .library(let key, _) = mode else { return }
+        let fetch: () async throws -> LibraryFilterOptions
+        if let library = providerLibrary {
+            guard let provider = MediaProviderRegistry.shared.provider(for: library.providerID) else { return }
+            fetch = { try await provider.filterOptions(in: library) }
+        } else {
+            guard let serverURL = authManager.selectedServerURL, let token = authManager.selectedServerToken else { return }
+            fetch = { try await PlexNetworkManager.shared.getLibraryFilterOptions(serverURL: serverURL, authToken: token, sectionId: key) }
+        }
+        Task { @MainActor [weak self] in
+            guard let options = try? await fetch(), let self else { return }
+            self.filterOptions = options
+            self.refreshSortHeaderCount()
+        }
     }
 
     /// Empties the grid for a new source: a sort change or the Titles /
@@ -2564,7 +2622,8 @@ final class PlexHomeViewController: UIViewController {
                 // as a Plex library does.
                 let failedWithRows = state.error != nil && !providerLibraryRows.isEmpty
                 hubsError = failedWithRows ? nil : state.error
-                hubsEmpty = gridItems.isEmpty && !failedWithRows
+                // An active filter keeps the page (and its header, the way to clear it) up when nothing matches.
+                hubsEmpty = gridItems.isEmpty && !failedWithRows && !libraryFilter.isActive
             } else {
                 isLoadingHubs = isLoadingLibraryHubs
                 hubsError = libraryHubsError
@@ -2572,7 +2631,7 @@ final class PlexHomeViewController: UIViewController {
                 // "empty" means no projected rows AND no hubs AND no grid items.
                 hubsEmpty = (dataStore.libraryItemsByKey[key] ?? []).isEmpty
                     && (dataStore.libraryHubs[key] ?? []).isEmpty
-                    && gridItems.isEmpty
+                    && gridItems.isEmpty && !libraryFilter.isActive
             }
         case .discover:
             isLoadingHubs = isLoadingDiscover
@@ -3239,7 +3298,7 @@ final class PlexHomeViewController: UIViewController {
             // a changed list calls refreshSortHeaderCount().
             let modes: [LibraryViewMode] = [.titles] + (libraryCollections.isEmpty ? [] : [.collections])
                 + (onSelectViewMode == nil ? [] : [.folders])
-            let viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles) {
+            let viewMenu = LibraryViewMode.menu(modes, current: gridShowsCollections ? .collections : .titles, filters: filterMenu()) {
                 [weak self] mode in
                 guard let self else { return }
                 if let onSelectViewMode { onSelectViewMode(mode) } else { setGridShowsCollections(mode == .collections) }
@@ -3251,6 +3310,7 @@ final class PlexHomeViewController: UIViewController {
                 sortMenu: sortMenu(),
                 view: gridShowsCollections ? .collections : .titles,
                 viewMenu: viewMenu,
+                filterSummary: offersFilters ? LibraryFilterMenu.summary(libraryFilter) : nil,
                 onShuffle: shuffleLibrary.map { library in { [weak self] in
                     guard let self else { return }
                     ShufflePlayback.shuffle(library, from: self)

@@ -53,6 +53,11 @@ nonisolated struct JFMediaSegments: Decodable, Sendable {
     let items: [JFMediaSegment]?
 }
 
+/// `Items/Filters`: the values a library listing can be narrowed by. Only the years are read.
+nonisolated struct JFFilters: Decodable, Sendable {
+    let years: [Int]?
+}
+
 nonisolated struct JFQueryResult: Decodable, Sendable {
     let items: [JFItem]?
     let totalRecordCount: Int?

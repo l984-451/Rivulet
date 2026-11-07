@@ -48,13 +48,62 @@ enum LibraryViewMode: String {
     }
 
     /// The View button's menu; nil when there is nothing to switch to.
-    static func menu(_ modes: [LibraryViewMode], current: LibraryViewMode,
+    /// `filters` (Titles of a video library) is a second group under a divider; with it the menu
+    /// exists even when there is only one mode.
+    static func menu(_ modes: [LibraryViewMode], current: LibraryViewMode, filters: UIMenu? = nil,
                      select: @escaping (LibraryViewMode) -> Void) -> UIMenu? {
-        guard modes.count > 1 else { return nil }
-        return UIMenu(children: modes.map { mode in
+        guard modes.count > 1 || filters != nil else { return nil }
+        let modeActions = modes.count > 1 ? modes.map { mode in
             UIAction(title: mode.title, image: UIImage(systemName: mode.symbol),
                      state: mode == current ? .on : .off) { _ in select(mode) }
+        } : []
+        guard let filters else { return UIMenu(children: modeActions) }
+        return UIMenu(children: modeActions.isEmpty ? [filters] : [UIMenu(options: .displayInline, children: modeActions), filters])
+    }
+}
+
+// MARK: - LibraryFilterMenu
+
+/// The View menu's filter group: Genre and Decade submenus (All first) and an Unwatched Only toggle.
+enum LibraryFilterMenu {
+    /// The View button's label while a filter is on, e.g. "Action · 1990s · Unwatched"; nil when none is.
+    static func summary(_ filter: LibraryFilter) -> String? {
+        var parts: [String] = []
+        if let genre = filter.genre { parts.append(genre.name) }
+        if let decade = filter.decade { parts.append(LibraryFilter.decadeTitle(decade)) }
+        if filter.unwatchedOnly { parts.append(String(localized: "Unwatched")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func menu(_ filter: LibraryFilter, options: LibraryFilterOptions,
+                     change: @escaping (LibraryFilter) -> Void) -> UIMenu {
+        var children: [UIMenuElement] = []
+        if !options.genres.isEmpty {
+            let all = UIAction(title: String(localized: "All"), state: filter.genre == nil ? .on : .off) { _ in
+                var next = filter; next.genre = nil; change(next)
+            }
+            let genres = options.genres.map { genre in
+                UIAction(title: genre.name, state: filter.genre == genre ? .on : .off) { _ in
+                    var next = filter; next.genre = genre; change(next)
+                }
+            }
+            children.append(UIMenu(title: String(localized: "Genre"), children: [all] + genres))
+        }
+        if !options.decades.isEmpty {
+            let all = UIAction(title: String(localized: "All"), state: filter.decade == nil ? .on : .off) { _ in
+                var next = filter; next.decade = nil; change(next)
+            }
+            let decades = options.decades.map { decade in
+                UIAction(title: LibraryFilter.decadeTitle(decade), state: filter.decade == decade ? .on : .off) { _ in
+                    var next = filter; next.decade = decade; change(next)
+                }
+            }
+            children.append(UIMenu(title: String(localized: "Decade"), children: [all] + decades))
+        }
+        children.append(UIAction(title: String(localized: "Unwatched Only"), state: filter.unwatchedOnly ? .on : .off) { _ in
+            var next = filter; next.unwatchedOnly.toggle(); change(next)
         })
+        return UIMenu(options: .displayInline, children: children)
     }
 }
 
@@ -147,8 +196,10 @@ final class SortButton: UIButton {
     // MARK: - Configure
 
     /// The View button: shows `current` and opens `menu`; hidden without one.
-    func configure(view current: LibraryViewMode, menu: UIMenu?) {
-        configure(sortName: current.title, symbol: current.symbol)
+    /// `filterSummary` replaces the mode's name while a library filter is on.
+    func configure(view current: LibraryViewMode, menu: UIMenu?, filterSummary: String? = nil) {
+        configure(sortName: filterSummary ?? current.title,
+                  symbol: filterSummary == nil ? current.symbol : "line.3.horizontal.decrease")
         self.menu = menu
         showsMenuAsPrimaryAction = true
         isHidden = menu == nil
@@ -309,7 +360,8 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     /// In Collections the count reads "N collections" and the sort and shuffle
     /// buttons hide, which also takes them out of the focus graph.
     func configure(title: String, count: Int, sortName: String, sortMenu: UIMenu,
-                   view: LibraryViewMode, viewMenu: UIMenu?, onShuffle: (() -> Void)? = nil) {
+                   view: LibraryViewMode, viewMenu: UIMenu?, filterSummary: String? = nil,
+                   onShuffle: (() -> Void)? = nil) {
         titleLabel.text = title
         countLabel.text = view == .collections ? String(localized: "\(count) collections") : String(localized: "\(count) items")
         sortButton.configure(sortName: sortName)
@@ -319,7 +371,7 @@ final class MediaLibrarySortControl: UICollectionViewCell {
         self.onShuffle = onShuffle
         shuffleButton.isHidden = sortButton.isHidden || onShuffle == nil
         shuffleClearsTitle.isActive = !shuffleButton.isHidden
-        viewButton.configure(view: view, menu: viewMenu)
+        viewButton.configure(view: view, menu: viewMenu, filterSummary: filterSummary)
         // Deactivate before activate, so the two are never active together.
         let beside = !viewButton.isHidden
         NSLayoutConstraint.deactivate([beside ? sortAtEdge : sortBesideView])

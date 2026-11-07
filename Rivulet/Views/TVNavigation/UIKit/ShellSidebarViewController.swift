@@ -736,7 +736,10 @@ final class ShellSidebarViewController: UIViewController {
     }
 
     /// Left and Right between the avatar and the pill are focus moves, not a request to close.
+    /// The engine usually moves focus before the press or swipe reaches us, so a gesture
+    /// that already moved focus counts too.
     private func movesWithinProfileSlot(_ direction: DirectionalInputBinding.Direction) -> Bool {
+        if lastFocusMoveGesture == MenuPressInterceptor.remoteGestures.count { return true }
         guard Self.hasPill(sections), let focused = TileLongPress.focusedCell(in: collectionView), focused.section == 0
         else { return false }
         switch direction {

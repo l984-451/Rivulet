@@ -328,6 +328,18 @@ final class BrowseStore: ObservableObject {
         await watchStateDidChange()
     }
 
+    /// Offered on a Continue Watching card whose server can drop it.
+    func canRemoveFromContinueWatching(_ item: MediaItem) -> Bool {
+        continueWatching.contains { $0.ref == item.ref } && registry.provider(for: item.ref.providerID)?.canRemoveFromContinueWatching(item) == true
+    }
+
+    /// Drops the card; a merged card's other copies go with it, or the row brings it back.
+    func removeFromContinueWatching(_ item: MediaItem) async throws {
+        try await provider(for: item.ref).removeFromContinueWatching(item)
+        for copy in cwCopies[item.ref] ?? [] { try? await registry.provider(for: copy.ref.providerID)?.removeFromContinueWatching(copy) }
+        await watchStateDidChange()
+    }
+
     func refreshMetadata(_ item: MediaItem) async throws {
         try await provider(for: item.ref).refreshMetadata(item.ref)
         await watchStateDidChange()

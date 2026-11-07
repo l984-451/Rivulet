@@ -16,7 +16,7 @@ struct MacRootView: View {
     @State private var paths: [MacSidebarItem: [MacRoute]] = [:]
     /// Pages popped by Back or the back button, for Forward. A new push clears them.
     @State private var forwardPaths: [MacSidebarItem: [MacRoute]] = [:]
-    @SceneStorage("macSelectedRow") private var storedRow = "home"
+    @AppStorage("macSelectedRow") private var storedRow = "home"
     @State private var restoredRow = false
     @State private var pendingLink: RivuletLink?
     @State private var showingAccount = false
@@ -97,6 +97,7 @@ struct MacRootView: View {
         .onChange(of: browse.hiddenSidebarLibraries) {
             if case .library(let library) = selection, !browse.isSidebarLibraryShown(library) { selection = .home }
         }
+        .onChange(of: browse.isLoadingOtherServers) { restoreRow() }
         .onChange(of: browse.libraries, initial: true) { _, libraries in
             restoreRow()
             if case .library(let library) = selection, !libraries.isEmpty, !browse.isLoadingOtherServers,

@@ -19,6 +19,7 @@ struct MacActions {
     /// Pushes the item's detail page.
     var open: (MediaItem) -> Void = { _ in }
     var setWatched: (MediaItem, Bool) -> Void = { _, _ in }
+    var removeFromContinueWatching: (MediaItem) -> Void = { _ in }
     var setWatchlisted: (MediaItem, Bool) -> Void = { _, _ in }
     var setFavorite: (MediaItem, Bool) -> Void = { _, _ in }
     /// A trailer or extra from a title's page.
@@ -83,6 +84,9 @@ private struct MacActionHost: ViewModifier {
                 open: { openRoute(.detail($0)) },
                 setWatched: { item, watched in
                     run(String(localized: "Couldn't Update")) { try await browse.setWatched(watched, for: item) }
+                },
+                removeFromContinueWatching: { item in
+                    run(String(localized: "Couldn't Update")) { try await browse.removeFromContinueWatching(item) }
                 },
                 setWatchlisted: { item, on in
                     run(String(localized: "Couldn't Update Watchlist")) { try await browse.setWatchlisted(on, item: item) }
@@ -216,6 +220,9 @@ struct MacItemMenu: View {
                 item.countsAsWatched ? "Mark as Unwatched" : "Mark as Watched",
                 systemImage: item.countsAsWatched ? "circle" : "checkmark.circle"
             ) { actions.setWatched(item, !item.countsAsWatched) }
+            if browse.canRemoveFromContinueWatching(item) {
+                Button("Remove from Continue Watching", systemImage: "xmark.circle") { actions.removeFromContinueWatching(item) }
+            }
             if showsWatchlist, WatchlistMembership.canAnswer(item), browse.supportsWatchlist(item) {
                 let onList = browse.isOnWatchlist(item)
                 let standsForShow = item.kind == .episode || item.kind == .season

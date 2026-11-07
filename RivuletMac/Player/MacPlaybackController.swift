@@ -360,9 +360,11 @@ private struct MacPlaybackHost: ViewModifier {
                             MacLivePlayerView(session: live, player: live.player, controller: controller)
                         }
                     }
+                    .ignoresSafeArea()
                     .transition(.opacity)
                 }
             }
+            .toolbarVisibility(controller.isPresented && controller.session != nil ? .hidden : .automatic, for: .windowToolbar)
             .animation(.easeInOut(duration: 0.2), value: controller.isPresented)
             .alert(
                 "Couldn't Play",

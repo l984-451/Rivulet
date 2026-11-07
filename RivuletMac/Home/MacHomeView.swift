@@ -28,7 +28,6 @@ struct MacHomeView: View {
             }
         }
         .navigationTitle("Home")
-        .toolbar { ToolbarItem(placement: .primaryAction) { MacAccountButton() } }
         .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)) {
             guard showHero else { return }
             trending = await browse.trendingHeroItems()

@@ -68,7 +68,7 @@ struct MacPlayerView: View {
         .onContinuousHover { phase in
             if case .active(let location) = phase { pointerMoved(to: location) }
         }
-        .background(MacWindowReader(isFullScreen: $isFullScreen))
+        .background(MacWindowReader(isFullScreen: $isFullScreen, onEscape: { controller.escape() }))
         .foregroundStyle(.white)
         .tint(.white)
         .environment(\.colorScheme, .dark)
@@ -537,10 +537,13 @@ struct MacRoutePicker: NSViewRepresentable {
 /// Reads the hosting window: tracks full screen, and hides the toolbar while the player covers it.
 struct MacWindowReader: NSViewRepresentable {
     @Binding var isFullScreen: Bool
+    var onEscape: () -> Void = {}
 
     final class Coordinator {
         weak var window: NSWindow?
         var tokens: [NSObjectProtocol] = []
+        var keyMonitor: Any?
+        var onEscape: () -> Void = {}
 
         func attach(_ window: NSWindow?, update: @escaping (Bool) -> Void) {
             guard self.window !== window else { return }
@@ -548,8 +551,16 @@ struct MacWindowReader: NSViewRepresentable {
             self.window = window
             guard let window else { return }
             window.toolbar?.isVisible = false
+            // The sidebar list would otherwise own bare keys (Space, letters) under the player.
+            DispatchQueue.main.async { window.makeFirstResponder(nil) }
             update(window.styleMask.contains(.fullScreen))
             let center = NotificationCenter.default
+            // The Playback menu's Escape shortcut is not reached when a list owns the key; catch it here.
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
+                guard event.keyCode == 53, event.window === window, window?.attachedSheet == nil else { return event }
+                self?.onEscape()
+                return nil
+            }
             tokens = [
                 center.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { _ in update(true) },
                 center.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { _ in update(false) }
@@ -559,6 +570,8 @@ struct MacWindowReader: NSViewRepresentable {
         func detach() {
             tokens.forEach(NotificationCenter.default.removeObserver)
             tokens = []
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
             window?.toolbar?.isVisible = true
             window = nil
         }
@@ -577,13 +590,14 @@ struct MacWindowReader: NSViewRepresentable {
     func makeNSView(context: Context) -> ReaderView {
         let view = ReaderView()
         let binding = $isFullScreen
+        context.coordinator.onEscape = onEscape
         view.onWindow = { [weak coordinator = context.coordinator] window in
             coordinator?.attach(window) { value in Task { @MainActor in binding.wrappedValue = value } }
         }
         return view
     }
 
-    func updateNSView(_ view: ReaderView, context: Context) {}
+    func updateNSView(_ view: ReaderView, context: Context) { context.coordinator.onEscape = onEscape }
 
     static func dismantleNSView(_ view: ReaderView, coordinator: Coordinator) {
         view.onWindow = nil

@@ -20,6 +20,7 @@ struct MacRootView: View {
     @State private var restoredRow = false
     @State private var pendingLink: RivuletLink?
     @State private var showingAccount = false
+    @FocusedValue(\.macPageRefresh) private var pageRefresh: (() -> Void)?
     @State private var showingWhatsNew = false
     @State private var choosingProfile = false
     @State private var backgroundedAt: Date?
@@ -154,18 +155,22 @@ struct MacRootView: View {
         NavigationStack(path: Binding(get: { paths[current] ?? [] }, set: setPath)) {
             root
                 .navigationDestination(for: MacRoute.self) { route in
-                    switch route {
-                    case .detail(let item): MacDetailView(item: item)
-                    case .hub(let hub): MacHubGridView(hub: hub)
-                    case .playlist(let playlist): MacPlaylistView(playlist: playlist)
-                    case .library(let library): MacLibraryView(library: library)
-                    case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
+                    // Pushed pages do not see the stack's actions, so each carries its own host.
+                    Group {
+                        switch route {
+                        case .detail(let item): MacDetailView(item: item)
+                        case .hub(let hub): MacHubGridView(hub: hub)
+                        case .playlist(let playlist): MacPlaylistView(playlist: playlist)
+                        case .library(let library): MacLibraryView(library: library)
+                        case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
+                        }
                     }
+                    .macActionHost()
                 }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button { Task { await browse.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                Button { if let pageRefresh { pageRefresh() } else { Task { await browse.refresh() } } } label: { Image(systemName: "arrow.clockwise") }
                     .help("Refresh")
                     .disabled(browse.isLoadingContent)
                 MacAccountButton()

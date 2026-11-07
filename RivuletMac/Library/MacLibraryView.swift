@@ -76,9 +76,6 @@ private struct MacLibraryRecommendedView: View {
                                        description: Text("Switch to Browse to see every title."))
             }
         }
-        .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise") { Task { await reload() } }
-        }
         .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
         .task(id: browse.watchStateRevision) {
             guard loadedRevision != browse.watchStateRevision else { return }
@@ -188,9 +185,6 @@ private struct MacLibraryBrowseView: View {
                     Label("Filter", systemImage: unwatchedOnly ? "line.3.horizontal.decrease.circle.fill"
                                                                : "line.3.horizontal.decrease")
                 }
-            }
-            ToolbarItem {
-                Button("Refresh", systemImage: "arrow.clockwise") { Task { await refetchLoaded() } }
             }
         }
         .focusedSceneValue(\.macPageRefresh) { Task { await refetchLoaded() } }

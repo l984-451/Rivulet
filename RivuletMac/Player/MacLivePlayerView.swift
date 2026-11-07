@@ -65,7 +65,7 @@ struct MacLivePlayerView: View {
         .onContinuousHover { phase in
             if case .active(let location) = phase { pointerMoved(to: location) }
         }
-        .background(MacWindowReader(isFullScreen: $isFullScreen))
+        .background(MacWindowReader(isFullScreen: $isFullScreen, onEscape: { controller.escape() }))
         .foregroundStyle(.white)
         .tint(.white)
         .environment(\.colorScheme, .dark)

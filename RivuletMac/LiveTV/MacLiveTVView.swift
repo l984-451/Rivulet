@@ -138,10 +138,6 @@ struct MacLiveTVView: View {
                 }
                 ToolbarItem { filterMenu }
             }
-            ToolbarItem {
-                Button { Task { await reloadEverything() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    .help("Refresh Channels and Guide")
-            }
         }
         if store.hasRecordingSources {
             ToolbarItem {

@@ -50,6 +50,7 @@ struct MacDetailView: View {
                     .help("Reload this page")
             }
         }
+        .focusedSceneValue(\.macPageRefresh) { Task { await load() } }
         .task(id: browse.watchStateRevision) {
             guard loadedRevision != browse.watchStateRevision else { return }
             await load()

@@ -28,9 +28,7 @@ struct MacPlaylistsView: View {
             }
         }
         .navigationTitle(browse.labels.title(String(localized: "Playlists"), providerID: providerID))
-        .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise") { Task { await browse.refreshPlaylists() } }
-        }
+        .focusedSceneValue(\.macPageRefresh) { Task { await browse.refreshPlaylists() } }
         .playlistEditAlerts($editing)
         .playlistContinueDialog($pendingStart, actions: actions)
     }

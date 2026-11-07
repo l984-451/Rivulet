@@ -31,9 +31,7 @@ struct MacFavoritesView: View {
             }
         }
         .navigationTitle("Favorites")
-        .toolbar {
-            Button("Refresh", systemImage: "arrow.clockwise") { Task { await load() } }
-        }
+        .focusedSceneValue(\.macPageRefresh) { Task { await load() } }
         // A favorite change and playback both bump the revision, so the page follows.
         .task(id: browse.watchStateRevision) { await load() }
     }

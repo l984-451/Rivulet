@@ -26,7 +26,7 @@ struct MacLiveTVView: View {
         content
             .navigationTitle("Live TV")
             .toolbar { toolbar }
-            .focusedSceneValue(\.macPageRefresh) { Task { await reloadEverything() } }
+            .macPageRefresh { Task { await reloadEverything() } }
             .navigationDestination(for: MacLiveRoute.self) { _ in MacLiveRecordingsView() }
             .sheet(item: $selection, onDismiss: playPending) { selection in
                 MacLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }

@@ -13,24 +13,24 @@ struct MacShellCommands: Commands {
     @AppStorage(MacSettingsKeys.showFavorites) private var showFavorites = false
     @FocusedValue(\.macHistory) private var history: MacHistory?
     @FocusedValue(\.macAccountMenu) private var account: MacAccountMenuActions?
-    @FocusedValue(\.macPageRefresh) private var pageRefresh: (() -> Void)?
+    @FocusedValue(\.macPageRefresh) private var pageRefresh: MacPageRefresh?
 
     var body: some Commands {
         SidebarCommands()
         CommandGroup(after: .appInfo) {
-            Button("Account…") { account?.openAccount() }
+            Button("Account…") { account?.box.openAccount() }
                 .disabled(account == nil)
-            if let switchProfile = account?.switchProfile {
-                Button("Switch Profile…") { switchProfile() }
+            if let account, account.canSwitchProfile {
+                Button("Switch Profile…") { account.box.switchProfile() }
             }
         }
         CommandMenu("Go") {
-            Button("Back") { history?.back?() }
+            Button("Back") { history?.box.back() }
                 .keyboardShortcut("[")
-                .disabled(history?.back == nil)
-            Button("Forward") { history?.forward?() }
+                .disabled(history?.canBack != true)
+            Button("Forward") { history?.box.forward() }
                 .keyboardShortcut("]")
-                .disabled(history?.forward == nil)
+                .disabled(history?.canForward != true)
             Divider()
             Button("Home") { selection = .some(.home) }
                 .keyboardShortcut("1")

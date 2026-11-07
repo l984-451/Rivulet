@@ -76,7 +76,7 @@ private struct MacLibraryRecommendedView: View {
                                        description: Text("Switch to Browse to see every title."))
             }
         }
-        .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
+        .macPageRefresh { Task { await reload() } }
         .task(id: browse.watchStateRevision) {
             guard loadedRevision != browse.watchStateRevision else { return }
             await reload()
@@ -187,7 +187,7 @@ private struct MacLibraryBrowseView: View {
                 }
             }
         }
-        .focusedSceneValue(\.macPageRefresh) { Task { await refetchLoaded() } }
+        .macPageRefresh { Task { await refetchLoaded() } }
         .task(id: "\(queryKey)|\(browse.watchStateRevision)") {
             // Nothing claimed and nothing shown: a first page that was cancelled when the view left.
             if loadedQuery != queryKey || (slots.slots.isEmpty && slots.claimedPages.isEmpty) {

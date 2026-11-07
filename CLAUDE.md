@@ -41,9 +41,9 @@ The video player is **AetherPlayer** — an adapter around AetherEngine (FFmpeg 
 
 ## Project Structure
 
-Five code roots. `RivuletCore/` is a buildable folder compiled into BOTH app
+Six code roots. `RivuletCore/` is a buildable folder compiled into ALL THREE app
 targets (not a module: `internal` spans each target); `Rivulet/` is the tvOS
-app, `RivuletiOS/` the iOS app, `TopShelfExtension/` the tvOS Top Shelf, and
+app, `RivuletiOS/` the iOS app, `RivuletMac/` the native macOS app, `TopShelfExtension/` the tvOS Top Shelf, and
 `AssetPackExtension/` the tvOS Background Assets downloader that fetches the
 speech model as an Apple-hosted asset pack (`SpeechModelStore`; Debug builds,
 which can't reach Apple hosting, fall back to Hugging Face into Caches; repack
@@ -51,7 +51,8 @@ with `Scripts/speech-model-pack.json`). See "Platform Boundary" below for what
 goes where.
 
 ```
-RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkManager,
+RivuletCore/            # Shared tvOS + iOS + macOS. Client/ (PlexSession, BrowseStore,
+│                       #   PlayerBackend/ProviderBackend, ClientHost), Platform/HostPlatform. The ONE Plex client (PlexNetworkManager,
 │                       #   PlexAuthManager, PlexUserProfileManager), Models/Plex,
 │                       #   TMDB, WatchProgressPolicy, IPTV parsers,
 │                       #   Security (attest, keychain), Sentry startup, Secrets,
@@ -69,13 +70,14 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   hero sources, favorites and playlist rows).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
-│                       #   navigation contract, BrowseStore: every server's
-│                       #   content), Plex/ (PlexSession: Plex sign-in and
-│                       #   playback; Home/Library/Detail views; no endpoint code), Search/, Settings/, LiveTV/ (views
+│                       #   navigation contract), Plex/ (Home/Library/Detail
+│                       #   views; no endpoint code), Search/, Settings/, LiveTV/ (views
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
 │                       #   records + offline progress live in RivuletCore/Downloads).
+RivuletMac/             # Native macOS app (SwiftUI + AppKit). See "Mac app" and
+│                       #   RivuletMac/README-MAC.md (navigation contract, file map).
 Rivulet/                # The tvOS app — everything below.
 ├── Models/
 │   ├── Shared/         # RivuletLink (the one rivulet:// definition) and TopShelfItem,
@@ -218,12 +220,11 @@ The Plex stack is already across: `PlexNetworkManager`, `PlexAuthManager`,
 So is the Live TV stack: `LiveTVDataStore`, `PlexLiveTVProvider` + the timeline
 keepalive, `IPTVProvider`, `DispatcharrService`, `LiveTVSourceConnector` (the
 verify-then-add behind both apps' add-source forms) and `LiveShelves` (What's On
-rows). **There is exactly one Plex client.** `RivuletiOS/Plex/` holds
+rows). **There is exactly one Plex client.** `RivuletCore/Client/` holds
 `PlexSession` (Plex sign-in, profile, server choice and the Plex playback
-path) and the SwiftUI views; iOS content for every server comes from
-`RivuletCore/Client/BrowseStore` over `MediaProviderRegistry` and the shared
-`HomeFeed`. No endpoint code in the iOS folder. Never add a second decoder for a Plex
-endpoint to the iOS folder; a bug fixed in the shared client must be the fix
+path) and `BrowseStore` (every server's content over `MediaProviderRegistry`
+and the shared `HomeFeed`), used by both iOS and Mac. No endpoint code in the
+iOS or Mac folders. Never add a second decoder for a Plex endpoint to an app folder; a bug fixed in the shared client must be the fix
 for both apps.
 
 ### Host injection instead of platform conditionals
@@ -249,9 +250,33 @@ RivuletCore is compiled into each app target, not built as a module, so
 also means an extension on a shared type inside `RivuletiOS/` is not a
 retroactive conformance.
 
-### Mac (Designed for iPad)
+### Mac app (native, `RivuletMac/`)
 
-The iOS app runs on Apple silicon Macs as **Designed for iPad**, not Mac Catalyst:
+Scheme `Rivulet Mac`, macOS 15+, SwiftUI + AppKit, sandboxed. Same parity rule
+as the other apps (no Downloads, no Photos). It reads the same `RivuletCore/Client`
+stores as iOS; only `RivuletMac/Player/AetherPlayer.swift` imports AetherEngine
+(a third adapter, so a mapping fix lands in three files until it moves to core).
+Captions have no libass layer: LibassBuild ships no macOS slice.
+
+- **Host differences come through `HostPlatform`** (`RivuletCore/Platform/`):
+  foreground notification, appearance, video-preview policy and app icon,
+  installed by `UIKitHostPlatform.swift` on tvOS/iOS and `AppKitHostPlatform.swift`
+  on Mac. Shared code returns `CGImage`/`CGColor`/`CTFont`, never `UIImage`.
+- **`SentryStartup.start(platform:configure:)`**: options that exist only on
+  UIKit platforms go in the host's `configure` closure.
+- **A focused/scene value must never be a fresh closure per body pass.** It
+  republishes, re-renders the root and loops the window toolbar at 100% CPU
+  (seen on sidebar toggle). Publish a stable reference box (`MacPageRefresh`,
+  `MacShellBox` in `Shell/MacNavigation.swift`).
+
+```bash
+xcodebuild -project Rivulet.xcodeproj -scheme "Rivulet Mac" \
+  -destination 'platform=macOS,arch=arm64' build CODE_SIGNING_ALLOWED=NO
+```
+
+### iOS app on Mac (Designed for iPad)
+
+The iOS app also runs on Apple silicon Macs as **Designed for iPad**, not Mac Catalyst:
 the FFmpeg, LibDovi and LibTrueHD xcframeworks under AetherEngine ship no
 `maccatalyst` slice and the engine is upstream-only, so Catalyst cannot link
 (`SUPPORTS_MACCATALYST = NO`). The Mac runs the iphoneos binary; the only

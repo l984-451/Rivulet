@@ -20,7 +20,8 @@ struct MacRootView: View {
     @State private var restoredRow = false
     @State private var pendingLink: RivuletLink?
     @State private var showingAccount = false
-    @FocusedValue(\.macPageRefresh) private var pageRefresh: (() -> Void)?
+    @State private var shellBox = MacShellBox()
+    @FocusedValue(\.macPageRefresh) private var pageRefresh: MacPageRefresh?
     @State private var showingWhatsNew = false
     @State private var choosingProfile = false
     @State private var backgroundedAt: Date?
@@ -40,9 +41,7 @@ struct MacRootView: View {
         .environment(\.macOpenAccount) { showingAccount = true }
         .focusedSceneValue(\.macSelection, $selection)
         .focusedSceneValue(\.macHistory, history)
-        .focusedSceneValue(\.macAccountMenu, MacAccountMenuActions(
-            openAccount: { showingAccount = true },
-            switchProfile: profiles.hasMultipleProfiles ? { choosingProfile = true } : nil))
+        .focusedSceneValue(\.macAccountMenu, MacAccountMenuActions(canSwitchProfile: profiles.hasMultipleProfiles, box: shellBox))
         .onOpenURL { if let link = RivuletLink(url: $0) { pendingLink = link } }
         .task(id: linkDeliveryKey) { await deliverLink() }
         .onChange(of: selection) { _, row in
@@ -201,7 +200,11 @@ struct MacRootView: View {
     private var history: MacHistory {
         let canBack = paths[current]?.isEmpty == false
         let canForward = forwardPaths[current]?.isEmpty == false
-        return MacHistory(back: canBack ? { goBack() } : nil, forward: canForward ? { goForward() } : nil)
+        shellBox.back = { goBack() }
+        shellBox.forward = { goForward() }
+        shellBox.openAccount = { showingAccount = true }
+        shellBox.switchProfile = { choosingProfile = true }
+        return MacHistory(canBack: canBack, canForward: canForward, box: shellBox)
     }
 
     private func push(_ route: MacRoute) {

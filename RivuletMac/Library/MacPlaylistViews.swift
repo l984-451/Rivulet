@@ -28,7 +28,7 @@ struct MacPlaylistsView: View {
             }
         }
         .navigationTitle(browse.labels.title(String(localized: "Playlists"), providerID: providerID))
-        .focusedSceneValue(\.macPageRefresh) { Task { await browse.refreshPlaylists() } }
+        .macPageRefresh { Task { await browse.refreshPlaylists() } }
         .playlistEditAlerts($editing)
         .playlistContinueDialog($pendingStart, actions: actions)
     }
@@ -178,7 +178,7 @@ struct MacPlaylistView: View {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await reload() } }
             }
         }
-        .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
+        .macPageRefresh { Task { await reload() } }
         .playlistEditAlerts($editing, onDeleted: { dismiss() })
         .playlistContinueDialog($pendingStart, actions: actions)
         .task(id: revision) {

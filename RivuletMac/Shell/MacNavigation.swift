@@ -75,26 +75,61 @@ extension FocusedValues {
 
 /// Back and forward through the pages pushed on the current row, published by the window for the Go menu.
 struct MacHistory {
-    var back: (() -> Void)?
-    var forward: (() -> Void)?
+    let canBack: Bool
+    let canForward: Bool
+    let box: MacShellBox
+}
+
+/// The window's menu actions, set in place each pass. Published values hold this box and flags, never
+/// closures: a fresh closure per pass republishes, which re-renders the root and loops the toolbar.
+final class MacShellBox {
+    var back: () -> Void = {}
+    var forward: () -> Void = {}
+    var openAccount: () -> Void = {}
+    var switchProfile: () -> Void = {}
 }
 
 /// The visible page's reload; the Go menu's Cmd-R runs it, else refreshes the store.
+/// The published value is one box per page, so a page pass does not republish and loop the window's toolbar.
+final class MacPageRefreshBox { var action: () -> Void = {} }
+
+struct MacPageRefresh {
+    let box: MacPageRefreshBox
+    func callAsFunction() { box.action() }
+}
+
 struct MacPageRefreshKey: FocusedValueKey {
-    typealias Value = () -> Void
+    typealias Value = MacPageRefresh
 }
 
 extension FocusedValues {
-    var macPageRefresh: (() -> Void)? {
+    var macPageRefresh: MacPageRefresh? {
         get { self[MacPageRefreshKey.self] }
         set { self[MacPageRefreshKey.self] = newValue }
     }
 }
 
+private struct MacPageRefreshModifier: ViewModifier {
+    let action: () -> Void
+    @State private var box = MacPageRefreshBox()
+
+    func body(content: Content) -> some View {
+        box.action = action
+        return content.focusedSceneValue(\.macPageRefresh, MacPageRefresh(box: box))
+    }
+}
+
+extension View {
+    /// Registers this page's reload for the toolbar button and Cmd-R.
+    func macPageRefresh(_ action: @escaping () -> Void) -> some View {
+        modifier(MacPageRefreshModifier(action: action))
+    }
+}
+
 /// Window actions the app menu drives: Account and Switch Profile.
 struct MacAccountMenuActions {
-    var openAccount: () -> Void
-    var switchProfile: (() -> Void)?
+    let canSwitchProfile: Bool
+    let box: MacShellBox
 }
 
 struct MacAccountMenuKey: FocusedValueKey {

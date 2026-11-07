@@ -32,5 +32,8 @@ extension ThemeBackdrop {
 }
 
 extension CaptionStyle {
-    func uiFont(ofSize size: CGFloat) -> UIFont { font(ofSize: size) as UIFont }
+    /// The default style keeps UIKit's own medium system face; a user font descriptor goes through CoreText.
+    func uiFont(ofSize size: CGFloat) -> UIFont {
+        fontDescriptor == nil ? .systemFont(ofSize: size, weight: .medium) : font(ofSize: size) as UIFont
+    }
 }

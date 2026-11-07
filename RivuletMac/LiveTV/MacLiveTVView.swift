@@ -27,7 +27,6 @@ struct MacLiveTVView: View {
             .navigationTitle("Live TV")
             .toolbar { toolbar }
             .macPageRefresh { Task { await reloadEverything() } }
-            .navigationDestination(for: MacLiveRoute.self) { _ in MacLiveRecordingsView() }
             .sheet(item: $selection, onDismiss: playPending) { selection in
                 MacLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
             }
@@ -141,7 +140,7 @@ struct MacLiveTVView: View {
         }
         if store.hasRecordingSources {
             ToolbarItem {
-                NavigationLink(value: MacLiveRoute.recordings) {
+                NavigationLink(value: MacRoute.liveRecordings) {
                     Label("Recordings", systemImage: "recordingtape")
                 }
                 .help("Recordings")

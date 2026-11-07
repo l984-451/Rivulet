@@ -57,7 +57,13 @@ final class MacPlaybackController: NSObject, ObservableObject {
             do {
                 let prepared = try await PlaybackStart.prepare(
                     item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex)
-                start(MacPlexPlayback(request: prepared.request, plex: prepared.backend, queue: prepared.queue))
+                let session = MacPlexPlayback(request: prepared.request, plex: prepared.backend, queue: prepared.queue)
+                session.onFailure = { [weak self] message in
+                    self?.close()
+                    self?.playbackError = message
+                }
+                session.onFinished = { [weak self] in self?.close() }
+                start(session)
             } catch is CancellationError {
             } catch {
                 playbackError = PlaybackFailure.message(for: error)
@@ -87,7 +93,10 @@ final class MacPlaybackController: NSObject, ObservableObject {
         player.bind(surface: surface)
         self.surface = surface
         player.setVolume((UserDefaults.standard.object(forKey: Self.volumeKey) as? Float) ?? 1)
-        newSession.onItemChange = { [weak self] in self?.startNowPlaying() }
+        newSession.onItemChange = { [weak self] in
+            self?.lastSubtitleID = nil
+            self?.startNowPlaying()
+        }
         observe(newSession)
         startNowPlaying()
         isPresented = true
@@ -119,6 +128,7 @@ final class MacPlaybackController: NSObject, ObservableObject {
         beginTask?.cancel()
         beginTask = nil
         session.end()
+        lastSubtitleID = nil
         if let surface { session.player.unbind(surface: surface) }
         session.player.stop()
         surface = nil
@@ -195,8 +205,10 @@ final class MacPlaybackController: NSObject, ObservableObject {
         if let current = session.selectedSubtitleID {
             lastSubtitleID = current
             session.selectSubtitle(nil)
-        } else if let id = lastSubtitleID ?? session.subtitleTracks.first?.id {
-            session.selectSubtitle(id)
+        } else {
+            let tracks = session.subtitleTracks
+            let remembered = tracks.first { $0.id == lastSubtitleID }?.id
+            if let id = remembered ?? tracks.first?.id { session.selectSubtitle(id) }
         }
     }
 
@@ -228,6 +240,7 @@ final class MacPlaybackController: NSObject, ObservableObject {
             player.$isMuted.map { _ in () }.eraseToAnyPublisher(),
             player.$fillsScreen.map { _ in () }.eraseToAnyPublisher(),
             player.$rate.map { _ in () }.eraseToAnyPublisher(),
+            player.$state.map { _ in () }.eraseToAnyPublisher(),
             session.changes
         ])
         .receive(on: DispatchQueue.main)

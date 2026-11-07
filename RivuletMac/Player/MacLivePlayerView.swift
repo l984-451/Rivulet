@@ -171,7 +171,8 @@ struct MacLivePlayerView: View {
         let window = player.liveWindow
         let scrub = liveScrub(now: .now)
         return VStack(spacing: 6) {
-            if let range = window.seekableRange, window.edgeTime > range.lowerBound {
+            let range = window.seekableRange.flatMap { window.edgeTime > $0.lowerBound ? $0 : nil }
+            if let range {
                 MacPlayerScrubber(
                     range: scrub?.bar ?? range.lowerBound...window.edgeTime,
                     value: session.stagedSkipTarget ?? player.pendingSeekTarget ?? window.playhead,
@@ -185,17 +186,17 @@ struct MacLivePlayerView: View {
                     },
                     onStep: { controller.skip(forward: $0 > 0) }
                 )
-                HStack {
-                    if let programme {
-                        Text(programme.startTime...programme.endTime ~= Date() ? programmeTimes(programme) : "")
-                    }
-                    Spacer()
-                    let behind = max(0, window.edgeTime - (scrubValue ?? window.playhead))
-                    Text(behind < 1 ? String(localized: "Live") : "-" + MacPlayerView.format(behind))
-                }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.white.opacity(0.75))
             }
+            HStack {
+                if let programme {
+                    Text(programme.startTime...programme.endTime ~= Date() ? programmeTimes(programme) : "")
+                }
+                Spacer()
+                let behind = range == nil ? 0 : max(0, window.edgeTime - (scrubValue ?? window.playhead))
+                Text(behind < 1 ? String(localized: "Live") : "-" + MacPlayerView.format(behind))
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.75))
             ZStack {
                 transport
                 HStack {

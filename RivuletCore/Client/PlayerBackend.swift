@@ -12,6 +12,9 @@ protocol PlayerBackend: AnyObject {
     /// `previous` lends its fresh throughput reading.
     func upNextPlayback(for item: PlexMetadata, quality: StreamingQuality?,
                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest
+    /// The movie after its trailers: from the start, on the version the viewer picked.
+    func featurePlayback(for item: PlexMetadata, version: VersionChoice,
+                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest
     /// The playing title again at `time`: a quality change, a step-down, a fallback, a track
     /// change on a transcode (`streams` are the picks as the player's stream ids).
     func reloadedPlayback(of request: PlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
@@ -37,6 +40,11 @@ extension PlexSession: PlayerBackend {
     func upNextPlayback(for item: PlexMetadata, quality: StreamingQuality?,
                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest {
         try await playback(for: item, quality: quality, previous: previous)
+    }
+
+    func featurePlayback(for item: PlexMetadata, version: VersionChoice,
+                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest {
+        try await playback(for: item, fromBeginning: true, previous: previous, version: version)
     }
 
     func reloadedPlayback(of request: PlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,

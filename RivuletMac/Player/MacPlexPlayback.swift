@@ -69,6 +69,12 @@ final class MacPlexPlayback: ObservableObject {
         )
     }
 
+    /// Whether this title streams from one of the servers in `removed` (a sign-out).
+    func plays(from removed: Set<String>) -> Bool {
+        if let id = request.providerPlayback?.item.ref.providerID { return removed.contains(id) }
+        return removed.contains { $0.hasPrefix("plex:") }
+    }
+
     func begin() async {
         await beginCinemaExtras()
         lookUpNextEpisode()
@@ -80,6 +86,12 @@ final class MacPlexPlayback: ObservableObject {
     /// The movie waiting behind the trailers playing now.
     private var cinemaFeature: PlexMetadata?
     private var cinemaQueue: [PlexMetadata] = []
+    /// The version the viewer picked for the movie.
+    private var cinemaFeatureVersion: VersionChoice = .best
+    /// Set by the controller: a failed start of the movie after its trailers.
+    var onFailure: ((String) -> Void)?
+    /// Set by the controller: the title ended with nothing to play next.
+    var onFinished: (() -> Void)?
     var isPlayingCinemaExtra: Bool { cinemaFeature != nil }
 
     /// Swaps the first server-picked clip in for the movie. Any failure plays the movie.
@@ -96,6 +108,7 @@ final class MacPlexPlayback: ObservableObject {
               !ended else { return }
         await plex.stopTranscode(movie)
         cinemaFeature = movie.item
+        cinemaFeatureVersion = movie.item.Media.flatMap { $0.indices.contains(movie.mediaIndex) ? .source("\($0[movie.mediaIndex].id)") : nil } ?? .best
         cinemaQueue = Array(clips.dropFirst())
         request = clip
     }
@@ -103,9 +116,11 @@ final class MacPlexPlayback: ObservableObject {
     /// The next clip, or the movie after the last one.
     func advanceCinemaExtras() {
         guard let feature = cinemaFeature else { return }
-        let next = cinemaQueue.isEmpty ? feature : cinemaQueue.removeFirst()
-        switchItem(to: next, queueIndex: nil)
-        if cinemaQueue.isEmpty, next.id == feature.id { cinemaFeature = nil }
+        if cinemaQueue.isEmpty {
+            switchItem(to: feature, queueIndex: nil, featureVersion: cinemaFeatureVersion)
+        } else {
+            switchItem(to: cinemaQueue.removeFirst(), queueIndex: nil)
+        }
     }
 
     func end() {
@@ -519,7 +534,13 @@ final class MacPlexPlayback: ObservableObject {
             }
         case .ended:
             finishItem(at: max(player.duration, player.currentTime))
-            if isPlayingCinemaExtra { advanceCinemaExtras() } else { startUpNextCountdown() }
+            if isPlayingCinemaExtra {
+                advanceCinemaExtras()
+            } else {
+                startUpNextCountdown()
+                // Nothing next: return to the page instead of the engine's cleared (black) frame.
+                if nextEpisode == nil { onFinished?() }
+            }
         case .failed:
             if isPlayingCinemaExtra { advanceCinemaExtras() } else { fallBackToTranscode() }
         default:
@@ -686,7 +707,9 @@ final class MacPlexPlayback: ObservableObject {
         switchItem(to: queue.entries[index], queueIndex: index)
     }
 
-    private func switchItem(to next: PlexMetadata, queueIndex: Int?, autoplayed: Bool = false) {
+    /// `featureVersion` marks the movie's turn after its trailers: from the start, on that version.
+    private func switchItem(to next: PlexMetadata, queueIndex: Int?, autoplayed: Bool = false,
+                            featureVersion: VersionChoice? = nil) {
         episodesInARow = autoplayed ? episodesInARow + 1 : 1
         countdownTask?.cancel()
         upNextCountdown = nil
@@ -698,9 +721,22 @@ final class MacPlexPlayback: ObservableObject {
         let previous = request
         nextTask = Task { [weak self] in
             // Up Next keeps the player-menu pick, else decides Home or Away again; a fresh reading is reused.
-            guard let self,
-                  let nextRequest = try? await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous),
-                  !Task.isCancelled else { return }
+            guard let self else { return }
+            let nextRequest: PlexPlaybackRequest
+            do {
+                if let featureVersion {
+                    nextRequest = try await plex.featurePlayback(for: next, version: featureVersion, previous: previous)
+                } else {
+                    nextRequest = try await plex.upNextPlayback(for: next, quality: sessionQuality, previous: previous)
+                }
+            } catch {
+                guard featureVersion != nil, !Task.isCancelled, !ended else { return }
+                cinemaFeature = nil
+                onFailure?(PlaybackFailure.message(for: error))
+                return
+            }
+            guard !Task.isCancelled else { return }
+            if featureVersion != nil { cinemaFeature = nil }
             let plex = plex
             Task { await plex.stopTranscode(previous) }
             guard !ended else { return }

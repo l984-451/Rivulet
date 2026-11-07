@@ -5,10 +5,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum MacLiveRoute: Hashable {
-    case recordings
-}
-
 /// Tunes a channel for the Mac player: the stream URL, headers, the Plex keepalive and the
 /// messages iOS shows for a refused tune. No engine types, so the player feeds `Stream`
 /// to its `loadLive` and shows `notice` as the failure (`IOSLivePlayback.load`).

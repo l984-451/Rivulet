@@ -34,7 +34,10 @@ struct MacShellCommands: Commands {
             Divider()
             Button("Home") { selection = .some(.home) }
                 .keyboardShortcut("1")
-            Button("Search") { selection = .some(.search) }
+            Button("Search") {
+                selection = .some(.search)
+                NotificationCenter.default.post(name: .macFocusSearch, object: nil)
+            }
                 .keyboardShortcut("f")
             Button("Live TV") { selection = .some(.liveTV) }
                 .keyboardShortcut("2")
@@ -70,6 +73,11 @@ struct MacShellCommands: Commands {
             Button("What's New") { openWindow(id: MacWhatsNewWindow.id) }
         }
     }
+}
+
+extension Notification.Name {
+    /// Cmd-F: the search page focuses its field even when it is already showing.
+    static let macFocusSearch = Notification.Name("macFocusSearch")
 }
 
 enum MacWhatsNewWindow {

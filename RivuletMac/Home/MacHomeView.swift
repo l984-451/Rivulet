@@ -60,7 +60,7 @@ struct MacHomeView: View {
 }
 
 /// The hero over a stack of rows, with the ambient wash from the shown title behind both.
-private struct MacHeroFeed: View {
+struct MacHeroFeed: View {
     let rows: [MediaHub]
     let heroItems: [MediaItem]
     let banners: [BrowseStore.FailedServer]

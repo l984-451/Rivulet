@@ -69,7 +69,7 @@ struct MacLiveWhatsOnView<Header: View>: View {
         let tile = MacLiveCard(item: item, now: now, width: width)
         switch item.kind {
         case .recording:
-            NavigationLink(value: MacLiveRoute.recordings) { tile }
+            NavigationLink(value: MacRoute.liveRecordings) { tile }
                 .buttonStyle(.plain)
         case .channel, .upcoming:
             if let channel = item.channel {

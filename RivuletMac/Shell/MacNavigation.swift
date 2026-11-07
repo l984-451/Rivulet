@@ -13,6 +13,22 @@ enum MacRoute: Hashable {
     case library(MediaLibrary)
     /// A cast or crew member; `providerID` is the server whose artwork URL the portrait is.
     case person(MediaPerson, providerID: String)
+    /// Live TV's scheduled and finished recordings.
+    case liveRecordings
+}
+
+extension MacRoute {
+    /// The server this page's content comes from.
+    var providerID: String {
+        switch self {
+        case .detail(let item): item.ref.providerID
+        case .hub(let hub): hub.providerID
+        case .playlist(let playlist): playlist.item.ref.providerID
+        case .library(let library): library.providerID
+        case .person(_, let providerID): providerID
+        case .liveRecordings: ""
+        }
+    }
 }
 
 /// A row of the window's sidebar. Selecting one swaps the detail column's stack.
@@ -26,6 +42,15 @@ enum MacSidebarItem: Hashable {
 }
 
 extension MacSidebarItem {
+    /// The server this row lists, nil for the rows that span them.
+    var providerID: String? {
+        switch self {
+        case .library(let library): library.providerID
+        case .playlists(let providerID): providerID
+        default: nil
+        }
+    }
+
     /// The row as a string, for window restoration.
     var storageKey: String {
         switch self {

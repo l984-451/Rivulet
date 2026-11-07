@@ -90,9 +90,32 @@ struct MacRootView: View {
             forwardPaths = [:]
             selection = .home
         }
-        // Signing out of the last server ends the title it was playing.
+        // Signing out of the last server ends the title it was playing and leaves nothing open.
         .onChange(of: browse.hasServers) { old, new in
-            if old, !new, playback.plexSession != nil { playback.close() }
+            if old, !new {
+                if playback.plexSession != nil { playback.close() }
+                paths = [:]
+                forwardPaths = [:]
+                selection = .home
+            }
+        }
+        // Signing out of one server drops its pages and rows, and the title it was playing.
+        .onChange(of: browse.providerOrder) { old, new in
+            let removed = Set(old).subtracting(new)
+            guard !removed.isEmpty else { return }
+            if playback.plexSession?.plays(from: removed) == true { playback.close() }
+            for key in Array(paths.keys) { paths[key] = paths[key]?.filter { !removed.contains($0.providerID) } }
+            for key in Array(forwardPaths.keys) { forwardPaths[key] = forwardPaths[key]?.filter { !removed.contains($0.providerID) } }
+            if let id = selection?.providerID, removed.contains(id) { selection = .home }
+        }
+        .onChange(of: showFavorites) { _, shown in
+            if !shown, selection == .favorites { selection = .home }
+        }
+        .onChange(of: showPlaylists) { _, shown in
+            if !shown, case .playlists = selection { selection = .home }
+        }
+        .onChange(of: browse.playlists) {
+            if case .playlists(let id) = selection, browse.playlists[id] == nil, !browse.isLoadingContent { selection = .home }
         }
         .onChange(of: browse.hiddenSidebarLibraries) {
             if case .library(let library) = selection, !browse.isSidebarLibraryShown(library) { selection = .home }
@@ -100,8 +123,14 @@ struct MacRootView: View {
         .onChange(of: browse.isLoadingOtherServers) { restoreRow() }
         .onChange(of: browse.libraries, initial: true) { _, libraries in
             restoreRow()
-            if case .library(let library) = selection, !libraries.isEmpty, !browse.isLoadingOtherServers,
-               !libraries.contains(library) {
+            guard case .library(let library) = selection, !libraries.isEmpty, !browse.isLoadingOtherServers else { return }
+            // Match by id: a renamed or re-pinned library is the same row.
+            if let fresh = libraries.first(where: { $0.id == library.id && $0.providerID == library.providerID }) {
+                guard fresh != library else { return }
+                paths[.library(fresh)] = paths.removeValue(forKey: .library(library))
+                forwardPaths[.library(fresh)] = forwardPaths.removeValue(forKey: .library(library))
+                selection = .library(fresh)
+            } else {
                 selection = .home
             }
         }
@@ -163,6 +192,7 @@ struct MacRootView: View {
                         case .playlist(let playlist): MacPlaylistView(playlist: playlist)
                         case .library(let library): MacLibraryView(library: library)
                         case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
+                        case .liveRecordings: MacLiveRecordingsView()
                         }
                     }
                     .macActionHost()

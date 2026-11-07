@@ -16,6 +16,8 @@ struct MacPlayerView: View {
     @State private var captionStyle = CaptionAppearance.current()
     @State private var chromeVisible = true
     @State private var overControls = false
+    /// The capsule its Hide button dismissed; it still shows with the controls.
+    @State private var hiddenAction: String?
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubValue: Double?
     @State private var pointerLocation: CGPoint?
@@ -81,6 +83,9 @@ struct MacPlayerView: View {
             scheduleHide()
         }
         .onChange(of: failure) { _, failure in if failure != nil { chromeVisible = true } }
+        .onChange(of: contextualAction?.title) { _, title in
+            if title == nil { hiddenAction = nil }
+        }
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
         }
@@ -356,7 +361,7 @@ struct MacPlayerView: View {
 
     @ViewBuilder
     private var contextualCapsule: some View {
-        if let item = contextualAction {
+        if let item = contextualAction, chromeVisible || hiddenAction != item.title {
             VStack {
                 Spacer()
                 HStack(spacing: 8) {
@@ -368,6 +373,13 @@ struct MacPlayerView: View {
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
                         .accessibilityLabel("Cancel")
+                    } else if !chromeVisible {
+                        Button { hiddenAction = item.title } label: {
+                            Image(systemName: "xmark").frame(width: 22, height: 22)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .accessibilityLabel("Hide")
                     }
                     Button(action: item.action) {
                         HStack(spacing: 8) {

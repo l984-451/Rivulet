@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Bain Gurley
 
+import AppKit
 import Combine
 import SwiftUI
 
@@ -74,6 +75,8 @@ struct MacLiveGuideView: View {
         .overlay(alignment: .topLeading) { corner }
         .background(.background)
         .onReceive(clock) { _ in now = Date() }
+        .onAppear(perform: recentreIfStale)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in recentreIfStale() }
         .onChange(of: jumpToken) { _, token in
             guard token != lastJump else { return }
             lastJump = token
@@ -105,6 +108,13 @@ struct MacLiveGuideView: View {
     }
 
     private func minuteX(_ minute: CGFloat) -> CGFloat { channelWidth + minute * pointsPerMinute }
+
+    /// After a long sleep the window is hours back: move it to now without waiting for the Now button.
+    private func recentreIfStale() {
+        guard hasPositioned, Date().timeIntervalSince(windowStart) > (Self.historyMinutes + 30) * 60 else { return }
+        now = Date()
+        jumpToNow(animated: false)
+    }
 
     private func jumpToNow(animated: Bool) {
         if Date().timeIntervalSince(windowStart) > (Self.historyMinutes + 30) * 60 {

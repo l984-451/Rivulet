@@ -9,6 +9,8 @@ struct MacLibraryView: View {
     let library: MediaLibrary
     @EnvironmentObject private var browse: BrowseStore
     @AppStorage private var pageRaw: String
+    /// Same key as the tvOS library hero setting.
+    @AppStorage("showLibraryHero") private var showHero = true
     @State private var rows: [MediaHub] = []
 
     enum LibraryPage: String, CaseIterable {
@@ -30,7 +32,8 @@ struct MacLibraryView: View {
     var body: some View {
         Group {
             switch LibraryPage(rawValue: pageRaw) ?? .recommended {
-            case .recommended: MacLibraryRecommendedView(library: library, rows: $rows)
+            case .recommended:
+                MacLibraryRecommendedView(library: library, rows: $rows, heroItems: showHero ? HomeHero.libraryItems(rows) : [])
             case .browse: MacLibraryBrowseView(library: library)
             }
         }
@@ -53,6 +56,7 @@ struct MacLibraryView: View {
 private struct MacLibraryRecommendedView: View {
     let library: MediaLibrary
     @Binding var rows: [MediaHub]
+    let heroItems: [MediaItem]
     @EnvironmentObject private var browse: BrowseStore
     @State private var isLoading = false
     @State private var error: String?
@@ -61,12 +65,8 @@ private struct MacLibraryRecommendedView: View {
     var body: some View {
         Group {
             if !rows.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
-                        ForEach(rows) { MacShelfView(hub: $0) }
-                    }
-                    .padding(.vertical, 20)
-                }
+                MacHeroFeed(rows: rows, heroItems: heroItems, banners: [])
+                    .safeAreaPadding(.top, heroItems.isEmpty ? 20 : 0)
             } else if let error {
                 MacErrorView(title: "Couldn't Load Recommended", message: error) { await reload() }
             } else if isLoading || loadedRevision == nil {

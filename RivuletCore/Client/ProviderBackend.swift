@@ -53,6 +53,11 @@ final class ProviderBackend: PlayerBackend {
         return try await firstPlayback(of: target, fromBeginning: false, quality: quality, throughput: measured)
     }
 
+    func featurePlayback(for item: PlexMetadata, version: VersionChoice,
+                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest {
+        try await upNextPlayback(for: item, quality: nil, previous: previous)
+    }
+
     func reloadedPlayback(of request: PlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
                           at time: TimeInterval, streams: TrackPicks?) async throws -> PlexPlaybackRequest {
         guard let playback = request.providerPlayback else { throw MediaProviderError.notFound }

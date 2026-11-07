@@ -50,6 +50,7 @@ struct MacSearchView: View {
             .onSubmit(of: .search) { remember(trimmedQuery) }
             .task(id: query) { await search() }
             .onAppear { fieldFocused = true }
+            .onReceive(NotificationCenter.default.publisher(for: .macFocusSearch)) { _ in fieldFocused = true }
             // Opening a result pushes over this view; that is when the query counts as a recent search.
             .onDisappear { if !groups.isEmpty { remember(trimmedQuery) } }
     }

@@ -98,6 +98,27 @@ struct MacLivePlayerView: View {
         return MacPlayerFailure(message: message, canRetry: player.canRetry)
     }
 
+    /// The bar reaching back over the rewind window, split at the earlier programmes it covers.
+    private func liveScrub(now: Date) -> (bar: ClosedRange<Double>, sections: [Double])? {
+        let window = player.liveWindow
+        guard let range = window.seekableRange, window.edgeTime > range.lowerBound else { return nil }
+        let onAir = store.getCurrentProgram(for: session.channel)
+        let earlier = onAir.map {
+            store.getPrograms(for: session.channel,
+                              startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
+                              endDate: $0.startTime)
+        } ?? []
+        guard let layout = LiveTimelineLayout(
+            now: now, program: onAir, earlierPrograms: earlier,
+            seekWindowSeconds: window.edgeTime - range.lowerBound,
+            behindLiveSeconds: max(0, window.edgeTime - window.playhead)
+        ) else { return nil }
+        let span = layout.end.timeIntervalSince(layout.start)
+        func onAxis(_ date: Date) -> Double { window.edgeTime - now.timeIntervalSince(date) }
+        return (onAxis(layout.start)...max(onAxis(layout.end), onAxis(layout.start) + 1),
+                layout.boundaries.map { onAxis(layout.start.addingTimeInterval(span * $0)) })
+    }
+
     /// The programme at the playhead: behind live, that is in the past.
     private func programme(at date: Date) -> UnifiedProgram? {
         let window = player.liveWindow
@@ -148,13 +169,16 @@ struct MacLivePlayerView: View {
 
     private func bottomBar(programme: UnifiedProgram?) -> some View {
         let window = player.liveWindow
+        let scrub = liveScrub(now: .now)
         return VStack(spacing: 6) {
             if let range = window.seekableRange, window.edgeTime > range.lowerBound {
                 MacPlayerScrubber(
-                    range: range.lowerBound...window.edgeTime,
+                    range: scrub?.bar ?? range.lowerBound...window.edgeTime,
                     value: session.stagedSkipTarget ?? player.pendingSeekTarget ?? window.playhead,
                     scrubValue: $scrubValue,
                     scrubStill: nil,
+                    seekable: scrub == nil ? nil : range.lowerBound...window.edgeTime,
+                    sections: scrub?.sections ?? [],
                     onCommit: { time in
                         session.seek(to: time)
                         scheduleHide()

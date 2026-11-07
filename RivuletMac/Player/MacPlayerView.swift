@@ -109,6 +109,10 @@ struct MacPlayerView: View {
     private var contextualAction: MacPlayerContextualAction? {
         let isEpisode = session.queue == nil
         let next = isEpisode ? String(localized: "Next Episode") : String(localized: "Next")
+        if session.isPlayingCinemaExtra {
+            return MacPlayerContextualAction(title: String(localized: "Skip"), systemImage: "forward.end.fill",
+                                             action: session.advanceCinemaExtras)
+        }
         if let countdown = session.upNextCountdown {
             return MacPlayerContextualAction(
                 title: isEpisode ? String(localized: "Next Episode in \(countdown)") : String(localized: "Next in \(countdown)"),

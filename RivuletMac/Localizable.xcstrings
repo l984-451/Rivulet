@@ -1,8 +1,12 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {},
-    " " : {},
+    "" : {
+
+    },
+    " " : {
+
+    },
     "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
       "localizations" : {
         "de" : {
@@ -67,12 +71,6 @@
     },
     "%@ to %@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ to %2$@"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -83,6 +81,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ έως %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@"
           }
         }
       }
@@ -99,12 +103,6 @@
     },
     "%@%@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@%2$@"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -114,6 +112,12 @@
         "el" : {
           "stringUnit" : {
             "state" : "translated",
+            "value" : "%1$@%2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
             "value" : "%1$@%2$@"
           }
         }
@@ -135,7 +139,9 @@
         }
       }
     },
-    "%lld" : {},
+    "%lld" : {
+
+    },
     "%lld Episodes" : {
       "localizations" : {
         "de" : {
@@ -274,12 +280,6 @@
     },
     "%lld episodes across %lld seasons" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld episodes across %2$lld seasons"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -333,17 +333,17 @@
               }
             }
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld episodes across %2$lld seasons"
+          }
         }
       }
     },
     "%lld hr %lld min left" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld hr %2$lld min left"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -354,6 +354,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Απομένουν %1$lld ώρες και %2$lld λεπτά"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hr %2$lld min left"
           }
         }
       }
@@ -418,12 +424,6 @@
     },
     "%lldh %lldm" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lldh %2$lldm"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -434,6 +434,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld ώ. %2$lld λ."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm"
           }
         }
       }
@@ -5304,7 +5310,9 @@
         }
       }
     },
-    "Not built yet. Parity source: %@" : {},
+    "Not built yet. Parity source: %@" : {
+
+    },
     "Not connected to the internet" : {
       "localizations" : {
         "de" : {
@@ -5945,16 +5953,16 @@
     },
     "Play S%lld, E%lld" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Play S%1$lld, E%2$lld"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "S%lld, F%lld wiedergeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Play S%1$lld, E%2$lld"
           }
         }
       }
@@ -6151,7 +6159,12 @@
         }
       }
     },
-    "Plex" : {},
+    "Plays trailers and pre-roll videos from your Plex server's Cinema Trailers settings before a movie that starts from the beginning." : {
+
+    },
+    "Plex" : {
+
+    },
     "Plex Account" : {
       "localizations" : {
         "de" : {
@@ -6775,6 +6788,7 @@
       }
     },
     "Refresh Channels and Guide" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -6911,6 +6925,9 @@
           }
         }
       }
+    },
+    "Remove from Continue Watching" : {
+
     },
     "Remove from Favorites" : {
       "localizations" : {
@@ -7154,16 +7171,16 @@
     },
     "Resume S%lld, E%lld" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Resume S%1$lld, E%2$lld"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "S%lld, F%lld fortsetzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Resume S%1$lld, E%2$lld"
           }
         }
       }
@@ -7234,16 +7251,16 @@
     },
     "Rivulet needs %@ Server %lld.%lld.%lld or newer." : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Rivulet needs %1$@ Server %2$lld.%3$lld.%4$lld or newer."
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rivulet benötigt %1$@-Server %2$lld.%3$lld.%4$lld oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet needs %1$@ Server %2$lld.%3$lld.%4$lld or newer."
           }
         }
       }
@@ -7266,28 +7283,22 @@
     },
     "S%@E%@" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$@E%2$@"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "S%1$@F%2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$@E%2$@"
           }
         }
       }
     },
     "S%lld E%lld" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$lld E%2$lld"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7299,17 +7310,17 @@
             "state" : "translated",
             "value" : "Κ%1$lld Ε%2$lld"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld"
+          }
         }
       }
     },
     "S%lld, E%lld" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$lld, E%2$lld"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -7320,6 +7331,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Κ%1$lld, Ε%2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld"
           }
         }
       }
@@ -7965,6 +7982,9 @@
           }
         }
       }
+    },
+    "Skip" : {
+
     },
     "Skip %@" : {
       "localizations" : {
@@ -8716,16 +8736,16 @@
     },
     "The folder “%@” and everything in it will be deleted from %@. This cannot be undone." : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "The folder “%1$@” and everything in it will be deleted from %2$@. This cannot be undone."
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Ordner „%1$@“ und alles darin wird von %2$@ gelöscht. Dieser Vorgang kann nicht widerrufen werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The folder “%1$@” and everything in it will be deleted from %2$@. This cannot be undone."
           }
         }
       }
@@ -9218,16 +9238,16 @@
     },
     "This server runs Jellyfin %@. Rivulet needs %lld.%lld or newer." : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "This server runs Jellyfin %1$@. Rivulet needs %2$lld.%3$lld or newer."
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Auf diesem Server läuft Jellyfin %@. Rivulet benötigt %lld.%lld oder neuer."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This server runs Jellyfin %1$@. Rivulet needs %2$lld.%3$lld or newer."
           }
         }
       }
@@ -9507,6 +9527,9 @@
           }
         }
       }
+    },
+    "Trailers Before Movies" : {
+
     },
     "Trending" : {
       "localizations" : {
@@ -10413,12 +10436,6 @@
     "streaming.home" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Home"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -10430,18 +10447,18 @@
             "state" : "translated",
             "value" : "Σπίτι"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Home"
+          }
         }
       }
     },
     "tmdb.nowPlaying" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Now Playing"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
@@ -10452,6 +10469,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Παίζονται τώρα"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Now Playing"
           }
         }
       }

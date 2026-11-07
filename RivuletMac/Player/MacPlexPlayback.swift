@@ -70,8 +70,42 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     func begin() async {
+        await beginCinemaExtras()
         lookUpNextEpisode()
         await load(startsItem: true)
+    }
+
+    // MARK: - Trailers before a movie
+
+    /// The movie waiting behind the trailers playing now.
+    private var cinemaFeature: PlexMetadata?
+    private var cinemaQueue: [PlexMetadata] = []
+    var isPlayingCinemaExtra: Bool { cinemaFeature != nil }
+
+    /// Swaps the first server-picked clip in for the movie. Any failure plays the movie.
+    private func beginCinemaExtras() async {
+        let count = CinemaExtras.count
+        let movie = request
+        guard movie.providerPlayback == nil, !movie.isLocal, queue == nil,
+              CinemaExtras.applies(type: movie.item.type, startOffset: movie.startTime, inPlaylist: false, count: count),
+              let key = movie.item.ratingKey,
+              let clips = try? await PlexNetworkManager.shared.cinemaExtras(
+                  serverURL: movie.serverURL, authToken: movie.token, ratingKey: key, count: count),
+              let first = clips.first,
+              let clip = try? await plex.upNextPlayback(for: first, quality: nil, previous: movie),
+              !ended else { return }
+        await plex.stopTranscode(movie)
+        cinemaFeature = movie.item
+        cinemaQueue = Array(clips.dropFirst())
+        request = clip
+    }
+
+    /// The next clip, or the movie after the last one.
+    func advanceCinemaExtras() {
+        guard let feature = cinemaFeature else { return }
+        let next = cinemaQueue.isEmpty ? feature : cinemaQueue.removeFirst()
+        switchItem(to: next, queueIndex: nil)
+        if cinemaQueue.isEmpty, next.id == feature.id { cinemaFeature = nil }
     }
 
     func end() {
@@ -485,9 +519,9 @@ final class MacPlexPlayback: ObservableObject {
             }
         case .ended:
             finishItem(at: max(player.duration, player.currentTime))
-            startUpNextCountdown()
+            if isPlayingCinemaExtra { advanceCinemaExtras() } else { startUpNextCountdown() }
         case .failed:
-            fallBackToTranscode()
+            if isPlayingCinemaExtra { advanceCinemaExtras() } else { fallBackToTranscode() }
         default:
             break
         }
@@ -507,7 +541,7 @@ final class MacPlexPlayback: ObservableObject {
     private func report(_ state: String) {
         // A session must open with "playing": the engine holds paused while loading, and a
         // "paused" first makes Plex fire media.pause and never media.play (#433).
-        guard !reportedStopped, state != "paused" || hasPlayed else { return }
+        guard !reportedStopped, !isPlayingCinemaExtra, state != "paused" || hasPlayed else { return }
         let request = request
         let time = player.currentTime
         let plex = plex
@@ -531,7 +565,7 @@ final class MacPlexPlayback: ObservableObject {
     /// Stopped, then a scrobble when the viewer got past the watched ceiling.
     @discardableResult
     private func finishItem(at time: TimeInterval) -> Task<Void, Never>? {
-        guard !reportedStopped else { return nil }
+        guard !reportedStopped, !isPlayingCinemaExtra else { return nil }
         reportedStopped = true
         let request = request
         let plex = plex

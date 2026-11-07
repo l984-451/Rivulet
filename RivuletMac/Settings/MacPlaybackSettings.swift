@@ -26,6 +26,7 @@ struct MacPlaybackSettingsView: View {
     @State private var trackRevision = 0
     @AppStorage(AutoplayCountdown.storageKey) private var autoplayCountdown = AutoplayCountdown.fiveSeconds.rawValue
     @AppStorage(AutoplayLimit.storageKey) private var autoplayLimit = AutoplayLimit.off.rawValue
+    @AppStorage(CinemaExtras.countKey) private var cinemaTrailers = 0
 
     var body: some View {
         Form {
@@ -75,6 +76,15 @@ struct MacPlaybackSettingsView: View {
                 Text("Autoplay")
             } footer: {
                 Text("Countdown is how long Up Next waits before the next episode starts. Limit stops autoplay after that many episodes in a row.")
+            }
+
+            Section {
+                Picker("Trailers Before Movies", selection: $cinemaTrailers) {
+                    Text("Off").tag(0)
+                    ForEach(CinemaExtras.countOptions.dropFirst(), id: \.self) { Text("\($0)").tag($0) }
+                }
+            } footer: {
+                Text("Plays trailers and pre-roll videos from your Plex server's Cinema Trailers settings before a movie that starts from the beginning.")
             }
 
             Section {

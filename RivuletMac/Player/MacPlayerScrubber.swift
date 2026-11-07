@@ -11,6 +11,9 @@ struct MacPlayerScrubber: View {
     let value: Double
     @Binding var scrubValue: Double?
     var scrubStill: ((Double) async -> NSImage?)?
+    /// Live with a rewind window: the part that can be reached, and programme boundaries on the bar's axis.
+    var seekable: ClosedRange<Double>?
+    var sections: [Double] = []
     let onCommit: (Double) -> Void
     let onStep: (Double) -> Void
 
@@ -39,8 +42,8 @@ struct MacPlayerScrubber: View {
             let width = geometry.size.width
             let shown = scrubValue ?? value
             ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.28)).frame(height: active ? 7 : 4)
-                Capsule().fill(.white).frame(width: width * fraction(shown), height: active ? 7 : 4)
+                track(width: width, shown: shown)
+                    .frame(height: active ? 7 : 4)
                 if active {
                     Circle().fill(.white).frame(width: 13, height: 13)
                         .offset(x: width * fraction(shown) - 6.5)
@@ -83,6 +86,25 @@ struct MacPlayerScrubber: View {
     }
 
     @ViewBuilder
+    private func track(width: CGFloat, shown: Double) -> some View {
+        if seekable == nil, sections.isEmpty {
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.28))
+                Capsule().fill(.white).frame(width: width * fraction(shown))
+            }
+        } else {
+            let start = seekable.map { width * fraction($0.lowerBound) } ?? 0
+            let reach = seekable.map { width * fraction($0.upperBound) } ?? width
+            ZStack(alignment: .leading) {
+                Rectangle().fill(.white.opacity(0.28))
+                Rectangle().fill(.white.opacity(0.22)).frame(width: max(0, reach - start)).offset(x: start)
+                Rectangle().fill(.white).frame(width: max(0, width * fraction(shown) - start)).offset(x: start)
+            }
+            .mask { MacTimelineSections(cuts: sections.map(fraction)) }
+        }
+    }
+
+    @ViewBuilder
     private func preview(width: CGFloat) -> some View {
         if let time = previewTime {
             let still = still
@@ -119,6 +141,29 @@ struct MacPlayerScrubber: View {
                 if previewTime != nil, let image { still = image }
             }
             stillLoad = nil
+        }
+    }
+}
+
+/// The track cut into one rounded section per programme. No cuts: one capsule.
+private struct MacTimelineSections: View {
+    let cuts: [Double]
+    private static let gap: CGFloat = 3
+
+    var body: some View {
+        Canvas { context, size in
+            guard size.width > 0, size.height > 0 else { return }
+            let edges = [0] + cuts.filter { $0 > 0 && $0 < 1 }.sorted() + [1]
+            var path = Path()
+            for (from, to) in zip(edges, edges.dropFirst()) {
+                let minX = size.width * from + (from > 0 ? Self.gap / 2 : 0)
+                let maxX = size.width * to - (to < 1 ? Self.gap / 2 : 0)
+                guard maxX > minX else { continue }
+                let rect = CGRect(x: minX, y: 0, width: maxX - minX, height: size.height)
+                let radius = min(size.height / 2, rect.width / 2)
+                path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+            }
+            context.fill(path, with: .color(.white))
         }
     }
 }

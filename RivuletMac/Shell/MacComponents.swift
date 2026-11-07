@@ -264,7 +264,7 @@ struct MacPosterCard: View {
     }
 }
 
-/// Continue Watching: art at the tvOS card's 357:277, the logo centred, and progress with
+/// Continue Watching: art at the tvOS card's 357:277, the logo placed as on tvOS, and progress with
 /// "S2, E5 · 12 min left" along the bottom over a soft blur band.
 struct MacContinueCard: View {
     static let aspectRatio: CGFloat = 357 / 277
@@ -276,8 +276,25 @@ struct MacContinueCard: View {
     @Environment(\.displayScale) private var displayScale
     /// The art already shows the title, keyed by the art it was read from.
     @State private var artShowsTitle: (art: URL, shows: Bool)?
+    @State private var signals = ContinueWatchingCardCompositor.Signals.none
+    @State private var logoSize: CGSize?
 
     private var height: CGFloat { width / Self.aspectRatio }
+
+    /// The title rests leading on the floor and moves clear of faces and busy art, as on tvOS.
+    private var placedLogo: some View {
+        let size = logoSize ?? browse.cachedLogoURL(for: item).flatMap(MacArtworkCache.shared.cachedImage(for:))?.size
+        let placed = ContinueWatchingTitlePlacer.titleRect(card: CGSize(width: width, height: height), signals: signals, logoSize: size)
+        return MacResolvedLogo(item: item, fallbackTitle: item.showTitle, maxWidth: placed.rect.width, maxHeight: placed.rect.height,
+                               alignment: placed.side == .leading ? .leading : .trailing,
+                               textAlignment: placed.side == .leading ? .leading : .trailing)
+            .frame(width: placed.rect.width, height: placed.rect.height)
+            .offset(x: placed.rect.minX, y: placed.rect.minY)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .opacity(hidesLogo ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: hidesLogo)
+    }
+
     private var checkedArt: URL? { browse.artworkURL(for: item, kind: .backdrop, width: 900, height: 506) }
 
     private var hidesLogo: Bool {
@@ -300,10 +317,7 @@ struct MacContinueCard: View {
                 .mask(LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .init(x: 0.5, y: 0.45)))
                 .frame(height: height * 0.25)
                 .frame(maxHeight: .infinity, alignment: .bottom)
-            MacResolvedLogo(item: item, fallbackTitle: item.showTitle, maxWidth: width * 0.75, maxHeight: height * 0.45,
-                            targetArea: 18000 * pow(width / 357, 2))
-                .opacity(hidesLogo ? 0 : 1)
-                .animation(.easeInOut(duration: 0.2), value: hidesLogo)
+            placedLogo
             infoBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 10)
@@ -318,6 +332,17 @@ struct MacContinueCard: View {
         .accessibilityLabel([item.showTitle, item.episodeCode].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(item.watchStateDescription)
         .task(id: checkedArt) { await checkArt() }
+        .task(id: checkedArt) { await analyseArt() }
+    }
+
+    private func analyseArt() async {
+        guard let art = checkedArt else { return }
+        if let logo = await browse.logoURL(for: item) { logoSize = await MacArtworkCache.shared.image(for: logo)?.size }
+        let found = await ContinueWatchingTitlePlacer.signals(key: art.absoluteString) {
+            await MacArtworkCache.shared.image(for: art)?.cgImageRepresentation
+        }
+        guard !Task.isCancelled else { return }
+        signals = found
     }
 
     private func checkArt() async {

@@ -262,7 +262,7 @@ struct IOSPlexPosterCard: View {
 }
 
 /// Continue Watching, the tvOS card: art at the Apple TV app's ~1.29:1, the
-/// logo centred, and a play icon, progress and "S2, E5 · 12 min left" along
+/// logo placed as on tvOS, and a play icon, progress and "S2, E5 · 12 min left" along
 /// the bottom over a soft blur band.
 struct IOSPlexContinueCard: View {
     /// The tvOS Continue Watching card's ratio (`MediaRowMetrics`).
@@ -274,8 +274,30 @@ struct IOSPlexContinueCard: View {
     @EnvironmentObject private var browse: BrowseStore
     /// The art already shows the title (#450), keyed by the art it was read from.
     @State private var artShowsTitle: (art: URL, shows: Bool)?
+    @State private var signals = ContinueWatchingCardCompositor.Signals.none
+    @State private var logoSize: CGSize?
 
     private var height: CGFloat { width / Self.aspectRatio }
+
+    /// The title rests leading on the floor and moves clear of faces and busy art, as on tvOS.
+    private var placedLogo: some View {
+        let size = logoSize ?? browse.cachedLogoURL(for: item).flatMap(IOSArtworkCache.shared.cachedImage(for:))?.size
+        let placed = ContinueWatchingTitlePlacer.titleRect(card: CGSize(width: width, height: height), signals: signals, logoSize: size)
+        return IOSPlexResolvedLogo(
+            item: item,
+            fallbackTitle: item.showTitle,
+            maxWidth: placed.rect.width,
+            maxHeight: placed.rect.height,
+            fallbackFont: .title3.bold(),
+            alignment: placed.side == .leading ? .leading : .trailing,
+            textAlignment: placed.side == .leading ? .leading : .trailing
+        )
+        .frame(width: placed.rect.width, height: placed.rect.height)
+        .offset(x: placed.rect.minX, y: placed.rect.minY)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .opacity(hidesLogo ? 0 : 1)
+        .animation(.easeInOut(duration: 0.2), value: hidesLogo)
+    }
 
     /// The whole backdrop at the size tvOS reads it, not the card's crop.
     private var checkedArt: URL? { browse.artworkURL(for: item, kind: .backdrop, width: 900, height: 506) }
@@ -300,19 +322,7 @@ struct IOSPlexContinueCard: View {
                 .mask(LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .init(x: 0.5, y: 0.45)))
                 .frame(height: height * 0.25)
                 .frame(maxHeight: .infinity, alignment: .bottom)
-            // tvOS: 18000 pt² on a 357pt card, at most 75% wide and 45% tall.
-            IOSPlexResolvedLogo(
-                item: item,
-                fallbackTitle: item.showTitle,
-                maxWidth: width * 0.75,
-                maxHeight: height * 0.45,
-                fallbackFont: .title3.bold(),
-                alignment: .center,
-                textAlignment: .center,
-                targetArea: 18000 * pow(width / 357, 2)
-            )
-            .opacity(hidesLogo ? 0 : 1)
-            .animation(.easeInOut(duration: 0.2), value: hidesLogo)
+            placedLogo
             infoBar
                 .padding(.horizontal, 12)
                 .padding(.bottom, 10)
@@ -328,6 +338,17 @@ struct IOSPlexContinueCard: View {
         .accessibilityLabel([item.showTitle, item.episodeCode].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(item.watchStateDescription)
         .task(id: checkedArt) { await checkArt() }
+        .task(id: checkedArt) { await analyseArt() }
+    }
+
+    private func analyseArt() async {
+        guard let art = checkedArt else { return }
+        if let logo = await browse.logoURL(for: item) { logoSize = await IOSArtworkCache.shared.image(for: logo)?.size }
+        let found = await ContinueWatchingTitlePlacer.signals(key: art.absoluteString) {
+            await IOSArtworkCache.shared.image(for: art)?.cgImage
+        }
+        guard !Task.isCancelled else { return }
+        signals = found
     }
 
     private func checkArt() async {

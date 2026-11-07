@@ -45,13 +45,14 @@ nonisolated enum ContinueWatchingCardCompositor {
         /// The title's lowest bottom edge: the blur ramp's start, clear of the status row.
         let titleFloor: CGFloat
 
-        init(cardWidth width: CGFloat) {
+        /// `cardHeight` is for a card whose art fills the whole card (iOS, Mac); the band is only kept clear.
+        init(cardWidth width: CGFloat, cardHeight fullBleed: CGFloat? = nil) {
             let bandHeight = ContinueWatchingCardCompositor.bandHeight
-            let height = ContinueWatchingCardCompositor.height(forWidth: width)
+            let height = fullBleed ?? ContinueWatchingCardCompositor.height(forWidth: width)
             let stillHeight = height - bandHeight
             titleFloor = stillHeight - 16
             card = CGSize(width: width, height: height)
-            still = CGRect(x: 0, y: 0, width: width, height: stillHeight)
+            still = CGRect(x: 0, y: 0, width: width, height: fullBleed == nil ? stillHeight : height)
             band = CGRect(x: 0, y: stillHeight, width: width, height: bandHeight)
             blurStart = stillHeight - 16
             blurRadius = 8

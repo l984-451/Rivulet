@@ -69,8 +69,8 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   hero sources, favorites and playlist rows).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
-│                       #   navigation contract, IOSBrowseStore: every server's
-│                       #   content), Plex/ (IOSPlexSession: Plex sign-in and
+│                       #   navigation contract, BrowseStore: every server's
+│                       #   content), Plex/ (PlexSession: Plex sign-in and
 │                       #   playback; Home/Library/Detail views; no endpoint code), Search/, Settings/, LiveTV/ (views
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
@@ -219,9 +219,9 @@ So is the Live TV stack: `LiveTVDataStore`, `PlexLiveTVProvider` + the timeline
 keepalive, `IPTVProvider`, `DispatcharrService`, `LiveTVSourceConnector` (the
 verify-then-add behind both apps' add-source forms) and `LiveShelves` (What's On
 rows). **There is exactly one Plex client.** `RivuletiOS/Plex/` holds
-`IOSPlexSession` (Plex sign-in, profile, server choice and the Plex playback
+`PlexSession` (Plex sign-in, profile, server choice and the Plex playback
 path) and the SwiftUI views; iOS content for every server comes from
-`RivuletiOS/Shell/IOSBrowseStore` over `MediaProviderRegistry` and the shared
+`RivuletCore/Client/BrowseStore` over `MediaProviderRegistry` and the shared
 `HomeFeed`. No endpoint code in the iOS folder. Never add a second decoder for a Plex
 endpoint to the iOS folder; a bug fixed in the shared client must be the fix
 for both apps.
@@ -238,7 +238,7 @@ references to per-platform types:
 - `PlexAuthManager.onAuthenticated` / `.onSignedOut` and
   `PlexUserProfileManager.onProfileChanged` / `.onInitialProfileSelected` are
   closures the host sets at launch (tvOS → `PlexDataStore`, iOS →
-  `IOSPlexSession`). The managers own identity; content stores are per
+  `PlexSession`). The managers own identity; content stores are per
   platform. `onAuthenticated` is awaited on purpose — it prefetches the
   libraries the tvOS sidebar needs on its first build.
 - `SentryStartup.start(platform:)` takes the platform from the caller for the
@@ -807,7 +807,7 @@ which never names a backend.
   per-profile list and tokens from `/resources`, shared with iOS), shown beside
   Jellyfin by `ServerDataStore`. iOS keys the same servers on
   `PlexMetadata.serverID` / `PlexLibrary.serverID` / `PlexHub.serverID` (nil is
-  the selected server) and resolves each through `IOSPlexSession.configuration(serverID:)`.
+  the selected server) and resolves each through `PlexSession.configuration(serverID:)`.
   `MediaItemRef.isPlex` means the SELECTED server only, so an extra server's
   item takes the provider path; never test `hasPrefix("plex:")` to mean
   "the Plex server".

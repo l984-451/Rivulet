@@ -17,7 +17,7 @@ extension EnvironmentValues {
 extension View {
     /// The app-wide objects, passed into a sheet by hand: on a Mac the sheet's body
     /// is built before it inherits them from the presenter, and reading one crashes.
-    func iosSessionObjects(_ plex: IOSPlexSession) -> some View {
+    func iosSessionObjects(_ plex: PlexSession) -> some View {
         environmentObject(plex)
             .environmentObject(plex.browse)
             .environmentObject(IOSDownloadCenter.shared)
@@ -43,9 +43,9 @@ struct IOSPlexDetailRoute: Hashable {
 /// The avatar every tab root puts at the trailing end of its toolbar.
 struct IOSAccountButton: View {
     @Environment(\.openAccount) private var openAccount
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     /// Its libraries change on every Jellyfin or Emby sign-in and sign-out, which re-reads the name.
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @ObservedObject private var profiles = PlexUserProfileManager.shared
 
     var body: some View {

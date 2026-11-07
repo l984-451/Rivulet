@@ -35,7 +35,7 @@ final class IOSPlaybackController: NSObject, ObservableObject {
     @Published var playbackError: String?
 
     /// Needed by Plex sessions; the host modifier supplies it.
-    weak var plex: IOSPlexSession?
+    weak var plex: PlexSession?
 
     /// The engine surface, kept here so it survives the view while PiP runs.
     private(set) var surface: UIView?
@@ -48,7 +48,7 @@ final class IOSPlaybackController: NSObject, ObservableObject {
     // MARK: - Caller API
 
     /// Plays a Plex item full screen; a playlist's `queue` replaces Up Next.
-    func play(_ request: IOSPlexPlaybackRequest, queue: PlayQueue<PlexMetadata>? = nil) {
+    func play(_ request: PlexPlaybackRequest, queue: PlayQueue<PlexMetadata>? = nil) {
         guard let plex else { return }
         start(IOSPlexPlayback(request: request, plex: plex, queue: queue))
     }
@@ -226,7 +226,7 @@ extension IOSPlaybackController: AVPictureInPictureControllerDelegate {
 }
 
 extension View {
-    /// Applied once at the app root, inside the `IOSPlexSession` environment:
+    /// Applied once at the app root, inside the `PlexSession` environment:
     /// presents the controller's player full screen.
     func iosPlaybackHost(_ controller: IOSPlaybackController) -> some View {
         modifier(IOSPlaybackHost(controller: controller))
@@ -235,7 +235,7 @@ extension View {
 
 private struct IOSPlaybackHost: ViewModifier {
     @ObservedObject var controller: IOSPlaybackController
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
 
     func body(content: Content) -> some View {
         content

@@ -17,7 +17,7 @@ extension IOSPlaybackController {
                 try await startItem(item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue)
             } catch is CancellationError {
             } catch {
-                playbackError = Self.message(for: error)
+                playbackError = PlaybackFailure.message(for: error)
             }
         }
     }
@@ -49,13 +49,13 @@ extension IOSPlaybackController {
             return
         }
 
-        let backend = IOSProviderBackend(provider: provider, onWatchStateChange: { [weak plex] in
+        let backend = ProviderBackend(provider: provider, onWatchStateChange: { [weak plex] in
             await plex?.watchStateDidChange()
         })
         backend.register(entries?.items ?? [])
         // A downloaded title plays its file, online or not.
-        let request: IOSPlexPlaybackRequest
-        if var local = IOSDownloadCenter.shared.localPlayback(for: target), sourceID == nil {
+        let request: PlexPlaybackRequest
+        if var local = ClientHost.offline.localPlayback(for: target), sourceID == nil {
             if fromBeginning { local.startTime = nil }
             request = local
         } else {
@@ -78,21 +78,10 @@ extension IOSPlaybackController {
             playbackError = String(localized: "Sign in to the server to play this download.")
             return
         }
-        let backend = IOSProviderBackend(provider: provider, onWatchStateChange: { [weak plex] in
+        let backend = ProviderBackend(provider: provider, onWatchStateChange: { [weak plex] in
             await plex?.watchStateDidChange()
         })
         backend.register([record.item])
         start(IOSPlexPlayback(request: request, plex: backend, queue: nil))
-    }
-
-    /// What the alert says for a failed start.
-    static func message(for error: Error) -> String {
-        switch error as? MediaProviderError {
-        case .transcodeRequired: String(localized: "This server can't stream this title to this device.")
-        case .unreachable: String(localized: "Couldn't reach the server.")
-        case .unauthorized: String(localized: "The server didn't accept your sign-in.")
-        case .none: (error as? LocalizedError)?.errorDescription ?? String(localized: "Something went wrong starting playback.")
-        default: String(localized: "Something went wrong starting playback.")
-        }
     }
 }

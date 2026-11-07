@@ -2,20 +2,20 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //
-//  IOSBrowseStore.swift
-//  Rivulet iOS
+//  BrowseStore.swift
+//  Rivulet
 //
 //  What the browse screens show, for every signed-in server: Home, libraries and playlists, read
 //  through MediaProviderRegistry. The counterpart of tvOS's PlexDataStore and ServerDataStore.
 //  The assembly lives in RivuletCore (HomeFeed); this publishes it and runs the actions the
-//  menus offer. Plex sign-in and profile state stay in IOSPlexSession.
+//  menus offer. Plex sign-in and profile state stay in PlexSession.
 //
 
 import Combine
 import Foundation
 
 @MainActor
-final class IOSBrowseStore: ObservableObject {
+final class BrowseStore: ObservableObject {
     @Published private(set) var libraries: [MediaLibrary] = []
     /// Home rows after Continue Watching: promoted rows of the selected Plex server, then each other server's.
     @Published private(set) var shelves: [MediaHub] = []
@@ -212,10 +212,7 @@ final class IOSBrowseStore: ObservableObject {
     }
 
     private func apply(_ assembled: HomeFeed.Assembled) {
-        var home = assembled
-        #if DEBUG
-        if IOSScreenshotMode.isOn { home = IOSScreenshotMode.demo(home) }
-        #endif
+        let home = ClientHost.transformHome(assembled)
         failures = home.failures
         libraries = home.libraries
         shelves = home.shelves
@@ -419,13 +416,14 @@ final class IOSBrowseStore: ObservableObject {
     /// Resolves logos and downloads them with the art, in row order, four at a time, so cards
     /// scrolled into view are already complete. Each `art` must be the URL the card itself requests.
     func prefetchArtwork(_ jobs: [(item: MediaItem, art: URL?)]) async {
+        let prefetch = ClientHost.prefetchImage
         await withTaskGroup(of: Void.self) { group in
             for (index, job) in jobs.enumerated() {
                 if Task.isCancelled { break }
                 if index >= 4 { await group.next() }
                 group.addTask {
-                    if let logo = await self.logoURL(for: job.item) { _ = await IOSArtworkCache.shared.image(for: logo) }
-                    if let art = job.art { _ = await IOSArtworkCache.shared.image(for: art) }
+                    if let logo = await self.logoURL(for: job.item) { await prefetch(logo) }
+                    if let art = job.art { await prefetch(art) }
                 }
             }
         }

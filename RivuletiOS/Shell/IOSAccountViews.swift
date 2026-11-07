@@ -7,7 +7,7 @@ import UIKit
 /// Call to action shown in place of content: sign in, or, when signed in with
 /// content waiting on a Home profile, choose who is watching.
 struct IOSPlexConnectView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @State private var showingSignIn = false
     @State private var choosingProfile = false
@@ -101,7 +101,7 @@ extension PlexHomeUser {
 
 /// PIN sign-in, then server choice, then the profile picker when the Plex Home has several users.
 struct IOSPlexConnectionSheet: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL

@@ -5,39 +5,8 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// Same key and values as tvOS `liveTVLayout`.
-enum IOSLiveLayout: String, CaseIterable {
-    case browse = "Browse"
-    case guide = "Guide"
-
-    static let storageKey = "liveTVLayout"
-
-    var title: String { self == .browse ? String(localized: "What's On") : String(localized: "Guide") }
-}
-
 enum IOSLiveRoute: Hashable {
     case recordings
-}
-
-/// A programme the sheet describes. `program` is nil for a channel with no guide data.
-struct IOSLiveProgrammeSelection: Identifiable {
-    let channel: UnifiedChannel
-    let program: UnifiedProgram?
-    var id: String { program?.id ?? channel.id }
-}
-
-extension UnifiedChannel {
-    /// "7 · BBC One", or the name alone.
-    var numberAndName: String {
-        [channelNumber.map(String.init), name].compactMap { $0 }.joined(separator: " · ")
-    }
-}
-
-extension UnifiedProgram {
-    var timeRange: String {
-        let style = Date.FormatStyle.dateTime.hour().minute()
-        return String(localized: "\(startTime.formatted(style)) to \(endTime.formatted(style))")
-    }
 }
 
 // MARK: - Playing
@@ -96,86 +65,15 @@ struct IOSLiveWideArt: ViewModifier {
     }
 }
 
-// MARK: - Recording
-
-/// Record offers and recording changes, with the tvOS copy for failures.
-/// Each presenting context (tab, sheet, player) owns one.
-@MainActor
-final class IOSLiveRecorder: ObservableObject {
-    struct Offer: Identifiable {
-        let id = UUID()
-        let program: UnifiedProgram
-        let channel: UnifiedChannel
-        let options: [LiveTVRecordOption]
-    }
-
-    struct Failure: Identifiable {
-        let id = UUID()
-        let title: String
-        let message: String
-    }
-
-    @Published var offer: Offer?
-    @Published var failure: Failure?
-    @Published private(set) var isLoadingOptions = false
-
-    private var store: LiveTVDataStore { .shared }
-
-    /// Loads the source's record options and asks which one.
-    func offerRecording(_ program: UnifiedProgram, on channel: UnifiedChannel) {
-        isLoadingOptions = true
-        Task {
-            defer { isLoadingOptions = false }
-            do {
-                let options = try await store.recordOptions(for: program, on: channel)
-                if options.isEmpty {
-                    failure = Failure(title: String(localized: "Can't Record"), message: String(localized: "The server offered no way to record this programme."))
-                } else {
-                    offer = Offer(program: program, channel: channel, options: options)
-                }
-            } catch {
-                failure = Failure(title: String(localized: "Can't Record"), message: error.localizedDescription)
-            }
-        }
-    }
-
-    func record(_ option: LiveTVRecordOption, offer: Offer) {
-        run { try await LiveTVDataStore.shared.record(option, program: offer.program, on: offer.channel) }
-    }
-
-    func cancel(_ recording: LiveTVScheduledRecording) {
-        run { try await LiveTVDataStore.shared.cancel(recording) }
-    }
-
-    func cancelSeries(of recording: LiveTVScheduledRecording) {
-        run { try await LiveTVDataStore.shared.cancelSeries(of: recording) }
-    }
-
-    func delete(_ rule: LiveTVRecordingRule, then done: @escaping () -> Void = {}) {
-        run({ try await LiveTVDataStore.shared.delete(rule) }, then: done)
-    }
-
-    private func run(_ change: @escaping () async throws -> Void, then done: @escaping () -> Void = {}) {
-        Task {
-            do {
-                try await change()
-                done()
-            } catch {
-                failure = Failure(title: String(localized: "Recording Didn't Change"), message: error.localizedDescription)
-            }
-        }
-    }
-}
-
 extension View {
     /// The record choices dialog and the failure alert for `recorder`.
-    func liveRecorder(_ recorder: IOSLiveRecorder) -> some View {
+    func liveRecorder(_ recorder: LiveRecorder) -> some View {
         modifier(IOSLiveRecorderPresenter(recorder: recorder))
     }
 }
 
 private struct IOSLiveRecorderPresenter: ViewModifier {
-    @ObservedObject var recorder: IOSLiveRecorder
+    @ObservedObject var recorder: LiveRecorder
 
     func body(content: Content) -> some View {
         content
@@ -203,73 +101,8 @@ private struct IOSLiveRecorderPresenter: ViewModifier {
 
 // MARK: - Menus
 
-/// One long-press menu entry. Built once, drawn as SwiftUI buttons or UIActions.
-struct IOSLiveMenuAction: Identifiable {
-    let id: String
-    let title: String
-    let systemImage: String
-    var isDestructive = false
-    let perform: () -> Void
-}
-
-/// The tvOS `LiveProgramMenu` rules in HIG order: Watch, Record, Favorite.
-@MainActor
-enum IOSLiveMenu {
-    static func sections(
-        channel: UnifiedChannel,
-        program: UnifiedProgram?,
-        recorder: IOSLiveRecorder,
-        watch: @escaping (UnifiedChannel) -> Void,
-        details: ((IOSLiveProgrammeSelection) -> Void)? = nil
-    ) -> [[IOSLiveMenuAction]] {
-        let store = LiveTVDataStore.shared
-        let airingNow = program?.isCurrentlyAiring ?? true
-        var watchGroup = [IOSLiveMenuAction(
-            id: "watch",
-            title: airingNow ? String(localized: "Watch") : String(localized: "Watch \(channel.name)"),
-            systemImage: "play.fill"
-        ) { watch(channel) }]
-        if let details, program != nil {
-            watchGroup.append(IOSLiveMenuAction(id: "details", title: String(localized: "Details"), systemImage: "info.circle") {
-                details(IOSLiveProgrammeSelection(channel: channel, program: program))
-            })
-        }
-
-        var recordGroup: [IOSLiveMenuAction] = []
-        if let program, program.endTime > Date(), store.canRecord(channel) {
-            if let recording = store.activeRecording(for: program) {
-                recordGroup.append(IOSLiveMenuAction(
-                    id: "cancel",
-                    title: recording.status == .recording ? String(localized: "Stop Recording") : String(localized: "Cancel Recording"),
-                    systemImage: "stop.circle",
-                    isDestructive: true
-                ) { recorder.cancel(recording) })
-                if recording.ruleIsSeries {
-                    recordGroup.append(IOSLiveMenuAction(
-                        id: "series",
-                        title: String(localized: "Cancel Series"),
-                        systemImage: "square.stack.3d.up.slash",
-                        isDestructive: true
-                    ) { recorder.cancelSeries(of: recording) })
-                }
-            } else {
-                recordGroup.append(IOSLiveMenuAction(id: "record", title: String(localized: "Record…"), systemImage: "record.circle") {
-                    recorder.offerRecording(program, on: channel)
-                })
-            }
-        }
-
-        var favoriteGroup: [IOSLiveMenuAction] = []
-        let isFavorite = store.isFavorite(channel)
-        favoriteGroup.append(IOSLiveMenuAction(
-            id: "favorite",
-            title: isFavorite ? String(localized: "Remove from Favorites") : String(localized: "Add to Favorites"),
-            systemImage: isFavorite ? "star.slash" : "star"
-        ) { store.toggleFavorite(channel) })
-        return [watchGroup, recordGroup, favoriteGroup].filter { !$0.isEmpty }
-    }
-
-    static func uiMenu(_ sections: [[IOSLiveMenuAction]]) -> UIMenu {
+extension LiveMenu {
+    static func uiMenu(_ sections: [[LiveMenuAction]]) -> UIMenu {
         UIMenu(children: sections.map { group in
             UIMenu(options: .displayInline, children: group.map { action in
                 UIAction(
@@ -282,9 +115,9 @@ enum IOSLiveMenu {
     }
 }
 
-/// SwiftUI rendering of `IOSLiveMenu.sections`.
+/// SwiftUI rendering of `LiveMenu.sections`.
 struct IOSLiveMenuContent: View {
-    let sections: [[IOSLiveMenuAction]]
+    let sections: [[LiveMenuAction]]
 
     var body: some View {
         ForEach(sections.indices, id: \.self) { index in

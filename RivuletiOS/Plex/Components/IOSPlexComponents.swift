@@ -44,12 +44,12 @@ struct IOSPlexImage: View {
 /// round up to 120px steps so nearby tile sizes share one cache entry.
 struct IOSPlexArtwork: View {
     let item: PlexMetadata
-    let kind: IOSPlexSession.ArtworkKind
+    let kind: PlexSession.ArtworkKind
     /// Display width in points.
     let width: CGFloat
     /// Width over height of the requested image.
     let aspectRatio: CGFloat
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
@@ -57,7 +57,7 @@ struct IOSPlexArtwork: View {
     }
 
     /// The exact URL this view requests, so a prefetch warms the same cache entry.
-    static func url(_ plex: IOSPlexSession, item: PlexMetadata, kind: IOSPlexSession.ArtworkKind,
+    static func url(_ plex: PlexSession, item: PlexMetadata, kind: PlexSession.ArtworkKind,
                     width: CGFloat, aspectRatio: CGFloat, scale: CGFloat) -> URL? {
         let pixels = max(1, Int((width * scale / 120).rounded(.up))) * 120
         return plex.artworkURL(for: item, kind: kind, width: pixels, height: Int(CGFloat(pixels) / aspectRatio))
@@ -67,12 +67,12 @@ struct IOSPlexArtwork: View {
 /// A MediaItem's artwork, resized by its server to the pixel size the tile draws at.
 struct IOSItemArtwork: View {
     let item: MediaItem
-    let kind: IOSBrowseStore.ArtworkKind
+    let kind: BrowseStore.ArtworkKind
     /// Display width in points.
     let width: CGFloat
     /// Width over height of the requested image.
     let aspectRatio: CGFloat
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
@@ -81,7 +81,7 @@ struct IOSItemArtwork: View {
 
     /// The exact URL this view requests, so a prefetch warms the same cache entry.
     /// Widths round up to 120px steps so nearby tile sizes share one cache entry.
-    static func url(_ browse: IOSBrowseStore, item: MediaItem, kind: IOSBrowseStore.ArtworkKind,
+    static func url(_ browse: BrowseStore, item: MediaItem, kind: BrowseStore.ArtworkKind,
                     width: CGFloat, aspectRatio: CGFloat, scale: CGFloat) -> URL? {
         let pixels = max(1, Int((width * scale / 120).rounded(.up))) * 120
         return browse.artworkURL(for: item, kind: kind, width: pixels, height: Int(CGFloat(pixels) / aspectRatio))
@@ -102,7 +102,7 @@ struct IOSPlexResolvedLogo: View {
     /// and tall logos read the same weight. Nil fills the max box.
     var targetArea: CGFloat?
 
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @State private var loaded: (identity: String, image: UIImage)?
 
     private var sourceIdentity: String {
@@ -271,7 +271,7 @@ struct IOSPlexContinueCard: View {
     let item: MediaItem
     let width: CGFloat
 
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     /// The art already shows the title (#450), keyed by the art it was read from.
     @State private var artShowsTitle: (art: URL, shows: Bool)?
 
@@ -377,7 +377,7 @@ struct IOSPlexHubRoute: Hashable {
     var pages: Bool { hub.pagingKey != nil }
 
     /// Only the merged row, which has no server; a library's own in-progress row keeps its items.
-    var isContinueWatching: Bool { hub.id == IOSBrowseStore.continueWatchingID && hub.providerID.isEmpty }
+    var isContinueWatching: Bool { hub.id == BrowseStore.continueWatchingID && hub.providerID.isEmpty }
 }
 
 /// "Title ›" heading that pushes the full grid.
@@ -554,7 +554,7 @@ struct IOSShelfRow<Items: RandomAccessCollection, Header: View, Tile: View>: Vie
 /// One Home hub as a titled row.
 struct IOSPlexShelfView: View {
     let hub: MediaHub
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
 
     private var items: [MediaItem] { Array(hub.items.prefix(HomeFeed.railLimit)) }
@@ -696,8 +696,8 @@ extension GeometryProxy {
 
 /// A server that failed to load, named, above the rows of the servers that answered.
 struct IOSServerFailureBanner: View {
-    let failure: IOSBrowseStore.FailedServer
-    @EnvironmentObject private var browse: IOSBrowseStore
+    let failure: BrowseStore.FailedServer
+    @EnvironmentObject private var browse: BrowseStore
 
     var body: some View {
         HStack(spacing: 12) {

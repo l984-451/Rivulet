@@ -172,10 +172,10 @@ private struct IOSLivePlayerScreen: View {
     @ObservedObject var player: AetherPlayer
     @ObservedObject var controller: IOSPlaybackController
     @ObservedObject private var store = LiveTVDataStore.shared
-    @StateObject private var recorder = IOSLiveRecorder()
+    @StateObject private var recorder = LiveRecorder()
     @State private var captionStyle = CaptionAppearance.current()
     @State private var showsChannels = false
-    @State private var info: IOSLiveProgrammeSelection?
+    @State private var info: LiveProgrammeSelection?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
@@ -317,7 +317,7 @@ private struct IOSLivePlayerScreen: View {
 
         if programme != nil {
             glassButton("Info", systemImage: "info.circle") {
-                info = IOSLiveProgrammeSelection(channel: channel, program: programme)
+                info = LiveProgrammeSelection(channel: channel, program: programme)
             }
         }
     }

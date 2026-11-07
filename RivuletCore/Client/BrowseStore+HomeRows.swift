@@ -2,8 +2,8 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //
-//  IOSBrowseStore+HomeRows.swift
-//  Rivulet iOS
+//  BrowseStore+HomeRows.swift
+//  Rivulet
 //
 //  Home's rows as the user arranged them: hidden rows left out, the saved order applied, and
 //  the favorites and playlist rows (`PersonalRows`) added. The keys are tvOS's, so a profile
@@ -14,7 +14,7 @@ import Combine
 import Foundation
 
 /// One row of Settings > Home > Rows.
-struct IOSHomeRowEntry: Identifiable {
+struct HomeRowEntry: Identifiable {
     enum Kind {
         case continueWatching
         case shelf(hiddenID: String)
@@ -29,7 +29,7 @@ struct IOSHomeRowEntry: Identifiable {
     var isOn: Bool
 }
 
-extension IOSBrowseStore {
+extension BrowseStore {
 
     func observeHomeSettings() {
         let center = NotificationCenter.default
@@ -112,28 +112,28 @@ extension IOSBrowseStore {
 
     /// Every row Home can draw, in Home's order, with the ones that are off marked: one entry per
     /// `HomeRowOrder` key. Favorites and playlists are listed whether or not they have loaded.
-    var homeRowEntries: [IOSHomeRowEntry] {
-        var entries: [IOSHomeRowEntry] = []
+    var homeRowEntries: [HomeRowEntry] {
+        var entries: [HomeRowEntry] = []
         if continueWatchingHub != nil {
-            entries.append(IOSHomeRowEntry(id: HomeRowOrder.continueWatchingKey, title: String(localized: "Continue Watching"),
+            entries.append(HomeRowEntry(id: HomeRowOrder.continueWatchingKey, title: String(localized: "Continue Watching"),
                                            kind: .continueWatching, isOn: isContinueWatchingShown))
         }
         for hub in shelves {
             let id = hiddenID(of: hub)
             let badge = labels.badge(providerID: hub.providerID)
-            entries.append(IOSHomeRowEntry(id: id, title: badge.map { "\(hub.title) (\($0))" } ?? hub.title,
+            entries.append(HomeRowEntry(id: id, title: badge.map { "\(hub.title) (\($0))" } ?? hub.title,
                                            kind: .shelf(hiddenID: id), isOn: !HomeRowSettings.isHidden(id)))
         }
         if offersFavorites {
             for kind in PersonalRows.favoriteKinds {
-                entries.append(IOSHomeRowEntry(id: PersonalRows.favoritesIdentifier(kind), title: PersonalRows.favoritesTitle(kind),
+                entries.append(HomeRowEntry(id: PersonalRows.favoritesIdentifier(kind), title: PersonalRows.favoritesTitle(kind),
                                                kind: .favorites(kind), isOn: PersonalRows.showsFavorites(kind)))
             }
         }
         for pin in playlistEntries {
             let id = PersonalRows.playlistRowID(providerID: pin.providerID, playlistID: pin.playlistID)
             let badge = labels.badge(providerID: pin.providerID)
-            entries.append(IOSHomeRowEntry(id: id, title: badge.map { "\(pin.title) (\($0))" } ?? pin.title, kind: .playlist(pin),
+            entries.append(HomeRowEntry(id: id, title: badge.map { "\(pin.title) (\($0))" } ?? pin.title, kind: .playlist(pin),
                                            isOn: HomePlaylistPins.pins.contains { $0.id == pin.id }))
         }
         return HomeRowOrder.arrange(entries, key: \.id)
@@ -152,7 +152,7 @@ extension IOSBrowseStore {
     var offersFavorites: Bool { PersonalRows.offersFavorites(allProviders) }
 
     /// Switching a row on or off. A row turned on goes last.
-    func setHomeRow(_ entry: IOSHomeRowEntry, shown: Bool) {
+    func setHomeRow(_ entry: HomeRowEntry, shown: Bool) {
         if shown {
             let entries = homeRowEntries
             HomeRowOrder.placeLast(entry.id, among: (entries.filter(\.isOn) + entries.filter { !$0.isOn }).map(\.id))

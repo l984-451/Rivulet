@@ -8,10 +8,15 @@ import Sentry
 @main
 struct RivuletiOSApp: App {
     @UIApplicationDelegateAdaptor(IOSAppDelegate.self) private var appDelegate
-    @StateObject private var plex: IOSPlexSession
+    @StateObject private var plex: PlexSession
 
     init() {
         HostPlatform.installUIKit()
+        ClientHost.offline = IOSOfflineHost()
+        ClientHost.prefetchImage = { _ = await IOSArtworkCache.shared.image(for: $0) }
+        #if DEBUG
+        ClientHost.transformHome = { IOSScreenshotMode.isOn ? IOSScreenshotMode.demo($0) : $0 }
+        #endif
         // Order matters: identity and migration must land before anything
         // touches PlexAuthManager.shared (the session does) or builds a request.
         // The manager reads Keychain and UserDefaults in its init, and PlexAPI
@@ -32,7 +37,7 @@ struct RivuletiOSApp: App {
         MediaProviderRegistry.plexIncludesCollections = false
         // The signed-in Jellyfin and Emby servers, rebuilt from their stored accounts.
         MediaProviderRegistry.shared.populateFromCurrentAuth()
-        let session = IOSPlexSession()
+        let session = PlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)
         // Start the path monitor now; its first reading arrives after a delay.

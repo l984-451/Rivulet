@@ -90,17 +90,7 @@ final class AetherPlayer: ObservableObject {
         let placement: TextPlacement?
     }
 
-    /// A sidecar subtitle file registered at load (Plex external streams).
-    struct SidecarSubtitle {
-        let url: URL
-        let name: String?
-        let language: String?
-        let isForced: Bool
-        let isHearingImpaired: Bool
-        let isDefault: Bool
-        /// "srt", "ass", "vtt": Plex stream keys carry no extension.
-        let formatHint: String?
-    }
+    typealias SidecarSubtitle = SubtitleSidecar
 
     /// The live rewind window on the session axis, the one `seekLive` takes.
     /// Never `sourceTime`: on the software live path that axis is offset.

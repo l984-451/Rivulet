@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Account > Home: what the hero shows, and the way into the rows. The same settings as tvOS's Home pages.
 struct IOSHomeSettingsView: View {
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @State private var confirmingReset = false
 
     private func title(_ source: HeroSources.Source) -> LocalizedStringKey {
@@ -68,7 +68,7 @@ private extension HeroSources.Source {
 
 /// Account > Home > Rows: which rows Home shows and in what order. Drag the shown rows in Edit.
 struct IOSHomeRowsSettingsView: View {
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @State private var confirmingReset = false
 
     var body: some View {
@@ -101,7 +101,7 @@ struct IOSHomeRowsSettingsView: View {
         }
     }
 
-    private func row(_ entry: IOSHomeRowEntry) -> some View {
+    private func row(_ entry: HomeRowEntry) -> some View {
         Toggle(isOn: Binding(get: { entry.isOn }, set: { browse.setHomeRow(entry, shown: $0) })) {
             Text(verbatim: entry.title)
         }

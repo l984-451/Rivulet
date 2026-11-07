@@ -8,7 +8,7 @@ import SwiftUI
 /// art under a transparent bar, actions, episodes, then related rows.
 struct IOSPlexDetailView: View {
     let item: MediaItem
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -259,7 +259,7 @@ private struct IOSPlexDetailHeader: View {
     let size: CGSize
     @Environment(\.plexActions) private var actions
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     /// Asked of the server for the page's title; nil until it answers.
     @State private var onList: Bool?
     @State private var onScreen = false

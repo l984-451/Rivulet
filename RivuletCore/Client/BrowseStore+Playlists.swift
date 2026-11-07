@@ -4,7 +4,7 @@
 import Foundation
 
 /// Video playlists on every server that has them: browse, play and edit through the provider.
-extension IOSBrowseStore {
+extension BrowseStore {
     /// A playlist's rows, in the server's order.
     func playlistContents(_ playlist: MediaPlaylist) async throws -> PlaylistContents {
         try await provider(for: playlist.item.ref).playlistEntries(playlist.item.ref)

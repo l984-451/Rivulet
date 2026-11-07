@@ -4,8 +4,8 @@
 import Foundation
 
 /// The Plex lookups the Plex player and downloads still take by `PlexMetadata`. Browsing,
-/// search, detail and the item actions go through the providers (IOSBrowseStore).
-extension IOSPlexSession {
+/// search, detail and the item actions go through the providers (BrowseStore).
+extension PlexSession {
     /// Marks a row and its items as `serverID`'s.
     nonisolated static func onServer(_ items: [PlexMetadata], _ serverID: String?) -> [PlexMetadata] {
         guard serverID != nil else { return items }
@@ -46,12 +46,12 @@ extension IOSPlexSession {
         if full.type == "show" {
             let seasons = try await children(of: full)
             guard let first = seasons.first(where: { ($0.index ?? 0) > 0 }) ?? seasons.first else {
-                throw IOSPlexSessionError.noPlayableURL
+                throw PlexSessionError.noPlayableURL
             }
             season = first
         }
         guard let episode = Self.nextUp(in: try await children(of: season)) else {
-            throw IOSPlexSessionError.noPlayableURL
+            throw PlexSessionError.noPlayableURL
         }
         return episode
     }

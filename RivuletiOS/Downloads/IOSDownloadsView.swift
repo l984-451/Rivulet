@@ -100,7 +100,7 @@ struct IOSDownloadsView: View {
 private struct IOSDownloadRow: View {
     let record: DownloadRecord
     let isPreparing: Bool
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
 
     private var item: MediaItem { record.item }
 
@@ -168,8 +168,8 @@ private struct IOSDownloadRow: View {
 struct IOSDownloadButton: View {
     let item: MediaItem
     @EnvironmentObject private var downloads: IOSDownloadCenter
-    @EnvironmentObject private var plex: IOSPlexSession
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var plex: PlexSession
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
 
     var body: some View {

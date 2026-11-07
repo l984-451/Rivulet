@@ -48,8 +48,8 @@ extension View {
 }
 
 private struct IOSPlexActionHost: ViewModifier {
-    @EnvironmentObject private var plex: IOSPlexSession
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var plex: PlexSession
+    @EnvironmentObject private var browse: BrowseStore
     @EnvironmentObject private var playback: IOSPlaybackController
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @State private var preparingID: String?
@@ -276,7 +276,7 @@ extension View {
 private struct IOSPlexContextMenu: ViewModifier {
     let item: MediaItem
     let showsDetails: Bool
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -298,7 +298,7 @@ struct IOSPlexItemMenu: View {
     var showsFavorite = true
     var showsDelete = true
     @Environment(\.plexActions) private var actions
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @ObservedObject private var watchlist = PlexWatchlistService.shared
 

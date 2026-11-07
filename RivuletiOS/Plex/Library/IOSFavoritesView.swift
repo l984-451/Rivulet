@@ -6,7 +6,7 @@ import SwiftUI
 /// Every server's favorite movies, then shows, each by title (`FavoritesFeed`).
 /// The tvOS sidebar's Favorites page, as a Library tab row.
 struct IOSFavoritesView: View {
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     /// Nil until the first load lands.
     @State private var items: [MediaItem]?
 

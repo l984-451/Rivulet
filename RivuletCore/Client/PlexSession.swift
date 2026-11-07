@@ -2,19 +2,19 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //
-//  IOSPlexSession.swift
-//  Rivulet iOS
+//  PlexSession.swift
+//  Rivulet
 //
-//  Plex sign-in, profile and server choice for the iOS app, plus the Plex playback pieces
+//  Plex sign-in, profile and server choice for the phone and desktop apps, plus the Plex playback pieces
 //  (iOS has no ContentRouter, so this composes the playback URL). What the browse screens
-//  show lives in IOSBrowseStore, over MediaProviderRegistry.
+//  show lives in BrowseStore, over MediaProviderRegistry.
 //
 
 import Combine
 import Foundation
 
 @MainActor
-final class IOSPlexSession: ObservableObject {
+final class PlexSession: ObservableObject {
     enum State: Equatable {
         case signedOut
         case requestingPIN
@@ -30,7 +30,7 @@ final class IOSPlexSession: ObservableObject {
     @Published private(set) var authenticationURL: URL?
     @Published private(set) var availableServers: [PlexDevice] = []
     /// What the browse screens show, for every server.
-    let browse = IOSBrowseStore()
+    let browse = BrowseStore()
     @Published private(set) var selectedServerName: String?
     @Published private(set) var profileImageURL: URL?
     @Published private(set) var profileDisplayName: String?
@@ -227,19 +227,19 @@ final class IOSPlexSession: ObservableObject {
         for item: PlexMetadata,
         fromBeginning: Bool = false,
         quality: StreamingQuality? = nil,
-        previous: IOSPlexPlaybackRequest? = nil,
+        previous: PlexPlaybackRequest? = nil,
         version: VersionChoice = .best
-    ) async throws -> IOSPlexPlaybackRequest {
+    ) async throws -> PlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
-        if var local = IOSDownloadCenter.shared.localPlayback(
+        if var local = ClientHost.offline.localPlayback(
             for: item, serverID: item.serverID ?? previous?.downloadProviderID.flatMap(DownloadIdentity.plexMachineID(of:))) {
             if fromBeginning { local.startTime = nil }
             return local
         }
         let full = try await metadata(for: item)
         let (serverURL, token) = try configuration(serverID: full.serverID)
-        guard full.streamKey != nil else { throw IOSPlexSessionError.noPlayableURL }
+        guard full.streamKey != nil else { throw PlexSessionError.noPlayableURL }
 
         let markers = await PlexPlaybackMarkers.markers(for: full, serverURL: serverURL, token: token, network: network)
 
@@ -263,11 +263,11 @@ final class IOSPlexSession: ObservableObject {
     /// The playing title again at `time`, keeping its version. `plan` skips the
     /// decision (a step-down, a fallback, or a track change that keeps its step).
     func playback(
-        reloading request: IOSPlexPlaybackRequest,
+        reloading request: PlexPlaybackRequest,
         quality: StreamingQuality,
         plan: StreamPlan? = nil,
         at time: TimeInterval
-    ) async throws -> IOSPlexPlaybackRequest {
+    ) async throws -> PlexPlaybackRequest {
         // `item.Media` leads with the playing version; the transcoder wants its server index.
         var item = request.item
         if var media = item.Media, media.indices.contains(request.mediaIndex) {
@@ -298,7 +298,7 @@ final class IOSPlexSession: ObservableObject {
         plan forced: StreamPlan?,
         measurement: (kbps: Int?, at: Date)?,
         startTime: TimeInterval?
-    ) async throws -> IOSPlexPlaybackRequest {
+    ) async throws -> PlexPlaybackRequest {
         let isRelay = PlexRelay.isRelayURL(serverURL)
         let quality = quality ?? StreamingQuality.setting(home: StreamingQuality.isHome(serverURL: serverURL))
         let media = full.Media ?? []
@@ -327,7 +327,7 @@ final class IOSPlexSession: ObservableObject {
         case .original:
             guard let key = chosen?.Part?.first?.key,
                   let direct = Self.directPlayURL(serverURL: serverURL, token: token, partKey: key) else {
-                throw IOSPlexSessionError.noPlayableURL
+                throw PlexSessionError.noPlayableURL
             }
             url = direct
             headers = PlexProvider.directPlayHeaders(token: token)
@@ -343,7 +343,7 @@ final class IOSPlexSession: ObservableObject {
                     forceVideoTranscode: true,
                     step: step
                   ) else {
-                throw IOSPlexSessionError.noPlayableURL
+                throw PlexSessionError.noPlayableURL
             }
             url = built.url
             headers = built.headers
@@ -351,7 +351,7 @@ final class IOSPlexSession: ObservableObject {
                 .queryItems?.first { $0.name == "session" }?.value
         }
 
-        return IOSPlexPlaybackRequest(
+        return PlexPlaybackRequest(
             item: item,
             url: url,
             headers: headers,
@@ -372,12 +372,12 @@ final class IOSPlexSession: ObservableObject {
 
     /// Returns the server's reason when it has ended this play session (#403).
     @discardableResult
-    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
+    func reportProgress(for request: PlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
         guard let key = request.item.ratingKey else { return nil }
         let at = Date()
         let offsetMs = Int(time * 1000)
         if request.isLocal {
-            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: offsetMs, watched: false, persist: state != "playing")
+            ClientHost.offline.noteProgress(for: request, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
         guard !request.serverURL.isEmpty else { return nil }
         do {
@@ -390,11 +390,11 @@ final class IOSPlexSession: ObservableObject {
                 duration: request.item.duration,
                 sessionIdentifier: request.directPlaySessionID
             )
-            if let owner = plexProviderID(of: request) { IOSOfflineProgress.reached(owner, itemID: key, at: at) }
+            if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
             return terminated
         } catch {
             if let owner = plexProviderID(of: request) {
-                IOSOfflineProgress.record(providerID: owner, itemID: key, offsetMs: offsetMs,
+                ClientHost.offline.recordProgress(providerID: owner, itemID: key, offsetMs: offsetMs,
                                           durationMs: request.item.duration, watched: false, at: at)
             }
             return nil
@@ -403,9 +403,9 @@ final class IOSPlexSession: ObservableObject {
 
     /// The download key of the Plex server a request reports to: a download's own server (its metadata
     /// carries none), else the item's, else the current one. Nil when no server is known.
-    func plexProviderID(of request: IOSPlexPlaybackRequest) -> String? {
+    func plexProviderID(of request: PlexPlaybackRequest) -> String? {
         DownloadIdentity.reportingKey(isLocal: request.isLocal, downloadProviderID: request.downloadProviderID,
-                                      itemServerID: request.item.serverID, currentMachineID: IOSDownloadCenter.shared.currentServerID)
+                                      itemServerID: request.item.serverID, currentMachineID: ClientHost.offline.currentServerID)
     }
 
     private static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
@@ -432,7 +432,7 @@ final class IOSPlexSession: ObservableObject {
 
     func configuration() throws -> (serverURL: String, token: String) {
         guard let serverURL = auth.selectedServerURL, let token = auth.selectedServerToken else {
-            throw IOSPlexSessionError.notConfigured
+            throw PlexSessionError.notConfigured
         }
         return (serverURL, token)
     }
@@ -443,12 +443,12 @@ final class IOSPlexSession: ObservableObject {
         guard let serverID else { return try configuration() }
         let extras = PlexExtraServers.shared
         guard let server = extras.current.first(where: { $0.machineID == serverID }),
-              let token = extras.token(for: server) else { throw IOSPlexSessionError.notConfigured }
+              let token = extras.token(for: server) else { throw PlexSessionError.notConfigured }
         return (server.url, token)
     }
 }
 
-nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
+nonisolated struct PlexPlaybackRequest: Identifiable, Sendable {
     var id: String { item.id }
     let item: PlexMetadata
     let url: URL
@@ -470,7 +470,7 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     /// The Plex play session a direct-play file's timeline carries, so the dashboard shows it (#423).
     var directPlaySessionID: String? = nil
     /// Set for a downloaded file: its saved subtitles and poster.
-    var localSidecars: [AetherPlayer.SidecarSubtitle]? = nil
+    var localSidecars: [SubtitleSidecar]? = nil
     var localArtworkURL: URL? = nil
     /// The server a downloaded file came from (`DownloadRecord.providerID`), which may not be the current one.
     var downloadProviderID: String? = nil
@@ -484,7 +484,7 @@ nonisolated struct IOSPlexPlaybackRequest: Identifiable, Sendable {
     }
 }
 
-nonisolated enum IOSPlexSessionError: LocalizedError {
+nonisolated enum PlexSessionError: LocalizedError {
     case notConfigured
     case noPlayableURL
 

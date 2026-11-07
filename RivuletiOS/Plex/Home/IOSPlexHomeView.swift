@@ -7,8 +7,8 @@ import SwiftUI
 /// Home tab root: hero carousel, Continue Watching, then each pinned
 /// library's promoted rows. The root supplies the NavigationStack.
 struct IOSPlexHomeView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var plex: PlexSession
+    @EnvironmentObject private var browse: BrowseStore
     @State private var trending: [MediaItem] = []
     @State private var watchlist: [MediaItem] = []
 

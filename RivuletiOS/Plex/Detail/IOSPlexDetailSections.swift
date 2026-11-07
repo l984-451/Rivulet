@@ -99,7 +99,7 @@ struct IOSPlexEpisodeCell: View {
 struct IOSPlexCastRow: View {
     let item: MediaItem
     let detail: MediaItemDetail?
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
 
     private struct Person: Identifiable {
@@ -150,7 +150,7 @@ struct IOSPlexCastRow: View {
 struct IOSPlexExtrasRow: View {
     let detail: MediaItemDetail?
     @Environment(\.plexActions) private var actions
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     @Environment(\.openURL) private var openURL
     /// The YouTube trailer awaiting its confirm.

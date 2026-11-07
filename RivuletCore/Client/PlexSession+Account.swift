@@ -4,7 +4,7 @@
 import Foundation
 
 /// Account plumbing the shell needs: profile hooks, connection health, server list.
-extension IOSPlexSession {
+extension PlexSession {
     /// iOS side of the profile handoff (tvOS sets the same hooks in RivuletApp.init).
     func installProfileHooks() {
         PlexUserProfileManager.onProfileChanged = { [weak self] in
@@ -45,7 +45,7 @@ extension IOSPlexSession {
 
     /// Every server on the account, for the Account sheet's server picker.
     func accountServers() async throws -> [PlexDevice] {
-        guard let token = PlexAuthManager.shared.authToken else { throw IOSPlexSessionError.notConfigured }
+        guard let token = PlexAuthManager.shared.authToken else { throw PlexSessionError.notConfigured }
         return try await PlexNetworkManager.shared.getServers(authToken: token)
     }
 

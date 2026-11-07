@@ -7,7 +7,7 @@ import Foundation
 /// all through the seam. The player reads a Plex-shaped display shim of the item
 /// (`ProviderPlaybackMetadata`) while the real stream, session and reports stay here.
 @MainActor
-final class IOSProviderBackend: IOSPlayerBackend {
+final class ProviderBackend: PlayerBackend {
     let provider: any MediaProvider
     private let onWatchStateChange: @MainActor () async -> Void
     /// Titles the player can be asked about again (Up Next, playlist entries), by item id.
@@ -28,7 +28,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     /// `item` as a request: the stream and extras from its provider, the quality decision, the resume point.
     func firstPlayback(of item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                        quality: StreamingQuality? = nil,
-                       throughput: (kbps: Int, at: Date)? = nil) async throws -> IOSPlexPlaybackRequest {
+                       throughput: (kbps: Int, at: Date)? = nil) async throws -> PlexPlaybackRequest {
         register([item])
         let playback = try await ProviderPlayback.prepare(
             item: item, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best,
@@ -39,10 +39,10 @@ final class IOSProviderBackend: IOSPlayerBackend {
     }
 
     func upNextPlayback(for item: PlexMetadata, quality: StreamingQuality?,
-                        previous: IOSPlexPlaybackRequest?) async throws -> IOSPlexPlaybackRequest {
+                        previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest {
         guard let key = item.ratingKey else { throw MediaProviderError.notFound }
         // A downloaded episode plays its file, online or not.
-        if let known = items[key], let local = IOSDownloadCenter.shared.localPlayback(for: known) { return local }
+        if let known = items[key], let local = ClientHost.offline.localPlayback(for: known) { return local }
         let target: MediaItem
         if let known = items[key] {
             target = known
@@ -53,8 +53,8 @@ final class IOSProviderBackend: IOSPlayerBackend {
         return try await firstPlayback(of: target, fromBeginning: false, quality: quality, throughput: measured)
     }
 
-    func reloadedPlayback(of request: IOSPlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
-                          at time: TimeInterval, streams: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
+    func reloadedPlayback(of request: PlexPlaybackRequest, quality: StreamingQuality, plan: StreamPlan?,
+                          at time: TimeInterval, streams: TrackPicks?) async throws -> PlexPlaybackRequest {
         guard let playback = request.providerPlayback else { throw MediaProviderError.notFound }
         let next = try await playback.reloaded(quality: quality, plan: plan, at: time, tracks: streams)
         return try await self.request(from: next, startTime: time > 1 ? time : nil, picks: streams)
@@ -63,7 +63,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
     /// The player's request for `playback`. A transcode starts on the tracks the saved intents pick
     /// (`picks` when the player made a choice), since a provider burns or selects them at session start.
     private func request(from playback: ProviderPlayback, startTime: TimeInterval?,
-                         picks: TrackPicks?) async throws -> IOSPlexPlaybackRequest {
+                         picks: TrackPicks?) async throws -> PlexPlaybackRequest {
         var playback = playback
         var source = playback.stream.source
         var picks = picks
@@ -90,7 +90,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
         let isTranscode = playback.stream.source.streamKind != .directPlay
         let sessionID = playback.stream.playSessionID
         let file = playback.detail.mediaSources.first { $0.id == source.id } ?? source
-        return IOSPlexPlaybackRequest(
+        return PlexPlaybackRequest(
             item: shim,
             url: url,
             headers: playback.stream.headers,
@@ -113,12 +113,12 @@ final class IOSProviderBackend: IOSPlayerBackend {
     // MARK: - Reporting
 
     @discardableResult
-    func reportProgress(for request: IOSPlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
+    func reportProgress(for request: PlexPlaybackRequest, time: TimeInterval, state: String) async -> String? {
         // A downloaded file keeps its own resume point; the server hears at the end, or when it is back.
         if request.isLocal {
-            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: Int(time * 1000), watched: false, persist: state != "playing")
+            ClientHost.offline.noteProgress(for: request, offsetMs: Int(time * 1000), watched: false, persist: state != "playing")
             if state == "stopped", let key = request.item.ratingKey {
-                IOSOfflineProgress.record(providerID: provider.id, itemID: key, offsetMs: Int(time * 1000),
+                ClientHost.offline.recordProgress(providerID: provider.id, itemID: key, offsetMs: Int(time * 1000),
                                           durationMs: request.item.duration, watched: false, at: Date())
             }
             return nil
@@ -128,14 +128,14 @@ final class IOSProviderBackend: IOSPlayerBackend {
         return nil
     }
 
-    func openPlaySession(_ request: IOSPlexPlaybackRequest) async {
+    func openPlaySession(_ request: PlexPlaybackRequest) async {
         guard let playback = request.providerPlayback else { return }
         await ledger.open(reportKey(request), make: { reporter(for: playback) }, position: request.startTime ?? 0)
     }
 
     /// Ends a replaced stream's session, direct play or transcode, at the last position it reported,
     /// so the server frees what it holds without moving the resume point.
-    func stopTranscode(_ request: IOSPlexPlaybackRequest) async {
+    func stopTranscode(_ request: PlexPlaybackRequest) async {
         guard let playback = request.providerPlayback else { return }
         await ledger.stop(reportKey(request), make: { reporter(for: playback) }, fallback: request.startTime ?? 0)
     }
@@ -146,17 +146,17 @@ final class IOSProviderBackend: IOSPlayerBackend {
     }
 
     /// One report per play session; a request with no session id is its own.
-    private func reportKey(_ request: IOSPlexPlaybackRequest) -> String {
+    private func reportKey(_ request: PlexPlaybackRequest) -> String {
         request.providerPlayback?.stream.playSessionID ?? request.id
     }
 
     // MARK: - Items
 
-    func markWatched(_ request: IOSPlexPlaybackRequest) async {
+    func markWatched(_ request: PlexPlaybackRequest) async {
         if request.isLocal, let key = request.item.ratingKey {
-            IOSDownloadCenter.shared.noteProgress(for: request, offsetMs: 0, watched: true, persist: true)
+            ClientHost.offline.noteProgress(for: request, offsetMs: 0, watched: true, persist: true)
             let duration = request.item.duration
-            IOSOfflineProgress.record(providerID: provider.id, itemID: key, offsetMs: duration ?? 0,
+            ClientHost.offline.recordProgress(providerID: provider.id, itemID: key, offsetMs: duration ?? 0,
                                       durationMs: duration, watched: true, at: Date())
             return
         }
@@ -164,14 +164,14 @@ final class IOSProviderBackend: IOSPlayerBackend {
         try? await provider.markPlayed(ref)
     }
 
-    func nextEpisode(after episode: PlexMetadata, in request: IOSPlexPlaybackRequest) async -> PlexMetadata? {
+    func nextEpisode(after episode: PlexMetadata, in request: PlexPlaybackRequest) async -> PlexMetadata? {
         guard let key = episode.ratingKey, let current = items[key] ?? request.providerPlayback?.detail.item,
               current.ref.itemID == key else { return nil }
         let result = await EpisodePicker.upNext(after: current, provider: provider)
         register(result.season + [result.next].compactMap { $0 })
         if let next = result.next { return ProviderPlaybackMetadata.listing(item: next) }
         // Offline, or the server has no more: the next episode that is on the device.
-        let center = IOSDownloadCenter.shared
+        let center = ClientHost.offline
         guard let downloaded = DownloadRules.nextDownloaded(
             afterShow: current.grandparentRef?.itemID, season: current.seasonNumber ?? 0, episode: current.episodeNumber ?? 0,
             providerID: provider.id, in: center.visibleRecords) else { return nil }
@@ -180,9 +180,9 @@ final class IOSProviderBackend: IOSPlayerBackend {
     }
 
     /// The transcode reads its picks from the URL it was built with, so there is nothing to write.
-    func selectStream(_ picks: TrackPicks, in request: IOSPlexPlaybackRequest) async {}
+    func selectStream(_ picks: TrackPicks, in request: PlexPlaybackRequest) async {}
 
-    func artworkURL(for item: PlexMetadata, kind: IOSPlexSession.ArtworkKind, width: Int, height: Int) -> URL? {
+    func artworkURL(for item: PlexMetadata, kind: PlexSession.ArtworkKind, width: Int, height: Int) -> URL? {
         guard let key = item.ratingKey, let known = items[key] else { return nil }
         let art: URL? = switch kind {
         case .poster: known.kind == .episode
@@ -198,7 +198,7 @@ final class IOSProviderBackend: IOSPlayerBackend {
 
     /// After a stopped report and a scrobble: send what a download queued, then repaint.
     func watchStateDidChange() async {
-        _ = await IOSOfflineProgress.flushProviders()
+        _ = await ClientHost.offline.flushProviders()
         await onWatchStateChange()
     }
 }

@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The Account sheet behind every tab's avatar: profile, server, settings pages, About.
 struct IOSAccountView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @ObservedObject private var sync = CloudSync.shared
     @Environment(\.dismiss) private var dismiss
@@ -191,7 +191,7 @@ struct IOSAccountView: View {
 
 /// Every server on the account, current one checked. Picking another connects to it.
 private struct IOSServerPicker: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @State private var servers: [PlexDevice]?
     @State private var loadError: String?
     @State private var connectingID: String?

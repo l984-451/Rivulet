@@ -6,7 +6,7 @@
 //  Rivulet
 //
 //  The account's Plex servers other than the selected one (#87), for both apps:
-//  tvOS makes each a PlexProvider, iOS a server in IOSPlexSession. The list
+//  tvOS makes each a PlexProvider, iOS a server in PlexSession. The list
 //  belongs to the profile whose plex.tv token fetched it, because a Home
 //  profile sees its own servers with its own tokens.
 //

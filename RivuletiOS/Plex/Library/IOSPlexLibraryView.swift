@@ -18,7 +18,7 @@ struct IOSPlexLibrarySplitView: View {
     @Binding var selection: IOSLibrarySelection?
     @Binding var column: NavigationSplitViewColumn
     @Binding var path: NavigationPath
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -63,7 +63,7 @@ struct IOSPlexLibrarySplitView: View {
 /// Downloads stays reachable signed out or with the server unreachable.
 struct IOSPlexLibrariesView: View {
     @Binding var selection: IOSLibrarySelection?
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     @AppStorage("showFavoritesTab") private var showFavorites = false
@@ -150,7 +150,7 @@ struct IOSPlexLibraryView: View {
     let library: MediaLibrary
     /// Only a tab root shows the avatar; a library pushed from the Library list does not.
     var showsAccount = false
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @AppStorage private var pageRaw: String
     /// Same key as the tvOS library hero setting.
     @AppStorage("showLibraryHero") private var showHero = true
@@ -212,7 +212,7 @@ private struct IOSPlexLibraryRecommendedView: View {
     let library: MediaLibrary
     @Binding var rows: [MediaHub]
     let heroItems: [MediaItem]
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @State private var isLoading = false
     @State private var error: String?
     @State private var loadedRevision: Int?
@@ -264,7 +264,7 @@ private struct IOSPlexLibraryRecommendedView: View {
 /// Browse: the whole library as a paged poster grid with Sort and Filter menus.
 private struct IOSPlexLibraryBrowseView: View {
     let library: MediaLibrary
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
     @AppStorage private var sortRaw: String
     @State private var unwatchedOnly = false

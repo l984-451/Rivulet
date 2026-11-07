@@ -8,10 +8,10 @@ import SwiftUI
 struct IOSLiveTVView: View {
     @ObservedObject private var store = LiveTVDataStore.shared
     @EnvironmentObject private var playback: IOSPlaybackController
-    @StateObject private var recorder = IOSLiveRecorder()
-    @AppStorage(IOSLiveLayout.storageKey) private var layoutRaw = IOSLiveLayout.browse.rawValue
+    @StateObject private var recorder = LiveRecorder()
+    @AppStorage(LiveLayout.storageKey) private var layoutRaw = LiveLayout.browse.rawValue
     @AppStorage("iosLiveTVGuideFilter") private var guideFilter = ""
-    @State private var selection: IOSLiveProgrammeSelection?
+    @State private var selection: LiveProgrammeSelection?
     @State private var pendingPlay: UnifiedChannel?
     @State private var showingAddSource = false
     @State private var jumpToken = 0
@@ -19,7 +19,7 @@ struct IOSLiveTVView: View {
 
     private static let favoritesFilter = "Favorites"
 
-    private var layout: IOSLiveLayout { IOSLiveLayout(rawValue: layoutRaw) ?? .browse }
+    private var layout: LiveLayout { LiveLayout(rawValue: layoutRaw) ?? .browse }
 
     var body: some View {
         content
@@ -91,7 +91,7 @@ struct IOSLiveTVView: View {
 
     private var layoutPicker: some View {
         Picker("Layout", selection: $layoutRaw) {
-            ForEach(IOSLiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+            ForEach(LiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
         }
         .pickerStyle(.segmented)
         .frame(maxWidth: 360)
@@ -112,7 +112,7 @@ struct IOSLiveTVView: View {
                 play: play,
                 details: { selection = $0 },
                 menu: { channel, program in
-                    IOSLiveMenu.uiMenu(IOSLiveMenu.sections(
+                    LiveMenu.uiMenu(LiveMenu.sections(
                         channel: channel, program: program, recorder: recorder,
                         watch: play, details: { selection = $0 }
                     ))

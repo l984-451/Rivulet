@@ -80,8 +80,8 @@ struct MacAccountView: View {
                 }
             }
             if !profiles.isRestrictedProfile {
-                LabeledContent("Server") {
-                    Button(plex.selectedServerName ?? String(localized: "Choose…")) { showingServers = true }
+                LabeledContent("Servers") {
+                    Button(plex.serversSummary ?? String(localized: "Choose…")) { showingServers = true }
                 }
             }
         }
@@ -120,21 +120,24 @@ extension OtherServerKind: Identifiable {
     var id: String { kind.displayName }
 }
 
-/// Every server on the account, current one checked. Picking another connects to it.
+/// Every server on the account; the ones checked show their content. A click turns one on or off.
 private struct MacPlexServerPicker: View {
     @EnvironmentObject private var plex: PlexSession
     @Environment(\.dismiss) private var dismiss
     @State private var servers: [PlexDevice]?
     @State private var loadError: String?
     @State private var connectingID: String?
-    @State private var failedServer: String?
+    @State private var notice: ServerNotice?
+    /// Bumped after a toggle so the checkmarks re-read.
+    @State private var revision = 0
 
     var body: some View {
         VStack(spacing: 0) {
             List(servers ?? []) { server in
-                Button { connect(to: server) } label: {
+                Button { toggle(server) } label: {
+                    let _ = revision
                     MacServerRow(server: server,
-                                 isCurrent: connectingID == nil && plex.isCurrentServer(server),
+                                 isCurrent: connectingID == nil && plex.isServerEnabled(server),
                                  isConnecting: connectingID == server.id)
                 }
                 .buttonStyle(.plain)
@@ -158,10 +161,10 @@ private struct MacPlexServerPicker: View {
         }
         .frame(width: 420, height: 360)
         .task { await load() }
-        .alert("Couldn’t Connect", isPresented: Binding(get: { failedServer != nil }, set: { if !$0 { failedServer = nil } })) {
+        .alert(notice?.title ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("\(failedServer ?? String(localized: "The server")) isn’t reachable right now.")
+            Text(notice?.message ?? "")
         }
     }
 
@@ -175,12 +178,16 @@ private struct MacPlexServerPicker: View {
         }
     }
 
-    private func connect(to server: PlexDevice) {
-        guard !plex.isCurrentServer(server) else { return }
+    private func toggle(_ server: PlexDevice) {
         connectingID = server.id
         Task {
-            if !(await plex.switchServer(to: server)) { failedServer = server.name }
+            switch await plex.toggleServer(server, among: servers ?? []) {
+            case .changed: break
+            case .onlyServer: notice = .onlyServer
+            case .unreachable: notice = .unreachable(server.name)
+            }
             connectingID = nil
+            revision += 1
         }
     }
 }

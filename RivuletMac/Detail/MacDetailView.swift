@@ -70,18 +70,18 @@ struct MacDetailView: View {
             summaryView.padding(.horizontal, MacMetrics.pageMargin)
         }
         if isSeries { episodesSection }
+        MacDetailExtras(detail: detail)
         if !members.isEmpty {
             MacRail(title: String(localized: "In This Collection"), kind: .poster, items: members) { member, width in
                 MacTileButton(item: member) { MacPosterCard(item: member, width: width) }
             }
         }
-        MacDetailCast(item: shown, detail: detail)
         if !related.isEmpty {
             MacRail(title: String(localized: "More Like This"), kind: .poster, items: related) { related, width in
                 MacTileButton(item: related) { MacPosterCard(item: related, width: width) }
             }
         }
-        MacDetailExtras(detail: detail)
+        MacDetailCast(item: shown, detail: detail)
         MacDetailInformation(item: shown, detail: detail).padding(.horizontal, MacMetrics.pageMargin)
     }
 

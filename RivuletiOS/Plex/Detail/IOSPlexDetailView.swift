@@ -77,13 +77,13 @@ struct IOSPlexDetailView: View {
         if isSeries {
             episodesSection(leading: leading)
         }
-        IOSPlexCastRow(item: shown, detail: detail)
+        IOSPlexExtrasRow(detail: detail)
         if !related.isEmpty {
             IOSPlexRail(title: String(localized: "More Like This"), kind: .poster, items: related) {
                 IOSPlexPosterCard(item: $0, width: $1)
             }
         }
-        IOSPlexExtrasRow(detail: detail)
+        IOSPlexCastRow(item: shown, detail: detail)
         IOSPlexInformationSection(item: shown, detail: detail).padding(.horizontal, leading)
     }
 

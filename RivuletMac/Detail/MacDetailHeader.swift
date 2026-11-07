@@ -4,7 +4,7 @@
 import Combine
 import SwiftUI
 
-/// Backdrop with the title block over it: logo, metadata, ratings, and the action row.
+/// Backdrop with the title block over it: logo, metadata and the action row.
 struct MacDetailHeader: View {
     let item: MediaItem
     let detail: MediaItemDetail?
@@ -81,7 +81,6 @@ struct MacDetailHeader: View {
             .font(.subheadline)
             .foregroundStyle(.white.opacity(0.8))
             .lineLimit(1)
-            if let ratings = detail?.ratings, !ratings.isEmpty { ratingsRow(ratings) }
             actionRow.padding(.top, 6)
             if let target = playTarget, target.id != item.id, let code = target.episodeCode {
                 Text([code, target.title].joined(separator: " · "))
@@ -90,22 +89,6 @@ struct MacDetailHeader: View {
                     .lineLimit(1)
             }
         }
-    }
-
-    private func ratingsRow(_ ratings: [MediaRating]) -> some View {
-        HStack(spacing: 14) {
-            ForEach(ratings, id: \.source) { rating in
-                HStack(spacing: 4) {
-                    Text(verbatim: rating.name).foregroundStyle(.white.opacity(0.7))
-                    Text(verbatim: rating.badgeText + (rating.scale ?? "")).fontWeight(.semibold)
-                }
-                .help(rating.detailText)
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .font(.footnote)
-        .foregroundStyle(.white)
-        .lineLimit(1)
     }
 
     private var actionRow: some View {
@@ -174,7 +157,7 @@ struct MacDetailHeader: View {
                 Text(playTarget?.isInProgress == true ? "Resume" : "Play")
                 if let target = playTarget, target.isInProgress {
                     if let fraction = target.progressBarFraction {
-                        ProgressView(value: fraction).frame(width: 36).accessibilityHidden(true)
+                        MacProgressBar(fraction: fraction).frame(width: 36)
                     }
                     if let left = target.timeLeftText { Text(left).font(.subheadline) }
                 }

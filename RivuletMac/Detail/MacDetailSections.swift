@@ -230,17 +230,34 @@ struct MacDetailInformation: View {
     }
 
     var body: some View {
-        if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), alignment: .topLeading)],
-                          alignment: .leading, spacing: 14) {
-                    ForEach(rows, id: \.0) { label, value in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(verbatim: label).font(.subheadline.weight(.semibold))
-                            Text(verbatim: value).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 28) {
+            if let ratings = detail?.ratings, !ratings.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Ratings").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .top, spacing: 28) {
+                        ForEach(ratings, id: \.source) { rating in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: rating.badgeText + (rating.scale ?? "")).font(.title2.weight(.semibold))
+                                Text(verbatim: rating.name).font(.subheadline).foregroundStyle(.secondary)
+                            }
+                            .help(rating.detailText)
+                            .accessibilityElement(children: .combine)
                         }
-                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+            if !rows.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), alignment: .topLeading)],
+                              alignment: .leading, spacing: 14) {
+                        ForEach(rows, id: \.0) { label, value in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: label).font(.subheadline.weight(.semibold))
+                                Text(verbatim: value).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                     }
                 }
             }

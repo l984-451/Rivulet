@@ -53,11 +53,64 @@ extension PlexSession {
         PlexAuthManager.shared.isCurrentServer(server)
     }
 
+    /// The selected server's name, with a count of the other servers that are on.
+    var serversSummary: String? {
+        guard let name = selectedServerName else { return nil }
+        let others = PlexExtraServers.shared.current.count
+        return others == 0 ? name : String(localized: "\(name) + \(others) more")
+    }
+
+    /// Whether a server's content shows. Several can be on at once (#87).
+    func isServerEnabled(_ server: PlexDevice) -> Bool {
+        server.machineIdentifier.map { PlexExtraServers.shared.isEnabled(machineID: $0) } ?? true
+    }
+
+    enum ServerToggleResult { case changed, onlyServer, unreachable }
+
+    /// Turns a server on or off. Turning off the selected server first moves the selected
+    /// role to another server that is on; the last server in use can only be signed out.
+    func toggleServer(_ server: PlexDevice, among servers: [PlexDevice]) async -> ServerToggleResult {
+        guard let id = server.machineIdentifier else { return .unreachable }
+        let turningOff = isServerEnabled(server)
+        if turningOff, isCurrentServer(server) {
+            let others = servers.filter { $0.clientIdentifier != server.clientIdentifier && isServerEnabled($0) }
+            guard !others.isEmpty else { return .onlyServer }
+            var moved = false
+            for other in others where await switchServer(to: other) {
+                moved = true
+                break
+            }
+            guard moved else { return .unreachable }
+        }
+        PlexExtraServers.shared.setEnabled(!turningOff, machineID: id)
+        return .changed
+    }
+
     /// Switches servers. If the app cannot connect, this returns false and the old server stays in use.
     func switchServer(to server: PlexDevice) async -> Bool {
         guard await PlexAuthManager.shared.selectServer(server) else { return false }
         contentSessionChanged()
         await authChanged()
         return true
+    }
+}
+
+/// Why a server toggle did not take.
+enum ServerNotice: Equatable {
+    case onlyServer
+    case unreachable(String)
+
+    var title: String {
+        switch self {
+        case .onlyServer: String(localized: "Only Server in Use")
+        case .unreachable: String(localized: "Couldn’t Turn Off")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .onlyServer: String(localized: "Turn on another server first, or sign out of Plex.")
+        case .unreachable(let name): String(localized: "No other server is reachable right now, so \(name) stays on.")
+        }
     }
 }

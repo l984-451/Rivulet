@@ -5,7 +5,7 @@ import AppKit
 import SwiftUI
 
 /// Full-width paging hero. Advances every 7 s unless the pointer is over it; the arrow buttons,
-/// the dots and the Left and Right keys page it. The title crossfades and the buttons stay put.
+/// the dots and the Left and Right keys page it. The artwork slides; the title crossfades and the buttons stay put.
 /// Port of RivuletiOS/Plex/Home/IOSPlexHomeHero.swift.
 struct MacHomeHero: View {
     let items: [MediaItem]
@@ -14,6 +14,10 @@ struct MacHomeHero: View {
     @Binding var selection: MediaItemRef?
     @State private var hovering = false
     @State private var inView = true
+    @State private var isPaging = false
+
+    /// Share of the page travel the artwork lags behind, as on iOS and tvOS.
+    private static let parallax: CGFloat = 0.3
     @EnvironmentObject private var playback: MacPlaybackController
     @Environment(\.macOpen) private var open
 
@@ -25,10 +29,8 @@ struct MacHomeHero: View {
         if let current {
             ZStack(alignment: .bottomLeading) {
                 Group {
-                    MacItemArtwork(item: current, kind: .backdrop, width: width, aspectRatio: 16 / 9)
-                        .id(current.id)
-                        .transition(.opacity)
-                    MacThemeVideoBackdrop(item: current.ref, isActive: inView, isCovered: playback.isPresented)
+                    artworkPager
+                    MacThemeVideoBackdrop(item: current.ref, isActive: inView && !isPaging, isCovered: playback.isPresented)
                         .allowsHitTesting(false)
                     LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.75), location: 1)],
                                    startPoint: .top, endPoint: .bottom)
@@ -71,6 +73,38 @@ struct MacHomeHero: View {
         withAnimation(.easeInOut(duration: 0.5)) {
             selection = items[(index + step + items.count) % items.count].id
         }
+    }
+
+    /// Pages slide with a parallax lag, as on iOS; a trackpad swipe pages too.
+    private var artworkPager: some View {
+        ScrollViewReader { reader in
+            ScrollView(.horizontal) {
+                // Eager: a lazy stack blanked the outgoing page mid-scroll on iOS.
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        MacItemArtwork(item: item, kind: .backdrop, width: width, aspectRatio: 16 / 9)
+                            .frame(width: width, height: height)
+                            .clipped()
+                            .visualEffect { content, proxy in
+                                content.offset(x: -proxy.frame(in: .scrollView(axis: .horizontal)).minX * Self.parallax)
+                            }
+                            .frame(width: width, height: height)
+                            .clipped()
+                            .id(item.id)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.never)
+            .scrollPosition(id: $selection)
+            .onScrollPhaseChange { _, phase in isPaging = phase != .idle }
+            // A window resize keeps the old offset; re-seat the shown page.
+            .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, _ in
+                if let selection { reader.scrollTo(selection, anchor: .leading) }
+            }
+        }
+        .accessibilityHidden(true)
     }
 
     private var arrows: some View {
@@ -137,10 +171,11 @@ private struct MacHeroControls: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 10) {
-                    MacResolvedLogo(item: item, fallbackTitle: item.showTitle, maxWidth: 380, maxHeight: 110,
-                                    fallbackFont: .largeTitle.bold(), alignment: .bottomLeading, textAlignment: .leading)
+                    MacResolvedLogo(item: item, fallbackTitle: item.showTitle, maxWidth: 340, maxHeight: 110,
+                                    fallbackFont: .largeTitle.bold(), alignment: .bottomLeading, textAlignment: .leading,
+                                    targetArea: 17000)
                     Text(metadataLine.isEmpty ? " " : metadataLine)
-                        .font(.subheadline)
+                        .font(.title3.weight(.medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .lineLimit(1)
                 }

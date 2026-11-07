@@ -132,17 +132,31 @@ struct MacResolvedLogo: View {
 
 // MARK: - Watch state and hover
 
+/// A thin white bar on a translucent track.
+struct MacProgressBar: View {
+    let fraction: Double
+    var height: CGFloat = 4
+
+    var body: some View {
+        Capsule()
+            .fill(.white.opacity(0.3))
+            .frame(height: height)
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule().fill(.white).frame(width: proxy.size.width * min(max(fraction, 0), 1))
+                }
+            }
+            .shadow(color: .black.opacity(0.3), radius: 2)
+            .accessibilityHidden(true)
+    }
+}
+
 extension View {
     /// Progress bar along the bottom, or the watched check when there is no bar.
     func macWatchState(_ item: MediaItem) -> some View {
         overlay(alignment: .bottom) {
             if let fraction = item.progressBarFraction {
-                ProgressView(value: fraction)
-                    .tint(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.35), in: Capsule())
-                    .padding(6)
+                MacProgressBar(fraction: fraction).padding(8)
             }
         }
         .overlay(alignment: .topTrailing) {

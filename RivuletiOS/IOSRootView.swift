@@ -51,7 +51,8 @@ struct IOSRootView: View {
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
-                ForEach(showsSidebarLibraries ? videoLibraries : []) { library in
+                // Not by `id`: that is the server's own section number, so two servers collide and UIKit's sidebar throws.
+                ForEach(showsSidebarLibraries ? videoLibraries : [], id: \.self) { library in
                     Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.icon,
                         value: libraryTab(library)) {
                         sidebarStack(libraryTab(library)) { IOSPlexLibraryView(library: library, showsAccount: true) }

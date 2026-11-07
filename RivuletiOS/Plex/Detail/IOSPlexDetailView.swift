@@ -71,7 +71,11 @@ struct IOSPlexDetailView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, leading)
         }
-        if let summary = shown.overview, !summary.isEmpty {
+        if let episode = playTarget.flatMap({
+            EpisodePicker.episodeDescription(for: $0, overview: nil, on: shown.kind)
+        }) {
+            summaryView(episode.body, prefix: episode.prefix).padding(.horizontal, leading)
+        } else if let summary = shown.overview, !summary.isEmpty {
             summaryView(summary).padding(.horizontal, leading)
         }
         if isSeries {
@@ -87,9 +91,9 @@ struct IOSPlexDetailView: View {
         IOSPlexInformationSection(item: shown, detail: detail).padding(.horizontal, leading)
     }
 
-    private func summaryView(_ summary: String) -> some View {
+    private func summaryView(_ summary: String, prefix: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(summary)
+            (Text(verbatim: prefix.map { $0 + " " } ?? "").bold() + Text(verbatim: summary))
                 .font(.body)
                 .lineLimit(summaryExpanded ? nil : 3)
             if summary.count > 160 {

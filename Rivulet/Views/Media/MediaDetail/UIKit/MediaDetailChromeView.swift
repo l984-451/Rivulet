@@ -91,6 +91,9 @@ final class MediaDetailChromeView: UIView {
     /// repopulate genre + quality rows + cast label with richer fields.
     private var detail: MediaItemDetail?
 
+    /// The episode the Play pill names, shown in place of a show's synopsis.
+    private var episodeDescription: (prefix: String, body: String)?
+
     /// Sizes the logo view to the image's aspect, since `.scaleAspectFit` centres the glyphs
     /// and would push them right of the metadata's leading edge.
     private var logoAspectConstraint: NSLayoutConstraint?
@@ -352,6 +355,7 @@ final class MediaDetailChromeView: UIView {
         loadToken &+= 1
         item = nil
         detail = nil
+        episodeDescription = nil
         if let prev = logoAspectConstraint {
             prev.isActive = false
             logoAspectConstraint = nil
@@ -430,6 +434,7 @@ final class MediaDetailChromeView: UIView {
         let token = loadToken
         pendingLoads = 0
         readyWaiters = []
+        episodeDescription = nil
 
         titleLogoImageView.image = nil
         titleFallbackLabel.text = nil
@@ -555,7 +560,20 @@ final class MediaDetailChromeView: UIView {
                   self.loadToken == token
             else { return }
             self.setPlayTarget(episode)
+            await self.showEpisodeDescription(for: episode, page: item.kind, token: token)
         }
+    }
+
+    /// Swaps the synopsis for the named episode's (one fetch when the episode lacks an overview).
+    private func showEpisodeDescription(for episode: MediaItem, page: MediaKind, token: UInt64) async {
+        var overview = episode.overview
+        if overview?.isEmpty != false,
+           EpisodePicker.episodeDescription(for: episode, overview: "x", on: page) != nil {
+            overview = await Self.fetchDetail(episode.ref)?.item.overview
+        }
+        guard loadToken == token else { return }
+        episodeDescription = EpisodePicker.episodeDescription(for: episode, overview: overview, on: page)
+        if let item, let detail { renderDescription(item: item, detail: detail) }
     }
 
     private static func fetchDetail(_ ref: MediaItemRef) async -> MediaItemDetail? {
@@ -578,19 +596,7 @@ final class MediaDetailChromeView: UIView {
     private func applyDetail(item: MediaItem, detail: MediaItemDetail) {
         rebuildGenreRow(item: item, detail: detail)
         rebuildQualityRow(item: item, detail: detail)
-        if let s = item.seasonNumber, let e = item.episodeNumber,
-           let overview = detail.item.overview, !overview.isEmpty {
-            // Episode: bold "S1, E1:" prefix before the synopsis.
-            let color = UIColor.white.withAlphaComponent(0.85)
-            let attr = NSMutableAttributedString(string: String(localized: "S\(s), E\(e): "), attributes: [
-                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color])
-            attr.append(NSAttributedString(string: overview, attributes: [
-                .font: Self.descriptionFont, .foregroundColor: color]))
-            descriptionLabel.attributedText = attr
-        } else if let overview = detail.item.overview, !overview.isEmpty {
-            descriptionLabel.text = overview
-            descriptionLabel.font = Self.descriptionFont
-        }
+        renderDescription(item: item, detail: detail)
         let topCast = detail.cast.prefix(3).map { $0.name }
         if !topCast.isEmpty {
             let attr = NSMutableAttributedString(string: String(localized: "Starring "), attributes: [
@@ -601,6 +607,27 @@ final class MediaDetailChromeView: UIView {
             castLabel.attributedText = nil
         }
         addVersionsButton(detail)
+    }
+
+    private func renderDescription(item: MediaItem, detail: MediaItemDetail) {
+        let color = UIColor.white.withAlphaComponent(0.85)
+        func prefixed(_ prefix: String, _ body: String) {
+            let attr = NSMutableAttributedString(string: prefix, attributes: [
+                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color])
+            attr.append(NSAttributedString(string: body, attributes: [
+                .font: Self.descriptionFont, .foregroundColor: color]))
+            descriptionLabel.attributedText = attr
+        }
+        if let episode = episodeDescription {
+            prefixed(episode.prefix + " ", episode.body)
+        } else if let s = item.seasonNumber, let e = item.episodeNumber,
+                  let overview = detail.item.overview, !overview.isEmpty {
+            prefixed(String(localized: "S\(s), E\(e): "), overview)   // episode page
+        } else if let overview = detail.item.overview, !overview.isEmpty {
+            descriptionLabel.attributedText = nil
+            descriptionLabel.text = overview
+            descriptionLabel.font = Self.descriptionFont
+        }
     }
 
     /// Versions button after Info, once the detail shows two or more files.

@@ -87,13 +87,16 @@ struct MacDetailView: View {
 
     @ViewBuilder
     private var summaryView: some View {
-        let summary = shown.overview ?? ""
+        let episode = playTarget.flatMap {
+            EpisodePicker.episodeDescription(for: $0, overview: nil, on: shown.kind)
+        }
+        let summary = episode?.body ?? shown.overview ?? ""
         VStack(alignment: .leading, spacing: 6) {
             if let tagline = detail?.tagline, !tagline.isEmpty {
                 Text(verbatim: tagline).font(.headline).foregroundStyle(.secondary)
             }
             if !summary.isEmpty {
-                Text(verbatim: summary)
+                (Text(verbatim: episode.map { $0.prefix + " " } ?? "").bold() + Text(verbatim: summary))
                     .font(.body)
                     .lineLimit(summaryExpanded ? nil : 4)
                     .textSelection(.enabled)

@@ -285,13 +285,11 @@ struct MacLiveAddSourceSheet: View {
                 }
             }
             .navigationTitle("Add Source")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+            .safeAreaInset(edge: .bottom, alignment: .trailing) {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).padding(12)
             }
         }
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 420)
     }
 
     private func row(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String) -> some View {

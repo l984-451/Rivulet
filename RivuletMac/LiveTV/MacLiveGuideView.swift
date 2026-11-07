@@ -27,6 +27,14 @@ struct MacLiveGuideView: View {
         var size: CGSize = .zero
     }
 
+    /// The pinned overlays sit inside the safe area, so the offset adds the scroll insets (the container size already excludes them).
+    private static func viewport(of geometry: ScrollGeometry) -> Viewport {
+        let inset = geometry.contentInsets
+        return Viewport(
+            offset: CGPoint(x: geometry.contentOffset.x + inset.leading, y: geometry.contentOffset.y + inset.top),
+            size: geometry.containerSize)
+    }
+
     private struct Span: Identifiable {
         let program: UnifiedProgram?
         let channelIndex: Int
@@ -61,12 +69,9 @@ struct MacLiveGuideView: View {
             .frame(width: contentSize.width, height: contentSize.height, alignment: .topLeading)
         }
         .scrollPosition($position)
-        .onScrollGeometryChange(for: CGPoint.self, of: { $0.contentOffset }) { _, offset in
-            viewport.offset = offset
-        }
-        .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
-            viewport.size = size
-            guard !hasPositioned, size.width > 0, size.height > 0 else { return }
+        .onScrollGeometryChange(for: Viewport.self, of: Self.viewport(of:)) { _, new in
+            viewport = new
+            guard !hasPositioned, new.size.width > 0, new.size.height > 0 else { return }
             hasPositioned = true
             Task { @MainActor in jumpToNow(animated: false) }
         }
@@ -219,7 +224,7 @@ struct MacLiveGuideView: View {
                             .foregroundStyle(.secondary)
                             .padding(.leading, 6)
                     }
-                    .frame(width: column, height: rulerHeight)
+                    .frame(width: column, height: rulerHeight, alignment: .leading)
                     .offset(x: channelWidth + CGFloat(index) * column - viewport.offset.x)
                 }
             }

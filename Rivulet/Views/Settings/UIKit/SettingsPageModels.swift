@@ -461,6 +461,7 @@ enum SettingsContent {
                             kind: .cycle(value: { TopShelfCache.shared.fullScreen ? String(localized: "Full Screen") : String(localized: "Posters") },
                                          next: { TopShelfCache.shared.fullScreen.toggle() })),
             toggle("skipPreview", "Skip Preview", key: "skipPreviewCarousel", default: false),
+            toggle("posterTitles", "Titles Under Posters", key: MediaRowMetrics.posterTitlesKey, default: MediaRowMetrics.posterTitlesDefault),
 
             // Titles drop whatever their caption already says ("Home Hero" under
             // HOME reads as "Home Home Hero"), the way Apple TV Settings puts a

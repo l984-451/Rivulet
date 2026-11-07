@@ -91,6 +91,8 @@ final class ShelfRowCell: UICollectionViewCell {
     /// overshoot is simply added to the inner content insets so tiles, peeks
     /// and landings line up with the panel exactly like the home rows.
     private var panelOvershoot: (left: CGFloat, right: CGFloat) = (0, 0)
+    /// Extra tile height under the artwork for a caption (Home poster rows); 0 elsewhere.
+    private var captionHeight: CGFloat = 0
 
     /// Optional in-cell header title (the below-fold Related row draws its
     /// "Related" header here so it self-aligns with the tiles; the home rows
@@ -269,10 +271,13 @@ final class ShelfRowCell: UICollectionViewCell {
                    hasSkeleton: Bool,
                    contentToken: Int,
                    initialOffset: CGFloat,
-                   panelOvershoot: (left: CGFloat, right: CGFloat) = (0, 0)) {
+                   panelOvershoot: (left: CGFloat, right: CGFloat) = (0, 0),
+                   captionHeight: CGFloat = 0) {
         let kindChanged = kind != tileKind || panelOvershoot != self.panelOvershoot
+            || captionHeight != self.captionHeight
         tileKind = kind
         self.panelOvershoot = panelOvershoot
+        self.captionHeight = captionHeight
         if kindChanged {
             applyMetrics(for: kind)
         }
@@ -467,7 +472,7 @@ final class ShelfRowCell: UICollectionViewCell {
     }
 
     private func applyMetrics(for kind: TileKind) {
-        flow.itemSize = CGSize(width: kind.tileWidth, height: kind.tileHeight)
+        flow.itemSize = CGSize(width: kind.tileWidth, height: kind.tileHeight + captionHeight)
         flow.minimumLineSpacing = kind.gap
         flow.minimumInteritemSpacing = kind.gap
         flow.sectionInset = UIEdgeInsets(

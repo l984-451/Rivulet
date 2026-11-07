@@ -2877,7 +2877,8 @@ final class PlexHomeViewController: UIViewController {
         let columns = isPlaylists ? MediaRowMetrics.playlistFullCount : MediaRowMetrics.posterFullCount
         // Posters sit on Apple's row pitch; the other tiles keep their padded rows with a gap.
         let isPosterGrid = !isPlaylists && !data.isMusic
-        let groupHeight = isPosterGrid ? MediaRowMetrics.posterGridPitch
+        let groupHeight = isPosterGrid
+            ? MediaRowMetrics.posterGridPitch + (MediaRowMetrics.showsPosterTitles ? MediaRowMetrics.posterCaptionHeight : 0)
             : tile.frame.height + MediaRowMetrics.focusGrowthPadding
 
         let itemSize = NSCollectionLayoutSize(
@@ -2992,6 +2993,7 @@ final class PlexHomeViewController: UIViewController {
             ? MediaRowMetrics.continueWatching
             : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster))
         let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding  // room for focus growth
+            + (override == nil ? Self.shelfCaptionHeight(section) : 0)
 
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                               heightDimension: .absolute(rowHeight))
@@ -3207,6 +3209,9 @@ final class PlexHomeViewController: UIViewController {
                     Perf.interval(.cellPrepare, key: perfKey) {
                         cell.configure(item: item)
                     }
+                    // Same gate as the grid's row height in makeGridSectionLayout (poster grids only).
+                    Self.applyCaption(to: cell, item: item,
+                                      shows: MediaRowMetrics.showsPosterTitles && !section.isMusic)
                 }
             }
             return cell
@@ -3623,11 +3628,26 @@ final class PlexHomeViewController: UIViewController {
     /// `enablePersonalizedRecommendations`) flipping while the home is on
     /// screen. `UserDefaults.didChangeNotification` fires once per change.
     /// We just re-evaluate the relevant subsystem; no need to filter by key.
+    private var lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+
+    /// Row heights and tile captions both read the setting, so re-run the layout and every cell.
+    private func reloadForPosterTitles() {
+        guard let dataSource else { return }
+        collectionView.collectionViewLayout.invalidateLayout()
+        var snapshot = dataSource.snapshot()
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
     private func observeUserDefaults() {
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                if MediaRowMetrics.showsPosterTitles != self.lastShowsPosterTitles {
+                    self.lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+                    self.reloadForPosterTitles()
+                }
                 self.backdropView.isHidden = !self.showHomeHero
                 if !self.showHomeHero {
                     self.setHeroBackdrop(url: nil)
@@ -3876,8 +3896,32 @@ final class PlexHomeViewController: UIViewController {
             realCount: shelfRealCount(section),
             hasSkeleton: paginationStates[section.id]?.isLoadingMore == true,
             contentToken: shelfContentToken(section),
-            initialOffset: shelfOffsets[sectionID] ?? 0
+            initialOffset: shelfOffsets[sectionID] ?? 0,
+            captionHeight: Self.shelfCaptionHeight(section)
         )
+    }
+
+    /// Poster rows carry a title and year line under each tile; Continue Watching, music and the
+    /// watchlist do not.
+    private static func shelfCaptionHeight(_ section: HomeSectionData) -> CGFloat {
+        guard MediaRowMetrics.showsPosterTitles else { return 0 }
+        switch section.kind {
+        case .recentlyAdded, .recommendations, .discoverList:
+            return section.isMusic ? 0 : MediaRowMetrics.posterCaptionHeight
+        default:
+            return 0
+        }
+    }
+
+    /// Sets or clears a poster's title line. Always called, because a reconfigured cell skips
+    /// `prepareForReuse` and would keep a caption the setting just turned off.
+    private static func applyCaption(to cell: PosterCell, item: MediaItem, shows: Bool) {
+        if shows {
+            let caption = PosterCell.caption(for: item)
+            cell.setCaption(title: caption.title, subtitle: caption.subtitle)
+        } else {
+            cell.setCaption(title: nil, subtitle: nil)
+        }
     }
 
     /// Binds a row's tile provider to a captured section value, so the row's count and its tiles come
@@ -3953,6 +3997,7 @@ final class PlexHomeViewController: UIViewController {
                     cell.setSourceBadge(Self.sourceBadge(for: item.ref,
                                                          labelsServers: ServerDataStore.shared.labelsServers))
                 }
+                Self.applyCaption(to: cell, item: item, shows: Self.shelfCaptionHeight(section) > 0)
             }
             return cell
         case .watchlist:

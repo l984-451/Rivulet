@@ -3958,6 +3958,22 @@
         }
       }
     },
+    "Hide" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausblenden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απόκρυψη"
+          }
+        }
+      }
+    },
     "Highest Rated" : {
       "localizations" : {
         "de" : {

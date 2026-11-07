@@ -25,6 +25,9 @@ class PlayerContainerViewController: UIViewController {
     private var progressBar: PlayerProgressBarView?
     private var scrubberProxy: ScrubberFocusProxyView?
     private var skipPill: SkipPillButton?
+    /// The pill's two homes: bottom right over the video, or in the rail's tool row (#556).
+    private var floatingPillConstraints: [NSLayoutConstraint] = []
+    private var railPillConstraints: [NSLayoutConstraint] = []
     private var pausedDimView: UIView?
     private var chromeScrim = ChromeScrimView()
     private var ambientScrim: BottomScrimView?
@@ -284,11 +287,22 @@ class PlayerContainerViewController: UIViewController {
                 proxy.topAnchor.constraint(equalTo: bar.topAnchor, constant: -8),
                 proxy.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: 56),
 
-                // Skip pill: AVKit's contextual-action spot, bottom right. Like
-                // AVKit's it shows only while the controls are hidden.
+            ])
+            // Skip pill: AVKit's contextual-action spot, bottom right, while the
+            // controls are hidden; with them up it sits in the rail's tool row.
+            floatingPillConstraints = [
                 pill.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -11),
                 pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -56),
-            ])
+            ]
+            let slotWidth = railView.skipPillSlot.widthAnchor.constraint(equalTo: pill.widthAnchor)
+            // Below required: the stack view zeroes a hidden slot's width.
+            slotWidth.priority = .defaultHigh
+            slotWidth.isActive = true
+            railPillConstraints = [
+                pill.centerXAnchor.constraint(equalTo: railView.skipPillSlot.centerXAnchor),
+                pill.centerYAnchor.constraint(equalTo: railView.skipPillSlot.centerYAnchor),
+            ]
+            NSLayoutConstraint.activate(floatingPillConstraints)
             // The proxy is a sibling of the rail, so the rail can't reach it
             // through the view tree — hand it over so its preferredFocus can
             // make the scrubber the first landing.
@@ -690,9 +704,10 @@ class PlayerContainerViewController: UIViewController {
         guard let focusedView = focused as? UIView else { return false }
         if focusedView === contentAnchor { return true }
         if focusedView === skipPill {
-            // Only Left/Right seek behind the pill. An Up here is usually the
+            // Only Left/Right seek behind the floating pill. An Up here is usually the
             // press that just moved focus onto it, so claiming it bounces focus back.
-            return type == .leftArrow || type == .rightArrow
+            // In the rail's tool row the engine moves focus instead.
+            return vm.skipPillOwnsFocus && (type == .leftArrow || type == .rightArrow)
         }
         return false
     }
@@ -890,6 +905,13 @@ class PlayerContainerViewController: UIViewController {
         // Cancel auto-skip countdown if active (highest priority)
         if vm.skipCountdownSeconds > 0 {
             vm.cancelSkipCountdown()
+            blockDismissTemporarily()
+            return
+        }
+
+        // Menu on the floating pill hides it for this marker; the controls still offer it (#556).
+        if vm.skipPillOwnsFocus {
+            vm.dismissSkipPill()
             blockDismissTemporarily()
             return
         }
@@ -1241,7 +1263,7 @@ class PlayerContainerViewController: UIViewController {
         // Pill title + visibility + focus-ownership all react to the skip
         // button toggling and to the live countdown ticking.
         vm.$showSkipButton
-            .combineLatest(vm.$skipCountdownSeconds, vm.$upNextCollapsed)
+            .combineLatest(vm.$skipCountdownSeconds, vm.$upNextCollapsed, vm.$skipPillDismissed)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshSkipPill() }
             .store(in: &cancellables)
@@ -2025,9 +2047,12 @@ class PlayerContainerViewController: UIViewController {
             contentSelectPending = false
         }
 
-        // The skip pill shows whenever a marker is active, independent of the rail.
-        let skipVisible = vm.showsSkipPill && !isLoading && !ambient && vm.postVideoState == .hidden
-            && !chromeVisible
+        // The skip pill: over the video while the controls are hidden (unless Menu
+        // dismissed it), in the rail's tool row while they are up (#556).
+        let skipAvailable = vm.showsSkipPill && !isLoading && !ambient && vm.postVideoState == .hidden
+        let pillInRail = skipAvailable && railVisible && !paneOpen
+        let skipVisible = pillInRail || (skipAvailable && !chromeVisible && !vm.skipPillDismissed)
+        let pillHomeChanged = pillInRail == (rail?.skipPillSlot.isHidden ?? !pillInRail)
 
         // Whether the pill owns focus. Re-resolved after the alpha write below.
         let ownsFocus = vm.skipPillOwnsFocus
@@ -2060,7 +2085,7 @@ class PlayerContainerViewController: UIViewController {
         captionOverlay?.controlsVisible = chromeVisible
         captionOverlay?.paneOpen = paneOpen
         guard targetsChanged || railAmbientChanged || ownershipChanged
-                || captionLiftChanged else {
+                || captionLiftChanged || pillHomeChanged else {
             if anchorNeedsFocusUpdate {
                 setNeedsFocusUpdate()
                 updateFocusIfNeeded()
@@ -2071,6 +2096,12 @@ class PlayerContainerViewController: UIViewController {
             for (view, alpha) in targets { view?.alpha = alpha }
             self.rail?.setAmbient(ambient, keepTitle: keepRailTitle)
             if captionLiftChanged { self.captionOverlay?.layoutIfNeeded() }
+            if pillHomeChanged {
+                self.rail?.skipPillSlot.isHidden = !pillInRail
+                NSLayoutConstraint.deactivate(pillInRail ? self.floatingPillConstraints : self.railPillConstraints)
+                NSLayoutConstraint.activate(pillInRail ? self.railPillConstraints : self.floatingPillConstraints)
+                self.view.layoutIfNeeded()
+            }
         }
         // Model alpha is now 1 for a visible pill, so the engine will accept it
         // as a focus target. Re-resolve toward/away from the pill (or off the
@@ -2177,6 +2208,8 @@ class PlayerContainerViewController: UIViewController {
         guard let view else { return false }
         if let proxy = scrubberProxy, view === proxy { return true }
         if let rail, view.isDescendant(of: rail) { return true }
+        // The skip pill while it sits in the rail's tool row (#556).
+        if let pill = skipPill, view === pill, rail?.skipPillSlot.isHidden == false { return true }
         // A presented panel counts as the rail, or its dismiss loses the button
         // that opened it.
         if let panel = activeRailPanel, panel.window != nil, view.isDescendant(of: panel) { return true }

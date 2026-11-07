@@ -41,6 +41,7 @@ struct MacDetailView: View {
         // The page is dark in both modes, like the header art it continues.
         .background(.black)
         .environment(\.colorScheme, .dark)
+        .toolbarColorScheme(.dark, for: .windowToolbar)
         .navigationTitle(shown.showTitle)
         .toolbar {
             ToolbarItem {

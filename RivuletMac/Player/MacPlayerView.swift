@@ -453,7 +453,7 @@ struct MacPlayerView: View {
 
 // MARK: - Pieces
 
-private struct MacBottomBarTopKey: PreferenceKey {
+struct MacBottomBarTopKey: PreferenceKey {
     static let defaultValue: CGFloat? = nil
     static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
 }
@@ -467,7 +467,7 @@ private struct MacPlayerContextualAction {
     var cancel: (() -> Void)?
 }
 
-private struct MacPlayerFailure: Equatable {
+struct MacPlayerFailure: Equatable {
     let message: String
     let canRetry: Bool
     var title = String(localized: "Couldn't Play")
@@ -475,7 +475,7 @@ private struct MacPlayerFailure: Equatable {
 }
 
 /// A borderless glyph button that lights up under the pointer.
-private struct MacPlayerIconButton: View {
+struct MacPlayerIconButton: View {
     let label: LocalizedStringKey
     let systemImage: String
     let size: CGFloat
@@ -498,7 +498,7 @@ private struct MacPlayerIconButton: View {
 }
 
 /// The engine surface, re-parented into whichever view is showing it.
-private struct MacPlayerSurface: NSViewRepresentable {
+struct MacPlayerSurface: NSViewRepresentable {
     let surface: NSView?
 
     final class Container: NSView {
@@ -524,7 +524,7 @@ private struct MacPlayerSurface: NSViewRepresentable {
 }
 
 /// The system AirPlay button.
-private struct MacRoutePicker: NSViewRepresentable {
+struct MacRoutePicker: NSViewRepresentable {
     func makeNSView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
         picker.isRoutePickerButtonBordered = false
@@ -535,7 +535,7 @@ private struct MacRoutePicker: NSViewRepresentable {
 }
 
 /// Reads the hosting window: tracks full screen, and hides the toolbar while the player covers it.
-private struct MacWindowReader: NSViewRepresentable {
+struct MacWindowReader: NSViewRepresentable {
     @Binding var isFullScreen: Bool
 
     final class Coordinator {

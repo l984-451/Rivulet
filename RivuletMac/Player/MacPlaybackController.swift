@@ -11,7 +11,7 @@ import SwiftUI
 /// PiP ends playback. Mirrors `IOSPlaybackController`.
 @MainActor
 final class MacPlaybackController: NSObject, ObservableObject {
-    @Published private(set) var session: MacPlexPlayback?
+    @Published private(set) var session: (any MacPlaybackSession)?
     /// False while the picture is in a PiP window.
     @Published private(set) var isPresented = false
     /// True while a play is preparing; a second request in that window is ignored.
@@ -32,6 +32,10 @@ final class MacPlaybackController: NSObject, ObservableObject {
     private let nowPlaying = MacNowPlaying()
     private var cancellables = Set<AnyCancellable>()
     private var displayActivity: NSObjectProtocol?
+    private var beginTask: Task<Void, Never>?
+    private var lifecycleTokens: [NSObjectProtocol] = []
+    /// The window the player covers; closing it ends playback.
+    weak var hostWindow: NSWindow? { didSet { observeWindow() } }
     /// The subtitle the C key turns back on.
     private var lastSubtitleID: Int?
     private static let volumeKey = "macPlayerVolume"
@@ -61,7 +65,21 @@ final class MacPlaybackController: NSObject, ObservableObject {
         }
     }
 
-    func start(_ newSession: MacPlexPlayback) {
+    /// The title being played, nil for a channel.
+    var plexSession: MacPlexPlayback? { session as? MacPlexPlayback }
+
+    /// Live TV: one click from a channel to full-window playback.
+    func playLive(_ channel: UnifiedChannel) {
+        start(MacLivePlayback(channel: channel))
+    }
+
+    /// Channel Up and Down, along the lineup.
+    func stepChannel(_ offset: Int) {
+        guard let live = session as? MacLivePlayback, let next = live.neighbour(offset) else { return }
+        live.switchChannel(to: next)
+    }
+
+    func start(_ newSession: any MacPlaybackSession) {
         end()
         session = newSession
         let player = newSession.player
@@ -73,7 +91,7 @@ final class MacPlaybackController: NSObject, ObservableObject {
         observe(newSession)
         startNowPlaying()
         isPresented = true
-        Task { await newSession.begin() }
+        beginTask = Task { await newSession.begin() }
     }
 
     /// Close button: ends playback and leaves the screen.
@@ -98,6 +116,8 @@ final class MacPlaybackController: NSObject, ObservableObject {
     /// Ends the session: final reports, player stop, PiP and Now Playing torn down.
     func end() {
         guard let session else { return }
+        beginTask?.cancel()
+        beginTask = nil
         session.end()
         if let surface { session.player.unbind(surface: surface) }
         session.player.stop()
@@ -114,6 +134,28 @@ final class MacPlaybackController: NSObject, ObservableObject {
         self.session = nil
     }
 
+    /// Quitting sends the final report; closing the window stops the player. PiP outlives the window.
+    private func observeWindow() {
+        lifecycleTokens.forEach(NotificationCenter.default.removeObserver)
+        lifecycleTokens = []
+        let center = NotificationCenter.default
+        lifecycleTokens.append(center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard self?.session != nil else { return }
+                self?.end()
+                // Lets the stopped report leave before the process does.
+                RunLoop.current.run(until: .now + 0.5)
+            }
+        })
+        guard let hostWindow else { return }
+        lifecycleTokens.append(center.addObserver(forName: NSWindow.willCloseNotification, object: hostWindow, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isPictureInPictureActive else { return }
+                self.close()
+            }
+        })
+    }
+
     // MARK: - Transport (the Playback menu and the player's keys)
 
     func togglePlayPause() { session?.player.togglePlayPause() }
@@ -123,8 +165,12 @@ final class MacPlaybackController: NSObject, ObservableObject {
         let seconds = forward
             ? Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
             : Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
-        guard let player = session?.player else { return }
-        Task { await player.skip(by: forward ? seconds : -seconds) }
+        guard let session else { return }
+        if let live = session as? MacLivePlayback {
+            live.skip(by: forward ? seconds : -seconds)
+        } else {
+            Task { await session.player.skip(by: forward ? seconds : -seconds) }
+        }
     }
 
     func adjustVolume(by delta: Float) {
@@ -156,7 +202,7 @@ final class MacPlaybackController: NSObject, ObservableObject {
 
     // MARK: - Observation
 
-    private func observe(_ session: MacPlexPlayback) {
+    private func observe(_ session: any MacPlaybackSession) {
         let player = session.player
         player.$pictureInPictureSource
             .sink { [weak self] source in self?.updatePictureInPicture(source) }
@@ -182,7 +228,7 @@ final class MacPlaybackController: NSObject, ObservableObject {
             player.$isMuted.map { _ in () }.eraseToAnyPublisher(),
             player.$fillsScreen.map { _ in () }.eraseToAnyPublisher(),
             player.$rate.map { _ in () }.eraseToAnyPublisher(),
-            session.objectWillChange.map { _ in () }.eraseToAnyPublisher()
+            session.changes
         ])
         .receive(on: DispatchQueue.main)
         .sink { [weak self] in self?.objectWillChange.send() }
@@ -302,10 +348,19 @@ private struct MacPlaybackHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear { controller.plex = plex }
+            .background(MacHostWindowReader { controller.hostWindow = $0 })
+            // The page under the player stays alive; its keys and buttons must not act on it.
+            .disabled(controller.isPresented && controller.session != nil)
             .overlay {
                 if controller.isPresented, let session = controller.session {
-                    MacPlayerView(session: session, player: session.player, controller: controller)
-                        .transition(.opacity)
+                    Group {
+                        if let plex = session as? MacPlexPlayback {
+                            MacPlayerView(session: plex, player: plex.player, controller: controller)
+                        } else if let live = session as? MacLivePlayback {
+                            MacLivePlayerView(session: live, player: live.player, controller: controller)
+                        }
+                    }
+                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: controller.isPresented)
@@ -317,4 +372,25 @@ private struct MacPlaybackHost: ViewModifier {
                 message: { Text(controller.playbackError ?? "") }
             )
     }
+}
+
+/// Hands the hosting window to the controller.
+private struct MacHostWindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+
+    final class ReaderView: NSView {
+        var onWindow: ((NSWindow?) -> Void)?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            onWindow?(window)
+        }
+    }
+
+    func makeNSView(context: Context) -> ReaderView {
+        let view = ReaderView()
+        view.onWindow = onWindow
+        return view
+    }
+
+    func updateNSView(_ view: ReaderView, context: Context) {}
 }

@@ -39,6 +39,9 @@ struct MacRootView: View {
         .environment(\.macOpenAccount) { showingAccount = true }
         .focusedSceneValue(\.macSelection, $selection)
         .focusedSceneValue(\.macHistory, history)
+        .focusedSceneValue(\.macAccountMenu, MacAccountMenuActions(
+            openAccount: { showingAccount = true },
+            switchProfile: profiles.hasMultipleProfiles ? { choosingProfile = true } : nil))
         .onOpenURL { if let link = RivuletLink(url: $0) { pendingLink = link } }
         .task(id: linkDeliveryKey) { await deliverLink() }
         .onChange(of: selection) { _, row in
@@ -81,9 +84,18 @@ struct MacRootView: View {
         }
         // A server or profile switch drops every open page: they hold the old one's items.
         .onChange(of: browse.sessionGeneration) {
+            // The playing title belongs to the old server or profile: its reports and Up Next would use the new one.
+            playback.close()
             paths = [:]
             forwardPaths = [:]
             selection = .home
+        }
+        // Signing out of the last server ends the title it was playing.
+        .onChange(of: browse.hasServers) { old, new in
+            if old, !new, playback.plexSession != nil { playback.close() }
+        }
+        .onChange(of: browse.hiddenSidebarLibraries) {
+            if case .library(let library) = selection, !browse.isSidebarLibraryShown(library) { selection = .home }
         }
         .onChange(of: browse.libraries, initial: true) { _, libraries in
             restoreRow()
@@ -128,7 +140,7 @@ struct MacRootView: View {
 
     /// One section per server, under its name once there are several.
     private var serverGroups: [(providerID: String, name: String?, libraries: [MediaLibrary])] {
-        let libraries = browse.libraries.sidebarOrder(servers: browse.providerOrder)
+        let libraries = browse.sidebarLibraries.sidebarOrder(servers: browse.providerOrder)
         var ids: [String] = []
         for library in libraries where !ids.contains(library.providerID) { ids.append(library.providerID) }
         return ids.map { id in
@@ -147,6 +159,7 @@ struct MacRootView: View {
                     case .hub(let hub): MacHubGridView(hub: hub)
                     case .playlist(let playlist): MacPlaylistView(playlist: playlist)
                     case .library(let library): MacLibraryView(library: library)
+                    case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
                     }
                 }
         }

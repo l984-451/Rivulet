@@ -56,20 +56,22 @@ struct MacDetailCast: View {
     let detail: MediaItemDetail?
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.macOpen) private var open
 
     private struct Person: Identifiable {
         let id: Int
         let name: String
         let role: String?
         let image: URL?
+        let source: MediaPerson
     }
 
     private var people: [Person] {
         guard let detail else { return [] }
-        let cast = detail.cast.prefix(30).map { (name: $0.name, role: $0.role, image: $0.imageURL) }
-        let directors = detail.directors.map { (name: $0.name, role: Optional(String(localized: "Director")), image: $0.imageURL) }
+        let cast = detail.cast.prefix(30).map { (name: $0.name, role: $0.role, image: $0.imageURL, source: $0) }
+        let directors = detail.directors.map { (name: $0.name, role: Optional(String(localized: "Director")), image: $0.imageURL, source: $0) }
         return (cast + directors).filter { !$0.name.isEmpty }.enumerated().map {
-            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image)
+            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image, source: $0.element.source)
         }
     }
 
@@ -84,6 +86,7 @@ struct MacDetailCast: View {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: MacMetrics.tileGap) {
                         ForEach(people) { person in
+                            Button { open(.person(person.source, providerID: item.ref.providerID)) } label: {
                             VStack(spacing: 6) {
                                 MacImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
                                     .overlay {
@@ -99,6 +102,9 @@ struct MacDetailCast: View {
                                 }
                             }
                             .frame(width: size + 20)
+                            .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             .accessibilityElement(children: .combine)
                         }
                     }

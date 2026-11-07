@@ -28,6 +28,10 @@ final class MacPlexPlayback: ObservableObject {
     private var skippedMarkerIDs: Set<String> = []
     private var lastReportBucket = -1
     private var reportedStopped = false
+    /// Set by `end()`: a load or reload still in flight must not start playback afterwards.
+    private var ended = false
+    /// Titles played in a row by the countdown; the Autoplay Limit stops the chain.
+    private var episodesInARow = 1
     private var countdownTask: Task<Void, Never>?
     private var nextLookupTask: Task<Void, Never>?
     private var nextTask: Task<Void, Never>?
@@ -71,6 +75,8 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     func end() {
+        ended = true
+        cancellables.removeAll()
         countdownTask?.cancel()
         nextLookupTask?.cancel()
         nextTask?.cancel()
@@ -118,6 +124,7 @@ final class MacPlexPlayback: ObservableObject {
         pendingEngineAudio = isTranscoding ? nil : chosenAudioID
         pendingEngineSubtitle = isTranscoding ? selectedSubtitleID.map(SubtitlePick.track) : chosenSubtitle
         await plex.openPlaySession(request)
+        guard !ended else { return }
         try? await player.load(
             url: request.url,
             headers: request.headers,
@@ -180,6 +187,7 @@ final class MacPlexPlayback: ObservableObject {
                 if let subtitle = picks.subtitle { chosenSubtitle = subtitle }
             }
             Task { await plex.stopTranscode(previous) }
+            guard !ended else { return }
             request = next
             await load(keepingTransport: true)
         }
@@ -611,17 +619,19 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     private func startUpNextCountdown() {
-        guard nextEpisode != nil, !upNextDismissed else { return }
+        let seconds = AutoplayCountdown.current.rawValue
+        guard nextEpisode != nil, !upNextDismissed, seconds > 0,
+              AutoplayLimit.current.allowsAutoplay(afterEpisodesInARow: episodesInARow) else { return }
         countdownTask?.cancel()
-        upNextCountdown = 5
+        upNextCountdown = seconds
         countdownTask = Task { [weak self] in
             while let remaining = self?.upNextCountdown, remaining > 0 {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 self?.upNextCountdown = remaining - 1
             }
-            guard !Task.isCancelled else { return }
-            self?.playNext()
+            guard !Task.isCancelled, let self, let next = self.nextEpisode else { return }
+            self.switchItem(to: next, queueIndex: self.queue.map { $0.index + 1 }, autoplayed: true)
         }
     }
 
@@ -642,7 +652,8 @@ final class MacPlexPlayback: ObservableObject {
         switchItem(to: queue.entries[index], queueIndex: index)
     }
 
-    private func switchItem(to next: PlexMetadata, queueIndex: Int?) {
+    private func switchItem(to next: PlexMetadata, queueIndex: Int?, autoplayed: Bool = false) {
+        episodesInARow = autoplayed ? episodesInARow + 1 : 1
         countdownTask?.cancel()
         upNextCountdown = nil
         pausedTimelineTask?.cancel()
@@ -658,6 +669,7 @@ final class MacPlexPlayback: ObservableObject {
                   !Task.isCancelled else { return }
             let plex = plex
             Task { await plex.stopTranscode(previous) }
+            guard !ended else { return }
             request = nextRequest
             if let queueIndex { queue?.jump(to: queueIndex) }
             chosenAudioID = nil

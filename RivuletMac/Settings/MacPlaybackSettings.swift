@@ -24,6 +24,8 @@ struct MacPlaybackSettingsView: View {
     @AppStorage("upscaleLowResolution") private var upscales = false
     /// Bumped on every track-intent write: `TrackIntentStore` is not observable.
     @State private var trackRevision = 0
+    @AppStorage(AutoplayCountdown.storageKey) private var autoplayCountdown = AutoplayCountdown.fiveSeconds.rawValue
+    @AppStorage(AutoplayLimit.storageKey) private var autoplayLimit = AutoplayLimit.off.rawValue
 
     var body: some View {
         Form {
@@ -60,6 +62,19 @@ struct MacPlaybackSettingsView: View {
                 Text("Skip Markers")
             } footer: {
                 Text("Manual shows a skip button, Automatic skips on its own, and Off shows nothing.")
+            }
+
+            Section {
+                Picker("Countdown", selection: $autoplayCountdown) {
+                    ForEach(AutoplayCountdown.allCases, id: \.rawValue) { Text($0.description).tag($0.rawValue) }
+                }
+                Picker("Limit", selection: $autoplayLimit) {
+                    ForEach(AutoplayLimit.allCases, id: \.rawValue) { Text($0.description).tag($0.rawValue) }
+                }
+            } header: {
+                Text("Autoplay")
+            } footer: {
+                Text("Countdown is how long Up Next waits before the next episode starts. Limit stops autoplay after that many episodes in a row.")
             }
 
             Section {

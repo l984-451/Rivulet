@@ -11,6 +11,8 @@ enum MacRoute: Hashable {
     case hub(MediaHub)
     case playlist(MediaPlaylist)
     case library(MediaLibrary)
+    /// A cast or crew member; `providerID` is the server whose artwork URL the portrait is.
+    case person(MediaPerson, providerID: String)
 }
 
 /// A row of the window's sidebar. Selecting one swaps the detail column's stack.
@@ -75,6 +77,35 @@ extension FocusedValues {
 struct MacHistory {
     var back: (() -> Void)?
     var forward: (() -> Void)?
+}
+
+/// The visible page's reload; the Go menu's Cmd-R runs it, else refreshes the store.
+struct MacPageRefreshKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+extension FocusedValues {
+    var macPageRefresh: (() -> Void)? {
+        get { self[MacPageRefreshKey.self] }
+        set { self[MacPageRefreshKey.self] = newValue }
+    }
+}
+
+/// Window actions the app menu drives: Account and Switch Profile.
+struct MacAccountMenuActions {
+    var openAccount: () -> Void
+    var switchProfile: (() -> Void)?
+}
+
+struct MacAccountMenuKey: FocusedValueKey {
+    typealias Value = MacAccountMenuActions
+}
+
+extension FocusedValues {
+    var macAccountMenu: MacAccountMenuActions? {
+        get { self[MacAccountMenuKey.self] }
+        set { self[MacAccountMenuKey.self] = newValue }
+    }
 }
 
 struct MacHistoryKey: FocusedValueKey {

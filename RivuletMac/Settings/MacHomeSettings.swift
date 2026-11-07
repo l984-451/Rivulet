@@ -134,7 +134,28 @@ struct MacLibrarySettingsView: View {
                     Text("Lists your favorite movies and shows from every server under Library.")
                 }
             }
+            if !browse.libraries.isEmpty { sidebarLibraries }
         }
         .formStyle(.grouped)
+    }
+
+    /// Which libraries the sidebar lists, for this profile.
+    private var sidebarLibraries: some View {
+        Section {
+            ForEach(browse.libraries.sidebarOrder(servers: browse.providerOrder)) { library in
+                Toggle(isOn: Binding(get: { browse.isSidebarLibraryShown(library) },
+                                     set: { browse.setSidebarLibrary(library, shown: $0) })) {
+                    Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                }
+            }
+            HStack {
+                Button("Show All") { browse.setSidebarLibraries(browse.libraries, shown: true) }
+                Button("Hide All") { browse.setSidebarLibraries(browse.libraries, shown: false) }
+            }
+        } header: {
+            Text("Sidebar Libraries")
+        } footer: {
+            Text("Hidden libraries stay on the server and are only left out of the sidebar and the Go menu.")
+        }
     }
 }

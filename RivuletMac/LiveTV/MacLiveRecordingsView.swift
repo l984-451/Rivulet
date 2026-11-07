@@ -61,9 +61,9 @@ struct MacLiveRecordingsView: View {
         .toolbar {
             ToolbarItem {
                 Button { Task { await reload() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    .keyboardShortcut("r", modifiers: .command)
             }
         }
+        .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
         .task { await reload() }
         .onChange(of: store.scheduledRecordings) { Task { rules = await store.recordingRules() } }
         .liveRecorder(recorder)

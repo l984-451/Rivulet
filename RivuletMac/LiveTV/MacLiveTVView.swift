@@ -15,7 +15,7 @@ struct MacLiveTVView: View {
     @State private var pendingPlay: UnifiedChannel?
     @State private var jumpToken = 0
     @State private var dismissedIssues = ""
-    @State private var playUnavailable = false
+    @EnvironmentObject private var playback: MacPlaybackController
 
     private static let favoritesFilter = "Favorites"
 
@@ -26,12 +26,10 @@ struct MacLiveTVView: View {
         content
             .navigationTitle("Live TV")
             .toolbar { toolbar }
+            .focusedSceneValue(\.macPageRefresh) { Task { await reloadEverything() } }
             .navigationDestination(for: MacLiveRoute.self) { _ in MacLiveRecordingsView() }
             .sheet(item: $selection, onDismiss: playPending) { selection in
                 MacLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
-            }
-            .alert("Live TV Playback Isn't Available Yet", isPresented: $playUnavailable) {
-                Button("OK", role: .cancel) {}
             }
             .liveRecorder(recorder)
             .environmentObject(recorder)
@@ -142,7 +140,6 @@ struct MacLiveTVView: View {
             }
             ToolbarItem {
                 Button { Task { await reloadEverything() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    .keyboardShortcut("r", modifiers: .command)
                     .help("Refresh Channels and Guide")
             }
         }
@@ -220,7 +217,7 @@ struct MacLiveTVView: View {
     // MARK: Actions
 
     private func play(_ channel: UnifiedChannel) {
-        if let hook = MacLiveHooks.play { hook(channel) } else { playUnavailable = true }
+        playback.playLive(channel)
     }
 
     private func playPending() {

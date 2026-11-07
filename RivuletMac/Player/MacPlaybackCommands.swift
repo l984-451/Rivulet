@@ -23,14 +23,22 @@ struct MacPlaybackCommands: Commands {
             Button("Skip Forward") { playback.skip(forward: true) }
                 .keyboardShortcut(.rightArrow, modifiers: [])
                 .disabled(!active)
-            Button("Next Episode") { session?.playNext() }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(!active || session?.nextEpisode == nil)
+            let plexSession = playback.plexSession
+            Button("Next Episode") { plexSession?.playNext() }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+                .disabled(!active || plexSession?.nextEpisode == nil)
             Button("Skip Intro or Credits") {
-                if let marker = session?.activeMarker { session?.skip(marker) }
+                if let marker = plexSession?.activeMarker { plexSession?.skip(marker) }
             }
             .keyboardShortcut("s", modifiers: [])
             .disabled(!active)
+
+            Button("Channel Up") { playback.stepChannel(1) }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+                .disabled(!active || !(session is MacLivePlayback))
+            Button("Channel Down") { playback.stepChannel(-1) }
+                .keyboardShortcut(.downArrow, modifiers: .command)
+                .disabled(!active || !(session is MacLivePlayback))
 
             Divider()
 
@@ -83,7 +91,7 @@ struct MacPlaybackCommands: Commands {
                 .keyboardShortcut("c", modifiers: [])
                 .disabled(!active || session?.subtitleTracks.isEmpty != false)
 
-            if let session, !session.request.isLocal {
+            if let session = plexSession, !session.request.isLocal {
                 Menu("Quality") {
                     Picker("Quality", selection: Binding(
                         get: { session.request.quality }, set: { session.switchQuality($0) }
@@ -95,7 +103,7 @@ struct MacPlaybackCommands: Commands {
                 .disabled(!active)
             }
 
-            if let session, !session.chapters.isEmpty {
+            if let session = plexSession, !session.chapters.isEmpty {
                 Menu("Chapters") {
                     ForEach(Array(session.chapters.enumerated()), id: \.offset) { index, chapter in
                         Button(chapter.tag ?? String(localized: "Chapter \(index + 1)")) { session.seekToChapter(chapter) }

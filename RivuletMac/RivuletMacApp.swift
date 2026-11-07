@@ -10,6 +10,9 @@ struct RivuletMacApp: App {
     @StateObject private var playback = MacPlaybackController()
 
     init() {
+        #if DEBUG
+        MacDebugSeed.seedSession()
+        #endif
         HostPlatform.installAppKit()
         ClientHost.prefetchImage = { _ = await MacArtworkCache.shared.image(for: $0) }
         // Order matters: identity and migration must land before anything
@@ -47,15 +50,15 @@ struct RivuletMacApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        Window("Rivulet", id: "main") {
             MacRootView()
                 .environmentObject(plex)
                 .environmentObject(plex.browse)
                 .environmentObject(playback)
                 .frame(minWidth: 1000, minHeight: 640)
         }
-        // A rivulet:// link goes to the open window instead of making a new one.
-        .handlesExternalEvents(matching: ["*"])
+        // One window: one player surface, and a rivulet:// link has one place to land.
+        .defaultSize(width: 1280, height: 800)
         .commands {
             MacShellCommands(browse: plex.browse)
             MacPlaybackCommands(playback: playback)

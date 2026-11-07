@@ -18,6 +18,10 @@ actor MacArtworkCache {
         images.totalCostLimit = 160 * 1024 * 1024
     }
 
+    func clear() {
+        images.removeAllObjects()
+    }
+
     /// Read synchronously so a recreated tile shows its art on the first frame.
     nonisolated func cachedImage(for url: URL) -> NSImage? {
         images.object(forKey: url as NSURL)

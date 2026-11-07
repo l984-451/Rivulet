@@ -125,7 +125,7 @@ private struct MacProfilePINEntry: View {
                     .onChange(of: pin) { _, value in
                         let digits = String(value.filter(\.isNumber).prefix(4))
                         if digits != value { pin = digits }
-                        if digits.count == 4 { send() }
+                        if digits.count == 4, digits == value { send() }
                     }
                 Toggle("Remember PIN on this Mac", isOn: $remember)
             } header: {
@@ -140,6 +140,7 @@ private struct MacProfilePINEntry: View {
     }
 
     private func send() {
+        guard !isWorking else { return }
         isWorking = true
         Task {
             let ok = await submit(pin, remember)

@@ -7,6 +7,9 @@ import SwiftUI
 struct MacGeneralSettingsView: View {
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @ObservedObject private var sync = CloudSync.shared
+    @EnvironmentObject private var browse: BrowseStore
+    @State private var confirmingClear = false
+    @State private var isClearing = false
     @State private var appIcon = AppIcon.current
     @State private var showingChangelog = false
     @State private var showingLicenses = false
@@ -32,6 +35,15 @@ struct MacGeneralSettingsView: View {
                 }
             }
 
+            Section {
+                Button("Clear Cache and Reload…", role: .destructive) { confirmingClear = true }
+                    .disabled(isClearing)
+            } header: {
+                Text("Storage")
+            } footer: {
+                Text("Removes cached artwork and scrub thumbnails, then reloads your libraries and Home rows from your servers.")
+            }
+
             Section("About") {
                 LabeledContent("Version", value: MacChangelog.currentVersion)
                 LabeledContent("Changelog") { Button("Show…") { showingChangelog = true } }
@@ -39,6 +51,21 @@ struct MacGeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog("Clear Cache and Reload?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Clear Cache", role: .destructive) {
+                isClearing = true
+                Task {
+                    await MacArtworkCache.shared.clear()
+                    URLCache.shared.removeAllCachedResponses()
+                    await PlexThumbnailService.shared.clearAllCache()
+                    ArtworkTitleCheck.clearDisk()
+                    await browse.watchStateDidChange()
+                    isClearing = false
+                }
+            }
+        } message: {
+            Text("Artwork and metadata are downloaded again as you browse.")
+        }
         .sheet(isPresented: $showingChangelog) { MacChangelogSheet() }
         .sheet(isPresented: $showingLicenses) { MacLicensesSheet() }
     }

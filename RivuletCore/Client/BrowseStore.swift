@@ -35,6 +35,8 @@ final class BrowseStore: ObservableObject {
     @Published private(set) var watchStateRevision = 0
     /// Favorites changed here this session, so menus and hearts are right before lists refetch.
     @Published private(set) var favoriteOverrides: [MediaItemRef: Bool] = [:]
+    /// Libraries the profile hid from the sidebar (`SidebarLibraryVisibility`).
+    @Published var hiddenSidebarLibraries: Set<String> = SidebarLibraryVisibility.stored()
     /// Bumped on a server or profile switch; the tab stacks rebuild on it.
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
@@ -161,7 +163,11 @@ final class BrowseStore: ObservableObject {
     }
 
     /// A server or profile switch: open pages belong to the old one, so the tab stacks reset.
-    func contentSessionChanged() { sessionGeneration += 1 }
+    func contentSessionChanged() {
+        favoriteOverrides = [:]
+        hiddenSidebarLibraries = SidebarLibraryVisibility.stored()
+        sessionGeneration += 1
+    }
 
     /// Called after playback or a watched toggle: repaint open pages, then Home.
     func watchStateDidChange() async {
@@ -187,6 +193,7 @@ final class BrowseStore: ObservableObject {
     }
 
     private func resetForNewSession() {
+        favoriteOverrides = [:]
         loader.reset()
         heroSources.reset()
         personalTask?.cancel()

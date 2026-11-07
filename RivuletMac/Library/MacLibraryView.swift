@@ -78,8 +78,8 @@ private struct MacLibraryRecommendedView: View {
         }
         .toolbar {
             Button("Refresh", systemImage: "arrow.clockwise") { Task { await reload() } }
-                .keyboardShortcut("r", modifiers: .command)
         }
+        .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
         .task(id: browse.watchStateRevision) {
             guard loadedRevision != browse.watchStateRevision else { return }
             await reload()
@@ -191,9 +191,9 @@ private struct MacLibraryBrowseView: View {
             }
             ToolbarItem {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await refetchLoaded() } }
-                    .keyboardShortcut("r", modifiers: .command)
             }
         }
+        .focusedSceneValue(\.macPageRefresh) { Task { await refetchLoaded() } }
         .task(id: "\(queryKey)|\(browse.watchStateRevision)") {
             // Nothing claimed and nothing shown: a first page that was cancelled when the view left.
             if loadedQuery != queryKey || (slots.slots.isEmpty && slots.claimedPages.isEmpty) {

@@ -12,9 +12,18 @@ struct MacShellCommands: Commands {
     @AppStorage(MacSettingsKeys.showPlaylists) private var showPlaylists = true
     @AppStorage(MacSettingsKeys.showFavorites) private var showFavorites = false
     @FocusedValue(\.macHistory) private var history: MacHistory?
+    @FocusedValue(\.macAccountMenu) private var account: MacAccountMenuActions?
+    @FocusedValue(\.macPageRefresh) private var pageRefresh: (() -> Void)?
 
     var body: some Commands {
         SidebarCommands()
+        CommandGroup(after: .appInfo) {
+            Button("Account…") { account?.openAccount() }
+                .disabled(account == nil)
+            if let switchProfile = account?.switchProfile {
+                Button("Switch Profile…") { switchProfile() }
+            }
+        }
         CommandMenu("Go") {
             Button("Back") { history?.back?() }
                 .keyboardShortcut("[")
@@ -33,7 +42,7 @@ struct MacShellCommands: Commands {
                 Button("Favorites") { selection = .some(.favorites) }
                     .keyboardShortcut("3")
             }
-            let libraries = browse.libraries.sidebarOrder(servers: browse.providerOrder)
+            let libraries = browse.sidebarLibraries.sidebarOrder(servers: browse.providerOrder)
             if !libraries.isEmpty { Divider() }
             ForEach(Array(libraries.enumerated()), id: \.element) { index, library in
                 let title = browse.labels.title(library.title, providerID: library.providerID)
@@ -52,7 +61,9 @@ struct MacShellCommands: Commands {
                 }
             }
             Divider()
-            Button("Refresh") { Task { await browse.refresh() } }
+            Button("Refresh") {
+                if let pageRefresh { pageRefresh() } else { Task { await browse.refresh() } }
+            }
                 .keyboardShortcut("r")
         }
         CommandGroup(after: .help) {

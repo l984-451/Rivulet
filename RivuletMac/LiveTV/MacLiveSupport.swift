@@ -9,12 +9,6 @@ enum MacLiveRoute: Hashable {
     case recordings
 }
 
-/// Where a channel plays. The player sets `play` at launch; until it does, Live TV says so.
-@MainActor
-enum MacLiveHooks {
-    static var play: ((UnifiedChannel) -> Void)?
-}
-
 /// Tunes a channel for the Mac player: the stream URL, headers, the Plex keepalive and the
 /// messages iOS shows for a refused tune. No engine types, so the player feeds `Stream`
 /// to its `loadLive` and shows `notice` as the failure (`IOSLivePlayback.load`).

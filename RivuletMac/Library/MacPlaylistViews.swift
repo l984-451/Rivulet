@@ -178,9 +178,9 @@ struct MacPlaylistView: View {
             }
             ToolbarItem {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await reload() } }
-                    .keyboardShortcut("r", modifiers: .command)
             }
         }
+        .focusedSceneValue(\.macPageRefresh) { Task { await reload() } }
         .playlistEditAlerts($editing, onDeleted: { dismiss() })
         .playlistContinueDialog($pendingStart, actions: actions)
         .task(id: revision) {

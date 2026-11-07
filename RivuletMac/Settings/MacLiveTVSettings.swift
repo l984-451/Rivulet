@@ -14,14 +14,18 @@ struct MacLiveTVSettingsView: View {
     @State private var showingFavorites = false
     @State private var detailSourceID: String?
     @State private var askingToErase = false
+    /// Bumped after a server's Live TV is shown or hidden, to re-read the hidden sources.
+    @State private var hiddenRevision = 0
 
     var body: some View {
+        let _ = hiddenRevision
         Form {
             Section {
-                ForEach(store.sources) { source in
+                ForEach(MacLiveSourceList.all(store)) { source in
                     LabeledContent {
                         HStack {
-                            Text(source.isConnected ? "\(source.channelCount) channels" : "Offline")
+                            Text(MacLiveSourceList.isHidden(source, store) ? "Off"
+                                 : source.isConnected ? "\(source.channelCount) channels" : "Offline")
                                 .foregroundStyle(.secondary)
                             Button("Details…") { detailSourceID = source.id }
                         }
@@ -59,7 +63,7 @@ struct MacLiveTVSettingsView: View {
         .sheet(isPresented: $showingAddSource) { MacLiveAddSourceSheet() }
         .sheet(isPresented: $showingFavorites) { MacLiveFavoritesSheet() }
         .sheet(isPresented: Binding(get: { detailSourceID != nil }, set: { if !$0 { detailSourceID = nil } })) {
-            if let id = detailSourceID { MacLiveSourceDetailSheet(sourceId: id) }
+            if let id = detailSourceID { MacLiveSourceDetailSheet(sourceId: id, onVisibilityChange: { hiddenRevision += 1 }) }
         }
         .onChange(of: suggestions) { _, on in
             if !on { askingToErase = true }
@@ -72,14 +76,54 @@ struct MacLiveTVSettingsView: View {
 }
 
 /// One source: status, channel count, refresh and remove.
+/// Sources for Settings: the active ones plus a server's Live TV the user hid, listed as Off.
+@MainActor
+enum MacLiveSourceList {
+    static func all(_ store: LiveTVDataStore) -> [LiveTVDataStore.LiveTVSourceInfo] {
+        store.sources + store.hiddenPlexSources
+            + [JellyfinLiveTVProvider.hiddenSource, EmbyLiveTVProvider.hiddenSource].compactMap { $0 }
+    }
+
+    static func isHidden(_ source: LiveTVDataStore.LiveTVSourceInfo, _ store: LiveTVDataStore) -> Bool {
+        !store.sources.contains { $0.id == source.id }
+    }
+}
+
 private struct MacLiveSourceDetailSheet: View {
     let sourceId: String
+    var onVisibilityChange: () -> Void = {}
     @ObservedObject private var store = LiveTVDataStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingRemove = false
     @State private var isRefreshing = false
 
-    private var source: LiveTVDataStore.LiveTVSourceInfo? { store.sources.first { $0.id == sourceId } }
+    private var source: LiveTVDataStore.LiveTVSourceInfo? { MacLiveSourceList.all(store).first { $0.id == sourceId } }
+
+    private var shownInLiveTV: Binding<Bool> {
+        Binding(
+            get: {
+                switch source?.sourceType {
+                case .plex: store.plexMachineIDs[sourceId].map { !store.isPlexLiveTVHidden(machineID: $0) } ?? true
+                case .jellyfin: !UserDefaults.standard.bool(forKey: JellyfinLiveTVProvider.hiddenKey)
+                case .emby: !UserDefaults.standard.bool(forKey: EmbyLiveTVProvider.hiddenKey)
+                default: true
+                }
+            },
+            set: { shown in
+                switch source?.sourceType {
+                case .plex:
+                    if let id = store.plexMachineIDs[sourceId] { store.setPlexLiveTVHidden(!shown, machineID: id) }
+                    Task { await store.plexSourcesSynced(); onVisibilityChange() }
+                case .jellyfin:
+                    let sync = JellyfinLiveTVProvider.setHidden(!shown)
+                    Task { await sync?.value; onVisibilityChange() }
+                case .emby:
+                    let sync = EmbyLiveTVProvider.setHidden(!shown)
+                    Task { await sync?.value; onVisibilityChange() }
+                default: break
+                }
+            })
+    }
     private var synced: Bool { CloudSync.shared.isSynced(accountID: LiveTVDataStore.syncID(forSource: sourceId)) }
 
     private func remove(_ scope: SignOutScope?) {
@@ -98,6 +142,11 @@ private struct MacLiveSourceDetailSheet: View {
                         LabeledContent("Channels", value: "\(source.channelCount)")
                         if let profile = source.channelProfile, !profile.isEmpty {
                             LabeledContent("Channel Profile", value: profile)
+                        }
+                    }
+                    if source.sourceType.followsServer {
+                        Section {
+                            Toggle("Show in Live TV", isOn: shownInLiveTV)
                         }
                     }
                     Section {

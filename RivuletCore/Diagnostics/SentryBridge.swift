@@ -11,6 +11,7 @@
 //
 
 import Sentry
+import Synchronization
 
 // `nonisolated`: under MainActor default isolation every capture from a
 // non-isolated context would be an actor hop. SentrySDK is thread-safe.
@@ -56,9 +57,17 @@ nonisolated enum SentryBridge {
         #endif
     }
 
+    private static let throttle = Mutex(SentryThrottle())
+
+    /// Whether an event under `key` may still go out this launch (see `SentryThrottle`).
+    static func admit(_ key: String, limit: Int = 1) -> Bool {
+        throttle.withLock { $0.admit(key, limit: limit) }
+    }
+
+    /// Once per launch per distinct error: a failure that repeats reaches Sentry once.
     static func capture(error: Error, configure: ((Scope) -> Void)? = nil) {
         #if !DEBUG
-        guard isActive else { return }
+        guard isActive, admit(SentryThrottle.key(for: error)) else { return }
         if let configure {
             SentrySDK.capture(error: error) { configure($0) }
         } else {

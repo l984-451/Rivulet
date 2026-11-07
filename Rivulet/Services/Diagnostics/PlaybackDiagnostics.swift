@@ -132,6 +132,20 @@ final class PlaybackDiagnostics {
         ]
         step("primary_failed", detail: "\(route)/\(kind.rawValue): \(error.localizedDescription)")
 
+        // The origin answered 404 or 503: the server's file or load, not ours. A log, not an error.
+        if engineKind == "sourceRefused" || engineKind == "sourceRateLimited" {
+            SentryBridge.log(.warn, "Primary route refused by origin", attributes: [
+                "component": "playback",
+                "playback_event": "primary_route_failed",
+                "failed_route": route,
+                "failure_kind": kind.rawValue,
+                "engine_failure_kind": engineKind ?? "none",
+                "engine_underlying_code": engineUnderlying?.code.map(String.init) ?? "none",
+                "is_relay": isRelay,
+            ])
+            return
+        }
+
         SentryBridge.capture(error: error) { scope in
             scope.setLevel(.warning)
             scope.setTag(value: "playback", key: "component")

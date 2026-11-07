@@ -112,7 +112,7 @@ struct IOSAccountView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet() }
+        .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet().iosSessionObjects(plex) }
     }
 
     @ViewBuilder

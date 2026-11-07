@@ -78,7 +78,7 @@ struct IOSRootView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
-        .sheet(isPresented: $showingAccount) { IOSAccountView() }
+        .sheet(isPresented: $showingAccount) { IOSAccountView().iosSessionObjects(plex) }
         .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(version: IOSChangelog.currentVersion) }
         .sheet(isPresented: $choosingProfile) { IOSProfilePickerSheet() }
         // Content is withheld until a profile is entered: ask who is watching,

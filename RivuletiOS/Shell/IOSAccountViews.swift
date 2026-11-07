@@ -35,7 +35,7 @@ struct IOSPlexConnectView: View {
                 Button("Sign In") { showingSignIn = true }
                     .buttonStyle(.borderedProminent)
             }
-            .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet() }
+            .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet().iosSessionObjects(plex) }
         }
     }
 }

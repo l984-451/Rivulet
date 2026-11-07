@@ -14,6 +14,16 @@ extension EnvironmentValues {
     @Entry var plexZoomScope = ""
 }
 
+extension View {
+    /// The app-wide objects, passed into a sheet by hand: on a Mac the sheet's body
+    /// is built before it inherits them from the presenter, and reading one crashes.
+    func iosSessionObjects(_ plex: IOSPlexSession) -> some View {
+        environmentObject(plex)
+            .environmentObject(plex.browse)
+            .environmentObject(IOSDownloadCenter.shared)
+    }
+}
+
 /// A detail push that remembers its source tile, so push and pop zoom from the tile tapped.
 struct IOSPlexDetailRoute: Hashable {
     let item: MediaItem

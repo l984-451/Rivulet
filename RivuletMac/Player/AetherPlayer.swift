@@ -48,7 +48,9 @@ final class AetherPlayer: ObservableObject {
             if let menuDetail { return menuDetail }
             var parts: [String] = []
             if let language, !language.isEmpty {
-                parts.append(Locale.current.localizedString(forLanguageCode: language) ?? language)
+                let languageName = Locale.current.localizedString(forLanguageCode: language) ?? language
+                // A name that already says the language ("English (SDH)") does not repeat it.
+                if !name.localizedCaseInsensitiveContains(languageName) { parts.append(languageName) }
             }
             if !codec.isEmpty { parts.append(codec.uppercased()) }
             if channels > 0 { parts.append(channels == 2 ? String(localized: "Stereo") : String(localized: "\(channels) ch")) }

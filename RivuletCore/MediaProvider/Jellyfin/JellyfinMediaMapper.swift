@@ -256,13 +256,15 @@ enum JellyfinMediaMapper {
         let externalURL: URL? = external
             ? baseURL.appending(path: "Videos/\(itemID)/\(sourceID)/Subtitles/\(index)/Stream.\(sidecarFormat(s.codec))")
             : nil
+        let label = external ? SidecarSubtitleLabel.make(
+            language: s.language, title: s.title, path: s.path, fallbackNumber: index) : nil
         return SubtitleTrack(
             id: "\(index)",
             index: external ? index : index - externalCount,
             codec: s.codec ?? "unknown",
             language: s.language,
-            title: s.title ?? s.displayTitle,
-            extendedTitle: s.displayTitle,
+            title: label ?? s.title ?? s.displayTitle,
+            extendedTitle: label ?? s.displayTitle,
             isDefault: s.isDefault ?? false,
             isForced: s.isForced ?? false,
             isHearingImpaired: s.isHearingImpaired ?? false,

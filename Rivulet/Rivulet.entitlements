@@ -24,5 +24,8 @@
 	<array>
 		<string>iCloud.com.gstudios.rivulet.sync</string>
 	</array>
+	<!-- App Store Connect rejects a tvOS app with CloudKit but no aps-environment (ITMS-90575). -->
+	<key>aps-environment</key>
+	<string>$(APPATTEST_ENVIRONMENT)</string>
 </dict>
 </plist>

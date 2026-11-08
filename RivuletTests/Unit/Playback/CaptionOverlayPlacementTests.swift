@@ -106,27 +106,27 @@ final class CaptionOverlayPlacementTests: XCTestCase {
 
     /// 0 is AVPlayer's position; each unit moves the band 10 points.
     func testHeightMovesTheDefaultBandBothWays() {
-        XCTAssertEqual(captionFrame(placement: nil, heightUnits: 10).maxY, 850, accuracy: 0.5)
-        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -2).maxY, 970, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, heightUnits: 5).maxY, 850, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -1).maxY, 970, accuracy: 0.5)
     }
 
     func testHeightStaysOnScreen() {
-        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -30).maxY, 1_000, accuracy: 0.5)
-        XCTAssertEqual(captionFrame(placement: nil, heightUnits: 80).maxY, 200, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -15).maxY, 1_000, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, heightUnits: 40).maxY, 200, accuracy: 0.5)
     }
 
     /// Negative height reaches the letterbox bar under a wide picture.
     func testHeightReachesTheLetterboxBar() {
         let wide = CGSize(width: 2_000, height: 800)
         XCTAssertEqual(captionFrame(placement: nil, videoSize: wide).maxY, 680, accuracy: 0.5)
-        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -30, videoSize: wide).maxY, 980, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, heightUnits: -15, videoSize: wide).maxY, 980, accuracy: 0.5)
     }
 
     /// The rail still wins over a low setting, and a high one doesn't jump when it appears.
     func testHeightClearsTheRailWithoutDoubleLifting() {
         let railTop = canvas.height - SubtitleAdjustments.controlsFloor
-        XCTAssertEqual(captionFrame(placement: nil, controlsVisible: true, heightUnits: -10).maxY, railTop, accuracy: 0.5)
-        XCTAssertEqual(captionFrame(placement: nil, controlsVisible: true, heightUnits: 50).maxY, 450, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, controlsVisible: true, heightUnits: -5).maxY, railTop, accuracy: 0.5)
+        XCTAssertEqual(captionFrame(placement: nil, controlsVisible: true, heightUnits: 25).maxY, 450, accuracy: 0.5)
     }
 
     /// The stepper lives in the open pane: every step shows, either way.
@@ -142,13 +142,13 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         }
         let rest = maxY(units: 0)
         XCTAssertEqual(rest, canvas.height - SubtitleAdjustments.controlsFloor - SubtitleAdjustments.paneLift, accuracy: 0.5)
-        XCTAssertEqual(maxY(units: 1), rest - 10, accuracy: 0.5)
-        XCTAssertEqual(maxY(units: -1), rest + 10, accuracy: 0.5)
+        XCTAssertEqual(maxY(units: 1), rest - CaptionHeight.unitPt, accuracy: 0.5)
+        XCTAssertEqual(maxY(units: -1), rest + CaptionHeight.unitPt, accuracy: 0.5)
     }
 
     /// A cue that placed itself stays where it asked to be.
     func testHeightDoesNotMovePlacedCues() {
-        let frame = captionFrame(placement: .init(alignment: 1, position: CGPoint(x: 0.10, y: 0.70)), heightUnits: 20)
+        let frame = captionFrame(placement: .init(alignment: 1, position: CGPoint(x: 0.10, y: 0.70)), heightUnits: 10)
         XCTAssertEqual(frame.minY, 700, accuracy: 0.5)
     }
 
@@ -156,9 +156,9 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         let saved = SubtitleAdjustments.heightUnits
         defer { SubtitleAdjustments.heightUnits = saved }
         SubtitleAdjustments.heightUnits = 999
-        XCTAssertEqual(SubtitleAdjustments.heightUnits, 80)
+        XCTAssertEqual(SubtitleAdjustments.heightUnits, 40)
         SubtitleAdjustments.heightUnits = -999
-        XCTAssertEqual(SubtitleAdjustments.heightUnits, -30)
+        XCTAssertEqual(SubtitleAdjustments.heightUnits, -15)
     }
 
     /// AVKit rests every style's box on the same floor.

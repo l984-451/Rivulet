@@ -8,13 +8,21 @@ import CoreGraphics
 /// band, in stepper units. Positive sits higher. Shared by all three apps.
 enum CaptionHeight {
     /// Points moved per step.
-    static let unitPt: CGFloat = 10
+    static let unitPt: CGFloat = 20
     /// Far enough down to reach the screen edge under a wide film's letterbox bar,
     /// and up to the top of the screen.
-    static let unitRange = -30...80
+    static let unitRange = -15...40
     /// The highest the band's bottom edge may rest, as a fraction of the screen height.
     static let highestBandFraction: CGFloat = 0.8
-    static let key = "subtitleHeightUnits"
+    /// Steps were 10 pt under `subtitleHeightUnits`; that value carries over halved.
+    static let key: String = {
+        let defaults = UserDefaults.standard, old = "subtitleHeightUnits", new = "subtitleHeightSteps"
+        if defaults.object(forKey: new) == nil, defaults.object(forKey: old) != nil {
+            defaults.set((Double(defaults.integer(forKey: old)) / 2).rounded(), forKey: new)
+            defaults.removeObject(forKey: old)
+        }
+        return new
+    }()
 
     static var units: Int {
         get { clamp(UserDefaults.standard.integer(forKey: key)) }

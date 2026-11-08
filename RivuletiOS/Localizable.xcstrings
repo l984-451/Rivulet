@@ -1674,8 +1674,26 @@
         }
       }
     },
-    "Choose what appears on Home and in what order." : {},
-    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
+    "Choose what appears on Home and in what order." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, was auf der Startseite erscheint und in welcher Reihenfolge."
+          }
+        }
+      }
+    },
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, was das Hero-Banner zeigt. Wählst du mehreres, wird es gemischt. Schaltest du alles aus, wird das Hero-Banner ausgeblendet."
+          }
+        }
+      }
+    },
     "Clear" : {
       "localizations" : {
         "de" : {
@@ -3425,7 +3443,16 @@
         }
       }
     },
-    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Reihen deiner Server kommen in der ursprünglichen Reihenfolge zurück. Favoriten und Playlists werden ausgeschaltet."
+          }
+        }
+      }
+    },
     "Extra" : {
       "localizations" : {
         "de" : {
@@ -3458,8 +3485,26 @@
         }
       }
     },
-    "Favorite Movies" : {},
-    "Favorite TV Shows" : {},
+    "Favorite Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsfilme"
+          }
+        }
+      }
+    },
+    "Favorite TV Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsserien"
+          }
+        }
+      }
+    },
     "FFmpeg Build Scripts and Sources" : {
       "localizations" : {
         "de" : {
@@ -3918,8 +3963,26 @@
         }
       }
     },
-    "Hero Playlists" : {},
-    "Hidden from Home" : {},
+    "Hero Playlists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlists im Hero-Banner"
+          }
+        }
+      }
+    },
+    "Hidden from Home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Startseite ausgeblendet"
+          }
+        }
+      }
+    },
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -6239,11 +6302,56 @@
       }
     },
     "Recommended" : {},
-    "Reset" : {},
-    "Reset Hero" : {},
-    "Reset Home Rows?" : {},
-    "Reset the Hero?" : {},
-    "Rows" : {},
+    "Reset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset Hero" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hero-Banner zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset Home Rows?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reihen der Startseite zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset the Hero?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hero-Banner zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Rows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reihen"
+          }
+        }
+      }
+    },
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -8037,7 +8145,16 @@
       }
     },
     "Switch to Browse to see every title." : {},
-    "The hero shows Trending only, with no playlists." : {},
+    "The hero shows Trending only, with no playlists." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Hero-Banner zeigt dann nur „Angesagt“, ohne Playlists."
+          }
+        }
+      }
+    },
     "The server didn't accept the sign-in." : {
       "localizations" : {
         "de" : {

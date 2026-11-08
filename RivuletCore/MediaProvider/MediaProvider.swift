@@ -214,6 +214,9 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Skip markers (intro, credits, ...) for the item. Default: none.
     /// Best effort: a backend without the data returns an empty value.
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras
+
+    /// Server-made scrub stills for the version (Jellyfin trickplay), or nil. Default: nil.
+    func scrubPreviews(for itemRef: MediaItemRef, sourceID: String?) async -> (any ScrubPreviewSource)?
 }
 
 extension MediaProvider {
@@ -242,6 +245,7 @@ extension MediaProvider {
         try await related(for: ref, kind: kind).items
     }
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras { PlaybackExtras() }
+    func scrubPreviews(for itemRef: MediaItemRef, sourceID: String?) async -> (any ScrubPreviewSource)? { nil }
     func showIdentityKeys(for showIDs: [String]) async -> [String: [String]] { [:] }
     func contentAdvisory(for ref: MediaItemRef) async throws -> ContentAdvisory? { nil }
     func search(_ query: String, inLibraries libraryIDs: [String]) async throws -> [MediaItem] {

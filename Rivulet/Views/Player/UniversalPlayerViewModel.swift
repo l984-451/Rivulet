@@ -192,6 +192,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Where scrub stills come from: the Plex server's BIF, or frames the
     /// engine decodes from the playing file.
     enum ScrubThumbnailSource { case server, engine }
+    /// Jellyfin trickplay for a provider item, tried before engine frames.
+    private let providerScrubPreviews = ScrubPreviewHolder()
 
     /// The engine decode loop. One decode runs at a time (each one seeks the
     /// file, a range request when it is remote); a scrub that moves meanwhile
@@ -3058,6 +3060,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// A still for a chapter the server has no thumb for: the BIF frame, else an engine decode.
     func chapterStill(at time: TimeInterval) async -> UIImage? {
+        if case .provider(let playback) = source,
+           let still = await providerScrubPreviews.image(at: time, for: playback) {
+            return UIImage(cgImage: still)
+        }
         if currentScrubThumbnailSource == .server, let partId = metadata.Media?.first?.Part?.first?.id,
            let image = await PlexThumbnailService.shared.getThumbnail(
                partId: partId, time: time, serverURL: serverURL, authToken: authToken) {
@@ -4406,6 +4412,16 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     private func loadThumbnail(for time: TimeInterval) {
+        if case .provider(let playback) = source {
+            Task {
+                if let still = await providerScrubPreviews.image(at: time, for: playback) {
+                    self.scrubThumbnail = UIImage(cgImage: still)
+                } else {
+                    self.loadEngineThumbnail(for: time)
+                }
+            }
+            return
+        }
         guard currentScrubThumbnailSource == .server else {
             loadEngineThumbnail(for: time)
             return
@@ -4514,6 +4530,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Drop the outgoing item's BIF. Safe to call when nothing is cached; a
     /// later scrub re-fetches on demand.
     private func releaseThumbnailCache() {
+        providerScrubPreviews.clear()
         guard let partId = preloadedThumbnailPartId else { return }
         preloadedThumbnailPartId = nil
         PlexThumbnailService.shared.clearCache(partId: partId)

@@ -230,10 +230,13 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     /// The Plex part whose BIF is held, released when the item changes or playback ends.
     private var thumbnailPartID: Int?
+    /// Jellyfin trickplay for a provider item, tried before engine frames.
+    private let providerPreviews = ScrubPreviewHolder()
 
     /// The still for a scrub position: the server's BIF, loaded on the first scrub, else
     /// a frame decoded from the file. A transcode has no file to decode from.
     func scrubStill(at time: Double) async -> UIImage? {
+        if let still = await providerPreviews.image(at: time, for: request.providerPlayback) { return UIImage(cgImage: still) }
         let parts = request.item.Media.flatMap { $0.indices.contains(request.mediaIndex) ? $0[request.mediaIndex] : nil }?.Part
         if !request.isLocal, !request.serverURL.isEmpty, parts?.count == 1, let partID = parts?.first?.id,
            !PlexThumbnailService.shared.isUnavailable(partId: partID) {
@@ -248,6 +251,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     private func releaseThumbnails() {
+        providerPreviews.clear()
         if let thumbnailPartID { PlexThumbnailService.shared.clearCache(partId: thumbnailPartID) }
         thumbnailPartID = nil
     }

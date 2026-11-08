@@ -628,6 +628,20 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         return PlaybackExtras(markers: markers)
     }
 
+    /// Trickplay sheets at the width nearest the 320 pt scrub still; nil when the version has none.
+    func scrubPreviews(for itemRef: MediaItemRef, sourceID: String?) async -> (any ScrubPreviewSource)? {
+        let item: JFTrickplayItem? = try? await client.get("Items/\(itemRef.itemID)",
+                                                           [URLQueryItem(name: "fields", value: "Trickplay")])
+        guard let widths = item?.widths(forSource: sourceID),
+              let info = JFTrickplayInfo.choose(from: widths, near: 320) else { return nil }
+        let client = client
+        let itemID = itemRef.itemID
+        let query = sourceID.map { [URLQueryItem(name: "mediaSourceId", value: $0)] } ?? []
+        return JellyfinTrickplayPreviews(info: info) { index in
+            await client.bytes("Videos/\(itemID)/Trickplay/\(info.width)/\(index).jpg", query)
+        }
+    }
+
     /// Direct play when the server allows it, else the server's HLS transcode.
     /// A source with neither throws `.transcodeRequired`.
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?) async throws -> StreamInfo {

@@ -77,6 +77,16 @@ nonisolated final class JellyfinClient: Sendable {
         try await send("GET", path, query: query, body: nil)
     }
 
+    /// The raw body of a 2xx GET (an image sheet); nil on any failure.
+    @concurrent
+    func bytes(_ path: String, _ query: [URLQueryItem] = []) async -> Data? {
+        var request = URLRequest(url: url(path, query))
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await transport(request),
+              let status = (response as? HTTPURLResponse)?.statusCode, (200...299).contains(status) else { return nil }
+        return data
+    }
+
     func post<T: Decodable & Sendable>(_ path: String, body: (any Encodable & Sendable)? = nil) async throws -> T {
         try await send("POST", path, query: [], body: body)
     }

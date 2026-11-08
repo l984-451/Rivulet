@@ -8,14 +8,13 @@ import SwiftUI
 struct MacPlaybackSettingsView: View {
     @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
-    /// Observed so the skip pickers redraw; read and written through `MarkerSkipMode`.
+    /// Observed so the skip pickers redraw (and At the Credits); read and written through `MarkerSkipMode`.
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipRecap") private var autoSkipRecap = false
-    @AppStorage("autoSkipCredits") private var autoSkipCredits = false
+    @AppStorage(CreditsBehavior.storageKey) private var atTheCredits = ""
     @AppStorage("autoSkipAds") private var autoSkipAds = false
     @AppStorage("showSkipIntro") private var showSkipIntro = true
     @AppStorage("showSkipRecap") private var showSkipRecap = true
-    @AppStorage("showSkipCredits") private var showSkipCredits = true
     @AppStorage("showSkipAds") private var showSkipAds = true
     @AppStorage("useIntroDB") private var useIntroDB = false
     @AppStorage(StreamingQuality.homeKey) private var homeQuality = StreamingQuality.homeDefault
@@ -57,12 +56,21 @@ struct MacPlaybackSettingsView: View {
             Section {
                 skipPicker("Intros", marker: "intro")
                 skipPicker("Recaps", marker: "recap")
-                skipPicker("Credits", marker: "credits")
                 skipPicker("Commercials", marker: "commercial")
             } header: {
                 Text("Skip Markers")
             } footer: {
                 Text("Manual shows a skip button, Automatic skips on its own, and Off shows nothing.")
+            }
+
+            Section {
+                Picker("At the Credits", selection: Binding(
+                    get: { CreditsBehavior.current() }, set: { CreditsBehavior.set($0) }
+                )) {
+                    ForEach(CreditsBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+            } footer: {
+                Text("Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Nothing waits for the end. Countdown decides autoplay.")
             }
 
             Section {

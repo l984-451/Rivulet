@@ -558,7 +558,6 @@ enum SettingsContent {
                             })),
             .header("Skip Buttons"),
             skipModeRow("autoSkipIntro", "Intro", marker: "intro"),
-            skipModeRow("autoSkipCredits", "Credits", marker: "credits"),
             skipModeRow("autoSkipAds", "Ads", marker: "commercial"),
             skipModeRow("autoSkipRecap", "Recap", marker: "recap"),
             toggle("useIntroDB", "Community Marker Database", key: "useIntroDB", default: false),
@@ -569,7 +568,13 @@ enum SettingsContent {
                             })),
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
-            toggle("showPostVideoUpNext", "Up Next Panel", key: "showPostVideoUpNext", default: true),
+            SettingsRowItem(id: "atTheCredits", title: "At the Credits", kind: .cycle(
+                value: { CreditsBehavior.current().label },
+                next: {
+                    let all = CreditsBehavior.allCases
+                    let i = all.firstIndex(of: CreditsBehavior.current()) ?? 0
+                    CreditsBehavior.set(all[(i + 1) % all.count])
+                })),
             SettingsRowItem(id: "cinemaTrailers", title: "Trailers Before Movies",
                             kind: .cycle(value: { CinemaExtras.count == 0 ? String(localized: "Off") : "\(CinemaExtras.count)" },
                                          next: {

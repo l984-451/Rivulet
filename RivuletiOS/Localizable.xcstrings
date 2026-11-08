@@ -1023,6 +1023,9 @@
         }
       }
     },
+    "At the Credits" : {
+
+    },
     "Audio" : {
       "localizations" : {
         "de" : {
@@ -5113,6 +5116,9 @@
         }
       }
     },
+    "Nothing" : {
+
+    },
     "Nothing On Right Now" : {
       "localizations" : {
         "de" : {
@@ -7621,6 +7627,9 @@
         }
       }
     },
+    "Skip Button" : {
+
+    },
     "Skip Buttons" : {
       "localizations" : {
         "de" : {
@@ -9408,6 +9417,9 @@
           }
         }
       }
+    },
+    "Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Nothing waits for the end. Countdown decides autoplay." : {
+
     },
     "Upcoming" : {
       "localizations" : {

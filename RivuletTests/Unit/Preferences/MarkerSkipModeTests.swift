@@ -20,9 +20,16 @@ final class MarkerSkipModeTests: XCTestCase {
 
     func testRoundTripsEveryMode() {
         for mode in MarkerSkipMode.allCases {
-            MarkerSkipMode.set(mode, for: "credits", defaults: defaults)
-            XCTAssertEqual(MarkerSkipMode.current(for: "credits", defaults: defaults), mode)
+            MarkerSkipMode.set(mode, for: "intro", defaults: defaults)
+            XCTAssertEqual(MarkerSkipMode.current(for: "intro", defaults: defaults), mode)
         }
         XCTAssertEqual(MarkerSkipMode.current(for: "recap", defaults: defaults), .manual)
+    }
+
+    func testCreditsFollowAtTheCredits() {
+        CreditsBehavior.set(.nothing, defaults: defaults)
+        XCTAssertEqual(MarkerSkipMode.current(for: "credits", defaults: defaults), .off)
+        CreditsBehavior.set(.skipButton, defaults: defaults)
+        XCTAssertEqual(MarkerSkipMode.current(for: "credits", defaults: defaults), .manual)
     }
 }

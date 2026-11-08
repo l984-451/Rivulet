@@ -655,8 +655,11 @@ final class MacPlexPlayback: ObservableObject {
 
     // MARK: - Up Next
 
-    /// Near the end: inside the credits marker, or the last 30 s.
+    /// Near the end: inside the credits marker, or the last 30 s. Only "Up Next" opens it early;
+    /// the other choices wait for the end of the file.
     var isNearEnd: Bool {
+        if player.state == .ended { return true }
+        guard CreditsBehavior.current().showsUpNextAtCredits else { return false }
         if activeMarker?.type == "credits" { return true }
         let duration = player.duration
         return duration > 60 && player.currentTime >= duration - 30

@@ -5159,7 +5159,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
                 // Trigger post-video summary when FIRST credits marker actually starts
                 // (skip button will be hidden by UI when postVideoState != .hidden)
-                if credits.id == upNextCredits?.id,
+                if credits.id == upNextCredits?.id, opensUpNextAtCredits,
                    time >= credits.startTimeSeconds && !hasTriggeredPostVideo {
                     hasTriggeredPostVideo = true
                     triggerPostVideoTransition()
@@ -5195,7 +5195,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // No credits markers: Up Next opens one countdown before the end, so autoplay lands at the
         // end. Countdown off opens it at the end. At least 85% watched, for short videos.
-        if metadata.creditsMarkers.isEmpty && duration > 60 {
+        if metadata.creditsMarkers.isEmpty && duration > 60 && opensUpNextAtCredits {
             let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
             let minCompletionTime = duration * 0.85  // At least 85% watched
 
@@ -5310,26 +5310,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         // The pill is Up Next's while it's folded there; no credits skip or auto-skip.
         guard let creditsId = marker.id, !upNextCollapsed else { return }
 
-        let mode = MarkerSkipMode.current(for: "credits")
-        guard mode != .off else { return }
-        let autoSkipCredits = mode == .automatic
+        guard CreditsBehavior.current().showsSkipPill else { return }
 
-        // Only auto-skip when actually inside the marker (not during preview window)
-        let insideMarker = currentTime >= marker.startTimeSeconds
-
-        // Auto-skip with a visible countdown when the setting is on.
-        if autoSkipCredits && !skippedCreditsIds.contains(creditsId) && insideMarker && !userDeclinedAutoSkip {
-            if activeMarker == nil {
-                activeMarker = marker
-                showSkipButton = true
-            }
-            if skipCountdownTimer == nil && skipCountdownSeconds == 0 {
-                startSkipCountdown(for: marker)
-            }
-            return
-        }
-
-        // Show skip button if not already skipped
+        // Credits never auto-skip; the pill is manual.
         if !skippedCreditsIds.contains(creditsId) && activeMarker == nil {
             activeMarker = marker
             showSkipButton = true
@@ -5616,11 +5599,9 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Post-Video Handling
 
-    /// Handle video end - transition to post-video summary
-    /// Reads the user's "Show Up Next Panel" preference. A missing key
-    /// reads as `true` so the chooser still appears for existing users.
-    private var showPostVideoUpNext: Bool {
-        UserDefaults.standard.object(forKey: "showPostVideoUpNext") as? Bool ?? true
+    /// Up Next opens at the credits only for the "Up Next" choice; movies and playlists keep their own path.
+    private var opensUpNextAtCredits: Bool {
+        playQueue != nil || metadata.type != "episode" || CreditsBehavior.current().showsUpNextAtCredits
     }
 
     /// Resolve the next episode EARLY (as soon as Aether's AVPlayer is
@@ -5642,16 +5623,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         Task { await loadUpNextEpisodes() }
     }
 
-    /// At the credits boundary (or 45s from the end): enter the Up Next flow,
-    /// or, with the panel off for episodes, just mark the item watched.
+    /// At the credits boundary (or one countdown from the end): enter the Up Next flow.
     private func triggerPostVideoTransition() {
-        let isEpisode = metadata.type == "episode"
-
-        if playQueue != nil || showPostVideoUpNext || !isEpisode {
-            Task { await handlePlaybackEnded() }
-        } else {
-            Task { await markCurrentAsWatched() }
-        }
+        Task { await handlePlaybackEnded() }
     }
 
     /// Playback is over for good: the stream reached its end, or a credits skip
@@ -5680,12 +5654,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Don't re-enter if already showing post-video
         guard postVideoState == .hidden else { return }
 
-        // Per-user opt-out of the post-video "Up Next" chooser for TV
-        // episodes. When disabled, episodes follow the same path movies
-        // already take: credits play uninterrupted at full size.
-        // Movies: No PostVideo - just let the video play through to the end.
-        // A playlist's next entry follows any type, ahead of both gates.
-        guard playQueue != nil || (isEpisode && showPostVideoUpNext) else {
+        // Movies: no Up Next, just mark watched. A playlist's next entry follows any type.
+        guard playQueue != nil || isEpisode else {
             await markCurrentAsWatched()
             return
         }

@@ -171,10 +171,6 @@ enum SettingsDescriptorStore {
             icon: "play.circle",
             description: "What happens when an intro starts. Manual shows Skip Intro, Automatic skips it after a short countdown, and Off never shows the button."
         ),
-        "autoSkipCredits": SettingDescriptor(
-            icon: "stop.circle",
-            description: "What happens when the credits start. Manual shows Skip Credits, Automatic skips straight to the post-play screen, and Off never shows the button."
-        ),
         "autoSkipAds": SettingDescriptor(
             icon: "forward.frame",
             description: "What happens when an ad break starts. Manual shows Skip Ad, Automatic skips it after a short countdown, and Off never shows the button."
@@ -251,9 +247,9 @@ enum SettingsDescriptorStore {
             icon: "film.stack",
             description: "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on."
         ),
-        "showPostVideoUpNext": SettingDescriptor(
+        "atTheCredits": SettingDescriptor(
             icon: "rectangle.stack",
-            description: "When off, closing credits play uninterrupted and the player returns to Home at the end of the episode."
+            description: "What shows when the credits start. Up Next opens the next episode card with its countdown. Skip Button shows only Skip Credits and opens Up Next at the end. Nothing shows no button or card until the end. Countdown decides whether the next episode autoplays."
         ),
 
         // MARK: Live TV

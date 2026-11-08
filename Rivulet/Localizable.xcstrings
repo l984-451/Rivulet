@@ -2235,6 +2235,9 @@
         }
       }
     },
+    "At the Credits" : {
+
+    },
     "Audio" : {
       "localizations" : {
         "de" : {
@@ -9039,6 +9042,9 @@
         }
       }
     },
+    "Nothing" : {
+
+    },
     "Nothing in your Watchlist yet." : {
       "localizations" : {
         "de" : {
@@ -13309,6 +13315,9 @@
         }
       }
     },
+    "Skip Button" : {
+
+    },
     "Skip Buttons" : {
       "localizations" : {
         "de" : {
@@ -16147,22 +16156,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ακολουθούν"
-          }
-        }
-      }
-    },
-    "Up Next Panel" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„Als Nächstes“-Leiste"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πλαίσιο «Ακολουθούν»"
           }
         }
       }

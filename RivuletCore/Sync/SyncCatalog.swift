@@ -17,11 +17,11 @@ nonisolated enum SyncCatalog {
         "showHomeHero", "homeHeroContent", "showLibraryHero", "showLibraryRecentRows",
         "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab", "showFavoritesTab",
         // Playback
-        "autoplayLimit", "autoplayCountdown", "showPostVideoUpNext", "promptResumeOrRestart",
+        "autoplayLimit", "autoplayCountdown", "atTheCredits", "promptResumeOrRestart",
         "continueWatchingInstantResume", "skipPreviewCarousel", "useIntroDB", "cinemaTrailersCount",
         "detailRatingSource", "generatedSubtitlesFallback", "playerShowsClockTimes",
-        "showSkipIntro", "showSkipRecap", "showSkipCredits", "showSkipAds",
-        "autoSkipIntro", "autoSkipRecap", "autoSkipCredits", "autoSkipAds",
+        "showSkipIntro", "showSkipRecap", "showSkipAds",
+        "autoSkipIntro", "autoSkipRecap", "autoSkipAds",
         SkipLengthKeys.forward, SkipLengthKeys.back,
         // Content filter (not its list source URL, which can embed access)
         "contentFilter.enabled", "contentFilter.profanityStrength", "contentFilter.customWords",

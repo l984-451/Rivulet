@@ -17,6 +17,16 @@
         }
       }
     },
+    "%@ left · Ends at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left · Ends at %2$@"
+          }
+        }
+      }
+    },
     "%@ Live TV" : {
       "localizations" : {
         "de" : {
@@ -5702,6 +5712,16 @@
         }
       }
     },
+    "Episode %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Episode %1$lld · %2$@"
+          }
+        }
+      }
+    },
     "Episodes" : {
       "localizations" : {
         "de" : {
@@ -9456,6 +9476,7 @@
         }
       }
     },
+    "Pause Screen" : {},
     "PIN expired. Please try again." : {
       "localizations" : {
         "de" : {
@@ -12074,6 +12095,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Υπότιτλοι για κωφούς και βαρήκοους"
+          }
+        }
+      }
+    },
+    "Season %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Season %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "Season %lld, Episode %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Season %1$lld, Episode %2$lld"
+          }
+        }
+      }
+    },
+    "Season %lld, Episode %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Season %1$lld, Episode %2$lld · %3$@"
           }
         }
       }
@@ -16672,6 +16723,7 @@
         }
       }
     },
+    "What the screen shows after a few seconds paused: the title and the time left. Frame keeps the paused picture and moves in slowly. Glass dims it and sets the details on a glass card." : {},
     "What this source is called in Live TV. Optional." : {
       "localizations" : {
         "de" : {
@@ -17689,6 +17741,28 @@
         }
       }
     },
+    "pauseScreen.frame" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Frame"
+          }
+        }
+      }
+    },
+    "pauseScreen.glass" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Glass"
+          }
+        }
+      }
+    },
     "postVideo.playNext" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -17708,6 +17782,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αναπαραγωγή επόμενου"
+          }
+        }
+      }
+    },
+    "settings.header.paused" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Paused"
           }
         }
       }

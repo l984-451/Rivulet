@@ -227,6 +227,10 @@ enum SettingsDescriptorStore {
             icon: "captions.bubble",
             description: "English only for now. With Subtitles set to Always, a title with no subtitles in your language gets them written from its dialogue. Downloads 230 MB."
         ),
+        "pauseScreenStyle": SettingDescriptor(
+            icon: "pause.rectangle",
+            description: "What the screen shows after a few seconds paused: the title and the time left. Frame keeps the paused picture and moves in slowly. Glass dims it and sets the details on a glass card."
+        ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
             description: "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before."

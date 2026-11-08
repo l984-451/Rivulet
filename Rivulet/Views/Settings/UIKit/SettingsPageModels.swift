@@ -577,6 +577,11 @@ enum SettingsContent {
                                                                   CinemaExtras.count == CinemaExtras.countOptions.upperBound
                                                                       ? 0 : CinemaExtras.count + 1)
                                          })),
+            // Its own key: "Paused" is also the timeshift status label.
+            .header(LocalizedStringResource("settings.header.paused", defaultValue: "Paused")),
+            SettingsRowItem(id: "pauseScreenStyle", title: "Pause Screen",
+                            kind: .cycle(value: { PauseScreenStyle.current.title },
+                                         next: { SettingsStore.setString(PauseScreenStyle.storageKey, PauseScreenStyle.current.next.rawValue) })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             .header("Filtering"),

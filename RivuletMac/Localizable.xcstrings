@@ -7372,6 +7372,38 @@
         }
       }
     },
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld · %@:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
+          }
+        }
+      }
+    },
     "SD First" : {
       "localizations" : {
         "de" : {

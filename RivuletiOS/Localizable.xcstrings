@@ -5464,7 +5464,16 @@
         }
       }
     },
-    "Open in YouTube" : {},
+    "Open in YouTube" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In YouTube öffnen"
+          }
+        }
+      }
+    },
     "Open Source Software" : {
       "localizations" : {
         "de" : {
@@ -7130,6 +7139,38 @@
         }
       }
     },
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld · %@:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
+          }
+        }
+      }
+    },
     "SD First" : {
       "localizations" : {
         "de" : {
@@ -8195,7 +8236,16 @@
         }
       }
     },
-    "This trailer plays in the YouTube app." : {},
+    "This trailer plays in the YouTube app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Trailer wird in der YouTube-App abgespielt."
+          }
+        }
+      }
+    },
     "TMDB users" : {
       "localizations" : {
         "de" : {

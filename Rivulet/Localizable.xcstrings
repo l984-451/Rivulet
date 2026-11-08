@@ -7369,7 +7369,16 @@
         }
       }
     },
-    "Install YouTube from the App Store to watch this trailer." : {},
+    "Install YouTube from the App Store to watch this trailer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiere YouTube aus dem App Store, um diesen Trailer anzusehen."
+          }
+        }
+      }
+    },
     "Instant Resume" : {
       "localizations" : {
         "de" : {
@@ -9440,7 +9449,16 @@
         }
       }
     },
-    "Open in YouTube" : {},
+    "Open in YouTube" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In YouTube öffnen"
+          }
+        }
+      }
+    },
     "Optional" : {
       "localizations" : {
         "de" : {
@@ -12157,6 +12175,38 @@
         }
       }
     },
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld · %@:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
+          }
+        }
+      }
+    },
     "S%lld, E%lld: " : {
       "localizations" : {
         "de" : {
@@ -14319,7 +14369,16 @@
         }
       }
     },
-    "This trailer plays in the YouTube app." : {},
+    "This trailer plays in the YouTube app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Trailer wird in der YouTube-App abgespielt."
+          }
+        }
+      }
+    },
     "TMDB users" : {
       "localizations" : {
         "de" : {
@@ -17645,7 +17704,16 @@
       }
     },
     "YouTube" : {},
-    "YouTube Isn't Installed" : {},
+    "YouTube Isn't Installed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YouTube ist nicht installiert"
+          }
+        }
+      }
+    },
     "You’re a late-night watcher" : {
       "localizations" : {
         "de" : {

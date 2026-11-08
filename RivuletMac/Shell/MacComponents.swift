@@ -222,7 +222,7 @@ struct MacPosterCard: View {
             MacItemArtwork(item: item, kind: item.isMusicItem ? .thumb : .poster, width: width ?? 180, aspectRatio: ratio)
                 .aspectRatio(ratio, contentMode: .fit)
                 .macWatchState(item)
-                .overlay(alignment: .topLeading) { editionBadge }
+                .overlay(alignment: .topTrailing) { editionBadge }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .macTileHover()
 
@@ -247,7 +247,7 @@ struct MacPosterCard: View {
     }
 
     /// Plex edition ("Director's Cut"), so two editions sharing a poster tell apart.
-    private var edition: String? { item.editionTitle?.isEmpty == false ? item.editionTitle : nil }
+    private var edition: String? { MediaItem.shortEdition(item.editionTitle) }
 
     @ViewBuilder
     private var editionBadge: some View {
@@ -260,6 +260,8 @@ struct MacPosterCard: View {
                 .padding(.vertical, 3)
                 .background(.black.opacity(0.55), in: Capsule())
                 .padding(6)
+                // Below the watched check, which shares this corner.
+                .padding(.top, item.progressBarFraction == nil && item.isWatched ? 22 : 0)
         }
     }
 }

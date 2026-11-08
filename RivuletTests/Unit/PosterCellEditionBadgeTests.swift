@@ -24,7 +24,7 @@ final class PosterCellEditionBadgeTests: XCTestCase {
     func test_edition_showsAndClearsOnReuse() {
         let cell = PosterCell(frame: CGRect(x: 0, y: 0, width: 220, height: 400))
         cell.configure(item: movie(edition: "Extended Edition"))
-        XCTAssertEqual(cell.editionBadgeText, "Extended Edition")
+        XCTAssertEqual(cell.editionBadgeText, "Extended")
         cell.prepareForReuse()
         XCTAssertNil(cell.editionBadgeText)
         cell.configure(item: movie(edition: nil))

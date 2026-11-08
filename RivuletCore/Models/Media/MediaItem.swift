@@ -199,6 +199,22 @@ extension MediaItem {
     }
 }
 
+extension MediaItem {
+    private static let standaloneEditions: Set<String> = [
+        "extended", "theatrical", "ultimate", "unrated", "uncut", "remastered", "imax", "anniversary", "redux",
+    ]
+
+    /// An edition name for a poster badge: "Extended Edition" reads "Extended". Names where the
+    /// last word carries meaning ("Director's Cut", "Final Cut") stay whole. Nil when empty.
+    static func shortEdition(_ edition: String?) -> String? {
+        guard let edition = edition?.trimmingCharacters(in: .whitespaces), !edition.isEmpty else { return nil }
+        let words = edition.split(separator: " ")
+        guard words.count == 2, ["edition", "cut", "version"].contains(words[1].lowercased()),
+              standaloneEditions.contains(words[0].lowercased()) else { return edition }
+        return String(words[0])
+    }
+}
+
 extension Dictionary {
     /// Self, or nil when empty, for the optional list fields of `MediaItem`.
     var nilIfEmpty: Self? { isEmpty ? nil : self }

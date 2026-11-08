@@ -218,7 +218,7 @@ struct IOSPlexPosterCard: View {
             )
             .modifier(TileSize(width: width, ratio: ratio))
             .plexWatchState(item)
-            .overlay(alignment: .topLeading) { editionBadge }
+            .overlay(alignment: .topTrailing) { editionBadge }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .tileHover(cornerRadius: 10)
             .plexZoomSource(item)
@@ -244,7 +244,7 @@ struct IOSPlexPosterCard: View {
     }
 
     /// Plex edition ("Director's Cut"), so two editions sharing a poster tell apart (#413).
-    private var edition: String? { item.editionTitle?.isEmpty == false ? item.editionTitle : nil }
+    private var edition: String? { MediaItem.shortEdition(item.editionTitle) }
 
     @ViewBuilder
     private var editionBadge: some View {
@@ -257,6 +257,8 @@ struct IOSPlexPosterCard: View {
                 .padding(.vertical, 3)
                 .background(.black.opacity(0.55), in: Capsule())
                 .padding(6)
+                // Below the watched check, which shares this corner.
+                .padding(.top, item.progressBarFraction == nil && item.isWatched ? 22 : 0)
         }
     }
 }

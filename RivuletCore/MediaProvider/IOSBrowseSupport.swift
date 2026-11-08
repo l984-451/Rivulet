@@ -247,6 +247,14 @@ nonisolated enum IOSLibrarySorts {
 }
 
 extension MediaItemDetail {
+    /// This detail with more extras (a season's) after its own, deduped by id.
+    nonisolated func adding(extras more: [Extra]) -> MediaItemDetail {
+        var copy = self
+        let have = Set(extras.map(\.id))
+        copy.extras += more.filter { !have.contains($0.id) }
+        return copy
+    }
+
     /// Trailers first, then the other extras by kind, each kind in the server's order.
     nonisolated var orderedExtras: [Extra] {
         extras.enumerated().sorted { ($0.element.subtype, $0.offset) < ($1.element.subtype, $1.offset) }.map(\.element)

@@ -14,6 +14,8 @@ struct MacDetailView: View {
     @State private var seasonKey: MediaItemRef?
     @State private var episodes: [MediaItem] = []
     @State private var episodesSeasonKey: MediaItemRef?
+    /// The picked season's own extras, shown with the show's.
+    @State private var seasonExtras: [MediaItemDetail.Extra] = []
     @State private var related: [MediaItem] = []
     @State private var members: [MediaItem] = []
     @State private var error: String?
@@ -56,6 +58,7 @@ struct MacDetailView: View {
             await load()
         }
         .task(id: seasonKey) { await loadEpisodes() }
+        .task(id: seasonKey) { await loadSeasonExtras() }
     }
 
     @ViewBuilder
@@ -70,7 +73,7 @@ struct MacDetailView: View {
             summaryView.padding(.horizontal, MacMetrics.pageMargin)
         }
         if isSeries { episodesSection }
-        MacDetailExtras(detail: detail)
+        MacDetailExtras(detail: detail?.adding(extras: seasonExtras))
         if !members.isEmpty {
             MacRail(title: String(localized: "In This Collection"), kind: .poster, items: members) { member, width in
                 MacTileButton(item: member) { MacPosterCard(item: member, width: width) }
@@ -246,5 +249,12 @@ struct MacDetailView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func loadSeasonExtras() async {
+        seasonExtras = []
+        guard shown.kind == .show, let key = seasonKey else { return }
+        let loaded = try? await browse.provider(for: key).fullDetail(for: key).extras
+        if seasonKey == key { seasonExtras = loaded ?? [] }
     }
 }

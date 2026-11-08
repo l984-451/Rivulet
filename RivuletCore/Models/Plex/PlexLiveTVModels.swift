@@ -286,18 +286,6 @@ extension PlexLiveTVChannel {
         // Generate a unique session ID for this transcode session
         let sessionId = UUID().uuidString.uppercased()
 
-        // Log transcode URL building start (GitHub #64 - DVB diagnostics)
-        let startBreadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
-        startBreadcrumb.message = "Building Plex transcode URL for DVB channel"
-        startBreadcrumb.data = [
-            "channel_name": title,
-            "channel_number": channelNumber ?? "unknown",
-            "channel_key": key,
-            "session_id": String(sessionId.prefix(8)),
-            "server_host": URL(string: serverURL)?.host ?? "unknown"
-        ]
-        SentryBridge.addBreadcrumb(startBreadcrumb)
-
         var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/start.m3u8")
 
         // Untuned base: `path` points at the EPG channel metadata. Cloud-EPG /
@@ -314,20 +302,7 @@ extension PlexLiveTVChannel {
         // Consensus wire form: '+' profile-clause separators travel as %2B.
         let resultURL = components.flatMap { Self.finalizedLiveURL($0) }
 
-        // Log transcode URL building result (GitHub #64 - DVB diagnostics)
-        if let url = resultURL {
-            let successBreadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
-            successBreadcrumb.message = "Plex transcode URL built successfully"
-            successBreadcrumb.data = [
-                "channel_name": title,
-                "channel_number": channelNumber ?? "unknown",
-                "session_id": String(sessionId.prefix(8)),
-                "url_path": url.path,
-                "url_host": url.host ?? "unknown",
-                "has_query_params": url.query != nil
-            ]
-            SentryBridge.addBreadcrumb(successBreadcrumb)
-        } else {
+        if resultURL == nil {
             let failBreadcrumb = Breadcrumb(level: .error, category: "plex_livetv")
             failBreadcrumb.message = "Failed to build Plex transcode URL - URLComponents failed"
             failBreadcrumb.data = [
@@ -450,41 +425,11 @@ extension PlexLiveTVChannel {
         // Plex server transcode URL (needed for DVB tuners without HDHomeRun)
         let streamURLValue: URL? = {
             if let hdhrURL = streamURL {
-                // HDHomeRun direct stream URL available
-                let breadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
-                breadcrumb.message = "Using HDHomeRun direct stream URL"
-                breadcrumb.data = [
-                    "channel_name": title,
-                    "channel_number": channelNumber ?? "unknown",
-                    "rating_key": ratingKey,
-                    "channel_key": key,
-                    "stream_type": "hdhr_direct",
-                    "has_stream_url": true,
-                    "server_host": URL(string: serverURL)?.host ?? "unknown"
-                ]
-                SentryBridge.addBreadcrumb(breadcrumb)
                 return URL(string: hdhrURL)
             }
 
             // No HDHomeRun URL - build Plex transcode URL (DVB tuner path)
             let transcodeURL = buildPlexLiveTVStreamURL(serverURL: serverURL, authToken: authToken)
-
-            // Log detailed info for DVB tuner debugging (GitHub #64)
-            let breadcrumb = Breadcrumb(level: .info, category: "plex_livetv")
-            breadcrumb.message = transcodeURL != nil
-                ? "Built Plex transcode URL for DVB tuner"
-                : "Failed to build Plex transcode URL"
-            breadcrumb.data = [
-                "channel_name": title,
-                "channel_number": channelNumber ?? "unknown",
-                "rating_key": ratingKey,
-                "stream_type": "plex_transcode",
-                "channel_key": key,
-                "server_host": URL(string: serverURL)?.host ?? "unknown",
-                "transcode_url_built": transcodeURL != nil,
-                "transcode_url_host": transcodeURL?.host ?? "none"
-            ]
-            SentryBridge.addBreadcrumb(breadcrumb)
 
             // If transcode URL failed, capture as an error
             if transcodeURL == nil {

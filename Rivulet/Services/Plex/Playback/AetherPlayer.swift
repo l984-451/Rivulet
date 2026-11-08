@@ -182,6 +182,8 @@ final class AetherPlayer: PlayerProtocol {
         // The engine otherwise uses system trust alone, so a server the API
         // session accepts would browse and never play (#337).
         EngineTLS.serverTrustEvaluator = { PlexCertificateDelegate.trustsServer($0) }
+        // Image subtitles are kept only as far as the delay stepper reaches.
+        engine.maximumSubtitleOffsetSeconds = SubtitleAdjustments.maxDelay
         wireUpPublishers()
         observeAppLifecycle()
     }

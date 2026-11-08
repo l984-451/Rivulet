@@ -206,6 +206,8 @@ final class AetherPlayer: ObservableObject {
         // The engine otherwise uses system trust alone, so a server the API
         // session accepts would browse and never play (#337).
         EngineTLS.serverTrustEvaluator = { PlexCertificateDelegate.trustsServer($0) }
+        // No subtitle delay control here, so image subtitles keep the engine's minimum window.
+        engine.maximumSubtitleOffsetSeconds = 0
         // The app owns the session on iOS, so the engine releases it off-main
         // on final teardown (no host-side setActive(false) racing the stop).
         engine.deactivatesAudioSessionOnStop = true

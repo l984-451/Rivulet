@@ -19,6 +19,8 @@ enum SubtitleAdjustments {
 
     /// One stepper press worth of delay, in seconds.
     static let delayStep: Double = 0.1
+    /// Largest delay either way. The engine keeps image subtitles this far behind and ahead.
+    static let maxDelay: Double = 15
 
     private static let delayMapKey = "subtitleDelayByMedia"
 
@@ -26,7 +28,7 @@ enum SubtitleAdjustments {
     /// 0 when never adjusted.
     static func delay(forKey key: String) -> Double {
         let map = UserDefaults.standard.dictionary(forKey: delayMapKey) as? [String: Double]
-        return map?[key] ?? 0
+        return min(max(map?[key] ?? 0, -maxDelay), maxDelay)
     }
 
     /// Persists `value` for `key`. A value of 0 removes the entry so the map
@@ -42,9 +44,9 @@ enum SubtitleAdjustments {
     }
 
     /// Rounds a raw delay to one decimal so repeated ±0.1 steps can't drift
-    /// into binary-fraction noise (0.30000000000000004).
+    /// into binary-fraction noise (0.30000000000000004), within ±maxDelay.
     static func roundedDelay(_ value: Double) -> Double {
-        (value * 10).rounded() / 10
+        min(max((value * 10).rounded() / 10, -maxDelay), maxDelay)
     }
 
     /// "0.0s", "+0.3s", "-1.2s" — the stepper's centre label.

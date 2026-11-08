@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// The app's lines for Settings > About > Send Diagnostics, which reads them back from OSLog.
+// The app's lines for Settings > About > Send Diagnostics, which reads them back from OSLog and
+// from PersistentLog (the file copy that survives a relaunch).
 // Logged public at notice so a release build keeps them, and scrubbed of credentials on the way in.
 // Still pass no titles, user or server names, or addresses: describe a server with `describe(url:)`.
 
@@ -26,11 +27,13 @@ nonisolated enum DiagLog {
     static func notice(_ category: Category, _ message: String) {
         let line = SensitiveDataRedactor.redact(message)
         loggers[category]?.notice("\(line, privacy: .public)")
+        PersistentLog.shared.append(category.rawValue, line, isError: false)
     }
 
     static func error(_ category: Category, _ message: String) {
         let line = SensitiveDataRedactor.redact(message)
         loggers[category]?.error("\(line, privacy: .public)")
+        PersistentLog.shared.append(category.rawValue, line, isError: true)
     }
 
     /// A server address without the address: "https plex.direct :32400 /path".

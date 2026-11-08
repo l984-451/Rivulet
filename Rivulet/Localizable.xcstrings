@@ -14664,6 +14664,9 @@
         }
       }
     },
+    "The report is saved and will be sent with your next attempt." : {
+
+    },
     "The server couldn't convert this item" : {
       "localizations" : {
         "de" : {

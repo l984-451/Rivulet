@@ -1570,17 +1570,21 @@ enum SettingsContent {
                 guard !DiagnosticsReport.isSending else { return }
                 let page = vc as? SettingsPageViewController
                 Task { @MainActor in
-                    let code = await DiagnosticsReport.send(window: vc.view.window, onStart: { page?.reloadRows() })
+                    let outcome = await DiagnosticsReport.send(window: vc.view.window, onStart: { page?.reloadRows() })
                     page?.reloadRows()
-                    let popup = code.map {
-                        ConfirmationPopupViewController(
+                    let popup: ConfirmationPopupViewController
+                    switch outcome {
+                    case .server(let code):
+                        popup = ConfirmationPopupViewController(
                             title: String(localized: "Diagnostics Sent"),
-                            message: String(localized: "Your code is \($0). Include it in your GitHub issue or message so the report can be found."),
+                            message: String(localized: "Your code is \(code). Include it in your GitHub issue or message so the report can be found."),
                             confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
-                    } ?? ConfirmationPopupViewController(
-                        title: String(localized: "Couldn't Send Diagnostics"),
-                        message: String(localized: "Diagnostics are not available in this build."),
-                        confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
+                    case .failed:
+                        popup = ConfirmationPopupViewController(
+                            title: String(localized: "Couldn't Send Diagnostics"),
+                            message: String(localized: "The report is saved and will be sent with your next attempt."),
+                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {})
+                    }
                     vc.present(popup, animated: true)
                 }
             }), isBusy: { DiagnosticsReport.isSending })

@@ -1734,6 +1734,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         trackQualityStall(from: playbackState, to: state)
         playbackState = state
         isBuffering = state == .buffering
+        switch state {
+        case .playing: diagnostics.noteStarted()
+        case .ended: diagnostics.noteEnd(.ended, position: currentTime)
+        case .failed(let error): diagnostics.noteError("failed: \(error)")
+        default: break
+        }
 
         if state == .playing {
             // Not while swapping: the reused player's CurrentValueSubject
@@ -1783,6 +1789,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Only report mid-playback stalls worth looking at; ignore startup and
         // sub-second rebuffers that are just normal pipeline breathing.
         guard currentTime > 1, stallSeconds >= 2 else { return }
+        diagnostics.noteStall(seconds: stallSeconds)
 
         let crumb = Breadcrumb(level: stallSeconds >= 10 ? .warning : .info, category: "playback_stall")
         crumb.message = String(format: "Rebuffered %.1fs at %.0fs", stallSeconds, currentTime)
@@ -3895,6 +3902,11 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func stopPlayback() {
         stopCount += 1
+        if case .failed = playbackState {
+            diagnostics.noteEnd(.failed, position: currentTime)
+        } else {
+            diagnostics.noteEnd(.userExit, position: currentTime)
+        }
         cinemaStopped = true
         pausedTimelineTask?.cancel()
         pausedTimelineTask = nil
@@ -4075,6 +4087,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         seekGeneration += 1
         inFlightRelativeSeekTarget = nil
         stallTracker.noteSeekOrLoad(at: Date())
+        diagnostics.noteSeek()
         if let ap = aetherPlayer {
             await ap.seek(to: time, exact: exact)
         } else {

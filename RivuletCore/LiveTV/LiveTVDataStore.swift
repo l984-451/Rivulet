@@ -942,7 +942,7 @@ class LiveTVDataStore: ObservableObject {
             for await (sourceId, result) in group {
                 switch result {
                 case .success(let channels):
-                    allChannels.append(contentsOf: channels)
+                    allChannels.append(contentsOf: LiveGroupOrder.ranked(channels))
                 case .failure(let error):
                     errors.append("\(sourceId): \(error.localizedDescription)")
                     DiagLog.error(.liveTV, "Channels failed for source \(sourceId.prefix(12)): \(DiagLog.describe(error))")

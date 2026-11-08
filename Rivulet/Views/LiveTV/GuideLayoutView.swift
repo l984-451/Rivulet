@@ -39,7 +39,7 @@ struct GuideLayoutView: View {
     /// rather than by channel number.
     static let favouritesTab = String(localized: "Favorites")
 
-    /// Tabs that lead the bar regardless of the alphabet, in this order. A list
+    /// Tabs that lead the bar regardless of source order, in this order. A list
     /// the user curated outranks a source's own grouping — burying "Favourites"
     /// under F is the kind of correctness that reads as a bug.
     private static let pinnedGroups = [favouritesTab]
@@ -56,12 +56,12 @@ struct GuideLayoutView: View {
     }
 
     /// Category tabs: Favorites, then each source by name (#377),
-    /// then group titles, both alphabetical. Groups come from an M3U's
+    /// then group titles in the source's own order (#568). Groups come from an M3U's
     /// `group-title` and, for Plex, the DVR's tuner name. A source wins a name
     /// it shares with a group.
     private var groupTitles: [String] {
         Self.tabTitles(
-            groups: sourceChannels.compactMap { $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) },
+            groups: LiveGroupOrder.titles(in: sourceChannels, sourceOrder: dataStore.sources.map(\.id)),
             sourceNames: dataStore.sources.map(\.displayName).filter { sourceTabs[$0] != nil },
             // Offered only when there are favourites, so no empty tab.
             hasFavorites: !dataStore.favorites(in: sourceChannels).isEmpty)
@@ -72,7 +72,10 @@ struct GuideLayoutView: View {
         let sources = sourceNames.filter { seen.insert($0).inserted }
         let named = Set(groups.filter { !$0.isEmpty })
         let pinned = pinnedGroups.filter { hasFavorites || named.contains($0) }
-        let rest = named.subtracting(sources).subtracting(pinned).sorted()
+        var restSeen: Set<String> = []
+        let rest = groups.filter {
+            !$0.isEmpty && !sources.contains($0) && !pinned.contains($0) && restSeen.insert($0).inserted
+        }
         return pinned + sources.filter { !pinned.contains($0) } + rest
     }
 

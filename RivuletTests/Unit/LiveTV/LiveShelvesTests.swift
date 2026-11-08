@@ -125,4 +125,14 @@ final class LiveShelvesTests: XCTestCase {
         XCTAssertEqual(shelves.map(\.id), ["now"])
         XCTAssertEqual(shelves.first?.items.map(\.id), ["now|x"])
     }
+
+    func test_groupShelves_followSourceOrder() {
+        let channels = [UnifiedChannel(id: "z", sourceType: .genericM3U, sourceId: "s", name: "z", groupTitle: "Zulu", groupRank: 0),
+                        UnifiedChannel(id: "a", sourceType: .genericM3U, sourceId: "s", name: "a", groupTitle: "Alpha", groupRank: 1),
+                        UnifiedChannel(id: "m", sourceType: .genericM3U, sourceId: "s", name: "m", groupTitle: "Mid", groupRank: 2)]
+        let shelves = LiveShelves.build(LiveShelves.Input(channels: channels, epg: [:], recentChannelIds: [],
+                                                          favoriteIds: [], suggestionsEnabled: false,
+                                                          scheduledRecordings: []), sourceIdFilter: nil, now: Date())
+        XCTAssertEqual(shelves.map(\.id).filter { $0.hasPrefix("group|") }, ["group|Zulu", "group|Alpha", "group|Mid"])
+    }
 }

@@ -27,6 +27,8 @@ actor M3UParser {
         let httpHeaders: [String: String]
         /// The source's own stable channel id, when it has one (Xtream's stream id).
         let key: String?
+        /// Position of the group in the source's category list, when it publishes one (Xtream).
+        let groupRank: Int?
 
         init(
             tvgId: String?,
@@ -37,9 +39,11 @@ actor M3UParser {
             name: String,
             streamURL: URL,
             httpHeaders: [String: String] = [:],
-            key: String? = nil
+            key: String? = nil,
+            groupRank: Int? = nil
         ) {
             self.key = key
+            self.groupRank = groupRank
             self.tvgId = tvgId
             self.tvgName = tvgName
             self.tvgLogo = tvgLogo

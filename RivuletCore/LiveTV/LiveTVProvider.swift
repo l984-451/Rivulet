@@ -116,6 +116,9 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
     /// falls to the end, ordered by channel number as usual.
     let favouriteRank: Int?
 
+    /// Position of `groupTitle` in its source's own category order.
+    let groupRank: Int?
+
     init(
         id: String,
         sourceType: LiveTVSourceType,
@@ -130,7 +133,8 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
         isHD: Bool = false,
         httpHeaders: [String: String]? = nil,
         isFavourite: Bool = false,
-        favouriteRank: Int? = nil
+        favouriteRank: Int? = nil,
+        groupRank: Int? = nil
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -146,6 +150,7 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
         self.httpHeaders = httpHeaders
         self.isFavourite = isFavourite
         self.favouriteRank = favouriteRank
+        self.groupRank = groupRank
     }
 
     /// Create a unique identifier combining source and channel
@@ -174,7 +179,17 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
             isHD: isHD,
             httpHeaders: httpHeaders,
             isFavourite: isFavourite,
-            favouriteRank: favouriteRank
+            favouriteRank: favouriteRank,
+            groupRank: groupRank
+        )
+    }
+
+    func withGroupRank(_ rank: Int?) -> UnifiedChannel {
+        UnifiedChannel(
+            id: id, sourceType: sourceType, sourceId: sourceId, channelNumber: channelNumber,
+            name: name, callSign: callSign, logoURL: logoURL, streamURL: streamURL, tvgId: tvgId,
+            groupTitle: groupTitle, isHD: isHD, httpHeaders: httpHeaders,
+            isFavourite: isFavourite, favouriteRank: favouriteRank, groupRank: rank
         )
     }
 }
@@ -440,7 +455,8 @@ extension M3UParser.ParsedChannel {
             tvgId: tvgId,
             groupTitle: groupTitle,
             isHD: isHD,
-            httpHeaders: httpHeaders.isEmpty ? nil : httpHeaders
+            httpHeaders: httpHeaders.isEmpty ? nil : httpHeaders,
+            groupRank: groupRank
         )
     }
 }

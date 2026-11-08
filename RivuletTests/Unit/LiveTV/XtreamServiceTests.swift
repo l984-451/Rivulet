@@ -148,6 +148,17 @@ final class XtreamServiceTests: XCTestCase {
         XCTAssertTrue(XtreamService.channels(from: false, categories: nil, service: service, format: "ts").isEmpty)
     }
 
+    func test_channels_groupRankFollowsCategoryOrder() {
+        let service = XtreamService(account: account)
+        let streams: [[String: Any]] = [["stream_id": 1, "name": "A", "category_id": "2"],
+                                        ["stream_id": 2, "name": "B", "category_id": "1"],
+                                        ["stream_id": 3, "name": "C", "category_id": "9"]]
+        let categories: [[String: Any]] = [["category_id": "1", "category_name": "Zulu"],
+                                           ["category_id": "2", "category_name": "Alpha"]]
+        let channels = XtreamService.channels(from: streams, categories: categories, service: service, format: "ts")
+        XCTAssertEqual(channels.map(\.groupRank), [1, 0, nil])
+    }
+
     func test_fetchChannels_survivesFailedCategories() async throws {
         let service = XtreamService(account: XtreamAccount(server: URL(string: "http://panel.test")!,
                                                            username: "u", password: "p"), session: session)

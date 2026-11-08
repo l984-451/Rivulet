@@ -194,9 +194,11 @@ actor XtreamService {
     nonisolated static func channels(from streams: Any, categories: Any?, service: XtreamService,
                                      format: String) -> [M3UParser.ParsedChannel] {
         var groups: [String: String] = [:]
-        for category in categories as? [[String: Any]] ?? [] {
+        var ranks: [String: Int] = [:]
+        for (index, category) in (categories as? [[String: Any]] ?? []).enumerated() {
             if let id = string(category["category_id"]), let name = string(category["category_name"]) {
                 groups[id] = groups[id] ?? name
+                ranks[id] = ranks[id] ?? index
             }
         }
         return (streams as? [[String: Any]] ?? []).compactMap { stream in
@@ -215,7 +217,8 @@ actor XtreamService {
                 name: name,
                 streamURL: service.streamURL(streamId: id, format: format),
                 // The panel's id: unlike epg_channel_id it survives renumbering.
-                key: "xc\(id)")
+                key: "xc\(id)",
+                groupRank: string(stream["category_id"]).flatMap { ranks[$0] })
         }
     }
 

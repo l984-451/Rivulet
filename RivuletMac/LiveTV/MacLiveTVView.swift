@@ -99,9 +99,7 @@ struct MacLiveTVView: View {
     }
 
     private var groups: [String] {
-        Set(store.channels.compactMap { $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) })
-            .filter { !$0.isEmpty }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        LiveGroupOrder.titles(in: store.channels, sourceOrder: store.sources.map(\.id))
     }
 
     /// The filtered lineup. A filter whose channels vanished falls back to all.

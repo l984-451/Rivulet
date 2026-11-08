@@ -265,9 +265,10 @@ enum LiveShelves {
         let groups = Dictionary(grouping: channels) {
             $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
-        let groupTitles = groups.keys.filter {
-            !$0.isEmpty && !sourceTitles.contains($0) && groups[$0]?.count != channels.count
-        }.sorted()
+        let sourceOrder = input.sourceNames.sorted { $0.value < $1.value }.map(\.key)
+        let groupTitles = LiveGroupOrder.titles(in: channels, sourceOrder: sourceOrder).filter {
+            !sourceTitles.contains($0) && groups[$0]?.count != channels.count
+        }
         for title in groupTitles.prefix(16) {
             let id = "group|\(title)"
             let list = Array((groups[title] ?? []).prefix(60))

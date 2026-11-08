@@ -155,19 +155,22 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
-        ("1.2.0 (123)", [
+        ("1.2.0 (124)", [
             "> Thank you to everyone who sent a PR!",
-            "Emby support, next to Plex and Jellyfin",
-            "Arrange Home: reorder and hide rows, add favorites and playlists. @DIYtechie",
-            "The hero can mix several sources, and Left goes back a title. @danieldjupvik",
-            "Mark favorites on any server, with an optional Favorites page. @DennisR-git",
-            "Jellyfin and Emby theme videos play behind the hero and details. @smidley",
-            "Sidebar: Now Playing next to your profile, and Up opens it. @DIYtechie",
-            "Live TV can rewind through a channel's window, with past shows. @tresby",
-            "Shuffle libraries and shows, and delete episodes from long-press menus",
+            "On a Dolby Vision TV, Profile 7 FEL keeps most of its enhancement layer",
+            "Emby support, next to Plex and Jellyfin. @DennisR-git",
+            "Arrange Home: reorder rows, add favorites and playlists. @DIYtechie",
+            "The Home hero can mix several sources. @danieldjupvik",
+            "Mark favorites on any server. @DennisR-git",
+            "Filter libraries by genre, decade or unwatched. @DennisR-git",
+            "Change playback speed from the player",
+            "Critic reviews from Rotten Tomatoes appear with a title's ratings",
+            "A new At the Credits setting chooses what shows when credits start",
+            "Jellyfin and Emby theme videos play behind the hero. @smidley",
+            "Live TV can rewind through a channel's window. @tresby",
             "Specials now come after the last season. @priyanshuppal",
             "Greek is available. @Camthalion77",
-            "Updated AetherEngine to 7.57.0",
+            "Updated AetherEngine to 7.61.0",
             "Other small changes and fixes",
         ]),
         ("1.2.0 (122)", [

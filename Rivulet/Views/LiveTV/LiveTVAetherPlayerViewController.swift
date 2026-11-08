@@ -298,7 +298,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var scoresPane: LiveScoresPaneView?
 
     /// The rail's panes, for Down reopening the last one used.
-    enum LivePane { case info, scores, channels }
+    enum LivePane { case info, scores, channels, details }
     private var lastPane = LivePane.info
 
     /// Down's pane: the last one used while it is still offered, else Info.
@@ -909,12 +909,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
         railView.onUpNext = { [weak self] in self?.presentChannelListPanel() }
         railView.onScores = { [weak self] in self?.presentScoresPanel() }
+        railView.onDetails = { [weak self] in self?.presentDetailsPanel() }
+        railView.setDetailsAvailable(true)
         // Moving across the pills while a pane is open switches its tab.
         railView.onPillFocused = { [weak self] pill in
             guard let self, self.activePanel?.isPane == true, pill !== self.openPanePill else { return }
             if pill === self.railView.infoButton { self.presentInfoPanel() }
             if pill === self.railView.scoresButton { self.presentScoresPanel() }
             if pill === self.railView.upNextButton { self.presentChannelListPanel() }
+            if pill === self.railView.detailsButton { self.presentDetailsPanel() }
         }
         railView.onGoLive = { [weak self] in self?.goLive() }
         railView.onRecord = { [weak self] in self?.presentRecordPanel() }
@@ -1266,6 +1269,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         switch pill {
         case railView.scoresButton: lastPane = .scores
         case railView.upNextButton: lastPane = .channels
+        case railView.detailsButton: lastPane = .details
         default: lastPane = .info
         }
         panel.onDismiss = { [weak self, weak panel] in
@@ -2014,6 +2018,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         presentPane(content: pane, pill: railView.scoresButton)
     }
 
+    /// Source facts plus the engine's live stats. No stream URL: IPTV ones embed credentials.
+    private func presentDetailsPanel() {
+        var source = [PlayerDetailsPaneView.Row(label: String(localized: "Channel"), value: [channel.channelNumber.map { "\($0)" }, channel.name].compactMap { $0 }.joined(separator: " "))]
+        source.append(.init(label: String(localized: "Provider"), value: channel.sourceType.displayName))
+        let route = lastResortPlayer != nil ? "AVPlayer" : isNativeHLSRoute ? "HLS" : "AetherEngine"
+        source.append(.init(label: String(localized: "Route"), value: route))
+        let stats: (() -> AetherAdvancedStats?)? = aetherPlayer.map { player in { player.advancedStats() } }
+        let pane = PlayerDetailsPaneView(
+            media: [.init(title: String(localized: "SOURCE"), rows: source)], statsProvider: stats)
+        presentPane(content: pane, pill: railView.detailsButton)
+    }
+
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -2213,15 +2229,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             var available: Set<LivePane> = [.info]
             if matchedGame != nil { available.insert(.scores) }
             if !LiveTVDataStore.shared.channels.isEmpty { available.insert(.channels) }
+            available.insert(.details)
             let pane = Self.paneForDown(last: lastPane, available: available)
             let pills: [LivePane: PlayerInfoPillButton] = [
-                .info: railView.infoButton, .scores: railView.scoresButton, .channels: railView.upNextButton]
+                .info: railView.infoButton, .scores: railView.scoresButton, .channels: railView.upNextButton,
+                .details: railView.detailsButton]
             if let pill = pills[pane] { railView.setFocusLanding(pill) }
             showRail()
             switch pane {
             case .info: presentInfoPanel()
             case .scores: presentScoresPanel()
             case .channels: presentChannelListPanel()
+            case .details: presentDetailsPanel()
             }
         }
     }

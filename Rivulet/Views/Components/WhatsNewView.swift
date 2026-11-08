@@ -156,7 +156,6 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         ("1.2.0 (123)", [
-            "Deep links can start playback at a specific time",
             "> Thank you to everyone who sent a PR!",
             "Emby support, next to Plex and Jellyfin",
             "Arrange Home: reorder and hide rows, add favorites and playlists. @DIYtechie",

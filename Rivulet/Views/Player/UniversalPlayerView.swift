@@ -794,10 +794,6 @@ struct UniversalPlayerView: View {
             // Report progress periodically
             viewModel.reportPlaybackProgress(time: newTime, force: false)
         }
-        .onChange(of: viewModel.playbackState) { _, newState in
-            // Immediately report state changes to the item's server
-            viewModel.reportPlaybackState(newState)
-        }
         // System appearance
     }
 

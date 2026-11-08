@@ -1792,7 +1792,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         forceVideoTranscode: Bool = false,
         allowAudioDirectStream: Bool = true,
         step: QualityStep? = nil,
-        clientRendersTextSubtitles: Bool = false
+        clientRendersTextSubtitles: Bool = false,
+        sessionIdentifier: String? = nil
     ) -> (url: URL, headers: [String: String])? {
         // Request an HLS remux that keeps the HEVC/Dolby Vision bitstream intact
         // tvOS requires fMP4/CMAF segments for Dolby Vision profiles 5/8
@@ -1918,6 +1919,11 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // Keyframe playlist improves seeking accuracy in HLS streams
             URLQueryItem(name: "includeKeyframePlaylist", value: "1")
         ]
+
+        if let sessionIdentifier {
+            items.append(URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier))
+            headers["X-Plex-Session-Identifier"] = sessionIdentifier
+        }
 
         if clientRendersTextSubtitles {
             // Without it PMS burns styled ASS in; image formats still burn.

@@ -1,0 +1,35 @@
+
+name: Sync Rivulet Upstream
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/l984-451/Rivulet.git
+          git fetch upstream main
+
+      - name: Fast-forward main
+        run: |
+          git merge --ff-only upstream/main
+          git push origin HEAD:main

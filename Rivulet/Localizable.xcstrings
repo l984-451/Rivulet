@@ -269,6 +269,9 @@
         }
       }
     },
+    "%lld More Episodes" : {
+
+    },
     "%lld Servers" : {
       "localizations" : {
         "de" : {
@@ -1498,6 +1501,9 @@
           }
         }
       }
+    },
+    "1 More Episode" : {
+
     },
     "10 seconds" : {
       "localizations" : {
@@ -7097,6 +7103,9 @@
           }
         }
       }
+    },
+    "How many more episodes play on their own after the one you picked. After that, the next one waits for you." : {
+
     },
     "How this source appears in Live TV. Leave it empty to use “%@”." : {
       "localizations" : {

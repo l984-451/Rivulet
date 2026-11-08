@@ -237,7 +237,7 @@ enum SettingsDescriptorStore {
         ),
         "autoplayLimit": SettingDescriptor(
             icon: "moon.zzz",
-            description: "After this many episodes play in a row, the next one waits for you instead of starting on its own."
+            description: "How many more episodes play on their own after the one you picked. After that, the next one waits for you."
         ),
         "skipLength": SettingDescriptor(
             icon: "forward.fill",

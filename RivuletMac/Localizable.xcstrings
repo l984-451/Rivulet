@@ -158,6 +158,9 @@
         }
       }
     },
+    "%lld More Episodes" : {
+
+    },
     "%lld ch" : {
       "localizations" : {
         "de" : {
@@ -477,6 +480,9 @@
           }
         }
       }
+    },
+    "1 More Episode" : {
+
     },
     "10 seconds" : {
       "localizations" : {

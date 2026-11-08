@@ -252,7 +252,7 @@ retroactive conformance.
 
 ### Mac app (native, `RivuletMac/`)
 
-Scheme `Rivulet Mac`, macOS 15+, SwiftUI + AppKit, sandboxed. Same parity rule
+Scheme `Rivulet Mac`, macOS 26+, SwiftUI + AppKit, sandboxed. Same parity rule
 as the other apps (no Downloads, no Photos). It reads the same `RivuletCore/Client`
 stores as iOS; only `RivuletMac/Player/AetherPlayer.swift` imports AetherEngine
 (a third adapter, so a mapping fix lands in three files until it moves to core).
@@ -1007,6 +1007,9 @@ Release notes live ONLY in the `changelogs` array in
 `Rivulet/Views/Components/WhatsNewView.swift` (root `CHANGELOG.md` is a stub).
 iOS has its own, `IOSChangelog.entries` in `RivuletiOS/Settings/IOSWhatsNew.swift`,
 keyed the same way from the `ios-vX.Y.Z-<build>` tag (sheet at launch, Account → Changelog).
+Mac has `MacChangelog.entries` in `RivuletMac/Settings/MacWhatsNew.swift`, keyed from the
+`mac-vX.Y.Z-<build>` tag (sheet at launch, Help → What's New, Settings → General). Each
+platform keeps its own `MARKETING_VERSION` and build numbers; Mac started at `1.0.0 (1)`.
 Entries are keyed by build-qualified version (`"1.0.3 (65)"`), newest first.
 Settings → About → Changelog renders the full history; the fresh-launch
 "What's New" shows only the current build's entry.

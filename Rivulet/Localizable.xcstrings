@@ -3211,8 +3211,26 @@
         }
       }
     },
-    "Choose what appears on Home and in what order." : {},
-    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
+    "Choose what appears on Home and in what order." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, was auf der Startseite erscheint und in welcher Reihenfolge."
+          }
+        }
+      }
+    },
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, was das Hero-Banner zeigt. Wählst du mehreres, wird es gemischt. Schaltest du alles aus, wird das Hero-Banner ausgeblendet."
+          }
+        }
+      }
+    },
     "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -3309,7 +3327,16 @@
         }
       }
     },
-    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {},
+    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke die Auswahltaste, um diese Playlist auf der Startseite ein- oder auszublenden. Wird sie angezeigt, halte die Taste gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
     "Click to show or hide this row in the sidebar. Press and hold to move it up or down." : {
       "localizations" : {
         "de" : {
@@ -3326,9 +3353,36 @@
         }
       }
     },
-    "Click to show or hide this row on Home. Press and hold to move it up or down." : {},
-    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {},
-    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {},
+    "Click to show or hide this row on Home. Press and hold to move it up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke die Auswahltaste, um diese Reihe auf der Startseite ein- oder auszublenden. Halte sie gedrückt, um die Reihe nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
+    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke die Auswahltaste, um deine Lieblingsfilme auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte die Taste gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
+    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke die Auswahltaste, um deine Lieblingsserien auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte die Taste gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
     "Codec" : {
       "localizations" : {
         "de" : {
@@ -4412,7 +4466,14 @@
       }
     },
     "Decade" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahrzehnt"
+          }
+        }
+      }
     },
     "Decoded" : {
       "localizations" : {
@@ -5846,7 +5907,16 @@
         }
       }
     },
-    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Reihen deiner Server kommen in der ursprünglichen Reihenfolge zurück. Favoriten und Playlists werden ausgeschaltet."
+          }
+        }
+      }
+    },
     "Exit" : {
       "localizations" : {
         "de" : {
@@ -5895,8 +5965,26 @@
         }
       }
     },
-    "Favorite Movies" : {},
-    "Favorite TV Shows" : {},
+    "Favorite Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsfilme"
+          }
+        }
+      }
+    },
+    "Favorite TV Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsserien"
+          }
+        }
+      }
+    },
     "FILE" : {
       "localizations" : {
         "de" : {
@@ -6532,7 +6620,14 @@
       }
     },
     "Genre" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Genre"
+          }
+        }
+      }
     },
     "Genres" : {
       "localizations" : {
@@ -6784,7 +6879,16 @@
         }
       }
     },
-    "Hidden from Home" : {},
+    "Hidden from Home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Startseite ausgeblendet"
+          }
+        }
+      }
+    },
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -8108,7 +8212,16 @@
         }
       }
     },
-    "Mixed" : {},
+    "Mixed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemischt"
+          }
+        }
+      }
+    },
     "Mode" : {
       "localizations" : {
         "de" : {
@@ -10566,7 +10679,16 @@
         }
       }
     },
-    "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay." : {},
+    "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setzt alle Reihen der Startseite auf die ursprüngliche Reihenfolge zurück und zeigt ausgeblendete wieder an. Favoriten und Playlists werden ausgeschaltet, angepinnte Sammlungen bleiben."
+          }
+        }
+      }
+    },
     "Put every sidebar row back in its original order and show the ones you hid. Home's rows follow the library order." : {
       "localizations" : {
         "de" : {
@@ -10583,7 +10705,16 @@
         }
       }
     },
-    "Put the hero back to Trending only, with no playlists." : {},
+    "Put the hero back to Trending only, with no playlists." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setzt das Hero-Banner auf „Angesagt“ zurück, ohne Playlists."
+          }
+        }
+      }
+    },
     "Quality" : {
       "localizations" : {
         "de" : {
@@ -10696,8 +10827,26 @@
         }
       }
     },
-    "Reset Home Rows?" : {},
-    "Reset the Hero?" : {},
+    "Reset Home Rows?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reihen der Startseite zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset the Hero?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hero-Banner zurücksetzen?"
+          }
+        }
+      }
+    },
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -14120,7 +14269,16 @@
         }
       }
     },
-    "The hero shows Trending only, with no playlists." : {},
+    "The hero shows Trending only, with no playlists." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Hero-Banner zeigt dann nur „Angesagt“, ohne Playlists."
+          }
+        }
+      }
+    },
     "The server didn't accept the sign-in." : {
       "localizations" : {
         "de" : {
@@ -16097,10 +16255,24 @@
       }
     },
     "Unwatched" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungesehen"
+          }
+        }
+      }
     },
     "Unwatched Only" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur ungesehen"
+          }
+        }
+      }
     },
     "Up Next" : {
       "localizations" : {
@@ -17669,6 +17841,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ώρες μουσικής"
+          }
+        }
+      }
+    },
+    "library.decade" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@er"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@s"
           }
         }
       }

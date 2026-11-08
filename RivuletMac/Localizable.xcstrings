@@ -2629,7 +2629,14 @@
       }
     },
     "Decade" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahrzehnt"
+          }
+        }
+      }
     },
     "Default" : {
       "localizations" : {
@@ -10453,6 +10460,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iCloud hat ein anderes Plex-Konto."
+          }
+        }
+      }
+    },
+    "library.decade" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@er"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@s"
           }
         }
       }

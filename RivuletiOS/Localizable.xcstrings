@@ -2516,7 +2516,14 @@
       }
     },
     "Decade" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahrzehnt"
+          }
+        }
+      }
     },
     "Default" : {
       "localizations" : {
@@ -9927,6 +9934,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "http://provider.example:8080"
+          }
+        }
+      }
+    },
+    "library.decade" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@er"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@s"
           }
         }
       }

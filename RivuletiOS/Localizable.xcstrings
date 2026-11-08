@@ -3919,6 +3919,9 @@
     },
     "Hero Playlists" : {},
     "Hidden from Home" : {},
+    "Higher" : {
+
+    },
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -4458,6 +4461,9 @@
           }
         }
       }
+    },
+    "Lower" : {
+
     },
     "Lowest Quality" : {
       "localizations" : {
@@ -6243,6 +6249,9 @@
     "Reset Home Rows?" : {},
     "Reset the Hero?" : {},
     "Rows" : {},
+    "Reset subtitle height" : {
+
+    },
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -7973,6 +7982,9 @@
           }
         }
       }
+    },
+    "Subtitle Height" : {
+
     },
     "Subtitle Language" : {
       "localizations" : {

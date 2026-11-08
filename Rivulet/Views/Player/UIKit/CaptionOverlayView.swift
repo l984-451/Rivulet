@@ -111,7 +111,7 @@ final class CaptionOverlayView: UIView {
         }
 
         /// The highest the Height setting may rest the default band's bottom edge.
-        static let highestBandFraction: CGFloat = 0.8
+        static let highestBandFraction = CaptionHeight.highestBandFraction
 
         /// Fallback presentation height, for a degenerate zero-height layout pass.
         static let assumedVideoHeight: CGFloat = 1080

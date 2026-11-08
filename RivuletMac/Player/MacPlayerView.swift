@@ -29,6 +29,7 @@ struct MacPlayerView: View {
     @AppStorage(SkipLengthKeys.back) private var skipBackSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
     @AppStorage(AudioSync.key) private var audioDelayMs = 0
+    @AppStorage(CaptionHeight.key) private var captionHeightUnits = 0
 
     private static let space = "mac-player"
 
@@ -347,6 +348,14 @@ struct MacPlayerView: View {
                 ForEach(session.subtitleTracks) { MacTrackLabel(track: $0).tag(Optional($0.id)) }
             }
             .pickerStyle(.inline)
+            Section("Subtitle Height") {
+                Button("Lower") { CaptionHeight.step(by: -1) }
+                    .disabled(captionHeightUnits <= CaptionHeight.unitRange.lowerBound)
+                Button("Higher") { CaptionHeight.step(by: 1) }
+                    .disabled(captionHeightUnits >= CaptionHeight.unitRange.upperBound)
+                Button("Reset (\(CaptionHeight.formatted(captionHeightUnits)))") { CaptionHeight.units = 0 }
+                    .disabled(captionHeightUnits == 0)
+            }
         } label: {
             Image(systemName: session.selectedSubtitleID == nil ? "captions.bubble" : "captions.bubble.fill")
                 .font(.system(size: 15, weight: .semibold))

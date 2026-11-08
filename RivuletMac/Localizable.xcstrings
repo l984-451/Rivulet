@@ -4053,6 +4053,9 @@
         }
       }
     },
+    "Higher" : {
+
+    },
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -4707,6 +4710,9 @@
           }
         }
       }
+    },
+    "Lower" : {
+
     },
     "Lowest Quality" : {
       "localizations" : {
@@ -8396,6 +8402,9 @@
           }
         }
       }
+    },
+    "Subtitle Height" : {
+
     },
     "Subtitle Language" : {
       "localizations" : {

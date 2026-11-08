@@ -55,18 +55,11 @@ enum SubtitleAdjustments {
 
     // MARK: - Height (global)
 
-    /// Points moved per stepper press.
-    static let heightUnitPt: CGFloat = 10
-    /// Stepper range: far enough down to reach the screen edge under a wide film's
-    /// letterbox bar, and up to the top of the screen.
-    static let heightUnitRange = -30...80
-
-    private static let heightKey = "subtitleHeightUnits"
-
     /// Height offset in UNITS (positive = subtitles sit higher). 0 is AVPlayer's position.
+    /// The rule is `CaptionHeight`, shared with iOS and Mac.
     static var heightUnits: Int {
-        get { clampUnits(UserDefaults.standard.integer(forKey: heightKey)) }
-        set { UserDefaults.standard.set(clampUnits(newValue), forKey: heightKey) }
+        get { CaptionHeight.units }
+        set { CaptionHeight.units = newValue }
     }
 
     // MARK: - Rail clearance
@@ -94,16 +87,8 @@ enum SubtitleAdjustments {
     static let controlsFloor: CGFloat = railTopFromScreenBottom + railMargin
 
     /// "0", "+3", "-2" — the stepper's centre label.
-    static func formattedHeight(_ units: Int) -> String {
-        units == 0 ? "0" : String(format: "%+d", units)
-    }
+    static func formattedHeight(_ units: Int) -> String { CaptionHeight.formatted(units) }
 
     /// Extra bottom padding for the default caption band, from the stored units.
-    static func heightOffset(forUnits units: Int) -> CGFloat {
-        CGFloat(clampUnits(units)) * heightUnitPt
-    }
-
-    private static func clampUnits(_ units: Int) -> Int {
-        min(max(units, heightUnitRange.lowerBound), heightUnitRange.upperBound)
-    }
+    static func heightOffset(forUnits units: Int) -> CGFloat { CaptionHeight.offset(forUnits: units) }
 }

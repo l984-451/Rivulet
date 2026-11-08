@@ -2483,6 +2483,9 @@
         }
       }
     },
+    "Critic Reviews" : {
+
+    },
     "DNS lookup failed for EPG server" : {
       "localizations" : {
         "de" : {
@@ -3798,6 +3801,9 @@
           }
         }
       }
+    },
+    "Fresh" : {
+
     },
     "Genre" : {
       "localizations" : {
@@ -6938,6 +6944,9 @@
           }
         }
       }
+    },
+    "Rotten" : {
+
     },
     "Runtime" : {
       "localizations" : {

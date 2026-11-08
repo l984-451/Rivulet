@@ -155,17 +155,26 @@ final class InfoPopupViewController: UIViewController {
             view.addGestureRecognizer(tap)
         }
 
-        // Arrow presses and swipes both scroll; the card is the only focus target, so swipes steal nothing.
-        if scrollable {
+        // Arrow presses and swipes both drive the popup; the card is the only focus target, so swipes steal nothing.
+        var directions: [DirectionalInputBinding.Direction] = scrollable ? [.up, .down] : []
+        if onHorizontalMove != nil { directions += [.left, .right] }
+        if !directions.isEmpty {
             directionalInput = DirectionalInputBinding(
                 view: view,
-                directions: [.up, .down],
+                directions: directions,
                 onTap: { [weak self] direction in
-                    self?.scrollContent(by: direction == .up ? -440 : 440)
+                    switch direction {
+                    case .up: self?.scrollContent(by: -440)
+                    case .down: self?.scrollContent(by: 440)
+                    case .left, .right: self?.onHorizontalMove?(direction)
+                    }
                 }
             )
         }
     }
+
+    /// Left/Right, for content that pages sideways (the ratings popup's reviews). Set before presenting.
+    var onHorizontalMove: ((DirectionalInputBinding.Direction) -> Void)?
 
     private var directionalInput: DirectionalInputBinding?
 
@@ -262,8 +271,9 @@ enum InfoPopupContent {
         return stack
     }
 
-    /// Every review score, one row each: score, then source and who it's from.
-    static func ratings(_ ratings: [MediaRating]) -> UIView {
+    /// Every review score, one row each: score, then source and who it's from,
+    /// then the critic strip when there is one.
+    static func ratings(_ ratings: [MediaRating], strip: ReviewStripView? = nil) -> UIView {
         let stack = verticalStack(spacing: 22)
         stack.addArrangedSubview(label(String(localized: "Ratings"), size: 30, weight: .semibold, color: .white, lines: 1))
         for rating in ratings {
@@ -278,6 +288,11 @@ enum InfoPopupContent {
             row.alignment = .center
             row.spacing = 20
             stack.addArrangedSubview(row)
+        }
+        if let strip {
+            if let last = stack.arrangedSubviews.last { stack.setCustomSpacing(34, after: last) }
+            stack.addArrangedSubview(label(String(localized: "Critic Reviews"), size: 24, weight: .semibold, color: .white, lines: 1))
+            stack.addArrangedSubview(strip)
         }
         return stack
     }

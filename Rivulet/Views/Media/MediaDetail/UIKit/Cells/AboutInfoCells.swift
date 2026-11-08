@@ -229,7 +229,11 @@ final class AboutCollectionCell: UICollectionViewCell {
         guard let ratings = currentDetail?.ratings, !ratings.isEmpty,
               var top = window?.rootViewController else { return }
         while let presented = top.presentedViewController { top = presented }
-        top.present(InfoPopupViewController(content: InfoPopupContent.ratings(ratings), width: 720), animated: true)
+        let reviews = currentDetail?.reviews ?? []
+        let strip = reviews.isEmpty ? nil : ReviewStripView(reviews)
+        let popup = InfoPopupViewController(content: InfoPopupContent.ratings(ratings, strip: strip), width: 720)
+        if let strip { popup.onHorizontalMove = { strip.page(by: $0 == .left ? -1 : 1) } }
+        top.present(popup, animated: true)
     }
     // Focus lives on the cards (AboutCardControl), not the cell itself.
     override var canBecomeFocused: Bool { false }

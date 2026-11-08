@@ -4308,6 +4308,9 @@
         }
       }
     },
+    "Critic Reviews" : {
+
+    },
     "Crude & Sexual Language" : {
       "localizations" : {
         "de" : {
@@ -6437,6 +6440,9 @@
           }
         }
       }
+    },
+    "Fresh" : {
+
     },
     "Frightening & Intense" : {
       "localizations" : {
@@ -11858,6 +11864,9 @@
           }
         }
       }
+    },
+    "Rotten" : {
+
     },
     "Route" : {
 

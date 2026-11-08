@@ -30,6 +30,8 @@ struct MediaItemDetail: Sendable {
     /// Review scores in display order (`MediaRating.ordered`). The ratings
     /// worker's Metacritic / Letterboxd scores are merged in after load.
     var ratings: [MediaRating] = []
+    /// Critic excerpts. Plex only: Jellyfin and Emby carry just a `CriticRating` score.
+    var reviews: [CriticReview] = []
 
     // Wave 1 additions for the detail view
     let nextEpisode: MediaItem?      // shows only — Plex `OnDeck`, Jellyfin `/Shows/NextUp`

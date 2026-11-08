@@ -246,6 +246,17 @@ struct MacDetailInformation: View {
                     }
                 }
             }
+            if let reviews = detail?.reviews, !reviews.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Critic Reviews").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(reviews, id: \.self) { MacReviewCard(review: $0) }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+            }
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
@@ -262,5 +273,29 @@ struct MacDetailInformation: View {
                 }
             }
         }
+    }
+}
+
+/// One critic excerpt in the inline reviews row (server text, shown verbatim).
+private struct MacReviewCard: View {
+    let review: CriticReview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if let verdict = review.verdict {
+                    Image(systemName: verdict.symbol)
+                        .foregroundStyle(verdict == .fresh ? Color.green : Color.red)
+                        .accessibilityLabel(verdict.label)
+                }
+                if let byline = review.byline {
+                    Text(verbatim: byline).font(.subheadline.weight(.semibold)).lineLimit(1)
+                }
+            }
+            Text(verbatim: review.excerpt).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+        }
+        .frame(width: 280, alignment: .topLeading)
+        .padding(14)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 }

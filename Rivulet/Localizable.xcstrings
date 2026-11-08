@@ -211,6 +211,23 @@
         }
       }
     },
+    "%@×" : {
+      "comment" : "Playback speed, such as 1.25×",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@×"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@×"
+          }
+        }
+      }
+    },
     "%lld Episodes" : {
       "localizations" : {
         "de" : {
@@ -9890,6 +9907,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Σφάλμα αναπαραγωγής"
+          }
+        }
+      }
+    },
+    "Playback Speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabetempo"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταχύτητα αναπαραγωγής"
           }
         }
       }

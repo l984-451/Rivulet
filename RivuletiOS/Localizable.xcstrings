@@ -153,6 +153,23 @@
         }
       }
     },
+    "%@×" : {
+      "comment" : "Playback speed, such as 1.25×",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@×"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@×"
+          }
+        }
+      }
+    },
     "%lld ch" : {
       "localizations" : {
         "de" : {

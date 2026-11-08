@@ -587,6 +587,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var qualityChoice: StreamingQuality = .original
     /// What is playing: the untouched file, or a transcode at a step.
     @Published private(set) var activeStreamPlan: StreamPlan = .original
+    /// Playback speed (#426). Lives for this player session: Up Next keeps it, a new player starts at 1×.
+    @Published private(set) var playbackSpeed: Float = 1
     private var isHomeLocation = true
     /// Last successful probe; Up Next and menu changes reuse it for 10 minutes.
     private var lastThroughput: (kbps: Int, at: Date)?
@@ -1187,7 +1189,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         let now = aetherPlayer?.sourceTime(atHostTime: CACurrentMediaTime()) ?? time
         let work = DispatchWorkItem { [weak self] in self?.contentFilter.clockDidReach(edge + 0.001) }
         muteEdgeWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, edge - now), execute: work)
+        let delay = PlaybackSpeed.wallSeconds(forMedia: max(0, edge - now), at: playbackSpeed)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// Clear any prepared stream state so the next startup recomputes route + URLs.
@@ -2192,6 +2195,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             do {
                 let ap = aetherPlayer ?? AetherPlayer()
                 aetherPlayer = ap
+                applyPlaybackSpeed()
                 // A load drops the engine's selection; the unseen read is chosen again from its tracks.
                 aetherSubtitleModel.update(cues: [])
                 silentSubtitleTrackId = nil
@@ -2756,6 +2760,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         let item = AVPlayerItem(asset: asset)
+        // Speed keeps the pitch, as on the engine's paths.
+        item.audioTimePitchAlgorithm = .timeDomain
 
         // Feed metadata to AVPlayerViewController (info panel + Now Playing)
         item.externalMetadata = buildExternalMetadata()
@@ -2770,6 +2776,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             player = newPlayer
             _playerForCleanup = newPlayer
         }
+        player?.defaultRate = playbackSpeed
 
         setupAVPlayerObservers()
         updatePlaybackState(.loading)
@@ -3300,6 +3307,27 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Another version's stream ids mean nothing on this one, so the picks carry over by language.
             await vm.reloadStream(toOriginal: vm.activeStreamPlan == .original, reason: "quality_menu",
                                   tracks: sameVersion ? tracks : vm.plexTrackIDs(carrying: picks), restoring: before)
+        }
+    }
+
+    /// The speeds the menu offers for what is playing; empty hides it.
+    var playbackSpeeds: [Float] {
+        PlaybackSpeed.choices(maxRate: aetherPlayer?.maxPlaybackRate ?? PlaybackSpeed.transcodeMaxRate)
+    }
+
+    func selectPlaybackSpeed(_ speed: Float) {
+        playbackSpeed = speed
+        applyPlaybackSpeed()
+    }
+
+    /// Hands the session's speed to whichever player is up. AetherPlayer re-applies it to every
+    /// file it opens; AVPlayer starts at `defaultRate` on every play(), so a pause keeps it.
+    private func applyPlaybackSpeed() {
+        if let ap = aetherPlayer {
+            if ap.playbackRate != playbackSpeed { ap.playbackRate = playbackSpeed }
+        } else if let player {
+            player.defaultRate = playbackSpeed
+            if player.rate > 0 { player.rate = playbackSpeed }
         }
     }
 
@@ -5152,7 +5180,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         // No credits markers: Up Next opens one countdown before the end, so autoplay lands at the
         // end. Countdown off opens it at the end. At least 85% watched, for short videos.
         if metadata.creditsMarkers.isEmpty && duration > 60 {
-            let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
+            // The countdown is wall-clock, so at 2× it covers twice the media.
+            let triggerTime = duration - PlaybackSpeed.mediaSeconds(
+                forWall: TimeInterval(autoplayCountdownSetting), at: playbackSpeed)
             let minCompletionTime = duration * 0.85  // At least 85% watched
 
             // Reset flag if user rewound before trigger point

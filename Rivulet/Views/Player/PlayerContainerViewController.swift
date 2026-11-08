@@ -1500,6 +1500,30 @@ class PlayerContainerViewController: UIViewController {
                 }),
                 width: CardTrackListView.menuWidth, from: rail.qualityButton)
         }
+        // Speed: AVKit's set up to what the item plays at, the session's pick checked (#426).
+        rail.onSpeed = { [weak self] in
+            guard let self, let vm = self.viewModel else { return }
+            let speeds = vm.playbackSpeeds
+            let rows = speeds.enumerated().map { index, speed in
+                CardTrackListView.Row(
+                    title: PlaybackSpeed.label(speed), subtitle: nil, trackId: index,
+                    isSelected: speed == vm.playbackSpeed)
+            }
+            self.presentRailPanel(
+                content: CardTrackListView(header: String(localized: "Playback Speed"), rows: rows, onSelect: { [weak vm, weak self] index in
+                    if let index, speeds.indices.contains(index) { vm?.selectPlaybackSpeed(speeds[index]) }
+                    self?.activeRailPanel?.dismissPanel()
+                }),
+                width: CardTrackListView.menuWidth, from: rail.speedButton)
+        }
+        // The cap depends on the item's path, known once it has loaded.
+        vm.$playbackState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak rail, weak vm] state in
+                guard let vm, state == .playing || state == .paused else { return }
+                rail?.setSpeedAvailable(!vm.playbackSpeeds.isEmpty)
+            }
+            .store(in: &cancellables)
         vm.contentFilter.$isEnabled
             .combineLatest(vm.contentFilter.$isPaused, vm.$contentFilterNotice, vm.contentFilter.$hasSceneSkips)
             .receive(on: DispatchQueue.main)

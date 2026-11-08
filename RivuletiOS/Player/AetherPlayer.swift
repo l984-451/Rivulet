@@ -443,6 +443,8 @@ final class AetherPlayer: ObservableObject {
 
     private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool) async throws {
         beginLoad()
+        // Live TV has no speed control.
+        rate = 1
         let isNativeHLS = Self.isHLSURL(url) && !forceEngineDemux
         // Forced onto the engine demuxer AND a playlist: the Plex direct-play grant.
         let usesHLSIngest = !isNativeHLS && Self.isHLSURL(url)
@@ -511,7 +513,7 @@ final class AetherPlayer: ObservableObject {
 
     /// Plex video on demand. Sidecars are registered at load so they appear
     /// as ordinary subtitle tracks. `keepingTransport` (a quality reload) keeps
-    /// the speed and a paused session paused.
+    /// a paused session paused. The speed lasts until `stop()` (#426).
     func load(
         url: URL,
         headers: [String: String]? = nil,
@@ -600,9 +602,8 @@ final class AetherPlayer: ObservableObject {
         isStarting = false
         isStalled = false
         liveWindow = .idle
-        // The engine forgets the speed when the source changes; a reload reapplies it.
+        // The engine forgets the speed when the source changes; the VOD load reapplies it.
         if !keepingTransport {
-            rate = 1
             userIntendsToPlay = true
         }
         tornDownAt = nil
@@ -647,6 +648,9 @@ final class AetherPlayer: ObservableObject {
     func togglePlayPause() {
         state == .playing ? pause() : play()
     }
+
+    /// The fastest speed the loaded item plays at: 2× for video. Read after load.
+    var maxPlaybackRate: Float { engine.maxSupportedRate }
 
     func setRate(_ newRate: Float) {
         rate = newRate

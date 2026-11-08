@@ -694,6 +694,7 @@ private struct IOSPlexPlayerScreen: View {
                 duration: player.duration > 0 ? player.duration : item.durationSeconds
             ),
             rate: player.rate,
+            speeds: PlaybackSpeed.choices(maxRate: player.maxPlaybackRate),
             // A downloaded file has one quality: the one on disk.
             quality: session.request.isLocal ? nil : IOSPlayerQuality(
                 choices: StreamingQuality.allChoices,

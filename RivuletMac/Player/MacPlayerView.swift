@@ -269,7 +269,7 @@ struct MacPlayerView: View {
 
     private var optionControls: some View {
         HStack(spacing: 6) {
-            speedMenu
+            if !speeds.isEmpty { speedMenu }
             if !session.request.isLocal { qualityMenu }
             if !session.audioTracks.isEmpty || !session.subtitleTracks.isEmpty { tracksMenu }
             if !session.chapters.isEmpty {
@@ -295,14 +295,17 @@ struct MacPlayerView: View {
         }
     }
 
+    /// The shared speed list (#426), up to what the item plays at; empty hides the menu.
+    private var speeds: [Float] { PlaybackSpeed.choices(maxRate: player.maxPlaybackRate) }
+
     private var speedMenu: some View {
         Menu {
             Picker("Playback Speed", selection: Binding(get: { player.rate }, set: { player.setRate($0) })) {
-                ForEach(MacPlayerSpeeds.all, id: \.self) { Text(MacPlayerSpeeds.label($0)).tag($0) }
+                ForEach(speeds, id: \.self) { Text(verbatim: PlaybackSpeed.label($0)).tag($0) }
             }
             .pickerStyle(.inline)
         } label: {
-            Text(MacPlayerSpeeds.label(player.rate)).font(.subheadline.weight(.semibold).monospacedDigit())
+            Text(verbatim: PlaybackSpeed.label(player.rate)).font(.subheadline.weight(.semibold).monospacedDigit())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

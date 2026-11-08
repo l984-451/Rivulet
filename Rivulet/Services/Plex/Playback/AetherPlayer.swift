@@ -690,6 +690,9 @@ final class AetherPlayer: PlayerProtocol {
     }
     private var _playbackRate: Float = 1.0
 
+    /// The fastest speed the loaded item plays at: 2× for video. Read after load.
+    var maxPlaybackRate: Float { engine.maxSupportedRate }
+
     var playbackStatePublisher: AnyPublisher<UniversalPlaybackState, Never> {
         stateSubject.eraseToAnyPublisher()
     }
@@ -1171,6 +1174,8 @@ final class AetherPlayer: PlayerProtocol {
         pendingReloadSince = nil
         do {
             try await engine.load(url: url, startPosition: startTime, options: options)
+            // The engine starts a new file at 1×; the session's speed carries on (#426).
+            if !isLive, _playbackRate != 1 { engine.setRate(_playbackRate) }
         } catch {
             // User navigated away / switched items mid-load. Rethrow untouched
             // and stay off errorSubject: wrapping it as PlayerError.loadFailed

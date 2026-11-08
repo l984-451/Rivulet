@@ -84,6 +84,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private let isBusy: Bool
     private let timeline: IOSPlayerTimeline
     private let rate: Float?
+    private let speeds: [Float]
     private let quality: IOSPlayerQuality?
     private let audioTracks: [AetherPlayer.Track]
     private let selectedAudioID: Int?
@@ -115,6 +116,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
 
     /// - Parameters:
     ///   - rate: nil hides the speed menu (live).
+    ///   - speeds: what the speed menu offers; empty hides it.
     ///   - quality: nil hides the quality menu (live).
     ///   - video: the picture and captions; receives the bottom bar's top edge
     ///     while the chrome is up, so captions can lift above it.
@@ -126,6 +128,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         isBusy: Bool,
         timeline: IOSPlayerTimeline,
         rate: Float? = nil,
+        speeds: [Float] = PlaybackSpeed.standard,
         quality: IOSPlayerQuality? = nil,
         audioTracks: [AetherPlayer.Track] = [],
         selectedAudioID: Int? = nil,
@@ -146,6 +149,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         self.isBusy = isBusy
         self.timeline = timeline
         self.rate = rate
+        self.speeds = speeds
         self.quality = quality
         self.audioTracks = audioTracks
         self.selectedAudioID = selectedAudioID
@@ -389,7 +393,7 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             scrubber
 
             HStack(spacing: 10) {
-                if let rate { speedMenu(rate) }
+                if let rate, !speeds.isEmpty { speedMenu(rate) }
                 if let quality { qualityMenu(quality) }
                 if !audioTracks.isEmpty || !subtitleTracks.isEmpty { tracksMenu }
                 trailing()
@@ -472,13 +476,13 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     private func speedMenu(_ rate: Float) -> some View {
         Menu {
             Picker("Playback Speed", selection: Binding(get: { rate }, set: { value in interact { actions.setRate(value) } })) {
-                ForEach(Self.speeds, id: \.self) { speed in
-                    Text(Self.speedLabel(speed)).tag(speed)
+                ForEach(speeds, id: \.self) { speed in
+                    Text(verbatim: PlaybackSpeed.label(speed)).tag(speed)
                 }
             }
             .pickerStyle(.inline)
         } label: {
-            Text(Self.speedLabel(rate))
+            Text(verbatim: PlaybackSpeed.label(rate))
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .frame(minWidth: 44, minHeight: 44)
                 .padding(.horizontal, 6)
@@ -738,12 +742,6 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         let id = UUID()
     }
 
-    private static var speeds: [Float] { [0.5, 0.75, 1, 1.25, 1.5, 2] }
-
-    private static func speedLabel(_ rate: Float) -> String {
-        rate.formatted(.number.precision(.fractionLength(0...2))) + "x"
-    }
-
     /// gobackward.N exists for these values; anything else gets the plain glyph.
     private static func skipSymbol(_ base: String, seconds: Int) -> String {
         [5, 10, 15, 30, 45, 60, 75, 90].contains(seconds) ? "\(base).\(seconds)" : base
@@ -767,6 +765,7 @@ extension IOSPlayerChrome where Trailing == EmptyView {
         isBusy: Bool,
         timeline: IOSPlayerTimeline,
         rate: Float? = nil,
+        speeds: [Float] = PlaybackSpeed.standard,
         quality: IOSPlayerQuality? = nil,
         audioTracks: [AetherPlayer.Track] = [],
         selectedAudioID: Int? = nil,
@@ -781,7 +780,7 @@ extension IOSPlayerChrome where Trailing == EmptyView {
     ) {
         self.init(
             title: title, subtitle: subtitle, isPlaying: isPlaying, isBusy: isBusy, timeline: timeline,
-            rate: rate, quality: quality, audioTracks: audioTracks, selectedAudioID: selectedAudioID,
+            rate: rate, speeds: speeds, quality: quality, audioTracks: audioTracks, selectedAudioID: selectedAudioID,
             subtitleTracks: subtitleTracks, selectedSubtitleID: selectedSubtitleID,
             contextualAction: contextualAction, failure: failure, isMuted: isMuted,
             canPictureInPicture: canPictureInPicture, actions: actions,

@@ -211,6 +211,16 @@ final class NowPlayingService: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // A speed change re-anchors elapsed time at the new rate.
+        viewModel.$playbackSpeed
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self, weak viewModel] _ in
+                guard let self, let viewModel else { return }
+                self.updatePlaybackRateAndState(isPlaying: viewModel.playbackState == .playing)
+            }
+            .store(in: &cancellables)
+
         // Subscribe to time updates
         viewModel.$currentTime
             .receive(on: RunLoop.main)
@@ -598,8 +608,8 @@ final class NowPlayingService: ObservableObject {
         // Duration and elapsed time
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? playbackSpeed : 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = playbackSpeed
 
         // Media type
         nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.video.rawValue
@@ -698,6 +708,9 @@ final class NowPlayingService: ObservableObject {
     /// Update playback rate in Now Playing info AND set explicit playback state.
     /// This should be called whenever play/pause state changes.
     /// Also updates elapsed time to "anchor" the position when rate changes.
+    /// The session's speed (#426), so the system advances elapsed time at the right pace.
+    private var playbackSpeed: Double { Double(viewModel?.playbackSpeed ?? 1) }
+
     private func updatePlaybackRateAndState(isPlaying: Bool) {
         guard var nowPlayingInfo = firstAvailableNowPlayingInfo() else {
             playerDebugLog("🎵 NowPlaying: Cannot update rate/state - no info set")
@@ -705,7 +718,8 @@ final class NowPlayingService: ObservableObject {
         }
 
         // Update rate
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? playbackSpeed : 0.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = playbackSpeed
 
         // CRITICAL: When rate changes, also update elapsed time to "anchor" the position.
         // This tells the system the exact position at the moment playback state changed.

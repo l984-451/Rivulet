@@ -44,6 +44,10 @@ final class PlayerRailView: UIView {
     let filterButton = TransportControlButton(
         icon: UIImage(systemName: "hand.raised"), accessibilityLabel: String(localized: "Content Filter"),
         diameter: Metrics.toolDiameter)
+    /// VOD only: playback speed for this session.
+    let speedButton = TransportControlButton(
+        icon: UIImage(systemName: "gauge.with.dots.needle.67percent"), accessibilityLabel: String(localized: "Playback Speed"),
+        diameter: Metrics.toolDiameter)
     /// VOD only: streaming quality for this session.
     let qualityButton = TransportControlButton(
         icon: UIImage(systemName: "dial.medium"), accessibilityLabel: String(localized: "Quality"),
@@ -94,6 +98,7 @@ final class PlayerRailView: UIView {
     var onUpNext: (() -> Void)?
     var onFilter: (() -> Void)?
     var onQuality: (() -> Void)?
+    var onSpeed: (() -> Void)?
     var onGoLive: (() -> Void)?
     var onRecord: (() -> Void)?
     var onMultiview: (() -> Void)?
@@ -129,7 +134,7 @@ final class PlayerRailView: UIView {
         toolRow.alignment = .center
         skipPillSlot.isHidden = true
         skipPillSlot.isUserInteractionEnabled = false
-        [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, filterButton, qualityButton].forEach {
+        [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, speedButton, filterButton, qualityButton].forEach {
             toolRow.addArrangedSubview($0)
         }
 
@@ -185,6 +190,7 @@ final class PlayerRailView: UIView {
         upNextButton.onPress = { [weak self] in self?.onUpNext?() }
         filterButton.onPress = { [weak self] in self?.onFilter?() }
         qualityButton.onPress = { [weak self] in self?.onQuality?() }
+        speedButton.onPress = { [weak self] in self?.onSpeed?() }
         goLiveButton.onPress = { [weak self] in self?.onGoLive?() }
         recordButton.onPress = { [weak self] in self?.onRecord?() }
         multiviewButton.onPress = { [weak self] in self?.onMultiview?() }
@@ -197,6 +203,7 @@ final class PlayerRailView: UIView {
         // has no content filter.
         filterButton.isHidden = true
         qualityButton.isHidden = true
+        speedButton.isHidden = true
         // Live TV only, and only in the states that give them meaning.
         goLiveButton.isHidden = true
         recordButton.isHidden = true
@@ -211,6 +218,11 @@ final class PlayerRailView: UIView {
     /// Show the Quality menu (VOD only; Live TV never does).
     func setQualityAvailable(_ available: Bool) {
         qualityButton.isHidden = !available
+    }
+
+    /// Show the speed menu (VOD, when the item plays faster or slower than 1×).
+    func setSpeedAvailable(_ available: Bool) {
+        speedButton.isHidden = !available
     }
 
     /// Reflect whether the content filter is acting in the toggle glyph

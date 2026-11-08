@@ -13,6 +13,8 @@ struct MacPlaybackCommands: Commands {
             let session = playback.session
             let player = session?.player
             let active = playback.isActive
+            // The shared list (#426), up to what the item plays at; empty disables the menu.
+            let speeds = PlaybackSpeed.choices(maxRate: player?.maxPlaybackRate ?? PlaybackSpeed.transcodeMaxRate)
 
             Button(player?.state == .playing ? "Pause" : "Play") { playback.togglePlayPause() }
                 .keyboardShortcut(.space, modifiers: [])
@@ -56,11 +58,11 @@ struct MacPlaybackCommands: Commands {
 
             Menu("Speed") {
                 Picker("Speed", selection: Binding(get: { player?.rate ?? 1 }, set: { player?.setRate($0) })) {
-                    ForEach(MacPlayerSpeeds.all, id: \.self) { Text(MacPlayerSpeeds.label($0)).tag($0) }
+                    ForEach(speeds, id: \.self) { Text(verbatim: PlaybackSpeed.label($0)).tag($0) }
                 }
                 .pickerStyle(.inline)
             }
-            .disabled(!active)
+            .disabled(!active || speeds.isEmpty)
 
             Menu("Audio") {
                 if let session {
@@ -126,15 +128,6 @@ struct MacPlaybackCommands: Commands {
                 .keyboardShortcut(.escape, modifiers: [])
                 .disabled(!active)
         }
-    }
-}
-
-/// Playback speeds offered by the menu and the chrome.
-enum MacPlayerSpeeds {
-    static let all: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 2]
-
-    static func label(_ rate: Float) -> String {
-        rate.formatted(.number.precision(.fractionLength(0...2))) + "x"
     }
 }
 

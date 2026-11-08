@@ -318,3 +318,180 @@ workflows:
         submit_to_testflight: true
         beta_groups:
           - Rivulet External Plex Forum
+
+  rivulet-macos-testflight:
+    name: Rivulet macOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+
+    integrations:
+      app_store_connect: codemagic
+
+    environment:
+      groups:
+        - rivulet
+      vars:
+        XCODE_SCHEME: "Rivulet Mac"
+        XCODE_PROJECT: "Rivulet.xcodeproj"
+        BUNDLE_ID: "com.gstudios.rivulet"
+        APP_STORE_APPLE_ID: 6756892857
+        ARCHIVE_PATH: "build/macos/Rivulet.xcarchive"
+      xcode: 27.2
+
+    # Same App Store record and bundle id as tvOS and iOS, its own tag prefix.
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'mac-v*'
+          include: true
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Initialize keychain
+        script: keychain initialize
+
+      - name: Provide the distribution certificate private key
+        script: |
+          if [ -n "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            printf '%s' "$CERTIFICATE_PRIVATE_KEY" > "$CM_BUILD_DIR/cert_key.pem"
+            echo "Using persistent CERTIFICATE_PRIVATE_KEY."
+          else
+            echo "WARNING: CERTIFICATE_PRIVATE_KEY is not set, generating an"
+            echo "ephemeral key. This mints NEW certificates every build and"
+            echo "will hit Apple's cert cap. Set CERTIFICATE_PRIVATE_KEY."
+            openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
+          fi
+
+      # The app signs with the Apple Distribution certificate the other
+      # platforms use; the .pkg needs a Mac Installer Distribution one too.
+      - name: Fetch or create signing files (Mac App Store)
+        script: |
+          set -e
+          # --platform IOS finds the shared App ID (IOS or UNIVERSAL); MAC_OS
+          # would miss it and try to create a duplicate.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type MAC_APP_STORE \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --create
+          count_p12() {
+            ls "$HOME/Library/Developer/Xcode/UserData/Certificates/"*.p12 \
+               "$HOME/Library/MobileDevice/Certificates/"*.p12 2>/dev/null | wc -l
+          }
+          BEFORE=$(count_p12)
+          app-store-connect certificates list \
+            --type MAC_INSTALLER_DISTRIBUTION \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --save
+          if [ "$(count_p12)" -eq "$BEFORE" ]; then
+            echo "No Mac Installer Distribution certificate for this key, creating one."
+            app-store-connect certificates create \
+              --type MAC_INSTALLER_DISTRIBUTION \
+              --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+              --save
+          fi
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+          rm -f "$CM_BUILD_DIR/cert_key.pem"
+
+      - name: Apply fetched signing profiles to Xcode project
+        script: xcode-project use-profiles
+
+      - name: Restore package traits dropped by use-profiles
+        script: python3 Scripts/restore-package-traits.py
+
+      - name: Generate Secrets.swift from env
+        script: |
+          mkdir -p RivuletCore/Config
+          cat > RivuletCore/Config/Secrets.swift <<EOS
+          import Foundation
+
+          enum Secrets {
+              static let sentryDSN = "${SENTRY_DSN:-}"
+          }
+          EOS
+          echo "Wrote RivuletCore/Config/Secrets.swift (dsn set: $([ -n "${SENTRY_DSN:-}" ] && echo yes || echo no))"
+
+      - name: Set build number from the tag
+        script: |
+          # Tag shape is mac-vX.Y.Z-<build>; build numbers are per platform.
+          if [ -n "${CM_TAG:-}" ]; then
+            NEXT="${CM_TAG##*-}"
+          else
+            NEXT=$PROJECT_BUILD_NUMBER
+          fi
+          case "$NEXT" in
+            ''|*[!0-9]*)
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected mac-vX.Y.Z-<build>)."
+              exit 1
+              ;;
+          esac
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform MAC_OS 2>/dev/null || echo "")
+          if [ -n "$LATEST" ] && [ "$NEXT" -le "$LATEST" ]; then
+            echo "Tag asks for build $NEXT but macOS TestFlight is already at $LATEST. Tag a higher build."
+            exit 1
+          fi
+          echo "Setting CURRENT_PROJECT_VERSION=$NEXT (tag ${CM_TAG:-none}, TestFlight latest ${LATEST:-unknown})"
+          agvtool new-version -all "$NEXT"
+
+      - name: Archive (macOS Release)
+        script: |
+          set -o pipefail
+          mkdir -p /tmp/xcodebuild_logs
+          xcodebuild archive \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$CM_BUILD_DIR/$ARCHIVE_PATH" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            2>&1 | tee /tmp/xcodebuild_logs/archive.log | grep -E "error:|\*\* ARCHIVE" || true
+          test -d "$CM_BUILD_DIR/$ARCHIVE_PATH/Products/Applications/Rivulet.app"
+
+      # build-ipa can't be used: it fails when the export holds a .pkg, not an .ipa.
+      - name: Export signed installer package
+        script: |
+          set -e
+          INSTALLER=$(security find-identity -v | awk '/Installer/ {print $2; exit}')
+          if [ -z "$INSTALLER" ]; then
+            echo "No Mac Installer Distribution identity in the keychain."
+            exit 1
+          fi
+          OPTIONS="$HOME/export_options.plist"
+          /usr/libexec/PlistBuddy -c "Delete :installerSigningCertificate" "$OPTIONS" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $INSTALLER" "$OPTIONS"
+          xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/$ARCHIVE_PATH" \
+            -exportOptionsPlist "$OPTIONS" \
+            -exportPath "$CM_BUILD_DIR/build/macos/pkg"
+          ls "$CM_BUILD_DIR"/build/macos/pkg/*.pkg
+
+      - name: Upload dSYMs to Sentry
+        ignore_failure: true
+        script: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "No SENTRY_AUTH_TOKEN set, skipping dSYM upload."
+            exit 0
+          fi
+          which sentry-cli >/dev/null 2>&1 || brew install getsentry/tools/sentry-cli
+          sentry-cli debug-files upload \
+            --auth-token "$SENTRY_AUTH_TOKEN" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            --include-sources \
+            "$CM_BUILD_DIR/$ARCHIVE_PATH"
+
+    artifacts:
+      - build/macos/pkg/*.pkg
+      - build/macos/Rivulet.xcarchive/dSYMs/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Rivulet External Plex Forum

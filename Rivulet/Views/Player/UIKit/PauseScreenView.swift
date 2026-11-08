@@ -7,9 +7,10 @@
 //
 //  The pause screen: after 10 s paused the player says what is paused and how long
 //  is left; after 2 min it settles into a dimmer, quieter state (an OLED burn-in
-//  guard). Two looks, picked in Settings (`PauseScreenStyle`): Frame keeps the
-//  paused picture under a scrim (the container pushes it in), and Glass dims it
-//  (a flat 30% black, the picture left sharp) and holds the details on a glass card.
+//  guard) and the title's art replaces the paused picture. Two looks, picked in
+//  Settings (`PauseScreenStyle`): Frame keeps the paused picture under a scrim (the
+//  container pushes it in), and Glass dims it (a flat 30% black, the picture left
+//  sharp) and holds the details on a glass card.
 //
 //  Plain UIKit, non-interactive and focusless. `PlayerContainerViewController`
 //  mounts it above the video and captions and below the content focus anchor, and
@@ -233,9 +234,9 @@ final class PauseScreenView: UIView {
 
     private var infoLines: [UIView] { [logoSlot, titleLabel, detailLabel, synopsisLabel, timeRow] }
 
-    /// Frame shows the art at 2 min; both styles show it while no frame exists.
+    /// Both styles show the art at 2 min, and while no frame exists. Only Frame's drifts.
     private var showsArt: Bool {
-        artView.image != nil && (parked || (style == .frame && tier == .dimmed))
+        artView.image != nil && (parked || tier == .dimmed)
     }
 
     /// Alphas of the picture layers for the current state. Inside an animation block.

@@ -60,7 +60,7 @@ enum OpenSourceLicenses {
         [
             Entry(
                 name: "AetherEngine",
-                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.57.0, commit 7d50497) is available at \(aetherSourceURL).",
+                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.61.0, commit d612bed) is available at \(aetherSourceURL).",
                 licenseText: aetherLGPLv3
             ),
             Entry(

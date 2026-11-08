@@ -198,6 +198,8 @@ final class AetherPlayer: PlayerProtocol {
             .sink { [weak self] aetherState, errorInfo in
                 guard let self else { return }
                 self.engineIsPlaying = (aetherState == .playing)
+                // A load of another file (a stacked part, a version) drops the engine's speed; put it back.
+                if aetherState == .playing, self._playbackRate != 1 { self.engine.setRate(self._playbackRate) }
                 // Recompute BEFORE publishing the state so the view model's
                 // ".playing while still buffering" reconciliation sees the
                 // combined flag the moment a seek lands.

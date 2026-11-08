@@ -583,6 +583,18 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// The quality picked in the player; nil follows the Home or Away setting. Lives for this player session.
     private var sessionQuality: StreamingQuality?
+
+    /// AVKit's tvOS speed set. A model lives for one item, so it starts at 1x.
+    static let playbackSpeeds: [Float] = [0.5, 1, 1.25, 1.5, 2]
+    private(set) var playbackSpeed: Float = 1
+
+    func setPlaybackSpeed(_ speed: Float) {
+        playbackSpeed = speed
+        aetherPlayer?.playbackRate = speed
+        guard let player else { return }
+        player.defaultRate = speed
+        if player.timeControlStatus != .paused { player.rate = speed }
+    }
     /// The quality in effect: the session pick, else the Home or Away setting.
     @Published private(set) var qualityChoice: StreamingQuality = .original
     /// What is playing: the untouched file, or a transcode at a step.
@@ -2192,6 +2204,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             do {
                 let ap = aetherPlayer ?? AetherPlayer()
                 aetherPlayer = ap
+                ap.playbackRate = playbackSpeed
                 // A load drops the engine's selection; the unseen read is chosen again from its tracks.
                 aetherSubtitleModel.update(cues: [])
                 silentSubtitleTrackId = nil
@@ -2767,6 +2780,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             existing.replaceCurrentItem(with: item)
         } else {
             let newPlayer = AVPlayer(playerItem: item)
+            newPlayer.defaultRate = playbackSpeed
             player = newPlayer
             _playerForCleanup = newPlayer
         }

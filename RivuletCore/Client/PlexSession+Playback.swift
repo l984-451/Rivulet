@@ -129,7 +129,28 @@ extension PlexPlaybackRequest {
     /// Plex external subtitle streams (the ones with a `key`), registered with
     /// the engine at load. Mirrors tvOS UniversalPlayerViewModel.aetherExternalSubtitles.
     /// None on a transcode, which carries the server's own subtitle rendition.
-    var sidecarSubtitles: [SubtitleSidecar] {
+    var sidecarSubtitles: [SubtitleSidecar] { sidecarSubtitles(in: nil) }
+
+    /// True when Plex stacks the playing version from several files (#399). A transcode or a
+    /// download plays the first file only, so those stay single.
+    var isStacked: Bool {
+        !isLocal && providerPlayback == nil && (item.Media?.first?.Part?.count ?? 0) > 1
+    }
+
+    /// Every file of a stacked title, nil for one file or when a file has no length.
+    var stackedParts: StackedParts<StackedPartFile>? {
+        guard isStacked, plan == .original, let parts = item.Media?.first?.Part else { return nil }
+        var files: [(file: StackedPartFile, duration: TimeInterval?)] = []
+        for part in parts {
+            guard let key = part.key, let url = PlexSession.directPlayURL(serverURL: serverURL, token: token, partKey: key)
+            else { return nil }
+            files.append((StackedPartFile(url: url, sidecars: sidecarSubtitles(in: part)),
+                          part.duration.map { TimeInterval($0) / 1000 }))
+        }
+        return StackedParts(files)
+    }
+
+    private func sidecarSubtitles(in part: PlexPart?) -> [SubtitleSidecar] {
         if let localSidecars { return localSidecars }
         if let providerPlayback {
             // A provider's sidecars are its external tracks, with their own URL and auth.
@@ -142,7 +163,7 @@ extension PlexPlaybackRequest {
                     isDefault: track.isDefault, formatHint: track.codec)
             }
         }
-        guard plan == .original, let streams = item.Media?.first?.Part?.first?.Stream else { return [] }
+        guard plan == .original, let streams = (part ?? item.Media?.first?.Part?.first)?.Stream else { return [] }
         return streams.filter { $0.isSubtitle && $0.key != nil }.compactMap { stream in
             guard let key = stream.key,
                   let url = PlexSidecarURL.url(serverURL: serverURL, key: key, token: token, codec: stream.codec)

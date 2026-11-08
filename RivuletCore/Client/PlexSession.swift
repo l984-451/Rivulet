@@ -316,7 +316,9 @@ final class PlexSession: ObservableObject {
         var item = full
         if !selection.media.isEmpty { item.Media = selection.media }
         let chosen = selection.media.first
-        let plan = forced ?? QualityDecision.decide(
+        // A transcode would play only the first file of a stacked title (#399).
+        let stacked = (chosen?.Part?.count ?? 0) > 1
+        let plan = stacked ? .original : forced ?? QualityDecision.decide(
             setting: quality, sourceKbps: chosen?.sourceKbps, measuredKbps: measurement?.kbps, isRelay: isRelay
         )
 
@@ -408,7 +410,7 @@ final class PlexSession: ObservableObject {
                                       itemServerID: request.item.serverID, currentMachineID: ClientHost.offline.currentServerID)
     }
 
-    private static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
+    static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
         guard let base = URL(string: serverURL),
               var components = URLComponents(url: base.appending(path: partKey), resolvingAgainstBaseURL: false) else {
             return nil

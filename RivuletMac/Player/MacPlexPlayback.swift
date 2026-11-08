@@ -179,7 +179,8 @@ final class MacPlexPlayback: ObservableObject {
             headers: request.headers,
             startTime: request.startTime,
             externalSubtitles: request.sidecarSubtitles,
-            keepingTransport: keepingTransport
+            keepingTransport: keepingTransport,
+            stackedParts: request.stackedParts
         )
         if player.audioIsDropped { fallBackToTranscode() }
     }
@@ -261,7 +262,7 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     private func stepDown() {
-        guard let step = QualityDecision.stepDown(from: request.plan, sourceKbps: request.sourceKbps) else { return }
+        guard !request.isStacked, let step = QualityDecision.stepDown(from: request.plan, sourceKbps: request.sourceKbps) else { return }
         stallTracker.noteStepDown()
         print("[Quality] Stalling, stepping down to \(step.label)")
         reload(quality: .auto, plan: .transcode(step))
@@ -269,7 +270,7 @@ final class MacPlexPlayback: ObservableObject {
 
     /// A direct-play file that never starts gets one retry as a transcode, as on tvOS.
     private func fallBackToTranscode() {
-        guard !hasPlayed, !didFallBack, request.plan == .original, !request.isLocal else { return }
+        guard !hasPlayed, !didFallBack, request.plan == .original, !request.isLocal, !request.isStacked else { return }
         didFallBack = true
         let kbps = request.quality == .auto
             ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000

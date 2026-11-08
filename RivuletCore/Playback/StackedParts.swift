@@ -40,3 +40,9 @@ struct StackedParts<File> {
         return (index, max(0, time - starts[index]))
     }
 }
+
+/// One file of a stacked Plex title with its sidecar subtitles.
+struct StackedPartFile {
+    let url: URL
+    let sidecars: [SubtitleSidecar]
+}

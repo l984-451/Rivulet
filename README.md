@@ -98,6 +98,12 @@ Playback runs on [AetherEngine](https://github.com/superuser404notfound/AetherEn
 
 <br></br>
 
+## Deep links
+
+On Apple TV, `rivulet://play?ratingKey=<key>` opens playback at the item's resume point. Add `&offset=<milliseconds>` to start at a specific position, for example `rivulet://play?ratingKey=12345&offset=823000` starts at 823 seconds. The offset must be a nonnegative integer number of milliseconds; `offset=0` starts at the beginning. Without `offset`, playback keeps the item's normal resume behavior. `rivulet://detail?ratingKey=<key>` opens the item's detail and ignores `offset`.
+
+<br></br>
+
 ## Music
 
 - Album, artist, and playlist browsing, modeled on Apple's Music app for tvOS. I think its beautiful.

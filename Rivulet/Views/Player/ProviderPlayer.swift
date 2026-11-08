@@ -43,7 +43,7 @@ enum ProviderPlayer {
     /// is the playlist `item` starts.
     @MainActor
     static func play(_ item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
-                     playQueue: PlayQueue<PlaylistEntry>? = nil,
+                     playQueue: PlayQueue<PlaylistEntry>? = nil, explicitStartOffset: TimeInterval? = nil,
                      from presenter: UIViewController, onDismiss: (() -> Void)?) {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
             presentError(MediaProviderError.notFound, from: presenter)
@@ -68,7 +68,7 @@ enum ProviderPlayer {
                     let (art, thumb) = await loadingImages
                     let viewModel = UniversalPlayerViewModel(
                         metadata: metadata, serverURL: plex.serverURL, authToken: plex.authToken,
-                        startOffset: plexStartOffset(metadata, fromBeginning: fromBeginning),
+                        startOffset: explicitStartOffset ?? plexStartOffset(metadata, fromBeginning: fromBeginning),
                         playQueue: playQueue,
                         loadingArtImage: art, loadingThumbImage: thumb, preferredMediaID: sourceID)
                     PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
@@ -80,12 +80,12 @@ enum ProviderPlayer {
             do {
                 let playback = try await ProviderPlayback.prepare(
                     item: target, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best,
-                    fromBeginning: fromBeginning, awaitingExtras: false)
+                    fromBeginning: fromBeginning, explicitStartOffset: explicitStartOffset, awaitingExtras: false)
                 let (art, thumb) = await loadingImages
                 let viewModel = UniversalPlayerViewModel(
                     providerPlayback: playback,
-                    startOffset: startOffset(detailOffset: playback.detail.item.userState.viewOffset,
-                                             fromBeginning: fromBeginning),
+                    startOffset: explicitStartOffset ?? startOffset(detailOffset: playback.detail.item.userState.viewOffset,
+                                                                   fromBeginning: fromBeginning),
                     playQueue: playQueue,
                     loadingArtImage: art,
                     loadingThumbImage: thumb,

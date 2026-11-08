@@ -19,6 +19,13 @@ enum HeroPageDirection: CGFloat {
     case backward = -1
 }
 
+/// What the hero needs to tell whether its backdrop already shows the title (#450).
+struct HeroTitleCheck {
+    let logo: URL?
+    let title: String
+    let tmdb: (id: Int, type: TMDBMediaType)?
+}
+
 @MainActor
 final class HeroBackdropView: UIView {
 
@@ -53,6 +60,7 @@ final class HeroBackdropView: UIView {
 
     private var currentURL: URL?
     private var loadTask: Task<Void, Never>?
+    private var textlessTask: Task<Void, Never>?
     private var pageAnimator: UIViewPropertyAnimator?
     private let themeVideo: ThemeVideoBackdropView
     private var isShowcased = true
@@ -149,7 +157,8 @@ final class HeroBackdropView: UIView {
     /// Load the backdrop for `url`. `paging` slides the new art in from the
     /// selected edge (a hero page change); otherwise it crossfades. Nil shows
     /// the placeholder.
-    func setBackdrop(url: URL?, item: MediaItemRef? = nil, host: UIViewController? = nil, paging: HeroPageDirection? = nil) {
+    func setBackdrop(url: URL?, item: MediaItemRef? = nil, host: UIViewController? = nil, paging: HeroPageDirection? = nil,
+                     titleCheck: HeroTitleCheck? = nil) {
         // The clip follows the title, not the artwork: episodes share images.
         if url != currentURL {
             isChangingBackdrop = true
@@ -159,6 +168,7 @@ final class HeroBackdropView: UIView {
         themeVideo.configure(item: item, host: host)
         guard url != currentURL else { return }
         loadTask?.cancel()
+        textlessTask?.cancel()
 
         guard let url else {
             currentURL = nil
@@ -172,14 +182,17 @@ final class HeroBackdropView: UIView {
             return
         }
         currentURL = url
+        // A backdrop already judged to show the title loads as its textless twin from the start.
+        let shown = HeroTextlessBackdrop.cached(url) ?? url
+        if shown == url, let titleCheck { swapForTextless(url, titleCheck) }
 
         // A prefetched image slides at once, on the same beat as the text.
-        if let image = ImageCacheManager.shared.cachedImage(for: url, quality: .full) {
+        if let image = ImageCacheManager.shared.cachedImage(for: shown, quality: .full) {
             show(image, paging: paging)
             return
         }
         loadTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.imageFullSize(for: url)
+            let image = await ImageCacheManager.shared.imageFullSize(for: shown)
             guard !Task.isCancelled, let self, self.currentURL == url else { return }
             // Home waits behind this callback, so an image that fails must fire it too.
             guard let image else {
@@ -189,6 +202,19 @@ final class HeroBackdropView: UIView {
                 return
             }
             self.show(image, paging: paging)
+        }
+    }
+
+    /// Checks the shown backdrop for the title; if it has it, crossfades to TMDB's textless one.
+    private func swapForTextless(_ url: URL, _ check: HeroTitleCheck) {
+        textlessTask = Task { [weak self] in
+            let swap = await HeroTextlessBackdrop.resolve(
+                backdrop: url, logo: check.logo, title: check.title, tmdb: check.tmdb, size: "original"
+            ) { await ImageCacheManager.shared.image(for: $0)?.cgImage }
+            guard !Task.isCancelled, let self, self.currentURL == url, let swap,
+                  let image = await ImageCacheManager.shared.imageFullSize(for: swap),
+                  !Task.isCancelled, self.currentURL == url else { return }
+            self.show(image, paging: nil)
         }
     }
 

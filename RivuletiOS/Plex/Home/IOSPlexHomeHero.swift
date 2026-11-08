@@ -103,7 +103,7 @@ struct IOSPlexHomeHero: View {
                 HStack(spacing: 0) {
                     ForEach(items) { item in
                         // Pages take the pager's own width, so they always match its paging step.
-                        IOSItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9)
+                        IOSItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .visualEffect { content, proxy in

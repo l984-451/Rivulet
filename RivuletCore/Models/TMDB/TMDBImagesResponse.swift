@@ -15,18 +15,21 @@ import Foundation
 
 struct TMDBImagesResponse: Decodable, Sendable {
     let logos: [TMDBImageEntry]
+    let backdrops: [TMDBImageEntry]
 
     enum CodingKeys: String, CodingKey {
-        case logos
+        case logos, backdrops
     }
 
-    init(logos: [TMDBImageEntry]) {
+    init(logos: [TMDBImageEntry], backdrops: [TMDBImageEntry] = []) {
         self.logos = logos
+        self.backdrops = backdrops
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         logos = (try? c.decode([TMDBImageEntry].self, forKey: .logos)) ?? []
+        backdrops = (try? c.decode([TMDBImageEntry].self, forKey: .backdrops)) ?? []
     }
 }
 
@@ -64,5 +67,15 @@ extension TMDBImagesResponse {
         if let pick = bestByVote(agnostic) { return pick.filePath }
 
         return bestByVote(candidates)?.filePath
+    }
+}
+
+extension TMDBImagesResponse {
+    /// The best-voted backdrop with no language (`iso_639_1` null), i.e. no text; nil when none.
+    var bestTextlessBackdropPath: String? {
+        backdrops
+            .filter { $0.iso6391 == nil && $0.filePath?.isEmpty == false }
+            .max { ($0.voteAverage ?? 0) < ($1.voteAverage ?? 0) }?
+            .filePath
     }
 }

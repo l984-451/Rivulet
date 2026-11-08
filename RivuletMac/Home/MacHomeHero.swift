@@ -82,7 +82,7 @@ struct MacHomeHero: View {
                 // Eager: a lazy stack blanked the outgoing page mid-scroll on iOS.
                 HStack(spacing: 0) {
                     ForEach(items) { item in
-                        MacItemArtwork(item: item, kind: .backdrop, width: width, aspectRatio: 16 / 9)
+                        MacItemArtwork(item: item, kind: .backdrop, width: width, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
                             .frame(width: width, height: height)
                             .clipped()
                             .visualEffect { content, proxy in

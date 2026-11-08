@@ -46,6 +46,7 @@ nonisolated enum ArtworkTitleCheck {
     /// Forgets every answer (Settings, Clear All Cache).
     static func clearDisk() {
         answers.removeAllObjects()
+        HeroTextlessBackdrop.clear()
         guard let directory else { return }
         for file in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
             try? FileManager.default.removeItem(at: file)

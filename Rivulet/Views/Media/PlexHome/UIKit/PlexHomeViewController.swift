@@ -2250,8 +2250,9 @@ final class PlexHomeViewController: UIViewController {
     /// immediately so the startup splash doesn't wait for an image that isn't
     /// coming. The non-nil case is reported by `onFirstImageLoaded` once the
     /// image is on screen.
-    private func setHeroBackdrop(url: URL?, item: MediaItemRef? = nil, paging: HeroPageDirection? = nil) {
-        backdropView.setBackdrop(url: url, item: item, host: self, paging: paging)
+    private func setHeroBackdrop(url: URL?, item: MediaItemRef? = nil, paging: HeroPageDirection? = nil,
+                                 titleCheck: HeroTitleCheck? = nil) {
+        backdropView.setBackdrop(url: url, item: item, host: self, paging: paging, titleCheck: titleCheck)
         // The ambient wash tracks the hero: same artwork, diffused by the
         // frosted material in front of it. Every hero page change lands here,
         // so this is the only place the wash needs driving.
@@ -2313,7 +2314,8 @@ final class PlexHomeViewController: UIViewController {
         }
         let request = item.heroBackdropRequest(serverURL: serverURL, authToken: token)
         let url = request.backdropURL ?? request.thumbnailURL
-        setHeroBackdrop(url: url, paging: paging)
+        setHeroBackdrop(url: url, paging: paging,
+                        titleCheck: item.title.map { HeroTitleCheck(logo: request.logoURL, title: $0, tmdb: item.heroTMDB) })
     }
 
     /// MediaItem-backed backdrop (Discover hero — TMDB CDN URLs are absolute,
@@ -2324,7 +2326,8 @@ final class PlexHomeViewController: UIViewController {
             return
         }
         let request = item.heroBackdropRequest()
-        setHeroBackdrop(url: request.backdropURL ?? request.thumbnailURL, item: item.ref, paging: paging)
+        setHeroBackdrop(url: request.backdropURL ?? request.thumbnailURL, item: item.ref, paging: paging,
+                        titleCheck: HeroTitleCheck(logo: request.logoURL, title: item.showTitle, tmdb: item.heroTMDB))
     }
 
     /// Discover hero Play, shown only for library-matched items: plays the match directly, falling back

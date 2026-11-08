@@ -51,11 +51,28 @@ struct MacItemArtwork: View {
     let width: CGFloat
     /// Width over height of the requested image.
     let aspectRatio: CGFloat
+    /// The Home hero: a backdrop with the title baked in is swapped for a textless TMDB one (#450).
+    var swapsTitledBackdrop = false
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
+    @State private var textless: (from: URL, to: URL)?
+
+    private var url: URL? { Self.url(browse, item: item, kind: kind, width: width, aspectRatio: aspectRatio, scale: displayScale) }
 
     var body: some View {
-        MacImage(url: Self.url(browse, item: item, kind: kind, width: width, aspectRatio: aspectRatio, scale: displayScale))
+        let url = url
+        let swap = url.flatMap { HeroTextlessBackdrop.cached($0) } ?? (textless?.from == url ? textless?.to : nil)
+        MacImage(url: swap ?? url)
+            .task(id: url) { await swapIfTitled(url) }
+    }
+
+    private func swapIfTitled(_ url: URL?) async {
+        guard swapsTitledBackdrop, let url, let tmdb = item.heroTMDB, HeroTextlessBackdrop.cached(url) == nil else { return }
+        let swap = await HeroTextlessBackdrop.resolve(
+            backdrop: url, logo: await browse.logoURL(for: item), title: item.showTitle, tmdb: tmdb, size: "original"
+        ) { await MacArtworkCache.shared.image(for: $0)?.cgImageRepresentation }
+        guard !Task.isCancelled, let swap else { return }
+        textless = (url, swap)
     }
 
     /// The exact URL this view requests, so a prefetch warms the same cache entry.

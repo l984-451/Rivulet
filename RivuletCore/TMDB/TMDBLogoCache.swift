@@ -23,6 +23,7 @@ actor TMDBLogoCache {
     private struct Key: Hashable {
         let tmdbId: Int
         let type: TMDBMediaType
+        var backdrop = false
     }
 
     private struct CachedEntry: Codable {
@@ -52,14 +53,19 @@ actor TMDBLogoCache {
     /// Nil results are cached just like found URLs — we don't thrash the network
     /// asking "is there a logo?" for every page view of an item that has none.
     func logoURL(tmdbId: Int, type: TMDBMediaType) async -> URL? {
-        let path = await logoPath(tmdbId: tmdbId, type: type)
+        let path = await path(for: Key(tmdbId: tmdbId, type: type))
         return path.flatMap { URL(string: "\(Self.cdnBase)\($0)") }
+    }
+
+    /// A textless backdrop for a TMDB id, at a CDN size ("w1280", "original"); nil when none exists.
+    func textlessBackdropURL(tmdbId: Int, type: TMDBMediaType, size: String = "w1280") async -> URL? {
+        await path(for: Key(tmdbId: tmdbId, type: type, backdrop: true))
+            .flatMap { URL(string: "https://image.tmdb.org/t/p/\(size)\($0)") }
     }
 
     // MARK: - Resolution
 
-    private func logoPath(tmdbId: Int, type: TMDBMediaType) async -> String? {
-        let key = Key(tmdbId: tmdbId, type: type)
+    private func path(for key: Key) async -> String? {
 
         if let cached = memory[key] { return cached }
 
@@ -89,7 +95,7 @@ actor TMDBLogoCache {
             return nil
         }
 
-        let path = response.bestLogoPath
+        let path = key.backdrop ? response.bestTextlessBackdropPath : response.bestLogoPath
         memory[key] = path
         saveToDisk(key: key, entry: CachedEntry(resolvedAt: Date(), logoPath: path))
         return path
@@ -119,7 +125,7 @@ actor TMDBLogoCache {
     // MARK: - Disk
 
     private func diskURL(for key: Key) -> URL {
-        directory.appendingPathComponent("\(key.type.rawValue)_\(key.tmdbId).json")
+        directory.appendingPathComponent("\(key.type.rawValue)_\(key.tmdbId)\(key.backdrop ? "_backdrop" : "").json")
     }
 
     private func loadFromDisk(key: Key) -> CachedEntry? {

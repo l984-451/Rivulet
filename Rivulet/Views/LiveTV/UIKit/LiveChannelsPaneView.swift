@@ -196,9 +196,16 @@ private final class LiveChannelCardView: UIView {
         guard let url = landscape ?? channel.logoURL ?? program?.posterURL ?? program?.iconURL else { return }
         art.contentMode = landscape != nil ? .scaleAspectFill : .scaleAspectFit
         imageTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: url)
+            var image = await ImageCacheManager.shared.image(for: url)
+            var isLogo = landscape == nil
+            // Programme art that fails to load falls back to the channel logo.
+            if image == nil, !isLogo, let logo = channel.logoURL {
+                image = await ImageCacheManager.shared.image(for: logo)
+                isLogo = true
+            }
             guard let self, !Task.isCancelled else { return }
-            self.art.image = landscape == nil ? image?.legibleChannelLogo : image
+            if isLogo { self.art.contentMode = .scaleAspectFit }
+            self.art.image = isLogo ? image?.legibleChannelLogo : image
         }
     }
 

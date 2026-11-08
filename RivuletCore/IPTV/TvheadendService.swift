@@ -260,9 +260,10 @@ actor TvheadendService {
                                   seriesLink: string(entry["serieslinkUri"]),
                                   isNew: (entry["new"] as? NSNumber)?.boolValue ?? false,
                                   // XMLTV-fed guides keep the feed's `&amp;`.
+                                  // Only absolute URLs: the imagecache copy needs a login the loader lacks.
                                   imageURL: string(entry["image"]).flatMap {
                                       URL(string: $0.replacingOccurrences(of: "&amp;", with: "&"))
-                                  },
+                                  }.flatMap { $0.scheme?.lowercased().hasPrefix("http") == true ? $0 : nil },
                                   year: year)
         }
     }

@@ -209,4 +209,29 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(MediaDetailChromeView.calmBadges(source(range: .dolbyVision(profile: 8), hdr10Plus: true)), ["4K", "DV", "HDR10+"])
         XCTAssertEqual(MediaDetailChromeView.calmBadges(nil), [])
     }
+
+    /// 720p and 1080p read "HD" and 576p and below "SD", as the Apple TV app labels them.
+    @MainActor
+    func test_carouselBadges_hdAndSD() {
+        func source(height: Int, label: String?) -> MediaSource {
+            let video = VideoTrack(
+                id: "v1", codec: "h264", profile: nil, level: nil,
+                width: nil, height: height, frameRate: 24,
+                bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive"
+            )
+            return MediaSource(
+                id: "1", container: "mkv", duration: 7200,
+                bitrate: nil, fileSize: nil, fileName: nil, videoResolution: label,
+                videoTracks: [video], audioTracks: [], subtitleTracks: [],
+                streamKind: .directPlay, streamURL: nil
+            )
+        }
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 1080, label: "1080")), ["HD"])
+        // Emby and Jellyfin send no label: the pixel height decides.
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 800, label: nil)), ["HD"])
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 720, label: "720")), ["HD"])
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 576, label: "576")), ["SD"])
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 480, label: "sd")), ["SD"])
+        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(height: 360, label: nil)), ["SD"])
+    }
 }

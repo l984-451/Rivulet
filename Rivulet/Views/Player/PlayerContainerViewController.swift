@@ -1267,6 +1267,13 @@ class PlayerContainerViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshSkipPill() }
             .store(in: &cancellables)
+        // The floating pill's 5 seconds running out hides it and hands focus back (#556).
+        vm.$skipPillPresence
+            .map(\.isShowing)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyChromeVisibility() }
+            .store(in: &cancellables)
 
         // Post-video takes its own focus layer and hides the pill; keep the
         // pill's visibility/ownership in sync when it appears or dismisses.
@@ -2047,11 +2054,14 @@ class PlayerContainerViewController: UIViewController {
             contentSelectPending = false
         }
 
-        // The skip pill: over the video while the controls are hidden (unless Menu
-        // dismissed it), in the rail's tool row while they are up (#556).
+        // The skip pill: over the video while the controls are hidden, for 5 seconds
+        // from when it appears unless Menu dismissed it, and in the rail's tool row
+        // while they are up (#556).
         let skipAvailable = vm.showsSkipPill && !isLoading && !ambient && vm.postVideoState == .hidden
         let pillInRail = skipAvailable && railVisible && !paneOpen
-        let skipVisible = pillInRail || (skipAvailable && !chromeVisible && !vm.skipPillDismissed)
+        let pillCanFloat = skipAvailable && !chromeVisible && !vm.skipPillDismissed
+        vm.setSkipPillCanAppear(pillCanFloat)
+        let skipVisible = pillInRail || (pillCanFloat && vm.skipPillPresence.isShowing)
         let pillHomeChanged = pillInRail == (rail?.skipPillSlot.isHidden ?? !pillInRail)
 
         // Whether the pill owns focus. Re-resolved after the alpha write below.

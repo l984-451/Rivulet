@@ -105,6 +105,9 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
     @State private var chromeVisible = true
     /// The capsule its close button hid; it still shows with the controls (#556).
     @State private var hiddenAction: String?
+    /// The capsule's window over the video: 5 seconds from when it appears (#556).
+    @State private var capsulePresence = SkipPillPresence()
+    @State private var capsuleHideTask: Task<Void, Never>?
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubValue: Double?
     @State private var ripple: Ripple?
@@ -188,7 +191,8 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 ProgressView().controlSize(.large)
             }
 
-            if let contextualAction, failure == nil, chromeVisible || hiddenAction != contextualAction.title {
+            if let contextualAction, failure == nil,
+               chromeVisible || capsulePresence.isOnScreen || contextualAction.cancel != nil {
                 contextualCapsule(contextualAction)
             }
 
@@ -216,10 +220,21 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
         }
         .onChange(of: failure) { _, failure in
             if failure != nil { chromeVisible = true }
+            syncCapsule()
         }
-        .onChange(of: contextualAction?.title) { _, title in
+        .onChange(of: contextualAction?.title, initial: true) { _, title in
             if title == nil { hiddenAction = nil }
+            capsulePresence.track(title)
+            syncCapsule()
         }
+        .onChange(of: chromeVisible) { _, visible in
+            // Closing the controls shows the capsule again for a fresh window (#556).
+            if !visible { capsulePresence.reveal() }
+            syncCapsule()
+        }
+        .onChange(of: hiddenAction) { _, _ in syncCapsule() }
+        .animation(.easeInOut(duration: 0.25), value: capsulePresence.isOnScreen)
+        .onDisappear { capsuleHideTask?.cancel() }
     }
 
     // MARK: - Layout
@@ -707,6 +722,29 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled, scrubValue == nil else { return }
             chromeVisible = false
+        }
+    }
+
+    /// Times out the capsule's window over the video, counting only while it
+    /// shows there, so its 5 seconds start when it appears (#556). A countdown
+    /// capsule (with Cancel) never hides.
+    private func syncCapsule() {
+        let canAppear = contextualAction.map { failure == nil && !chromeVisible && hiddenAction != $0.title } ?? false
+        capsulePresence.setCanAppear(canAppear)
+        switch capsulePresence.syncTimer() {
+        case .none:
+            break
+        case .stop:
+            capsuleHideTask?.cancel()
+            capsuleHideTask = nil
+        case .start(let window):
+            capsuleHideTask?.cancel()
+            capsuleHideTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(SkipPillPresence.autoHideDelay))
+                guard !Task.isCancelled else { return }
+                capsulePresence.timeOut(window: window, held: false)
+                syncCapsule()
+            }
         }
     }
 

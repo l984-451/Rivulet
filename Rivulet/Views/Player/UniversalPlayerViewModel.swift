@@ -76,6 +76,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         didSet {
             // Focus mode cannot outlive visible controls.
             if !showControls { controlsFocusActive = false }
+            // Closing the controls brings the floating skip pill back for a fresh window (#556).
+            if oldValue && !showControls { revealSkipPill() }
         }
     }
 
@@ -201,9 +203,12 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Skip Marker State
     @Published private(set) var activeMarker: PlexMarker? {
-        didSet { if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
+        didSet {
+            if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false }
+            syncSkipPillPresence()
+        }
     }
-    @Published private(set) var showSkipButton = false
+    @Published private(set) var showSkipButton = false { didSet { syncSkipPillPresence() } }
     /// Menu hid the pill for this marker or this Up Next fold; it still shows in the controls (#556).
     @Published private(set) var skipPillDismissed = false
     private var hasSkippedIntro = false
@@ -213,7 +218,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var hasTriggeredPostVideo = false
     /// Up Next was closed with a next episode waiting: the skip pill stands in for it, labelled "Up Next".
     @Published private(set) var upNextCollapsed = false {
-        didSet { if upNextCollapsed != oldValue { skipPillDismissed = false } }
+        didSet {
+            if upNextCollapsed != oldValue { skipPillDismissed = false }
+            syncSkipPillPresence()
+        }
     }
 
     // MARK: - Auto-Skip Countdown State
@@ -5218,6 +5226,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// per type). The pill shows a live "· N" suffix while this runs.
     private func startSkipCountdown(for marker: PlexMarker) {
         skipCountdownSeconds = skipCountdownDelaySeconds
+        // The pill may have timed out in its preview lead-in; the countdown needs it up.
+        revealSkipPill()
 
         skipCountdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             Task { @MainActor in
@@ -5258,6 +5268,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         cancelSkipCountdownTimer()
         userDeclinedAutoSkip = true  // Don't restart the countdown for this marker
+        // The manual pill stays for a fresh window.
+        revealSkipPill()
     }
 
     /// Handle when playback enters a credits marker range (or preview window)
@@ -5358,6 +5370,55 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// The pill is up: a marker is active, or Up Next is folded into it.
     var showsSkipPill: Bool { showSkipButton || upNextCollapsed }
 
+    // MARK: - Floating skip pill window (#556)
+
+    /// Over the video, the pill goes 5 seconds after it appears if untaken and
+    /// comes back each time the controls close. See `SkipPillPresence`.
+    @Published private(set) var skipPillPresence = SkipPillPresence()
+    private var skipPillHideTask: Task<Void, Never>?
+
+    private var skipPillKey: String? {
+        if upNextCollapsed { return "upNext" }
+        guard showSkipButton, let marker = activeMarker else { return nil }
+        return "\(marker.type ?? "marker")-\(marker.id ?? marker.startTimeOffset ?? 0)"
+    }
+
+    private func syncSkipPillPresence() {
+        skipPillPresence.track(skipPillKey)
+        syncSkipPillTimer()
+    }
+
+    private func revealSkipPill() {
+        skipPillPresence.reveal()
+        syncSkipPillTimer()
+    }
+
+    /// The container reports whether the floating pill could be drawn right
+    /// now. Its 5 seconds count only while it is on screen.
+    func setSkipPillCanAppear(_ canAppear: Bool) {
+        guard skipPillPresence.canAppear != canAppear else { return }
+        skipPillPresence.setCanAppear(canAppear)
+        syncSkipPillTimer()
+    }
+
+    /// Starts, keeps or stops the hide timer to match the pill (`SkipPillPresence.syncTimer`).
+    private func syncSkipPillTimer() {
+        var presence = skipPillPresence
+        let change = presence.syncTimer()
+        guard change != .none else { return }
+        skipPillPresence = presence
+        skipPillHideTask?.cancel()
+        skipPillHideTask = nil
+        guard case .start(let window) = change else { return }
+        skipPillHideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(SkipPillPresence.autoHideDelay))
+            guard !Task.isCancelled, let self else { return }
+            // A running auto-skip countdown holds the pill; count again after it.
+            self.skipPillPresence.timeOut(window: window, held: self.skipCountdownSeconds > 0)
+            self.syncSkipPillTimer()
+        }
+    }
+
     /// Skip to end of current marker (called from UI skip button)
     func skipActiveMarker() async {
         guard let marker = activeMarker else { return }
@@ -5451,6 +5512,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     var skipPillOwnsFocus: Bool {
         showsSkipPill
             && !skipPillDismissed
+            && skipPillPresence.isShowing
             && !showControls
             && !isScrubbing
             && postVideoState == .hidden

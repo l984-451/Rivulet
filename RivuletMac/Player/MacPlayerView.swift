@@ -18,6 +18,9 @@ struct MacPlayerView: View {
     @State private var overControls = false
     /// The capsule its Hide button dismissed; it still shows with the controls.
     @State private var hiddenAction: String?
+    /// The capsule's window over the video: 5 seconds from when it appears (#556).
+    @State private var capsulePresence = SkipPillPresence()
+    @State private var capsuleHideTask: Task<Void, Never>?
     @State private var hideTask: Task<Void, Never>?
     @State private var scrubValue: Double?
     @State private var pointerLocation: CGPoint?
@@ -82,10 +85,23 @@ struct MacPlayerView: View {
             if !playing { chromeVisible = true }
             scheduleHide()
         }
-        .onChange(of: failure) { _, failure in if failure != nil { chromeVisible = true } }
-        .onChange(of: contextualAction?.title) { _, title in
-            if title == nil { hiddenAction = nil }
+        .onChange(of: failure) { _, failure in
+            if failure != nil { chromeVisible = true }
+            syncCapsule()
         }
+        .onChange(of: contextualAction?.title, initial: true) { _, title in
+            if title == nil { hiddenAction = nil }
+            capsulePresence.track(title)
+            syncCapsule()
+        }
+        .onChange(of: chromeVisible) { _, visible in
+            // Closing the controls shows the capsule again for a fresh window (#556).
+            if !visible { capsulePresence.reveal() }
+            syncCapsule()
+        }
+        .onChange(of: hiddenAction) { _, _ in syncCapsule() }
+        .animation(.easeInOut(duration: 0.25), value: capsulePresence.isOnScreen)
+        .onDisappear { capsuleHideTask?.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
         }
@@ -361,7 +377,7 @@ struct MacPlayerView: View {
 
     @ViewBuilder
     private var contextualCapsule: some View {
-        if let item = contextualAction, chromeVisible || hiddenAction != item.title {
+        if let item = contextualAction, chromeVisible || capsulePresence.isOnScreen || item.cancel != nil {
             VStack {
                 Spacer()
                 HStack(spacing: 8) {
@@ -451,6 +467,29 @@ struct MacPlayerView: View {
             guard !Task.isCancelled, scrubValue == nil else { return }
             chromeVisible = false
             NSCursor.setHiddenUntilMouseMoves(true)
+        }
+    }
+
+    /// Times out the capsule's window over the video, counting only while it
+    /// shows there, so its 5 seconds start when it appears (#556). A countdown
+    /// capsule (with Cancel) never hides.
+    private func syncCapsule() {
+        let canAppear = contextualAction.map { failure == nil && !chromeVisible && hiddenAction != $0.title } ?? false
+        capsulePresence.setCanAppear(canAppear)
+        switch capsulePresence.syncTimer() {
+        case .none:
+            break
+        case .stop:
+            capsuleHideTask?.cancel()
+            capsuleHideTask = nil
+        case .start(let window):
+            capsuleHideTask?.cancel()
+            capsuleHideTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(SkipPillPresence.autoHideDelay))
+                guard !Task.isCancelled else { return }
+                capsulePresence.timeOut(window: window, held: false)
+                syncCapsule()
+            }
         }
     }
 

@@ -35,6 +35,26 @@ final class ArtworkTitleCheckTests: XCTestCase {
         XCTAssertFalse(Check.textShowsTitle([Line(text: "IT", height: 0.05)], title: "It"))
     }
 
+    func testArtworkMayDropTheArticleOrTheSubtitle() {
+        XCTAssertTrue(Check.textShowsTitle([Line(text: "MATRIX", height: 0.18)], title: "The Matrix"))
+        XCTAssertTrue(Check.textShowsTitle([Line(text: "AVENGERS", height: 0.25)], title: "Avengers: Infinity War"))
+        XCTAssertTrue(Check.textShowsTitle([Line(text: "MAD MAX", height: 0.2)], title: "Mad Max: Fury Road"))
+        // A short part before the colon is too generic to stand for the title.
+        XCTAssertFalse(Check.textShowsTitle([Line(text: "DUNE", height: 0.2)], title: "Dune: Part Two"))
+        XCTAssertFalse(Check.textShowsTitle([Line(text: "FURY", height: 0.2)], title: "Fury Road: The Wasteland"))
+    }
+
+    func testFourLetterTitleMustReadExactly() {
+        XCTAssertTrue(Check.textShowsTitle([Line(text: "SILO", height: 0.2)], title: "Silo"))
+        XCTAssertFalse(Check.textShowsTitle([Line(text: "SLOTH", height: 0.04), Line(text: "GREED", height: 0.04)], title: "Silo"))
+    }
+
+    func testTitleForms() {
+        XCTAssertEqual(Check.titleForms("The Matrix").map { String($0) }, ["thematrix", "matrix"])
+        XCTAssertEqual(Check.titleForms("Avengers: Infinity War").map { String($0) }, ["avengersinfinitywar", "avengers"])
+        XCTAssertEqual(Check.titleForms("It").map { String($0) }, ["it"])
+    }
+
     func testSubstringDistance() {
         XCTAssertEqual(Check.substringDistance(Array("guy"), in: Array("familyguyshow")), 0)
         XCTAssertEqual(Check.substringDistance(Array("familyguy"), in: Array("amlyguy")), 2)

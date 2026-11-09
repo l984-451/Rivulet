@@ -4108,6 +4108,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         if seconds < 0, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
            Self.systemShowsSubtitlesOnSkipBack() {
             openCaptionWindow(until: base)
+        } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {
+            // Skipped forward past the point: done, even if no tick ever armed the window.
+            endReplayWindow()
         }
         inFlightRelativeSeekTarget = targetTime
         seekGeneration += 1
@@ -4174,6 +4177,13 @@ final class UniversalPlayerViewModel: ObservableObject {
         let window = existing.observing(currentTime: time)
         replayWindow = window
         guard window.shouldRevert(currentTime: time) else { return }
+        endReplayWindow()
+    }
+
+    /// Closes the replay window and turns off the subtitles it turned on (#595).
+    /// For a seek that leaves the window; a manual pick uses `clearReplayWindow`.
+    func endReplayWindow() {
+        guard let window = replayWindow else { return }
         replayWindow = nil
         if window.priorSubtitleTrackId == nil {
             selectSubtitleTrackWithoutSaving(id: nil, reloadsTranscode: false)
@@ -4200,10 +4210,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
-    /// Clears any active replay window without reverting subtitles, wherever
-    /// playback or subtitle state moves out from under it. Internal for
-    /// `UniversalPlayerView`'s `.seekAbsolute` handler.
-    func clearReplayWindow() {
+    /// Clears any active replay window without reverting subtitles: a manual
+    /// pick, teardown, or a new item whose tracks are not the window's.
+    private func clearReplayWindow() {
         replayWindow = nil
     }
 
@@ -4352,7 +4361,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         stopScrubTimer()
         stopWheelScrubbingTimer()
         if isScrubbing {
-            clearReplayWindow()
+            endReplayWindow()
             await seek(to: scrubTime)
             isScrubbing = false
             scrubSpeed = 0
@@ -5442,11 +5451,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             skippedRecapIds.insert(recapId)
         }
 
-        // Marker skip (manual or auto) is a user-initiated seek that bypasses
-        // commitScrub/.seekAbsolute: clear any active replay window so a
-        // stale invocation point can't spuriously revert subtitles later,
-        // disconnected from where playback actually landed post-skip.
-        clearReplayWindow()
+        // A marker skip leaves the replay window like any absolute seek.
+        endReplayWindow()
 
         switch MarkerSkipPolicy.outcome(
             isCredits: marker.isCredits,

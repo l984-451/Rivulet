@@ -9,11 +9,11 @@ import SwiftUI
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.3.0 (125)", [
-            "Search finds every match and adds collections, genres and people",
+            "Improved search to find more matches, genres, and people",
             "Cast and crew on a title open their page, with their movies and shows",
-            "Search for and download subtitles from the player",
-            "Each Plex Home profile now sees its own Watchlist",
-            "A deleted episode now fades out of its show's list",
+            "Subtitle search in the player. Jellyfin and Emby should work (please test)",
+            "Plex home profiles now see their own watchlist",
+            "Added delete option in more long press menus",
         ]),
         ("1.0.7 (87)", [
             "On a Dolby Vision display, Profile 7 FEL keeps most of its enhancement layer",

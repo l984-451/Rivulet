@@ -156,16 +156,14 @@ struct WhatsNewView: View {
 
     static let changelogs: [(version: String, features: [String])] = [
         ("1.3.0 (125)", [
-            "Search finds every match and adds collections, genres and people",
-            "Pick an actor or director in Search to see their movies and shows",
-            "Subtitle search now works on Jellyfin and Emby",
-            "Music plays TrueHD, DTS and other formats Apple's player can't",
-            "Each Plex Home profile now sees its own Watchlist",
-            "A deleted episode now leaves its show or season list right away",
-            "Top Shelf and Siri links open even while a video is playing",
+            "Improved search to find more matches, genres, and people",
+            "Subtitle search should work for Jellyfin and Emby (please test)",
+            "Music plays TrueHD, DTS, and other formats",
+            "Plex home profiles now see their own watchlist",
+            "Added delete option in more long press menus",
             "Live TV guide category pills fade at the edges. @rcork",
             "Long-press menus scroll when they're taller than the screen",
-            "The music library title no longer covers the top of the menu",
+            "Music library title no longer covers top of menu",
         ]),
         ("1.2.0 (124)", [
             "> Thank you to everyone who sent a PR!",

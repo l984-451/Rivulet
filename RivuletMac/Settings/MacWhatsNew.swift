@@ -9,11 +9,10 @@ import SwiftUI
 enum MacChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.3.0 (125)", [
-            "Search finds every match and adds collections, genres and people",
-            "Pick an actor or director in Search to see their movies and shows",
-            "Search for and download subtitles from the player",
-            "Each Plex Home profile now sees its own Watchlist",
-            "A deleted episode now fades out of its show's list",
+            "Improved search to find more matches, genres, and people",
+            "Subtitle search in the player. Jellyfin and Emby should work (please test)",
+            "Plex home profiles now see their own watchlist",
+            "Added delete option in more long press menus",
         ]),
         ("1.0.0 (1)", [
             "Rivulet now has a native Mac app",

@@ -5,22 +5,29 @@
 //  PhotoMapViewController.swift
 //  Rivulet
 //
-//  A library's located photos as a list of places over a map. The remote drives
-//  the list: focus moves the map to a place, Select opens its photos. The map
-//  itself takes no input (tvOS cannot focus or select annotations).
+//  A library's located photos as a list of places over a map. Focus on a row moves
+//  the map to that place, Select opens its photos. Right moves onto the map, which
+//  then pans and zooms; Select there opens the photos in view, Menu goes back to the list.
 //
 
 import MapKit
 import UIKit
 
 final class PhotoMapViewController: UIViewController {
+    private nonisolated enum Row: Hashable, Sendable {
+        case all
+        case place(PhotoPlace.ID)
+    }
+
     private static let panelWidth: CGFloat = 720
     /// About 2 km, so a place with one photo isn't framed down to a street.
     private static let minimumSpanMeters: Double = 2000
 
     private let provider: any PhotoProvider
     private let library: MediaLibrary
-    private let mapView = MKMapView()
+    private let mapView = PhotoMapView()
+    /// The map area right of the list, leading Right from a row onto the map.
+    private let mapGuide = UIFocusGuide()
     private let panel = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
     private lazy var dataSource = makeDataSource()
@@ -52,9 +59,13 @@ final class PhotoMapViewController: UIViewController {
         mapView.frame = view.bounds
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mapView.delegate = self
-        mapView.isScrollEnabled = false
-        mapView.isZoomEnabled = false
-        mapView.isUserInteractionEnabled = false
+        setMapInteractive(false)
+        let back = UITapGestureRecognizer(target: self, action: #selector(mapMenuPressed))
+        back.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
+        mapView.addGestureRecognizer(back)
+        let select = UITapGestureRecognizer(target: self, action: #selector(mapSelectPressed))
+        select.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+        mapView.addGestureRecognizer(select)
         mapView.register(PhotoMapAnnotationView.self, forAnnotationViewWithReuseIdentifier: PhotoMapAnnotationView.reuseID)
         mapView.register(PhotoMapClusterView.self, forAnnotationViewWithReuseIdentifier: PhotoMapClusterView.reuseID)
         view.addSubview(mapView)
@@ -69,6 +80,15 @@ final class PhotoMapViewController: UIViewController {
         collectionView.delegate = self
         panel.contentView.addSubview(collectionView)
         view.addSubview(loadingAnchor)
+
+        view.addLayoutGuide(mapGuide)
+        mapGuide.preferredFocusEnvironments = [mapView]
+        NSLayoutConstraint.activate([
+            mapGuide.leadingAnchor.constraint(equalTo: panel.trailingAnchor),
+            mapGuide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            mapGuide.topAnchor.constraint(equalTo: view.topAnchor),
+            mapGuide.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
 
         let loader = PhotoMapLoader(provider: provider, library: library)
         loadTask = Task { [weak self] in
@@ -105,9 +125,9 @@ final class PhotoMapViewController: UIViewController {
         places = PhotoMapLoader.places(located)
         mapView.addAnnotations(items.map(PhotoMapAnnotation.init))
 
-        var snapshot = NSDiffableDataSourceSnapshot<Int, PhotoPlace.ID>()
+        var snapshot = NSDiffableDataSourceSnapshot<Int, Row>()
         snapshot.appendSections([0])
-        snapshot.appendItems(places.map(\.id))
+        snapshot.appendItems([Row.all] + places.map { Row.place($0.id) })
         let existing = dataSource.snapshot().itemIdentifiers
         snapshot.reconfigureItems(existing.filter { snapshot.indexOfItem($0) != nil })
         dataSource.apply(snapshot, animatingDifferences: false)
@@ -134,8 +154,8 @@ final class PhotoMapViewController: UIViewController {
                       let name = await PhotoPlaceNames.shared.queuedName(for: coordinate) else { continue }
                 self.names[place.id] = name
                 var snapshot = self.dataSource.snapshot()
-                guard snapshot.indexOfItem(place.id) != nil else { continue }
-                snapshot.reconfigureItems([place.id])
+                guard snapshot.indexOfItem(.place(place.id)) != nil else { continue }
+                snapshot.reconfigureItems([.place(place.id)])
                 await self.dataSource.apply(snapshot, animatingDifferences: false)
             }
             self?.namingTask = nil
@@ -148,6 +168,14 @@ final class PhotoMapViewController: UIViewController {
 
     private func place(_ id: PhotoPlace.ID) -> PhotoPlace? {
         places.first { $0.id == id }
+    }
+
+    /// Frames every place, or one.
+    private func show(_ row: Row, animated: Bool) {
+        switch row {
+        case .all: show(located, animated: animated)
+        case .place(let id): if let place = place(id) { show(place.photos, animated: animated) }
+        }
     }
 
     /// Frames these photos in the map area right of the list.
@@ -165,13 +193,59 @@ final class PhotoMapViewController: UIViewController {
         mapView.setVisibleMapRect(rect, edgePadding: padding, animated: animated)
     }
 
-    private func open(_ place: PhotoPlace) {
-        let items = place.photos
+    private func open(_ row: Row) {
+        switch row {
+        case .all: open(located, title: String(localized: "All"))
+        case .place(let id): if let place = place(id) { open(place.photos, title: name(of: place)) }
+        }
+    }
+
+    private func open(_ photos: [PhotoItem], title: String) {
+        let items = photos.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
         let provider = provider, library = library
         let listing = PhotoListing(folder: nil, source: { (FixedPhotoProvider(items: items, server: provider), library) })
-        let grid = PhotoGridViewController(title: name(of: place), listing: listing)
+        let grid = PhotoGridViewController(title: title, listing: listing)
         grid.modalPresentationStyle = .fullScreen
         present(grid, animated: true)
+    }
+
+    // MARK: - Map
+
+    /// The map takes the remote only while it holds focus; the list leaves it where the user put it.
+    private func setMapInteractive(_ interactive: Bool) {
+        mapView.isScrollEnabled = interactive
+        mapView.isZoomEnabled = interactive
+    }
+
+    private var mapHasFocus: Bool {
+        (UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView)?.isDescendant(of: mapView) == true
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let onMap = (context.nextFocusedView?.isDescendant(of: mapView)) == true
+        setMapInteractive(onMap)
+        if onMap { followsFocus = true }
+    }
+
+    /// Menu on the map goes back to the list, on the row last focused. Only reached while the map holds focus.
+    @objc private func mapMenuPressed() {
+        guard mapHasFocus else { return }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    /// Select on the map opens the photos in view right of the list; nothing when there are none.
+    @objc private func mapSelectPressed() {
+        guard mapHasFocus else { return }
+        let area = view.bounds.inset(by: UIEdgeInsets(top: 0, left: Self.panelWidth, bottom: 0, right: 0))
+        let inView = located.filter { photo in
+            guard let point = photo.coordinate else { return false }
+            let coordinate = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+            return area.contains(mapView.convert(coordinate, toPointTo: view))
+        }
+        guard !inView.isEmpty else { return }
+        open(inView, title: String(localized: "Photos in View"))
     }
 
     // MARK: - List
@@ -186,10 +260,17 @@ final class PhotoMapViewController: UIViewController {
         return UICollectionViewCompositionalLayout(section: section)
     }
 
-    private func makeDataSource() -> UICollectionViewDiffableDataSource<Int, PhotoPlace.ID> {
-        let registration = UICollectionView.CellRegistration<PhotoPlaceCell, PhotoPlace.ID> { [weak self] cell, _, id in
-            guard let self, let place = self.place(id) else { return }
-            cell.configure(name: self.name(of: place), count: place.photos.count, thumbnail: place.photos[0].thumbnail)
+    private func makeDataSource() -> UICollectionViewDiffableDataSource<Int, Row> {
+        let registration = UICollectionView.CellRegistration<PhotoPlaceCell, Row> { [weak self] cell, _, row in
+            guard let self else { return }
+            switch row {
+            case .all:
+                cell.configure(name: String(localized: "All"), count: self.located.count,
+                               thumbnail: self.places.first?.photos[0].thumbnail)
+            case .place(let id):
+                guard let place = self.place(id) else { return }
+                cell.configure(name: self.name(of: place), count: place.photos.count, thumbnail: place.photos[0].thumbnail)
+            }
         }
         return UICollectionViewDiffableDataSource(collectionView: collectionView) { collectionView, indexPath, id in
             collectionView.dequeueConfiguredReusableCell(using: registration, for: indexPath, item: id)
@@ -203,14 +284,14 @@ extension PhotoMapViewController: UICollectionViewDelegate {
                         with coordinator: UIFocusAnimationCoordinator) {
         // Only a move between rows: the first landing (open, or back from a place) keeps the map where it is.
         guard context.previouslyFocusedIndexPath != nil, let next = context.nextFocusedIndexPath,
-              let id = dataSource.itemIdentifier(for: next), let place = place(id) else { return }
+              let row = dataSource.itemIdentifier(for: next) else { return }
         followsFocus = true
-        show(place.photos, animated: true)
+        show(row, animated: true)
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard let id = dataSource.itemIdentifier(for: indexPath), let place = place(id) else { return }
-        open(place)
+        guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
+        open(row)
     }
 }
 
@@ -229,6 +310,11 @@ extension PhotoMapViewController: MKMapViewDelegate {
 }
 
 /// A place in the list: its newest photo, its name and how many photos.
+/// Focusable so Right from the list can reach it; it pans and zooms only while focused.
+private final class PhotoMapView: MKMapView {
+    override var canBecomeFocused: Bool { true }
+}
+
 private final class PhotoPlaceCell: UICollectionViewCell {
     static let height: CGFloat = 132
     private static let thumbSide: CGFloat = 108

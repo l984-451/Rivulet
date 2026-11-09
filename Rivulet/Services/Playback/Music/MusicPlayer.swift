@@ -5,8 +5,8 @@
 //  MusicPlayer.swift
 //  Rivulet
 //
-//  Audio-only player using AVQueuePlayer for music playback.
-//  Handles gapless transitions, sweet fades, and audio session.
+//  Audio-only player for music: AVQueuePlayer, or the engine for codecs
+//  AVPlayer cannot decode (#544). Handles sweet fades and audio session.
 //
 
 import Foundation
@@ -22,8 +22,8 @@ enum MusicPlayerState: Equatable {
     case ended
 }
 
-/// Audio-only player backed by AVQueuePlayer.
-/// Handles gapless playback, volume fading, and audio session management.
+/// Audio-only player backed by AVQueuePlayer, or by `MusicEngineTrack` for a track
+/// whose codec AVPlayer cannot decode. Handles volume fading and audio session management.
 @MainActor
 final class MusicPlayer: ObservableObject {
 
@@ -43,18 +43,27 @@ final class MusicPlayer: ObservableObject {
     private var didPlayToEndObserver: NSObjectProtocol?
     private var fadeTimer: Timer?
     private var seekTarget: TimeInterval?
+    private let engineTrack = MusicEngineTrack()
+    private var usesEngine = false
 
     /// Sweet fade duration for pause/resume
     private let sweetFadeDuration: TimeInterval = 0.3
 
     // MARK: - Initialization
 
-    init() {}
+    init() {
+        engineTrack.onState = { [weak self] in self?.state = $0 }
+        engineTrack.onDuration = { [weak self] in self?.duration = $0 }
+        engineTrack.onTime = { [weak self] time in
+            // A seek in flight still reports the position it left.
+            if let self, self.seekTarget == nil { self.currentTime = time }
+        }
+    }
 
     // MARK: - Playback Controls
 
-    /// Load and play an audio URL
-    func load(url: URL, headers: [String: String]) {
+    /// Load and play an audio URL. `useEngine` sends it to AetherEngine, for codecs AVPlayer cannot decode.
+    func load(url: URL, headers: [String: String], useEngine: Bool = false) {
         cleanUp()
 
         // Configure audio session
@@ -62,6 +71,8 @@ final class MusicPlayer: ObservableObject {
             mode: .default,
             owner: "MusicPlayer"
         )
+
+        if useEngine { return loadEngine(url: url, headers: headers) }
 
         // Create asset with headers
         let assetOptions: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": headers]
@@ -87,7 +98,9 @@ final class MusicPlayer: ObservableObject {
                     self.player?.play()
                 case .failed:
                     print("🎵 MusicPlayer: Item failed: \(item.error?.localizedDescription ?? "unknown")")
-                    self.state = .idle
+                    // A codec not on the engine list that AVPlayer still refused: the engine may play it.
+                    self.cleanUp()
+                    self.loadEngine(url: url, headers: headers)
                 default:
                     break
                 }
@@ -124,6 +137,12 @@ final class MusicPlayer: ObservableObject {
         }
     }
 
+    private func loadEngine(url: URL, headers: [String: String]) {
+        usesEngine = true
+        state = .loading
+        engineTrack.load(url: url, headers: headers) { [weak self] in self?.state = .idle }
+    }
+
     /// Prepare the next track for gapless playback
     func prepareNext(url: URL, headers: [String: String]) {
         let assetOptions: [String: Any] = ["AVURLAssetHTTPHeaderFieldsKey": headers]
@@ -138,22 +157,21 @@ final class MusicPlayer: ObservableObject {
     }
 
     func play() {
-        guard let player else { return }
+        guard usesEngine || player != nil else { return }
         // Sweet fade in
-        player.volume = 0
-        player.play()
+        outputVolume = 0
+        if usesEngine { engineTrack.play() } else { player?.play() }
         state = .playing
         fadeVolume(to: 1.0)
     }
 
     func pause() {
-        guard let player else { return }
+        guard usesEngine || player != nil else { return }
         // Sweet fade out then pause
         fadeVolume(to: 0) { [weak self] in
-            player.pause()
-            Task { @MainActor [weak self] in
-                self?.state = .paused
-            }
+            guard let self else { return }
+            if self.usesEngine { self.engineTrack.pause() } else { self.player?.pause() }
+            self.state = .paused
         }
     }
 
@@ -164,6 +182,14 @@ final class MusicPlayer: ObservableObject {
     }
 
     func seek(to time: TimeInterval) {
+        if usesEngine {
+            seekTarget = time
+            Task {
+                await engineTrack.seek(to: time)
+                if seekTarget == time { seekTarget = nil }
+            }
+            return
+        }
         guard let player else { return }
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
         seekTarget = time
@@ -179,34 +205,38 @@ final class MusicPlayer: ObservableObject {
     var playbackTime: TimeInterval {
         // A seek in flight still reports the position it left.
         if let seekTarget { return seekTarget }
+        if usesEngine { return engineTrack.currentTime }
         guard let seconds = player?.currentTime().seconds, seconds.isFinite else { return currentTime }
         return seconds
     }
 
     // MARK: - Volume Fading
 
+    private var outputVolume: Float {
+        get { usesEngine ? engineTrack.volume : player?.volume ?? 1 }
+        set { if usesEngine { engineTrack.volume = newValue } else { player?.volume = newValue } }
+    }
+
     private func fadeVolume(to target: Float, completion: (() -> Void)? = nil) {
         fadeTimer?.invalidate()
 
-        guard let player else {
-            completion?()
-            return
-        }
-
-        let startVolume = player.volume
+        let startVolume = outputVolume
         let steps = 15
         let stepDuration = sweetFadeDuration / Double(steps)
         let volumeStep = (target - startVolume) / Float(steps)
         var currentStep = 0
 
-        fadeTimer = Timer.scheduledTimer(withTimeInterval: stepDuration, repeats: true) { [weak player] timer in
-            currentStep += 1
-            if currentStep >= steps {
-                player?.volume = target
-                timer.invalidate()
-                completion?()
-            } else {
-                player?.volume = startVolume + volumeStep * Float(currentStep)
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: stepDuration, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { return timer.invalidate() }
+                currentStep += 1
+                if currentStep >= steps {
+                    self.outputVolume = target
+                    timer.invalidate()
+                    completion?()
+                } else {
+                    self.outputVolume = startVolume + volumeStep * Float(currentStep)
+                }
             }
         }
     }
@@ -230,6 +260,8 @@ final class MusicPlayer: ObservableObject {
         }
         didPlayToEndObserver = nil
 
+        engineTrack.stop()
+        usesEngine = false
         player?.removeAllItems()
         player = nil
         currentItem = nil

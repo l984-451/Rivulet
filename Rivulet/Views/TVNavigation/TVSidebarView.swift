@@ -85,11 +85,6 @@ struct TVSidebarView: View {
                                              otherServerUsers: AccountName.otherServerUsers)
     }
 
-    private var isMusicLibrarySelected: Bool {
-        guard case .library(let key) = selectedTab else { return false }
-        return dataStore.libraries.first(where: { $0.key == key })?.isMusicLibrary ?? false
-    }
-
     /// The collapsed pill sits top-left, over the guide's info bar, which puts
     /// it on top of the focused programme's poster. Hide it here rather than
     /// pushing the whole guide down to clear it.
@@ -169,7 +164,7 @@ struct TVSidebarView: View {
         RootShellHost(
             selection: tabSelection,
             interactionBlocked: nestedNavState.isNested || nestedNavState.isSettingsSubPage,
-            pillSuppressed: isMusicLibrarySelected || isLiveTVSelected || isSearchSelected,
+            pillSuppressed: isLiveTVSelected || isSearchSelected,
             collapseRequest: sidebarCollapseRequest,
             profilePanelOpen: showProfileSwitcher,
             profileRowRequest: sidebarProfileRowRequest,

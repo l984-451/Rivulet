@@ -74,6 +74,30 @@ nonisolated struct PlexProfileSession: Codable, Equatable {
         }
     }
 
+    /// The token plex.tv-account content (Watchlist, favourite channels) uses: the
+    /// account's while it is the profile in use, else that profile's own switched
+    /// token, else none. Never the account's token for another profile.
+    static func accountContentToken(accountToken: String?, contentUserID: Int,
+                                    contentUnlocked: Bool, profileToken: String?) -> String? {
+        guard contentUnlocked, let accountToken else { return nil }
+        return contentUserID == 0 ? accountToken : profileToken
+    }
+
+    private static let profileTokenPrefix = "plexProfilePlexToken_"
+
+    /// A Home profile's own plex.tv token, from its profile switch. Keychain only.
+    @MainActor static func profilePlexToken(userID: Int) -> String? {
+        KeychainHelper.get(profileTokenPrefix + String(userID))
+    }
+
+    @MainActor static func saveProfilePlexToken(_ token: String, userID: Int) {
+        KeychainHelper.set(token, forKey: profileTokenPrefix + String(userID))
+    }
+
+    @MainActor static func deleteProfilePlexTokens() {
+        KeychainHelper.deleteAll(withPrefix: profileTokenPrefix)
+    }
+
     @MainActor static func load() -> PlexProfileSession? {
         KeychainHelper.get(keychainKey).flatMap { try? JSONDecoder().decode(Self.self, from: Data($0.utf8)) }
     }

@@ -131,6 +131,7 @@ class PlexAuthManager: ObservableObject {
             KeychainHelper.delete(keychainTokenKey)
             KeychainHelper.delete(keychainServerTokenKey)
             PlexProfileSession.delete()
+            PlexProfileSession.deleteProfilePlexTokens()
             KeychainHelper.deleteAllPins()
             state = .idle
             return
@@ -712,6 +713,7 @@ class PlexAuthManager: ObservableObject {
         KeychainHelper.delete(keychainTokenKey)
         KeychainHelper.delete(keychainServerTokenKey)
         PlexProfileSession.delete()
+        PlexProfileSession.deleteProfilePlexTokens()
         PlexCertificateDelegate.forgetCertificateHashes()
 
         // Clear non-sensitive data from UserDefaults
@@ -827,12 +829,13 @@ class PlexAuthManager: ObservableObject {
     /// Signed out of Plex is not a lock: `storedContent` reads `.withheld` with no account token.
     var relocksOnLaunch: Bool { authToken != nil && storedContent == .withheld }
 
-    /// The account token for account-level content (Watchlist, favourite channels),
-    /// only while the account itself is the profile in use.
+    /// The plex.tv token for account-level content (Watchlist, favourite channels):
+    /// the account's own, or the profile in use's own switched token.
     var accountContentToken: String? {
-        guard selectedServerToken != nil,
-              userDefaults.integer(forKey: PlexProfileSession.contentUserIDKey) == 0 else { return nil }
-        return authToken
+        let id = contentOwnerID
+        return PlexProfileSession.accountContentToken(
+            accountToken: authToken, contentUserID: id, contentUnlocked: selectedServerToken != nil,
+            profileToken: id == 0 ? nil : PlexProfileSession.profilePlexToken(userID: id))
     }
 
     /// Whether a Home user is the signed-in account itself, not another profile in its Home.
@@ -854,9 +857,10 @@ class PlexAuthManager: ObservableObject {
 
     /// Installs a Home profile's server token. Returns true when content now
     /// belongs to a different user than the one it was loaded and cached for.
-    func enterProfile(_ user: PlexHomeUser, serverToken: String, usedPin: Bool) -> Bool {
+    func enterProfile(_ user: PlexHomeUser, serverToken: String, plexToken: String, usedPin: Bool) -> Bool {
         guard let authToken else { return false }
         let isAccount = isAccount(user)
+        if !isAccount { PlexProfileSession.saveProfilePlexToken(plexToken, userID: user.id) }
         let access = PlexProfileSession.access(isAccount: isAccount, usedPin: usedPin, serverToken: serverToken)
         PlexProfileSession(userID: user.id, accountToken: authToken, access: access).save()
         if selectedServerToken != serverToken { selectedServerToken = serverToken }

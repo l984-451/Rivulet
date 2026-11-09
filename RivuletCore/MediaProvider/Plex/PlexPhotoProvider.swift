@@ -141,6 +141,16 @@ extension PlexProvider: PhotoProvider {
         }
     }
 
+    /// EXIF comes on the item request only, laid over what the list gave.
+    func photoDetails(for item: PhotoItem) async throws -> PhotoDetails? {
+        guard item.kind == .photo else { return item.details }
+        return try await plexCall {
+            let meta = try await networkManager.getMetadata(serverURL: serverURL, authToken: authToken,
+                                                            ratingKey: item.ref.itemID)
+            return PlexPhotoMapper.details(meta).merged(over: item.details)
+        }
+    }
+
     /// One level: its albums once (type 14), then its photos and clips (types 13, 12), paged.
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         try await plexCall {

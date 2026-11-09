@@ -23,4 +23,11 @@ protocol PhotoProvider: Sendable {
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage
     /// Marks or clears one photo or clip as a favorite.
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
+    /// A photo's details as complete as the server has them, which may take a request of its own.
+    func photoDetails(for item: PhotoItem) async throws -> PhotoDetails?
+}
+
+extension PhotoProvider {
+    /// The list already carries everything (Jellyfin, Emby).
+    func photoDetails(for item: PhotoItem) async throws -> PhotoDetails? { item.details }
 }

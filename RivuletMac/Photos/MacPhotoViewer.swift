@@ -2,10 +2,12 @@
 // Copyright (C) 2026 Bain Gurley
 
 import AppKit
+import MapKit
 import SwiftUI
 
 /// Full-window photo viewer over a grid's listing. Arrows page, Space runs a slideshow (the Photos
-/// settings: interval, transition, clips; wraps once every page is loaded), Escape closes, pinch zooms.
+/// settings: interval, transition, clips; wraps once every page is loaded), Command-I shows info, Escape closes,
+/// pinch zooms.
 struct MacPhotoViewer: View {
     @ObservedObject var model: PhotoListingModel
     let onClose: () -> Void
@@ -21,6 +23,7 @@ struct MacPhotoViewer: View {
     @State private var drag: CGSize = .zero
     @FocusState private var focused: Bool
     @State private var awake: NSObjectProtocol?
+    @State private var showsInfo = false
 
     init(model: PhotoListingModel, start: PhotoItem, running: Bool = false, onClose: @escaping () -> Void) {
         self.model = model
@@ -50,6 +53,13 @@ struct MacPhotoViewer: View {
             }
             controls
         }
+        .inspector(isPresented: $showsInfo) {
+            if let item {
+                MacPhotoInfo(item: item, provider: model.listing.source()?.provider) { model.toggleFavorite(item) }
+                    .inspectorColumnWidth(min: 260, ideal: 300)
+            }
+        }
+        .onChange(of: showsInfo) { _, open in if open { slideshow = false } }
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -107,6 +117,9 @@ struct MacPhotoViewer: View {
                 Spacer()
                 if let item { Text(verbatim: item.title).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
                 Spacer()
+                Button { showsInfo.toggle() } label: { Image(systemName: "info.circle") }
+                    .keyboardShortcut("i", modifiers: .command)
+                    .help("Info")
                 if let item {
                     Button { model.toggleFavorite(item) } label: { Image(systemName: item.isFavorite ? "heart.circle.fill" : "heart.circle") }
                         .help(item.isFavorite ? Text("Unfavorite") : Text("Favorite"))
@@ -197,6 +210,56 @@ private struct MacPhotoPage: View {
             guard let url = item.full ?? item.thumbnail,
                   let loaded = await MacArtworkCache.shared.image(for: url), !Task.isCancelled else { return }
             image = loaded
+        }
+    }
+}
+
+/// The inspector: the photo's lines, a map when it has a place, and Favorite.
+private struct MacPhotoInfo: View {
+    let item: PhotoItem
+    let provider: (any PhotoProvider)?
+    let onFavorite: () -> Void
+    /// Fetched details, used only while they belong to the photo on show.
+    @State private var loaded: (ref: MediaItemRef, details: PhotoDetails?)?
+
+    private var lines: [String] {
+        var shown = PhotoDetailsCache.known(item)
+        if let loaded, loaded.ref == item.ref { shown.details = loaded.details }
+        return PhotoInfoLines.lines(for: shown)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    Text(verbatim: line).font(index == 0 ? .headline : .body)
+                        .foregroundStyle(index == 0 ? .primary : .secondary)
+                        .textSelection(.enabled)
+                }
+                if let point = item.coordinate {
+                    let center = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+                    Map(initialPosition: .region(MKCoordinateRegion(center: center, latitudinalMeters: 2000,
+                                                                    longitudinalMeters: 2000))) {
+                        Marker(item.title, coordinate: center)
+                    }
+                    .frame(height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .id(item.ref)
+                }
+                Button(action: onFavorite) {
+                    Label(item.isFavorite ? "Unfavorite" : "Favorite",
+                          systemImage: item.isFavorite ? "heart.fill" : "heart")
+                }
+                .padding(.top, 8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .task(id: item.ref) {
+            guard let provider else { return }
+            let full = await PhotoDetailsCache.load(item, provider: provider)
+            guard !Task.isCancelled else { return }
+            loaded = (full.ref, full.details)
         }
     }
 }

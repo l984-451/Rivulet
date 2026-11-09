@@ -6,8 +6,9 @@
 //  Rivulet
 //
 //  One photo full screen. Left and Right page, Select or Play/Pause runs a
-//  slideshow, Select on a clip plays it, Menu closes. The slideshow reads its
-//  interval, transition and clips from `PhotoPreferences` at every slide.
+//  slideshow, Select on a clip plays it, Down opens the info pane, Menu closes.
+//  The slideshow reads its interval, transition and clips from `PhotoPreferences`
+//  at every slide.
 //
 
 import UIKit
@@ -44,6 +45,12 @@ final class PhotoViewerViewController: UIViewController {
     private var overlayHide: DispatchWorkItem?
     /// Set only while this viewer is what turned the idle timer off.
     private var holdsDisplayAwake = false
+    /// Over the bottom third while open; its Favorite button then holds focus.
+    private let infoPane = PhotoInfoPaneView()
+    private var paneOpen = false
+    private var detailsTask: Task<Void, Never>?
+    /// Select and Play/Pause stand down while the pane is open, so Select reaches its button.
+    private var paneBlockedTaps: [UITapGestureRecognizer] = []
 
     init(listing: PhotoListing, index: Int, startsSlideshow: Bool = false) {
         self.listing = listing
@@ -97,17 +104,30 @@ final class PhotoViewerViewController: UIViewController {
         ])
         view.addSubview(anchor)
 
+        infoPane.isHidden = true
+        infoPane.alpha = 0
+        infoPane.onFavorite = { [weak self] in self?.toggleFavorite() }
+        infoPane.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(infoPane)
+        NSLayoutConstraint.activate([
+            infoPane.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            infoPane.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            infoPane.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            infoPane.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 1.0 / 3)
+        ])
+
         // The swipes stand down while a clip's player is up over the viewer.
         input = DirectionalInputBinding(
-            view: view, directions: [.left, .right],
-            onTap: { [weak self] in self?.step($0 == .right ? 1 : -1) },
+            view: view, directions: [.left, .right, .up, .down],
+            onTap: { [weak self] in self?.directionPressed($0) },
             swipeGate: { [weak self] _ in self?.presentedViewController == nil })
         for (press, action) in [(UIPress.PressType.select, #selector(selectPressed)),
                                 (.playPause, #selector(toggleSlideshow)),
-                                (.menu, #selector(close))] {
+                                (.menu, #selector(menuPressed))] {
             let tap = UITapGestureRecognizer(target: self, action: action)
             tap.allowedPressTypes = [NSNumber(value: press.rawValue)]
             view.addGestureRecognizer(tap)
+            if press != .menu { paneBlockedTaps.append(tap) }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(stopSlideshow),
                                                name: UIApplication.willResignActiveNotification, object: nil)
@@ -120,7 +140,9 @@ final class PhotoViewerViewController: UIViewController {
         if !playingShowClip { stopSlideshow() }
     }
 
-    override var preferredFocusEnvironments: [UIFocusEnvironment] { [anchor] }
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        paneOpen ? [infoPane.favoriteButton] : [anchor]
+    }
 
     // MARK: - Showing a photo
 
@@ -147,6 +169,7 @@ final class PhotoViewerViewController: UIViewController {
         Task { await cache.prefetch(urls: ahead, quality: .full) }
         if newIndex >= listing.media.count - 5 { listing.loadMore() }
         updateCaption(item)
+        if paneOpen { updatePane() }
     }
 
     private func setImage(_ image: UIImage?, dissolve: TimeInterval) {
@@ -167,7 +190,7 @@ final class PhotoViewerViewController: UIViewController {
                              .foregroundColor: UIColor(white: 1, alpha: 0.7)]))
         }
         caption.attributedText = text
-        guard !isRunning else { caption.alpha = 0; return }
+        guard !isRunning, !paneOpen else { caption.alpha = 0; return }
         UIView.animate(withDuration: Self.stepDissolve) { self.caption.alpha = 1 }
         let hide = DispatchWorkItem { [weak self] in
             UIView.animate(withDuration: 0.5) { self?.caption.alpha = 0 }
@@ -177,6 +200,19 @@ final class PhotoViewerViewController: UIViewController {
     }
 
     // MARK: - Input
+
+    private func directionPressed(_ direction: DirectionalInputBinding.Direction) {
+        switch direction {
+        case .left: step(-1)
+        case .right: step(1)
+        case .down: openPane()
+        case .up: closePane()
+        }
+    }
+
+    @objc private func menuPressed() {
+        paneOpen ? closePane() : close()
+    }
 
     private func step(_ direction: Int) {
         guard let next = PhotoViewerIndex.step(from: index, by: direction, count: listing.media.count,
@@ -197,6 +233,67 @@ final class PhotoViewerViewController: UIViewController {
         stopSlideshow()
         onClose?(index)
         dismiss(animated: true) { [onDismissed] in onDismissed?() }
+    }
+
+    // MARK: - Info pane
+
+    private func openPane() {
+        guard !paneOpen, listing.media.indices.contains(index) else { return }
+        stopSlideshow()
+        paneOpen = true
+        overlayHide?.cancel()
+        paneBlockedTaps.forEach { $0.isEnabled = false }
+        updatePane()
+        infoPane.isHidden = false
+        UIView.animate(withDuration: Self.stepDissolve) {
+            self.infoPane.alpha = 1
+            self.caption.alpha = 0
+        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        // Hidden, the anchor leaves the button with no neighbour, so every arrow reaches the binding.
+        anchor.isHidden = true
+    }
+
+    private func closePane() {
+        guard paneOpen else { return }
+        paneOpen = false
+        detailsTask?.cancel()
+        paneBlockedTaps.forEach { $0.isEnabled = true }
+        anchor.isHidden = false
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        UIView.animate(withDuration: Self.stepDissolve) {
+            self.infoPane.alpha = 0
+        } completion: { _ in
+            if !self.paneOpen { self.infoPane.isHidden = true }
+        }
+    }
+
+    /// The listed lines at once, then the server's full details when they arrive.
+    private func updatePane() {
+        guard listing.media.indices.contains(index) else { return }
+        let shown = index, item = listing.media[shown]
+        infoPane.show(PhotoDetailsCache.known(item))
+        detailsTask?.cancel()
+        guard let provider = listing.source()?.provider else { return }
+        detailsTask = Task { [weak self] in
+            _ = await PhotoDetailsCache.load(item, provider: provider)
+            guard let self, !Task.isCancelled, paneOpen, index == shown,
+                  listing.media.indices.contains(shown) else { return }
+            infoPane.show(PhotoDetailsCache.known(listing.media[shown]))
+        }
+    }
+
+    private func toggleFavorite() {
+        guard listing.media.indices.contains(index) else { return }
+        let task = listing.setFavorite(!listing.media[index].isFavorite, at: index)
+        updatePane()
+        // A refused write is put back once it settles.
+        Task { [weak self] in
+            await task?.value
+            if let self, paneOpen { updatePane() }
+        }
     }
 
     // MARK: - Slideshow

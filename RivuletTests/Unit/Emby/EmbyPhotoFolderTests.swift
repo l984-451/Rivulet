@@ -128,6 +128,12 @@ final class EmbyPhotoFolderTests: XCTestCase {
         XCTAssertEqual(day(try map(Fixtures.rootMedia)?.date), DateComponents(year: 2025, month: 12, day: 9))
     }
 
+    func test_takenClock_isTheCamerasWithEXIF_elseAnInstant() throws {
+        XCTAssertEqual(try map(Fixtures.rootMedia)?.details?.takenAtClock, .wallClock)
+        XCTAssertEqual(try map(Fixtures.rootMedia, at: 2)?.details?.takenAtClock, .instant)
+        XCTAssertEqual(try map(Fixtures.rootMedia, at: 3)?.details?.takenAtClock, .instant)
+    }
+
     func test_dateWithoutEXIF_andForAClip_isAnInstant() throws {
         XCTAssertEqual(try map(Fixtures.rootMedia, at: 2)?.date, EmbyJSON.date("2025-12-05T16:53:00.0000000Z"))
         XCTAssertEqual(try map(Fixtures.rootMedia, at: 3)?.date, EmbyJSON.date("2025-07-16T06:46:37.0000000Z"))

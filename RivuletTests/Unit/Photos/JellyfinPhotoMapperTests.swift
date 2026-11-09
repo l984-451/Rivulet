@@ -86,6 +86,12 @@ final class JellyfinPhotoMapperTests: XCTestCase {
                        DateComponents(year: 2001, month: 1, day: 3), "and west of UTC")
     }
 
+    func test_takenClock_isTheCamerasWithEXIF_elseAnInstant() {
+        XCTAssertEqual(map(Self.photo)?.details?.takenAtClock, .wallClock)
+        XCTAssertEqual(map(Self.photoWithoutEXIF)?.details?.takenAtClock, .instant)
+        XCTAssertEqual(map(Self.clip)?.details?.takenAtClock, .instant)
+    }
+
     func test_date_withoutEXIF_andForAClip_isAnInstant() {
         XCTAssertEqual(map(Self.photoWithoutEXIF)?.date, JellyfinMediaMapper.parseDate("2001-04-03T07:42:06.0000000Z"))
         XCTAssertEqual(map(Self.clip)?.date, JellyfinMediaMapper.parseDate("2001-01-17T06:07:11.0000000Z"))

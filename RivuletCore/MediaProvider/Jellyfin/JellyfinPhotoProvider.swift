@@ -55,7 +55,9 @@ enum JellyfinPhotoMapper {
                 focalLength: dto.focalLength,
                 width: dto.width,
                 height: dto.height,
-                fileName: PhotoDetails.fileName(dto.path)))
+                fileName: PhotoDetails.fileName(dto.path),
+                // DateCreated is the camera's clock when EXIF gave a PremiereDate, else the file's instant.
+                takenAtClock: kind == .photo && dto.premiereDate != nil ? .wallClock : .instant))
     }
 
     /// A photo's PremiereDate is the camera's wall clock stamped Z: read its

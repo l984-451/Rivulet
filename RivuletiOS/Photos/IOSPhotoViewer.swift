@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import MapKit
 import SwiftUI
 import UIKit
 
@@ -16,6 +17,7 @@ struct IOSPhotoViewer: View {
     @State private var slideshow = false
     /// Set only while this viewer is what turned the idle timer off.
     @State private var holdsDisplayAwake = false
+    @State private var showsInfo = false
     @Environment(\.scenePhase) private var scenePhase
 
     init(model: PhotoListingModel, start: PhotoItem, running: Bool = false,
@@ -50,6 +52,14 @@ struct IOSPhotoViewer: View {
         .statusBarHidden(!chrome)
         .animation(.easeInOut(duration: 0.2), value: chrome)
         .onChange(of: slideshow) { _, on in setAwake(on) }
+        .onChange(of: showsInfo) { _, open in if open { slideshow = false } }
+        .sheet(isPresented: $showsInfo) {
+            if let current {
+                IOSPhotoInfoSheet(item: current, provider: model.listing.source()?.provider) {
+                    model.toggleFavorite(current)
+                }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in if phase != .active { slideshow = false } }
         .onAppear { if slideshow { setAwake(true) } }
         .onDisappear { slideshow = false; setAwake(false) }
@@ -107,6 +117,13 @@ struct IOSPhotoViewer: View {
             }
             .accessibilityLabel("Close")
             Spacer()
+            if current != nil {
+                Button { showsInfo = true } label: {
+                    Image(systemName: "info").font(.body.weight(.semibold)).padding(12)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .accessibilityLabel("Info")
+            }
             if let current {
                 Button { model.toggleFavorite(current) } label: {
                     Image(systemName: current.isFavorite ? "heart.fill" : "heart").font(.body.weight(.semibold))
@@ -304,6 +321,56 @@ private struct IOSZoomScrollView: UIViewRepresentable {
                 scroll.zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
                                        width: size.width, height: size.height), animated: true)
             }
+        }
+    }
+}
+
+/// The info pane as a sheet: the photo's lines, a map when it has a place, and Favorite.
+private struct IOSPhotoInfoSheet: View {
+    let item: PhotoItem
+    let provider: (any PhotoProvider)?
+    let onFavorite: () -> Void
+    /// Fetched details, used only while they belong to the photo on show.
+    @State private var loaded: (ref: MediaItemRef, details: PhotoDetails?)?
+
+    private var lines: [String] {
+        var shown = PhotoDetailsCache.known(item)
+        if let loaded, loaded.ref == item.ref { shown.details = loaded.details }
+        return PhotoInfoLines.lines(for: shown)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { Text(verbatim: $0.element) }
+                }
+                if let point = item.coordinate {
+                    let center = CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude)
+                    Map(initialPosition: .region(MKCoordinateRegion(center: center, latitudinalMeters: 2000,
+                                                                    longitudinalMeters: 2000))) {
+                        Marker(item.title, coordinate: center)
+                    }
+                    .frame(height: 200)
+                    .listRowInsets(EdgeInsets())
+                }
+                Section {
+                    Button(action: onFavorite) {
+                        Label(item.isFavorite ? "Unfavorite" : "Favorite",
+                              systemImage: item.isFavorite ? "heart.fill" : "heart")
+                    }
+                }
+            }
+            .navigationTitle(Text(verbatim: item.title))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .task(id: item.ref) {
+            guard let provider else { return }
+            let full = await PhotoDetailsCache.load(item, provider: provider)
+            guard !Task.isCancelled else { return }
+            loaded = (full.ref, full.details)
         }
     }
 }

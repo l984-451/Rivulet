@@ -27,6 +27,34 @@ nonisolated struct PhotoDetails: Hashable, Sendable {
     var width: Int?
     var height: Int?
     var fileName: String?
+    /// How `takenAt` reads.
+    enum Clock: Hashable, Sendable {
+        /// A day with no time (Plex).
+        case day
+        /// The camera's clock stamped UTC (Jellyfin and Emby with EXIF).
+        case wallClock
+        /// A real instant (Jellyfin and Emby without EXIF, clips).
+        case instant
+    }
+    var takenAtClock = Clock.day
+
+    /// These details, each gap filled from `listed`.
+    func merged(over listed: PhotoDetails?) -> PhotoDetails {
+        guard let listed else { return self }
+        var merged = self
+        merged.takenAt = takenAt ?? listed.takenAt
+        merged.make = make ?? listed.make
+        merged.model = model ?? listed.model
+        merged.lens = lens ?? listed.lens
+        merged.fNumber = fNumber ?? listed.fNumber
+        merged.exposureSeconds = exposureSeconds ?? listed.exposureSeconds
+        merged.iso = iso ?? listed.iso
+        merged.focalLength = focalLength ?? listed.focalLength
+        merged.width = width ?? listed.width
+        merged.height = height ?? listed.height
+        merged.fileName = fileName ?? listed.fileName
+        return merged
+    }
 
     /// "Apple iPhone Air"; the model alone when it already starts with the make.
     var cameraLine: String? {

@@ -50,7 +50,10 @@ enum EmbyPhotoMapper {
             // Emby sends no EXIF and no coordinates, even when asked.
             details: kind == .folder ? nil : PhotoDetails(
                 takenAt: EmbyJSON.date(dto.dateCreated), width: dto.width, height: dto.height,
-                fileName: PhotoDetails.fileName(dto.path)))
+                fileName: PhotoDetails.fileName(dto.path),
+                // DateCreated is the camera's clock when EXIF gave a PremiereDate, else the file's instant.
+                takenAtClock: kind == .photo && dto.premiereDate.map { !$0.hasPrefix("0001-") } == true
+                    ? .wallClock : .instant))
     }
 
     /// A photo's PremiereDate is the camera's wall clock stamped Z, and DateCreated carries the same

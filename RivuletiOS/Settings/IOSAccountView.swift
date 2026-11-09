@@ -3,6 +3,32 @@
 
 import SwiftUI
 
+enum IOSColorTheme: String, CaseIterable, Identifiable {
+    case system
+    case dark
+    case light
+
+    static let storageKey = "iosColorTheme"
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .system: "System"
+        case .dark: "Dark"
+        case .light: "Light"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .dark: .dark
+        case .light: .light
+        }
+    }
+}
+
 /// The Account sheet behind every tab's avatar: profile, server, settings pages, About.
 struct IOSAccountView: View {
     @EnvironmentObject private var plex: PlexSession
@@ -12,6 +38,7 @@ struct IOSAccountView: View {
     @State private var showingSignIn = false
     @State private var confirmingSignOut = false
     @State private var appIcon = AppIcon.current
+    @AppStorage(IOSColorTheme.storageKey) private var colorThemeRawValue = IOSColorTheme.system.rawValue
     /// Bumped when the sheet shows again, so the server rows re-read their stored accounts.
     @State private var serverRevision = 0
 
@@ -50,6 +77,14 @@ struct IOSAccountView: View {
                     } label: {
                         Label("Downloads", systemImage: "arrow.down.circle")
                     }
+                    Picker(selection: $colorThemeRawValue) {
+                        ForEach(IOSColorTheme.allCases) { theme in
+                            Text(theme.title).tag(theme.rawValue)
+                        }
+                    } label: {
+                        Label("Color Theme", systemImage: "circle.lefthalf.filled")
+                    }
+                    .pickerStyle(.navigationLink)
                     Picker(selection: Binding(get: { appIcon }, set: { appIcon = $0; $0.apply() })) {
                         ForEach(AppIcon.allCases) { Text($0.title).tag($0) }
                     } label: {

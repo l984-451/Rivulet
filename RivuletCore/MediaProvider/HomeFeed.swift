@@ -111,8 +111,9 @@ nonisolated enum HomeFeed {
 
     /// The merged Continue Watching row: one card per title across servers.
     @MainActor
-    static func continueWatchingCards(_ rows: [[MediaItem]], row: ContinueWatchingRow = .shared) -> [ContinueWatchingMerge.Card<MediaItem>] {
-        row.cards(rows, identity: { $0.identity ?? [] }, showKey: { $0.showKey }, watched: { $0.userState.lastViewedAt })
+    static func continueWatchingCards(_ rows: [[MediaItem]], row: ContinueWatchingRow? = nil) -> [ContinueWatchingMerge.Card<MediaItem>] {
+        let row = row ?? .shared
+        return row.cards(rows, identity: { $0.identity ?? [] }, showKey: { $0.showKey }, watched: { $0.userState.lastViewedAt })
     }
 }
 

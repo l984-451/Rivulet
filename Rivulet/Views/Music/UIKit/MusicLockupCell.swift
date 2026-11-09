@@ -54,7 +54,7 @@ final class MusicLockupCell: UICollectionViewCell {
     /// What is showing or loading, so a reconfigure with the same artwork leaves it alone.
     private var artworkURL: URL?
 
-    private var footer: TVLockupHeaderFooterView? { poster.footerView as? TVLockupHeaderFooterView }
+    private var footer: TVLockupHeaderFooterView? { poster.footerView }
 
     override init(frame: CGRect) {
         super.init(frame: frame)

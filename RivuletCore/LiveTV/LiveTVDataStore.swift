@@ -1456,8 +1456,8 @@ class LiveTVDataStore: ObservableObject {
         Self.activeRecording(for: program, in: scheduledRecordings)
     }
 
-    static func activeRecording(for program: UnifiedProgram,
-                                in recordings: [LiveTVScheduledRecording]) -> LiveTVScheduledRecording? {
+    nonisolated static func activeRecording(for program: UnifiedProgram,
+                                          in recordings: [LiveTVScheduledRecording]) -> LiveTVScheduledRecording? {
         recordings.first { ($0.status == .scheduled || $0.status == .recording) && $0.covers(program) }
     }
 

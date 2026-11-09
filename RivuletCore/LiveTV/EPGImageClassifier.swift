@@ -60,10 +60,10 @@ nonisolated final class EPGImageClassifier: @unchecked Sendable {
         if let known = kind(for: url) { return known }
         guard let size = await loadSize(),
               let measured = Self.kind(width: size.width, height: size.height) else { return nil }
-        lock.lock()
-        if classifications.count >= Self.capacity { classifications.removeAll() }
-        classifications[url] = measured
-        lock.unlock()
+        lock.withLock {
+            if classifications.count >= Self.capacity { classifications.removeAll() }
+            classifications[url] = measured
+        }
         return measured
     }
 }

@@ -1,30 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {},
-    " " : {},
-    "%@ Live TV" : {
+    "" : {
+
+    },
+    " " : {
+
+    },
+    "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ Live-TV"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ Ζωντανή τηλεόραση"
+            "value" : "„%@“ wird über iCloud geteilt. Nur von diesem Gerät entfernen oder von allen Geräten?"
           }
         }
       }
     },
-    "%@ Server" : {
+    "%@ + %lld more" : {
       "localizations" : {
-        "de" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@-Server"
+            "state" : "new",
+            "value" : "%1$@ + %2$lld more"
           }
         }
       }
@@ -56,6 +54,7 @@
       }
     },
     "%@ isn’t reachable right now." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -71,6 +70,22 @@
         }
       }
     },
+    "%@ Live TV" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Live-TV"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Ζωντανή τηλεόραση"
+          }
+        }
+      }
+    },
     "%@ of %@" : {
       "localizations" : {
         "de" : {
@@ -79,16 +94,26 @@
             "value" : "%@ von %@"
           }
         },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ από %2$@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ of %2$@"
           }
-        },
-        "el" : {
+        }
+      }
+    },
+    "%@ Server" : {
+      "localizations" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ από %2$@"
+            "value" : "%@-Server"
           }
         }
       }
@@ -101,38 +126,16 @@
             "value" : "%@ bis %@"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ to %2$@"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ έως %2$@"
           }
-        }
-      }
-    },
-    "%@%@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@%@"
-          }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@%2$@"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@%2$@"
+            "value" : "%1$@ to %2$@"
           }
         }
       }
@@ -149,6 +152,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@: απαιτείται PIN"
+          }
+        }
+      }
+    },
+    "%@%@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@%2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@%2$@"
           }
         }
       }
@@ -213,24 +238,6 @@
             }
           }
         },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld channel"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld channels"
-                }
-              }
-            }
-          }
-        },
         "el" : {
           "variations" : {
             "plural" : {
@@ -244,6 +251,24 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld κανάλια"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld channel"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld channels"
                 }
               }
             }
@@ -271,24 +296,6 @@
             }
           }
         },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld episode"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld episodes"
-                }
-              }
-            }
-          }
-        },
         "el" : {
           "variations" : {
             "plural" : {
@@ -306,6 +313,24 @@
               }
             }
           }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld episodes"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -315,54 +340,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Folgen in %lld Staffeln"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%#@episodes@ across %#@seasons@"
-          },
-          "substitutions" : {
-            "episodes" : {
-              "argNum" : 1,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg episode"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg episodes"
-                    }
-                  }
-                }
-              }
-            },
-            "seasons" : {
-              "argNum" : 2,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg season"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg seasons"
-                    }
-                  }
-                }
-              }
-            }
           }
         },
         "el" : {
@@ -412,6 +389,54 @@
               }
             }
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%#@episodes@ across %#@seasons@"
+          },
+          "substitutions" : {
+            "episodes" : {
+              "argNum" : 1,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episode"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg episodes"
+                    }
+                  }
+                }
+              }
+            },
+            "seasons" : {
+              "argNum" : 2,
+              "formatSpecifier" : "lld",
+              "variations" : {
+                "plural" : {
+                  "one" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg season"
+                    }
+                  },
+                  "other" : {
+                    "stringUnit" : {
+                      "state" : "translated",
+                      "value" : "%arg seasons"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -423,21 +448,22 @@
             "value" : "Noch %lld Std. %lld Min."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld hr %2$lld min left"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Απομένουν %1$lld ώρες και %2$lld λεπτά"
           }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hr %2$lld min left"
+          }
         }
       }
     },
     "%lld items" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "variations" : {
@@ -452,24 +478,6 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld Objekte"
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld item"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld items"
                 }
               }
             }
@@ -492,6 +500,24 @@
               }
             }
           }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld item"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld items"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -510,6 +536,9 @@
           }
         }
       }
+    },
+    "%lld More Episodes" : {
+
     },
     "%lld percent watched" : {
       "localizations" : {
@@ -561,16 +590,16 @@
             "value" : "%lld Std. %lld Min."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lldh %2$lldm"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld ώ. %2$lld λ."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm"
           }
         }
       }
@@ -591,21 +620,24 @@
         }
       }
     },
-    "100%" : {
+    "•" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "100 %"
+            "value" : "•"
           }
         },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "100%"
+            "value" : "•"
           }
         }
       }
+    },
+    "1 More Episode" : {
+
     },
     "4K First" : {
       "localizations" : {
@@ -619,6 +651,31 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Προτεραιότητα στο 4K"
+          }
+        }
+      }
+    },
+    "5 seconds" : {
+
+    },
+    "10 seconds" : {
+
+    },
+    "20 seconds" : {
+
+    },
+    "100%" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 %"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100%"
           }
         }
       }
@@ -703,6 +760,22 @@
         }
       }
     },
+    "Add a Live TV Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live-TV-Quelle hinzufügen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσθήκη πηγής ζωντανής τηλεόρασης"
+          }
+        }
+      }
+    },
     "Add Show to Watchlist" : {
       "localizations" : {
         "de" : {
@@ -747,22 +820,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Προσθήκη πηγής…"
-          }
-        }
-      }
-    },
-    "Add a Live TV Source" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live-TV-Quelle hinzufügen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Προσθήκη πηγής ζωντανής τηλεόρασης"
           }
         }
       }
@@ -863,22 +920,6 @@
         }
       }
     },
-    "AirPlay" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AirPlay"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AirPlay"
-          }
-        }
-      }
-    },
     "Airing Today" : {
       "localizations" : {
         "de" : {
@@ -891,6 +932,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Προβάλλονται σήμερα"
+          }
+        }
+      }
+    },
+    "AirPlay" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AirPlay"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AirPlay"
           }
         }
       }
@@ -923,6 +980,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Όλα τα κανάλια"
+          }
+        }
+      }
+    },
+    "All Devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Geräte"
           }
         }
       }
@@ -1042,6 +1109,22 @@
         }
       }
     },
+    "Audio & Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Audio & Untertitel"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ήχος και υπότιτλοι"
+          }
+        }
+      }
+    },
     "Audio %lld" : {
       "localizations" : {
         "de" : {
@@ -1058,12 +1141,12 @@
         }
       }
     },
-    "Audio & Subtitles" : {
+    "Audio and Subtitles" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Audio & Untertitel"
+            "value" : "Audio und Untertitel"
           }
         },
         "el" : {
@@ -1118,22 +1201,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Γλώσσα ήχου"
-          }
-        }
-      }
-    },
-    "Audio and Subtitles" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Audio und Untertitel"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ήχος και υπότιτλοι"
           }
         }
       }
@@ -1324,7 +1391,9 @@
         }
       }
     },
-    "Browse" : {},
+    "Browse" : {
+
+    },
     "Can't Record" : {
       "localizations" : {
         "de" : {
@@ -1469,22 +1538,6 @@
         }
       }
     },
-    "Channel Profile" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Senderprofil"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Προφίλ καναλιών"
-          }
-        }
-      }
-    },
     "Channel not found: %@" : {
       "localizations" : {
         "de" : {
@@ -1497,6 +1550,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το κανάλι δεν βρέθηκε: %@"
+          }
+        }
+      }
+    },
+    "Channel Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senderprofil"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προφίλ καναλιών"
           }
         }
       }
@@ -1613,22 +1682,6 @@
         }
       }
     },
-    "Choose Profile" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profil wählen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Επιλογή προφίλ"
-          }
-        }
-      }
-    },
     "Choose a Library" : {
       "localizations" : {
         "de" : {
@@ -1641,22 +1694,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Επιλογή βιβλιοθήκης"
-          }
-        }
-      }
-    },
-    "Choose a Server" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Server wählen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Επιλογή διακομιστή"
           }
         }
       }
@@ -1677,8 +1714,44 @@
         }
       }
     },
-    "Choose what appears on Home and in what order." : {},
-    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
+    "Choose a Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server wählen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή διακομιστή"
+          }
+        }
+      }
+    },
+    "Choose Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil wählen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή προφίλ"
+          }
+        }
+      }
+    },
+    "Choose what appears on Home and in what order." : {
+
+    },
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {
+
+    },
     "Clear" : {
       "localizations" : {
         "de" : {
@@ -1726,6 +1799,9 @@
           }
         }
       }
+    },
+    "Color Theme" : {
+
     },
     "Commentary" : {
       "localizations" : {
@@ -2015,6 +2091,23 @@
         }
       }
     },
+    "Couldn’t Connect" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση"
+          }
+        }
+      }
+    },
     "Couldn't Create Playlist" : {
       "localizations" : {
         "de" : {
@@ -2079,16 +2172,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δεν ήταν δυνατή η φόρτωση"
-          }
-        }
-      }
-    },
-    "Couldn't Update Favorites" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favoriten konnten nicht aktualisiert werden"
           }
         }
       }
@@ -2167,7 +2250,41 @@
         }
       }
     },
-    "Couldn't Load Recommended" : {},
+    "Couldn’t Load Profiles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile konnten nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση των προφίλ"
+          }
+        }
+      }
+    },
+    "Couldn't Load Recommended" : {
+
+    },
+    "Couldn’t Load Servers" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server konnten nicht geladen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η φόρτωση των διακομιστών"
+          }
+        }
+      }
+    },
     "Couldn't Play" : {
       "localizations" : {
         "de" : {
@@ -2180,6 +2297,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δεν ήταν δυνατή η αναπαραγωγή"
+          }
+        }
+      }
+    },
+    "Couldn't reach that server. Check the address and port." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server ist nicht erreichbar. Überprüfe Adresse und Port."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η επικοινωνία με τον διακομιστή. Ελέγξτε τη διεύθυνση και τη θύρα."
           }
         }
       }
@@ -2204,80 +2337,6 @@
         }
       }
     },
-    "Couldn't Sign In" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anmeldung fehlgeschlagen"
-          }
-        }
-      }
-    },
-    "Couldn't Update" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktualisierung fehlgeschlagen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η ενημέρωση"
-          }
-        }
-      }
-    },
-    "Couldn't Update Watchlist" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Watchlist konnte nicht aktualisiert werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας παρακολούθησης"
-          }
-        }
-      }
-    },
-    "Couldn't Update the Playlist" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Playlist konnte nicht aktualisiert werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας αναπαραγωγής"
-          }
-        }
-      }
-    },
-    "Couldn't reach that server. Check the address and port." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Server ist nicht erreichbar. Überprüfe Adresse und Port."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η επικοινωνία με τον διακομιστή. Ελέγξτε τη διεύθυνση και τη θύρα."
-          }
-        }
-      }
-    },
     "Couldn't save the file: %@" : {
       "localizations" : {
         "de" : {
@@ -2294,6 +2353,48 @@
         }
       }
     },
+    "Couldn’t Search" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αναζήτηση"
+          }
+        }
+      }
+    },
+    "Couldn't Sign In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Couldn’t Sign In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldung fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση"
+          }
+        }
+      }
+    },
     "Couldn't sign in to Dispatcharr. Try again." : {
       "localizations" : {
         "de" : {
@@ -2306,6 +2407,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Η σύνδεση στο Dispatcharr απέτυχε. Δοκιμάστε ξανά."
+          }
+        }
+      }
+    },
+    "Couldn’t Switch Profile" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profilwechsel fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η αλλαγή προφίλ"
           }
         }
       }
@@ -2342,6 +2459,51 @@
         }
       }
     },
+    "Couldn’t Turn Off" : {
+
+    },
+    "Couldn't Update" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisierung fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση"
+          }
+        }
+      }
+    },
+    "Couldn't Update Favorites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favoriten konnten nicht aktualisiert werden"
+          }
+        }
+      }
+    },
+    "Couldn't Update the Playlist" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Playlist konnte nicht aktualisiert werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας αναπαραγωγής"
+          }
+        }
+      }
+    },
     "Couldn't update Watchlist" : {
       "localizations" : {
         "de" : {
@@ -2358,98 +2520,18 @@
         }
       }
     },
-    "Couldn’t Connect" : {
+    "Couldn't Update Watchlist" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verbindung fehlgeschlagen"
+            "value" : "Watchlist konnte nicht aktualisiert werden"
           }
         },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η σύνδεση"
-          }
-        }
-      }
-    },
-    "Couldn’t Load Profiles" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profile konnten nicht geladen werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η φόρτωση των προφίλ"
-          }
-        }
-      }
-    },
-    "Couldn’t Load Servers" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Server konnten nicht geladen werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η φόρτωση των διακομιστών"
-          }
-        }
-      }
-    },
-    "Couldn’t Search" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suche fehlgeschlagen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η αναζήτηση"
-          }
-        }
-      }
-    },
-    "Couldn’t Sign In" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anmeldung fehlgeschlagen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η σύνδεση"
-          }
-        }
-      }
-    },
-    "Couldn’t Switch Profile" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profilwechsel fehlgeschlagen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η αλλαγή προφίλ"
+            "value" : "Δεν ήταν δυνατή η ενημέρωση της λίστας παρακολούθησης"
           }
         }
       }
@@ -2489,21 +2571,8 @@
     "Critic Reviews" : {
 
     },
-    "DNS lookup failed for EPG server" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DNS-Abfrage für EPG-Server fehlgeschlagen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Η αναζήτηση DNS του διακομιστή EPG απέτυχε"
-          }
-        }
-      }
+    "Dark" : {
+
     },
     "Date Added" : {
       "localizations" : {
@@ -2572,6 +2641,22 @@
         }
       }
     },
+    "Delete “%@”?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ löschen?"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να διαγραφεί το «%@»;"
+          }
+        }
+      }
+    },
     "Delete All Downloads" : {
       "localizations" : {
         "de" : {
@@ -2584,6 +2669,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Διαγραφή όλων των λήψεων"
+          }
+        }
+      }
+    },
+    "Delete all downloads?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Downloads löschen?"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να διαγραφούν όλες οι λήψεις;"
           }
         }
       }
@@ -2616,38 +2717,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Διαγραφή κανόνα"
-          }
-        }
-      }
-    },
-    "Delete all downloads?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle Downloads löschen?"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Να διαγραφούν όλες οι λήψεις;"
-          }
-        }
-      }
-    },
-    "Delete “%@”?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ löschen?"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Να διαγραφεί το «%@»;"
           }
         }
       }
@@ -2716,22 +2785,6 @@
         }
       }
     },
-    "Dispatcharr Sign-In" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dispatcharr-Anmeldung"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σύνδεση στο Dispatcharr"
-          }
-        }
-      }
-    },
     "Dispatcharr didn't accept that username and password." : {
       "localizations" : {
         "de" : {
@@ -2796,6 +2849,38 @@
         }
       }
     },
+    "Dispatcharr Sign-In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatcharr-Anmeldung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο Dispatcharr"
+          }
+        }
+      }
+    },
+    "DNS lookup failed for EPG server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DNS-Abfrage für EPG-Server fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναζήτηση DNS του διακομιστή EPG απέτυχε"
+          }
+        }
+      }
+    },
     "Documentaries" : {
       "localizations" : {
         "de" : {
@@ -2828,6 +2913,22 @@
         }
       }
     },
+    "Download over Cellular" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über Mobilfunk laden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη μέσω δικτύου κινητής"
+          }
+        }
+      }
+    },
     "Download Quality" : {
       "localizations" : {
         "de" : {
@@ -2856,22 +2957,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Λήψη σεζόν"
-          }
-        }
-      }
-    },
-    "Download over Cellular" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Über Mobilfunk laden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Λήψη μέσω δικτύου κινητής"
           }
         }
       }
@@ -2916,16 +3001,16 @@
             "value" : "Download %lld von %lld"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Downloading %1$lld of %2$lld"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Λήψη %1$lld από %2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading %1$lld of %2$lld"
           }
         }
       }
@@ -2978,166 +3063,6 @@
         }
       }
     },
-    "EPG data could not be parsed" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Daten konnten nicht gelesen werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η ανάλυση δεδομένων EPG"
-          }
-        }
-      }
-    },
-    "EPG data is not available" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Daten sind nicht verfügbar"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν υπάρχουν διαθέσιμα δεδομένα EPG"
-          }
-        }
-      }
-    },
-    "EPG data is too large" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Daten sind zu groß"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Τα δεδομένα EPG είναι υπερβολικά μεγάλα"
-          }
-        }
-      }
-    },
-    "EPG request cancelled" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Anfrage abgebrochen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Το αίτημα EPG ακυρώθηκε"
-          }
-        }
-      }
-    },
-    "EPG server TLS certificate issue" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Problem mit dem TLS-Zertifikat des EPG-Servers"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πρόβλημα πιστοποιητικού TLS του διακομιστή EPG"
-          }
-        }
-      }
-    },
-    "EPG server didn't respond in time" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Server hat nicht rechtzeitig geantwortet"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο διακομιστής EPG δεν απάντησε εγκαίρως"
-          }
-        }
-      }
-    },
-    "EPG server hostname could not be resolved" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hostname des EPG-Servers konnte nicht aufgelöst werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν ήταν δυνατή η εύρεση ονόματος του διακομιστή EPG"
-          }
-        }
-      }
-    },
-    "EPG server requires a client certificate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Server verlangt ein Client-Zertifikat"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο διακομιστής EPG απαιτεί πιστοποιητικό πελάτη"
-          }
-        }
-      }
-    },
-    "EPG server returned HTTP %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Server hat HTTP %lld zurückgegeben"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο διακομιστής EPG επέστρεψε HTTP %lld"
-          }
-        }
-      }
-    },
-    "EPG server returned invalid data" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPG-Server hat ungültige Daten zurückgegeben"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο διακομιστής EPG επέστρεψε μη έγκυρα δεδομένα"
-          }
-        }
-      }
-    },
     "Earlier" : {
       "localizations" : {
         "de" : {
@@ -3170,22 +3095,6 @@
         }
       }
     },
-    "Enter PIN" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN eingeben"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εισαγωγή PIN"
-          }
-        }
-      }
-    },
     "Enter both your username and password, or neither." : {
       "localizations" : {
         "de" : {
@@ -3198,6 +3107,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Συμπληρώστε και το όνομα χρήστη και τον κωδικό πρόσβασης ή αφήστε και τα δύο κενά."
+          }
+        }
+      }
+    },
+    "Enter PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN eingeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εισαγωγή PIN"
           }
         }
       }
@@ -3298,6 +3223,166 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ψυχαγωγία"
+          }
+        }
+      }
+    },
+    "EPG data could not be parsed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten konnten nicht gelesen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η ανάλυση δεδομένων EPG"
+          }
+        }
+      }
+    },
+    "EPG data is not available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten sind nicht verfügbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν διαθέσιμα δεδομένα EPG"
+          }
+        }
+      }
+    },
+    "EPG data is too large" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Daten sind zu groß"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τα δεδομένα EPG είναι υπερβολικά μεγάλα"
+          }
+        }
+      }
+    },
+    "EPG request cancelled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Anfrage abgebrochen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αίτημα EPG ακυρώθηκε"
+          }
+        }
+      }
+    },
+    "EPG server didn't respond in time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat nicht rechtzeitig geantwortet"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG δεν απάντησε εγκαίρως"
+          }
+        }
+      }
+    },
+    "EPG server hostname could not be resolved" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostname des EPG-Servers konnte nicht aufgelöst werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η εύρεση ονόματος του διακομιστή EPG"
+          }
+        }
+      }
+    },
+    "EPG server requires a client certificate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server verlangt ein Client-Zertifikat"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG απαιτεί πιστοποιητικό πελάτη"
+          }
+        }
+      }
+    },
+    "EPG server returned HTTP %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat HTTP %lld zurückgegeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG επέστρεψε HTTP %lld"
+          }
+        }
+      }
+    },
+    "EPG server returned invalid data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPG-Server hat ungültige Daten zurückgegeben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής EPG επέστρεψε μη έγκυρα δεδομένα"
+          }
+        }
+      }
+    },
+    "EPG server TLS certificate issue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Problem mit dem TLS-Zertifikat des EPG-Servers"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πρόβλημα πιστοποιητικού TLS του διακομιστή EPG"
           }
         }
       }
@@ -3424,7 +3509,9 @@
         }
       }
     },
-    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {
+
+    },
     "Extra" : {
       "localizations" : {
         "de" : {
@@ -3453,24 +3540,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Πρόσθετο υλικό"
-          }
-        }
-      }
-    },
-    "Favorite Movies" : {},
-    "Favorite TV Shows" : {},
-    "FFmpeg Build Scripts and Sources" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FFmpeg-Build-Skripte und -Quellen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σενάρια δημιουργίας και πηγαίος κώδικας FFmpeg"
           }
         }
       }
@@ -3523,22 +3592,6 @@
         }
       }
     },
-    "Failed to parse XMLTV data" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "XMLTV-Daten konnten nicht gelesen werden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αποτυχία ανάλυσης δεδομένων XMLTV"
-          }
-        }
-      }
-    },
     "Failed to parse response" : {
       "localizations" : {
         "de" : {
@@ -3551,6 +3604,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αποτυχία ανάλυσης απόκρισης"
+          }
+        }
+      }
+    },
+    "Failed to parse XMLTV data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "XMLTV-Daten konnten nicht gelesen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία ανάλυσης δεδομένων XMLTV"
           }
         }
       }
@@ -3597,6 +3666,12 @@
         }
       }
     },
+    "Favorite Movies" : {
+
+    },
+    "Favorite TV Shows" : {
+
+    },
     "Favorites" : {
       "localizations" : {
         "de" : {
@@ -3625,6 +3700,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Μικρό αφιέρωμα"
+          }
+        }
+      }
+    },
+    "FFmpeg Build Scripts and Sources" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FFmpeg-Build-Skripte und -Quellen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σενάρια δημιουργίας και πηγαίος κώδικας FFmpeg"
           }
         }
       }
@@ -3920,43 +4011,6 @@
         }
       }
     },
-    "Hero Playlists" : {},
-    "Hidden from Home" : {},
-    "Higher" : {
-
-    },
-    "HTTP error %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "HTTP-Fehler %lld"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σφάλμα HTTP %lld"
-          }
-        }
-      }
-    },
-    "HTTP error: %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "HTTP-Fehler: %lld"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σφάλμα HTTP: %lld"
-          }
-        }
-      }
-    },
     "Hero" : {
       "localizations" : {
         "de" : {
@@ -3973,6 +4027,12 @@
         }
       }
     },
+    "Hero Playlists" : {
+
+    },
+    "Hidden from Home" : {
+
+    },
     "Hide" : {
       "localizations" : {
         "de" : {
@@ -3988,6 +4048,9 @@
           }
         }
       }
+    },
+    "Higher" : {
+
     },
     "Highest Rated" : {
       "localizations" : {
@@ -4033,6 +4096,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Πώς θα εμφανίζεται αυτή η πηγή στη ζωντανή τηλεόραση."
+          }
+        }
+      }
+    },
+    "HTTP error %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP-Fehler %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα HTTP %lld"
+          }
+        }
+      }
+    },
+    "HTTP error: %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP-Fehler: %lld"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σφάλμα HTTP: %lld"
+          }
+        }
+      }
+    },
+    "http://provider.example:8080" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example:8080"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example:8080"
+          }
+        }
+      }
+    },
+    "http://provider.example/playlist.m3u" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example/playlist.m3u"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "http://provider.example/playlist.m3u"
+          }
+        }
+      }
+    },
+    "iCloud has a different Plex account." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud hat ein anderes Plex-Konto."
+          }
+        }
+      }
+    },
+    "iCloud Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud-Synchronisierung"
           }
         }
       }
@@ -4159,22 +4306,6 @@
         }
       }
     },
-    "Invalid URL" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ungültige URL"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Μη έγκυρη διεύθυνση URL"
-          }
-        }
-      }
-    },
     "Invalid response from Dispatcharr server" : {
       "localizations" : {
         "de" : {
@@ -4203,6 +4334,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Μη έγκυρη απόκριση διακομιστή"
+          }
+        }
+      }
+    },
+    "Invalid URL" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültige URL"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μη έγκυρη διεύθυνση URL"
           }
         }
       }
@@ -4275,6 +4422,16 @@
         }
       }
     },
+    "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone and iPad. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf Apple TV, iPhone und iPad gleich. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
+          }
+        }
+      }
+    },
     "Kids" : {
       "localizations" : {
         "de" : {
@@ -4287,22 +4444,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Παιδικά"
-          }
-        }
-      }
-    },
-    "LIVE" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LIVE"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ΖΩΝΤΑΝΑ"
           }
         }
       }
@@ -4407,15 +4548,8 @@
         }
       }
     },
-    "Lists your favorite movies and shows from every server under Library." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt deine favorisierten Filme und Serien aller Server unter „Mediathek“."
-          }
-        }
-      }
+    "Light" : {
+
     },
     "Lists each server's video playlists under Library." : {
       "localizations" : {
@@ -4433,6 +4567,16 @@
         }
       }
     },
+    "Lists your favorite movies and shows from every server under Library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt deine favorisierten Filme und Serien aller Server unter „Mediathek“."
+          }
+        }
+      }
+    },
     "Live" : {
       "localizations" : {
         "de" : {
@@ -4445,6 +4589,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ζωντανά"
+          }
+        }
+      }
+    },
+    "LIVE" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LIVE"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ΖΩΝΤΑΝΑ"
           }
         }
       }
@@ -4744,6 +4904,22 @@
         }
       }
     },
+    "New episodes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Folgen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Νέα επεισόδια"
+          }
+        }
+      }
+    },
     "New Episodes" : {
       "localizations" : {
         "de" : {
@@ -4772,22 +4948,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Νέα λίστα αναπαραγωγής"
-          }
-        }
-      }
-    },
-    "New episodes" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neue Folgen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Νέα επεισόδια"
           }
         }
       }
@@ -4920,6 +5080,22 @@
         }
       }
     },
+    "No channels found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Sender gefunden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν βρέθηκαν κανάλια"
+          }
+        }
+      }
+    },
     "No Downloads" : {
       "localizations" : {
         "de" : {
@@ -4962,6 +5138,22 @@
         }
       }
     },
+    "No guide data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Programmdaten"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν δεδομένα οδηγού"
+          }
+        }
+      }
+    },
     "No Items" : {
       "localizations" : {
         "de" : {
@@ -4993,6 +5185,9 @@
           }
         }
       }
+    },
+    "No other server is reachable right now, so %@ stays on." : {
+
     },
     "No Playlists" : {
       "localizations" : {
@@ -5042,38 +5237,6 @@
         }
       }
     },
-    "No channels found" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Sender gefunden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν βρέθηκαν κανάλια"
-          }
-        }
-      }
-    },
-    "No guide data" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Programmdaten"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν υπάρχουν δεδομένα οδηγού"
-          }
-        }
-      }
-    },
     "None" : {
       "localizations" : {
         "de" : {
@@ -5119,39 +5282,6 @@
     "Nothing" : {
 
     },
-    "Nothing On Right Now" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gerade läuft nichts"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν μεταδίδεται τίποτα αυτή τη στιγμή"
-          }
-        }
-      }
-    },
-    "Nothing Recommended" : {},
-    "Nothing Unwatched" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alles gesehen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δεν υπάρχουν μη προβεβλημένα στοιχεία"
-          }
-        }
-      }
-    },
     "Nothing is scheduled. Long-press a programme in the guide to record it." : {
       "localizations" : {
         "de" : {
@@ -5180,6 +5310,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δεν υπάρχει ακόμη περιεχόμενο στην αρχική"
+          }
+        }
+      }
+    },
+    "Nothing On Right Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade läuft nichts"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν μεταδίδεται τίποτα αυτή τη στιγμή"
+          }
+        }
+      }
+    },
+    "Nothing Recommended" : {
+
+    },
+    "Nothing Unwatched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles gesehen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν υπάρχουν μη προβεβλημένα στοιχεία"
           }
         }
       }
@@ -5216,22 +5381,6 @@
         }
       }
     },
-    "OK" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εντάξει"
-          }
-        }
-      }
-    },
     "Off" : {
       "localizations" : {
         "de" : {
@@ -5260,6 +5409,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Εκτός σύνδεσης"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εντάξει"
           }
         }
       }
@@ -5312,6 +5477,32 @@
         }
       }
     },
+    "On a device signed in to %@, open Settings, choose Quick Connect and enter this code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne auf einem bei %@ angemeldeten Gerät die Einstellungen, wähle Quick Connect und gib diesen Code ein."
+          }
+        }
+      }
+    },
+    "On now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft jetzt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παίζεται τώρα"
+          }
+        }
+      }
+    },
     "On Now" : {
       "localizations" : {
         "de" : {
@@ -5340,32 +5531,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Στον αέρα"
-          }
-        }
-      }
-    },
-    "On a device signed in to %@, open Settings, choose Quick Connect and enter this code." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne auf einem bei %@ angemeldeten Gerät die Einstellungen, wähle Quick Connect und gib diesen Code ein."
-          }
-        }
-      }
-    },
-    "On now" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Läuft jetzt"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παίζεται τώρα"
           }
         }
       }
@@ -5412,22 +5577,11 @@
         }
       }
     },
-    "Open in YouTube" : {},
-    "Open Source Software" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open-Source-Software"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Λογισμικό ανοικτού κώδικα"
-          }
-        }
-      }
+    "Only Server in Use" : {
+
+    },
+    "Open in YouTube" : {
+
     },
     "Open plex.tv/link" : {
       "localizations" : {
@@ -5457,6 +5611,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ανοίξτε το plex.tv/link και συνδεθείτε. Αν σας ζητηθεί κωδικός, πληκτρολογήστε αυτόν."
+          }
+        }
+      }
+    },
+    "Open Source Software" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open-Source-Software"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λογισμικό ανοικτού κώδικα"
           }
         }
       }
@@ -5545,55 +5715,11 @@
         }
       }
     },
-    "Page" : {},
-    "Page, %@" : {},
-    "PIN" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN"
-          }
-        }
-      }
+    "Page" : {
+
     },
-    "PIN expired. Please try again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN abgelaufen. Bitte versuche es erneut."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Το PIN έληξε. Προσπαθήστε ξανά."
-          }
-        }
-      }
-    },
-    "PIN for %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN für %@"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PIN για %@"
-          }
-        }
-      }
+    "Page, %@" : {
+
     },
     "Parse error: %@" : {
       "localizations" : {
@@ -5675,6 +5801,22 @@
         }
       }
     },
+    "PIN" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN"
+          }
+        }
+      }
+    },
     "Pin a library to Home in Plex, then pull to refresh." : {
       "localizations" : {
         "de" : {
@@ -5687,6 +5829,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Καρφίτσωσε τη βιβλιοθήκη στην Αρχική του Plex και μετά σύρε για ανανέωση."
+          }
+        }
+      }
+    },
+    "PIN expired. Please try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN abgelaufen. Bitte versuche es erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το PIN έληξε. Προσπαθήστε ξανά."
+          }
+        }
+      }
+    },
+    "PIN for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN für %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PIN για %@"
           }
         }
       }
@@ -5743,22 +5917,6 @@
         }
       }
     },
-    "Play S%lld, E%lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "S%lld, F%lld wiedergeben"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Play S%1$lld, E%2$lld"
-          }
-        }
-      }
-    },
     "Play from Beginning" : {
       "localizations" : {
         "de" : {
@@ -5791,6 +5949,22 @@
         }
       }
     },
+    "Play S%lld, E%lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld wiedergeben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Play S%1$lld, E%2$lld"
+          }
+        }
+      }
+    },
     "Playback" : {
       "localizations" : {
         "de" : {
@@ -5803,38 +5977,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αναπαραγωγή"
-          }
-        }
-      }
-    },
-    "Playback Speed" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wiedergabetempo"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ταχύτητα αναπαραγωγής"
-          }
-        }
-      }
-    },
-    "Playback Stopped" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wiedergabe gestoppt"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Η αναπαραγωγή σταμάτησε"
           }
         }
       }
@@ -5867,6 +6009,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ταχύτητα αναπαραγωγής"
+          }
+        }
+      }
+    },
+    "Playback Speed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabetempo"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ταχύτητα αναπαραγωγής"
+          }
+        }
+      }
+    },
+    "Playback Stopped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiedergabe gestoppt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναπαραγωγή σταμάτησε"
           }
         }
       }
@@ -6015,26 +6189,6 @@
         }
       }
     },
-    "Plex HTTP %lld" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plex HTTP %lld"
-          }
-        }
-      }
-    },
-    "Plex URL malformed" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plex-URL fehlerhaft"
-          }
-        }
-      }
-    },
     "Plex didn't accept the sign-in; sign in again, then retry" : {
       "localizations" : {
         "de" : {
@@ -6047,6 +6201,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το Plex δεν δέχτηκε τη σύνδεση. Συνδεθείτε ξανά και δοκιμάστε πάλι."
+          }
+        }
+      }
+    },
+    "Plex HTTP %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex HTTP %lld"
           }
         }
       }
@@ -6103,6 +6267,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex hat eine ungültige Antwort zurückgegeben"
+          }
+        }
+      }
+    },
+    "Plex URL malformed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex-URL fehlerhaft"
           }
         }
       }
@@ -6233,41 +6407,6 @@
         }
       }
     },
-    "REC" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "REC"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ΕΓΓΡΑΦΗ"
-          }
-        }
-      }
-    },
-    "Recommended" : {},
-    "Reset" : {},
-    "Reset Hero" : {},
-    "Reset Home Rows?" : {},
-    "Reset the Hero?" : {},
-    "Rows" : {},
-    "Reset subtitle height" : {
-
-    },
-    "RT Audience" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RT-Publikum"
-          }
-        }
-      }
-    },
     "Rated" : {
       "localizations" : {
         "de" : {
@@ -6296,6 +6435,25 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αξιολόγηση"
+          }
+        }
+      }
+    },
+    "Ratings" : {
+
+    },
+    "REC" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REC"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ΕΓΓΡΑΦΗ"
           }
         }
       }
@@ -6406,6 +6564,9 @@
         }
       }
     },
+    "Recommended" : {
+
+    },
     "Record" : {
       "localizations" : {
         "de" : {
@@ -6486,6 +6647,22 @@
         }
       }
     },
+    "Record…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnehmen …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εγγραφή…"
+          }
+        }
+      }
+    },
     "Recording" : {
       "localizations" : {
         "de" : {
@@ -6546,22 +6723,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Εγγραφές"
-          }
-        }
-      }
-    },
-    "Record…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aufnehmen …"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εγγραφή…"
           }
         }
       }
@@ -6672,38 +6833,6 @@
         }
       }
     },
-    "Remove Source" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quelle entfernen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αφαίρεση πηγής"
-          }
-        }
-      }
-    },
-    "Remove Source?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quelle entfernen?"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Να αφαιρεθεί η πηγή;"
-          }
-        }
-      }
-    },
     "Remove from Favorites" : {
       "localizations" : {
         "de" : {
@@ -6748,6 +6877,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αφαίρεση από τη λίστα παρακολούθησης"
+          }
+        }
+      }
+    },
+    "Remove Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle entfernen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αφαίρεση πηγής"
+          }
+        }
+      }
+    },
+    "Remove Source?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle entfernen?"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Να αφαιρεθεί η πηγή;"
           }
         }
       }
@@ -6816,6 +6977,9 @@
         }
       }
     },
+    "Reset" : {
+
+    },
     "Reset audio delay" : {
       "localizations" : {
         "de" : {
@@ -6831,6 +6995,18 @@
           }
         }
       }
+    },
+    "Reset Hero" : {
+
+    },
+    "Reset Home Rows?" : {
+
+    },
+    "Reset subtitle height" : {
+
+    },
+    "Reset the Hero?" : {
+
     },
     "Resume" : {
       "localizations" : {
@@ -6963,6 +7139,19 @@
     "Rotten" : {
 
     },
+    "Rows" : {
+
+    },
+    "RT Audience" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RT-Publikum"
+          }
+        }
+      }
+    },
     "Runtime" : {
       "localizations" : {
         "de" : {
@@ -7003,16 +7192,16 @@
             "value" : "S%1$lld F%2$lld"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$lld E%2$lld"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Κ%1$lld Ε%2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld"
           }
         }
       }
@@ -7025,48 +7214,36 @@
             "value" : "S%lld, F%lld"
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$lld, E%2$lld"
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Κ%1$lld, Ε%2$lld"
           }
-        }
-      }
-    },
-    "SD First" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SD zuerst"
-          }
         },
-        "el" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "Προτεραιότητα στην SD"
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld"
           }
         }
       }
     },
-    "SDH Subtitles" : {
+    "S%lld, E%lld · %@:" : {
       "localizations" : {
-        "de" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "SDH-Untertitel"
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
           }
-        },
-        "el" : {
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "Υπότιτλοι για κωφούς και βαρήκοους"
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
           }
         }
       }
@@ -7099,6 +7276,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Προγραμματισμένο"
+          }
+        }
+      }
+    },
+    "SD First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SD zuerst"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προτεραιότητα στην SD"
+          }
+        }
+      }
+    },
+    "SDH Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SDH-Untertitel"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υπότιτλοι για κωφούς και βαρήκοους"
           }
         }
       }
@@ -7405,6 +7614,16 @@
         }
       }
     },
+    "Sign in to iCloud in the Settings app to sync." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich in der Einstellungen-App bei iCloud an, um zu synchronisieren."
+          }
+        }
+      }
+    },
     "Sign In to Plex" : {
       "localizations" : {
         "de" : {
@@ -7427,22 +7646,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Melde dich beim Server an, um diesen Download abzuspielen."
-          }
-        }
-      }
-    },
-    "Sign Out" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abmelden"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αποσύνδεση"
           }
         }
       }
@@ -7495,6 +7698,32 @@
         }
       }
     },
+    "Sign Out" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abmelden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποσύνδεση"
+          }
+        }
+      }
+    },
+    "Sign out of %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von %@ abmelden?"
+          }
+        }
+      }
+    },
     "Sign out of Plex?" : {
       "localizations" : {
         "de" : {
@@ -7507,16 +7736,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αποσύνδεση από το Plex;"
-          }
-        }
-      }
-    },
-    "Sign out of %@?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Von %@ abmelden?"
           }
         }
       }
@@ -7976,6 +8195,29 @@
         }
       }
     },
+    "streaming.home" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heimnetz"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σπίτι"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Home"
+          }
+        }
+      }
+    },
     "Studio" : {
       "localizations" : {
         "de" : {
@@ -7991,6 +8233,9 @@
           }
         }
       }
+    },
+    "Subtitle %@" : {
+
     },
     "Subtitle Height" : {
 
@@ -8059,90 +8304,11 @@
         }
       }
     },
-    "Switch to Browse to see every title." : {},
-    "The hero shows Trending only, with no playlists." : {},
-    "The server didn't accept the sign-in." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Server hat die Anmeldung nicht akzeptiert."
-          }
-        }
-      }
+    "Switch to Browse to see every title." : {
+
     },
-    "The server didn't accept the sign-in; sign in again, then retry" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Server hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
-          }
-        }
-      }
-    },
-    "The server doesn't have that." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Server hat das nicht."
-          }
-        }
-      }
-    },
-    "This account isn't allowed to download from the server" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses Konto darf vom Server nichts herunterladen"
-          }
-        }
-      }
-    },
-    "This trailer plays in the YouTube app." : {},
-    "TMDB users" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TMDB-Nutzer:innen"
-          }
-        }
-      }
-    },
-    "TV Show" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TV-Sendung"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Τηλεοπτική σειρά"
-          }
-        }
-      }
-    },
-    "TV Shows" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TV-Sendungen"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Τηλεοπτικές σειρές"
-          }
-        }
-      }
+    "System" : {
+
     },
     "That address doesn't look right. Check it and try again." : {
       "localizations" : {
@@ -8270,22 +8436,6 @@
         }
       }
     },
-    "The M3U link from your provider." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der M3U-Link deines Anbieters."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο σύνδεσμος M3U από τον πάροχό σου."
-          }
-        }
-      }
-    },
     "The download is too large." : {
       "localizations" : {
         "de" : {
@@ -8408,7 +8558,27 @@
         }
       }
     },
+    "The hero shows Trending only, with no playlists." : {
+
+    },
+    "The M3U link from your provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der M3U-Link deines Anbieters."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο σύνδεσμος M3U από τον πάροχό σου."
+          }
+        }
+      }
+    },
     "The server" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -8472,12 +8642,42 @@
         }
       }
     },
+    "The server didn't accept the sign-in; sign in again, then retry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert; melde dich erneut an und versuche es dann noch einmal"
+          }
+        }
+      }
+    },
+    "The server didn't accept the sign-in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
     "The server didn't accept your sign-in." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Server hat deine Anmeldung nicht akzeptiert."
+          }
+        }
+      }
+    },
+    "The server doesn't have that." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat das nicht."
           }
         }
       }
@@ -8626,54 +8826,6 @@
         }
       }
     },
-    "This Dolby Vision file has no fallback layer this device can decode." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Dolby-Vision-Datei hat keine Ersatzebene, die dieses Gerät decodieren kann."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αυτό το αρχείο Dolby Vision δεν έχει εναλλακτικό επίπεδο που να μπορεί να αποκωδικοποιήσει η συσκευή."
-          }
-        }
-      }
-    },
-    "This Tvheadend server needs a username and password." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Tvheadend-Server benötigt Benutzername und Passwort."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αυτός ο διακομιστής Tvheadend χρειάζεται όνομα χρήστη και κωδικό."
-          }
-        }
-      }
-    },
-    "This Tvheadend user can't record." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Tvheadend-Benutzer darf nicht aufnehmen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αυτός ο χρήστης Tvheadend δεν έχει δικαίωμα εγγραφής."
-          }
-        }
-      }
-    },
     "This account has expired. Contact your provider to renew it." : {
       "localizations" : {
         "de" : {
@@ -8706,6 +8858,16 @@
         }
       }
     },
+    "This account isn't allowed to download from the server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Konto darf vom Server nichts herunterladen"
+          }
+        }
+      }
+    },
     "This channel has no stream." : {
       "localizations" : {
         "de" : {
@@ -8734,6 +8896,32 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αυτό το κανάλι δεν αποκρίνεται αυτή τη στιγμή."
+          }
+        }
+      }
+    },
+    "This Device Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur dieses Gerät"
+          }
+        }
+      }
+    },
+    "This Dolby Vision file has no fallback layer this device can decode." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Dolby-Vision-Datei hat keine Ersatzebene, die dieses Gerät decodieren kann."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το αρχείο Dolby Vision δεν έχει εναλλακτικό επίπεδο που να μπορεί να αποκωδικοποιήσει η συσκευή."
           }
         }
       }
@@ -8854,6 +9042,41 @@
         }
       }
     },
+    "This trailer plays in the YouTube app." : {
+
+    },
+    "This Tvheadend server needs a username and password." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Tvheadend-Server benötigt Benutzername und Passwort."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτός ο διακομιστής Tvheadend χρειάζεται όνομα χρήστη και κωδικό."
+          }
+        }
+      }
+    },
+    "This Tvheadend user can't record." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Tvheadend-Benutzer darf nicht aufnehmen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτός ο χρήστης Tvheadend δεν έχει δικαίωμα εγγραφής."
+          }
+        }
+      }
+    },
     "This version is split into parts; choose a converted quality" : {
       "localizations" : {
         "de" : {
@@ -8962,6 +9185,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Τίτλος Ω–Α"
+          }
+        }
+      }
+    },
+    "TMDB users" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TMDB-Nutzer:innen"
+          }
+        }
+      }
+    },
+    "tmdb.nowPlaying" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt im Kino"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Παίζονται τώρα"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Now Playing"
           }
         }
       }
@@ -9210,6 +9466,41 @@
         }
       }
     },
+    "Turn on another server first, or sign out of Plex." : {
+
+    },
+    "TV Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV-Sendung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τηλεοπτική σειρά"
+          }
+        }
+      }
+    },
+    "TV Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TV-Sendungen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τηλεοπτικές σειρές"
+          }
+        }
+      }
+    },
     "Tvheadend" : {
       "localizations" : {
         "de" : {
@@ -9222,22 +9513,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tvheadend"
-          }
-        }
-      }
-    },
-    "Tvheadend Sign-In" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tvheadend-Anmeldung"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σύνδεση στο Tvheadend"
           }
         }
       }
@@ -9286,6 +9561,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το Tvheadend απέρριψε αυτόν τον χρήστη. Έλεγξε κωδικό και δικαιώματα στο Tvheadend."
+          }
+        }
+      }
+    },
+    "Tvheadend Sign-In" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tvheadend-Anmeldung"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο Tvheadend"
           }
         }
       }
@@ -9787,6 +10078,16 @@
         }
       }
     },
+    "Your %@ sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine %@-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
+          }
+        }
+      }
+    },
     "Your Dispatcharr server's address on your network, with its port." : {
       "localizations" : {
         "de" : {
@@ -9831,6 +10132,48 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ο διακομιστής Plex διέκοψε αυτή τη ροή."
+          }
+        }
+      }
+    },
+    "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Plex-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
+          }
+        }
+      }
+    },
+    "Your provider has blocked this account." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Anbieter hat diesen Account gesperrt."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο πάροχός σου έχει αποκλείσει αυτόν τον λογαριασμό."
+          }
+        }
+      }
+    },
+    "Your saved PIN no longer works. Enter it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine gespeicherte PIN funktioniert nicht mehr. Gib sie erneut ein."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το αποθηκευμένο PIN δεν λειτουργεί πλέον. Πληκτρολόγησέ το ξανά."
           }
         }
       }
@@ -9883,39 +10226,6 @@
         }
       }
     },
-    "Your provider has blocked this account." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dein Anbieter hat diesen Account gesperrt."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο πάροχός σου έχει αποκλείσει αυτόν τον λογαριασμό."
-          }
-        }
-      }
-    },
-    "Your saved PIN no longer works. Enter it again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine gespeicherte PIN funktioniert nicht mehr. Gib sie erneut ein."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Το αποθηκευμένο PIN δεν λειτουργεί πλέον. Πληκτρολόγησέ το ξανά."
-          }
-        }
-      }
-    },
-    "YouTube" : {},
     "Z-A" : {
       "localizations" : {
         "de" : {
@@ -9928,190 +10238,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ω–Α"
-          }
-        }
-      }
-    },
-    "http://provider.example/playlist.m3u" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "http://provider.example/playlist.m3u"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "http://provider.example/playlist.m3u"
-          }
-        }
-      }
-    },
-    "http://provider.example:8080" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "http://provider.example:8080"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "http://provider.example:8080"
-          }
-        }
-      }
-    },
-    "streaming.home" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Heimnetz"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Home"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σπίτι"
-          }
-        }
-      }
-    },
-    "tmdb.nowPlaying" : {
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jetzt im Kino"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Now Playing"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παίζονται τώρα"
-          }
-        }
-      }
-    },
-    "•" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "•"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "•"
-          }
-        }
-      }
-    },
-    "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ wird über iCloud geteilt. Nur von diesem Gerät entfernen oder von allen Geräten?"
-          }
-        }
-      }
-    },
-    "All Devices" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle Geräte"
-          }
-        }
-      }
-    },
-    "iCloud has a different Plex account." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iCloud hat ein anderes Plex-Konto."
-          }
-        }
-      }
-    },
-    "iCloud Sync" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iCloud-Synchronisierung"
-          }
-        }
-      }
-    },
-    "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone and iPad. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf Apple TV, iPhone und iPad gleich. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
-          }
-        }
-      }
-    },
-    "Sign in to iCloud in the Settings app to sync." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Melde dich in der Einstellungen-App bei iCloud an, um zu synchronisieren."
-          }
-        }
-      }
-    },
-    "This Device Only" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur dieses Gerät"
-          }
-        }
-      }
-    },
-    "Your Plex sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Plex-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
-          }
-        }
-      }
-    },
-    "Your %@ sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine %@-Anmeldung wird über iCloud geteilt. Nur auf diesem Gerät abmelden oder auf allen Geräten?"
           }
         }
       }

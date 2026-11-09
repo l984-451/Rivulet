@@ -84,7 +84,7 @@ extension JellyfinProvider: PhotoProvider {
 
         // Asked for once. Without `recursive=false` a library id recurses by
         // itself: nested albums and the library's own Folder join the root.
-        func folders() async throws -> JFQueryResult? {
+        @Sendable func folders() async throws -> JFQueryResult? {
             guard page.offset == 0 else { return nil }
             return try await client.get("Items", [
                 parent, fields,

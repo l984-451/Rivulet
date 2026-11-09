@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2650"
+   LastUpgradeVersion = "2720"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D50000040000000000000004"
-               BuildableName = "Rivulet Mac.app"
+               BuildableName = "Rivulet.app"
                BlueprintName = "Rivulet Mac"
                ReferencedContainer = "container:Rivulet.xcodeproj">
             </BuildableReference>
@@ -39,13 +39,13 @@
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-     >
+      allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D50000040000000000000004"
-            BuildableName = "Rivulet Mac.app"
+            BuildableName = "Rivulet.app"
             BlueprintName = "Rivulet Mac"
             ReferencedContainer = "container:Rivulet.xcodeproj">
          </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D50000040000000000000004"
-            BuildableName = "Rivulet Mac.app"
+            BuildableName = "Rivulet.app"
             BlueprintName = "Rivulet Mac"
             ReferencedContainer = "container:Rivulet.xcodeproj">
          </BuildableReference>

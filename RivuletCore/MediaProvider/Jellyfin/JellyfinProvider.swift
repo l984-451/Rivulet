@@ -110,7 +110,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     private func libraryQuery(_ library: MediaLibrary, sort: SortOption, itemTypes: String? = nil,
                               filter: LibraryFilter = .none) -> [URLQueryItem] {
         let (sortBy, order) = Self.sortParameters(sort)
-        var query = [
+        let query = [
             URLQueryItem(name: "parentId", value: library.id),
             URLQueryItem(name: "recursive", value: "true"),
             URLQueryItem(name: "includeItemTypes", value: itemTypes ?? Self.itemTypes(for: library.kind)),

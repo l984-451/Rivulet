@@ -105,7 +105,7 @@ extension EmbyProvider {
     /// The query that defines a library listing, without its page.
     private func libraryQuery(_ library: MediaLibrary, sort: SortOption, filter: LibraryFilter = .none) -> [URLQueryItem] {
         let (sortBy, order) = Self.sortParameters(sort)
-        var query = [
+        let query = [
             URLQueryItem(name: "ParentId", value: library.id),
             URLQueryItem(name: "Recursive", value: "true"),
             URLQueryItem(name: "IncludeItemTypes", value: Self.itemTypes(for: library.kind)),

@@ -132,7 +132,7 @@ nonisolated final class PersistentLog: @unchecked Sendable {
         let body = ([head, "[earlier lines dropped]"] + kept.reversed()).joined(separator: "\n") + "\n"
         try? Data(body.utf8).write(to: current, options: .atomic)
         handle = try? FileHandle(forWritingTo: current)
-        try? handle?.seekToEnd()
+        _ = try? handle?.seekToEnd()
         size = body.utf8.count
     }
 }

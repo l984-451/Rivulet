@@ -255,7 +255,7 @@ final class BrowseStore: ObservableObject {
                                                   title: String(localized: "Continue Watching"), style: .shelf, items: continueWatching)
     }
 
-    static let continueWatchingID = "continueWatching"
+    nonisolated static let continueWatchingID = "continueWatching"
 
     // MARK: - Playlists
 

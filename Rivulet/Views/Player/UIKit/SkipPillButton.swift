@@ -74,7 +74,9 @@ final class SkipPillButton: UIButton {
         // AVKit's contextual action: bold 29, focused at 225x67 for "Skip Intro"
         // (these insets plus the 1.05 focus scale).
         titleLabel?.font = .systemFont(ofSize: 29, weight: .bold)
-        contentEdgeInsets = UIEdgeInsets(top: 14, left: 40, bottom: 14, right: 40)
+        var configuration = UIButton.Configuration.plain()
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 14, leading: 40, bottom: 14, trailing: 40)
+        self.configuration = configuration
     }
 
     /// Starts the left-to-right sweep, reaching the full pill width after

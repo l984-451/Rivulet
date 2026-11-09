@@ -164,6 +164,7 @@ final class MusicQueueStripView: UIView, UICollectionViewDataSource, UICollectio
         }
     }
 
+    @MainActor
     private final class LinkProxy: NSObject {
         private weak var owner: MusicQueueStripView?
         init(_ owner: MusicQueueStripView) { self.owner = owner }

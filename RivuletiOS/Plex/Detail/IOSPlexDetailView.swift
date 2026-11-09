@@ -96,7 +96,7 @@ struct IOSPlexDetailView: View {
 
     private func summaryView(_ summary: String, prefix: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            (Text(verbatim: prefix.map { $0 + " " } ?? "").bold() + Text(verbatim: summary))
+            Text(verbatim: "\(prefix.map { $0 + " " } ?? "")\(summary)")
                 .font(.body)
                 .lineLimit(summaryExpanded ? nil : 3)
             if summary.count > 160 {

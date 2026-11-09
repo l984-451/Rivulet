@@ -96,7 +96,7 @@ final class PhotoCell: UICollectionViewCell {
 
     /// The Music lockup's label colours: title white, count grey until focused.
     private func applyFocusAppearance(_ focused: Bool) {
-        let footer = poster.footerView as? TVLockupHeaderFooterView
+        let footer = poster.footerView
         footer?.titleLabel?.textColor = .white
         footer?.subtitleLabel?.textColor = focused ? .white : MusicMetrics.secondary
     }

@@ -24,6 +24,7 @@ final class MultiStreamViewModel: ObservableObject {
 
     // MARK: - Stream Slot Model
 
+    @MainActor
     struct StreamSlot: Identifiable {
         let id = UUID()
         let channel: UnifiedChannel

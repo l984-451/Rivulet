@@ -16,6 +16,7 @@ struct IOSRootView: View {
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @State private var choosingProfile = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
+    @AppStorage(IOSColorTheme.storageKey) private var colorThemeRawValue = IOSColorTheme.system.rawValue
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     @State private var backgroundedAt: Date?
     /// The Library tab's selection, column and detail path, so "Go to Downloads" can open it from any tab.
@@ -77,6 +78,7 @@ struct IOSRootView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .preferredColorScheme(IOSColorTheme(rawValue: colorThemeRawValue)?.colorScheme)
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
         .sheet(isPresented: $showingAccount) { IOSAccountView().iosSessionObjects(plex) }

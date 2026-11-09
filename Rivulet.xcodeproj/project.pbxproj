@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -13,8 +13,8 @@
 		A7F159552F04124A001B2177 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 		B2000001AAAA000000000001 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
 		B2000001AAAA000000000002 /* Libass in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000002 /* Libass */; };
-		B2000001AAAA000000000004 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000004 /* SwiftDraw */; };
 		B2000001AAAA000000000003 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000003 /* FluidAudio */; };
+		B2000001AAAA000000000004 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000004 /* SwiftDraw */; };
 		B30000190000000000000019 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000001 /* AetherEngine */; };
 		B30000210000000000000021 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = A7F159542F04124A001B2177 /* Sentry */; };
 		B30000220000000000000022 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = B2000010AAAA000000000004 /* SwiftDraw */; };
@@ -52,7 +52,7 @@
 		A70B44472F05AF3200DEF5ED /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolder = PlugIns;
 			files = (
 				A70B44422F05AF3200DEF5ED /* TopShelfExtension.appex in Embed Foundation Extensions */,
 			);
@@ -61,7 +61,7 @@
 		C40000050000000000000005 /* Embed ExtensionKit Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
-			dstSubfolderSpec = 16;
+			dstSubfolder = Product;
 			files = (
 				C40000010000000000000001 /* AssetPackExtension.appex in Embed ExtensionKit Extensions */,
 			);
@@ -393,8 +393,8 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				D50000020000000000000002 /* RivuletMac */,
 				B30000200000000000000020 /* RivuletCore */,
+				D50000020000000000000002 /* RivuletMac */,
 			);
 			name = "Rivulet Mac";
 			packageProductDependencies = (
@@ -414,7 +414,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					A70B44382F05AF3200DEF5ED = {
 						CreatedOnToolsVersion = 26.2;
@@ -429,11 +429,11 @@
 					B30000040000000000000004 = {
 						CreatedOnToolsVersion = 26.5;
 					};
-					D50000040000000000000004 = {
-						CreatedOnToolsVersion = 27.2;
-					};
 					C40000040000000000000004 = {
 						CreatedOnToolsVersion = 27.1;
+					};
+					D50000040000000000000004 = {
+						CreatedOnToolsVersion = 27.2;
 					};
 				};
 			};
@@ -509,7 +509,10 @@
 			alwaysOutOfDate = 1;
 			name = "Upload dSYMs to Sentry";
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Scripts/sentry-upload-dsyms.sh\"\n";
+			shellScript = (
+				"\"${SRCROOT}/Scripts/sentry-upload-dsyms.sh\"",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -672,7 +675,7 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) RIVULET_FFMPEG";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=appletvsimulator*]" = DEBUG;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -731,7 +734,7 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) RIVULET_FFMPEG";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=appletvsimulator*]" = DEBUG;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -751,6 +754,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -815,6 +819,7 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -945,7 +950,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -985,7 +990,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;

@@ -22,7 +22,7 @@ struct IOSPlexHomeHero: View {
     @State private var isPaging = false
 
     /// Share of the page travel the artwork lags behind, as in `PreviewCarouselLayout`.
-    private static let parallax: CGFloat = 0.3
+    private nonisolated static let parallax: CGFloat = 0.3
 
     private var isWide: Bool { size.width > size.height }
     private var pageWidth: CGFloat { Self.pageWidth(size.width, bleed: bleed) }
@@ -59,7 +59,8 @@ struct IOSPlexHomeHero: View {
                     )
                     .allowsHitTesting(false)
                 }
-                .ignoresSafeArea(edges: .horizontal)
+                // The artwork alone extends beneath the network and battery status chrome.
+                .ignoresSafeArea(edges: [.horizontal, .top])
                 // Fades out at the bottom into the page's ambient wash.
                 .mask {
                     LinearGradient(

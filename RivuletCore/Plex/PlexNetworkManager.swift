@@ -546,7 +546,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     /// The genres and decades a section's `/all` can be filtered by (`genre=`, `decade=`).
     func getLibraryFilterOptions(serverURL: String, authToken: String, sectionId: String) async throws -> LibraryFilterOptions {
-        func values(_ field: String) async throws -> [PlexFilterValue] {
+        @Sendable func values(_ field: String) async throws -> [PlexFilterValue] {
             guard let url = URL(string: "\(serverURL)/library/sections/\(sectionId)/\(field)") else {
                 throw PlexAPIError.invalidURL
             }
@@ -2077,8 +2077,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
 
         do {
-            let (_, response) = try await session.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            _ = try await session.data(for: request)
         } catch {
             // Best-effort — don't block on failure
             print("[Plex] Failed to stop transcode session \(sessionId): \(error.localizedDescription)")

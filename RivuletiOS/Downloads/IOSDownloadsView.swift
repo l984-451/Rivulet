@@ -242,7 +242,7 @@ extension DownloadRecord {
             return String(localized: "Waiting for Wi-Fi")
         case .waitingForServer:
             return String(localized: "Waiting for Server")
-        case .preparing(let progress):
+        case .preparing:
             return String(localized: "Preparing on Server")
         case .downloading:
             guard let expected = expectedBytes, expected > 0 else {

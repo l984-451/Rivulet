@@ -1,6 +1,30 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet iOS"
+          }
+        }
+      }
+    },
     "NSLocalNetworkUsageDescription" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10,16 +34,16 @@
             "value" : "Rivulet stellt eine Verbindung zu deinen Plex-Servern und Live-TV-Quellen in deinem lokalen Netzwerk her, um deine Medien wiederzugeben."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rivulet connects to your Plex servers and Live TV sources on your local network to play your media."
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το Rivulet συνδέεται με τους διακομιστές Plex και τις πηγές ζωντανής τηλεόρασης στο τοπικό σας δίκτυο για να αναπαράγει το περιεχόμενό σας."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet connects to your Plex servers and Live TV sources on your local network to play your media."
           }
         }
       }

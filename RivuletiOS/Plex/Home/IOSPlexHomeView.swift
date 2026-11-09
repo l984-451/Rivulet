@@ -35,6 +35,9 @@ struct IOSPlexHomeView: View {
                 .refreshable { await browse.refresh() }
             }
         }
+        // The navigation stack applies its safe area at this level. Expand the Home
+        // content itself so the hero can render behind the status indicators.
+        .ignoresSafeArea(.container, edges: hero ? [.top, .horizontal] : [])
         .iosPlexHeroChrome(hero: hero, title: String(localized: "Home"))
         .toolbar {
             IOSAccountToolbarItem()

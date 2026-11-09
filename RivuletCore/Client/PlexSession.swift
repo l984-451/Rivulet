@@ -410,7 +410,7 @@ final class PlexSession: ObservableObject {
                                       itemServerID: request.item.serverID, currentMachineID: ClientHost.offline.currentServerID)
     }
 
-    static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
+    nonisolated static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
         guard let base = URL(string: serverURL),
               var components = URLComponents(url: base.appending(path: partKey), resolvingAgainstBaseURL: false) else {
             return nil

@@ -73,7 +73,7 @@ final class MediaItemDetailPageViewController: UIViewController {
 
     private var isWatched: Bool
     private let blurFade = BlurFadeTransitioningDelegate()
-    private var provider: MediaProvider? { MediaProviderRegistry.shared.provider(for: item.ref.providerID) }
+    private var provider: (any MediaProvider)? { MediaProviderRegistry.shared.provider(for: item.ref.providerID) }
 
     init(item: MediaItem, seriesTitle: String?, onPlay: @escaping (MediaItem, String?) -> Void) {
         self.item = item

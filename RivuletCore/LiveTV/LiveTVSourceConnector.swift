@@ -121,7 +121,7 @@ struct LiveTVSourceConnector {
                 throw LiveTVConnectError.source(Self.signInFailureCopy(for: error))
             }
         }
-        let store = LiveTVDataStore.shared
+        let store = await MainActor.run { LiveTVDataStore.shared }
         await store.addDispatcharrSource(baseURL: request.baseURL, name: name.isEmpty ? Self.defaultServerName : name,
                                          apiToken: token, channelProfile: request.channelProfile)
         await Self.load(store)
@@ -160,7 +160,7 @@ struct LiveTVSourceConnector {
         } catch {
             throw LiveTVConnectError.source(Self.failureCopy(for: error))
         }
-        let store = LiveTVDataStore.shared
+        let store = await MainActor.run { LiveTVDataStore.shared }
         await store.addM3USource(m3uURL: request.m3uURL, epgURL: request.epgURL,
                                  name: name.isEmpty ? Self.defaultPlaylistName : name)
         await Self.load(store)
@@ -227,7 +227,7 @@ struct LiveTVSourceConnector {
         } catch {
             throw LiveTVConnectError.source(Self.xtreamFailureCopy(for: error))
         }
-        let store = LiveTVDataStore.shared
+        let store = await MainActor.run { LiveTVDataStore.shared }
         await store.addXtreamSource(account: request.account, name: name.isEmpty ? Self.defaultPlaylistName : name)
         await Self.load(store)
     }
@@ -293,7 +293,7 @@ struct LiveTVSourceConnector {
             throw LiveTVConnectError.source(Self.tvheadendFailureCopy(for: error))
         }
         let canRecord = request.account.isSignedIn ? await request.service.canRecord() : nil
-        let store = LiveTVDataStore.shared
+        let store = await MainActor.run { LiveTVDataStore.shared }
         await store.addTvheadendSource(account: request.account, name: name.isEmpty ? Self.defaultTvheadendName : name,
                                        canRecord: canRecord)
         await Self.load(store)
@@ -348,6 +348,7 @@ struct LiveTVSourceConnector {
 
     /// Host for the address placeholder and presets: the Plex server's when it
     /// is on the local network, since many run both on one box.
+    @MainActor
     static var suggestedHost: String {
         suggestedHost(plexServerURL: PlexAuthManager.shared.selectedServerURL)
     }
@@ -359,9 +360,15 @@ struct LiveTVSourceConnector {
         return "192.168.1.100"
     }
 
-    /// The address a form starts with for `app`.
-    static func defaultAddress(for app: LiveTVServerApp, host: String = suggestedHost) -> String {
+    /// The address a form starts with for `app`, using an explicit host.
+    static func defaultAddress(for app: LiveTVServerApp, host: String) -> String {
         "http://\(host):\(app.defaultPort)"
+    }
+
+    /// The address a form starts with for `app`, using the selected Plex server when available.
+    @MainActor
+    static func defaultAddress(for app: LiveTVServerApp) -> String {
+        defaultAddress(for: app, host: suggestedHost)
     }
 
     private static func isLocalIP(_ host: String) -> Bool {

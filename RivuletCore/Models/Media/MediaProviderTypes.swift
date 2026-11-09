@@ -44,7 +44,7 @@ extension MediaProviderError: LocalizedError {
 
 extension MediaProviderKind {
     /// The kind a provider id names ("jellyfin:<serverID>"), nil for any other id.
-    init?(providerID: String) {
+    nonisolated init?(providerID: String) {
         guard let colon = providerID.firstIndex(of: ":"),
               let kind = Self(rawValue: String(providerID[..<colon])) else { return nil }
         self = kind

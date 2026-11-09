@@ -67,6 +67,7 @@ struct LiveCardItem: Hashable, Identifiable {
 extension Array where Element == LiveCardItem {
     /// Each card's `setToRecord`, from the schedule. Recording cards already
     /// say so themselves.
+    @MainActor
     func markingRecordings(_ recordings: [LiveTVScheduledRecording]) -> [LiveCardItem] {
         map { item in
             guard item.kind != .recording, let program = item.program else { return item }
@@ -113,6 +114,7 @@ enum LiveShelves {
         var sourceNames: [String: String] = [:]
     }
 
+    @MainActor
     static func build(_ input: Input, sourceIdFilter: String?, now: Date) -> [LiveShelf] {
         let epg = input.epg
         // Each row asks again for the same channel; scan its guide once per build.

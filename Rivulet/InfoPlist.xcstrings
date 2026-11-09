@@ -1,6 +1,30 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Rivulet"
+          }
+        }
+      }
+    },
     "NSLocalNetworkUsageDescription" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10,16 +34,16 @@
             "value" : "Rivulet stellt eine Verbindung zu Medienservern in deinem lokalen Netzwerk her, etwa zu deinem Plex-Server, um deine Mediathek zu streamen."
           }
         },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rivulet connects to media servers on your local network, such as your Plex server, to stream your library."
-          }
-        },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το Rivulet συνδέεται με διακομιστές πολυμέσων στο τοπικό σας δίκτυο, όπως τον διακομιστή Plex, για να αναπαράγει τη βιβλιοθήκη σας."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet connects to media servers on your local network, such as your Plex server, to stream your library."
           }
         }
       }

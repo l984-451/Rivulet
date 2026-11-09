@@ -18,7 +18,7 @@ nonisolated struct LiveTVSyncBody: Codable, Equatable {
 }
 
 extension LiveTVDataStore {
-    static func syncID(forSource id: String) -> String { "livetv:" + id }
+    nonisolated static func syncID(forSource id: String) -> String { "livetv:" + id }
 
     /// The saved IPTV sources with their secrets. A server's own Live TV is not saved, so not here.
     func syncExports() -> [AccountExport] {

@@ -16,7 +16,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private var seasonDetail: MediaItemDetail?
     private var showDetail: MediaItemDetail?
     private var ageRating: String?
-    private var provider: MediaProvider? { MediaProviderRegistry.shared.provider(for: season.ref.providerID) }
+    private var provider: (any MediaProvider)? { MediaProviderRegistry.shared.provider(for: season.ref.providerID) }
 
     private let background = UIImageView()
     private let themeVideo = ThemeVideoBackdropView()

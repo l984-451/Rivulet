@@ -69,7 +69,6 @@ struct FocusMemoryModifier: ViewModifier {
 
     #if DEBUG
     private func debugLog(_ event: String, extra: String = "") {
-        let suffix = extra.isEmpty ? "" : " | \(extra)"
     }
     #else
     private func debugLog(_ event: String, extra: String = "") {}

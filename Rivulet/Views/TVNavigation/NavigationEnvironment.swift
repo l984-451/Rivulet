@@ -38,7 +38,6 @@ enum SidebarTab: Hashable {
 /// Nested navigation state: while either flag is set the sidebar hides its pill
 /// and blocks tab switches. Settings sub-pages get their own flag because
 /// sharing `isNested` raced the sidebar on the way back to the root page.
-@MainActor
 class NestedNavigationState: ObservableObject {
     @Published var isNested: Bool = false
     @Published var isSettingsSubPage: Bool = false

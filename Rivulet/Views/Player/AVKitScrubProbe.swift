@@ -13,6 +13,7 @@ import UIKit
 /// - RIVULET_SCRUBPROBE=rivulet: renders PlayerProgressBarView in the same states.
 /// - RIVULET_SCRUBPROBE=barstates (optional RIVULET_SCRUBPROBE_STRIPES=1): AVKit's bar
 ///   focus dim, scans and skips via its private selectors; `rivulet-bar` renders ours.
+@MainActor
 final class AVKitScrubProbe: NSObject {
     private static var current: AVKitScrubProbe?
 
@@ -463,7 +464,7 @@ enum ScrubStatesProbe {
         vc.view.backgroundColor = .black
         // AVKit's own paused-with-controls frame, so both glass renders sit on the same pixels.
         let backdrop = UIImageView(image: UIImage(contentsOfFile: caches.appendingPathComponent("probe-backdrop.png").path))
-        backdrop.frame = UIScreen.main.bounds
+        backdrop.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.addSubview(backdrop)
         let player = AVPlayer(url: streamURL)
         let rail = UIView(frame: CGRect(x: 80, y: 796, width: 1760, height: 70))
@@ -1130,7 +1131,7 @@ enum ScrubStatesProbe {
     /// Stripes of falling period (4, 12, 40pt) then a step edge, across x 300...1500,
     /// mid grey elsewhere: blur shows as lost stripe contrast and a wider edge.
     private static func blurPattern() -> UIView {
-        let pattern = UIView(frame: UIScreen.main.bounds)
+        let pattern = UIView(frame: UIScreen.screens.first?.bounds ?? .zero)
         pattern.backgroundColor = UIColor(white: 0.5, alpha: 1)
         for (start, period) in [(300.0, 4.0), (600, 12), (900, 40)] {
             var x = start
@@ -1253,7 +1254,7 @@ enum ScrubStatesProbe {
         let vc = UIViewController()
         vc.modalPresentationStyle = .fullScreen
         let backdrop = UIImageView(image: UIImage(contentsOfFile: caches.appendingPathComponent("probe-backdrop.png").path))
-        backdrop.frame = UIScreen.main.bounds
+        backdrop.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.addSubview(backdrop)
         let wash = env["RIVULET_SCRUBPROBE_WASH"]?.split(separator: ",").compactMap({ Double($0) })
         let washColor = wash.flatMap { $0.count == 2 ? UIColor(white: $0[0], alpha: $0[1]) : nil }
@@ -1356,10 +1357,10 @@ enum ScrubStatesProbe {
         // AVKit's raw paused frame with no chrome, so our dimming and controls
         // composite over the same pixels AVKit's did.
         let backdrop = UIImageView(image: UIImage(contentsOfFile: caches.appendingPathComponent("probe-video.png").path))
-        backdrop.frame = UIScreen.main.bounds
+        backdrop.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.addSubview(backdrop)
         let scrim = ChromeScrimView()
-        scrim.frame = UIScreen.main.bounds
+        scrim.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.addSubview(scrim)
         let rail = PlayerRailView()
         rail.translatesAutoresizingMaskIntoConstraints = false
@@ -1418,10 +1419,10 @@ enum ScrubStatesProbe {
         let vc = UIViewController()
         vc.modalPresentationStyle = .fullScreen
         let backdrop = UIImageView(image: UIImage(contentsOfFile: caches.appendingPathComponent("probe-backdrop.png").path))
-        backdrop.frame = UIScreen.main.bounds
+        backdrop.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.addSubview(backdrop)
         if ProcessInfo.processInfo.environment["RIVULET_SCRUBPROBE_BRIGHT"] == "1" {
-            let white = UIView(frame: UIScreen.main.bounds)
+            let white = UIView(frame: UIScreen.screens.first?.bounds ?? .zero)
             white.backgroundColor = .white
             let stripe = UIView(frame: CGRect(x: 1500, y: 0, width: 120, height: 1080))
             stripe.backgroundColor = .black
@@ -1471,7 +1472,7 @@ enum ScrubStatesProbe {
         vc.view.backgroundColor = .black
         let player = AVPlayer(url: streamURL)
         let videoLayer = AVPlayerLayer(player: player)
-        videoLayer.frame = UIScreen.main.bounds
+        videoLayer.frame = UIScreen.screens.first?.bounds ?? .zero
         vc.view.layer.addSublayer(videoLayer)
         let bar = PlayerProgressBarView()
         bar.translatesAutoresizingMaskIntoConstraints = false

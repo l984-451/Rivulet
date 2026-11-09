@@ -703,7 +703,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             ),
             guids: guids
         )
-        let service = PlexWatchlistService.shared
+        let service = await MainActor.run { PlexWatchlistService.shared }
         await service.add(guid: guid, item: entry)
         // `add` swallows its own API errors and reverts the optimistic insert,
         // so asking whether the guid survived is the only way to know the write
@@ -717,7 +717,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     func removeFromWatchlist(_ ref: MediaItemRef) async throws {
         let guids = await watchlistGUIDs(ref)
         guard !guids.isEmpty else { throw MediaProviderError.notFound }
-        let service = PlexWatchlistService.shared
+        let service = await MainActor.run { PlexWatchlistService.shared }
         // Remove by the guid actually in the local set — that's the one the
         // service matches its stored items against.
         let target = await MainActor.run { guids.first(where: service.contains) }

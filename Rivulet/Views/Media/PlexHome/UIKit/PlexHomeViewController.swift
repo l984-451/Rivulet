@@ -522,6 +522,7 @@ final class PlexHomeViewController: UIViewController {
     private var ambientView: AmbientBackdropView!
     private var backgroundBlurView: UIVisualEffectView!
     private var backdropView: HeroBackdropView!
+    private var backdropTopConstraint: NSLayoutConstraint!
     private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<HomeSectionID, HomeItemID>!
 
@@ -746,6 +747,9 @@ final class PlexHomeViewController: UIViewController {
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         updateContentTopInset()
+        // Let only the artwork bleed beneath the system network/battery chrome;
+        // hero controls and collection content retain their normal layout.
+        backdropTopConstraint?.constant = -view.safeAreaInsets.top
     }
 
     override func viewDidLayoutSubviews() {
@@ -771,18 +775,25 @@ final class PlexHomeViewController: UIViewController {
         let id = ObjectIdentifier(scroller)
         guard scrollerSettleObservations[id] == nil else { return }
         scrollerSettleObservations[id] = scroller.observe(\.contentOffset, options: [.new]) { [weak self, weak scroller] _, _ in
-            guard let self, let scroller else { return }
-            let workID = ObjectIdentifier(scroller)
-            self.scrollerSettleWork[workID]?.cancel()
-            let work = DispatchWorkItem { [weak scroller] in
-                guard let scroller else { return }
-                let x = scroller.contentOffset.x
-                let inset = scroller.adjustedContentInset
-                NSLog("[ShelfSettle] x=%.1f insetL=%.1f insetR=%.1f y=%.0f", x, inset.left, inset.right, scroller.frame.minY)
+            Task { @MainActor [weak self, weak scroller] in
+                guard let self, let scroller else { return }
+                self.scheduleScrollerSettleLog(for: scroller)
             }
-            self.scrollerSettleWork[workID] = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
         }
+    }
+
+    @MainActor
+    private func scheduleScrollerSettleLog(for scroller: UIScrollView) {
+        let workID = ObjectIdentifier(scroller)
+        scrollerSettleWork[workID]?.cancel()
+        let work = DispatchWorkItem { [weak scroller] in
+            guard let scroller else { return }
+            let x = scroller.contentOffset.x
+            let inset = scroller.adjustedContentInset
+            NSLog("[ShelfSettle] x=%.1f insetL=%.1f insetR=%.1f y=%.0f", x, inset.left, inset.right, scroller.frame.minY)
+        }
+        scrollerSettleWork[workID] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
     }
 
     override func viewDidLoad() {
@@ -2222,14 +2233,16 @@ final class PlexHomeViewController: UIViewController {
         ])
 
         view.addSubview(backdropView)
+        backdropTopConstraint = backdropView.topAnchor.constraint(equalTo: view.topAnchor)
         NSLayoutConstraint.activate([
-            backdropView.topAnchor.constraint(equalTo: view.topAnchor),
+            backdropTopConstraint,
             backdropView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             backdropView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             backdropView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
         backdropView.isHidden = !showHomeHero
     }
+
 
     /// Top inset: 0 with the hero, otherwise room for the first row.
     private func updateContentTopInset() {
@@ -3033,7 +3046,12 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// The hero section: the screen less 200 pt, then a 40 pt gap to the first shelf.
-    private static var heroHeight: CGFloat { max(400, UIScreen.main.bounds.height - 200) }
+    private static var heroHeight: CGFloat {
+        let screenHeight = UIApplication.shared.openSessions
+            .compactMap { ($0.scene as? UIWindowScene)?.screen.bounds.height }
+            .first ?? 1080
+        return max(400, screenHeight - 200)
+    }
     private static let heroShelfGap: CGFloat = 40
     /// The line the backdrop's bottom catches up with: 40 pt above the hero's
     /// bottom, leaving Apple's ~100 pt between the art and the first row title.
@@ -5581,9 +5599,10 @@ final class PlexHomeViewController: UIViewController {
     }
 
     private func presentPlayer(for item: PlexMetadata, fromBeginning: Bool, mediaID: String? = nil) {
-        Task { @MainActor in
-            guard let serverURL = authManager.selectedServerURL,
-                  let token = authManager.selectedServerToken else { return }
+        Task { @MainActor [weak self] in
+            guard let presenter = self,
+                  let serverURL = presenter.authManager.selectedServerURL,
+                  let token = presenter.authManager.selectedServerToken else { return }
 
             let request = item.heroBackdropRequest(serverURL: serverURL, authToken: token)
             let (artImage, thumbImage) = await HeroBackdropResolver.shared.playerLoadingImages(for: request)
@@ -5598,8 +5617,8 @@ final class PlexHomeViewController: UIViewController {
                 loadingThumbImage: thumbImage,
                 preferredMediaID: mediaID
             )
-            PlayerPresenter.present(viewModel: viewModel, from: self, onDismiss: { [weak self] in
-                Task { await self?.dataStore.refreshHubs() }
+            PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: { [weak presenter] in
+                Task { await presenter?.dataStore.refreshHubs() }
             })
         }
     }
@@ -6576,6 +6595,7 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// Weak trampoline between CADisplayLink (strong target) and the VC.
+    @MainActor
     private final class DisplayLinkProxy: NSObject {
         private weak var owner: PlexHomeViewController?
         init(_ owner: PlexHomeViewController) { self.owner = owner }

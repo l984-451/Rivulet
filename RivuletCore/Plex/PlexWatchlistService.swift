@@ -186,8 +186,9 @@ final class PlexWatchlistService: ObservableObject {
 
     private func surface(_ message: String) {
         transientWriteError = message
+        let duration = transientErrorDuration
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(transientErrorDuration))
+            try? await Task.sleep(for: .seconds(duration))
             guard let self else { return }
             if self.transientWriteError == message {
                 self.transientWriteError = nil

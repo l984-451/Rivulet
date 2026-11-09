@@ -30,7 +30,7 @@ struct IOSPlexHeroFeed: View {
                 }
                 .padding(.bottom, 24)
             }
-            .ignoresSafeArea(edges: hero ? .top : [])
+            .ignoresSafeArea(.container, edges: hero ? [.top, .horizontal] : [])
             .onScrollGeometryChange(for: Bool.self) { scroll in
                 scroll.contentOffset.y + scroll.contentInsets.top < IOSPlexHomeHero.height(for: fullSize(proxy)) - 120
             } action: { _, under in heroUnderBar = under }
@@ -41,6 +41,9 @@ struct IOSPlexHeroFeed: View {
             }
             .iosPlexAmbient(hero ? heroItems.first { $0.ref == heroSelection } ?? heroItems.first : nil)
         }
+        // Expand the layout container itself so the hero's first pixels can sit behind
+        // the navigation bar and device status indicators, not just its artwork layer.
+        .ignoresSafeArea(.container, edges: hero ? [.top, .horizontal] : [])
     }
 
     /// Warms the hero pages' logos and art at the size the hero requests.
@@ -56,7 +59,9 @@ struct IOSPlexHeroFeed: View {
     }
 
     private func fullSize(_ proxy: GeometryProxy) -> CGSize {
-        CGSize(width: proxy.size.width, height: proxy.size.height + proxy.safeAreaInsets.top)
+        // The feed already ignores the top safe area. Do not add that inset again:
+        // the ambient backdrop may fill the screen, but the hero keeps its own height.
+        proxy.size
     }
 }
 

@@ -37,7 +37,7 @@ final class PreferenceMirror {
     private let store: KeyValueStore
     /// Largest value written. The store holds 1 MB in all, so one value gets a small share.
     private let maxValueBytes: Int
-    static let defaultMaxValueBytes = 64_000
+    nonisolated static let defaultMaxValueBytes = 64_000
 
     init(defaults: UserDefaults = .standard, domain: String = Bundle.main.bundleIdentifier ?? "",
          store: KeyValueStore, maxValueBytes: Int = PreferenceMirror.defaultMaxValueBytes) {

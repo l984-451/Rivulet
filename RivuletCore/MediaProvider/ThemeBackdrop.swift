@@ -116,7 +116,7 @@ final class ThemeBackdrop {
         let center = NotificationCenter.default
         notifications = HostPlatform.appearanceChangeNotifications.map { name in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
+                Task { @MainActor [weak self] in self?.refresh() }
             }
         }
     }
@@ -176,7 +176,7 @@ final class ThemeBackdrop {
         observers = [
             layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] layer, _ in
                 let ready = layer.isReadyForDisplay
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.generation == generation, ready else { return }
                     self.startup?.cancel()
                     self.layer.opacity = 1
@@ -184,7 +184,7 @@ final class ThemeBackdrop {
             },
             looper.observe(\.status, options: [.initial, .new]) { [weak self] looper, _ in
                 let failed = looper.status == .failed
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.generation == generation, failed else { return }
                     self.session.playbackFailed()
                 }

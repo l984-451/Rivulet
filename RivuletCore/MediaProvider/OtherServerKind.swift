@@ -12,6 +12,7 @@
 
 import Foundation
 
+@MainActor
 struct OtherServerKind {
     let kind: MediaProviderKind
     /// The signed-in account, read without building a provider (the sidebar's first render).

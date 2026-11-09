@@ -20,7 +20,7 @@ enum EpisodePicker {
     /// first season's pick), the pick for a season. Nil means the caller plays `item` as-is.
     /// The Play button and its title both use it, so they always agree.
     static func resolvePlayTarget(
-        for item: MediaItem, provider: MediaProvider
+        for item: MediaItem, provider: any MediaProvider
     ) async -> MediaItem? {
         switch item.kind {
         case .movie, .episode:

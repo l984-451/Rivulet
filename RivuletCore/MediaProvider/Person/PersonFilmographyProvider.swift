@@ -35,7 +35,7 @@ private let _defaultServerFilmography: @Sendable (_ person: MediaPerson) async -
         return (url, tok, pid)
     }
     guard let serverURL, let token else { return [] }
-    let headers = await PlexNetworkManager.shared.plexHeaders(authToken: token)
+    let headers = PlexNetworkManager.shared.plexHeaders(authToken: token)
 
     var actorId = person.originActorId
     if actorId == nil, person.originFilter == "actor" {
@@ -112,7 +112,7 @@ private nonisolated struct DiscoverContainer: Codable, Sendable {
 private func discoverItems(_ path: String) async -> [DiscoverContainer.Item] {
     guard let token = await MainActor.run(body: { PlexAuthManager.shared.authToken }),
           let url = URL(string: "https://discover.provider.plex.tv\(path)") else { return [] }
-    let headers = await PlexNetworkManager.shared.plexHeaders(authToken: token)
+    let headers = PlexNetworkManager.shared.plexHeaders(authToken: token)
     let container: DiscoverContainer? = try? await PlexNetworkManager.shared.request(url, headers: headers)
     return container?.MediaContainer.Metadata ?? []
 }

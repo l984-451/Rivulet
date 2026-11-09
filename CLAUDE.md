@@ -1319,6 +1319,13 @@ The Plex Discover API uses three different hosts:
 
 ## Plex server API gotchas
 
+**Search through `/hubs/search`, never the legacy `/search`.** Measured on PMS 1.43.5:
+`/search` caps each type at 15, so "christmas" returned 15 home videos and no film from
+the Movies library. `/hubs/search` caps per hub (`limit`), scores each result, and adds
+actor, director, genre and collection hubs (`PlexHubSearch`). An item with `reason=actor`
+or `director` matched a person, not its title, and episodes of a matching show come back
+too, so the title rows filter both.
+
 **Hub items are not full metadata.** `/hubs/continueWatching` sends the `Guid`
 array only with `includeGuids=1` (which `continueWatchingURL` sends), and only three `Role` entries. Anything keyed on external
 ids or the full cast reads `getFullMetadata` first, as Insights does

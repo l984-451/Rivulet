@@ -141,6 +141,7 @@ struct MacDetailView: View {
                             ForEach(episodes) { episode in
                                 MacEpisodeCell(episode: episode, isNextUp: episode.id == nextUpID, width: 300)
                                     .id(episode.id)
+                                    .transition(.opacity)
                             }
                         }
                     }
@@ -243,7 +244,9 @@ struct MacDetailView: View {
         do {
             let loaded = try await browse.provider(for: season.ref).children(of: season.ref).sortedByNumber()
             guard seasonKey == key else { return }
-            episodes = loaded
+            // A deleted episode fades out of the list.
+            let shrank = episodesSeasonKey == key && loaded.count < episodes.count
+            withAnimation(shrank ? .default : nil) { episodes = loaded }
             episodesSeasonKey = key
         } catch let error where isCancellationError(error) {
         } catch {

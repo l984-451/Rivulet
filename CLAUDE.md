@@ -152,7 +152,7 @@ Standing exceptions:
 - Photos are tvOS only.
 - Downloads are iOS only.
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
-- The detail page offers no Delete on either app: it would be left showing what it deleted.
+- Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
 
 ## Platform Boundary (tvOS / iOS)
 

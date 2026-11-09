@@ -151,9 +151,22 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     // viewDidAppear is dropped, because focus is still on the presenter then.
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
+        var up = context.nextFocusedView
+        while let v = up, !(v is SeasonEpisodeCell) { up = v.superview }
+        if let cell = up as? SeasonEpisodeCell, let ip = collectionView.indexPath(for: cell),
+           let id = dataSource.itemIdentifier(for: ip) { focusedEpisodeID = id }
         // Once only, after the episodes were there to land on: a later refresh must not pull focus back.
         if !episodes.isEmpty, context.nextFocusedView?.isDescendant(of: view) == true { pendingFocusEpisodeID = nil }
     }
+
+    /// The next surviving id after `id` in `ids`, else the nearest one before it.
+    static func neighbourID(of id: String, in ids: [String], surviving: Set<String>) -> String? {
+        guard let at = ids.firstIndex(of: id) else { return nil }
+        return ids[(at + 1)...].first(where: surviving.contains) ?? ids[..<at].last(where: surviving.contains)
+    }
+
+    /// The episode whose card holds focus now, or last held it while the page was up.
+    private var focusedEpisodeID: String?
 
     /// Scrolls the pending episode's row to the centre, where focus will keep it, so its cell
     /// exists for `preferredFocusEnvironments`; then asks for focus.
@@ -295,7 +308,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
 
     // MARK: - Data
 
-    private func applySnapshot() {
+    private func applySnapshot(animated: Bool = false, completion: (() -> Void)? = nil) {
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([0, 1])
         snapshot.appendItems([Self.headerID], toSection: 0)
@@ -309,7 +322,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         // self-sizing header re-measures.
         let existing = Set(dataSource.snapshot().itemIdentifiers)
         snapshot.reconfigureItems(([Self.headerID] + ids).filter(existing.contains))
-        dataSource.apply(snapshot, animatingDifferences: false)
+        dataSource.apply(snapshot, animatingDifferences: animated, completion: completion)
     }
 
     private func load() {
@@ -333,12 +346,25 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
                     youTubeVideoID: detail.youTubeTrailerID, providerID: detail.item.ref.providerID)
                 self.extrasShelf.configure(split.trailers + split.extras)
             }
+            // A deleted episode animates out; focus moves to the one after it, else the one before.
+            let before = self.episodes.map(\.ref.itemID)
             self.episodes = EpisodePicker.inPlaybackOrder(children)
+            let remaining = Set(self.episodes.map(\.ref.itemID))
+            let removed = !before.isEmpty && !remaining.isSuperset(of: before)
+            if removed, let focused = self.focusedEpisodeID, !remaining.contains(focused) {
+                self.pendingFocusEpisodeID = Self.neighbourID(of: focused, in: before, surviving: remaining)
+            }
             self.episodesByID = Dictionary(self.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
             if !self.episodes.isEmpty { self.isWatched = self.episodes.allSatisfy(\.isWatched) }
             self.applyText()
-            self.applySnapshot()
-            if self.pendingFocusEpisodeID != nil { self.focusPendingEpisode() }
+            if removed {
+                self.applySnapshot(animated: true) { [weak self] in
+                    if self?.pendingFocusEpisodeID != nil { self?.focusPendingEpisode() }
+                }
+            } else {
+                self.applySnapshot()
+                if self.pendingFocusEpisodeID != nil { self.focusPendingEpisode() }
+            }
             self.loadLogo()
             if self.ageRating == nil, let showRef { self.loadAgeRating(showRef) }
         }

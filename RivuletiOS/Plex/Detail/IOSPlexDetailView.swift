@@ -136,6 +136,7 @@ struct IOSPlexDetailView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     ForEach(episodes) { episode in
                         IOSPlexEpisodeCell(episode: episode, isNextUp: episode.id == nextUpID, layout: .row)
+                            .transition(.opacity)
                     }
                 }
                 .padding(.horizontal, leading)
@@ -246,7 +247,9 @@ struct IOSPlexDetailView: View {
         do {
             let loaded = try await browse.provider(for: season.ref).children(of: season.ref).sortedByNumber()
             guard seasonKey == key else { return }
-            episodes = loaded
+            // A deleted episode fades out of the list.
+            let shrank = episodesSeasonKey == key && loaded.count < episodes.count
+            withAnimation(shrank ? .default : nil) { episodes = loaded }
             episodesSeasonKey = key
         } catch let error where isCancellationError(error) {
         } catch {

@@ -23,7 +23,7 @@ struct MacDetailHeader: View {
 
     private var height: CGFloat { min(max(width * 0.42, 380), 640) }
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
-    private var sources: [MediaSource] { detail?.mediaSources ?? [] }
+    private var versions: [MediaSource] { detail.map(VersionPicker.versions(in:)) ?? [] }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -100,7 +100,7 @@ struct MacDetailHeader: View {
                         Label("From Beginning", systemImage: "arrow.counterclockwise")
                     }
                 }
-                if item.isPlayable, sources.count > 1 { versionMenu }
+                if item.isPlayable, !versions.isEmpty { versionMenu }
                 if item.kind == .show {
                     Button { actions.shuffleShow(item) } label: {
                         if actions.preparingID == MacActions.shuffleID(providerID: item.ref.providerID, itemID: item.ref.itemID) {
@@ -173,8 +173,8 @@ struct MacDetailHeader: View {
     /// Plays one of the title's files instead of the best one.
     private var versionMenu: some View {
         Menu {
-            ForEach(sources) { source in
-                Button(label(for: source)) {
+            ForEach(Array(zip(versions, VersionPicker.labels(for: versions))), id: \.0.id) { source, label in
+                Button(label) {
                     if let playTarget { playback.play(playTarget, sourceID: source.id) }
                 }
             }
@@ -183,14 +183,6 @@ struct MacDetailHeader: View {
         }
         .fixedSize()
         .help("Play a different version")
-    }
-
-    private func label(for source: MediaSource) -> String {
-        let details = [source.resolutionBadge, source.container?.uppercased(),
-                       source.fileSize.map { $0.formatted(.byteCount(style: .file)) }].compactMap { $0 }
-        let name = source.versionName ?? details.first ?? String(localized: "Version")
-        let rest = source.versionName == nil ? Array(details.dropFirst()) : details
-        return rest.isEmpty ? name : "\(name) · \(rest.joined(separator: " · "))"
     }
 
     /// Plex answers from its watchlist; an episode or season stands for its show.

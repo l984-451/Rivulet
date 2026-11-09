@@ -7,10 +7,21 @@ import XCTest
 private final class StubPhotoProvider: PhotoProvider, @unchecked Sendable {
     var pages: [Int: Result<PhotoPage, Error>] = [:]
     var asked: [Int] = []
+    var queries: [PhotoQuery] = []
+    var shufflesPhotosOnServer = true
+    /// Held until the test lets the page through.
+    var gate: CheckedContinuation<Void, Never>?
+    var holds = false
 
-    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, page: Page) async throws -> PhotoPage {
+    var photoSorts: [PhotoQuery.Sort] { [.dateTaken] }
+    var hasPhotoLocations: Bool { false }
+
+    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         asked.append(page.offset)
-        return try (pages[page.offset] ?? .failure(MediaProviderError.notFound)).get()
+        queries.append(query)
+        let result = pages[page.offset] ?? .failure(MediaProviderError.notFound)
+        if holds { await withCheckedContinuation { gate = $0 } }
+        return try result.get()
     }
 }
 
@@ -111,6 +122,36 @@ final class PhotoListingTests: XCTestCase {
         await listing.loadFirst()?.value
         XCTAssertEqual(seen.map(\.loading), [true], "an empty, idle listing reads as No Content")
         XCTAssertEqual(seen.map(\.failed), [false])
+    }
+
+    func test_queryChangeDropsInFlightPage() async throws {
+        provider.pages = [0: page(media: ["old"], next: nil)]
+        provider.holds = true
+        let listing = listing()
+        let stale = listing.loadFirst()
+        while provider.gate == nil { await Task.yield() }
+
+        provider.holds = false
+        provider.pages = [0: page(media: ["new"], next: nil)]
+        listing.query = PhotoQuery(sort: .name)
+        provider.gate?.resume()
+        await stale?.value
+        while listing.isLoading { await Task.yield() }
+
+        XCTAssertEqual(listing.media.map(\.title), ["new"], "the page asked for under the old query never lands")
+        XCTAssertEqual(provider.queries.last?.sort, .name)
+    }
+
+    func test_clientShuffleKeepsEachPhotoOnce() async {
+        provider.shufflesPhotosOnServer = false
+        provider.pages = [0: page(folders: ["f"], media: (1...6).map(String.init), next: 200),
+                          200: page(media: (4...10).map(String.init), next: nil)]
+        let listing = PhotoListing(folder: nil, query: PhotoQuery(shuffled: true)) { [provider, library] in (provider, library) }
+        await listing.loadFirst()?.value
+        await listing.loadMore()?.value
+        XCTAssertEqual(listing.media.compactMap { Int($0.title) }.sorted(), Array(1...10))
+        XCTAssertTrue(listing.folders.isEmpty, "a shuffled listing is photos alone")
+        XCTAssertEqual(listing.library?.id, "lib")
     }
 
     func test_withNoProvider_reportsAFailure() async {

@@ -665,10 +665,7 @@ struct TVSidebarView: View {
                     }
                 }
                 if library.kind == .photos {
-                    return PhotoLibraryViewController(title: library.title) {
-                        (MediaProviderRegistry.shared.provider(for: library.providerID) as? any PhotoProvider)
-                            .map { ($0, library) }
-                    }
+                    return PhotoLibraryViewController(title: library.title, source: PhotoListing.source(for: library))
                 }
                 if library.kind == .music {
                     return MusicLibraryViewController(libraryKey: library.id, title: library.title,

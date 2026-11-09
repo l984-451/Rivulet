@@ -133,12 +133,36 @@ final class EmbyPhotoFolderTests: XCTestCase {
         XCTAssertEqual(try map(Fixtures.rootMedia, at: 3)?.date, EmbyJSON.date("2025-07-16T06:46:37.0000000Z"))
     }
 
+    func test_photo_detailsAreSizeAndFileOnly_andNoPlace() throws {
+        let photo = try XCTUnwrap(try map(Fixtures.rootMedia))
+        XCTAssertNil(photo.coordinate, "Emby sends no GPS")
+        XCTAssertNil(photo.details?.cameraLine, "nor EXIF")
+        XCTAssertNil(photo.details?.exposureLine)
+        XCTAssertEqual([photo.details?.width, photo.details?.height], [4032, 3024])
+        XCTAssertEqual(photo.details?.fileName, "photo-5.jpg")
+        XCTAssertEqual(photo.details?.takenAt, EmbyJSON.date("2025-12-09T16:42:20.0000000Z"))
+        XCTAssertFalse(photo.isFavorite)
+        let favorite = Fixtures.rootMedia.replacingOccurrences(of: #""IsFavorite":false"#, with: #""IsFavorite":true"#)
+        XCTAssertTrue(try XCTUnwrap(try map(favorite)).isFavorite)
+        XCTAssertNil(try map(Fixtures.libraryAlbums)?.details)
+    }
+
+    func test_favorites_skipTheAlbums_andRecurse() async throws {
+        server.respond("/Users/\(uid)/Items", body: Fixtures.rootMedia)
+        let trip = MediaItemRef(providerID: pid, itemID: "1653")
+        _ = try await provider().photoPage(in: photos, folder: trip, query: PhotoQuery(favoritesOnly: true),
+                                           page: Page(offset: 0, limit: 100))
+        XCTAssertEqual(server.requests.count, 1, "no album request")
+        let sent = query(server.requests[0])
+        XCTAssertEqual([sent["Filters"], sent["Recursive"]], ["IsFavorite", "true"])
+    }
+
     // MARK: - photoPage
 
     func test_root_listsFoldersNonRecursively_andEveryPhotoRecursively() async throws {
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "PhotoAlbum,Folder"], body: Fixtures.libraryAlbums)
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "Photo,Video"], body: Fixtures.rootMedia)
-        let result = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 0, limit: 100))
+        let result = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 0, limit: 100))
         XCTAssertEqual(result.folders.map(\.title), ["Trip"])
         XCTAssertEqual(result.media.map(\.title), ["photo-5", "photo-2", "trip-6", "clip-1"])
         XCTAssertEqual(result.media.map(\.kind), [.photo, .photo, .photo, .clip])
@@ -159,7 +183,7 @@ final class EmbyPhotoFolderTests: XCTestCase {
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "PhotoAlbum,Folder"], body: Fixtures.albumFolders)
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "Photo,Video"], body: Fixtures.albumMedia)
         let trip = MediaItemRef(providerID: pid, itemID: "1653")
-        let result = try await provider().photoPage(in: photos, folder: trip, page: Page(offset: 0, limit: 100))
+        let result = try await provider().photoPage(in: photos, folder: trip, query: .default, page: Page(offset: 0, limit: 100))
         XCTAssertEqual(result.folders.map(\.title), ["Day Two"])
         XCTAssertEqual(result.media.map(\.kind), [.photo, .photo, .photo, .clip])
         for request in server.requests {
@@ -170,11 +194,11 @@ final class EmbyPhotoFolderTests: XCTestCase {
 
     func test_laterPages_skipTheFoldersAndPageAgainstTheTotal() async throws {
         server.respond("/Users/\(uid)/Items", body: Fixtures.rootMedia.replacingOccurrences(of: #""TotalRecordCount":4"#, with: #""TotalRecordCount":11"#))
-        let result = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 4, limit: 4))
+        let result = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 4, limit: 4))
         XCTAssertEqual(server.requests.count, 1, "folders are asked for once")
         XCTAssertTrue(result.folders.isEmpty)
         XCTAssertEqual(result.nextPage?.offset, 8)
-        let last = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 8, limit: 4))
+        let last = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 8, limit: 4))
         XCTAssertNil(last.nextPage)
     }
 

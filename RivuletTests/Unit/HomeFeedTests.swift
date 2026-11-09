@@ -149,6 +149,15 @@ final class HomeFeedTests: XCTestCase {
                        "one Continue Watching row per server, the selected first")
     }
 
+    func test_assemble_keepsPhotoLibrariesApartInServerOrder() {
+        let selected = HomeFeed.ServerRows(libraries: [library("1")], photoLibraries: [library("p1", .photos)])
+        let other = HomeFeed.ServerRows(libraries: [library("m", provider: "jellyfin:s")],
+                                        photoLibraries: [library("p2", .photos, provider: "jellyfin:s")])
+        let home = HomeFeed.assemble(selected: selected, others: [other])
+        XCTAssertEqual(home.libraries.map(\.id), ["1", "m"])
+        XCTAssertEqual(home.photoLibraries.map(\.id), ["p1", "p2"])
+    }
+
     func test_assemble_withoutASelectedServer() {
         let other = HomeFeed.ServerRows(libraries: [library("m", provider: "jellyfin:s")], continueWatching: [],
                                         rowsByLibrary: ["m": [hub("r", provider: "jellyfin:s")]])

@@ -145,6 +145,19 @@ nonisolated struct JFItem: Decodable, Sendable {
     let extraType: String?          // on a trailer or special feature: Trailer, Featurette, BehindTheScenes, ...
     /// Internet trailers (YouTube links from TMDB); detail calls return them.
     let remoteTrailers: [JFRemoteTrailer]?
+
+    // Photos: EXIF and GPS on lists; Path, Width and Height only when asked for.
+    let cameraMake: String?
+    let cameraModel: String?
+    let exposureTime: Double?       // seconds
+    let focalLength: Double?
+    let isoSpeedRating: Int?
+    let aperture: Double?           // APEX
+    let latitude: Double?
+    let longitude: Double?
+    let width: Int?
+    let height: Int?
+    let path: String?
 }
 
 /// One entry of `RemoteTrailers`: a link, usually YouTube, and its name.

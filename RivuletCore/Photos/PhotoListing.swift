@@ -24,12 +24,26 @@ final class PhotoListing {
 
     static let pageSize = 200
 
+    /// The source a library's listing reads, shared by every app.
+    static func source(for library: MediaLibrary) -> Source {
+        {
+            (MediaProviderRegistry.shared.provider(for: library.providerID) as? any PhotoProvider)
+                .map { ($0, library) }
+        }
+    }
+
     private(set) var folders: [PhotoItem] = []
     private(set) var media: [PhotoItem] = []
     private(set) var isLoading = false
     private(set) var error: Error?
     var hasMore: Bool { nextPage != nil }
     var onChange: ((Change) -> Void)?
+    /// Changing it starts the listing over.
+    var query: PhotoQuery {
+        didSet { if query != oldValue { loadFirst() } }
+    }
+    /// The library as the last page's source gave it.
+    private(set) var library: MediaLibrary?
 
     private let source: Source
     private let folder: MediaItemRef?
@@ -38,8 +52,9 @@ final class PhotoListing {
     /// Bumped by `loadFirst`, so a page from before the reload is dropped.
     private var generation = 0
 
-    init(folder: MediaItemRef?, source: @escaping Source) {
+    init(folder: MediaItemRef?, query: PhotoQuery = .default, source: @escaping Source) {
         self.folder = folder
+        self.query = query
         self.source = source
     }
 
@@ -63,15 +78,18 @@ final class PhotoListing {
         guard !isLoading, let page = nextPage else { return nil }
         isLoading = true
         error = nil
-        let generation = generation
+        let generation = generation, query = query
         return Task {
             do {
                 guard let (provider, library) = source() else { throw MediaProviderError.unreachable }
-                let result = try await provider.photoPage(in: library, folder: folder, page: page)
+                let result = try await provider.photoPage(in: library, folder: folder, query: query, page: page)
                 guard generation == self.generation else { return }
+                self.library = library
                 let firstFolder = folders.count, firstMedia = media.count
-                folders += result.folders.filter { seen.insert($0.ref).inserted }
-                media += result.media.filter { seen.insert($0.ref).inserted }
+                // ponytail: shuffles each page as it lands, so early pages lead; load every id first if users notice.
+                let clientShuffle = query.shuffled && !provider.shufflesPhotosOnServer
+                if !query.shuffled { folders += result.folders.filter { seen.insert($0.ref).inserted } }
+                media += (clientShuffle ? result.media.shuffled() : result.media).filter { seen.insert($0.ref).inserted }
                 nextPage = result.nextPage
                 isLoading = false
                 onChange?(.appended(folders: firstFolder..<folders.count, media: firstMedia..<media.count))

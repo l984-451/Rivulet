@@ -116,6 +116,52 @@ final class PlexPhotoMapperTests: XCTestCase {
         XCTAssertEqual(query(clip.full)["url"], "/library/metadata/242384/thumb/1791946143", "never the video file")
     }
 
+    // An item request's shape (EXIF on Media), with invented values.
+    private static let detailedPhoto = #"""
+    {"ratingKey":"31","key":"/library/metadata/31","type":"photo","title":"beach",
+     "thumb":"/library/metadata/31/thumb/1","originallyAvailableAt":"2024-03-02","addedAt":1709400000,
+     "userRating":10,"Geolocation":{"Coordinates":{"latitude":10.5,"longitude":-20.25}},
+     "Media":[{"id":5,"width":4032,"height":3024,"aspectRatio":1.33,"container":"jpeg",
+               "make":"Apple","model":"iPhone Air","lens":"","aperture":"f/1.6","exposure":"1/5","iso":"3200",
+               "Part":[{"id":6,"key":"/library/parts/6/1/file.jpg","file":"/photos/trip/beach.jpg","size":100}]}]}
+    """#
+
+    func test_photo_mapsFavoriteCoordinateAndEXIF() throws {
+        let photo = try XCTUnwrap(map(Self.detailedPhoto))
+        XCTAssertTrue(photo.isFavorite, "a photo favorite is rating 10")
+        XCTAssertEqual(photo.coordinate, PhotoCoordinate(latitude: 10.5, longitude: -20.25))
+        let details = try XCTUnwrap(photo.details)
+        XCTAssertEqual(details.make, "Apple")
+        XCTAssertEqual(details.model, "iPhone Air")
+        XCTAssertNil(details.lens, "an empty string is no lens")
+        XCTAssertEqual(details.fNumber, 1.6)
+        XCTAssertEqual(details.exposureSeconds, 0.2)
+        XCTAssertEqual(details.iso, 3200)
+        XCTAssertEqual([details.width, details.height], [4032, 3024])
+        XCTAssertEqual(details.fileName, "beach.jpg")
+        XCTAssertEqual(details.takenAt, photo.date)
+    }
+
+    func test_exifNumbers_decode_andAWrongShapeIsNil() throws {
+        let numeric = Self.detailedPhoto.replacingOccurrences(of: #""iso":"3200""#, with: #""iso":3200"#)
+        XCTAssertEqual(try XCTUnwrap(map(numeric)).details?.iso, 3200)
+        let odd = Self.detailedPhoto.replacingOccurrences(of: #""iso":"3200""#, with: #""iso":{"x":1}"#)
+        let photo = try XCTUnwrap(map(odd), "a wrong shape must not fail the item")
+        XCTAssertNil(photo.details?.iso)
+        XCTAssertEqual(photo.details?.make, "Apple")
+    }
+
+    func test_listEntry_isNotAFavorite_andHasNoCoordinate() throws {
+        let photo = try XCTUnwrap(map(Self.photo))
+        XCTAssertFalse(photo.isFavorite)
+        XCTAssertNil(photo.coordinate)
+        XCTAssertNil(photo.details?.make)
+        XCTAssertEqual(photo.details?.width, 4032)
+        XCTAssertNil(try map(Self.album)?.details, "an album has no details")
+        let rated = try XCTUnwrap(map(Self.detailedPhoto.replacingOccurrences(of: #""userRating":10"#, with: #""userRating":6"#)))
+        XCTAssertFalse(rated.isFavorite, "three stars is not a photo favorite")
+    }
+
     func test_otherTypes_andItemsWithoutAKey_areDropped() throws {
         XCTAssertNil(try map(#"{"ratingKey":"14","key":"/library/metadata/14","type":"movie","title":"x"}"#))
         XCTAssertNil(try map(#"{"key":"/library/metadata/15","type":"photo","title":"x"}"#))

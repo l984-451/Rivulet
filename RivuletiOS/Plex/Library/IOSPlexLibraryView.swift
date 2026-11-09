@@ -36,8 +36,8 @@ struct IOSPlexLibrarySplitView: View {
             }
         }
         // Side by side, the detail column is never left empty.
-        .onChange(of: [sizeClass == .regular, browse.libraries.isEmpty], initial: true) {
-            if sizeClass == .regular, selection == nil, let first = browse.libraries.first {
+        .onChange(of: [sizeClass == .regular, browse.libraries.isEmpty, browse.photoLibraries.isEmpty], initial: true) {
+            if sizeClass == .regular, selection == nil, let first = browse.libraries.first ?? browse.photoLibraries.first {
                 selection = .library(first)
             }
         }
@@ -52,7 +52,7 @@ struct IOSPlexLibrarySplitView: View {
         switch selection {
         case .downloads: IOSDownloadsView()
         case .favorites: IOSFavoritesView()
-        case .library(let library): IOSPlexLibraryView(library: library)
+        case .library(let library): IOSLibraryPage(library: library)
         case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
         }
@@ -95,7 +95,7 @@ struct IOSPlexLibrariesView: View {
                             Section(group.name ?? "") {
                                 ForEach(group.libraries) { library in
                                     NavigationLink(value: IOSLibrarySelection.library(library)) {
-                                        Label(library.title, systemImage: library.icon)
+                                        Label(library.title, systemImage: library.iosIcon)
                                     }
                                 }
                                 if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
@@ -122,7 +122,7 @@ struct IOSPlexLibrariesView: View {
         }
     }
 
-    private var videoLibraries: [MediaLibrary] { browse.libraries }
+    private var videoLibraries: [MediaLibrary] { browse.libraries + browse.photoLibraries }
 
     /// One section per server, under its name once there are several.
     private var serverGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {

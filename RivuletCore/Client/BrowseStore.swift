@@ -17,6 +17,8 @@ import Foundation
 @MainActor
 final class BrowseStore: ObservableObject {
     @Published private(set) var libraries: [MediaLibrary] = []
+    /// Photo libraries across servers, for the sidebar; never in `libraries`.
+    @Published private(set) var photoLibraries: [MediaLibrary] = []
     /// Home rows after Continue Watching: promoted rows of the selected Plex server, then each other server's.
     @Published private(set) var shelves: [MediaHub] = []
     /// One row across every server: the same title on two servers is one card.
@@ -179,6 +181,7 @@ final class BrowseStore: ObservableObject {
         resetForNewSession()
         signature = ""
         libraries = []
+        photoLibraries = []
         shelves = []
         continueWatching = []
         playlists = [:]
@@ -207,6 +210,7 @@ final class BrowseStore: ObservableObject {
         deletableProviders = []
         refreshBlocked = []
         libraries = []
+        photoLibraries = []
         shelves = []
         continueWatching = []
         failures = [:]
@@ -222,6 +226,7 @@ final class BrowseStore: ObservableObject {
         let home = ClientHost.transformHome(assembled)
         failures = home.failures
         libraries = home.libraries
+        photoLibraries = home.photoLibraries
         shelves = home.shelves
         cwRows = home.continueWatching
         mergeContinueWatching()

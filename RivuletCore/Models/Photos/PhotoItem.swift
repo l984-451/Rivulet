@@ -27,6 +27,9 @@ nonisolated struct PhotoItem: Hashable, Sendable {
     let full: URL?
     /// Clips: what the player takes.
     let playable: MediaItem?
+    var isFavorite = false
+    var coordinate: PhotoCoordinate?
+    var details: PhotoDetails?
 
     /// Pixel side of a tile request, and the box a full-screen request fits in.
     static let thumbnailSide = 520

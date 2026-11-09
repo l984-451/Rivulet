@@ -176,6 +176,11 @@ nonisolated struct EmbyItem: Decodable, Sendable {
 
     let mediaSources: [EmbyMediaSource]?
 
+    /// Photos: only when asked for in `Fields`.
+    let width: Int?
+    let height: Int?
+    let path: String?
+
     /// Provider ids come with mixed key case on one server (`Imdb` on a movie, `IMDB` on a series).
     func providerID(_ name: String) -> String? {
         providerIds?.first { $0.key.caseInsensitiveCompare(name) == .orderedSame && !$0.value.isEmpty }?.value

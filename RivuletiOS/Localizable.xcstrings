@@ -10227,7 +10227,74 @@
           }
         }
       }
-    }
+    },
+    "%@ + %lld more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ + %2$lld more"
+          }
+        }
+      }
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · Collection" : {},
+    "%@ · Genre" : {},
+    "%lld More Episodes" : {},
+    "1 More Episode" : {},
+    "10 seconds" : {},
+    "20 seconds" : {},
+    "5 seconds" : {},
+    "Actor" : {},
+    "Couldn't Load Photos" : {},
+    "Couldn’t Load" : {},
+    "Couldn’t Turn Off" : {},
+    "Director" : {},
+    "Find movies, TV shows, episodes, people, collections, and genres." : {},
+    "Known For" : {},
+    "Movies, Shows, People, and More" : {},
+    "No Photos" : {},
+    "No other server is reachable right now, so %@ stays on." : {},
+    "Not on your servers" : {},
+    "Nothing with %@ on your servers." : {},
+    "Only Server in Use" : {},
+    "People" : {},
+    "Ratings" : {},
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
+          }
+        }
+      }
+    },
+    "Start Slideshow" : {},
+    "Stop Slideshow" : {},
+    "Subtitle %@" : {},
+    "Try again in a moment." : {},
+    "Turn on another server first, or sign out of Plex." : {}
   },
   "version" : "1.0"
 }

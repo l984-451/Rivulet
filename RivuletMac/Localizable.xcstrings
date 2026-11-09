@@ -10666,6 +10666,97 @@
           }
         }
       }
+    },
+    "%@ + %lld more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ + %2$lld more"
+          }
+        }
+      }
+    },
+    "%@ · Collection" : {
+
+    },
+    "%@ · Genre" : {
+
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Actor" : {
+
+    },
+    "Couldn't Load Photos" : {
+
+    },
+    "Couldn’t Turn Off" : {
+
+    },
+    "Find movies, TV shows, episodes, people, collections, and genres." : {
+
+    },
+    "Movies, Shows, People, and More" : {
+
+    },
+    "No Photos" : {
+
+    },
+    "No other server is reachable right now, so %@ stays on." : {
+
+    },
+    "Only Server in Use" : {
+
+    },
+    "Pause Slideshow" : {
+
+    },
+    "People" : {
+
+    },
+    "Ratings" : {
+
+    },
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
+          }
+        }
+      }
+    },
+    "Start Slideshow" : {
+
+    },
+    "Subtitle %@" : {
+
+    },
+    "The server did not answer." : {
+
+    },
+    "Turn on another server first, or sign out of Plex." : {
+
     }
   },
   "version" : "1.0"

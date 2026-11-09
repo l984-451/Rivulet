@@ -357,7 +357,7 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
             }
             // Not in the photo listing: show just this photo rather than the wrong one.
             guard let (_, library) = source() else { return }
-            let single = PhotoListing(folder: nil) { (SinglePhotoProvider(photo: photo), library) }
+            let single = PhotoListing(folder: nil) { (FixedPhotoProvider(items: [photo]), library) }
             await single.loadFirst()?.value
             guard presentedViewController == nil, !single.media.isEmpty else { return }
             present(PhotoViewerViewController(listing: single, index: 0), animated: true)
@@ -401,15 +401,6 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
             try? await change()
             NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
         }
-    }
-}
-
-/// A listing of one photo, for a photo the folder's photo listing does not hold.
-private struct SinglePhotoProvider: PhotoProvider {
-    let photo: PhotoItem
-
-    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, page: Page) async throws -> PhotoPage {
-        PhotoPage(folders: [], media: [photo], nextPage: nil)
     }
 }
 

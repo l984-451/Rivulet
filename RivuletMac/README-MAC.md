@@ -1,7 +1,7 @@
 # Rivulet for Mac: notes for feature agents
 
 Native SwiftUI + AppKit app. Logic lives in `RivuletCore/` (shared with iOS and tvOS, no `#if os`), GUI in
-`RivuletMac/`. Parity target: everything `RivuletiOS/` offers except Downloads (iOS only) and Photos (tvOS only).
+`RivuletMac/`. Parity target: everything `RivuletiOS/` offers except Downloads (iOS only).
 Each feature owns the files listed below; do not edit another feature's file, extend through the contract.
 
 ## Navigation contract (`Shell/MacNavigation.swift`)
@@ -50,6 +50,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 |---|---|---|
 | Home | `Home/MacHomeView.swift`, `MacHubGridView.swift` | `Plex/Home/IOSPlexHomeView`, `IOSPlexHeroFeed`, `IOSPlexHomeHero`, `IOSPlexHubGridView`, `Plex/Components/IOSThemeVideoBackdrop`, `IOSPlexAmbientBackdrop` |
 | Library | `Library/MacLibraryView.swift` | `Plex/Library/IOSPlexLibraryView` (Recommended + Browse, sort via `IOSLibrarySorts`) |
+| Photos | `Photos/MacPhotoLibraryView.swift` (grid, folders, clips), `MacPhotoViewer.swift` (arrows, Space slideshow, Esc, pinch) | `RivuletiOS/Photos/`; listing in `RivuletCore/Photos/` |
 | Playlists | `Library/MacPlaylistViews.swift` | `Plex/Library/IOSPlexPlaylistViews` |
 | Favorites | `Library/MacFavoritesView.swift` | `Plex/Library/IOSFavoritesView` |
 | Detail | `Detail/MacDetailView.swift` | `Plex/Detail/IOSPlexDetailView`, `IOSPlexDetailSections` |

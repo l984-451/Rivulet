@@ -75,7 +75,8 @@ RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
-│                       #   records + offline progress live in RivuletCore/Downloads).
+│                       #   records + offline progress live in RivuletCore/Downloads),
+│                       #   Photos/ (photo library grid and viewer over PhotoListingModel).
 RivuletMac/             # Native macOS app (SwiftUI + AppKit). See "Mac app" and
 │                       #   RivuletMac/README-MAC.md (navigation contract, file map).
 Rivulet/                # The tvOS app — everything below.
@@ -149,7 +150,6 @@ app supports**: Plex, Jellyfin and Emby on both apps (IPTV where it applies). A 
 message, and a standing exception is listed below. A gap nobody wrote down is a bug.
 
 Standing exceptions:
-- Photos are tvOS only.
 - Downloads are iOS only.
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
 - Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
@@ -253,7 +253,7 @@ retroactive conformance.
 ### Mac app (native, `RivuletMac/`)
 
 Scheme `Rivulet Mac`, macOS 26+, SwiftUI + AppKit, sandboxed. Same parity rule
-as the other apps (no Downloads, no Photos). It reads the same `RivuletCore/Client`
+as the other apps (no Downloads). It reads the same `RivuletCore/Client`
 stores as iOS; only `RivuletMac/Player/AetherPlayer.swift` imports AetherEngine
 (a third adapter, so a mapping fix lands in three files until it moves to core).
 Captions have no libass layer: LibassBuild ships no macOS slice.
@@ -871,13 +871,17 @@ A photo library (Plex section type `photo`, Jellyfin `photos`, or `homevideos` h
 one photo) is a library like any other: listed in the sidebar and in Settings > Sidebar Libraries, opened by
 `PhotoLibraryViewController` (`Views/Photos/UIKit/`), a stack of `PhotoGridViewController` grids
 with a focusless full-screen `PhotoViewerViewController` (paging and slideshow, both remote
-transports through `DirectionalInputBinding`). tvOS only.
+transports through `DirectionalInputBinding`). Photos are on tvOS, iOS and Mac; the names here are
+tvOS's, and the other two are SwiftUI in `RivuletiOS/Photos/` and `RivuletMac/Photos/` over the shared
+`RivuletCore/Photos/` listing.
 
 - **Photos are `PhotoItem`, never `MediaItem`.** That is what keeps them out of Home rows,
   Search, the detail page, Continue Watching and Top Shelf. Do not map one into a `MediaItem`.
-- **One seam: `PhotoProvider.photoPage(in:folder:page:)`**, adopted by extension on the Plex and
-  Jellyfin providers. Every server assumption lives in `PlexPhotoProvider.swift` and
-  `JellyfinPhotoProvider.swift`.
+- **One seam: `PhotoProvider.photoPage(in:folder:query:page:)`**, adopted by extension on the Plex,
+  Jellyfin and Emby providers. Every server assumption lives in `PlexPhotoProvider.swift`,
+  `JellyfinPhotoProvider.swift` and `EmbyPhotoProvider.swift`.
+- **On iOS and Mac, `BrowseStore.libraries` never holds photo libraries (`photoLibraries` does),**
+  which is what keeps photos off Home.
 - **`visibleSidebarLibraries` lists photo libraries; `visibleMediaLibraries` does not.** The
   second feeds Home rows, hub fetches and prefetch, so widening it puts photo sections on Home.
 - **Never request the original file.** Thumbnails ask the photo transcoder for a 520 px cover,

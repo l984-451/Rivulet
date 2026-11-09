@@ -815,7 +815,7 @@ struct TVSidebarView: View {
     }
 
     /// Play for a `rivulet://play` link. A show or a season resolves to the
-    /// episode its own Play button means; with none to play, its detail opens.
+    /// episode its own Play button means (ignoring any offset); with none to play, its detail opens.
     private func playForDeepLink(_ metadata: PlexMetadata, startOffset: TimeInterval? = nil) {
         guard let item = deepLinkItem(metadata), item.kind == .show || item.kind == .season,
               let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
@@ -824,7 +824,7 @@ struct TVSidebarView: View {
         }
         Task { @MainActor in
             if let episode = await EpisodePicker.resolvePlayTarget(for: item, provider: provider) {
-                playDeepLinkItem(episode, startOffset: startOffset)
+                playDeepLinkItem(episode)
             } else {
                 presentDetailForDeepLink(metadata)
             }

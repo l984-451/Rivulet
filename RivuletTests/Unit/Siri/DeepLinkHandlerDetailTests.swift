@@ -54,11 +54,21 @@ final class DeepLinkHandlerDetailTests: XCTestCase {
         XCTAssertNil(RivuletLink(url: URL(string: "rivulet://play?ratingKey=1")!)?.startOffset)
     }
 
-    func testInvalidPlexOffsetsAreRejected() {
+    func testBuiltURLShape() {
+        XCTAssertEqual(RivuletLink(.detail, ratingKey: "12345").url?.absoluteString,
+                       "rivulet://detail?ratingKey=12345")
+        XCTAssertEqual(RivuletLink(.play, ratingKey: "1").url?.absoluteString, "rivulet://play?ratingKey=1")
+    }
+
+    func testInvalidPlexOffsetsKeepTheLinkAndDropTheOffset() {
         for value in ["", "-1", "1.5", "nan", "inf", "9223372036854775808", "not-a-number"] {
-            XCTAssertNil(RivuletLink(url: URL(string: "rivulet://play?ratingKey=1&offset=\(value)")!), value)
+            let link = RivuletLink(url: URL(string: "rivulet://play?ratingKey=1&offset=\(value)")!)
+            XCTAssertEqual(link?.ratingKey, "1", value)
+            XCTAssertNil(link?.startOffset, value)
         }
         XCTAssertNil(RivuletLink(.play, ratingKey: "1", startOffset: .infinity).startOffset)
+        XCTAssertEqual(RivuletLink(.play, ratingKey: "1", startOffset: 1e300).url?.absoluteString,
+                       "rivulet://play?ratingKey=1")
     }
 
     func testOffsetOnlyAppliesToPlayLinks() {

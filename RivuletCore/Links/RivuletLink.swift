@@ -13,7 +13,7 @@ import Foundation
 
 struct RivuletLink: Equatable, Sendable {
     enum Action: String, Sendable {
-        case play      // start playback at the resume point
+        case play      // start playback at the resume point, or at `offset` (ms)
         case detail    // open the item's detail
     }
 
@@ -52,17 +52,11 @@ struct RivuletLink: Equatable, Sendable {
         let fromQuery = items.first(where: { $0.name == "ratingKey" })?.value
         guard let ratingKey = [fromQuery, fromPath].compactMap({ $0 }).first(where: { !$0.isEmpty })
         else { return nil }
-        let startOffset: TimeInterval?
-        if action == .play, let item = items.first(where: { $0.name == "offset" }) {
-            guard let value = item.value,
-                  let milliseconds = Int64(value), milliseconds >= 0 else { return nil }
-            startOffset = TimeInterval(milliseconds) / 1000
-        } else {
-            startOffset = nil
-        }
+        // Plex's convention: whole milliseconds. A malformed offset is dropped, not the link.
+        let milliseconds = items.first(where: { $0.name == "offset" })?.value.flatMap { Int64($0) }
         self.init(action, ratingKey: ratingKey,
                   server: items.first(where: { $0.name == "server" })?.value,
-                  startOffset: startOffset)
+                  startOffset: milliseconds.map { TimeInterval($0) / 1000 })
     }
 
     var url: URL? {
@@ -71,11 +65,8 @@ struct RivuletLink: Equatable, Sendable {
         components.host = action.rawValue
         components.queryItems = [URLQueryItem(name: "ratingKey", value: ratingKey)]
         if let server { components.queryItems?.append(URLQueryItem(name: "server", value: server)) }
-        if action == .play, let startOffset {
-            let milliseconds = (startOffset * 1000).rounded()
-            guard milliseconds.isFinite, milliseconds >= 0,
-                  milliseconds < Double(Int64.max) else { return nil }
-            components.queryItems?.append(URLQueryItem(name: "offset", value: String(Int64(milliseconds))))
+        if let startOffset, let milliseconds = Int64(exactly: (startOffset * 1000).rounded()) {
+            components.queryItems?.append(URLQueryItem(name: "offset", value: String(milliseconds)))
         }
         return components.url
     }

@@ -53,8 +53,10 @@ enum ProviderPlayer {
         Task { @MainActor in
             defer { finishStart() }
             var target = item
+            var explicitStartOffset = explicitStartOffset
             if item.kind == .show || item.kind == .season {
                 target = await EpisodePicker.resolvePlayTarget(for: item, provider: provider) ?? item
+                explicitStartOffset = nil  // an offset names a time in one title, not in a show
             }
             // The loading screen's art, fetched while the stream is resolved.
             async let loadingImages = HeroBackdropResolver.shared.playerLoadingImages(

@@ -157,6 +157,8 @@ struct WhatsNewView: View {
     static let changelogs: [(version: String, features: [String])] = [
         ("1.3.0 (125)", [
             "Improved search to find more matches, genres, and people",
+            "Photos: favorites, slideshows, photo info, a map and a memories row",
+            "Direct Play buffers as far ahead as storage allows",
             "Subtitle search should work for Jellyfin and Emby (please test)",
             "Music plays TrueHD, DTS, and other formats",
             "Plex home profiles now see their own watchlist",

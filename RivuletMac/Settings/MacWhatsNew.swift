@@ -9,9 +9,12 @@ import SwiftUI
 enum MacChangelog {
     static let entries: [(version: String, lines: [String])] = [
         ("1.3.0 (125)", [
+            "Photos, with favorites, slideshows, photo info, a map and a memories row",
             "Improved search to find more matches, genres, and people",
             "Subtitle search in the player. Jellyfin and Emby should work (please test)",
             "Plex home profiles now see their own watchlist",
+            "Hidden libraries stay off Home and the hero",
+            "Direct Play buffers as far ahead as storage allows",
             "Added delete option in more long press menus",
         ]),
         ("1.0.0 (1)", [

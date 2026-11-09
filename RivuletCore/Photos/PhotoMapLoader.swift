@@ -56,12 +56,35 @@ final class PhotoMapLoader {
     /// ponytail: a fixed grid, so a group can split across a cell edge; distance clustering if that reads badly.
     nonisolated static func clusters(_ items: [PhotoItem], cell: Double) -> [[PhotoItem]] {
         guard cell > 0 else { return items.map { [$0] } }
-        var groups: [[Int]: [PhotoItem]] = [:]
+        return places(items, cell: cell).map(\.photos)
+    }
+
+    /// Located photos grouped into cells `cell` degrees wide, newest place first by its newest photo.
+    nonisolated static func places(_ items: [PhotoItem], cell: Double = 0.1) -> [PhotoPlace] {
+        var groups: [PhotoPlace.ID: [PhotoItem]] = [:]
         for item in items {
             guard let point = item.coordinate else { continue }
-            groups[[Int((point.latitude / cell).rounded(.down)), Int((point.longitude / cell).rounded(.down))], default: []]
-                .append(item)
+            let id = PhotoPlace.ID(latitude: Int((point.latitude / cell).rounded(.down)),
+                                   longitude: Int((point.longitude / cell).rounded(.down)))
+            groups[id, default: []].append(item)
         }
-        return Array(groups.values)
+        let newer = { (a: PhotoItem, b: PhotoItem) in (a.date ?? .distantPast) > (b.date ?? .distantPast) }
+        return groups.map { PhotoPlace(id: $0.key, photos: $0.value.sorted(by: newer)) }.sorted {
+            if newer($0.photos[0], $1.photos[0]) { return true }
+            if newer($1.photos[0], $0.photos[0]) { return false }
+            return ($0.id.latitude, $0.id.longitude) < ($1.id.latitude, $1.id.longitude)
+        }
     }
+}
+
+/// One grid cell's located photos, for the tvOS map's list of places.
+nonisolated struct PhotoPlace: Identifiable, Hashable, Sendable {
+    struct ID: Hashable, Sendable {
+        let latitude: Int
+        let longitude: Int
+    }
+
+    let id: ID
+    /// Newest first, never empty.
+    let photos: [PhotoItem]
 }

@@ -1108,6 +1108,28 @@
         }
       }
     },
+    "%lld photos" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "new",
+                  "value" : "%lld photo"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "new",
+                  "value" : "%lld photos"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld playlists" : {
       "localizations" : {
         "de" : {
@@ -16087,6 +16109,9 @@
           }
         }
       }
+    },
+    "Unknown Place" : {
+
     },
     "Unknown error" : {
       "localizations" : {

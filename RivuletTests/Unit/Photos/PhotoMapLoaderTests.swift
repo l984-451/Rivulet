@@ -65,4 +65,23 @@ final class PhotoMapLoaderTests: XCTestCase {
         let groups = PhotoMapLoader.clusters(items, cell: 1).map { $0.map(\.ref.itemID).sorted() }.sorted { $0.count > $1.count }
         XCTAssertEqual(groups, [["a", "b"], ["c"]])
     }
+
+    func test_places_groupByCell_newestPlaceFirst_newestPhotoFirst() {
+        func photo(_ id: String, _ lat: Double, _ lon: Double, _ day: Double?) -> PhotoItem {
+            PhotoItem(ref: MediaItemRef(providerID: "p", itemID: id), kind: .photo, title: id,
+                      date: day.map { Date(timeIntervalSince1970: $0 * 86_400) }, childCount: nil, thumbnail: nil,
+                      full: nil, playable: nil, coordinate: PhotoCoordinate(latitude: lat, longitude: lon))
+        }
+        let items = [
+            photo("old-here", 10.01, 20.01, 1),
+            photo("new-here", 10.05, 20.09, 5),
+            photo("there", 10.15, 20.01, 9),       // next cell north
+            photo("undated", -33.87, 151.21, nil),
+            PagedProvider.photo("unlocated", nil),
+        ]
+        let places = PhotoMapLoader.places(items)
+        XCTAssertEqual(places.map { $0.photos.map(\.ref.itemID) }, [["there"], ["new-here", "old-here"], ["undated"]])
+        XCTAssertEqual(places[1].id, PhotoPlace.ID(latitude: 100, longitude: 200))
+        XCTAssertEqual(places[2].id, PhotoPlace.ID(latitude: -339, longitude: 1512), "negatives round down")
+    }
 }

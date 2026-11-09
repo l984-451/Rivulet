@@ -5,19 +5,37 @@
 //  PhotoMapViewController.swift
 //  Rivulet
 //
-//  A library's located photos on a map, clustered. A photo opens the viewer
-//  on it; a cluster opens a grid of its members.
+//  A library's located photos as a list of places over a map. The remote drives
+//  the list: focus moves the map to a place, Select opens its photos. The map
+//  itself takes no input (tvOS cannot focus or select annotations).
 //
 
 import MapKit
 import UIKit
 
 final class PhotoMapViewController: UIViewController {
+    private static let panelWidth: CGFloat = 720
+    /// About 2 km, so a place with one photo isn't framed down to a street.
+    private static let minimumSpanMeters: Double = 2000
+
     private let provider: any PhotoProvider
     private let library: MediaLibrary
     private let mapView = MKMapView()
+    private let panel = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+    private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
+    private lazy var dataSource = makeDataSource()
+    /// Holds focus until the first place arrives, so Menu still closes the map.
+    private let loadingAnchor = PreviewFocusAnchorView()
+
+    private var located: [PhotoItem] = []
+    private var places: [PhotoPlace] = []
+    private var names: [PhotoPlace.ID: String] = [:]
+    private var attempted: Set<PhotoPlace.ID> = []
     private var loadTask: Task<Void, Never>?
+    private var namingTask: Task<Void, Never>?
     private var framed = false
+    /// Set once focus moves between rows; until then each page reframes every place.
+    private var followsFocus = false
 
     init(provider: any PhotoProvider, library: MediaLibrary) {
         self.provider = provider
@@ -34,62 +52,245 @@ final class PhotoMapViewController: UIViewController {
         mapView.frame = view.bounds
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mapView.delegate = self
-        mapView.isScrollEnabled = true
-        mapView.isZoomEnabled = true
+        mapView.isScrollEnabled = false
+        mapView.isZoomEnabled = false
+        mapView.isUserInteractionEnabled = false
         mapView.register(PhotoMapAnnotationView.self, forAnnotationViewWithReuseIdentifier: PhotoMapAnnotationView.reuseID)
-        mapView.register(PhotoMapClusterView.self,
-                         forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
+        mapView.register(PhotoMapClusterView.self, forAnnotationViewWithReuseIdentifier: PhotoMapClusterView.reuseID)
         view.addSubview(mapView)
+
+        panel.frame = CGRect(x: 0, y: 0, width: Self.panelWidth, height: view.bounds.height)
+        panel.autoresizingMask = [.flexibleHeight]
+        view.addSubview(panel)
+        collectionView.frame = panel.bounds
+        collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        collectionView.backgroundColor = .clear
+        collectionView.remembersLastFocusedIndexPath = true
+        collectionView.delegate = self
+        panel.contentView.addSubview(collectionView)
+        view.addSubview(loadingAnchor)
 
         let loader = PhotoMapLoader(provider: provider, library: library)
         loadTask = Task { [weak self] in
-            await loader.load { [weak self] items in
-                guard let self else { return }
-                self.mapView.addAnnotations(items.map(PhotoMapAnnotation.init))
-                // Frame on the first points, then once more when every page is in.
-                if !self.framed { self.framed = true; self.frameAll() }
-            }
-            self?.frameAll()
+            await loader.load { [weak self] items in self?.add(items) }
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if !framed, !places.isEmpty, mapView.bounds.width > 0 {
+            framed = true
+            show(located, animated: false)
         }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if isBeingDismissed { loadTask?.cancel() }
+        if isBeingDismissed {
+            loadTask?.cancel()
+            namingTask?.cancel()
+        }
     }
 
-    override var preferredFocusEnvironments: [UIFocusEnvironment] { [mapView] }
-
-    private func frameAll() {
-        guard !mapView.annotations.isEmpty else { return }
-        mapView.showAnnotations(mapView.annotations, animated: false)
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        places.isEmpty ? [loadingAnchor] : [collectionView]
     }
 
-    private func open(_ photos: [PhotoItem]) {
-        let items = photos.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+    // MARK: - Places
+
+    private func add(_ items: [PhotoItem]) {
+        guard !items.isEmpty else { return }
+        let wasEmpty = places.isEmpty
+        located += items
+        places = PhotoMapLoader.places(located)
+        mapView.addAnnotations(items.map(PhotoMapAnnotation.init))
+
+        var snapshot = NSDiffableDataSourceSnapshot<Int, PhotoPlace.ID>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(places.map(\.id))
+        let existing = dataSource.snapshot().itemIdentifiers
+        snapshot.reconfigureItems(existing.filter { snapshot.indexOfItem($0) != nil })
+        dataSource.apply(snapshot, animatingDifferences: false)
+
+        if wasEmpty {
+            view.setNeedsLayout()
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            loadingAnchor.isHidden = true
+        } else if framed, !followsFocus {
+            show(located, animated: false)
+        }
+        nameNext()
+    }
+
+    /// Names the places one by one, in list order; a row says Unknown Place until its name arrives.
+    private func nameNext() {
+        guard namingTask == nil else { return }
+        namingTask = Task { [weak self] in
+            while let self, !Task.isCancelled,
+                  let place = self.places.first(where: { !self.attempted.contains($0.id) }) {
+                self.attempted.insert(place.id)
+                guard let coordinate = place.photos[0].coordinate,
+                      let name = await PhotoPlaceNames.shared.queuedName(for: coordinate) else { continue }
+                self.names[place.id] = name
+                var snapshot = self.dataSource.snapshot()
+                guard snapshot.indexOfItem(place.id) != nil else { continue }
+                snapshot.reconfigureItems([place.id])
+                await self.dataSource.apply(snapshot, animatingDifferences: false)
+            }
+            self?.namingTask = nil
+        }
+    }
+
+    private func name(of place: PhotoPlace) -> String {
+        names[place.id] ?? String(localized: "Unknown Place")
+    }
+
+    private func place(_ id: PhotoPlace.ID) -> PhotoPlace? {
+        places.first { $0.id == id }
+    }
+
+    /// Frames these photos in the map area right of the list.
+    private func show(_ photos: [PhotoItem], animated: Bool) {
+        var rect = MKMapRect.null
+        for photo in photos {
+            guard let point = photo.coordinate else { continue }
+            let mapPoint = MKMapPoint(CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude))
+            rect = rect.union(MKMapRect(origin: mapPoint, size: MKMapSize(width: 0, height: 0)))
+        }
+        guard !rect.isNull else { return }
+        let minimum = Self.minimumSpanMeters * MKMapPointsPerMeterAtLatitude(rect.origin.coordinate.latitude)
+        rect = rect.insetBy(dx: -max(0, minimum - rect.width) / 2, dy: -max(0, minimum - rect.height) / 2)
+        let padding = UIEdgeInsets(top: 120, left: Self.panelWidth + 120, bottom: 120, right: 120)
+        mapView.setVisibleMapRect(rect, edgePadding: padding, animated: animated)
+    }
+
+    private func open(_ place: PhotoPlace) {
+        let items = place.photos
         let provider = provider, library = library
         let listing = PhotoListing(folder: nil, source: { (FixedPhotoProvider(items: items, server: provider), library) })
-        if items.count == 1 {
-            Task { [weak self] in
-                await listing.loadFirst()?.value
-                self?.present(PhotoViewerViewController(listing: listing, index: 0), animated: true)
-            }
-        } else {
-            let grid = PhotoGridViewController(title: library.title, listing: listing)
-            grid.modalPresentationStyle = .fullScreen
-            present(grid, animated: true)
+        let grid = PhotoGridViewController(title: name(of: place), listing: listing)
+        grid.modalPresentationStyle = .fullScreen
+        present(grid, animated: true)
+    }
+
+    // MARK: - List
+
+    private static func makeLayout() -> UICollectionViewLayout {
+        let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(PhotoPlaceCell.height))
+        let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)])
+        let section = NSCollectionLayoutSection(group: group)
+        section.interGroupSpacing = 16
+        section.contentInsets = NSDirectionalEdgeInsets(top: 80, leading: 60, bottom: 80, trailing: 60)
+        section.contentInsetsReference = .none
+        return UICollectionViewCompositionalLayout(section: section)
+    }
+
+    private func makeDataSource() -> UICollectionViewDiffableDataSource<Int, PhotoPlace.ID> {
+        let registration = UICollectionView.CellRegistration<PhotoPlaceCell, PhotoPlace.ID> { [weak self] cell, _, id in
+            guard let self, let place = self.place(id) else { return }
+            cell.configure(name: self.name(of: place), count: place.photos.count, thumbnail: place.photos[0].thumbnail)
+        }
+        return UICollectionViewDiffableDataSource(collectionView: collectionView) { collectionView, indexPath, id in
+            collectionView.dequeueConfiguredReusableCell(using: registration, for: indexPath, item: id)
         }
     }
 }
 
+extension PhotoMapViewController: UICollectionViewDelegate {
+
+    func collectionView(_ collectionView: UICollectionView, didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
+                        with coordinator: UIFocusAnimationCoordinator) {
+        // Only a move between rows: the first landing (open, or back from a place) keeps the map where it is.
+        guard context.previouslyFocusedIndexPath != nil, let next = context.nextFocusedIndexPath,
+              let id = dataSource.itemIdentifier(for: next), let place = place(id) else { return }
+        followsFocus = true
+        show(place.photos, animated: true)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        guard let id = dataSource.itemIdentifier(for: indexPath), let place = place(id) else { return }
+        open(place)
+    }
+}
+
 extension PhotoMapViewController: MKMapViewDelegate {
-    func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
-        defer { mapView.deselectAnnotation(view.annotation, animated: false) }
-        if let cluster = view.annotation as? MKClusterAnnotation {
-            open(cluster.memberAnnotations.compactMap { ($0 as? PhotoMapAnnotation)?.photo })
-        } else if let annotation = view.annotation as? PhotoMapAnnotation {
-            open([annotation.photo])
+    // A registered class is only used under the default ids unless the delegate returns it.
+    func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        switch annotation {
+        case is MKClusterAnnotation:
+            mapView.dequeueReusableAnnotationView(withIdentifier: PhotoMapClusterView.reuseID, for: annotation)
+        case is PhotoMapAnnotation:
+            mapView.dequeueReusableAnnotationView(withIdentifier: PhotoMapAnnotationView.reuseID, for: annotation)
+        default:
+            nil
         }
+    }
+}
+
+/// A place in the list: its newest photo, its name and how many photos.
+private final class PhotoPlaceCell: UICollectionViewCell {
+    static let height: CGFloat = 132
+    private static let thumbSide: CGFloat = 108
+
+    private let thumbView = UIImageView()
+    private let nameLabel = UILabel()
+    private let countLabel = UILabel()
+    private var loading: Task<Void, Never>?
+    private var thumbnail: URL?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentView.layer.cornerRadius = 24
+        contentView.layer.borderWidth = 1
+        thumbView.contentMode = .scaleAspectFill
+        thumbView.clipsToBounds = true
+        thumbView.layer.cornerRadius = 14
+        thumbView.backgroundColor = UIColor(white: 1, alpha: 0.1)
+        nameLabel.font = .systemFont(ofSize: 31, weight: .semibold)
+        nameLabel.textColor = .white
+        countLabel.font = .systemFont(ofSize: 25, weight: .regular)
+        countLabel.textColor = UIColor(white: 1, alpha: 0.6)
+        for view in [thumbView, nameLabel, countLabel] { contentView.addSubview(view) }
+        applyFocus(false)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let inset = (bounds.height - Self.thumbSide) / 2
+        thumbView.frame = CGRect(x: inset, y: inset, width: Self.thumbSide, height: Self.thumbSide)
+        let textX = thumbView.frame.maxX + 28
+        let width = bounds.width - textX - 24
+        nameLabel.frame = CGRect(x: textX, y: bounds.midY - 42, width: width, height: 40)
+        countLabel.frame = CGRect(x: textX, y: bounds.midY + 4, width: width, height: 32)
+    }
+
+    func configure(name: String, count: Int, thumbnail: URL?) {
+        nameLabel.text = name
+        countLabel.text = String(localized: "\(count) photos")
+        guard thumbnail != self.thumbnail else { return }
+        self.thumbnail = thumbnail
+        loading?.cancel()
+        thumbView.image = nil
+        guard let thumbnail else { return }
+        loading = Task { [weak self] in
+            let image = await ImageCacheManager.shared.image(for: thumbnail)
+            guard !Task.isCancelled else { return }
+            self?.thumbView.image = image
+        }
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        coordinator.addCoordinatedAnimations { [self] in applyFocus(isFocused) }
+    }
+
+    private func applyFocus(_ focused: Bool) {
+        contentView.backgroundColor = UIColor(white: 1, alpha: focused ? 0.18 : 0.08)
+        contentView.layer.borderColor = UIColor(white: 1, alpha: focused ? 0.25 : 0.08).cgColor
+        transform = focused ? CGAffineTransform(scaleX: 1.02, y: 1.02) : .identity
     }
 }
 
@@ -114,6 +315,7 @@ private class PhotoMapThumbnailView: MKAnnotationView {
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         frame = CGRect(x: 0, y: 0, width: Self.side, height: Self.side)
+        canShowCallout = false
         imageView.frame = bounds
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -150,39 +352,26 @@ private class PhotoMapThumbnailView: MKAnnotationView {
             self?.imageView.image = image
         }
     }
-
-    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
-        super.didUpdateFocus(in: context, with: coordinator)
-        coordinator.addCoordinatedAnimations { [self] in
-            transform = isFocused ? CGAffineTransform(scaleX: 1.2, y: 1.2) : .identity
-        }
-    }
 }
 
 private final class PhotoMapAnnotationView: PhotoMapThumbnailView {
     static let reuseID = "photo"
 
-    override var annotation: MKAnnotation? {
-        didSet {
-            clusteringIdentifier = "photo"
-            show((annotation as? PhotoMapAnnotation)?.photo)
-        }
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        clusteringIdentifier = Self.reuseID
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForDisplay() {
+        super.prepareForDisplay()
+        show((annotation as? PhotoMapAnnotation)?.photo)
     }
 }
 
 private final class PhotoMapClusterView: PhotoMapThumbnailView {
-    override var annotation: MKAnnotation? {
-        didSet {
-            guard let cluster = annotation as? MKClusterAnnotation else { return }
-            let photos = cluster.memberAnnotations.compactMap { ($0 as? PhotoMapAnnotation)?.photo }
-            show(photos.max { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) })
-            countLabel.text = "\(photos.count)"
-            countLabel.sizeToFit()
-            let width = max(36, countLabel.bounds.width + 16)
-            countLabel.frame = CGRect(x: Self.side - width + 8, y: -8, width: width, height: 36)
-            countLabel.isHidden = false
-        }
-    }
+    static let reuseID = "photoCluster"
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -190,4 +379,16 @@ private final class PhotoMapClusterView: PhotoMapThumbnailView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForDisplay() {
+        super.prepareForDisplay()
+        guard let cluster = annotation as? MKClusterAnnotation else { return }
+        let photos = cluster.memberAnnotations.compactMap { ($0 as? PhotoMapAnnotation)?.photo }
+        show(photos.max { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) })
+        countLabel.text = "\(photos.count)"
+        countLabel.sizeToFit()
+        let width = max(36, countLabel.bounds.width + 16)
+        countLabel.frame = CGRect(x: Self.side - width + 8, y: -8, width: width, height: 36)
+        countLabel.isHidden = false
+    }
 }

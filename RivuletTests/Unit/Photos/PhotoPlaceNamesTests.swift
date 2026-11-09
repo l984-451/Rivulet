@@ -81,6 +81,41 @@ final class PhotoPlaceNamesTests: XCTestCase {
         XCTAssertEqual(fake.calls, [a, c])
     }
 
+    func test_queued_waitsInOrder_captionGoesFirst_andIsNeverSentAway() async {
+        let fake = FakeGeocoder()
+        let places = PhotoPlaceNames(geocoder: fake)
+        let a = PhotoCoordinate(latitude: 1, longitude: 1)
+        let b = PhotoCoordinate(latitude: 2, longitude: 2)
+        let c = PhotoCoordinate(latitude: 3, longitude: 3)
+        let caption = PhotoCoordinate(latitude: 4, longitude: 4)
+        let first = Task { await places.queuedName(for: a) }
+        await until { fake.waiting == 1 }
+        let second = Task { await places.queuedName(for: b) }
+        await Task.yield()
+        let third = Task { await places.queuedName(for: c) }
+        await Task.yield()
+        let shown = Task { await places.name(for: caption) }
+        await Task.yield()
+        let alsoA = Task { await places.queuedName(for: a) }
+        await Task.yield()
+
+        fake.answer("A")
+        let firstName = await first.value
+        XCTAssertEqual(firstName, "A")
+        await until { fake.waiting == 1 }
+        XCTAssertEqual(fake.calls.last, caption, "the caption jumps the queue")
+        fake.answer("Here")
+        let shownName = await shown.value
+        XCTAssertEqual(shownName, "Here")
+        await until { fake.waiting == 1 }
+        fake.answer("B")
+        await until { fake.waiting == 1 }
+        fake.answer("C")
+        let names = await [second.value, third.value, alsoA.value]
+        XCTAssertEqual(names, ["B", "C", "A"])
+        XCTAssertEqual(fake.calls, [a, caption, b, c], "a queued place already named costs no lookup")
+    }
+
     func test_format_areaAtHome_countryAbroad() {
         XCTAssertEqual(PhotoPlaceNames.format(city: "Portland", cityWithArea: "Portland, OR", country: "United States",
                                               countryCode: "US", homeRegion: "US"), "Portland, OR")

@@ -39,6 +39,8 @@ final class PhotoPlaceNames {
     private var inFlight = false
     /// The one request waiting its turn; a newer one sends it away with nil.
     private var waiting: CheckedContinuation<Bool, Never>?
+    /// `queuedName` requests, in order, served after `waiting`.
+    private var queue: [CheckedContinuation<Void, Never>] = []
 
     init(geocoder: any PlaceGeocoding) {
         self.geocoder = geocoder
@@ -60,6 +62,22 @@ final class PhotoPlaceNames {
             guard myTurn else { return nil }
             if let known = names[key] { handOver(); return known }
         }
+        return await lookUp(key, coordinate)
+    }
+
+    /// Like `name(for:)`, but waits its turn behind every other request instead of being
+    /// sent away, for naming a list of places one by one.
+    func queuedName(for coordinate: PhotoCoordinate) async -> String? {
+        let key = Key(coordinate)
+        if let known = names[key] { return known }
+        if inFlight {
+            await withCheckedContinuation { queue.append($0) }
+            if let known = names[key] { handOver(); return known }
+        }
+        return await lookUp(key, coordinate)
+    }
+
+    private func lookUp(_ key: Key, _ coordinate: PhotoCoordinate) async -> String? {
         inFlight = true
         let name = await geocoder.placeName(at: coordinate)
         if let name { names[key] = name }
@@ -67,10 +85,13 @@ final class PhotoPlaceNames {
         return name
     }
 
+    /// The caption's waiting request goes first: it is what's on screen.
     private func handOver() {
         if let next = waiting {
             waiting = nil
             next.resume(returning: true)
+        } else if !queue.isEmpty {
+            queue.removeFirst().resume()
         } else {
             inFlight = false
         }

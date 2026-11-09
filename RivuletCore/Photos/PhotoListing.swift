@@ -38,23 +38,34 @@ final class PhotoListing {
     private(set) var error: Error?
     var hasMore: Bool { nextPage != nil }
     var onChange: ((Change) -> Void)?
-    /// Changing it starts the listing over.
+    /// Changing it starts the listing over, and drops a pending `savedQuery`.
     var query: PhotoQuery {
-        didSet { if query != oldValue { loadFirst() } }
+        get { currentQuery }
+        set {
+            savedQuery = nil
+            guard newValue != currentQuery else { return }
+            currentQuery = newValue
+            loadFirst()
+        }
     }
+    private var currentQuery: PhotoQuery
+    /// The library's saved query, applied before the first page once the source knows the library.
+    private var savedQuery: (@MainActor (MediaLibrary) -> PhotoQuery)?
     /// The library as the last page's source gave it.
     private(set) var library: MediaLibrary?
 
-    private let source: Source
-    private let folder: MediaItemRef?
+    let source: Source
+    let folder: MediaItemRef?
     private var nextPage: Page? = Page(offset: 0, limit: pageSize)
     private var seen = Set<MediaItemRef>()
     /// Bumped by `loadFirst`, so a page from before the reload is dropped.
     private var generation = 0
 
-    init(folder: MediaItemRef?, query: PhotoQuery = .default, source: @escaping Source) {
+    init(folder: MediaItemRef?, query: PhotoQuery = .default,
+         savedQuery: (@MainActor (MediaLibrary) -> PhotoQuery)? = nil, source: @escaping Source) {
         self.folder = folder
-        self.query = query
+        self.currentQuery = query
+        self.savedQuery = savedQuery
         self.source = source
     }
 
@@ -76,6 +87,11 @@ final class PhotoListing {
     @discardableResult
     func loadMore() -> Task<Void, Never>? {
         guard !isLoading, let page = nextPage else { return nil }
+        // A source can be empty at first (the registry not yet filled), so this waits for one that answers.
+        if let savedQuery, let library = source()?.library {
+            self.savedQuery = nil
+            currentQuery = savedQuery(library)
+        }
         isLoading = true
         error = nil
         let generation = generation, query = query

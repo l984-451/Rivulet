@@ -28,6 +28,14 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     /// or the photo the viewer closed on.
     private var focusTarget: IndexPath?
     private var postedBelowTop = false
+    private let slideshowButton = MusicChrome.pill(title: String(localized: "Slideshow"), symbol: "play.fill")
+    private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
+    private let sortButton = MusicChrome.pill(title: nil, symbol: "arrow.up.arrow.down")
+    private let showButton = MusicChrome.pill(title: nil, symbol: "line.3.horizontal.decrease")
+    /// The menu button a Sort or Show choice came from, where focus returns once the grid reloads.
+    private var returnToButton: UIButton?
+    /// A shuffled listing loading its first page, opened in the viewer when it arrives.
+    private var pendingShuffle: PhotoListing?
 
     init(title: String, listing: PhotoListing) {
         self.listing = listing
@@ -64,8 +72,28 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         view.addSubview(stateView)
         view.addSubview(loadingAnchor)
 
+        slideshowButton.addAction(UIAction { [weak self] _ in self?.startSlideshow() }, for: .primaryActionTriggered)
+        shuffleButton.addAction(UIAction { [weak self] _ in self?.startShuffle() }, for: .primaryActionTriggered)
+        sortButton.showsMenuAsPrimaryAction = true
+        showButton.showsMenuAsPrimaryAction = true
+        refreshMenus()
+
+        let playPause = UITapGestureRecognizer(target: self, action: #selector(playPausePressed))
+        playPause.allowedPressTypes = [NSNumber(value: UIPress.PressType.playPause.rawValue)]
+        collectionView.addGestureRecognizer(playPause)
+
         listing.onChange = { [weak self] in self?.apply($0) }
         listing.loadFirst()
+    }
+
+    /// Back from a folder: that folder's Sort or Show may have changed the library's.
+    func syncSavedQuery() {
+        guard let library = listing.source()?.library else { return }
+        let saved = PhotoPreferences.query(for: library)
+        var merged = listing.query
+        (merged.sort, merged.ascending, merged.show) = (saved.sort, saved.ascending, saved.show)
+        listing.query = merged
+        refreshMenus()
     }
 
     private func makeLayout() -> UICollectionViewLayout {
@@ -117,6 +145,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
             break   // a later page: the grid stays, and the next scroll to the end asks again
         }
         updateState()
+        // The saved query may only now be applied, once the source knew its library.
+        if wasEmpty { refreshMenus() }
         if wasEmpty, !isEmpty {
             setNeedsFocusUpdate()
             NotificationCenter.default.post(name: .contentBecameFocusable, object: nil)
@@ -150,6 +180,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
         if !loadingAnchor.isHidden { return [loadingAnchor] }
+        if stateView.isHidden, let returnToButton, returnToButton.window != nil { return [returnToButton] }
         return [stateView.isHidden ? collectionView : stateView]
     }
 
@@ -159,14 +190,99 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         SidebarReselection.returnToTop(in: collectionView, focusing: focusTarget)
     }
 
+    // MARK: - Header
+
+    private func refreshMenus() {
+        let query = listing.query
+        let sorts = listing.source()?.provider.photoSorts ?? [query.sort]
+        let sortGroup = sorts.map { sort in
+            UIAction(title: Self.title(sort), state: sort == query.sort ? .on : .off) { [weak self] _ in
+                self?.change(from: self?.sortButton) { $0.sort = sort; $0.ascending = sort == .name }
+            }
+        }
+        let directions: [(String, Bool)] = query.sort == .name
+            ? [(String(localized: "A to Z"), true), (String(localized: "Z to A"), false)]
+            : [(String(localized: "Newest First"), false), (String(localized: "Oldest First"), true)]
+        let directionGroup = directions.map { title, ascending in
+            UIAction(title: title, state: ascending == query.ascending ? .on : .off) { [weak self] _ in
+                self?.change(from: self?.sortButton) { $0.ascending = ascending }
+            }
+        }
+        sortButton.menu = UIMenu(children: [UIMenu(options: .displayInline, children: sortGroup),
+                                            UIMenu(options: .displayInline, children: directionGroup)])
+        let shows: [(String, PhotoQuery.Show)] = [(String(localized: "All"), .all),
+                                                 (String(localized: "Photos"), .photos),
+                                                 (String(localized: "Videos"), .videos)]
+        showButton.menu = UIMenu(children: shows.map { title, show in
+            UIAction(title: title, state: show == query.show ? .on : .off) { [weak self] _ in
+                self?.change(from: self?.showButton) { $0.show = show }
+            }
+        })
+    }
+
+    private static func title(_ sort: PhotoQuery.Sort) -> String {
+        switch sort {
+        case .dateTaken: String(localized: "Date Taken")
+        case .dateAdded: String(localized: "Date Added")
+        case .name: String(localized: "Name")
+        }
+    }
+
+    /// Saves the library's Sort and Show, and reloads the grid on them.
+    private func change(from button: UIButton?, _ edit: (inout PhotoQuery) -> Void) {
+        var query = listing.query
+        edit(&query)
+        guard query != listing.query else { return }
+        if let library = listing.source()?.library { PhotoPreferences.setQuery(query, for: library) }
+        returnToButton = button
+        listing.query = query
+        refreshMenus()
+    }
+
+    private func startSlideshow() {
+        guard !listing.media.isEmpty else { return }
+        openViewer(listing: listing, at: 0, running: true)
+    }
+
+    /// The same folder in a random order, in the viewer; the grid keeps its own.
+    private func startShuffle() {
+        guard pendingShuffle == nil else { return }
+        var query = listing.query
+        query.shuffled = true
+        let shuffle = PhotoListing(folder: listing.folder, query: query, source: listing.source)
+        shuffle.onChange = { [weak self, weak shuffle] change in
+            guard let self, let shuffle, shuffle === pendingShuffle else { return }
+            switch change {
+            case .reloaded: break
+            case .appended where !shuffle.media.isEmpty:
+                pendingShuffle = nil
+                shuffle.onChange = nil
+                openViewer(listing: shuffle, at: 0, running: true)
+            case .appended where shuffle.hasMore: shuffle.loadMore()
+            case .appended, .failed: pendingShuffle = nil
+            }
+        }
+        pendingShuffle = shuffle
+        shuffle.loadFirst()
+    }
+
+    @objc private func playPausePressed() {
+        guard let cell = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UICollectionViewCell,
+              let path = collectionView.indexPath(for: cell), path.section == Section.media.rawValue else { return }
+        openViewer(listing: listing, at: path.item, running: true)
+    }
+
     // MARK: - Viewer
 
-    private func openViewer(at index: Int) {
-        let viewer = PhotoViewerViewController(listing: listing, index: index)
-        viewer.onClose = { [weak self] index in
-            guard let self else { return }
+    private func openViewer(listing shown: PhotoListing, at index: Int, running: Bool = false) {
+        let viewer = PhotoViewerViewController(listing: shown, index: index, startsSlideshow: running)
+        viewer.onClose = { [weak self, shown] index in
+            guard let self, shown.media.indices.contains(index) else { return }
+            // A shuffled viewer's order is its own: find the photo in the grid.
+            let ref = shown.media[index].ref
+            guard let item = listing.media.firstIndex(where: { $0.ref == ref }) else { return }
             // The grid may have grown under the viewer; the cell has to exist to take focus.
-            let path = IndexPath(item: index, section: Section.media.rawValue)
+            let path = IndexPath(item: item, section: Section.media.rawValue)
             focusTarget = path
             collectionView.scrollToItem(at: path, at: .centeredVertically, animated: false)
             collectionView.layoutIfNeeded()
@@ -200,7 +316,7 @@ extension PhotoGridViewController: UICollectionViewDataSource {
                         at indexPath: IndexPath) -> UICollectionReusableView {
         let header = collectionView.dequeueReusableSupplementaryView(
             ofKind: kind, withReuseIdentifier: Self.headerKind, for: indexPath) as! PhotoGridHeaderView
-        header.label.text = title
+        header.configure(title: title, buttons: [slideshowButton, shuffleButton, sortButton, showButton])
         return header
     }
 }
@@ -210,7 +326,7 @@ extension PhotoGridViewController: UICollectionViewDataSource {
 extension PhotoGridViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let item = item(at: indexPath)
-        if item.kind == .folder { onOpenFolder?(item) } else { openViewer(at: indexPath.item) }
+        if item.kind == .folder { onOpenFolder?(item) } else { openViewer(listing: listing, at: indexPath.item) }
     }
 
     func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell,
@@ -231,6 +347,7 @@ extension PhotoGridViewController: UICollectionViewDelegate {
                         with coordinator: UIFocusAnimationCoordinator) {
         let next = context.nextFocusedIndexPath
         if let next { focusTarget = next }
+        if next != nil || context.nextFocusedView === returnToButton { returnToButton = nil }
         if next == nil {
             for case let cell as PhotoCell in collectionView.visibleCells { cell.resetStaleFocusAppearance() }
         }
@@ -246,10 +363,13 @@ extension PhotoGridViewController: UICollectionViewDelegate {
 
 // MARK: - Header
 
-/// The page title, clear of the shell's pill, on the content margin.
+/// The page title and its buttons, clear of the shell's pill, on the content margin.
 private final class PhotoGridHeaderView: UICollectionReusableView {
-    static let height = ShellPillMetrics.contentClearance + 90
-    let label = UILabel()
+    static let height = ShellPillMetrics.contentClearance + 58 + 30 + MusicMetrics.pillHeight + 50
+    private let label = UILabel()
+    private let row = UIStackView()
+    /// Up from a tile right of the buttons lands on the first of them.
+    private let upGuide = UIFocusGuide()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -257,13 +377,34 @@ private final class PhotoGridHeaderView: UICollectionReusableView {
         label.textColor = .white
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
+        row.axis = .horizontal
+        row.spacing = 24
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        addLayoutGuide(upGuide)
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -MediaRowMetrics.rowTrailing),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: ShellPillMetrics.contentClearance)
+            label.topAnchor.constraint(equalTo: topAnchor, constant: ShellPillMetrics.contentClearance),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
+            row.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 30),
+            upGuide.leadingAnchor.constraint(equalTo: row.trailingAnchor),
+            upGuide.trailingAnchor.constraint(equalTo: trailingAnchor),
+            upGuide.topAnchor.constraint(equalTo: row.topAnchor),
+            upGuide.bottomAnchor.constraint(equalTo: row.bottomAnchor)
         ])
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The buttons belong to the grid; re-adding ones already here would drop their focus.
+    func configure(title: String?, buttons: [UIButton]) {
+        label.text = title
+        if row.arrangedSubviews != buttons {
+            row.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            buttons.forEach(row.addArrangedSubview)
+        }
+        upGuide.preferredFocusEnvironments = Array(buttons.prefix(1))
+    }
 }

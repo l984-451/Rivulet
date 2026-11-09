@@ -67,6 +67,22 @@ enum SettingsDescriptorStore {
             icon: "tv.fill",
             description: "Manage Live TV sources, layout preferences, multiview settings, and channel display options."
         ),
+        "cat_photos": SettingDescriptor(
+            icon: "photo.on.rectangle",
+            description: "Choose how slideshows in your photo libraries play."
+        ),
+        "photoSlideInterval": SettingDescriptor(
+            icon: "timer",
+            description: "How long each photo stays on screen during a slideshow."
+        ),
+        "photoSlideTransition": SettingDescriptor(
+            icon: "sparkles.rectangle.stack",
+            description: "Dissolve fades from one photo to the next. Pan and Zoom also moves slowly across each photo while it is up."
+        ),
+        "photoSlidePlaysClips": SettingDescriptor(
+            icon: "video",
+            description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. Off, slideshows skip clips."
+        ),
         "cat_servers": SettingDescriptor(
             icon: "server.rack",
             description: "Manage your Plex, Jellyfin and Emby server connections and user profiles."
@@ -643,6 +659,7 @@ enum SettingsDescriptorStore {
         case .playback: return ("play.fill", .systemBlue)
         case .music: return ("music.note", .systemPink)
         case .liveTV: return ("tv.fill", .systemGreen)
+        case .photos: return ("photo.on.rectangle", .systemYellow)
         case .servers: return ("server.rack", .systemOrange)
         case .about: return ("info.circle.fill", .systemGray)
         case .plex: return ("server.rack", .systemOrange)

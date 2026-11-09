@@ -6,15 +6,14 @@
 //  Rivulet
 //
 //  One photo full screen. Left and Right page, Select or Play/Pause runs a
-//  slideshow, Select on a clip plays it, Menu closes.
+//  slideshow, Select on a clip plays it, Menu closes. The slideshow reads its
+//  interval, transition and clips from `PhotoPreferences` at every slide.
 //
 
 import UIKit
 
 @MainActor
 final class PhotoViewerViewController: UIViewController {
-    /// Seconds each slide stays up.
-    static let slideInterval: TimeInterval = 4
     private static let stepDissolve: TimeInterval = 0.2
     private static let slideDissolve: TimeInterval = 0.5
     private static let overlayLinger: TimeInterval = 3
@@ -26,6 +25,10 @@ final class PhotoViewerViewController: UIViewController {
     private let listing: PhotoListing
     private var index: Int
     private let imageView = UIImageView()
+    /// The slide going away, fading out over the next one while it keeps its Pan and Zoom.
+    private let outgoingView = UIImageView()
+    /// Where the current slide's Pan and Zoom is heading.
+    private var panTarget: CGAffineTransform?
     private let clipGlyph = UIImageView(image: UIImage(systemName: "play.circle.fill"))
     private let slideGlyph = UIImageView()
     private let caption = UILabel()
@@ -34,13 +37,18 @@ final class PhotoViewerViewController: UIViewController {
     private var input: DirectionalInputBinding?
     private var loadTask: Task<Void, Never>?
     private var slideTimer: Timer?
+    private var isRunning = false
+    private let startsSlideshow: Bool
+    /// A slideshow clip's player is up; the show goes on when it closes.
+    private var playingShowClip = false
     private var overlayHide: DispatchWorkItem?
     /// Set only while this viewer is what turned the idle timer off.
     private var holdsDisplayAwake = false
 
-    init(listing: PhotoListing, index: Int) {
+    init(listing: PhotoListing, index: Int, startsSlideshow: Bool = false) {
         self.listing = listing
         self.index = index
+        self.startsSlideshow = startsSlideshow
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
         modalTransitionStyle = .crossDissolve
@@ -58,6 +66,11 @@ final class PhotoViewerViewController: UIViewController {
         imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         imageView.contentMode = .scaleAspectFit
         view.addSubview(imageView)
+        outgoingView.frame = view.bounds
+        outgoingView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        outgoingView.contentMode = .scaleAspectFit
+        outgoingView.alpha = 0
+        view.addSubview(outgoingView)
 
         for glyph in [clipGlyph, slideGlyph] {
             glyph.tintColor = UIColor(white: 1, alpha: 0.85)
@@ -99,11 +112,12 @@ final class PhotoViewerViewController: UIViewController {
         NotificationCenter.default.addObserver(self, selector: #selector(stopSlideshow),
                                                name: UIApplication.willResignActiveNotification, object: nil)
         show(index, dissolve: 0)
+        if startsSlideshow { toggleSlideshow() }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        stopSlideshow()
+        if !playingShowClip { stopSlideshow() }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { [anchor] }
@@ -153,7 +167,7 @@ final class PhotoViewerViewController: UIViewController {
                              .foregroundColor: UIColor(white: 1, alpha: 0.7)]))
         }
         caption.attributedText = text
-        guard slideTimer == nil else { caption.alpha = 0; return }
+        guard !isRunning else { caption.alpha = 0; return }
         UIView.animate(withDuration: Self.stepDissolve) { self.caption.alpha = 1 }
         let hide = DispatchWorkItem { [weak self] in
             UIView.animate(withDuration: 0.5) { self?.caption.alpha = 0 }
@@ -188,36 +202,125 @@ final class PhotoViewerViewController: UIViewController {
     // MARK: - Slideshow
 
     @objc private func toggleSlideshow() {
-        if slideTimer != nil { return stopSlideshow() }
-        slideTimer = Timer.scheduledTimer(withTimeInterval: Self.slideInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.advanceSlide() }
-        }
+        guard !playingShowClip else { return }
+        if isRunning { return stopSlideshow() }
+        isRunning = true
         holdsDisplayAwake = !UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = true
         overlayHide?.cancel()
         caption.alpha = 0
         flash("play.fill")
+        if listing.media.indices.contains(index), listing.media[index].kind == .clip,
+           PhotoPreferences.playsClips, let clip = listing.media[index].playable {
+            return playShowClip(clip)
+        }
+        startPan()
+        scheduleSlide()
     }
 
     @objc private func stopSlideshow() {
-        guard let slideTimer else { return }
-        slideTimer.invalidate()
-        self.slideTimer = nil
+        guard isRunning else { return }
+        isRunning = false
+        slideTimer?.invalidate()
+        slideTimer = nil
         if holdsDisplayAwake { UIApplication.shared.isIdleTimerDisabled = false }
         holdsDisplayAwake = false
+        resetPan(animated: true)
         flash("pause.fill")
     }
 
-    /// Clips are skipped. The last photo wraps to the first once every page is in.
+    private func scheduleSlide() {
+        slideTimer?.invalidate()
+        slideTimer = Timer.scheduledTimer(withTimeInterval: PhotoPreferences.slideInterval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.advanceSlide() }
+        }
+    }
+
+    /// Clips play when the setting allows, and are skipped otherwise.
+    /// The last photo wraps to the first once every page is in.
     private func advanceSlide() {
-        let media = listing.media
+        guard isRunning else { return }
+        let media = listing.media, playsClips = PhotoPreferences.playsClips
         guard let next = PhotoViewerIndex.step(from: index, by: 1, count: media.count, wraps: !listing.hasMore,
-                                               skipping: { media[$0].kind == .clip }) else {
+                                               skipping: { !playsClips && media[$0].kind == .clip }) else {
             // A failed page ends the show; otherwise ask again and wait for the next tick.
-            if !listing.hasMore || listing.error != nil { stopSlideshow() } else { listing.loadMore() }
+            if !listing.hasMore || listing.error != nil { stopSlideshow() } else { listing.loadMore(); scheduleSlide() }
             return
         }
-        show(next, dissolve: Self.slideDissolve)
+        if PhotoPreferences.transition == .panAndZoom || imageView.transform != .identity {
+            handOffSlide()
+            show(next, dissolve: 0)
+        } else {
+            show(next, dissolve: Self.slideDissolve)
+        }
+        if let clip = media[next].playable, media[next].kind == .clip {
+            playShowClip(clip)
+        } else {
+            startPan()
+            scheduleSlide()
+        }
+    }
+
+    /// The player closes itself at the clip's end; the show resumes on the next item.
+    private func playShowClip(_ clip: MediaItem) {
+        playingShowClip = true
+        ProviderPlayer.play(clip, fromBeginning: true, from: self) { [weak self] in
+            guard let self else { return }
+            playingShowClip = false
+            guard isRunning else { return }
+            // The player lets the display sleep again as it closes.
+            UIApplication.shared.isIdleTimerDisabled = true
+            advanceSlide()
+        } onFailedToStart: { [weak self] in
+            guard let self else { return }
+            playingShowClip = false
+            advanceSlide()
+        }
+    }
+
+    /// Pan and Zoom: a slow push in with a small drift over the slide, the direction alternating.
+    private func startPan() {
+        guard isRunning, PhotoPreferences.transition == .panAndZoom else { return }
+        let side: CGFloat = index.isMultiple(of: 2) ? 1 : -1
+        let drift = CGAffineTransform(translationX: side * view.bounds.width * 0.02,
+                                      y: -side * view.bounds.height * 0.01).scaledBy(x: 1.08, y: 1.08)
+        panTarget = drift
+        UIView.animate(withDuration: PhotoPreferences.slideInterval + Self.slideDissolve, delay: 0,
+                       options: [.curveLinear, .beginFromCurrentState]) {
+            self.imageView.transform = drift
+        }
+    }
+
+    /// Moves the slide on screen to `outgoingView`, still zoomed and drifting, and fades it
+    /// out over `imageView`, which starts the next slide from rest.
+    private func handOffSlide() {
+        let shown = imageView.layer.presentation().map { CATransform3DGetAffineTransform($0.transform) }
+            ?? imageView.transform
+        outgoingView.layer.removeAllAnimations()
+        outgoingView.image = imageView.image
+        outgoingView.transform = shown
+        outgoingView.alpha = 1
+        imageView.layer.removeAnimation(forKey: "transform")
+        imageView.transform = .identity
+        let target = panTarget ?? shown
+        panTarget = nil
+        UIView.animate(withDuration: Self.slideDissolve, delay: 0, options: .curveLinear) {
+            self.outgoingView.alpha = 0
+            self.outgoingView.transform = target
+        }
+    }
+
+    private func resetPan(animated: Bool) {
+        panTarget = nil
+        guard imageView.transform != .identity else { return }
+        // Hold where the push is now, then settle back from there.
+        if let shown = imageView.layer.presentation() {
+            imageView.transform = CATransform3DGetAffineTransform(shown.transform)
+        }
+        imageView.layer.removeAnimation(forKey: "transform")
+        UIView.animate(withDuration: animated ? 0.3 : 0, delay: 0, options: .beginFromCurrentState) {
+            self.imageView.transform = .identity
+        }
     }
 
     /// The only sign a slideshow started or stopped, since the caption hides for it.

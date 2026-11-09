@@ -4,11 +4,12 @@
 import SwiftUI
 import UIKit
 
-/// Full-screen pager over a listing's photos and clips. Tap toggles the chrome;
-/// the slideshow advances every 4 s, skips clips and wraps once every page is loaded.
+/// Full-screen pager over a listing's photos and clips. Tap toggles the chrome. The slideshow
+/// follows the Photos settings (interval, transition, clips) and wraps once every page is loaded.
 struct IOSPhotoViewer: View {
     @ObservedObject var model: PhotoListingModel
-    let onPlay: (MediaItem) -> Void
+    /// Plays a clip; `inShow` asks the host to resume the slideshow after it.
+    let onPlay: (PhotoItem, _ inShow: Bool) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selection: MediaItemRef
     @State private var chrome = true
@@ -17,25 +18,31 @@ struct IOSPhotoViewer: View {
     @State private var holdsDisplayAwake = false
     @Environment(\.scenePhase) private var scenePhase
 
-    private static let interval: Duration = .seconds(4)
-
-    init(model: PhotoListingModel, start: PhotoItem, onPlay: @escaping (MediaItem) -> Void) {
+    init(model: PhotoListingModel, start: PhotoItem, running: Bool = false,
+         onPlay: @escaping (PhotoItem, Bool) -> Void) {
         self.model = model
         self.onPlay = onPlay
         _selection = State(initialValue: start.ref)
+        _slideshow = State(initialValue: running)
     }
 
     private var current: PhotoItem? { model.media.first { $0.ref == selection } }
 
     var body: some View {
-        TabView(selection: $selection) {
-            ForEach(model.media, id: \.ref) { item in
-                page(item)
-                    .tag(item.ref)
-                    .onAppear { model.loadMoreIfNeeded(after: item) }
+        Group {
+            if slideshow {
+                stage
+            } else {
+                TabView(selection: $selection) {
+                    ForEach(model.media, id: \.ref) { item in
+                        page(item)
+                            .tag(item.ref)
+                            .onAppear { model.loadMoreIfNeeded(after: item) }
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
         .background(Color.black.ignoresSafeArea())
         .overlay(alignment: .top) { if chrome { topBar } }
@@ -44,21 +51,46 @@ struct IOSPhotoViewer: View {
         .animation(.easeInOut(duration: 0.2), value: chrome)
         .onChange(of: slideshow) { _, on in setAwake(on) }
         .onChange(of: scenePhase) { _, phase in if phase != .active { slideshow = false } }
+        .onAppear { if slideshow { setAwake(true) } }
         .onDisappear { slideshow = false; setAwake(false) }
         .task(id: slideshow) {
+            guard slideshow else { return }
+            if let current, current.kind == .clip, PhotoPreferences.playsClips { onPlay(current, true); return }
             while slideshow, !Task.isCancelled {
-                try? await Task.sleep(for: Self.interval)
+                Task { await prefetchNext() }
+                try? await Task.sleep(for: .seconds(PhotoPreferences.slideInterval))
                 if slideshow, !Task.isCancelled { advance() }
             }
         }
+    }
+
+    /// The slideshow's own page: one photo at a time, dissolving into the next.
+    private var stage: some View {
+        ZStack {
+            if let current {
+                IOSSlide(item: current, panAndZoom: PhotoPreferences.transition == .panAndZoom,
+                         interval: PhotoPreferences.slideInterval) { chrome.toggle() }
+                    .id(current.ref)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Warms the cache with the next photo so the dissolve starts on a picture, not a spinner.
+    private func prefetchNext() async {
+        let media = model.media
+        guard let index = media.firstIndex(where: { $0.ref == selection }), index + 1 < media.count,
+              let url = media[index + 1].full ?? media[index + 1].thumbnail else { return }
+        _ = await IOSArtworkCache.shared.image(for: url)
     }
 
     @ViewBuilder
     private func page(_ item: PhotoItem) -> some View {
         ZStack {
             IOSZoomableImage(url: item.full ?? item.thumbnail, placeholder: item.thumbnail) { chrome.toggle() }
-            if item.kind == .clip, let clip = item.playable {
-                Button { onPlay(clip) } label: {
+            if item.kind == .clip {
+                Button { onPlay(item, false) } label: {
                     Image(systemName: "play.circle.fill").font(.system(size: 72)).foregroundStyle(.white)
                         .shadow(radius: 4)
                 }
@@ -120,13 +152,45 @@ struct IOSPhotoViewer: View {
     private func advance() {
         let media = model.media
         guard let index = media.firstIndex(where: { $0.ref == selection }) else { return }
+        let skipsClips = !PhotoPreferences.playsClips
         if let next = PhotoViewerIndex.step(from: index, by: 1, count: media.count, wraps: !model.listing.hasMore,
-                                            skipping: { media[$0].kind == .clip }) {
-            withAnimation { selection = media[next].ref }
+                                            skipping: { skipsClips && media[$0].kind == .clip }) {
+            withAnimation(.easeInOut(duration: 1)) { selection = media[next].ref }
+            if media[next].kind == .clip { onPlay(media[next], true) }
         } else if !model.listing.hasMore || model.failed {
             slideshow = false
         } else {
             model.listing.loadMore()
+        }
+    }
+}
+
+/// One slideshow photo; Pan and Zoom grows it 8% and drifts it, past the fade-out that follows.
+private struct IOSSlide: View {
+    let item: PhotoItem
+    let panAndZoom: Bool
+    let interval: TimeInterval
+    let onTap: () -> Void
+    @State private var image: UIImage?
+    @State private var moved = false
+
+    var body: some View {
+        let drift: CGFloat = item.ref.hashValue & 1 == 0 ? 14 : -14
+        Group {
+            if let image { Image(uiImage: image).resizable().scaledToFit() } else { ProgressView().tint(.white) }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scaleEffect(moved ? 1.08 : 1)
+        .offset(x: moved ? drift : 0, y: moved ? -drift / 2 : 0)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+        .task {
+            guard let url = item.full ?? item.thumbnail else { return }
+            image = IOSArtworkCache.shared.cachedImage(for: url) ?? item.thumbnail.flatMap(IOSArtworkCache.shared.cachedImage(for:))
+            if let full = await IOSArtworkCache.shared.image(for: url) { image = full }
+        }
+        .onAppear {
+            if panAndZoom { withAnimation(.linear(duration: interval + 1)) { moved = true } }
         }
     }
 }

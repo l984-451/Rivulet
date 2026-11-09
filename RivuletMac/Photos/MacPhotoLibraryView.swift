@@ -11,14 +11,24 @@ struct MacPhotoLibraryView: View {
     let title: String
     @Environment(\.macOpen) private var open
     @StateObject private var model: PhotoListingModel
-    @State private var viewing: PhotoItem?
+    @State private var query: PhotoQuery
+    @State private var viewing: Viewing?
+    @State private var shuffling = false
+
+    private struct Viewing {
+        let model: PhotoListingModel
+        let item: PhotoItem
+        var running = false
+    }
 
     init(library: MediaLibrary, folder: MediaItemRef? = nil, title: String) {
         self.library = library
         self.folder = folder
         self.title = title
+        let query = PhotoPreferences.query(for: library)
+        _query = State(initialValue: query)
         _model = StateObject(wrappedValue: PhotoListingModel(
-            listing: PhotoListing(folder: folder, source: PhotoListing.source(for: library))))
+            listing: PhotoListing(folder: folder, query: query, source: PhotoListing.source(for: library))))
     }
 
     private let columns = [GridItem(.adaptive(minimum: MacMetrics.posterWidth), spacing: MacMetrics.tileGap)]
@@ -28,13 +38,101 @@ struct MacPhotoLibraryView: View {
             .navigationTitle(title)
             .macPageRefresh { model.listing.loadFirst() }
             .task { if model.media.isEmpty, model.folders.isEmpty, !model.isLoading { model.listing.loadFirst() } }
+            .onAppear {
+                // Back from a folder, whose Sort or Show may have changed the library's.
+                let saved = PhotoPreferences.query(for: library)
+                if saved != query { query = saved; model.listing.query = saved }
+            }
             .overlay {
-                if let item = viewing {
-                    MacPhotoViewer(model: model, start: item) { viewing = nil }
+                if let shown = viewing {
+                    MacPhotoViewer(model: shown.model, start: shown.item, running: shown.running) { viewing = nil }
                         .transition(.opacity)
                 }
             }
+            .toolbar {
+                if viewing == nil {
+                    ToolbarItemGroup {
+                        Button("Slideshow", systemImage: "play.rectangle") { startSlideshow() }
+                            .disabled(model.media.isEmpty)
+                        Button("Shuffle", systemImage: "shuffle") { startShuffle() }
+                            .disabled(model.media.isEmpty)
+                        optionsMenu
+                    }
+                }
+            }
             .toolbar(viewing == nil ? .automatic : .hidden, for: .windowToolbar)
+    }
+
+    private func startSlideshow() {
+        guard let first = model.media.first else { return }
+        viewing = Viewing(model: model, item: first, running: true)
+    }
+
+    /// The same folder in a random order, in the viewer; the grid keeps its own.
+    private func startShuffle() {
+        var shuffled = query
+        shuffled.shuffled = true
+        let listing = PhotoListing(folder: model.listing.folder, query: shuffled, source: model.listing.source)
+        let shuffle = PhotoListingModel(listing: listing)
+        guard !shuffling else { return }
+        shuffling = true
+        Task {
+            defer { shuffling = false }
+            await listing.loadFirst()?.value
+            while shuffle.media.isEmpty, listing.hasMore, listing.error == nil, let page = listing.loadMore() {
+                await page.value
+            }
+            if let first = shuffle.media.first { viewing = Viewing(model: shuffle, item: first, running: true) }
+        }
+    }
+
+    private func change(_ edit: (inout PhotoQuery) -> Void) {
+        var edited = query
+        edit(&edited)
+        guard edited != query else { return }
+        query = edited
+        PhotoPreferences.setQuery(edited, for: library)
+        model.listing.query = edited
+    }
+
+    private var optionsMenu: some View {
+        let sorts = model.listing.source()?.provider.photoSorts ?? [query.sort]
+        return Menu {
+            Picker("Sort", selection: Binding(get: { query.sort }, set: { sort in
+                change { $0.sort = sort; $0.ascending = sort == .name }
+            })) {
+                ForEach(sorts, id: \.self) { Text(Self.title($0)).tag($0) }
+            }
+            .pickerStyle(.inline)
+            Picker("Direction", selection: Binding(get: { query.ascending }, set: { ascending in
+                change { $0.ascending = ascending }
+            })) {
+                if query.sort == .name {
+                    Text("A to Z").tag(true)
+                    Text("Z to A").tag(false)
+                } else {
+                    Text("Newest First").tag(false)
+                    Text("Oldest First").tag(true)
+                }
+            }
+            .pickerStyle(.inline)
+            Picker("Show", selection: Binding(get: { query.show }, set: { show in change { $0.show = show } })) {
+                Text("All").tag(PhotoQuery.Show.all)
+                Text("Photos").tag(PhotoQuery.Show.photos)
+                Text("Videos").tag(PhotoQuery.Show.videos)
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label("Sort and Show", systemImage: "arrow.up.arrow.down")
+        }
+    }
+
+    private static func title(_ sort: PhotoQuery.Sort) -> LocalizedStringKey {
+        switch sort {
+        case .dateTaken: "Date Taken"
+        case .dateAdded: "Date Added"
+        case .name: "Name"
+        }
     }
 
     @ViewBuilder
@@ -80,7 +178,7 @@ struct MacPhotoLibraryView: View {
 
     private func mediaTile(_ item: PhotoItem) -> some View {
         Button {
-            viewing = item
+            viewing = Viewing(model: model, item: item)
         } label: {
             MacImage(url: item.thumbnail)
                 .aspectRatio(1, contentMode: .fit)

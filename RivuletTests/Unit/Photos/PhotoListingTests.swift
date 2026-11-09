@@ -160,4 +160,41 @@ final class PhotoListingTests: XCTestCase {
         XCTAssertNotNil(listing.error)
         XCTAssertTrue(listing.media.isEmpty)
     }
+
+    func test_savedQuery_waitsForTheSource_thenAppliesBeforeTheFirstPage() async {
+        provider.pages = [0: page(media: ["a"], next: nil)]
+        var registered = false
+        var saved = PhotoQuery()
+        saved.sort = .name
+        let listing = PhotoListing(folder: nil, savedQuery: { _ in saved }) { [provider, library] in
+            registered ? (provider, library) : nil
+        }
+        await listing.loadFirst()?.value
+        XCTAssertNotNil(listing.error, "no source yet")
+        XCTAssertEqual(listing.query, .default)
+
+        registered = true
+        await listing.loadMore()?.value
+        XCTAssertEqual(listing.query.sort, .name)
+        XCTAssertEqual(provider.queries.map(\.sort), [.name], "the first page asked for the saved sort")
+        XCTAssertEqual(listing.media.map(\.title), ["a"])
+    }
+
+    func test_aQueryChosenBeforeTheSourceAnswers_winsOverTheSavedOne() async {
+        provider.pages = [0: page(media: ["a"], next: nil)]
+        var registered = false
+        var saved = PhotoQuery()
+        saved.sort = .name
+        let listing = PhotoListing(folder: nil, savedQuery: { _ in saved }) { [provider, library] in
+            registered ? (provider, library) : nil
+        }
+        var chosen = PhotoQuery()
+        chosen.show = .videos
+        listing.query = chosen
+        registered = true
+        await listing.loadFirst()?.value
+        XCTAssertEqual(listing.query, chosen)
+        XCTAssertFalse(provider.queries.isEmpty)
+        XCTAssertTrue(provider.queries.allSatisfy { $0 == chosen }, "the saved sort never applied")
+    }
 }

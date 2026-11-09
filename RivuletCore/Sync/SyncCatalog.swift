@@ -31,6 +31,8 @@ nonisolated enum SyncCatalog {
         "liveTVHiddenPlexServers", "liveTVHideJellyfin", "liveTVHideEmby",
         // Servers the user turned off, by machine id
         "plexDisabledServers",
+        // Photos
+        "photoSlideInterval", "photoSlideTransition", "photoSlidePlaysClips",
     ]
 
     /// Keys stored once per Plex Home profile (`_user_<id>`) or non-Plex server (`_provider_<id>`).
@@ -56,7 +58,7 @@ nonisolated enum SyncCatalog {
         if exactKeys.contains(key) { return true }
         if profileFamilies.contains(where: { key.hasPrefix($0 + "_user_") || key.hasPrefix($0 + "_provider_") })
             || profileFamilies.contains(key) { return true }
-        if key.hasPrefix("mediaLibrarySort.") { return key.count > "mediaLibrarySort.".count }
+        for prefix in ["mediaLibrarySort.", "photoLibraryQuery."] where key.hasPrefix(prefix) { return key.count > prefix.count }
         // contentFilter.<category>.enabled
         if key.hasPrefix("contentFilter."), key.hasSuffix(".enabled") {
             let middle = key.dropFirst("contentFilter.".count).dropLast(".enabled".count)

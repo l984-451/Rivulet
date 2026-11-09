@@ -45,7 +45,9 @@ final class PhotoLibraryViewController: UIViewController {
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
     private func push(folder: MediaItemRef?, title: String) {
-        let grid = PhotoGridViewController(title: title, listing: PhotoListing(folder: folder, source: source))
+        // Every level of a library opens on the Sort and Show it was last left on.
+        let listing = PhotoListing(folder: folder, savedQuery: PhotoPreferences.query(for:), source: source)
+        let grid = PhotoGridViewController(title: title, listing: listing)
         grid.onOpenFolder = { [weak self] in self?.push(folder: $0.ref, title: $0.title) }
         addChild(grid)
         grid.view.frame = view.bounds
@@ -70,6 +72,7 @@ extension PhotoLibraryViewController: MenuBackHandling {
               focused.isDescendant(of: view) else { return false }
         stack.removeLast()
         stack.last?.view.isHidden = false
+        stack.last?.syncSavedQuery()
         top.view.isHidden = true
         setNeedsFocusUpdate()
         updateFocusIfNeeded()

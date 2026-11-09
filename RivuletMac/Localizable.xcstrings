@@ -1,6 +1,21 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Slideshow" : {},
+    "Photos" : {},
+    "Videos" : {},
+    "Date Taken" : {},
+    "A to Z" : {},
+    "Z to A" : {},
+    "Newest First" : {},
+    "Oldest First" : {},
+    "Dissolve" : {},
+    "Pan and Zoom" : {},
+    "Slideshow Interval" : {},
+    "Transition" : {},
+    "Play Clips in Slideshow" : {},
+    "Direction" : {},
+    "Sort and Show" : {},
     "" : {
 
     },

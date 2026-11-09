@@ -44,12 +44,14 @@ enum ProviderPlayer {
     @MainActor
     static func play(_ item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                      playQueue: PlayQueue<PlaylistEntry>? = nil, explicitStartOffset: TimeInterval? = nil,
-                     from presenter: UIViewController, onDismiss: (() -> Void)?) {
+                     from presenter: UIViewController, onDismiss: (() -> Void)?,
+                     onFailedToStart: (() -> Void)? = nil) {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
             presentError(MediaProviderError.notFound, from: presenter)
+            onFailedToStart?()
             return
         }
-        guard claimStart() else { return }
+        guard claimStart() else { onFailedToStart?(); return }
         Task { @MainActor in
             defer { finishStart() }
             var target = item
@@ -76,6 +78,7 @@ enum ProviderPlayer {
                     PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
                 } catch {
                     presentError(MediaProviderError.mapping(error), from: presenter)
+                    onFailedToStart?()
                 }
                 return
             }
@@ -95,6 +98,7 @@ enum ProviderPlayer {
                 PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
             } catch {
                 presentError(error, from: presenter)
+                onFailedToStart?()
             }
         }
     }

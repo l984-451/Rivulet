@@ -4,12 +4,15 @@
 import AppKit
 import SwiftUI
 
-/// Full-window photo viewer over a grid's listing. Arrows page, Space runs a slideshow
-/// (4 s, skips clips, wraps once every page is loaded), Escape closes, pinch zooms.
+/// Full-window photo viewer over a grid's listing. Arrows page, Space runs a slideshow (the Photos
+/// settings: interval, transition, clips; wraps once every page is loaded), Escape closes, pinch zooms.
 struct MacPhotoViewer: View {
     @ObservedObject var model: PhotoListingModel
     let onClose: () -> Void
     @Environment(\.macActions) private var actions
+    @EnvironmentObject private var playback: MacPlaybackController
+    /// A slideshow clip is playing: the show carries on once the player closes.
+    @State private var resumeAfterClip = false
     @State private var index: Int
     @State private var slideshow = false
     @State private var zoom: CGFloat = 1
@@ -19,12 +22,11 @@ struct MacPhotoViewer: View {
     @FocusState private var focused: Bool
     @State private var awake: NSObjectProtocol?
 
-    private static let interval: Duration = .seconds(4)
-
-    init(model: PhotoListingModel, start: PhotoItem, onClose: @escaping () -> Void) {
+    init(model: PhotoListingModel, start: PhotoItem, running: Bool = false, onClose: @escaping () -> Void) {
         self.model = model
         self.onClose = onClose
         _index = State(initialValue: model.media.firstIndex(of: start) ?? 0)
+        _slideshow = State(initialValue: running)
     }
 
     private var item: PhotoItem? { model.media.indices.contains(index) ? model.media[index] : nil }
@@ -43,13 +45,15 @@ struct MacPhotoViewer: View {
                         .onChanged { if zoom > 1 { drag = $0.translation } }
                         .onEnded { if zoom > 1 { pan.width += $0.translation.width; pan.height += $0.translation.height }; drag = .zero })
                     .onTapGesture(count: 2) { zoom = 1; pan = .zero }
+                    .id(item.ref)
+                    .transition(.opacity)
             }
             controls
         }
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
-        .onAppear { focused = true }
+        .onAppear { focused = true; if slideshow { setAwake(true) } }
         .onKeyPress(.leftArrow) { step(-1); return .handled }
         .onKeyPress(.rightArrow) { step(1); return .handled }
         .onKeyPress(.space) { slideshow.toggle(); return .handled }
@@ -58,9 +62,21 @@ struct MacPhotoViewer: View {
         .onChange(of: index) { zoom = 1; pan = .zero }
         .onChange(of: slideshow) { _, on in setAwake(on) }
         .onDisappear { slideshow = false; setAwake(false) }
+        .onChange(of: playback.playbackError) { _, error in
+            if error != nil { resumeAfterClip = false }
+        }
+        .onChange(of: playback.isPresented) { _, presented in
+            guard !presented, resumeAfterClip else { return }
+            resumeAfterClip = false
+            focused = true
+            slideshow = true
+            advance()
+        }
         .task(id: slideshow) {
+            guard slideshow else { return }
+            if let item, item.kind == .clip, PhotoPreferences.playsClips { playInShow(item); return }
             while slideshow, !Task.isCancelled {
-                try? await Task.sleep(for: Self.interval)
+                try? await Task.sleep(for: .seconds(PhotoPreferences.slideInterval))
                 if slideshow, !Task.isCancelled { advance() }
             }
         }
@@ -68,8 +84,8 @@ struct MacPhotoViewer: View {
 
     @ViewBuilder
     private func page(_ item: PhotoItem) -> some View {
-        MacPhotoPage(item: item)
-            .id(item.ref)
+        MacPhotoPage(item: item, panAndZoom: slideshow && PhotoPreferences.transition == .panAndZoom,
+                     interval: PhotoPreferences.slideInterval)
             .overlay {
                 if item.kind == .clip, let playable = item.playable {
                     Button {
@@ -114,6 +130,14 @@ struct MacPhotoViewer: View {
         }
     }
 
+    /// Hands a clip to the player; the show resumes after it closes.
+    private func playInShow(_ item: PhotoItem) {
+        guard let clip = item.playable else { return }
+        resumeAfterClip = true
+        slideshow = false
+        actions.play(clip)
+    }
+
     private func step(_ delta: Int) {
         let next = index + delta
         guard model.media.indices.contains(next) else { return }
@@ -124,10 +148,12 @@ struct MacPhotoViewer: View {
     /// The next photo, skipping clips; at the end waits for the next page, else wraps.
     private func advance() {
         let media = model.media
+        let skipsClips = !PhotoPreferences.playsClips
         if let next = PhotoViewerIndex.step(from: index, by: 1, count: media.count, wraps: !model.listing.hasMore,
-                                            skipping: { media[$0].kind == .clip }) {
-            index = next
+                                            skipping: { skipsClips && media[$0].kind == .clip }) {
+            withAnimation(.easeInOut(duration: 1)) { index = next }
             model.loadMoreIfNeeded(after: media[next])
+            if media[next].kind == .clip { playInShow(media[next]) }
         } else if !model.listing.hasMore || model.failed {
             slideshow = false
         } else {
@@ -136,20 +162,32 @@ struct MacPhotoViewer: View {
     }
 }
 
-/// One photo, the grid's thumbnail until the full image arrives.
+/// One photo, the grid's thumbnail until the full image arrives. Pan and Zoom grows it 8% and
+/// drifts it, past the fade-out that follows.
 private struct MacPhotoPage: View {
     let item: PhotoItem
+    let panAndZoom: Bool
+    let interval: TimeInterval
     @State private var image: NSImage?
+    @State private var moved = false
 
-    init(item: PhotoItem) {
+    init(item: PhotoItem, panAndZoom: Bool, interval: TimeInterval) {
         self.item = item
+        self.panAndZoom = panAndZoom
+        self.interval = interval
         _image = State(initialValue: (item.full ?? item.thumbnail).flatMap(MacArtworkCache.shared.cachedImage(for:))
             ?? item.thumbnail.flatMap(MacArtworkCache.shared.cachedImage(for:)))
     }
 
     var body: some View {
+        let drift: CGFloat = item.ref.hashValue & 1 == 0 ? 14 : -14
         Group {
             if let image { Image(nsImage: image).resizable().scaledToFit() } else { ProgressView() }
+        }
+        .scaleEffect(moved ? 1.08 : 1)
+        .offset(x: moved ? drift : 0, y: moved ? -drift / 2 : 0)
+        .task(id: panAndZoom) {
+            if panAndZoom { withAnimation(.linear(duration: interval + 1)) { moved = true } } else { moved = false }
         }
         .task(id: item.ref) {
             guard let url = item.full ?? item.thumbnail,

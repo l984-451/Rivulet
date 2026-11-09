@@ -60,13 +60,18 @@ nonisolated enum HomeFeed {
         var failures: [String: String] = [:]
     }
 
-    static func assemble(selected: ServerRows?, others: [ServerRows]) -> Assembled {
+    /// `hiddenLibraries` (`SidebarLibraryVisibility` keys) leave their rows off Home, as on tvOS.
+    static func assemble(selected: ServerRows?, others: [ServerRows], hiddenLibraries: Set<String> = []) -> Assembled {
         let servers = (selected.map { [$0] } ?? []) + others
         return Assembled(
             libraries: servers.flatMap(\.libraries),
             photoLibraries: servers.flatMap(\.photoLibraries),
             continueWatching: servers.map { $0.continueWatching ?? [] },
-            shelves: servers.flatMap { server in server.libraries.flatMap { server.rowsByLibrary[$0.id] ?? [] } })
+            shelves: servers.flatMap { server in
+                server.libraries
+                    .filter { !hiddenLibraries.contains(SidebarLibraryVisibility.key(for: $0)) }
+                    .flatMap { server.rowsByLibrary[$0.id] ?? [] }
+            })
     }
 
     /// Fetches one server's Home. Only the library list can fail the call; a failed
@@ -144,6 +149,8 @@ final class HomeFeedLoader {
     var onChange: ((HomeFeed.Assembled) -> Void)?
     /// Called once the secondary servers have all answered.
     var onSecondaryFinished: (() -> Void)?
+    /// Libraries left off Home; set it, then `publish()`.
+    var hiddenLibraries: Set<String> = []
 
     private var selectedID: String?
     private var secondaryIDs: [String] = []
@@ -230,10 +237,10 @@ final class HomeFeedLoader {
     }
 
     /// Waits for the selected server's first answer, or its failure, then publishes everything known.
-    private func publish() {
+    func publish() {
         if let selectedID, servers[selectedID] == nil, failures[selectedID] == nil { return }
         var home = HomeFeed.assemble(selected: selectedID.flatMap { servers[$0] },
-                                     others: secondaryIDs.compactMap { servers[$0] })
+                                     others: secondaryIDs.compactMap { servers[$0] }, hiddenLibraries: hiddenLibraries)
         home.failures = failures
         onChange?(home)
     }

@@ -26,6 +26,21 @@ struct IOSLibrarySettingsView: View {
                     Text("Lists your favorite movies and shows from every server under Library.")
                 }
             }
+            let libraries = (browse.libraries + browse.photoLibraries).sidebarOrder(servers: browse.providerOrder)
+            if !libraries.isEmpty {
+                Section {
+                    ForEach(libraries) { library in
+                        Toggle(isOn: Binding(get: { browse.isSidebarLibraryShown(library) },
+                                             set: { browse.setSidebarLibrary(library, shown: $0) })) {
+                            Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                        }
+                    }
+                } header: {
+                    Text("Libraries")
+                } footer: {
+                    Text("Hidden libraries stay on the server and are left out of Library and Home.")
+                }
+            }
         }
         .navigationTitle("Library")
     }

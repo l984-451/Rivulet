@@ -155,7 +155,7 @@ struct MacLibrarySettingsView: View {
         } header: {
             Text("Sidebar Libraries")
         } footer: {
-            Text("Hidden libraries stay on the server and are only left out of the sidebar and the Go menu.")
+            Text("Hidden libraries stay on the server and are left out of the sidebar, the Go menu and Home.")
         }
     }
 }

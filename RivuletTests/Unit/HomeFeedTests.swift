@@ -158,6 +158,16 @@ final class HomeFeedTests: XCTestCase {
         XCTAssertEqual(home.photoLibraries.map(\.id), ["p1", "p2"])
     }
 
+    func test_assemble_leavesHiddenLibrariesRowsOffHome() {
+        let selected = HomeFeed.ServerRows(libraries: [library("1"), library("2")],
+                                           rowsByLibrary: ["1": [hub("a")], "2": [hub("b")]])
+        let other = HomeFeed.ServerRows(libraries: [library("m", provider: "jellyfin:s")],
+                                        rowsByLibrary: ["m": [hub("r", provider: "jellyfin:s")]])
+        let home = HomeFeed.assemble(selected: selected, others: [other], hiddenLibraries: ["plex:a/2", "jellyfin:s/m"])
+        XCTAssertEqual(home.shelves.map(\.id), ["a"])
+        XCTAssertEqual(home.libraries.map(\.id), ["1", "2", "m"], "hidden libraries are still listed for Settings")
+    }
+
     func test_assemble_withoutASelectedServer() {
         let other = HomeFeed.ServerRows(libraries: [library("m", provider: "jellyfin:s")], continueWatching: [],
                                         rowsByLibrary: ["m": [hub("r", provider: "jellyfin:s")]])

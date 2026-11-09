@@ -36,8 +36,8 @@ struct IOSPlexLibrarySplitView: View {
             }
         }
         // Side by side, the detail column is never left empty.
-        .onChange(of: [sizeClass == .regular, browse.libraries.isEmpty, browse.photoLibraries.isEmpty], initial: true) {
-            if sizeClass == .regular, selection == nil, let first = browse.libraries.first ?? browse.photoLibraries.first {
+        .onChange(of: [sizeClass == .regular, browse.shownLibraries.isEmpty], initial: true) {
+            if sizeClass == .regular, selection == nil, let first = browse.shownLibraries.first {
                 selection = .library(first)
             }
         }
@@ -122,7 +122,7 @@ struct IOSPlexLibrariesView: View {
         }
     }
 
-    private var videoLibraries: [MediaLibrary] { browse.libraries + browse.photoLibraries }
+    private var videoLibraries: [MediaLibrary] { browse.shownLibraries }
 
     /// One section per server, under its name once there are several.
     private var serverGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {

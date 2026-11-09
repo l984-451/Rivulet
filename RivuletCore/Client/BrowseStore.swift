@@ -38,7 +38,14 @@ final class BrowseStore: ObservableObject {
     /// Favorites changed here this session, so menus and hearts are right before lists refetch.
     @Published private(set) var favoriteOverrides: [MediaItemRef: Bool] = [:]
     /// Libraries the profile hid from the sidebar (`SidebarLibraryVisibility`).
-    @Published var hiddenSidebarLibraries: Set<String> = SidebarLibraryVisibility.stored()
+    @Published var hiddenSidebarLibraries: Set<String> = SidebarLibraryVisibility.stored() {
+        didSet {
+            guard hiddenSidebarLibraries != oldValue else { return }
+            loader.hiddenLibraries = hiddenSidebarLibraries
+            loader.publish()
+            reloadPersonalRows()
+        }
+    }
     /// Bumped on a server or profile switch; the tab stacks rebuild on it.
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
@@ -72,6 +79,7 @@ final class BrowseStore: ObservableObject {
 
     init() {
         loader.onChange = { [weak self] home in self?.apply(home) }
+        loader.hiddenLibraries = hiddenSidebarLibraries
         loader.onSecondaryFinished = { [weak self] in
             self?.isLoadingOtherServers = false
             self?.reloadPersonalRows()
@@ -386,13 +394,20 @@ final class BrowseStore: ObservableObject {
     // MARK: - Hero
 
     func trendingHeroItems() async -> [MediaItem] {
-        await heroSources.trending(providers: allProviders)
+        await heroSources.trending(providers: allProviders).filter(isShownOnHome)
     }
 
     /// The watchlist's first ten entries that any server owns, in watchlist order.
     func watchlistHeroItems() async -> [MediaItem] {
         let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
         return await heroSources.watchlist(titles: entries.map(TitleMatch.init), key: entries.map(\.id), providers: allProviders)
+            .filter(isShownOnHome)
+    }
+
+    /// False for an item from a hidden library; an item that names no library stays.
+    func isShownOnHome(_ item: MediaItem) -> Bool {
+        guard let libraryID = item.libraryID else { return true }
+        return !hiddenSidebarLibraries.contains(SidebarLibraryVisibility.key(providerID: item.ref.providerID, libraryID: libraryID))
     }
 
     // MARK: - Artwork

@@ -137,16 +137,19 @@ struct IOSRootView: View {
             dropMissingLibrarySelection()
         }
         .onChange(of: browse.photoLibraries) { dropMissingLibrarySelection() }
+        .onChange(of: browse.hiddenSidebarLibraries) {
+            dropOrphanedLibraryTab()
+            dropMissingLibrarySelection()
+        }
         .onChange(of: browse.isLoadingOtherServers) { _, loading in
             if !loading, !browse.libraries.isEmpty { dropOrphanedLibraryTab() }
         }
         .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
     }
 
-    /// A photo library is never in `libraries`, so both lists count.
+    /// A library gone from the server or hidden in Settings leaves the selection.
     private func dropMissingLibrarySelection() {
-        if case .library(let library) = librarySelection,
-           !(browse.libraries + browse.photoLibraries).contains(library) {
+        if case .library(let library) = librarySelection, !browse.shownLibraries.contains(library) {
             librarySelection = nil
             libraryPath = NavigationPath()
         }
@@ -224,7 +227,7 @@ struct IOSRootView: View {
 
     /// Movie, TV and photo libraries: iOS has no music player. Each server's together, the selected first.
     private var videoLibraries: [MediaLibrary] {
-        (browse.libraries + browse.photoLibraries).sidebarOrder(servers: browse.providerOrder)
+        browse.shownLibraries.sidebarOrder(servers: browse.providerOrder)
     }
 
     private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }

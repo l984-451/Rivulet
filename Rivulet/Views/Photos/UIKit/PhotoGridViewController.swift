@@ -24,6 +24,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private let listing: PhotoListing
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
     private let stateView = HomeStateView()
+    /// Home's wash, from the focused tile's thumbnail (a folder's cover).
+    private let ambientView = AmbientBackdropView()
     /// Holds focus while the first page loads, so Menu still reaches this tab.
     private let loadingAnchor = PreviewFocusAnchorView()
     /// Where focus goes when it next enters the grid: the last tile focused,
@@ -56,6 +58,13 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        let frost = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+        for layer in [ambientView, frost] as [UIView] {
+            layer.isUserInteractionEnabled = false
+            layer.frame = view.bounds
+            layer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(layer)
+        }
 
         collectionView.frame = view.bounds
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -156,6 +165,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         // The saved query may only now be applied, once the source knew its library.
         if wasEmpty { refreshMenus() }
         if wasEmpty, !isEmpty {
+            // Until focus reaches a tile, the first one's art.
+            ambientView.setAmbient(url: (listing.folders.first ?? listing.media.first)?.thumbnail)
             setNeedsFocusUpdate()
             NotificationCenter.default.post(name: .contentBecameFocusable, object: nil)
         }
@@ -374,7 +385,10 @@ extension PhotoGridViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
                         with coordinator: UIFocusAnimationCoordinator) {
         let next = context.nextFocusedIndexPath
-        if let next { focusTarget = next }
+        if let next {
+            focusTarget = next
+            ambientView.setAmbient(url: item(at: next).thumbnail)
+        }
         if next != nil || context.nextFocusedView === returnToButton { returnToButton = nil }
         if next == nil {
             for case let cell as PhotoCell in collectionView.visibleCells { cell.resetStaleFocusAppearance() }

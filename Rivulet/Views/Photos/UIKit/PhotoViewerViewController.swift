@@ -11,6 +11,7 @@
 //  at every slide.
 //
 
+import CoreImage
 import UIKit
 
 @MainActor
@@ -26,6 +27,15 @@ final class PhotoViewerViewController: UIViewController {
     private let listing: PhotoListing
     private var index: Int
     private let imageView = UIImageView()
+    /// A blurred, darkened copy of the photo behind its letterbox bars; never panned or zoomed.
+    private let fillView = UIImageView()
+    /// Bounded: a long slideshow would otherwise keep every fill it made.
+    private let fills: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 40
+        return cache
+    }()
+    private var blurring: Set<MediaItemRef> = []
     /// The slide going away, fading out over the next one while it keeps its Pan and Zoom.
     private let outgoingView = UIImageView()
     /// Where the current slide's Pan and Zoom is heading.
@@ -69,6 +79,15 @@ final class PhotoViewerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        fillView.frame = view.bounds
+        fillView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        fillView.contentMode = .scaleAspectFill
+        fillView.clipsToBounds = true
+        let dim = UIView(frame: fillView.bounds)
+        dim.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        dim.backgroundColor = UIColor(white: 0, alpha: 0.55)
+        fillView.addSubview(dim)
+        view.addSubview(fillView)
         imageView.frame = view.bounds
         imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         imageView.contentMode = .scaleAspectFit
@@ -90,7 +109,7 @@ final class PhotoViewerViewController: UIViewController {
         }
         slideGlyph.alpha = 0
 
-        caption.numberOfLines = 2
+        caption.numberOfLines = 3
         caption.layer.shadowOpacity = 0.8
         caption.layer.shadowRadius = 6
         caption.layer.shadowOffset = .zero
@@ -146,7 +165,8 @@ final class PhotoViewerViewController: UIViewController {
 
     // MARK: - Showing a photo
 
-    private func show(_ newIndex: Int, dissolve: TimeInterval) {
+    /// `fillDissolve` is the fill's own crossfade when the photo hands off without one.
+    private func show(_ newIndex: Int, dissolve: TimeInterval, fillDissolve: TimeInterval? = nil) {
         guard listing.media.indices.contains(newIndex) else { return }
         index = newIndex
         let item = listing.media[newIndex]
@@ -156,12 +176,15 @@ final class PhotoViewerViewController: UIViewController {
 
         // The grid's thumbnail at once, then the screen-sized image when it arrives.
         let full = item.full.flatMap { cache.cachedImage(for: $0, quality: .full) }
-        setImage(full ?? item.thumbnail.flatMap { cache.cachedImage(for: $0) }, dissolve: dissolve)
+        let thumbnail = item.thumbnail.flatMap { cache.cachedImage(for: $0) }
+        setImage(full ?? thumbnail, dissolve: dissolve)
+        updateFill(item, source: thumbnail ?? full, dissolve: fillDissolve ?? dissolve)
         if full == nil, let url = item.full {
             loadTask = Task { [weak self] in
                 let image = await cache.image(for: url, quality: .full)
                 guard let self, let image, !Task.isCancelled, self.index == newIndex else { return }
                 self.setImage(image, dissolve: Self.stepDissolve)
+                if thumbnail == nil { self.updateFill(item, source: image, dissolve: Self.stepDissolve) }
             }
         }
         let neighbours = [newIndex - 1, newIndex + 1].filter(listing.media.indices.contains)
@@ -178,6 +201,35 @@ final class PhotoViewerViewController: UIViewController {
         }
     }
 
+    /// Fills the bars of a letterboxed photo; one that fills the screen sits on black.
+    /// A fill still blurring shows black until it is ready, never the last photo's.
+    private func updateFill(_ item: PhotoItem, source: UIImage?, dissolve: TimeInterval) {
+        guard let source else { return setFill(nil, dissolve: dissolve) }
+        let screen = view.bounds.size
+        guard PhotoLetterbox.needsFill(imageSize: source.size, screenSize: screen) else {
+            return setFill(nil, dissolve: dissolve)
+        }
+        let key = "\(item.ref.providerID)/\(item.ref.itemID)" as NSString
+        if let fill = fills.object(forKey: key) { return setFill(fill, dissolve: dissolve) }
+        setFill(nil, dissolve: dissolve)
+        guard blurring.insert(item.ref).inserted else { return }
+        Task { [weak self] in
+            let fill = await PhotoFillBlur.render(source, filling: screen)
+            guard let self else { return }
+            blurring.remove(item.ref)
+            if let fill { fills.setObject(fill, forKey: key) }
+            guard listing.media.indices.contains(index), listing.media[index].ref == item.ref else { return }
+            setFill(fill, dissolve: Self.stepDissolve)
+        }
+    }
+
+    private func setFill(_ image: UIImage?, dissolve: TimeInterval) {
+        guard fillView.image !== image else { return }
+        UIView.transition(with: fillView, duration: dissolve, options: .transitionCrossDissolve) {
+            self.fillView.image = image
+        }
+    }
+
     /// Title and date, bottom leading; gone after a moment and for the whole of a slideshow.
     private func updateCaption(_ item: PhotoItem) {
         overlayHide?.cancel()
@@ -189,6 +241,7 @@ final class PhotoViewerViewController: UIViewController {
                 attributes: [.font: UIFont.systemFont(ofSize: 28),
                              .foregroundColor: UIColor(white: 1, alpha: 0.7)]))
         }
+        text.append(Self.infoHint)
         caption.attributedText = text
         guard !isRunning, !paneOpen else { caption.alpha = 0; return }
         UIView.animate(withDuration: Self.stepDissolve) { self.caption.alpha = 1 }
@@ -198,6 +251,19 @@ final class PhotoViewerViewController: UIViewController {
         overlayHide = hide
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.overlayLinger, execute: hide)
     }
+
+    /// "⌄ Info" under the caption: Down opens the pane.
+    private static let infoHint: NSAttributedString = {
+        let font = UIFont.systemFont(ofSize: 28)
+        let color = UIColor(white: 1, alpha: 0.7)
+        let hint = NSMutableAttributedString(string: "\n")
+        let glyph = UIImage(systemName: "chevron.down", withConfiguration: UIImage.SymbolConfiguration(font: font))?
+            .withTintColor(color, renderingMode: .alwaysOriginal)
+        if let glyph { hint.append(NSAttributedString(attachment: NSTextAttachment(image: glyph))) }
+        hint.append(NSAttributedString(string: " " + String(localized: "Info"),
+                                       attributes: [.font: font, .foregroundColor: color]))
+        return hint
+    }()
 
     // MARK: - Input
 
@@ -346,7 +412,7 @@ final class PhotoViewerViewController: UIViewController {
         }
         if PhotoPreferences.transition == .panAndZoom || imageView.transform != .identity {
             handOffSlide()
-            show(next, dissolve: 0)
+            show(next, dissolve: 0, fillDissolve: Self.slideDissolve)
         } else {
             show(next, dissolve: Self.slideDissolve)
         }
@@ -425,5 +491,35 @@ final class PhotoViewerViewController: UIViewController {
         slideGlyph.image = UIImage(systemName: symbol)
         slideGlyph.alpha = 1
         UIView.animate(withDuration: 0.4, delay: 0.6) { self.slideGlyph.alpha = 0 }
+    }
+}
+
+/// The letterbox fill: the photo blurred past reading, at screen scale, on one serial queue
+/// rather than the cooperative pool (a 3-core Apple TV has no threads to spare).
+private nonisolated enum PhotoFillBlur {
+    /// On screen, in points.
+    static let radius: CGFloat = 60
+    private static let queue = DispatchQueue(label: "rivulet.photo-fill", qos: .userInitiated)
+    private static let context = CIContext()
+
+    static func render(_ image: UIImage, filling screen: CGSize) async -> UIImage? {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: blur(image, filling: screen)) }
+        }
+    }
+
+    private static func blur(_ image: UIImage, filling screen: CGSize) -> UIImage? {
+        guard let cg = image.cgImage else { return nil }
+        var input = CIImage(cgImage: cg)
+        // A small source blurs the same at this radius and costs far less.
+        let shrink = min(1, 480 / max(input.extent.width, input.extent.height))
+        input = input.transformed(by: CGAffineTransform(scaleX: shrink, y: shrink))
+        let extent = input.extent
+        // Aspect fill scale, so the radius reads as `radius` points once on screen.
+        let scale = max(screen.width / extent.width, screen.height / extent.height)
+        let blurred = input.clampedToExtent()
+            .applyingGaussianBlur(sigma: Double(radius / scale))
+            .cropped(to: extent)
+        return context.createCGImage(blurred, from: extent).map { UIImage(cgImage: $0) }
     }
 }

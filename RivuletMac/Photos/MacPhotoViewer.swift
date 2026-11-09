@@ -24,6 +24,7 @@ struct MacPhotoViewer: View {
     @FocusState private var focused: Bool
     @State private var awake: NSObjectProtocol?
     @State private var showsInfo = false
+    @State private var showsHint = false
 
     init(model: PhotoListingModel, start: PhotoItem, running: Bool = false, onClose: @escaping () -> Void) {
         self.model = model
@@ -38,6 +39,10 @@ struct MacPhotoViewer: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let item {
+                // Outside the zoom: only the sharp photo pans and zooms.
+                MacPhotoFill(item: item)
+                    .id(item.ref)
+                    .transition(.opacity)
                 page(item)
                     .scaleEffect(zoom * pinch)
                     .offset(x: pan.width + drag.width, y: pan.height + drag.height)
@@ -132,8 +137,22 @@ struct MacPhotoViewer: View {
             .foregroundStyle(.white.opacity(0.8))
             Spacer()
             Text("\(index + 1) of \(model.media.count)").font(.callout).foregroundStyle(.white.opacity(0.7))
+            HStack(spacing: 4) {
+                Text(verbatim: "\u{2318}I")
+                Text("Info")
+            }
+            .font(.callout)
+            .foregroundStyle(.white.opacity(0.7))
+            .opacity(showsHint && !slideshow && !showsInfo ? 1 : 0)
+            .animation(.easeInOut(duration: 0.5), value: showsHint)
         }
         .padding(16)
+        // Each photo shows the hint, then lets it go, as the tvOS caption does.
+        .task(id: index) {
+            showsHint = true
+            try? await Task.sleep(for: .seconds(3))
+            if !Task.isCancelled { showsHint = false }
+        }
     }
 
     /// Keeps the display on while the slideshow runs.
@@ -175,6 +194,36 @@ struct MacPhotoViewer: View {
             slideshow = false
         } else {
             model.listing.loadMore()
+        }
+    }
+}
+
+/// The thumbnail blurred past reading and darkened, behind a photo that leaves bars;
+/// one that fills the window sits on black.
+private struct MacPhotoFill: View {
+    let item: PhotoItem
+    @State private var image: NSImage?
+
+    init(item: PhotoItem) {
+        self.item = item
+        _image = State(initialValue: item.thumbnail.flatMap(MacArtworkCache.shared.cachedImage(for:)))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let image, PhotoLetterbox.needsFill(imageSize: image.size, screenSize: proxy.size) {
+                Image(nsImage: image).resizable().scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .blur(radius: 60, opaque: true)
+                    .overlay(Color.black.opacity(0.55))
+                    .clipped()
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .task(id: item.ref) {
+            guard image == nil, let url = item.thumbnail else { return }
+            image = await MacArtworkCache.shared.image(for: url)
         }
     }
 }

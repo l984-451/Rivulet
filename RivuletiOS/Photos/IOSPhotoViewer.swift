@@ -98,6 +98,7 @@ struct IOSPhotoViewer: View {
     @ViewBuilder
     private func page(_ item: PhotoItem) -> some View {
         ZStack {
+            IOSPhotoFill(item: item)
             IOSZoomableImage(url: item.full ?? item.thumbnail, placeholder: item.thumbnail) { chrome.toggle() }
             if item.kind == .clip {
                 Button { onPlay(item, false) } label: {
@@ -200,12 +201,15 @@ private struct IOSSlide: View {
 
     var body: some View {
         let drift: CGFloat = item.ref.hashValue & 1 == 0 ? 14 : -14
-        Group {
-            if let image { Image(uiImage: image).resizable().scaledToFit() } else { ProgressView().tint(.white) }
+        ZStack {
+            IOSPhotoFill(item: item)
+            Group {
+                if let image { Image(uiImage: image).resizable().scaledToFit() } else { ProgressView().tint(.white) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scaleEffect(moved ? 1.08 : 1)
+            .offset(x: moved ? drift : 0, y: moved ? -drift / 2 : 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .scaleEffect(moved ? 1.08 : 1)
-        .offset(x: moved ? drift : 0, y: moved ? -drift / 2 : 0)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .task {
@@ -215,6 +219,36 @@ private struct IOSSlide: View {
         }
         .onAppear {
             if panAndZoom { withAnimation(.linear(duration: interval + 1)) { moved = true } }
+        }
+    }
+}
+
+/// The thumbnail blurred past reading and darkened, behind a photo that leaves bars;
+/// one that fills the screen sits on black.
+private struct IOSPhotoFill: View {
+    let item: PhotoItem
+    @State private var image: UIImage?
+
+    init(item: PhotoItem) {
+        self.item = item
+        _image = State(initialValue: item.thumbnail.flatMap(IOSArtworkCache.shared.cachedImage(for:)))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let image, PhotoLetterbox.needsFill(imageSize: image.size, screenSize: proxy.size) {
+                Image(uiImage: image).resizable().scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .blur(radius: 60, opaque: true)
+                    .overlay(Color.black.opacity(0.55))
+                    .clipped()
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .task(id: item.ref) {
+            guard image == nil, let url = item.thumbnail else { return }
+            image = await IOSArtworkCache.shared.image(for: url)
         }
     }
 }

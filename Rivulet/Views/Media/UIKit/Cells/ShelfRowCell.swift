@@ -17,6 +17,7 @@ final class ShelfRowCell: UICollectionViewCell {
         case music   // 1:1 square (same width as poster)
         case live    // Live TV Browse card (16:9, four across)
         case person  // cast or crew circle (CastCollectionCell), poster width
+        case episode // Search's episode card (EpisodeCollectionCell), the detail page's rail
 
         /// The cell: the lockup's frame, not its resting artwork.
         var tileWidth: CGFloat { tile?.frame.width ?? MediaRowMetrics.liveWidth }
@@ -29,6 +30,7 @@ final class ShelfRowCell: UICollectionViewCell {
             case .poster:           return MediaRowMetrics.poster
             case .music:            return MediaRowMetrics.music
             case .person:           return MediaRowMetrics.person
+            case .episode:          return EpisodeCollectionCell.searchTile
             case .live:             return nil
             }
         }
@@ -37,6 +39,7 @@ final class ShelfRowCell: UICollectionViewCell {
         var fullCount: Int {
             switch self {
             case .continueWatching: return MediaRowMetrics.cwFullCount
+            case .episode:          return 4
             case .poster, .music, .person: return MediaRowMetrics.posterFullCount
             case .live:             return MediaRowMetrics.liveFullCount
             }
@@ -206,6 +209,7 @@ final class ShelfRowCell: UICollectionViewCell {
         rowCollectionView.register(PosterSkeletonCell.self, forCellWithReuseIdentifier: PosterSkeletonCell.reuseID)
         rowCollectionView.register(LiveCardCell.self, forCellWithReuseIdentifier: LiveCardCell.reuseID)
         rowCollectionView.register(CastCollectionCell.self, forCellWithReuseIdentifier: CastCollectionCell.reuseID)
+        rowCollectionView.register(EpisodeCollectionCell.self, forCellWithReuseIdentifier: EpisodeCollectionCell.reuseID)
 
         contentView.addSubview(headerLabel)
         contentView.addSubview(rowCollectionView)
@@ -568,7 +572,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
             switch tileKind {
             case .continueWatching: layout = .continueWatching
             case .music: layout = .music
-            case .poster, .live, .person: layout = .poster
+            case .poster, .live, .person, .episode: layout = .poster
             }
             cell.configure(layout: layout)
             return cell

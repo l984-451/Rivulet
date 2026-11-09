@@ -161,6 +161,8 @@ struct HomeSectionData {
     /// content-uniform (a whole row / library is music or not), so the first
     /// item is representative. Drives 1:1 square tiles instead of 2:3 posters.
     var isMusic: Bool { items.first?.isMusic == true }
+    /// Search's Episodes & Seasons row, drawn as episode stills with captions.
+    var isEpisodeRow: Bool { kind == .searchGrid && (items.first?.kind == .episode || items.first?.kind == .season) }
 
     static func hub(id: HomeSectionID, title: String, items: [MediaItem], isContinueWatching: Bool, hubKey: String?, hubIdentifier: String?, totalSize: Int? = nil) -> HomeSectionData {
         HomeSectionData(
@@ -3082,6 +3084,7 @@ final class PlexHomeViewController: UIViewController {
                                       tile override: MediaRowMetrics.Tile? = nil) -> NSCollectionLayoutSection {
         let tile = override ?? (isContinueWatching
             ? MediaRowMetrics.continueWatching
+            : section.isEpisodeRow ? EpisodeCollectionCell.searchTile
             : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster))
         let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding  // room for focus growth
 
@@ -3973,7 +3976,8 @@ final class PlexHomeViewController: UIViewController {
         }
         cell.configure(
             kind: section.kind == .continueWatching ? .continueWatching
-                : section.kind == .searchPeople ? .person : (section.isMusic ? .music : .poster),
+                : section.kind == .searchPeople ? .person
+                : section.isEpisodeRow ? .episode : (section.isMusic ? .music : .poster),
             realCount: shelfRealCount(section),
             hasSkeleton: paginationStates[section.id]?.isLoadingMore == true,
             contentToken: shelfContentToken(section),
@@ -4044,6 +4048,11 @@ final class PlexHomeViewController: UIViewController {
             // The next few cards build now, so one reaching the edge arrives finished.
             let ahead = (indexPath.item + 1)..<min(indexPath.item + 5, section.items.count)
             ContinueWatchingCell.prewarm(section.items[ahead], scale: innerCV.traitCollection.displayScale)
+            return cell
+        case .searchGrid where section.isEpisodeRow:
+            // Select and hold reach the row (`handleShelfTap`, the tile menu); the card's own handlers stay unset.
+            let cell = innerCV.dequeueReusableCell(withReuseIdentifier: EpisodeCollectionCell.reuseID, for: indexPath) as! EpisodeCollectionCell
+            cell.configure(searchResult: section.items[indexPath.item])
             return cell
         case .recentlyAdded, .recommendations, .discoverList, .searchGrid:
             let cell = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath) as! PosterCell
@@ -6509,7 +6518,9 @@ final class PlexHomeViewController: UIViewController {
         } else {
             guard let attrs = collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: sectionIndex))
             else { return nil }
-            target = attrs.frame.midY - collectionView.bounds.height / 2
+            // Search's top inset is its collapsed search chrome: centre in the space below it.
+            let chrome: CGFloat = if case .search = mode { collectionView.adjustedContentInset.top } else { 0 }
+            target = attrs.frame.midY - (collectionView.bounds.height + chrome) / 2
         }
         let maxOffset = max(0, collectionView.contentSize.height - collectionView.bounds.height)
         return max(-collectionView.adjustedContentInset.top, min(target, maxOffset))
@@ -6575,9 +6586,10 @@ final class PlexHomeViewController: UIViewController {
               focused.isDescendant(of: collectionView)
         else { return }
         // On Search the top row means the page's top, matching where the keyboard hand-off puts it;
-        // a minimal reveal leaves it ~180pt higher, under the search chrome.
-        if case .search = mode, sectionIndex(forFocusedView: focused) == 0 {
-            animateToContentTop()
+        // a minimal reveal leaves it ~180pt higher, under the search chrome. Deeper rows centre, as
+        // on Home, so the row below always peeks; resting on the bottom edge read as the last row.
+        if case .search = mode, let section = sectionIndex(forFocusedView: focused) {
+            if section == 0 { animateToContentTop() } else { scrollSectionToRest(sectionIndex: section) }
             return
         }
         revealFocusedView(focused)

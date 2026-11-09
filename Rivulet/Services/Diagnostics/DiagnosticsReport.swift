@@ -27,6 +27,7 @@ enum DiagnosticsReport {
         isSending = true
         defer { isSending = false }
         onStart()
+        _ = NetworkPathMonitor.shared  // starts the monitor if nothing has yet, so the path is known below
         // Let the row's spinner draw before the snapshot's main-thread work.
         try? await Task.sleep(for: .milliseconds(50))
 
@@ -68,6 +69,7 @@ enum DiagnosticsReport {
             "rivulet_device": device(window: window),
             "plex": plex(),
             "plex_profile": profile(),
+            "streaming": streaming(),
             "home": home(),
             "other_servers": otherServers(),
             "live_tv": liveTV(),
@@ -106,6 +108,7 @@ enum DiagnosticsReport {
             "free_disk_mb": freeDisk / 1_048_576,
             "thermal_state": process.thermalState.rawValue,
             "system_uptime_min": Int(process.systemUptime / 60),
+            "network": NetworkPathMonitor.shared.interfaceKind,
             "screen": "\(Int(screen.nativeBounds.width))x\(Int(screen.nativeBounds.height)) @\(screen.maximumFramesPerSecond)Hz",
             "hdr_eligible": AVPlayer.eligibleForHDRPlayback,
             "hdr_modes": AVPlayer.availableHDRModes.rawValue,
@@ -136,6 +139,20 @@ enum DiagnosticsReport {
         }
         if let url = auth.selectedServerURL {
             result["connection"] = connectionKind(url, server: auth.selectedServer)
+        }
+        return result
+    }
+
+    /// The quality settings in effect, defaults included (the settings dump only holds changed keys),
+    /// and which one the selected Plex server gets.
+    private static func streaming() -> [String: Any] {
+        var result: [String: Any] = [
+            "home_quality": StreamingQuality.setting(home: true).rawValue,
+            "away_quality": StreamingQuality.setting(home: false).rawValue,
+            "network_counts_as_away": NetworkPathMonitor.shared.isAwayPath,
+        ]
+        if let url = PlexAuthManager.shared.selectedServerURL {
+            result["plex_uses"] = StreamingQuality.isHome(serverURL: url) ? "home" : "away"
         }
         return result
     }

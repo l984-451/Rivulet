@@ -414,6 +414,10 @@ private struct IOSPlexDetailHeader: View {
                         actions.setFavorite(item, !isFavorite)
                     }
                 }
+                if canPlay, item.isPlayable, let detail {
+                    let versions = VersionPicker.versions(in: detail)
+                    if !versions.isEmpty { versionMenu(versions) }
+                }
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
@@ -482,6 +486,20 @@ private struct IOSPlexDetailHeader: View {
                 }
             }
         }
+    }
+
+    /// Plays one of the title's files instead of the best one.
+    private func versionMenu(_ versions: [MediaSource]) -> some View {
+        Menu {
+            ForEach(Array(zip(versions, VersionPicker.labels(for: versions))), id: \.0.id) { source, label in
+                Button(label) { if let playTarget { actions.playVersion(playTarget, source.id) } }
+            }
+        } label: {
+            Image(systemName: "square.stack.3d.up").frame(width: 22, height: 22)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Version")
     }
 
     private func circleButton(_ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {

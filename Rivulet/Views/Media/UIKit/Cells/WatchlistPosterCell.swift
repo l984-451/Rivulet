@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Poster tile for the Watchlist hub row: 20pt continuous mask, `TVPosterView` focus motion,
+// Poster tile for the Watchlist hub row: 20pt corner drawn into the artwork (`RoundedPoster`), `TVPosterView` focus motion,
 // and a film/tv symbol placeholder when there is no poster. Caption stays nil, as in `PosterCell`.
 
 import UIKit
@@ -23,7 +23,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
     /// True once real artwork is showing; `posterView.image` is never nil.
     private var hasArtwork = false
 
-    private let cornerRadius: CGFloat = 20
+    private let cornerRadius = RoundedPoster.cornerRadius
     private let tile = MediaRowMetrics.poster
 
     override init(frame: CGRect) {
@@ -147,7 +147,8 @@ final class WatchlistPosterCell: UICollectionViewCell {
         currentURL = url
         // Memory hit paints in this pass, so a tile realized for the carousel
         // exit has artwork to fly to.
-        if let cached = ImageCacheManager.shared.cachedImage(for: url) {
+        let shape = RoundedPoster.Shape(tile: tile, scale: traitCollection.displayScale)
+        if let cached = RoundedPoster.cached(for: url, shape: shape) {
             posterView.image = cached
             hasArtwork = true
             placeholderView.isHidden = true
@@ -157,7 +158,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
         let key = url.absoluteString as AnyHashable
         imageLoadTask = Task { [weak self] in
             let image: UIImage? = await Perf.interval(.imageDecode, key: key) {
-                await ImageCacheManager.shared.image(for: url)
+                await RoundedPoster.image(for: url, shape: shape)
             }
             await MainActor.run {
                 guard let self, self.currentURL == url else { return }

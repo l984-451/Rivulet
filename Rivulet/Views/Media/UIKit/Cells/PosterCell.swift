@@ -96,6 +96,12 @@ final class PosterCell: UICollectionViewCell {
     /// 2:3 poster one. Set per item in `configure(...)`.
     private var posterWidthConstraint: NSLayoutConstraint!
     private var posterHeightConstraint: NSLayoutConstraint!
+    /// Lifts the poster by half the caption so it keeps its row position in a taller cell.
+    private var posterCenterYConstraint: NSLayoutConstraint!
+
+    /// Title and year under the artwork (Home shelf rows only, see `setCaption`).
+    private let captionTitle = UILabel()
+    private let captionSubtitle = UILabel()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -184,11 +190,34 @@ final class PosterCell: UICollectionViewCell {
         watchedGlyph.isHidden = true
         overlayContainer.addSubview(watchedGlyph)
 
+        captionTitle.translatesAutoresizingMaskIntoConstraints = false
+        captionTitle.font = .systemFont(ofSize: 24, weight: .medium)
+        captionTitle.textColor = UIColor.white.withAlphaComponent(0.75)
+        captionTitle.lineBreakMode = .byTruncatingTail
+        captionTitle.isHidden = true
+        contentView.addSubview(captionTitle)
+
+        captionSubtitle.translatesAutoresizingMaskIntoConstraints = false
+        captionSubtitle.font = .systemFont(ofSize: 21, weight: .regular)
+        captionSubtitle.textColor = UIColor.white.withAlphaComponent(0.45)
+        captionSubtitle.lineBreakMode = .byTruncatingTail
+        captionSubtitle.isHidden = true
+        contentView.addSubview(captionSubtitle)
+
+        posterCenterYConstraint = posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
         posterWidthConstraint = posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width)
         posterHeightConstraint = posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height)
         NSLayoutConstraint.activate([
-            posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            posterCenterYConstraint,
             posterView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+
+            // Caption under the host frame (the focused artwork's extent), on the resting art's width.
+            captionTitle.topAnchor.constraint(equalTo: posterView.bottomAnchor, constant: 4),
+            captionTitle.leadingAnchor.constraint(equalTo: posterView.imageView.leadingAnchor),
+            captionTitle.trailingAnchor.constraint(equalTo: posterView.imageView.trailingAnchor),
+            captionSubtitle.topAnchor.constraint(equalTo: captionTitle.bottomAnchor, constant: 1),
+            captionSubtitle.leadingAnchor.constraint(equalTo: captionTitle.leadingAnchor),
+            captionSubtitle.trailingAnchor.constraint(equalTo: captionTitle.trailingAnchor),
             posterWidthConstraint,
             posterHeightConstraint,
 
@@ -254,6 +283,8 @@ final class PosterCell: UICollectionViewCell {
         coordinator.addCoordinatedAnimations({
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
+            self.captionTitle.textColor = UIColor.white.withAlphaComponent(nowFocused ? 1 : 0.75)
+            self.captionSubtitle.textColor = UIColor.white.withAlphaComponent(nowFocused ? 0.7 : 0.45)
             self.overlayContainer.transform = nowFocused
                 ? CGAffineTransform(scaleX: scale, y: scale)
                 : .identity
@@ -304,6 +335,33 @@ final class PosterCell: UICollectionViewCell {
         loadImage(from: url, failureKind: item.kind)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
+    }
+
+    /// Shows a title and subtitle under the artwork. The cell must be taller than the tile by
+    /// `MediaRowMetrics.posterCaptionHeight` (ShelfRowCell's `captionHeight`); call after `configure`.
+    func setCaption(title: String?, subtitle: String?) {
+        let shows = !(title ?? "").isEmpty
+        captionTitle.text = title
+        captionSubtitle.text = subtitle
+        captionTitle.isHidden = !shows
+        captionSubtitle.isHidden = !shows || (subtitle ?? "").isEmpty
+        posterCenterYConstraint.constant = shows ? -MediaRowMetrics.posterCaptionHeight / 2 : 0
+    }
+
+    /// Caption lines for a Home tile: show name and episode for episodes, title and year otherwise.
+    static func caption(for item: MediaItem) -> (title: String, subtitle: String?) {
+        switch item.kind {
+        case .episode:
+            let show = item.seriesTitle ?? item.title
+            if let season = item.seasonNumber, let episode = item.episodeNumber {
+                return (show, String(localized: "S\(season), E\(episode)"))
+            }
+            return (show, item.title)
+        case .season:
+            return (item.seriesTitle ?? item.title, item.title)
+        default:
+            return (item.title, item.year.map(String.init))
+        }
     }
 
     /// Names the item's server; call after `configure` (which never adds one).
@@ -363,6 +421,7 @@ final class PosterCell: UICollectionViewCell {
         failureIcon.image = nil
         failureTitle.isHidden = true
         failureTitle.text = nil
+        setCaption(title: nil, subtitle: nil)
         // A recycled cell must not inherit a prior occupant's stranded focus
         // (enlarged) appearance — clear any leftover scale transform.
         resetStaleFocusAppearance()

@@ -19,7 +19,11 @@ struct IOSPhotoMemoriesRow: View {
                     LazyHStack(spacing: 12) {
                         ForEach(memories, id: \.self) { memory in
                             NavigationLink {
-                                IOSPhotoLibraryView(library: library, memory: memory).iosPlexActionHost()
+                                if memory.kind == .map, let (provider, library) = PhotoListing.source(for: library)() {
+                                    IOSPhotoMapView(provider: provider, library: library)
+                                } else {
+                                    IOSPhotoLibraryView(library: library, memory: memory).iosPlexActionHost()
+                                }
                             } label: {
                                 card(memory)
                             }
@@ -38,8 +42,7 @@ struct IOSPhotoMemoriesRow: View {
             loaded = true
             let found = await PhotoMemories.load(provider: provider, library: library, today: .now)
             guard !Task.isCancelled else { loaded = false; return }
-            // Map stays out of the row until it has a page of its own.
-            memories = found.filter { $0.kind != .map }
+            memories = found
         }
     }
 
@@ -72,7 +75,11 @@ private struct IOSPhotoMemoryArt: View {
     var body: some View {
         Color(.secondarySystemFill)
             .overlay {
-                if let image { Image(uiImage: image).resizable().scaledToFill() }
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else if cover == nil {
+                    Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.secondary)
+                }
             }
             .clipped()
             .task(id: cover?.ref) {

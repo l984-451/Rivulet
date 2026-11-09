@@ -218,8 +218,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         Task { [weak self] in
             let found = await PhotoMemories.load(provider: provider, library: library, today: .now)
             guard !Task.isCancelled, let self else { return }
-            // Map stays out of the row until it has a page of its own.
-            let shown = found.filter { $0.kind != .map }
+            let shown = found
             guard !shown.isEmpty else { return }
             insertMemories(shown)
         }

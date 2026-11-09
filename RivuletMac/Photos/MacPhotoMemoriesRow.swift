@@ -32,14 +32,16 @@ struct MacPhotoMemoriesRow: View {
             loaded = true
             let found = await PhotoMemories.load(provider: provider, library: library, today: .now)
             guard !Task.isCancelled else { loaded = false; return }
-            // Map stays out of the row until it has a page of its own.
-            memories = found.filter { $0.kind != .map }
+            memories = found
         }
     }
 
     private func card(_ memory: PhotoMemory) -> some View {
         MacImage(url: memory.cover?.full ?? memory.cover?.thumbnail)
             .frame(width: 420, height: 236)
+            .overlay {
+                if memory.cover == nil { Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.secondary) }
+            }
             .overlay(alignment: .bottomLeading) {
                 Text(verbatim: memory.title)
                     .font(.title2.weight(.bold))

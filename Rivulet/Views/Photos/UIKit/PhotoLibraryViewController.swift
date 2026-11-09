@@ -44,6 +44,12 @@ final class PhotoLibraryViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
+    private func open(_ memory: PhotoMemory) {
+        guard memory.kind == .map else { return push(folder: nil, title: memory.title, memory: memory) }
+        guard let (provider, library) = source() else { return }
+        present(PhotoMapViewController(provider: provider, library: library), animated: true)
+    }
+
     /// `memory` is one of the root's memories, opened as a flat grid with no albums.
     private func push(folder: MediaItemRef?, title: String, memory: PhotoMemory? = nil) {
         let narrowing = memory?.query ?? .default
@@ -54,7 +60,7 @@ final class PhotoLibraryViewController: UIViewController {
         let grid = PhotoGridViewController(title: title, listing: listing)
         grid.onOpenFolder = { [weak self] in self?.push(folder: $0.ref, title: $0.title) }
         if folder == nil, memory == nil {
-            grid.onOpenMemory = { [weak self] in self?.push(folder: nil, title: $0.title, memory: $0) }
+            grid.onOpenMemory = { [weak self] in self?.open($0) }
         }
         addChild(grid)
         grid.view.frame = view.bounds

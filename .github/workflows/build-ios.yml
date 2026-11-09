@@ -1,7 +1,7 @@
 name: iOS Build
 
 # Closes the platform-boundary CI gap: without this, no automation compiles
-# the "Rivulet iOS" scheme between ios-v* release tags, so a RivuletCore
+# the "Rivulet iOS" scheme between release tags, so a RivuletCore
 # change that only breaks the iOS target stays invisible until release
 # archive time. Lint cannot catch it (it checks #if patterns, not type
 # references) and the tvOS build stays green.

@@ -15,6 +15,7 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
+        RELEASE_ASSET: "Rivulet.ipa"
       # Keep this the Xcode you build with locally; the GitHub build checks
       # read it. Older compilers time out type-checking code newer ones accept.
       xcode: 27.2
@@ -144,7 +145,9 @@ workflows:
             --include-sources \
             "$CM_BUILD_DIR/build/ios/xcarchive"
 
-      - name: Publish IPA to GitHub Releases
+      # Shared with the iOS workflow: one release per tag, one asset per platform.
+      - &publish_github_release
+        name: Publish IPA to GitHub Releases
         script: |
           if [ -z "${CM_TAG:-}" ]; then
             echo "Not a tag build, skipping GitHub release."
@@ -159,12 +162,16 @@ workflows:
             echo "No IPA found, skipping GitHub release."
             exit 0
           fi
+          ASSET="$CM_BUILD_DIR/build/$RELEASE_ASSET"
+          cp "$IPA" "$ASSET"
+          # Whichever platform finishes first creates the release; the other uploads to it.
           GH_TOKEN="$GITHUB_TOKEN" gh release create "$CM_TAG" \
             --repo "$CM_REPO_SLUG" \
             --title "Rivulet $CM_TAG" \
             --generate-notes \
-            "$IPA" \
-          || GH_TOKEN="$GITHUB_TOKEN" gh release upload "$CM_TAG" "$IPA" \
+            --latest \
+            "$ASSET" \
+          || GH_TOKEN="$GITHUB_TOKEN" gh release upload "$CM_TAG" "$ASSET" \
             --repo "$CM_REPO_SLUG" --clobber
 
     artifacts:
@@ -195,16 +202,15 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
+        RELEASE_ASSET: "Rivulet-iOS.ipa"
       xcode: 27.2
 
-    # Separate tag prefix from tvOS. The two platforms share one App Store
-    # Connect record but ship independently, and a single `v*` tag firing both
-    # workflows would archive an iOS build for every tvOS release.
+    # One vX.Y.Z-<build> tag releases tvOS, iOS and macOS together.
     triggering:
       events:
         - tag
       tag_patterns:
-        - pattern: 'ios-v*'
+        - pattern: 'v*'
           include: true
       cancel_previous_builds: true
 
@@ -260,9 +266,7 @@ workflows:
 
       - name: Set build number from the tag
         script: |
-          # Tag shape is ios-vX.Y.Z-<build>, matching the tvOS rule that the tag
-          # is the source of truth. Build numbers are tracked per platform in
-          # App Store Connect, so iOS and tvOS may reuse the same number.
+          # The shared vX.Y.Z-<build> tag is the source of truth, as on tvOS.
           if [ -n "${CM_TAG:-}" ]; then
             NEXT="${CM_TAG##*-}"
           else
@@ -270,7 +274,7 @@ workflows:
           fi
           case "$NEXT" in
             ''|*[!0-9]*)
-              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected ios-vX.Y.Z-<build>)."
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected vX.Y.Z-<build>)."
               exit 1
               ;;
           esac
@@ -307,6 +311,8 @@ workflows:
             --include-sources \
             "$CM_BUILD_DIR/build/ios/xcarchive"
 
+      - *publish_github_release
+
     artifacts:
       - build/ios/ipa/*.ipa
       - $CM_BUILD_DIR/build/ios/xcarchive/*.dSYMs/**/*
@@ -338,12 +344,12 @@ workflows:
         ARCHIVE_PATH: "build/macos/Rivulet.xcarchive"
       xcode: 27.2
 
-    # Same App Store record and bundle id as tvOS and iOS, its own tag prefix.
+    # Same App Store record, bundle id and release tag as tvOS and iOS.
     triggering:
       events:
         - tag
       tag_patterns:
-        - pattern: 'mac-v*'
+        - pattern: 'v*'
           include: true
       cancel_previous_builds: true
 
@@ -417,7 +423,7 @@ workflows:
 
       - name: Set build number from the tag
         script: |
-          # Tag shape is mac-vX.Y.Z-<build>; build numbers are per platform.
+          # The shared vX.Y.Z-<build> tag is the source of truth, as on tvOS.
           if [ -n "${CM_TAG:-}" ]; then
             NEXT="${CM_TAG##*-}"
           else
@@ -425,7 +431,7 @@ workflows:
           fi
           case "$NEXT" in
             ''|*[!0-9]*)
-              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected mac-vX.Y.Z-<build>)."
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected vX.Y.Z-<build>)."
               exit 1
               ;;
           esac

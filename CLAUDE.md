@@ -1005,11 +1005,14 @@ let next = episodes.first(where: { $0.index == currentEpisodeIndex + 1 })
 
 Release notes live ONLY in the `changelogs` array in
 `Rivulet/Views/Components/WhatsNewView.swift` (root `CHANGELOG.md` is a stub).
-iOS has its own, `IOSChangelog.entries` in `RivuletiOS/Settings/IOSWhatsNew.swift`,
-keyed the same way from the `ios-vX.Y.Z-<build>` tag (sheet at launch, Account → Changelog).
-Mac has `MacChangelog.entries` in `RivuletMac/Settings/MacWhatsNew.swift`, keyed from the
-`mac-vX.Y.Z-<build>` tag (sheet at launch, Help → What's New, Settings → General). Each
-platform keeps its own `MARKETING_VERSION` and build numbers; Mac started at `1.0.0 (1)`.
+iOS has its own, `IOSChangelog.entries` in `RivuletiOS/Settings/IOSWhatsNew.swift`
+(sheet at launch, Account → Changelog), and Mac `MacChangelog.entries` in
+`RivuletMac/Settings/MacWhatsNew.swift` (sheet at launch, Help → What's New, Settings → General).
+**All three platforms ship together from one `vX.Y.Z-<build>` tag, with one version and
+build number** (since `1.3.0 (125)`; before that iOS used `ios-v*` tags and Mac `mac-v*`).
+A release gets an entry under the same key in all three lists, each with only the lines
+that apply to that app. `MARKETING_VERSION` is set by hand on every app and extension
+target (10 places, not the test target) and must match across them.
 Entries are keyed by build-qualified version (`"1.0.3 (65)"`), newest first.
 Settings → About → Changelog renders the full history; the fresh-launch
 "What's New" shows only the current build's entry.
@@ -1179,7 +1182,7 @@ xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple
 
 Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature — Parsers, Playback, Player, Preferences, Services, Siri, etc.), with shared fixtures/mocks in `RivuletTests/Fixtures/`, `RivuletTests/Helpers/`, `RivuletTests/Mocks/`. A few sit at the `RivuletTests/` root (`PlexDeviceDecodingTests.swift`).
 
-**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (`v*` → tvOS, `ios-v*` → iOS, `mac-v*` → macOS, all `<prefix>X.Y.Z-<build>`), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
+**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (one `vX.Y.Z-<build>` tag starts the tvOS, iOS and macOS workflows; tvOS and iOS IPAs attach to one GitHub release as `Rivulet.ipa` and `Rivulet-iOS.ipa`), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
 
 **One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.2 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
 

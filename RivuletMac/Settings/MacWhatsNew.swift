@@ -3,10 +3,18 @@
 
 import SwiftUI
 
-/// The Mac release notes, keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest first.
+/// The Mac release notes, keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest first;
+/// CI takes the build number from the shared `vX.Y.Z-<build>` tag.
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum MacChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.0 (125)", [
+            "Search finds every match and adds collections, genres and people",
+            "Pick an actor or director in Search to see their movies and shows",
+            "Search for and download subtitles from the player",
+            "Each Plex Home profile now sees its own Watchlist",
+            "A deleted episode now fades out of its show's list",
+        ]),
         ("1.0.0 (1)", [
             "Rivulet now has a native Mac app",
             "Plex, Jellyfin and Emby in one place, with Continue Watching merged across servers",

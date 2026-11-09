@@ -327,10 +327,10 @@ struct TVSidebarView: View {
             // Start background preloading of Live TV data (low priority)
             liveTVDataStore.startBackgroundPreload()
         }
-        .onChange(of: deepLinkHandler.pendingPlayback) { _, metadata in
-            guard let metadata else { return }
+        .onChange(of: deepLinkHandler.pendingPlayback) { _, playback in
+            guard let playback else { return }
             deepLinkHandler.pendingPlayback = nil
-            playForDeepLink(metadata)
+            playForDeepLink(playback.metadata, startOffset: playback.startOffset)
         }
         // Handle detail deep links from Siri search results
         .onChange(of: deepLinkHandler.pendingDetail) { _, metadata in
@@ -343,7 +343,8 @@ struct TVSidebarView: View {
             deepLinkHandler.pendingProviderLink = nil
             presentReplacingStack { top in
                 switch link.action {
-                case .play: ProviderPlayer.play(link.item, fromBeginning: false, from: top, onDismiss: nil)
+                case .play: ProviderPlayer.play(link.item, fromBeginning: false,
+                                                explicitStartOffset: link.startOffset, from: top, onDismiss: nil)
                 case .detail: presentDetail(link.item, from: top)
                 }
             }
@@ -814,11 +815,11 @@ struct TVSidebarView: View {
     }
 
     /// Play for a `rivulet://play` link. A show or a season resolves to the
-    /// episode its own Play button means; with none to play, its detail opens.
-    private func playForDeepLink(_ metadata: PlexMetadata) {
+    /// episode its own Play button means (ignoring any offset); with none to play, its detail opens.
+    private func playForDeepLink(_ metadata: PlexMetadata, startOffset: TimeInterval? = nil) {
         guard let item = deepLinkItem(metadata), item.kind == .show || item.kind == .season,
               let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
-            presentPlayerForDeepLink(metadata)
+            presentPlayerForDeepLink(metadata, startOffset: startOffset)
             return
         }
         Task { @MainActor in
@@ -859,10 +860,12 @@ struct TVSidebarView: View {
 
     /// Play a MediaItem surfaced by the detail page: resolve full metadata by
     /// ratingKey (MediaItem carries no PlexMetadata), then hand to the player.
-    private func playDeepLinkItem(_ item: MediaItem, sourceID: String? = nil) {
+    private func playDeepLinkItem(_ item: MediaItem, sourceID: String? = nil,
+                                  startOffset: TimeInterval? = nil) {
         if !item.ref.isPlex {
             guard let top = Self.topPresentedViewController() else { return }
-            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID, from: top, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID,
+                                explicitStartOffset: startOffset, from: top, onDismiss: nil)
             return
         }
         let ratingKey = item.ref.itemID
@@ -873,14 +876,15 @@ struct TVSidebarView: View {
             guard let meta = try? await PlexNetworkManager.shared.getFullMetadata(
                 serverURL: serverURL, authToken: token, ratingKey: ratingKey
             ) else { return }
-            presentPlayerForDeepLink(meta, mediaID: sourceID)
+            presentPlayerForDeepLink(meta, mediaID: sourceID, startOffset: startOffset)
         }
     }
 
     // MARK: - Deep Link Player
 
     /// Present player for a deep link from Top Shelf
-    private func presentPlayerForDeepLink(_ metadata: PlexMetadata, mediaID: String? = nil) {
+    private func presentPlayerForDeepLink(_ metadata: PlexMetadata, mediaID: String? = nil,
+                                          startOffset: TimeInterval? = nil) {
         Task {
             let (artImage, thumbImage) = await getPlayerImages(for: metadata)
 
@@ -889,7 +893,7 @@ struct TVSidebarView: View {
                     metadata: metadata,
                     serverURL: authManager.selectedServerURL ?? "",
                     authToken: authManager.selectedServerToken ?? "",
-                    startOffset: metadata.viewOffset.map { Double($0) / 1000.0 },
+                    startOffset: startOffset ?? metadata.viewOffset.map { Double($0) / 1000.0 },
                     loadingArtImage: artImage,
                     loadingThumbImage: thumbImage,
                     preferredMediaID: mediaID

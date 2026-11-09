@@ -49,14 +49,15 @@ final class MacPlaybackController: NSObject, ObservableObject {
     /// means; `sourceID` picks a version; a `queue` (a playlist) replaces Up Next. Failure shows
     /// in the host's alert; a second call while one prepares is ignored.
     func play(_ item: MediaItem, fromBeginning: Bool = false, sourceID: String? = nil,
-              queue: PlayQueue<PlaylistEntry>? = nil) {
+              queue: PlayQueue<PlaylistEntry>? = nil, startOffset: TimeInterval? = nil) {
         guard !isPreparing else { return }
         isPreparing = true
         Task {
             defer { isPreparing = false }
             do {
                 let prepared = try await PlaybackStart.prepare(
-                    item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex)
+                    item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex,
+                    startOffset: startOffset)
                 let session = MacPlexPlayback(request: prepared.request, plex: prepared.backend, queue: prepared.queue)
                 session.onFailure = { [weak self] message in
                     self?.close()

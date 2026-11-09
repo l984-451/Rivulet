@@ -13,7 +13,7 @@ import Foundation
 
 struct RivuletLink: Equatable, Sendable {
     enum Action: String, Sendable {
-        case play      // start playback at the resume point
+        case play      // start playback at the resume point, or at `offset` (ms)
         case detail    // open the item's detail
     }
 
@@ -24,11 +24,19 @@ struct RivuletLink: Equatable, Sendable {
     /// The server the item was cached from. Informational: the app resolves
     /// against the selected server.
     var server: String?
+    /// Explicit playback start in seconds. Only play links carry an offset.
+    let startOffset: TimeInterval?
 
-    init(_ action: Action, ratingKey: String, server: String? = nil) {
+    init(_ action: Action, ratingKey: String, server: String? = nil,
+         startOffset: TimeInterval? = nil) {
         self.action = action
         self.ratingKey = ratingKey
         self.server = server
+        if action == .play, let startOffset, startOffset.isFinite, startOffset >= 0 {
+            self.startOffset = startOffset
+        } else {
+            self.startOffset = nil
+        }
     }
 
     /// Parses `rivulet://<action>?ratingKey=<key>` and `rivulet://<action>/<key>`.
@@ -44,8 +52,11 @@ struct RivuletLink: Equatable, Sendable {
         let fromQuery = items.first(where: { $0.name == "ratingKey" })?.value
         guard let ratingKey = [fromQuery, fromPath].compactMap({ $0 }).first(where: { !$0.isEmpty })
         else { return nil }
+        // Plex's convention: whole milliseconds. A malformed offset is dropped, not the link.
+        let milliseconds = items.first(where: { $0.name == "offset" })?.value.flatMap { Int64($0) }
         self.init(action, ratingKey: ratingKey,
-                  server: items.first(where: { $0.name == "server" })?.value)
+                  server: items.first(where: { $0.name == "server" })?.value,
+                  startOffset: milliseconds.map { TimeInterval($0) / 1000 })
     }
 
     var url: URL? {
@@ -54,6 +65,9 @@ struct RivuletLink: Equatable, Sendable {
         components.host = action.rawValue
         components.queryItems = [URLQueryItem(name: "ratingKey", value: ratingKey)]
         if let server { components.queryItems?.append(URLQueryItem(name: "server", value: server)) }
+        if let startOffset, let milliseconds = Int64(exactly: (startOffset * 1000).rounded()) {
+            components.queryItems?.append(URLQueryItem(name: "offset", value: String(milliseconds)))
+        }
         return components.url
     }
 }

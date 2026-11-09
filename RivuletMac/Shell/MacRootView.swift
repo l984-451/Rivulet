@@ -310,7 +310,7 @@ struct MacRootView: View {
             return
         }
         switch link.action {
-        case .play: playback.play(item)
+        case .play: playback.play(item, startOffset: link.startOffset)
         case .detail:
             playback.close()
             push(.detail(item))

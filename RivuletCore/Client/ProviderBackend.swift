@@ -28,13 +28,14 @@ final class ProviderBackend: PlayerBackend {
     /// `item` as a request: the stream and extras from its provider, the quality decision, the resume point.
     func firstPlayback(of item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                        quality: StreamingQuality? = nil,
-                       throughput: (kbps: Int, at: Date)? = nil) async throws -> PlexPlaybackRequest {
+                       throughput: (kbps: Int, at: Date)? = nil,
+                       startOffset: TimeInterval? = nil) async throws -> PlexPlaybackRequest {
         register([item])
         let playback = try await ProviderPlayback.prepare(
             item: item, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best,
-            quality: quality, throughput: throughput, fromBeginning: fromBeginning)
-        let start = ProviderPlayback.startOffset(detailOffset: playback.detail.item.userState.viewOffset,
-                                                 fromBeginning: fromBeginning)
+            quality: quality, throughput: throughput, fromBeginning: fromBeginning, explicitStartOffset: startOffset)
+        let start = startOffset ?? ProviderPlayback.startOffset(detailOffset: playback.detail.item.userState.viewOffset,
+                                                                fromBeginning: fromBeginning)
         return try await request(from: playback, startTime: start, picks: nil)
     }
 

@@ -44,20 +44,17 @@ final class PhotoLibraryViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
-    /// `favorites` is the root's flat, library-wide grid of favorites, with no albums.
-    private func push(folder: MediaItemRef?, title: String, favorites: Bool = false) {
+    /// `memory` is one of the root's memories, opened as a flat grid with no albums.
+    private func push(folder: MediaItemRef?, title: String, memory: PhotoMemory? = nil) {
+        let narrowing = memory?.query ?? .default
         // Every level of a library opens on the Sort and Show it was last left on.
-        let listing = PhotoListing(folder: folder, query: PhotoQuery(favoritesOnly: favorites), savedQuery: {
-            var query = PhotoPreferences.query(for: $0)
-            query.favoritesOnly = favorites
-            return query
-        }, source: source)
+        let listing = PhotoListing(folder: folder, query: narrowing, savedQuery: {
+            PhotoPreferences.query(for: $0, narrowedBy: narrowing)
+        }, source: memory?.source(over: source) ?? source)
         let grid = PhotoGridViewController(title: title, listing: listing)
         grid.onOpenFolder = { [weak self] in self?.push(folder: $0.ref, title: $0.title) }
-        if folder == nil, !favorites {
-            grid.onOpenFavorites = { [weak self] in
-                self?.push(folder: nil, title: String(localized: "Favorites"), favorites: true)
-            }
+        if folder == nil, memory == nil {
+            grid.onOpenMemory = { [weak self] in self?.push(folder: nil, title: $0.title, memory: $0) }
         }
         addChild(grid)
         grid.view.frame = view.bounds

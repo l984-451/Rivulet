@@ -6,7 +6,7 @@
 //  Rivulet
 //
 //  The viewer's info pane: a photo's lines, a small map when it has a place,
-//  and a Favorite button, the pane's only focus target.
+//  and a Favorite button, the pane's only focus target. Drawn as the player's Info card.
 //
 
 import MapKit
@@ -15,6 +15,7 @@ import UIKit
 @MainActor
 final class PhotoInfoPaneView: UIView {
     static let mapSize = CGSize(width: 320, height: 180)
+    private static let cardPadding: CGFloat = 40
 
     let favoriteButton = UIButton(type: .system)
     var onFavorite: (() -> Void)?
@@ -26,10 +27,7 @@ final class PhotoInfoPaneView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        blur.frame = bounds
-        blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        addSubview(blur)
+        let card = makePaneGlass(cornerRadius: PlayerInfoCardView.Metrics.radius)
 
         lineStack.axis = .vertical
         lineStack.spacing = 8
@@ -50,15 +48,22 @@ final class PhotoInfoPaneView: UIView {
         let row = UIStackView(arrangedSubviews: [lineStack, side])
         row.alignment = .center
         row.distribution = .equalSpacing
-        row.translatesAutoresizingMaskIntoConstraints = false
-        blur.contentView.addSubview(row)
-        let margin = MediaRowMetrics.rowLeading
+        [card, row].forEach {
+            addSubview($0)
+            $0.translatesAutoresizingMaskIntoConstraints = false
+        }
+        let inset = PlayerRailView.sideInset, padding = Self.cardPadding
         NSLayoutConstraint.activate([
             mapView.widthAnchor.constraint(equalToConstant: Self.mapSize.width),
             mapView.heightAnchor.constraint(equalToConstant: Self.mapSize.height),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: margin),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -margin),
-            row.centerYAnchor.constraint(equalTo: centerYAnchor)
+            card.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            card.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+            card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
+            card.heightAnchor.constraint(greaterThanOrEqualToConstant: PlayerInfoCardView.Metrics.height),
+            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: padding),
+            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -padding),
+            row.topAnchor.constraint(greaterThanOrEqualTo: card.topAnchor, constant: padding),
+            row.centerYAnchor.constraint(equalTo: card.centerYAnchor)
         ])
     }
 
@@ -71,8 +76,9 @@ final class PhotoInfoPaneView: UIView {
         for (index, line) in PhotoInfoLines.lines(for: item).enumerated() {
             let label = UILabel()
             label.text = line
-            label.font = .systemFont(ofSize: index == 0 ? 34 : 28, weight: index == 0 ? .semibold : .regular)
-            label.textColor = index == 0 ? .white : UIColor(white: 1, alpha: 0.7)
+            // The player's Info card: a 31pt bold title over 25pt medium lines.
+            label.font = .systemFont(ofSize: index == 0 ? 31 : 25, weight: index == 0 ? .bold : .medium)
+            label.textColor = .white
             lineStack.addArrangedSubview(label)
         }
         favoriteButton.setTitle(item.isFavorite ? String(localized: "Unfavorite") : String(localized: "Favorite"),

@@ -8,8 +8,8 @@ import SwiftUI
 struct MacPhotoLibraryView: View {
     let library: MediaLibrary
     let folder: MediaItemRef?
-    /// The root's flat, library-wide grid of favorites.
-    let favorites: Bool
+    /// One of the root's memories, opened as a flat grid with no albums.
+    let memory: PhotoMemory?
     let title: String
     @Environment(\.macOpen) private var open
     @StateObject private var model: PhotoListingModel
@@ -23,16 +23,16 @@ struct MacPhotoLibraryView: View {
         var running = false
     }
 
-    init(library: MediaLibrary, folder: MediaItemRef? = nil, favorites: Bool = false, title: String) {
+    init(library: MediaLibrary, folder: MediaItemRef? = nil, memory: PhotoMemory? = nil, title: String) {
         self.library = library
         self.folder = folder
-        self.favorites = favorites
+        self.memory = memory
         self.title = title
-        var query = PhotoPreferences.query(for: library)
-        query.favoritesOnly = favorites
+        let query = PhotoPreferences.query(for: library, narrowedBy: memory?.query ?? .default)
         _query = State(initialValue: query)
+        let source = PhotoListing.source(for: library)
         _model = StateObject(wrappedValue: PhotoListingModel(
-            listing: PhotoListing(folder: folder, query: query, source: PhotoListing.source(for: library))))
+            listing: PhotoListing(folder: folder, query: query, source: memory?.source(over: source) ?? source)))
     }
 
     private let columns = [GridItem(.adaptive(minimum: MacMetrics.posterWidth), spacing: MacMetrics.tileGap)]
@@ -44,8 +44,7 @@ struct MacPhotoLibraryView: View {
             .task { if model.media.isEmpty, model.folders.isEmpty, !model.isLoading { model.listing.loadFirst() } }
             .onAppear {
                 // Back from a folder, whose Sort or Show may have changed the library's.
-                var saved = PhotoPreferences.query(for: library)
-                saved.favoritesOnly = favorites
+                let saved = PhotoPreferences.query(for: library, narrowedBy: query)
                 if saved != query { query = saved; model.listing.query = saved }
             }
             .overlay {
@@ -61,10 +60,8 @@ struct MacPhotoLibraryView: View {
                             .disabled(model.media.isEmpty)
                         Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                             .disabled(model.media.isEmpty)
-                        optionsMenu
-                        if folder == nil, !favorites {
-                            Button("Favorites", systemImage: "heart") { open(.photoFavorites(library)) }
-                        }
+                        // Photos already in hand (On This Day) have no order or filter to change.
+                        if model.listing.source()?.provider.photoSorts.isEmpty != true { optionsMenu }
                     }
                 }
             }
@@ -157,6 +154,9 @@ struct MacPhotoLibraryView: View {
             }
         } else {
             ScrollView {
+                if folder == nil, memory == nil {
+                    MacPhotoMemoriesRow(library: library)
+                }
                 LazyVGrid(columns: columns, spacing: MacMetrics.tileGap) {
                     ForEach(model.folders, id: \.ref) { folderTile($0) }
                     ForEach(model.media, id: \.ref) { mediaTile($0) }

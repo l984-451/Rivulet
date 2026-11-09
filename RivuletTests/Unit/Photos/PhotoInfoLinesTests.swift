@@ -78,6 +78,7 @@ final class PhotoDetailsCacheTests: XCTestCase {
             PhotoPage(folders: [], media: [], nextPage: nil)
         }
         func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {}
+        func photoYears(in library: MediaLibrary) async throws -> [Int] { [] }
         func photoDetails(for item: PhotoItem) async throws -> PhotoDetails? {
             lock.withLock { count += 1 }
             try await Task.sleep(for: .milliseconds(50))

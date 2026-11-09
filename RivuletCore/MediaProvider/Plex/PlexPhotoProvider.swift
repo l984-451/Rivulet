@@ -133,6 +133,18 @@ extension PlexProvider: PhotoProvider {
         return items
     }
 
+    /// Years of `originallyAvailableAt`. Photos only: `type=13,12` is a 400 (PMS 1.43.4).
+    func photoYears(in library: MediaLibrary) async throws -> [Int] {
+        try await plexCall {
+            guard let url = URL(string: "\(serverURL)/library/sections/\(library.id)/year?type=13") else {
+                throw PlexAPIError.invalidURL
+            }
+            let container: PlexFilterValueContainer = try await networkManager.request(
+                url, headers: networkManager.plexHeaders(authToken: authToken))
+            return (container.MediaContainer.Directory ?? []).compactMap { Int($0.key) }
+        }
+    }
+
     /// A photo favorite is `rating=10`; clearing sends `-1`, which drops any rating set elsewhere.
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
         try await plexCall {

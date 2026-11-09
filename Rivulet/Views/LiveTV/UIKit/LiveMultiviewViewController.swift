@@ -39,8 +39,8 @@ final class LiveMultiviewViewController: UIViewController {
     private var tiles: [UUID: LiveMultiviewTileView] = [:]
     private var placeholderViews: [UIView] = []
 
-    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
-    private let editHint = LiveMultiviewHintView(pointsUp: false, text: nil)
+    private let watchHint = DirectionHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
+    private let editHint = DirectionHintView(pointsUp: false, text: nil)
 
     private let layoutButtons = UIStackView()
     private let focusLayoutButton = TransportControlButton(
@@ -1354,43 +1354,6 @@ final class LiveMultiviewTileView: UIView {
             self.transform = focused ? CGAffineTransform(scaleX: 1.03, y: 1.03) : .identity
         }
     }
-}
-
-// MARK: - Mode hint
-
-/// "Swipe up to watch" over the edit view, and the chevron under the watch
-/// view. Focusable only so a move toward it has somewhere to land; the
-/// controller changes mode the moment it takes focus, so it never shows a
-/// focused look.
-final class LiveMultiviewHintView: UIView {
-    override var canBecomeFocused: Bool { true }
-
-    init(pointsUp: Bool, text: String?) {
-        super.init(frame: .zero)
-        let chevron = UIImageView(image: UIImage(systemName: pointsUp ? "chevron.compact.up" : "chevron.compact.down"))
-        chevron.tintColor = UIColor.white.withAlphaComponent(0.8)
-        chevron.preferredSymbolConfiguration = .init(pointSize: 34, weight: .semibold)
-
-        let stack = UIStackView(arrangedSubviews: [chevron])
-        stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 2
-        if let text {
-            let label = UILabel()
-            label.text = text
-            label.font = .systemFont(ofSize: 24, weight: .medium)
-            label.textColor = UIColor.white.withAlphaComponent(0.8)
-            stack.addArrangedSubview(label)
-        }
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
 #if DEBUG

@@ -6,20 +6,21 @@
 //  Rivulet
 //
 //  One level of a photo library: its folders, then its photos and clips, six
-//  across on the app's content grid. Serves the library root and every folder.
+//  across on the app's content grid. Serves the library root and every folder;
+//  the root leads with a row of memories.
 //
 
 import UIKit
 
 @MainActor
 final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
-    private enum Section: Int, CaseIterable { case folders, media }
+    private enum Section: Int, CaseIterable { case memories, folders, media }
     private static let headerKind = "PhotoGridHeader"
     private static let columns = MediaRowMetrics.posterFullCount
 
     var onOpenFolder: ((PhotoItem) -> Void)?
-    /// Set on the library root, which offers the Favorites grid.
-    var onOpenFavorites: (() -> Void)?
+    /// Set on the library root, which loads the memories row after its first page.
+    var onOpenMemory: ((PhotoMemory) -> Void)?
 
     private let listing: PhotoListing
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
@@ -36,11 +37,15 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
     private let sortButton = MusicChrome.pill(title: nil, symbol: "arrow.up.arrow.down")
     private let showButton = MusicChrome.pill(title: nil, symbol: "line.3.horizontal.decrease")
-    private let favoritesButton = MusicChrome.pill(title: String(localized: "Favorites"), symbol: "heart")
     /// The menu button a Sort or Show choice came from, where focus returns once the grid reloads.
     private var returnToButton: UIButton?
     /// A shuffled listing loading its first page, opened in the viewer when it arrives.
     private var pendingShuffle: PhotoListing?
+    private var memories: [PhotoMemory] = []
+    private var memoriesRequested = false
+    /// The backdrop follows focus only once it rests, so fast navigation leaves it alone.
+    private static let ambientDelay: TimeInterval = 0.6
+    private var pendingAmbient: DispatchWorkItem?
 
     init(title: String, listing: PhotoListing) {
         self.listing = listing
@@ -74,6 +79,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.register(PhotoCell.self, forCellWithReuseIdentifier: PhotoCell.reuseID)
+        collectionView.register(PhotoMemoryCell.self, forCellWithReuseIdentifier: PhotoMemoryCell.reuseID)
         collectionView.register(PhotoGridHeaderView.self, forSupplementaryViewOfKind: Self.headerKind,
                                 withReuseIdentifier: Self.headerKind)
         view.addSubview(collectionView)
@@ -86,7 +92,6 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
 
         slideshowButton.addAction(UIAction { [weak self] _ in self?.startSlideshow() }, for: .primaryActionTriggered)
         shuffleButton.addAction(UIAction { [weak self] _ in self?.startShuffle() }, for: .primaryActionTriggered)
-        favoritesButton.addAction(UIAction { [weak self] _ in self?.onOpenFavorites?() }, for: .primaryActionTriggered)
         sortButton.showsMenuAsPrimaryAction = true
         showButton.showsMenuAsPrimaryAction = true
         refreshMenus()
@@ -104,16 +109,14 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     /// Back from a folder: that folder's Sort or Show may have changed the library's.
     func syncSavedQuery() {
         guard let library = listing.source()?.library else { return }
-        let saved = PhotoPreferences.query(for: library)
-        var merged = listing.query
-        (merged.sort, merged.ascending, merged.show) = (saved.sort, saved.ascending, saved.show)
-        listing.query = merged
+        listing.query = PhotoPreferences.query(for: library, narrowedBy: listing.query)
         refreshMenus()
     }
 
     private func makeLayout() -> UICollectionViewLayout {
         let tile = MediaRowMetrics.music
-        return UICollectionViewCompositionalLayout { index, _ in
+        return UICollectionViewCompositionalLayout { [weak self] index, _ in
+            if index == Section.memories.rawValue { return self?.memoriesSection() }
             let size = PhotoCell.size(for: index == Section.folders.rawValue ? .folder : .photo)
             let item = NSCollectionLayoutItem(layoutSize: NSCollectionLayoutSize(
                 widthDimension: .absolute(size.width), heightDimension: .absolute(size.height)))
@@ -127,28 +130,50 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
             section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: tile.leading, bottom: 0,
                                                             trailing: tile.leading)
             section.contentInsetsReference = .none
-            section.supplementariesFollowContentInsets = false
-            if index == Section.folders.rawValue {
-                // The page title, scrolling away with the content.
-                section.boundarySupplementaryItems = [NSCollectionLayoutBoundarySupplementaryItem(
-                    layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
-                                                       heightDimension: .absolute(PhotoGridHeaderView.height)),
-                    elementKind: Self.headerKind, alignment: .top)]
-            }
             return section
         }
+    }
+
+    /// The page title over the memories row, one large card per memory, scrolling sideways.
+    private func memoriesSection() -> NSCollectionLayoutSection {
+        let tile = PhotoMemoryCell.tile
+        let size = NSCollectionLayoutSize(widthDimension: .absolute(tile.frame.width),
+                                          heightDimension: .absolute(tile.frame.height))
+        let section = NSCollectionLayoutSection(
+            group: .horizontal(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)]))
+        section.orthogonalScrollingBehavior = .continuousGroupLeadingBoundary
+        section.interGroupSpacing = tile.gap
+        section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: tile.leading,
+                                                        bottom: memories.isEmpty ? 0 : MediaRowMetrics.tileGap,
+                                                        trailing: tile.leading)
+        section.contentInsetsReference = .none
+        section.supplementariesFollowContentInsets = false
+        // The page title, scrolling away with the content.
+        section.boundarySupplementaryItems = [NSCollectionLayoutBoundarySupplementaryItem(
+            layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
+                                               heightDimension: .absolute(PhotoGridHeaderView.height)),
+            elementKind: Self.headerKind, alignment: .top)]
+        return section
     }
 
     // MARK: - Data
 
     private func apply(_ change: PhotoListing.Change) {
-        let wasEmpty = collectionView.numberOfItems(inSection: 0) + collectionView.numberOfItems(inSection: 1) == 0
+        // From the model: a collection that has not laid out since `reloadData` re-asks the
+        // data source, which already holds this page.
+        let wasEmpty = switch change {
+        case .appended(let folders, let media): folders.lowerBound == 0 && media.lowerBound == 0
+        default: isEmpty
+        }
         switch change {
         case .reloaded:
             focusTarget = nil
             collectionView.reloadData()
         case .appended(let folders, let media):
-            if wasEmpty {
+            // Inserting is only valid against counts the collection already holds.
+            let shown = collectionView.numberOfItems(inSection: Section.folders.rawValue) == folders.lowerBound
+                && collectionView.numberOfItems(inSection: Section.media.rawValue) == media.lowerBound
+            if wasEmpty || !shown {
                 collectionView.reloadData()
             } else {
                 collectionView.performBatchUpdates {
@@ -170,6 +195,54 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
             setNeedsFocusUpdate()
             NotificationCenter.default.post(name: .contentBecameFocusable, object: nil)
         }
+        if !isEmpty { loadMemories() }
+    }
+
+    private func setAmbientAfterPause(_ url: URL?) {
+        pendingAmbient?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.ambientView.setAmbient(url: url) }
+        pendingAmbient = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.ambientDelay, execute: work)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        pendingAmbient?.cancel()
+        pendingAmbient = nil
+    }
+
+    /// Once, after the first page, so the row never delays the grid.
+    private func loadMemories() {
+        guard onOpenMemory != nil, !memoriesRequested, let (provider, library) = listing.source() else { return }
+        memoriesRequested = true
+        Task { [weak self] in
+            let found = await PhotoMemories.load(provider: provider, library: library, today: .now)
+            guard !Task.isCancelled, let self else { return }
+            // Map stays out of the row until it has a page of its own.
+            let shown = found.filter { $0.kind != .map }
+            guard !shown.isEmpty else { return }
+            insertMemories(shown)
+        }
+    }
+
+    /// Inserted, not reloaded: reloading the section would rebuild the header under a focused button.
+    /// Below the very top, the page ends up scrolled down by the row, so what is on screen stays still
+    /// (the collection anchors a focused tile itself, but nothing else).
+    private func insertMemories(_ shown: [PhotoMemory]) {
+        let section = Section.memories.rawValue
+        guard collectionView.numberOfItems(inSection: section) == 0 else { return }
+        collectionView.layoutIfNeeded()
+        let offset = collectionView.contentOffset.y
+        let height = { [collectionView] in collectionView.collectionViewLayout.collectionViewContentSize.height }
+        let before = height()
+        memories = shown
+        UIView.performWithoutAnimation {
+            collectionView.performBatchUpdates {
+                collectionView.insertItems(at: shown.indices.map { IndexPath(item: $0, section: section) })
+            }
+            collectionView.layoutIfNeeded()
+        }
+        if offset > 0 { collectionView.contentOffset.y = offset + height() - before }
     }
 
     private var isEmpty: Bool { listing.folders.isEmpty && listing.media.isEmpty }
@@ -191,6 +264,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         loadingAnchor.isHidden = !listing.isLoading || !isEmpty
     }
 
+    /// A folder, photo or clip; never a memory.
     private func item(at indexPath: IndexPath) -> PhotoItem {
         indexPath.section == Section.folders.rawValue ? listing.folders[indexPath.item] : listing.media[indexPath.item]
     }
@@ -204,9 +278,14 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     }
 
     func reselectSidebarTab() {
-        let section = listing.folders.isEmpty ? Section.media.rawValue : Section.folders.rawValue
-        focusTarget = IndexPath(item: 0, section: section)
+        focusTarget = IndexPath(item: 0, section: firstSection)
         SidebarReselection.returnToTop(in: collectionView, focusing: focusTarget)
+    }
+
+    /// The section the page's first row belongs to.
+    private var firstSection: Int {
+        if !memories.isEmpty { return Section.memories.rawValue }
+        return listing.folders.isEmpty ? Section.media.rawValue : Section.folders.rawValue
     }
 
     // MARK: - Header
@@ -339,11 +418,21 @@ extension PhotoGridViewController: UICollectionViewDataSource {
     func numberOfSections(in collectionView: UICollectionView) -> Int { Section.allCases.count }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        section == Section.folders.rawValue ? listing.folders.count : listing.media.count
+        switch Section(rawValue: section) {
+        case .memories: memories.count
+        case .folders: listing.folders.count
+        default: listing.media.count
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView,
                         cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        if indexPath.section == Section.memories.rawValue {
+            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PhotoMemoryCell.reuseID,
+                                                          for: indexPath) as! PhotoMemoryCell
+            cell.configure(memories[indexPath.item])
+            return cell
+        }
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PhotoCell.reuseID,
                                                       for: indexPath) as! PhotoCell
         cell.configure(item(at: indexPath))
@@ -354,8 +443,10 @@ extension PhotoGridViewController: UICollectionViewDataSource {
                         at indexPath: IndexPath) -> UICollectionReusableView {
         let header = collectionView.dequeueReusableSupplementaryView(
             ofKind: kind, withReuseIdentifier: Self.headerKind, for: indexPath) as! PhotoGridHeaderView
-        let buttons = [slideshowButton, shuffleButton, sortButton, showButton]
-        header.configure(title: title, buttons: onOpenFavorites == nil ? buttons : buttons + [favoritesButton])
+        // Photos already in hand (On This Day) have no order or filter to change.
+        let sortable = listing.source().map { !$0.provider.photoSorts.isEmpty } ?? true
+        header.configure(title: title, buttons: [slideshowButton, shuffleButton]
+                         + (sortable ? [sortButton, showButton] : []))
         return header
     }
 }
@@ -364,6 +455,7 @@ extension PhotoGridViewController: UICollectionViewDataSource {
 
 extension PhotoGridViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        if indexPath.section == Section.memories.rawValue { onOpenMemory?(memories[indexPath.item]); return }
         let item = item(at: indexPath)
         if item.kind == .folder { onOpenFolder?(item) } else { openViewer(listing: listing, at: indexPath.item) }
     }
@@ -387,15 +479,21 @@ extension PhotoGridViewController: UICollectionViewDelegate {
         let next = context.nextFocusedIndexPath
         if let next {
             focusTarget = next
-            ambientView.setAmbient(url: item(at: next).thumbnail)
+            let url = next.section == Section.memories.rawValue
+                ? memories[next.item].cover?.thumbnail : item(at: next).thumbnail
+            setAmbientAfterPause(url)
+        } else {
+            pendingAmbient?.cancel()
         }
         if next != nil || context.nextFocusedView === returnToButton { returnToButton = nil }
-        if next == nil {
-            for case let cell as PhotoCell in collectionView.visibleCells { cell.resetStaleFocusAppearance() }
+        // Once focus settles, any tile that still looks focused is a strand (the cell skips the focused one).
+        coordinator.addCoordinatedAnimations(nil) { [weak collectionView] in
+            for case let cell as PhotoCell in collectionView?.visibleCells ?? [] { cell.resetStaleFocusAppearance() }
         }
         // Below the top row the shell hides its pill; off the page it shows again.
-        let firstSection = listing.folders.isEmpty ? Section.media.rawValue : Section.folders.rawValue
-        let belowTop = next.map { $0.section != firstSection || $0.item >= Self.columns } ?? false
+        let belowTop = next.map {
+            $0.section != firstSection || ($0.section != Section.memories.rawValue && $0.item >= Self.columns)
+        } ?? false
         if belowTop != postedBelowTop {
             postedBelowTop = belowTop
             NotificationCenter.default.post(name: .contentFocusBelowTopChanged, object: belowTop)

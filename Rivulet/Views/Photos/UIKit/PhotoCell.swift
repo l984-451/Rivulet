@@ -74,10 +74,16 @@ final class PhotoCell: UICollectionViewCell {
         applyFocusAppearance(isFocused)
         guard item.thumbnail == nil || item.thumbnail != imageURL else { return }
         imageURL = item.thumbnail
+        // TVPosterView sizes its focused footer from the image view when the image is set:
+        // set at zero size (a cell not yet laid out), the title never lifts on focus.
+        if poster.bounds.isEmpty { layoutIfNeeded() }
         poster.image = MusicChrome.placeholder(item.kind == .folder ? "folder" : "photo", side: Self.tile.art.width)
         imageTask?.cancel()
         imageTask = MusicChrome.loadArtwork(item.thumbnail) { [weak self] image in
-            if let image { self?.poster.image = image }
+            guard let self, let image else { return }
+            poster.image = image
+            // A new image lays the poster out again, which can bring back a look focus already left.
+            resetStaleFocusAppearance()
         }
     }
 

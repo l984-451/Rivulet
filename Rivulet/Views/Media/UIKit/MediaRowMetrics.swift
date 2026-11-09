@@ -117,6 +117,13 @@ enum MediaRowMetrics {
         return Tile(art: CGSize(width: width, height: (width * 9 / 16).rounded()), lockup: .card)
     }()
 
+    /// Large 16:9 card, two across (the photo library's memories row). Unmeasured: the Apple TV
+    /// app is not on the simulator, so growth is the card default; measuring its two-across row is owed.
+    static let feature: Tile = {
+        let width = gridWidth(columns: 2)
+        return Tile(art: CGSize(width: width, height: (width * 9 / 16).rounded()), lockup: .card)
+    }()
+
     /// Live TV Browse card (16:9), on the Apple TV app's live-row geometry:
     /// four across, its ~88pt margin and 40pt gap, so both peeks stay wide.
     /// 2·88 + 4·406 + 3·40 = 1920 → 48pt sliver. The Browse page only, with

@@ -54,7 +54,7 @@ final class PlayerInfoCardView: UIView {
         var showsFromBeginning = true
     }
 
-    private enum Metrics {
+    enum Metrics {
         static let height: CGFloat = 250
         static let radius: CGFloat = 48
         static let poster = CGRect(x: 23, y: 23, width: 136, height: 204)

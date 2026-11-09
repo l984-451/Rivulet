@@ -65,4 +65,14 @@ final class PhotoPreferencesTests: XCTestCase {
         XCTAssertNil(read.takenBetween)
         XCTAssertEqual(PhotoPreferences.queryKey(for: library), "photoLibraryQuery.test:prefs.27")
     }
+
+    func test_queryNarrowedKeepsSavedSortAndNarrowing() {
+        PhotoPreferences.setQuery(PhotoQuery(sort: .name, ascending: true), for: library)
+        let range = Date(timeIntervalSince1970: 0)...Date(timeIntervalSince1970: 86_400)
+        let read = PhotoPreferences.query(for: library, narrowedBy: PhotoQuery(favoritesOnly: true, takenBetween: range))
+        XCTAssertEqual(read.sort, .name)
+        XCTAssertTrue(read.ascending)
+        XCTAssertTrue(read.favoritesOnly)
+        XCTAssertEqual(read.takenBetween, range)
+    }
 }

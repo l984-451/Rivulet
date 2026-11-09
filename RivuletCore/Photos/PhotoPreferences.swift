@@ -51,6 +51,14 @@ nonisolated enum PhotoPreferences {
         return kept(stored)
     }
 
+    /// The saved Sort and Show over `narrowing`'s favorites and dates.
+    static func query(for library: MediaLibrary, narrowedBy narrowing: PhotoQuery) -> PhotoQuery {
+        var query = query(for: library)
+        query.favoritesOnly = narrowing.favoritesOnly
+        query.takenBetween = narrowing.takenBetween
+        return query
+    }
+
     static func setQuery(_ query: PhotoQuery, for library: MediaLibrary) {
         guard let data = try? JSONEncoder().encode(kept(query)) else { return }
         defaults.set(String(decoding: data, as: UTF8.self), forKey: queryKey(for: library))

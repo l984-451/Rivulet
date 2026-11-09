@@ -25,6 +25,8 @@ protocol PhotoProvider: Sendable {
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
     /// A photo's details as complete as the server has them, which may take a request of its own.
     func photoDetails(for item: PhotoItem) async throws -> PhotoDetails?
+    /// The years the library's photos were taken in, as the server's date filter sees them.
+    func photoYears(in library: MediaLibrary) async throws -> [Int]
 }
 
 extension PhotoProvider {

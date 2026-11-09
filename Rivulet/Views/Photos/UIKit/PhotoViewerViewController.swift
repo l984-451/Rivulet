@@ -42,7 +42,13 @@ final class PhotoViewerViewController: UIViewController {
     private var panTarget: CGAffineTransform?
     private let clipGlyph = UIImageView(image: UIImage(systemName: "play.circle.fill"))
     private let slideGlyph = UIImageView()
-    private let caption = UILabel()
+    /// The player's dimming and title block, so the caption reads as the app's media chrome.
+    private let scrim = ChromeScrimView()
+    private let rail = UIView()
+    private let (eyebrowLabel, titleLabel) = PlayerRailView.makeTitleLabels()
+    /// Multiview's down hint, unfocusable: Down opens the pane, and the viewer stays focusless.
+    private let infoHint = DirectionHintView(pointsUp: false, text: String(localized: "Info"), focusable: false)
+    private var placeTask: Task<Void, Never>?
     /// The only focus target: presses reach a focused view, and the viewer has no other.
     private let anchor = PreviewFocusAnchorView()
     private var input: DirectionalInputBinding?
@@ -109,17 +115,33 @@ final class PhotoViewerViewController: UIViewController {
         }
         slideGlyph.alpha = 0
 
-        caption.numberOfLines = 3
-        caption.layer.shadowOpacity = 0.8
-        caption.layer.shadowRadius = 6
-        caption.layer.shadowOffset = .zero
-        caption.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(caption)
-        let margin = MediaRowMetrics.rowLeading
+        scrim.frame = view.bounds
+        scrim.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        scrim.isUserInteractionEnabled = false
+        scrim.alpha = 0
+        view.addSubview(scrim)
+        rail.isUserInteractionEnabled = false
+        rail.alpha = 0
+        view.addSubview(rail)
+        [eyebrowLabel, titleLabel, infoHint].forEach { rail.addSubview($0) }
+        for subview in [rail, eyebrowLabel, titleLabel, infoHint] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+        }
+        let metrics = PlayerRailView.Metrics.self, inset = PlayerRailView.sideInset
         NSLayoutConstraint.activate([
-            caption.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: margin),
-            caption.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -margin),
-            caption.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -margin)
+            rail.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            rail.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            rail.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            rail.heightAnchor.constraint(equalToConstant: PlayerRailView.railHeight),
+            eyebrowLabel.topAnchor.constraint(equalTo: rail.topAnchor, constant: metrics.subtitleTop),
+            eyebrowLabel.leadingAnchor.constraint(equalTo: rail.leadingAnchor, constant: metrics.titleLeading),
+            eyebrowLabel.trailingAnchor.constraint(lessThanOrEqualTo: rail.trailingAnchor, constant: -inset),
+            titleLabel.topAnchor.constraint(equalTo: rail.topAnchor, constant: metrics.titleTop),
+            titleLabel.leadingAnchor.constraint(equalTo: rail.leadingAnchor, constant: metrics.titleLeading),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: rail.trailingAnchor, constant: -inset),
+            // Bottom centre, where multiview's edit hint sits.
+            infoHint.centerXAnchor.constraint(equalTo: rail.centerXAnchor),
+            infoHint.bottomAnchor.constraint(equalTo: rail.bottomAnchor, constant: -16)
         ])
         view.addSubview(anchor)
 
@@ -230,40 +252,43 @@ final class PhotoViewerViewController: UIViewController {
         }
     }
 
-    /// Title and date, bottom leading; gone after a moment and for the whole of a slideshow.
+    /// The day taken under its place, in the player's title block; gone after a moment and for
+    /// the whole of a slideshow. The place fades in when it arrives.
     private func updateCaption(_ item: PhotoItem) {
         overlayHide?.cancel()
-        let text = NSMutableAttributedString(string: item.title, attributes: [
-            .font: UIFont.systemFont(ofSize: 34, weight: .semibold), .foregroundColor: UIColor.white])
-        if let date = item.date {
-            text.append(NSAttributedString(
-                string: "\n" + date.formatted(date: .abbreviated, time: .omitted),
-                attributes: [.font: UIFont.systemFont(ofSize: 28),
-                             .foregroundColor: UIColor(white: 1, alpha: 0.7)]))
+        placeTask?.cancel()
+        let places = PhotoPlaceNames.shared
+        setCaptionText(date: item.date, place: item.coordinate.flatMap(places.cachedName(for:)))
+        if let coordinate = item.coordinate, places.cachedName(for: coordinate) == nil {
+            placeTask = Task { [weak self] in
+                guard let place = await places.name(for: coordinate), let self, !Task.isCancelled,
+                      listing.media.indices.contains(index), listing.media[index].ref == item.ref else { return }
+                UIView.transition(with: rail, duration: Self.stepDissolve, options: .transitionCrossDissolve) {
+                    self.setCaptionText(date: item.date, place: place)
+                }
+            }
         }
-        text.append(Self.infoHint)
-        caption.attributedText = text
-        guard !isRunning, !paneOpen else { caption.alpha = 0; return }
-        UIView.animate(withDuration: Self.stepDissolve) { self.caption.alpha = 1 }
+        guard !isRunning, !paneOpen else { setCaption(visible: false); return }
+        UIView.animate(withDuration: Self.stepDissolve) { self.setCaption(visible: true) }
         let hide = DispatchWorkItem { [weak self] in
-            UIView.animate(withDuration: 0.5) { self?.caption.alpha = 0 }
+            UIView.animate(withDuration: 0.5) { self?.setCaption(visible: false) }
         }
         overlayHide = hide
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.overlayLinger, execute: hide)
     }
 
-    /// "⌄ Info" under the caption: Down opens the pane.
-    private static let infoHint: NSAttributedString = {
-        let font = UIFont.systemFont(ofSize: 28)
-        let color = UIColor(white: 1, alpha: 0.7)
-        let hint = NSMutableAttributedString(string: "\n")
-        let glyph = UIImage(systemName: "chevron.down", withConfiguration: UIImage.SymbolConfiguration(font: font))?
-            .withTintColor(color, renderingMode: .alwaysOriginal)
-        if let glyph { hint.append(NSAttributedString(attachment: NSTextAttachment(image: glyph))) }
-        hint.append(NSAttributedString(string: " " + String(localized: "Info"),
-                                       attributes: [.font: font, .foregroundColor: color]))
-        return hint
-    }()
+    private func setCaptionText(date: Date?, place: String?) {
+        let caption = PhotoInfoLines.caption(date: date, place: place)
+        eyebrowLabel.text = caption.eyebrow
+        eyebrowLabel.isHidden = caption.eyebrow == nil
+        titleLabel.text = caption.title
+    }
+
+    /// The scrim also stays under an open pane.
+    private func setCaption(visible: Bool) {
+        rail.alpha = visible ? 1 : 0
+        scrim.alpha = visible || paneOpen ? 1 : 0
+    }
 
     // MARK: - Input
 
@@ -313,7 +338,7 @@ final class PhotoViewerViewController: UIViewController {
         infoPane.isHidden = false
         UIView.animate(withDuration: Self.stepDissolve) {
             self.infoPane.alpha = 1
-            self.caption.alpha = 0
+            self.setCaption(visible: false)
         }
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
@@ -331,6 +356,7 @@ final class PhotoViewerViewController: UIViewController {
         updateFocusIfNeeded()
         UIView.animate(withDuration: Self.stepDissolve) {
             self.infoPane.alpha = 0
+            self.setCaption(visible: false)
         } completion: { _ in
             if !self.paneOpen { self.infoPane.isHidden = true }
         }
@@ -371,7 +397,7 @@ final class PhotoViewerViewController: UIViewController {
         holdsDisplayAwake = !UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = true
         overlayHide?.cancel()
-        caption.alpha = 0
+        setCaption(visible: false)
         flash("play.fill")
         if listing.media.indices.contains(index), listing.media[index].kind == .clip,
            PhotoPreferences.playsClips, let clip = listing.media[index].playable {

@@ -25,6 +25,13 @@ enum PhotoInfoLines {
         return [taken, details.cameraLine, details.lens, details.exposureLine, size, details.fileName]
             .compactMap { $0 }
     }
+
+    /// The viewer's caption: the day taken, long ("November 9, 2023"), under its place; the place
+    /// alone without a date; nothing without either. Never a title or album, which run long.
+    static func caption(date: Date?, place: String?) -> (eyebrow: String?, title: String?) {
+        guard let date else { return (nil, place) }
+        return (place, date.formatted(date: .long, time: .omitted))
+    }
 }
 
 /// Each photo's fetched details, kept for the session.

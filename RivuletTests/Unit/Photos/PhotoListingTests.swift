@@ -29,6 +29,8 @@ private final class StubPhotoProvider: PhotoProvider, @unchecked Sendable {
         return try result.get()
     }
 
+    func photoYears(in library: MediaLibrary) async throws -> [Int] { [] }
+
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
         favorites.append((favorite, ref))
         if holdsFavorites { await withCheckedContinuation { favoriteGate = $0 } }

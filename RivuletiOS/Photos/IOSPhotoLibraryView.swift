@@ -7,8 +7,8 @@ import SwiftUI
 struct IOSPhotoLibraryView: View {
     let library: MediaLibrary
     var folder: PhotoItem?
-    /// The root's flat, library-wide grid of favorites.
-    var favorites = false
+    /// One of the root's memories, opened as a flat grid with no albums.
+    var memory: PhotoMemory?
     var showsAccount = false
     /// Played once the viewer has finished dismissing.
     @State private var pendingClip: PhotoItem?
@@ -29,20 +29,23 @@ struct IOSPhotoLibraryView: View {
         var running = false
     }
 
-    init(library: MediaLibrary, folder: PhotoItem? = nil, favorites: Bool = false, showsAccount: Bool = false) {
+    init(library: MediaLibrary, folder: PhotoItem? = nil, memory: PhotoMemory? = nil, showsAccount: Bool = false) {
         self.library = library
         self.folder = folder
-        self.favorites = favorites
+        self.memory = memory
         self.showsAccount = showsAccount
-        var query = PhotoPreferences.query(for: library)
-        query.favoritesOnly = favorites
+        let query = PhotoPreferences.query(for: library, narrowedBy: memory?.query ?? .default)
         _query = State(initialValue: query)
+        let source = PhotoListing.source(for: library)
         _model = StateObject(wrappedValue: PhotoListingModel(
-            listing: PhotoListing(folder: folder?.ref, query: query, source: PhotoListing.source(for: library))))
+            listing: PhotoListing(folder: folder?.ref, query: query, source: memory?.source(over: source) ?? source)))
     }
 
     var body: some View {
         ScrollView {
+            if folder == nil, memory == nil {
+                IOSPhotoMemoriesRow(library: library, ready: !model.folders.isEmpty || !model.media.isEmpty)
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 2)], spacing: 2) {
                 ForEach(model.folders, id: \.ref) { album in
                     NavigationLink {
@@ -65,7 +68,7 @@ struct IOSPhotoLibraryView: View {
             if model.isLoading { ProgressView().padding() }
         }
         .overlay { status }
-        .navigationTitle(folder?.title ?? (favorites ? String(localized: "Favorites") : library.title))
+        .navigationTitle(folder?.title ?? memory?.title ?? library.title)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.listing.loadFirst()?.value }
         .task {
@@ -73,8 +76,7 @@ struct IOSPhotoLibraryView: View {
         }
         .onAppear {
             // Back from a folder, whose Sort or Show may have changed the library's.
-            var saved = PhotoPreferences.query(for: library)
-            saved.favoritesOnly = favorites
+            let saved = PhotoPreferences.query(for: library, narrowedBy: query)
             if saved != query { query = saved; model.listing.query = saved }
         }
         .toolbar {
@@ -83,14 +85,8 @@ struct IOSPhotoLibraryView: View {
                     .disabled(model.media.isEmpty)
                 Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                     .disabled(model.media.isEmpty)
-                optionsMenu
-                if folder == nil, !favorites {
-                    NavigationLink {
-                        IOSPhotoLibraryView(library: library, favorites: true).iosPlexActionHost()
-                    } label: {
-                        Label("Favorites", systemImage: "heart")
-                    }
-                }
+                // Photos already in hand (On This Day) have no order or filter to change.
+                if model.listing.source()?.provider.photoSorts.isEmpty != true { optionsMenu }
             }
             if showsAccount { IOSAccountToolbarItem() }
         }

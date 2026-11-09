@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Map" : {},
+    "On This Day" : {},
+    "Photos from %@" : {},
     "Slideshow" : {},
     "Photos" : {},
     "Unfavorite" : {},

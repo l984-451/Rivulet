@@ -123,6 +123,17 @@ extension JellyfinProvider: PhotoProvider {
         return items
     }
 
+    /// `Years` is ProductionYear, set only for photos with an EXIF date: the same photos
+    /// `minPremiereDate` finds (12.1). Others carry no taken date for a filter to match.
+    func photoYears(in library: MediaLibrary) async throws -> [Int] {
+        let result: JFQueryResult = try await client.get("Years", [
+            URLQueryItem(name: "parentId", value: library.id),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Photo")
+        ])
+        return (result.items ?? []).compactMap { $0.name.flatMap { Int($0) } }
+    }
+
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
         try await setFavorite(favorite, for: ref)
     }

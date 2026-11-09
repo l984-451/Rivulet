@@ -6,14 +6,19 @@
 //  Rivulet
 //
 //  A listing of photos already in hand, one page, for a viewer over them.
+//  Favorites and details go to `server` when there is one.
 //
 
 import Foundation
 
 nonisolated struct FixedPhotoProvider: PhotoProvider {
     let items: [PhotoItem]
+    let server: (any PhotoProvider)?
 
-    init(items: [PhotoItem]) { self.items = items }
+    init(items: [PhotoItem], server: (any PhotoProvider)? = nil) {
+        self.items = items
+        self.server = server
+    }
 
     var photoSorts: [PhotoQuery.Sort] { [] }
     var shufflesPhotosOnServer: Bool { true }
@@ -23,7 +28,16 @@ nonisolated struct FixedPhotoProvider: PhotoProvider {
         PhotoPage(folders: [], media: query.shuffled ? items.shuffled() : items, nextPage: nil)
     }
 
+    func photoYears(in library: MediaLibrary) async throws -> [Int] {
+        Set(items.compactMap { $0.date.map { Calendar.current.component(.year, from: $0) } }).sorted(by: >)
+    }
+
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
-        throw MediaProviderError.backendSpecific(underlying: "favorites not supported")
+        guard let server else { throw MediaProviderError.backendSpecific(underlying: "favorites not supported") }
+        try await server.setPhotoFavorite(favorite, for: ref)
+    }
+
+    func photoDetails(for item: PhotoItem) async throws -> PhotoDetails? {
+        try await server?.photoDetails(for: item) ?? item.details
     }
 }

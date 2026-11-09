@@ -25,6 +25,8 @@ struct MacPhotoViewer: View {
     @State private var awake: NSObjectProtocol?
     @State private var showsInfo = false
     @State private var showsHint = false
+    /// The shown photo's place, once geocoded.
+    @State private var place: (ref: MediaItemRef, name: String)?
 
     init(model: PhotoListingModel, start: PhotoItem, running: Bool = false, onClose: @escaping () -> Void) {
         self.model = model
@@ -77,6 +79,12 @@ struct MacPhotoViewer: View {
         .onChange(of: index) { zoom = 1; pan = .zero }
         .onChange(of: slideshow) { _, on in setAwake(on) }
         .onDisappear { slideshow = false; setAwake(false) }
+        .task(id: item?.ref) {
+            guard let item, let coordinate = item.coordinate else { return }
+            let name = await PhotoPlaceNames.shared.name(for: coordinate)
+            guard let name, !Task.isCancelled, self.item?.ref == item.ref else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { place = (item.ref, name) }
+        }
         .onChange(of: playback.playbackError) { _, error in
             if error != nil { resumeAfterClip = false }
         }
@@ -119,8 +127,16 @@ struct MacPhotoViewer: View {
             HStack {
                 Button(action: onClose) { Image(systemName: "xmark.circle.fill") }
                     .help("Close")
-                Spacer()
-                if let item { Text(verbatim: item.title).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
+                // The player's title block: the place over the day taken.
+                if let item, case let shown = PhotoInfoLines.caption(
+                    date: item.date, place: place?.ref == item.ref ? place?.name : nil), let title = shown.title {
+                    VStack(alignment: .leading, spacing: 1) {
+                        if let eyebrow = shown.eyebrow {
+                            Text(verbatim: eyebrow).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                        }
+                        Text(verbatim: title).font(.headline).lineLimit(1).foregroundStyle(.white)
+                    }
+                }
                 Spacer()
                 Button { showsInfo.toggle() } label: { Image(systemName: "info.circle") }
                     .keyboardShortcut("i", modifiers: .command)

@@ -18,6 +18,8 @@ struct IOSPhotoViewer: View {
     /// Set only while this viewer is what turned the idle timer off.
     @State private var holdsDisplayAwake = false
     @State private var showsInfo = false
+    /// The shown photo's place, once geocoded.
+    @State private var place: (ref: MediaItemRef, name: String)?
     @Environment(\.scenePhase) private var scenePhase
 
     init(model: PhotoListingModel, start: PhotoItem, running: Bool = false,
@@ -62,6 +64,12 @@ struct IOSPhotoViewer: View {
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { slideshow = false } }
         .onAppear { if slideshow { setAwake(true) } }
+        .task(id: current?.ref) {
+            guard let current, let coordinate = current.coordinate else { return }
+            let name = await PhotoPlaceNames.shared.name(for: coordinate)
+            guard let name, !Task.isCancelled, self.current?.ref == current.ref else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { place = (current.ref, name) }
+        }
         .onDisappear { slideshow = false; setAwake(false) }
         .task(id: slideshow) {
             guard slideshow else { return }
@@ -143,20 +151,23 @@ struct IOSPhotoViewer: View {
         .padding(.top, 60)
     }
 
+    /// The player's title block: the place over the day taken.
     @ViewBuilder
     private var caption: some View {
-        if let current {
-            VStack(spacing: 2) {
-                Text(verbatim: current.title).font(.headline)
-                if let date = current.date {
-                    Text(date.formatted(date: .long, time: .omitted)).font(.subheadline).foregroundStyle(.secondary)
+        let shown = current.map { item in
+            PhotoInfoLines.caption(date: item.date, place: place?.ref == item.ref ? place?.name : nil)
+        }
+        if let shown, let title = shown.title {
+            VStack(alignment: .leading, spacing: 2) {
+                if let eyebrow = shown.eyebrow {
+                    Text(verbatim: eyebrow).font(.subheadline).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                 }
+                Text(verbatim: title).font(.headline).lineLimit(2)
             }
             .foregroundStyle(.white)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 16)
             .padding(.bottom, 48)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
         }
     }

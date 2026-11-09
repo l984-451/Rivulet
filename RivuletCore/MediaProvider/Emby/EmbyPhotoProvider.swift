@@ -118,6 +118,16 @@ extension EmbyProvider: PhotoProvider {
         return items
     }
 
+    /// `Years` is scoped by `ParentId` and type (4.10.2).
+    func photoYears(in library: MediaLibrary) async throws -> [Int] {
+        let result: EmbyNamedResult = try await client.get("Years", [
+            URLQueryItem(name: "ParentId", value: library.id),
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "IncludeItemTypes", value: "Photo")
+        ])
+        return (result.items ?? []).compactMap { $0.name.flatMap { Int($0) } }
+    }
+
     func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
         try await setFavorite(favorite, for: ref)
     }

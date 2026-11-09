@@ -5351,6 +5351,16 @@
         }
       }
     },
+    "Enhancement Layer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erweiterungsebene"
+          }
+        }
+      }
+    },
     "Enter PIN to switch profile" : {
       "localizations" : {
         "de" : {
@@ -6481,6 +6491,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Από την αρχή"
+          }
+        }
+      }
+    },
+    "Full (FEL)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vollständig (FEL)"
           }
         }
       }
@@ -8125,6 +8145,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Από ήπια και πάνω"
+          }
+        }
+      }
+    },
+    "Minimal (MEL)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minimal (MEL)"
           }
         }
       }

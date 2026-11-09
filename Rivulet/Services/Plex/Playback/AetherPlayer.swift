@@ -781,6 +781,9 @@ final class AetherPlayer: PlayerProtocol {
                             presentsHDR: engine.videoFormat != .sdr,
                             panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
+    /// FEL or MEL for the current Profile 7 load, probed after it starts; nil otherwise.
+    private(set) var dolbyVisionEnhancementLayer: DolbyVisionLayerType?
+    private var enhancementLayerURL: URL?
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
     /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
     var upscaleSummary: String? {
@@ -1166,6 +1169,8 @@ final class AetherPlayer: PlayerProtocol {
         // against the old episode's picture rect until `presentationSize`
         // arrives.
         videoSize = .zero
+        dolbyVisionEnhancementLayer = nil
+        enhancementLayerURL = url
         // New file: the previous track's script and fonts describe nothing,
         // even when the next episode repeats the same header and track id.
         assFonts = []
@@ -1185,11 +1190,27 @@ final class AetherPlayer: PlayerProtocol {
             errorSubject.send(pe)
             throw pe
         }
+        if engine.sourceDVProfile == 7 { probeEnhancementLayer(url: url, headers: headers ?? [:]) }
         assFonts = engine.fontAttachments.map { LibassRenderer.Font(name: $0.filename, data: $0.data) }
         // The track may have been published during the load with no fonts;
         // republish so the renderer is built with them.
         assTrack = nil
         refreshASSTrack()
+    }
+
+    /// Reads the stream head once more for the RPU's el_type, off the start path.
+    private func probeEnhancementLayer(url: URL, headers: [String: String]) {
+        Task { [weak self] in
+            let layer = await Task.detached(priority: .utility) { () -> DolbyVisionLayerType? in
+                switch try? AetherEngine.probeDolbyVisionEnhancementLayer(url: url, options: LoadOptions(httpHeaders: headers)) {
+                case .fel: .full
+                case .mel: .minimal
+                default: nil
+                }
+            }.value
+            guard let self, self.enhancementLayerURL == url else { return }
+            self.dolbyVisionEnhancementLayer = layer
+        }
     }
 
     /// The engine's active subtitle track when it is ASS/SSA.

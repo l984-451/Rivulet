@@ -18,6 +18,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private static let columns = MediaRowMetrics.posterFullCount
 
     var onOpenFolder: ((PhotoItem) -> Void)?
+    /// Set on the library root, which offers the Favorites grid.
+    var onOpenFavorites: (() -> Void)?
 
     private let listing: PhotoListing
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
@@ -32,6 +34,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
     private let sortButton = MusicChrome.pill(title: nil, symbol: "arrow.up.arrow.down")
     private let showButton = MusicChrome.pill(title: nil, symbol: "line.3.horizontal.decrease")
+    private let favoritesButton = MusicChrome.pill(title: String(localized: "Favorites"), symbol: "heart")
     /// The menu button a Sort or Show choice came from, where focus returns once the grid reloads.
     private var returnToButton: UIButton?
     /// A shuffled listing loading its first page, opened in the viewer when it arrives.
@@ -74,6 +77,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
 
         slideshowButton.addAction(UIAction { [weak self] _ in self?.startSlideshow() }, for: .primaryActionTriggered)
         shuffleButton.addAction(UIAction { [weak self] _ in self?.startShuffle() }, for: .primaryActionTriggered)
+        favoritesButton.addAction(UIAction { [weak self] _ in self?.onOpenFavorites?() }, for: .primaryActionTriggered)
         sortButton.showsMenuAsPrimaryAction = true
         showButton.showsMenuAsPrimaryAction = true
         refreshMenus()
@@ -81,6 +85,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         let playPause = UITapGestureRecognizer(target: self, action: #selector(playPausePressed))
         playPause.allowedPressTypes = [NSNumber(value: UIPress.PressType.playPause.rawValue)]
         collectionView.addGestureRecognizer(playPause)
+        collectionView.addGestureRecognizer(
+            TileLongPress.makeRecognizer(target: self, action: #selector(handleLongPress(_:))))
 
         listing.onChange = { [weak self] in self?.apply($0) }
         listing.loadFirst()
@@ -143,6 +149,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
             }
         case .failed:
             break   // a later page: the grid stays, and the next scroll to the end asks again
+        case .updated(let media):
+            collectionView.reconfigureItems(at: [IndexPath(item: media, section: Section.media.rawValue)])
         }
         updateState()
         // The saved query may only now be applied, once the source knew its library.
@@ -253,7 +261,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         shuffle.onChange = { [weak self, weak shuffle] change in
             guard let self, let shuffle, shuffle === pendingShuffle else { return }
             switch change {
-            case .reloaded: break
+            case .reloaded, .updated: break
             case .appended where !shuffle.media.isEmpty:
                 pendingShuffle = nil
                 shuffle.onChange = nil
@@ -270,6 +278,25 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         guard let cell = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UICollectionViewCell,
               let path = collectionView.indexPath(for: cell), path.section == Section.media.rawValue else { return }
         openViewer(listing: listing, at: path.item, running: true)
+    }
+
+    /// Long press on a photo or clip: Favorite or Unfavorite. Unfavoriting in the Favorites grid
+    /// leaves the tile in place until the grid reloads.
+    @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began, presentedViewController == nil,
+              let path = TileLongPress.focusedCell(in: collectionView), path.section == Section.media.rawValue,
+              listing.media.indices.contains(path.item), let cell = collectionView.cellForItem(at: path) else { return }
+        let photo = listing.media[path.item]
+        let toggle = { [weak self] in
+            guard let listing = self?.listing, let index = listing.media.firstIndex(where: { $0.ref == photo.ref })
+            else { return }
+            listing.setFavorite(!photo.isFavorite, at: index)
+        }
+        let action = photo.isFavorite
+            ? TileMenuAction(title: "Unfavorite", systemImage: "heart.slash", handler: toggle)
+            : TileMenuAction(title: "Favorite", systemImage: "heart", handler: toggle)
+        present(TileMenuPopupViewController(sections: [[action]], sourceFrame: cell.convert(cell.bounds, to: nil)),
+                animated: false)
     }
 
     // MARK: - Viewer
@@ -316,7 +343,8 @@ extension PhotoGridViewController: UICollectionViewDataSource {
                         at indexPath: IndexPath) -> UICollectionReusableView {
         let header = collectionView.dequeueReusableSupplementaryView(
             ofKind: kind, withReuseIdentifier: Self.headerKind, for: indexPath) as! PhotoGridHeaderView
-        header.configure(title: title, buttons: [slideshowButton, shuffleButton, sortButton, showButton])
+        let buttons = [slideshowButton, shuffleButton, sortButton, showButton]
+        header.configure(title: title, buttons: onOpenFavorites == nil ? buttons : buttons + [favoritesButton])
         return header
     }
 }

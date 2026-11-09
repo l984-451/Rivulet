@@ -193,6 +193,8 @@ struct MacRootView: View {
                         case .library(let library): libraryPage(library)
                         case .photos(let library, let folder, let title):
                             MacPhotoLibraryView(library: library, folder: folder, title: title)
+                        case .photoFavorites(let library):
+                            MacPhotoLibraryView(library: library, favorites: true, title: String(localized: "Favorites"))
                         case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
                         case .liveRecordings: MacLiveRecordingsView()
                         }

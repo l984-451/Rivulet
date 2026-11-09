@@ -7,6 +7,8 @@ import SwiftUI
 struct IOSPhotoLibraryView: View {
     let library: MediaLibrary
     var folder: PhotoItem?
+    /// The root's flat, library-wide grid of favorites.
+    var favorites = false
     var showsAccount = false
     /// Played once the viewer has finished dismissing.
     @State private var pendingClip: PhotoItem?
@@ -27,11 +29,13 @@ struct IOSPhotoLibraryView: View {
         var running = false
     }
 
-    init(library: MediaLibrary, folder: PhotoItem? = nil, showsAccount: Bool = false) {
+    init(library: MediaLibrary, folder: PhotoItem? = nil, favorites: Bool = false, showsAccount: Bool = false) {
         self.library = library
         self.folder = folder
+        self.favorites = favorites
         self.showsAccount = showsAccount
-        let query = PhotoPreferences.query(for: library)
+        var query = PhotoPreferences.query(for: library)
+        query.favoritesOnly = favorites
         _query = State(initialValue: query)
         _model = StateObject(wrappedValue: PhotoListingModel(
             listing: PhotoListing(folder: folder?.ref, query: query, source: PhotoListing.source(for: library))))
@@ -51,13 +55,17 @@ struct IOSPhotoLibraryView: View {
                 ForEach(model.media, id: \.ref) { item in
                     Button { viewing = Start(model: model, item: item) } label: { IOSPhotoTile(item: item) }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(item.isFavorite ? String(localized: "Unfavorite") : String(localized: "Favorite"),
+                                   systemImage: item.isFavorite ? "heart.slash" : "heart") { model.toggleFavorite(item) }
+                        }
                         .onAppear { model.loadMoreIfNeeded(after: item) }
                 }
             }
             if model.isLoading { ProgressView().padding() }
         }
         .overlay { status }
-        .navigationTitle(folder?.title ?? library.title)
+        .navigationTitle(folder?.title ?? (favorites ? String(localized: "Favorites") : library.title))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.listing.loadFirst()?.value }
         .task {
@@ -65,7 +73,8 @@ struct IOSPhotoLibraryView: View {
         }
         .onAppear {
             // Back from a folder, whose Sort or Show may have changed the library's.
-            let saved = PhotoPreferences.query(for: library)
+            var saved = PhotoPreferences.query(for: library)
+            saved.favoritesOnly = favorites
             if saved != query { query = saved; model.listing.query = saved }
         }
         .toolbar {
@@ -75,6 +84,13 @@ struct IOSPhotoLibraryView: View {
                 Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                     .disabled(model.media.isEmpty)
                 optionsMenu
+                if folder == nil, !favorites {
+                    NavigationLink {
+                        IOSPhotoLibraryView(library: library, favorites: true).iosPlexActionHost()
+                    } label: {
+                        Label("Favorites", systemImage: "heart")
+                    }
+                }
             }
             if showsAccount { IOSAccountToolbarItem() }
         }
@@ -234,6 +250,11 @@ struct IOSPhotoTile: View {
             .overlay {
                 if item.kind == .clip {
                     Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white).shadow(radius: 2)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if item.isFavorite {
+                    Image(systemName: "heart.fill").font(.caption).foregroundStyle(.white).shadow(radius: 2).padding(6)
                 }
             }
             .clipped()

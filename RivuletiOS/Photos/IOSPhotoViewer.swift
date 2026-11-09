@@ -107,6 +107,13 @@ struct IOSPhotoViewer: View {
             }
             .accessibilityLabel("Close")
             Spacer()
+            if let current {
+                Button { model.toggleFavorite(current) } label: {
+                    Image(systemName: current.isFavorite ? "heart.fill" : "heart").font(.body.weight(.semibold))
+                        .padding(12).background(.ultraThinMaterial, in: Circle())
+                }
+                .accessibilityLabel(current.isFavorite ? Text("Unfavorite") : Text("Favorite"))
+            }
             Button { slideshow.toggle() } label: {
                 Image(systemName: slideshow ? "pause.fill" : "play.fill").font(.body.weight(.semibold)).padding(12)
                     .background(.ultraThinMaterial, in: Circle())

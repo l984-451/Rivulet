@@ -20,6 +20,8 @@ final class PhotoListing {
         case reloaded
         case appended(folders: Range<Int>, media: Range<Int>)
         case failed
+        /// One photo changed in place (its favorite).
+        case updated(media: Int)
     }
 
     static let pageSize = 200
@@ -67,6 +69,7 @@ final class PhotoListing {
         self.currentQuery = query
         self.savedQuery = savedQuery
         self.source = source
+        PhotoFavoriteWrites.shared.register(self)
     }
 
     @discardableResult
@@ -105,7 +108,15 @@ final class PhotoListing {
                 // ponytail: shuffles each page as it lands, so early pages lead; load every id first if users notice.
                 let clientShuffle = query.shuffled && !provider.shufflesPhotosOnServer
                 if !query.shuffled { folders += result.folders.filter { seen.insert($0.ref).inserted } }
-                media += (clientShuffle ? result.media.shuffled() : result.media).filter { seen.insert($0.ref).inserted }
+                let pending = PhotoFavoriteWrites.shared.pending
+                media += (clientShuffle ? result.media.shuffled() : result.media)
+                    .filter { seen.insert($0.ref).inserted }
+                    .map { item in
+                        // A write the server may not have applied yet outranks what the page says.
+                        var item = item
+                        if let favorite = pending[item.ref] { item.isFavorite = favorite }
+                        return item
+                    }
                 nextPage = result.nextPage
                 isLoading = false
                 onChange?(.appended(folders: firstFolder..<folders.count, media: firstMedia..<media.count))
@@ -116,5 +127,64 @@ final class PhotoListing {
                 onChange?(.failed)
             }
         }
+    }
+
+    /// Sets one photo's favorite at once on every listing, and puts it back if the server refuses.
+    /// The returned task ends once every write queued for the photo has settled.
+    @discardableResult
+    func setFavorite(_ favorite: Bool, at index: Int) -> Task<Void, Never>? {
+        guard media.indices.contains(index), media[index].isFavorite != favorite,
+              let provider = source()?.provider else { return nil }
+        let item = media[index]
+        return PhotoFavoriteWrites.shared.set(favorite, for: item.ref, was: item.isFavorite, provider: provider)
+    }
+
+    /// A favorite changed somewhere: the photo stays where it is, even in a Favorites grid.
+    fileprivate func applyFavorite(_ favorite: Bool, ref: MediaItemRef) {
+        guard let index = media.firstIndex(where: { $0.ref == ref }), media[index].isFavorite != favorite else { return }
+        media[index].isFavorite = favorite
+        onChange?(.updated(media: index))
+    }
+}
+
+/// Favorite writes for every listing: one request at a time per photo, the latest choice winning,
+/// and every live listing holding the photo told of each change.
+@MainActor
+final class PhotoFavoriteWrites {
+    static let shared = PhotoFavoriteWrites()
+    private let listings = NSHashTable<PhotoListing>.weakObjects()
+    /// The latest choice per photo the server has not confirmed yet.
+    private(set) var pending: [MediaItemRef: Bool] = [:]
+    private var running: [MediaItemRef: Task<Void, Never>] = [:]
+
+    func register(_ listing: PhotoListing) { listings.add(listing) }
+
+    /// `current` is the server's value when no write for the photo is running.
+    func set(_ favorite: Bool, for ref: MediaItemRef, was current: Bool,
+             provider: any PhotoProvider) -> Task<Void, Never> {
+        pending[ref] = favorite
+        broadcast(favorite, ref: ref)
+        if let task = running[ref] { return task }
+        let task = Task {
+            var onServer = current
+            while let wanted = pending[ref], wanted != onServer {
+                do {
+                    try await provider.setPhotoFavorite(wanted, for: ref)
+                    onServer = wanted
+                } catch {
+                    // A newer choice is tried next; otherwise this one is put back.
+                    if pending[ref] == wanted { pending[ref] = nil }
+                }
+            }
+            pending[ref] = nil
+            running[ref] = nil
+            broadcast(onServer, ref: ref)
+        }
+        running[ref] = task
+        return task
+    }
+
+    private func broadcast(_ favorite: Bool, ref: MediaItemRef) {
+        for listing in listings.allObjects { listing.applyFavorite(favorite, ref: ref) }
     }
 }

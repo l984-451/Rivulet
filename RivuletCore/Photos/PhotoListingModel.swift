@@ -35,6 +35,12 @@ final class PhotoListingModel: ObservableObject {
         listing.loadMore()
     }
 
+    /// Flips `item`'s favorite, at once on every view of this listing.
+    func toggleFavorite(_ item: PhotoItem) {
+        guard let index = listing.media.firstIndex(where: { $0.ref == item.ref }) else { return }
+        listing.setFavorite(!listing.media[index].isFavorite, at: index)
+    }
+
     private func mirror() {
         folders = listing.folders
         media = listing.media

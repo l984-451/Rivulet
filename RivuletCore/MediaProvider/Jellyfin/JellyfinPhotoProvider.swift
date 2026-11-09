@@ -121,6 +121,10 @@ extension JellyfinProvider: PhotoProvider {
         return items
     }
 
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await setFavorite(favorite, for: ref)
+    }
+
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         let parent = URLQueryItem(name: "parentId", value: folder?.itemID ?? library.id)
         func map(_ result: JFQueryResult?) -> [PhotoItem] {
@@ -142,7 +146,9 @@ extension JellyfinProvider: PhotoProvider {
             ])
         }
         async let folderList = folders()
-        let media: JFQueryResult = try await client.get("Items", [parent] + Self.photoQueryItems(query, folder: folder, page: page))
+        // `userId` brings each photo's UserData (its favorite); `filters=IsFavorite` without it is a 500 on 12.1.
+        let user = URLQueryItem(name: "userId", value: userID)
+        let media: JFQueryResult = try await client.get("Items", [parent, user] + Self.photoQueryItems(query, folder: folder, page: page))
         let next = Page(offset: page.offset + page.limit, limit: page.limit)
         return PhotoPage(folders: map(try await folderList).filter { $0.kind == .folder },
                          media: map(media).filter { $0.kind != .folder },

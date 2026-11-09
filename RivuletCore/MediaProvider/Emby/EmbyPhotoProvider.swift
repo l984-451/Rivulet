@@ -115,6 +115,10 @@ extension EmbyProvider: PhotoProvider {
         return items
     }
 
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await setFavorite(favorite, for: ref)
+    }
+
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         let parent = URLQueryItem(name: "ParentId", value: folder?.itemID ?? library.id)
         func map(_ result: EmbyQueryResult?) -> [PhotoItem] {

@@ -44,11 +44,21 @@ final class PhotoLibraryViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
-    private func push(folder: MediaItemRef?, title: String) {
+    /// `favorites` is the root's flat, library-wide grid of favorites, with no albums.
+    private func push(folder: MediaItemRef?, title: String, favorites: Bool = false) {
         // Every level of a library opens on the Sort and Show it was last left on.
-        let listing = PhotoListing(folder: folder, savedQuery: PhotoPreferences.query(for:), source: source)
+        let listing = PhotoListing(folder: folder, query: PhotoQuery(favoritesOnly: favorites), savedQuery: {
+            var query = PhotoPreferences.query(for: $0)
+            query.favoritesOnly = favorites
+            return query
+        }, source: source)
         let grid = PhotoGridViewController(title: title, listing: listing)
         grid.onOpenFolder = { [weak self] in self?.push(folder: $0.ref, title: $0.title) }
+        if folder == nil, !favorites {
+            grid.onOpenFavorites = { [weak self] in
+                self?.push(folder: nil, title: String(localized: "Favorites"), favorites: true)
+            }
+        }
         addChild(grid)
         grid.view.frame = view.bounds
         grid.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]

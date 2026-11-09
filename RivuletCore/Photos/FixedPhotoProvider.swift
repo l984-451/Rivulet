@@ -22,4 +22,8 @@ nonisolated struct FixedPhotoProvider: PhotoProvider {
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         PhotoPage(folders: [], media: query.shuffled ? items.shuffled() : items, nextPage: nil)
     }
+
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        throw MediaProviderError.backendSpecific(underlying: "favorites not supported")
+    }
 }

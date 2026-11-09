@@ -107,6 +107,10 @@ struct MacPhotoViewer: View {
                 Spacer()
                 if let item { Text(verbatim: item.title).lineLimit(1).foregroundStyle(.white.opacity(0.8)) }
                 Spacer()
+                if let item {
+                    Button { model.toggleFavorite(item) } label: { Image(systemName: item.isFavorite ? "heart.circle.fill" : "heart.circle") }
+                        .help(item.isFavorite ? Text("Unfavorite") : Text("Favorite"))
+                }
                 Button { slideshow.toggle() } label: { Image(systemName: slideshow ? "pause.circle.fill" : "play.circle.fill") }
                     .help(slideshow ? "Pause Slideshow" : "Start Slideshow")
             }

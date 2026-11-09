@@ -8,6 +8,8 @@ import SwiftUI
 struct MacPhotoLibraryView: View {
     let library: MediaLibrary
     let folder: MediaItemRef?
+    /// The root's flat, library-wide grid of favorites.
+    let favorites: Bool
     let title: String
     @Environment(\.macOpen) private var open
     @StateObject private var model: PhotoListingModel
@@ -21,11 +23,13 @@ struct MacPhotoLibraryView: View {
         var running = false
     }
 
-    init(library: MediaLibrary, folder: MediaItemRef? = nil, title: String) {
+    init(library: MediaLibrary, folder: MediaItemRef? = nil, favorites: Bool = false, title: String) {
         self.library = library
         self.folder = folder
+        self.favorites = favorites
         self.title = title
-        let query = PhotoPreferences.query(for: library)
+        var query = PhotoPreferences.query(for: library)
+        query.favoritesOnly = favorites
         _query = State(initialValue: query)
         _model = StateObject(wrappedValue: PhotoListingModel(
             listing: PhotoListing(folder: folder, query: query, source: PhotoListing.source(for: library))))
@@ -40,7 +44,8 @@ struct MacPhotoLibraryView: View {
             .task { if model.media.isEmpty, model.folders.isEmpty, !model.isLoading { model.listing.loadFirst() } }
             .onAppear {
                 // Back from a folder, whose Sort or Show may have changed the library's.
-                let saved = PhotoPreferences.query(for: library)
+                var saved = PhotoPreferences.query(for: library)
+                saved.favoritesOnly = favorites
                 if saved != query { query = saved; model.listing.query = saved }
             }
             .overlay {
@@ -57,6 +62,9 @@ struct MacPhotoLibraryView: View {
                         Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                             .disabled(model.media.isEmpty)
                         optionsMenu
+                        if folder == nil, !favorites {
+                            Button("Favorites", systemImage: "heart") { open(.photoFavorites(library)) }
+                        }
                     }
                 }
             }
@@ -188,9 +196,18 @@ struct MacPhotoLibraryView: View {
                             .shadow(radius: 4)
                     }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    if item.isFavorite {
+                        Image(systemName: "heart.fill").foregroundStyle(.white).shadow(radius: 2).padding(8)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(item.isFavorite ? String(localized: "Unfavorite") : String(localized: "Favorite"),
+                   systemImage: item.isFavorite ? "heart.slash" : "heart") { model.toggleFavorite(item) }
+        }
         .macTileHover()
         .help(item.title)
         .onAppear { model.loadMoreIfNeeded(after: item) }

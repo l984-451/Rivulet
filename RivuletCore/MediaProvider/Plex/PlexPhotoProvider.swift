@@ -133,6 +133,14 @@ extension PlexProvider: PhotoProvider {
         return items
     }
 
+    /// A photo favorite is `rating=10`; clearing sends `-1`, which drops any rating set elsewhere.
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await plexCall {
+            try await networkManager.setRating(serverURL: serverURL, authToken: authToken,
+                                               ratingKey: ref.itemID, rating: favorite ? 10 : nil)
+        }
+    }
+
     /// One level: its albums once (type 14), then its photos and clips (types 13, 12), paged.
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         try await plexCall {

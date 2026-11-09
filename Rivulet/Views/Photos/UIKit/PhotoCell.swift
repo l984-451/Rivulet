@@ -26,6 +26,7 @@ final class PhotoCell: UICollectionViewCell {
 
     private let poster = TVPosterView()
     private let clipBadge = UIImageView(image: UIImage(systemName: "play.fill"))
+    private let favoriteBadge = UIImageView(image: UIImage(systemName: "heart.fill"))
     private var imageTask: Task<Void, Never>?
     private var imageURL: URL?
 
@@ -40,13 +41,15 @@ final class PhotoCell: UICollectionViewCell {
         poster.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(poster)
 
-        clipBadge.tintColor = .white
-        clipBadge.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-        clipBadge.layer.shadowOpacity = 0.6
-        clipBadge.layer.shadowRadius = 4
-        clipBadge.layer.shadowOffset = .zero
-        clipBadge.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(clipBadge)
+        for badge in [clipBadge, favoriteBadge] {
+            badge.tintColor = .white
+            badge.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
+            badge.layer.shadowOpacity = 0.6
+            badge.layer.shadowRadius = 4
+            badge.layer.shadowOffset = .zero
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(badge)
+        }
 
         let inset = (Self.tile.frame.width - Self.tile.art.width) / 2 + 14
         NSLayoutConstraint.activate([
@@ -54,7 +57,9 @@ final class PhotoCell: UICollectionViewCell {
             poster.topAnchor.constraint(equalTo: contentView.topAnchor),
             clipBadge.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: inset),
             clipBadge.topAnchor.constraint(equalTo: contentView.topAnchor,
-                                           constant: Self.tile.frame.height - inset - 36)
+                                           constant: Self.tile.frame.height - inset - 36),
+            favoriteBadge.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -inset),
+            favoriteBadge.centerYAnchor.constraint(equalTo: clipBadge.centerYAnchor)
         ])
     }
 
@@ -63,6 +68,7 @@ final class PhotoCell: UICollectionViewCell {
 
     func configure(_ item: PhotoItem) {
         clipBadge.isHidden = item.kind != .clip
+        favoriteBadge.isHidden = !item.isFavorite
         poster.title = item.kind == .folder ? item.title : nil
         poster.subtitle = item.kind == .folder ? item.childCount.map { String(localized: "\($0) items") } : nil
         applyFocusAppearance(isFocused)

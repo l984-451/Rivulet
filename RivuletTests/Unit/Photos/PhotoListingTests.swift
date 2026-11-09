@@ -12,6 +12,11 @@ private final class StubPhotoProvider: PhotoProvider, @unchecked Sendable {
     /// Held until the test lets the page through.
     var gate: CheckedContinuation<Void, Never>?
     var holds = false
+    var favorites: [(Bool, MediaItemRef)] = []
+    var favoriteError: Error?
+    /// Each favorite write waits here while `holdsFavorites`.
+    var favoriteGate: CheckedContinuation<Void, Never>?
+    var holdsFavorites = false
 
     var photoSorts: [PhotoQuery.Sort] { [.dateTaken] }
     var hasPhotoLocations: Bool { false }
@@ -22,6 +27,12 @@ private final class StubPhotoProvider: PhotoProvider, @unchecked Sendable {
         let result = pages[page.offset] ?? .failure(MediaProviderError.notFound)
         if holds { await withCheckedContinuation { gate = $0 } }
         return try result.get()
+    }
+
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        favorites.append((favorite, ref))
+        if holdsFavorites { await withCheckedContinuation { favoriteGate = $0 } }
+        if let favoriteError { throw favoriteError }
     }
 }
 
@@ -196,5 +207,97 @@ final class PhotoListingTests: XCTestCase {
         XCTAssertEqual(listing.query, chosen)
         XCTAssertFalse(provider.queries.isEmpty)
         XCTAssertTrue(provider.queries.allSatisfy { $0 == chosen }, "the saved sort never applied")
+    }
+
+    func test_setFavoriteUpdatesThenRollsBack() async {
+        provider.pages = [0: page(media: ["a", "b"], next: nil)]
+        provider.favoriteError = MediaProviderError.unreachable
+        let listing = listing()
+        await listing.loadFirst()?.value
+        changes = []
+
+        let task = listing.setFavorite(true, at: 1)
+        XCTAssertTrue(listing.media[1].isFavorite, "the tile changes before the server answers")
+        await task?.value
+        XCTAssertFalse(listing.media[1].isFavorite, "a refused favorite is put back")
+        let updated = changes.compactMap { change -> Int? in
+            if case .updated(let media) = change { return media } else { return nil }
+        }
+        XCTAssertEqual(updated, [1, 1])
+    }
+
+    func test_setFavoriteSucceeds() async {
+        provider.pages = [0: page(media: ["a", "b"], next: nil)]
+        let listing = listing()
+        await listing.loadFirst()?.value
+
+        await listing.setFavorite(true, at: 0)?.value
+        XCTAssertTrue(listing.media[0].isFavorite)
+        XCTAssertEqual(provider.favorites.map(\.0), [true])
+        XCTAssertEqual(provider.favorites.map(\.1), [listing.media[0].ref])
+        XCTAssertNil(listing.setFavorite(true, at: 0), "already a favorite: nothing to send")
+    }
+
+    /// Lets the held favorite write through, and stops holding later ones.
+    private func releaseFavorite() async {
+        while provider.favoriteGate == nil { await Task.yield() }
+        provider.holdsFavorites = false
+        let gate = provider.favoriteGate
+        provider.favoriteGate = nil
+        gate?.resume()
+    }
+
+    func test_reloadDuringAPendingWrite_keepsTheNewState() async {
+        provider.pages = [0: page(media: ["a", "b"], next: nil)]
+        provider.holdsFavorites = true
+        let listing = listing()
+        await listing.loadFirst()?.value
+
+        let task = listing.setFavorite(true, at: 0)
+        await listing.loadFirst()?.value
+        XCTAssertTrue(listing.media[0].isFavorite, "the page predates the write and must not undo it")
+        await releaseFavorite()
+        await task?.value
+        XCTAssertTrue(listing.media[0].isFavorite)
+    }
+
+    func test_onOffOn_endsOnWithoutARollback() async {
+        provider.pages = [0: page(media: ["a"], next: nil)]
+        provider.holdsFavorites = true
+        let listing = listing()
+        await listing.loadFirst()?.value
+        changes = []
+
+        let task = listing.setFavorite(true, at: 0)
+        listing.setFavorite(false, at: 0)
+        listing.setFavorite(true, at: 0)
+        await releaseFavorite()
+        await task?.value
+        XCTAssertTrue(listing.media[0].isFavorite)
+        XCTAssertEqual(provider.favorites.map(\.0), [true], "one write at a time; the last choice was already sent")
+        let updates = changes.filter { if case .updated = $0 { true } else { false } }
+        XCTAssertEqual(updates.count, 3, "on, off, on, and no rollback after")
+    }
+
+    func test_aSecondListingOfTheSamePhoto_updatesOnSuccess() async {
+        provider.pages = [0: page(media: ["a", "b"], next: nil)]
+        let first = listing()
+        let second = PhotoListing(folder: nil, query: PhotoQuery(favoritesOnly: true)) { [provider, library] in
+            (provider, library)
+        }
+        var secondChanges: [PhotoListing.Change] = []
+        second.onChange = { secondChanges.append($0) }
+        await first.loadFirst()?.value
+        await second.loadFirst()?.value
+        secondChanges = []
+
+        await first.setFavorite(true, at: 1)?.value
+        XCTAssertTrue(second.media[1].isFavorite)
+        guard case .updated(let index)? = secondChanges.last else { return XCTFail("no update reported") }
+        XCTAssertEqual(index, 1)
+
+        await second.setFavorite(false, at: 1)?.value
+        XCTAssertFalse(first.media[1].isFavorite)
+        XCTAssertEqual(second.media.count, 2, "unfavoriting leaves the photo in place")
     }
 }

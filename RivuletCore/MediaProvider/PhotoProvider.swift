@@ -21,4 +21,6 @@ protocol PhotoProvider: Sendable {
     /// One page of a library's root (`folder` nil) or of a folder, in `query`'s order.
     /// Folders arrive on the first page only, and only for `query.listsAlbums`.
     func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage
+    /// Marks or clears one photo or clip as a favorite.
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
 }

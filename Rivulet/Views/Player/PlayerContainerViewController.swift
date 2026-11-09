@@ -1357,6 +1357,7 @@ class PlayerContainerViewController: UIViewController {
             .sink { [weak vm] _ in
                 Task { await vm?.loadInsightsCast() }
                 Task { await vm?.loadInsightsTrivia() }
+                Task { await vm?.refreshSubtitleSearchAvailability() }
             }
             .store(in: &cancellables)
 
@@ -1386,7 +1387,7 @@ class PlayerContainerViewController: UIViewController {
             let list = CardTrackListView.subtitleMenu(
                     tracks: vm.subtitleMenuTracks,
                     selectedTrackId: vm.currentSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
-                    actions: vm.canSearchSubtitles ? [
+                    actions: vm.subtitleSearchAvailable ? [
                         CardActionConfig(title: String(localized: "Search for Subtitles")) { [weak self] row in
                             self?.searchSubtitles(from: row)
                         },
@@ -1577,13 +1578,8 @@ class PlayerContainerViewController: UIViewController {
                 ? [CardTrackListView.Row(title: results == nil ? String(localized: "Search Failed") : String(localized: "No Subtitles Found"),
                                          subtitle: nil, trackId: nil, isSelected: false)]
                 : found.enumerated().map { index, result in
-                    CardTrackListView.Row(
-                        title: result.title ?? result.displayTitle ?? String(localized: "Subtitle"),
-                        subtitle: [result.language, result.codec?.uppercased(),
-                                   result.hearingImpaired == true ? "SDH" : nil,
-                                   result.forced == true ? String(localized: "Forced") : nil]
-                            .compactMap { $0 }.joined(separator: " • "),
-                        trackId: index, isSelected: false)
+                    CardTrackListView.Row(title: result.displayTitle, subtitle: result.detail,
+                                          trackId: index, isSelected: false)
                 }
             _ = self.presentRailPanel(
                 content: CardTrackListView(header: String(localized: "Search Results"), rows: rows, onSelect: { [weak vm, weak self] index in

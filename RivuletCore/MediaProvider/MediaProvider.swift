@@ -163,6 +163,15 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Default: not an episode, since clearing an episode's position moves it to Next Up.
     func canRemoveFromContinueWatching(_ item: MediaItem) -> Bool
 
+    // MARK: - Subtitle search
+
+    /// Whether this account may search the server's subtitle providers. Default: no, which hides the menu row.
+    func canSearchSubtitles() async -> Bool
+    /// Subtitles the server's providers offer for the item; `language` is ISO 639-1.
+    func searchSubtitles(for ref: MediaItemRef, language: String) async throws -> [SubtitleSearchResult]
+    /// Saves a result next to the media. The server lists it as a new external stream shortly after.
+    func downloadSubtitle(_ result: SubtitleSearchResult, for ref: MediaItemRef) async throws
+
     // MARK: - Deletion
 
     /// Whether this account may delete media from the server. Default: no.
@@ -301,6 +310,11 @@ extension MediaProvider {
     func canDownloadMedia() async -> Bool { false }
     func downloadSource(for itemRef: MediaItemRef, sourceID: String?) async throws -> DownloadSource {
         throw MediaProviderError.backendSpecific(underlying: "downloads not supported")
+    }
+    func canSearchSubtitles() async -> Bool { false }
+    func searchSubtitles(for ref: MediaItemRef, language: String) async throws -> [SubtitleSearchResult] { [] }
+    func downloadSubtitle(_ result: SubtitleSearchResult, for ref: MediaItemRef) async throws {
+        throw MediaProviderError.backendSpecific(underlying: "subtitle search not supported")
     }
     func canDeleteMedia() async -> Bool { false }
     func deleteConfirmation(for item: MediaItem) async -> String { standardDeleteConfirmation(for: item) }

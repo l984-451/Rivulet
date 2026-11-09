@@ -455,7 +455,7 @@ final class PlexSession: ObservableObject {
 
 nonisolated struct PlexPlaybackRequest: Identifiable, Sendable {
     var id: String { item.id }
-    let item: PlexMetadata
+    var item: PlexMetadata
     let url: URL
     let headers: [String: String]
     let markers: [PlexMarker]

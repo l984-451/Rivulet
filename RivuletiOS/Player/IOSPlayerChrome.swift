@@ -55,6 +55,8 @@ struct IOSPlayerChromeActions {
     var selectQuality: (StreamingQuality) -> Void = { _ in }
     var selectAudio: (Int) -> Void = { _ in }
     var selectSubtitle: (Int?) -> Void = { _ in }
+    /// Opens the subtitle search; nil hides the menu entry.
+    var searchSubtitles: (() -> Void)?
     /// Steps the audio delay by `AudioSync.stepMs` units; nil hides it.
     var stepAudioDelay: ((Int) -> Void)?
     var pictureInPicture: () -> Void = {}
@@ -535,6 +537,11 @@ struct IOSPlayerChrome<Video: View, Trailing: View>: View {
                 }
             }
             .pickerStyle(.inline)
+            if let search = actions.searchSubtitles {
+                Button { interact { search() } } label: {
+                    Label("Search for Subtitles", systemImage: "magnifyingglass")
+                }
+            }
             subtitleHeightControls
         } label: {
             Image(systemName: selectedSubtitleID == nil ? "captions.bubble" : "captions.bubble.fill")

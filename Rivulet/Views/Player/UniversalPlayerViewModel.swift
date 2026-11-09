@@ -4605,65 +4605,96 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Subtitle Search
 
-    /// PMS lets any non-restricted user search and download, not just the admin (measured).
-    var canSearchSubtitles: Bool {
-        guard case .plex = source else { return false }
-        return metadata.ratingKey != nil && PlexUserProfileManager.shared.selectedUser?.restricted != true
+    /// Whether the menu offers "Search for Subtitles": the server's rights and providers decide.
+    @Published private(set) var subtitleSearchAvailable = false
+
+    private var subtitleSearcher: (any SubtitleSearching)? {
+        switch source {
+        case .plex:
+            metadata.ratingKey.map { PlexSubtitleSearch(serverURL: serverURL, token: authToken, ratingKey: $0) }
+        case .provider(let playback):
+            ProviderSubtitleSearch(provider: playback.provider, ref: playback.item.ref)
+        }
     }
 
-    /// The subtitle preference's language, else the device's, as ISO 639-1.
-    private var subtitleSearchLanguage: String {
-        let device = Locale.LanguageCode(TrackLanguage.device).identifier(.alpha2) ?? "en"
-        guard let preferred = TrackIntentStore.effectiveSubtitleIntent.language else { return device }
-        let code = TrackLanguage.normalize(preferred)
-        return code.isEmpty ? device : Locale.LanguageCode(code).identifier(.alpha2) ?? device
+    func refreshSubtitleSearchAvailability() async {
+        let generation = itemGeneration
+        let available = await subtitleSearcher?.isAvailable() ?? false
+        guard generation == itemGeneration else { return }
+        subtitleSearchAvailable = available
     }
 
-    func searchSubtitles() async throws -> [PlexStream] {
-        guard let ratingKey = metadata.ratingKey else { return [] }
-        return try await PlexNetworkManager.shared.searchSubtitles(
-            serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, language: subtitleSearchLanguage)
+    func searchSubtitles() async throws -> [SubtitleSearchResult] {
+        let language = SubtitleSearchLanguage.alpha2(
+            preferred: TrackIntentStore.effectiveSubtitleIntent.language, device: TrackLanguage.device)
+        return try await subtitleSearcher?.search(language: language) ?? []
     }
 
     /// Downloads `result`, waits for the server to list it, then reloads at the
-    /// playhead with it on. A reload re-registers every sidecar in Plex's order,
+    /// playhead with it on. A reload re-registers every sidecar in the server's order,
     /// which `TrackMerge` pairs on; adding one to the live engine would not.
-    func installSubtitle(_ result: PlexStream) async {
-        guard let ratingKey = metadata.ratingKey, let resultKey = result.key else { return }
-        let network = PlexNetworkManager.shared
+    func installSubtitle(_ result: SubtitleSearchResult) async {
+        guard let searcher = subtitleSearcher else { return }
         let generation = itemGeneration
-        let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         var tracks = currentPlexTrackIDs()
+        let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
         do {
-            try await network.downloadSubtitle(
-                serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, resultKey: resultKey)
-            for _ in 0..<10 {
-                try await Task.sleep(for: .seconds(1.5))
-                let fresh = try await network.getMetadata(serverURL: serverURL, authToken: authToken, ratingKey: ratingKey)
-                guard generation == itemGeneration else { return }
-                let media = VersionRanking.select(playingMediaID.map(VersionChoice.source) ?? .best,
-                                                  in: fresh.Media ?? []).media
-                guard let added = media.first?.Part?.first?.Stream?.first(where: {
-                    $0.isSubtitle && $0.key != nil && !known.contains($0.id)
-                }) else { continue }
-                metadata.Media = media
-                TrackIntentStore.subtitleIntent = .afterPick(
-                    MediaTrack(from: added), replacing: TrackIntentStore.effectiveSubtitleIntent,
-                    audioLanguage: playingAudioLanguage)
-                tracks.subtitle = .track(added.id)
-                hideCompatibilityNotice()
-                enqueueStreamWork { vm in
-                    await vm.reloadStream(toOriginal: vm.aetherPlayer != nil, reason: "subtitle_download",
-                                          tracks: tracks, restoring: vm.planSnapshot)
-                }
-                return
+            try await searcher.download(result)
+            let arrived: MediaTrack?
+            if let search = searcher as? PlexSubtitleSearch {
+                arrived = try await installedPlexSubtitle(search, known: known, generation: generation)
+            } else if let search = searcher as? ProviderSubtitleSearch {
+                arrived = try await installedProviderSubtitle(search, known: known, generation: generation)
+            } else {
+                arrived = nil
             }
-            showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive"))
+            guard generation == itemGeneration else { return }
+            guard let arrived else { return showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive")) }
+            TrackIntentStore.subtitleIntent = .afterPick(
+                arrived, replacing: TrackIntentStore.effectiveSubtitleIntent, audioLanguage: playingAudioLanguage)
+            tracks.subtitle = .track(arrived.id)
+            hideCompatibilityNotice()
+            enqueueStreamWork { vm in
+                await vm.reloadStream(toOriginal: vm.aetherPlayer != nil, reason: "subtitle_download",
+                                      tracks: tracks, restoring: vm.planSnapshot)
+            }
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
             showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
         }
+    }
+
+    /// Waits for the sidecar to show on the Plex item, then adopts the fresh version list.
+    private func installedPlexSubtitle(_ search: PlexSubtitleSearch, known: Set<Int>, generation: Int) async throws -> MediaTrack? {
+        let network = search.network
+        for _ in 0..<SubtitleArrival.attempts {
+            try await Task.sleep(for: SubtitleArrival.interval)
+            let fresh = try await network.getMetadata(serverURL: serverURL, authToken: authToken, ratingKey: search.ratingKey)
+            guard generation == itemGeneration else { return nil }
+            let media = VersionRanking.select(playingMediaID.map(VersionChoice.source) ?? .best,
+                                              in: fresh.Media ?? []).media
+            guard let added = media.first?.Part?.first?.Stream?.first(where: {
+                $0.isSubtitle && $0.key != nil && !known.contains($0.id)
+            }) else { continue }
+            metadata.Media = media
+            return MediaTrack(from: added)
+        }
+        return nil
+    }
+
+    /// The same for a provider item: its refreshed detail replaces the playing one.
+    private func installedProviderSubtitle(_ search: ProviderSubtitleSearch, known: Set<Int>, generation: Int) async throws -> MediaTrack? {
+        guard case .provider(var playback) = source else { return nil }
+        let sourceID = playback.stream.source.id
+        guard let (detail, trackID) = try await search.detailWithNewSubtitle(sourceID: sourceID, known: known),
+              generation == itemGeneration,
+              let file = detail.mediaSources.first(where: { $0.id == sourceID }) ?? detail.mediaSources.first
+        else { return nil }
+        playback.detail = detail
+        source = .provider(playback)
+        metadata = ProviderPlaybackMetadata.make(detail: detail, source: file, extras: playback.extras)
+        return plexSubtitleTracksFromMetadata().first { $0.id == trackID }
     }
 
     /// Native (AVKit) subtitle picker bridge. Track ids ARE engine indices on

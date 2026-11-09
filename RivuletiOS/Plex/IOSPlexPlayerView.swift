@@ -344,6 +344,59 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     private var plexStreams: [PlexStream] { request.item.Media?.first?.Part?.first?.Stream ?? [] }
 
+    // MARK: - Subtitle search
+
+    /// Whether the Subtitles menu offers a search: the server's rights and providers decide.
+    @Published private(set) var subtitleSearchAvailable = false
+
+    func refreshSubtitleSearch() async {
+        let id = request.id
+        let available = await request.subtitleSearch?.isAvailable() ?? false
+        if id == request.id { subtitleSearchAvailable = available }
+    }
+
+    func makeSubtitleSearch() -> SubtitleSearchModel {
+        SubtitleSearchModel(
+            search: { [weak self] in
+                guard let search = self?.request.subtitleSearch else { return [] }
+                let language = SubtitleSearchLanguage.alpha2(
+                    preferred: TrackIntentStore.effectiveSubtitleIntent.language, device: TrackLanguage.device)
+                return try await search.search(language: language)
+            },
+            install: { [weak self] in await self?.installSubtitle($0) ?? false })
+    }
+
+    /// Downloads a result, waits for the server to list it, then reloads at the playhead with it on.
+    private func installSubtitle(_ result: SubtitleSearchResult) async -> Bool {
+        let previous = request
+        guard let search = previous.subtitleSearch else { return false }
+        let known = Set(plexStreams.filter(\.isSubtitle).map(\.id))
+        let time = player.pendingSeekTarget ?? player.currentTime
+        let audio = isTranscoding ? chosenAudioID : enginePicksAsPlexIDs().audio
+        do {
+            try await search.download(result)
+            guard let (next, id) = try await plex.requestWithNewSubtitle(previous, known: known, at: time),
+                  !Task.isCancelled else { return false }
+            let picks = TrackPicks(audio: audio, subtitle: .track(id))
+            if next.plan != .original { await plex.selectStream(picks, in: next) }
+            if let stream = next.item.Media?.first?.Part?.first?.Stream?.first(where: { $0.id == id }) {
+                TrackIntentStore.subtitleIntent = .afterPick(
+                    MediaTrack(from: stream), replacing: TrackIntentStore.effectiveSubtitleIntent,
+                    audioLanguage: mediaAudio.first { $0.id == selectedAudioID }.flatMap { $0.languageCode ?? $0.language })
+            }
+            reloadTask?.cancel()
+            subtitlesPickedOff = false
+            if let audio { chosenAudioID = audio }
+            chosenSubtitle = .track(id)
+            Task { await plex.stopTranscode(previous) }
+            request = next
+            await load(keepingTransport: true)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// The engine's playing tracks as server stream ids, joined as `TrackMerge` joins them.
     private func enginePicksAsPlexIDs() -> TrackPicks {
         let streams = plexStreams
@@ -688,6 +741,7 @@ private struct IOSPlexPlayerScreen: View {
     @State private var captionStyle = CaptionAppearance.current()
     @State private var showsPlaylist = false
     @State private var showsChapters = false
+    @State private var subtitleSearch: SubtitleSearchModel?
 
     var body: some View {
         let item = session.request.item
@@ -726,6 +780,7 @@ private struct IOSPlexPlayerScreen: View {
                 selectQuality: session.switchQuality,
                 selectAudio: session.selectAudio,
                 selectSubtitle: session.selectSubtitle,
+                searchSubtitles: session.subtitleSearchAvailable ? { subtitleSearch = session.makeSubtitleSearch() } : nil,
                 stepAudioDelay: player.stepAudioDelay,
                 pictureInPicture: controller.startPictureInPicture,
                 toggleMute: { player.setMuted(!player.isMuted) },
@@ -768,6 +823,10 @@ private struct IOSPlexPlayerScreen: View {
         .sheet(isPresented: $showsChapters) {
             IOSPlayerChaptersPane(session: session, currentTime: player.currentTime)
         }
+        .sheet(item: $subtitleSearch) { model in
+            IOSSubtitleSearchPane(model: model)
+        }
+        .task(id: session.request.id) { await session.refreshSubtitleSearch() }
         .sheet(isPresented: $showsPlaylist) {
             if let queue = session.queue {
                 IOSPlayerPlaylistPane(queue: queue) { index in

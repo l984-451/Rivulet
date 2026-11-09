@@ -66,6 +66,18 @@ final class ProviderBackend: PlayerBackend {
         return try await self.request(from: next, startTime: time > 1 ? time : nil, picks: streams)
     }
 
+    func requestWithNewSubtitle(_ request: PlexPlaybackRequest, known: Set<Int>,
+                                at time: TimeInterval) async throws -> (request: PlexPlaybackRequest, trackID: Int)? {
+        guard var playback = request.providerPlayback,
+              let search = request.subtitleSearch as? ProviderSubtitleSearch,
+              let (detail, trackID) = try await search.detailWithNewSubtitle(sourceID: playback.stream.source.id, known: known)
+        else { return nil }
+        playback.detail = detail
+        let picks = TrackPicks(audio: nil, subtitle: .track(trackID))
+        let next = try await playback.reloaded(quality: request.quality, plan: request.plan, at: time, tracks: picks)
+        return (try await self.request(from: next, startTime: time > 1 ? time : nil, picks: picks), trackID)
+    }
+
     /// The player's request for `playback`. A transcode starts on the tracks the saved intents pick
     /// (`picks` when the player made a choice), since a provider burns or selects them at session start.
     private func request(from playback: ProviderPlayback, startTime: TimeInterval?,

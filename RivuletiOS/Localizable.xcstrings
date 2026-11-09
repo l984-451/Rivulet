@@ -2930,6 +2930,22 @@
         }
       }
     },
+    "Downloading Subtitles…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel werden geladen …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Λήψη υποτίτλων…"
+          }
+        }
+      }
+    },
     "Downloads" : {
       "localizations" : {
         "de" : {
@@ -5074,6 +5090,22 @@
         }
       }
     },
+    "No Subtitles Found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Untertitel gefunden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν βρέθηκαν υπότιτλοι"
+          }
+        }
+      }
+    },
     "None" : {
       "localizations" : {
         "de" : {
@@ -7119,12 +7151,76 @@
         }
       }
     },
+    "Search Failed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche fehlgeschlagen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτυχία αναζήτησης"
+          }
+        }
+      }
+    },
+    "Search for Subtitles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Untertiteln suchen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναζήτηση υποτίτλων"
+          }
+        }
+      }
+    },
+    "Search Results" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchergebnisse"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αποτελέσματα αναζήτησης"
+          }
+        }
+      }
+    },
     "Search Your Libraries" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine Mediatheken durchsuchen"
+          }
+        }
+      }
+    },
+    "Searching…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suchen …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναζήτηση…"
           }
         }
       }
@@ -7988,6 +8084,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Στούντιο"
+          }
+        }
+      }
+    },
+    "Subtitle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υπότιτλος"
           }
         }
       }

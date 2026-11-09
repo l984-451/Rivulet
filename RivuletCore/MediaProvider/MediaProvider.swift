@@ -42,6 +42,16 @@ protocol MediaProvider: Sendable, Identifiable {
     func search(_ query: String) async throws -> [MediaItem]
     /// Search limited to these libraries' ids. Default: all libraries.
     func search(_ query: String, inLibraries libraryIDs: [String]) async throws -> [MediaItem]
+    /// The Search page's answer: titles, people, and collection and genre shelves. `libraryIDs` nil
+    /// is every library. Default: `search`'s titles, ranked, and nothing else.
+    func searchHits(_ query: String, inLibraries libraryIDs: [String]?) async throws -> SearchHits
+
+    // MARK: - People
+    /// The person's movies and shows on this server. A person from another server (or TMDB) is
+    /// found by name. Default: none.
+    func filmography(of person: MediaPerson) async throws -> [FilmographyEntry]
+    /// The person's biography as this server holds it. Default: nil.
+    func biography(of person: MediaPerson) async -> String?
 
     /// Provider-curated "related/recommended like this" items, and the
     /// collection the item belongs to when the provider picks one. `kind` is
@@ -260,6 +270,13 @@ extension MediaProvider {
     func search(_ query: String, inLibraries libraryIDs: [String]) async throws -> [MediaItem] {
         try await search(query)
     }
+    func searchHits(_ query: String, inLibraries libraryIDs: [String]?) async throws -> SearchHits {
+        let titles: [MediaItem]
+        if let libraryIDs { titles = try await search(query, inLibraries: libraryIDs) } else { titles = try await search(query) }
+        return SearchHits(titles: SearchRank.ranked(titles, query: query))
+    }
+    func filmography(of person: MediaPerson) async throws -> [FilmographyEntry] { [] }
+    func biography(of person: MediaPerson) async -> String? { nil }
     func collections(in library: MediaLibrary) async throws -> [MediaItem] { [] }
     func sortOptions(for kind: MediaLibrary.LibraryKind) -> [LibrarySortOption] {
         LibrarySortOption.expressible(for: kind)

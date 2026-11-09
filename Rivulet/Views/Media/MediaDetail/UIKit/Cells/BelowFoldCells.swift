@@ -252,6 +252,10 @@ final class CastCollectionCell: UICollectionViewCell {
         castView.configure(person: person, fallbackSubtitle: fallbackSubtitle)
     }
 
+    func configure(name: String, subtitle: String?, imageURL: URL?) {
+        castView.configure(name: name, subtitle: subtitle, imageURL: imageURL)
+    }
+
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         let focused = isSelfFocused(context)
         coordinator.addCoordinatedAnimations { [weak self] in self?.castView.setFocused(focused) }

@@ -107,15 +107,23 @@ struct IOSPlexCastRow: View {
         let name: String
         let role: String?
         let image: URL?
+        let source: MediaPerson
     }
 
     private var people: [Person] {
         guard let detail else { return [] }
-        let cast = detail.cast.prefix(20).map { (name: $0.name, role: $0.role, image: $0.imageURL) }
-        let directors = detail.directors.map { (name: $0.name, role: Optional("Director"), image: $0.imageURL) }
+        let cast = detail.cast.prefix(20).map { (name: $0.name, role: $0.role, image: $0.imageURL, source: $0) }
+        let directors = detail.directors.map { (name: $0.name, role: Optional("Director"), image: $0.imageURL, source: $0) }
         return (cast + directors).filter { !$0.name.isEmpty }.enumerated().map {
-            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image)
+            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image, source: $0.element.source)
         }
+    }
+
+    /// The person on this title's server, so their page reads the right one.
+    private func owned(_ person: MediaPerson) -> MediaPerson {
+        var person = person
+        person.providerID = person.providerID ?? item.ref.providerID
+        return person
     }
 
     var body: some View {
@@ -125,22 +133,25 @@ struct IOSPlexCastRow: View {
                 IOSPlexShelfHeader(title: String(localized: "Cast & Crew"))
             } tile: { person, width in
                 let pixels = Int((width * displayScale).rounded(.up))
-                VStack(spacing: 6) {
-                    IOSPlexImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
-                        .overlay {
-                            if person.image == nil {
-                                Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
+                NavigationLink(value: owned(person.source)) {
+                    VStack(spacing: 6) {
+                        IOSPlexImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
+                            .overlay {
+                                if person.image == nil {
+                                    Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
+                                }
                             }
+                            .frame(width: width, height: width)
+                            .clipShape(Circle())
+                        Text(person.name).font(.caption.weight(.semibold)).lineLimit(1)
+                        if let role = person.role {
+                            Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
-                        .frame(width: width, height: width)
-                        .clipShape(Circle())
-                    Text(person.name).font(.caption.weight(.semibold)).lineLimit(1)
-                    if let role = person.role {
-                        Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    .frame(width: width)
+                    .accessibilityElement(children: .combine)
                 }
-                .frame(width: width)
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.plain)
             }
         }
     }

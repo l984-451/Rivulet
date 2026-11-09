@@ -742,6 +742,14 @@ struct TVSidebarView: View {
     /// DEBUG: jump straight to a library named by the RIVULET_OPEN_LIBRARY env
     /// var once libraries have loaded, so sim iteration skips the sidebar nav.
     private func applyDebugLaunchTab() {
+        #if DEBUG
+        // RIVULET_SEARCH=<query>: the Search tab with that query typed.
+        if !didApplyDebugLaunch, ProcessInfo.processInfo.environment["RIVULET_SEARCH"] != nil {
+            didApplyDebugLaunch = true
+            selectedTab = .search
+            return
+        }
+        #endif
         guard !didApplyDebugLaunch,
               let name = ProcessInfo.processInfo.environment["RIVULET_OPEN_LIBRARY"] else { return }
         #if DEBUG

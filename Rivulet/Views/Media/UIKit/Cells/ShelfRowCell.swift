@@ -16,6 +16,7 @@ final class ShelfRowCell: UICollectionViewCell {
         case poster
         case music   // 1:1 square (same width as poster)
         case live    // Live TV Browse card (16:9, four across)
+        case person  // cast or crew circle (CastCollectionCell), poster width
 
         /// The cell: the lockup's frame, not its resting artwork.
         var tileWidth: CGFloat { tile?.frame.width ?? MediaRowMetrics.liveWidth }
@@ -27,6 +28,7 @@ final class ShelfRowCell: UICollectionViewCell {
             case .continueWatching: return MediaRowMetrics.continueWatching
             case .poster:           return MediaRowMetrics.poster
             case .music:            return MediaRowMetrics.music
+            case .person:           return MediaRowMetrics.person
             case .live:             return nil
             }
         }
@@ -35,7 +37,7 @@ final class ShelfRowCell: UICollectionViewCell {
         var fullCount: Int {
             switch self {
             case .continueWatching: return MediaRowMetrics.cwFullCount
-            case .poster, .music:   return MediaRowMetrics.posterFullCount
+            case .poster, .music, .person: return MediaRowMetrics.posterFullCount
             case .live:             return MediaRowMetrics.liveFullCount
             }
         }
@@ -203,6 +205,7 @@ final class ShelfRowCell: UICollectionViewCell {
         rowCollectionView.register(WatchlistPosterCell.self, forCellWithReuseIdentifier: WatchlistPosterCell.reuseID)
         rowCollectionView.register(PosterSkeletonCell.self, forCellWithReuseIdentifier: PosterSkeletonCell.reuseID)
         rowCollectionView.register(LiveCardCell.self, forCellWithReuseIdentifier: LiveCardCell.reuseID)
+        rowCollectionView.register(CastCollectionCell.self, forCellWithReuseIdentifier: CastCollectionCell.reuseID)
 
         contentView.addSubview(headerLabel)
         contentView.addSubview(rowCollectionView)
@@ -565,7 +568,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
             switch tileKind {
             case .continueWatching: layout = .continueWatching
             case .music: layout = .music
-            case .poster, .live: layout = .poster
+            case .poster, .live, .person: layout = .poster
             }
             cell.configure(layout: layout)
             return cell

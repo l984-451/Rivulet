@@ -88,6 +88,10 @@ enum MediaRowMetrics {
 
     /// 1:1 square for music (artist/album/track): the poster's grid column.
     static let music = Tile(art: CGSize(width: poster.art.width, height: poster.art.width))
+
+    /// A cast or crew circle over name and subtitle (`CastCell`), the detail page's cast row.
+    /// The photo's focus effect is the system's, so the frame is the circle with no growth.
+    static let person = Tile(art: CGSize(width: poster.art.width, height: 355), growth: .zero)
     static let musicWidth = music.frame.width
     static let musicHeight = music.frame.height
 

@@ -369,14 +369,14 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     }
 
     func test_searchError_onlyWhenNothingCameBack() {
-        let down: Result<[PlexMetadata], Error> = .failure(URLError(.timedOut))
-        let found: Result<[MediaItem], Error> = .success([JellyfinFixtures.mediaItem("m1")])
-        let none: Result<[MediaItem], Error> = .success([])
+        let down: Result<Bool, Error> = .failure(URLError(.timedOut))
+        let found: Result<Bool, Error> = .success(true)
+        let none: Result<Bool, Error> = .success(false)
         XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: found),
                      "one server down must not hide the other's results")
         XCTAssertNotNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: none),
                         "'No results' would be a lie while a server is down")
-        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success([]), otherServers: none))
+        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success(false), otherServers: none))
     }
 
     // MARK: - Home hero

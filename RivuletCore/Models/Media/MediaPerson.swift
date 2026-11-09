@@ -21,4 +21,6 @@ struct MediaPerson: Hashable, Identifiable, Sendable {
     var titleTmdbId: Int? = nil       // originating title's TMDB id (for actor->TMDB resolution)
     var titleIsMovie: Bool = true     // originating title type (movie vs show)
     var backdropURL: URL? = nil       // backdrop of the originating title (for person detail page background)
+    /// The server `id` belongs to; nil for a person from TMDB, whom a server finds by name.
+    var providerID: String? = nil
 }

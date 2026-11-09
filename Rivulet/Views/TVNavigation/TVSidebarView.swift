@@ -8,6 +8,7 @@
 //  Main tvOS navigation state, hosting the UIKit shell (RootShellViewController)
 //
 
+import Combine
 import SwiftUI
 import os.log
 import Sentry
@@ -327,19 +328,21 @@ struct TVSidebarView: View {
             // Start background preloading of Live TV data (low priority)
             liveTVDataStore.startBackgroundPreload()
         }
-        .onChange(of: deepLinkHandler.pendingPlayback) { _, playback in
-            guard let playback else { return }
+        // onReceive, not onChange: with a player presented over the shell, onChange never
+        // runs, so a link opened over a player was only seen after the player closed.
+        .onReceive(deepLinkHandler.$pendingPlayback.compactMap { $0 }.receive(on: DispatchQueue.main)) { playback in
+            guard deepLinkHandler.pendingPlayback != nil else { return }  // already delivered
             deepLinkHandler.pendingPlayback = nil
             playForDeepLink(playback.metadata, startOffset: playback.startOffset)
         }
         // Handle detail deep links from Siri search results
-        .onChange(of: deepLinkHandler.pendingDetail) { _, metadata in
-            guard let metadata else { return }
+        .onReceive(deepLinkHandler.$pendingDetail.compactMap { $0 }.receive(on: DispatchQueue.main)) { metadata in
+            guard deepLinkHandler.pendingDetail != nil else { return }  // already delivered
             deepLinkHandler.pendingDetail = nil
             presentDetailForDeepLink(metadata)
         }
-        .onChange(of: deepLinkHandler.pendingProviderLink) { _, link in
-            guard let link else { return }
+        .onReceive(deepLinkHandler.$pendingProviderLink.compactMap { $0 }.receive(on: DispatchQueue.main)) { link in
+            guard deepLinkHandler.pendingProviderLink != nil else { return }  // already delivered
             deepLinkHandler.pendingProviderLink = nil
             presentReplacingStack { top in
                 switch link.action {

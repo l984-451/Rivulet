@@ -106,10 +106,12 @@ enum TileLongPress {
 
 /// Where the tile menu sits: beside the tile, right of it when there is room. Top edges line up, or,
 /// when the panel would run off the bottom, bottom edges, so it grows upward like the system menu.
+/// A panel taller than the safe area is cut to it; the popup scrolls its rows.
 enum TileMenuPlacement {
-    static func place(panel: CGSize, beside tile: CGRect?, in bounds: CGRect)
+    static func place(panel fullPanel: CGSize, beside tile: CGRect?, in bounds: CGRect)
         -> (frame: CGRect, anchor: CGPoint) {
         let safe = bounds.insetBy(dx: 80, dy: 50)
+        let panel = CGSize(width: fullPanel.width, height: min(fullPanel.height, safe.height))
         let gap: CGFloat = 16
         guard let tile else {
             let origin = CGPoint(x: bounds.midX - panel.width / 2, y: bounds.midY - panel.height / 2)
@@ -204,12 +206,22 @@ final class TileMenuPopupViewController: UIViewController {
         panel.layer.cornerRadius = 50
         panel.layer.cornerCurve = .continuous
         panel.clipsToBounds = true
-        panel.contentView.addSubview(stack)
+        // The focus engine scrolls this when a menu is taller than the screen.
+        let scroll = UIScrollView()
+        scroll.showsVerticalScrollIndicator = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        panel.contentView.addSubview(scroll)
+        scroll.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: panel.contentView.topAnchor, constant: panelInset),
-            stack.leadingAnchor.constraint(equalTo: panel.contentView.leadingAnchor, constant: panelInset),
-            stack.trailingAnchor.constraint(equalTo: panel.contentView.trailingAnchor, constant: -panelInset),
-            stack.bottomAnchor.constraint(equalTo: panel.contentView.bottomAnchor, constant: -panelInset),
+            scroll.topAnchor.constraint(equalTo: panel.contentView.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: panel.contentView.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: panel.contentView.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: panel.contentView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: panelInset),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -panelInset),
+            stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: panelInset),
+            stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -panelInset),
+            stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -panelInset * 2),
         ])
 
         // Panel size: rows + dividers, wide enough for the longest title. A

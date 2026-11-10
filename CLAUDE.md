@@ -1127,6 +1127,11 @@ updates as the user moves focus between rows.
 ### Image Loading
 
 UIKit surfaces load remote images through `ImageCacheManager` (Music: `MusicChrome.loadArtwork`).
+`.thumb`, the default tier, asks the server for a copy fitted inside 900 px (`ArtworkSizing` in
+RivuletCore: the Plex photo transcoder at quality 95, `MaxWidth`/`MaxHeight` on Jellyfin and Emby)
+and falls back to the file itself when the server will not size it. `.full` and `.logo` download
+the file. So a `.thumb` load does not warm a later `.full` read of the same artwork: call
+`warmOriginal` for that. Measured on PMS 1.43: 39 posters were 37.9 MB as files and 8.7 MB sized.
 The remaining SwiftUI views use `CachedAsyncImage`:
 ```swift
 CachedAsyncImage(url: imageURL) { phase in

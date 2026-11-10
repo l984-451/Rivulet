@@ -1102,8 +1102,12 @@ final class PreviewCarouselViewController: UIViewController {
         let prefetchIndex = newIndex + direction * 2
         if items.indices.contains(prefetchIndex) {
             let item = items[prefetchIndex]
-            for url in [item.artwork.backdrop ?? item.artwork.poster, item.artwork.logo].compactMap({ $0 }) {
-                Task { _ = await ImageCacheManager.shared.image(for: url) }
+            // The plane decodes the backdrop at full size itself: only the bytes are fetched here.
+            if let backdrop = item.artwork.backdrop ?? item.artwork.poster {
+                Task { await ImageCacheManager.shared.warmOriginal(backdrop) }
+            }
+            if let logo = item.artwork.logo {
+                Task { _ = await ImageCacheManager.shared.image(for: logo) }
             }
         }
 

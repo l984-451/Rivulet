@@ -155,7 +155,7 @@ final class MediaDetailChromeView: UIView {
         let s = UIStackView()
         s.translatesAutoresizingMaskIntoConstraints = false
         s.axis = .horizontal
-        s.spacing = 6
+        s.spacing = 12
         s.alignment = .center
         return s
     }()
@@ -962,7 +962,7 @@ final class MediaDetailChromeView: UIView {
         }
 
         for badge in Self.calmBadges(detail?.primarySource) {
-            qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha))
+            qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha, filled: badge == "4K"))
         }
     }
 
@@ -1200,17 +1200,18 @@ final class MediaDetailChromeView: UIView {
     }
 
     /// Bordered rating / quality badge, 22pt tall in total (Apple's badge cap).
-    static func makeBadge(_ text: String, alpha: CGFloat) -> UIView {
+    static func makeBadge(_ text: String, alpha: CGFloat, filled: Bool = false) -> UIView {
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
         label.text = text
         label.font = .systemFont(ofSize: 15, weight: .bold)
-        label.textColor = UIColor.white.withAlphaComponent(alpha)
+        label.textColor = filled ? .black : UIColor.white.withAlphaComponent(alpha)
         let container = UIView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.layer.borderWidth = 1
+        container.layer.borderWidth = filled ? 0 : 1
         container.layer.borderColor = UIColor.white.withAlphaComponent(alpha * 0.7).cgColor
-        container.layer.cornerRadius = 4
+        container.layer.cornerRadius = 5
+        container.backgroundColor = filled ? UIColor.white.withAlphaComponent(alpha) : .clear
         container.layer.cornerCurve = .continuous
         container.addSubview(label)
         NSLayoutConstraint.activate([

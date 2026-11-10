@@ -433,7 +433,7 @@ enum InfoPopupContent {
         if source?.audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) ?? false { badges.append("AD") }
         for raw in badges {
             let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { row.addArrangedSubview(badgeLabel(text)) }
+            if !text.isEmpty { row.addArrangedSubview(badgeLabel(text, filled: text == "4K")) }
         }
         let spacer = UIView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -441,16 +441,17 @@ enum InfoPopupContent {
         return row
     }
 
-    private static func badgeLabel(_ text: String) -> UIView {
+    private static func badgeLabel(_ text: String, filled: Bool = false) -> UIView {
         let l = UILabel()
         l.text = text
         l.font = .systemFont(ofSize: 16, weight: .semibold)
-        l.textColor = .white.withAlphaComponent(0.9)
+        l.textColor = filled ? .black : .white.withAlphaComponent(0.9)
         l.translatesAutoresizingMaskIntoConstraints = false
         let container = UIView()
-        container.layer.borderWidth = 1
+        container.layer.borderWidth = filled ? 0 : 1
         container.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
-        container.layer.cornerRadius = 4
+        container.layer.cornerRadius = 5
+        container.backgroundColor = filled ? .white.withAlphaComponent(0.9) : .clear
         container.addSubview(l)
         NSLayoutConstraint.activate([
             l.topAnchor.constraint(equalTo: container.topAnchor, constant: 3),

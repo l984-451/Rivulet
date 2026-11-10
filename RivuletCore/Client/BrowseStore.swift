@@ -416,7 +416,7 @@ final class BrowseStore: ObservableObject {
     /// Which artwork a call site wants. `.thumb` on an episode is a 16:9 still, while `.poster` on the
     /// same episode is its show's 2:3 poster; the wrong one letterboxes or crops every tile in a rail.
     enum ArtworkKind {
-        /// 2:3 tile art. Episodes resolve to the show poster (tvOS `PosterCell`).
+        /// 2:3 tile art. Episodes and seasons resolve to the show poster (tvOS `PosterCell`).
         case poster
         /// The item's own image. 16:9 for episodes, square for music.
         case thumb
@@ -426,7 +426,8 @@ final class BrowseStore: ObservableObject {
 
     func artworkURL(for item: MediaItem, kind: ArtworkKind = .thumb, width: Int = 900, height: Int = 1350) -> URL? {
         let url: URL? = switch kind {
-        case .poster: item.grandparentArtwork?.poster ?? item.artwork.poster ?? item.parentArtwork?.poster
+        case .poster: item.grandparentArtwork?.poster
+            ?? (item.kind == .season ? item.parentArtwork?.poster : nil) ?? item.artwork.poster ?? item.parentArtwork?.poster
         case .thumb: item.artwork.thumbnail ?? item.artwork.poster
         case .backdrop: item.kind == .episode
             ? (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop ?? item.artwork.thumbnail)

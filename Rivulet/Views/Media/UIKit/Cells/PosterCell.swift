@@ -296,9 +296,9 @@ final class PosterCell: UICollectionViewCell {
     func configure(item: MediaItem) {
         sourceBadge.text = nil
         setSquare(item.isMusic == true)
-        // Episodes prefer the grandparent (show) poster so hub rows render
-        // show art instead of letterboxed episode stills, matching the Plex path.
-        let url = item.grandparentArtwork?.poster ?? item.artwork.poster
+        // Episodes and seasons show the show's poster, matching the Plex path.
+        let url = item.grandparentArtwork?.poster
+            ?? (item.kind == .season ? item.parentArtwork?.poster : nil) ?? item.artwork.poster
         failureTitleText = item.title
         setEdition(item.editionTitle)
         loadImage(from: url, failureKind: item.kind)
@@ -507,11 +507,12 @@ final class PosterCell: UICollectionViewCell {
         guard let serverURL = PlexAuthManager.shared.selectedServerURL,
               let token = PlexAuthManager.shared.selectedServerToken
         else { return nil }
-        // Episodes prefer the show (grandparent) thumb so Recently-Added
-        // episode rows render show posters, not letterboxed episode stills.
+        // Episodes and seasons show the show's poster, so Recently Added rows read as shows.
         let path: String?
         if item.type == "episode" {
             path = item.grandparentThumb ?? item.parentThumb ?? item.thumb
+        } else if item.type == "season" {
+            path = item.parentThumb ?? item.thumb
         } else {
             path = item.thumb
         }

@@ -61,7 +61,7 @@ enum SettingsDescriptorStore {
         ),
         "cat_playback": SettingDescriptor(
             icon: "play.fill",
-            description: "Configure audio, subtitles, skip behavior, and autoplay."
+            description: "Quality, audio, subtitles, skipping and autoplay."
         ),
         "cat_liveTV": SettingDescriptor(
             icon: "tv.fill",
@@ -77,11 +77,11 @@ enum SettingsDescriptorStore {
         ),
         "photoSlideTransition": SettingDescriptor(
             icon: "sparkles.rectangle.stack",
-            description: "Dissolve fades from one photo to the next. Pan and Zoom also moves slowly across each photo while it is up."
+            description: "Dissolve fades from one photo to the next. Pan and Zoom also drifts slowly across each photo."
         ),
         "photoSlidePlaysClips": SettingDescriptor(
             icon: "video",
-            description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. Off, slideshows skip clips."
+            description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. When off, slideshows skip them."
         ),
         "cat_servers": SettingDescriptor(
             icon: "server.rack",
@@ -103,15 +103,15 @@ enum SettingsDescriptorStore {
         ),
         "sidebarAppRow": SettingDescriptor(
             icon: "sidebar.squares.left",
-            description: "Click to show or hide this row in the sidebar. Press and hold to move it up or down."
+            description: "Select to show or hide this row in the sidebar. Hold Select to move it up or down."
         ),
         "sidebarLiveTVRow": SettingDescriptor(
             icon: "tv",
-            description: "Press and hold to move Live TV up or down. It leaves the sidebar when its sources are removed."
+            description: "Hold Select to move Live TV up or down. It leaves the sidebar when its sources are removed."
         ),
         "libraryRow": SettingDescriptor(
             icon: "sidebar.squares.left",
-            description: "Click to show or hide this library in the sidebar and on Home. Press and hold to move it up or down."
+            description: "Select to show or hide this library in the sidebar and on Home. Hold Select to move it up or down."
         ),
         "appIcon": SettingDescriptor(
             icon: "app.badge",
@@ -128,7 +128,7 @@ enum SettingsDescriptorStore {
         ),
         "homeRowItem": SettingDescriptor(
             icon: "rectangle.grid.1x2",
-            description: "Click to show or hide this row on Home. Press and hold to move it up or down."
+            description: "Select to show or hide this row on Home. Hold Select to move it up or down."
         ),
         "pinnedCollection": SettingDescriptor(
             icon: "pin",
@@ -136,15 +136,15 @@ enum SettingsDescriptorStore {
         ),
         "homePlaylist": SettingDescriptor(
             icon: "music.note.list",
-            description: "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down."
+            description: "Select to show or hide this playlist on Home. Once it is shown, hold Select to move it up or down."
         ),
         "homeFavoriteMovies": SettingDescriptor(
             icon: "star",
-            description: "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down."
+            description: "Select to show or hide your favorite movies on Home. Once they are shown, hold Select to move them up or down."
         ),
         "homeFavoriteShows": SettingDescriptor(
             icon: "star",
-            description: "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down."
+            description: "Select to show or hide your favorite TV shows on Home. Once they are shown, hold Select to move them up or down."
         ),
         "resetHomeHero": SettingDescriptor(
             icon: "arrow.counterclockwise",
@@ -168,7 +168,7 @@ enum SettingsDescriptorStore {
         ),
         "libraryHero": SettingDescriptor(
             icon: "rectangle.stack",
-            description: "Shows a featured content banner at the top of each library with highlighted picks."
+            description: "Shows a banner of featured titles at the top of each library."
         ),
         "discoveryRows": SettingDescriptor(
             icon: "square.stack.3d.up",
@@ -180,7 +180,7 @@ enum SettingsDescriptorStore {
         ),
         "personalizedRecs": SettingDescriptor(
             icon: "person.3",
-            description: "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content."
+            description: "Recommends unwatched titles based on your watch history and TMDB data."
         ),
         // MARK: Playback
         "autoSkipIntro": SettingDescriptor(
@@ -193,15 +193,15 @@ enum SettingsDescriptorStore {
         ),
         "autoSkipRecap": SettingDescriptor(
             icon: "backward.end.circle",
-            description: "When a recap starts. Manual shows Skip Recap, Automatic skips it, Off shows nothing. Recap markers come from the community database below."
+            description: "What happens when a recap starts. Manual shows Skip Recap, Automatic skips it, and Off never shows the button. Markers come from the community database below."
         ),
         "useIntroDB": SettingDescriptor(
             icon: "magnifyingglass",
-            description: "Fills in missing intro, recap and credits markers from introdb.app, sending only the show ID and episode number. Your server's markers come first."
+            description: "Fills in missing intro, recap and credits markers from introdb.app."
         ),
         "promptResumeOrRestart": SettingDescriptor(
             icon: "questionmark.circle",
-            description: "In-progress items show a Resume / Start from Beginning prompt before playing, like Apple TV."
+            description: "Before playing something you have started, asks whether to resume or start from the beginning, like the Apple TV app."
         ),
         "instantResume": SettingDescriptor(
             icon: "play.rectangle.on.rectangle",
@@ -209,15 +209,15 @@ enum SettingsDescriptorStore {
         ),
         "homeStreamingQuality": SettingDescriptor(
             icon: "house.fill",
-            description: "Quality when the server is on your home network. Original plays the file untouched, with HDR, Dolby Vision and Atmos."
+            description: "Quality on your home network. Original plays the file untouched."
         ),
         "awayStreamingQuality": SettingDescriptor(
             icon: "antenna.radiowaves.left.and.right",
-            description: "Quality on cellular, a hotspot, Low Data Mode or a remote connection. Auto measures your connection and converts only when the file will not fit."
+            description: "Quality away from home. Auto converts only when your connection needs it."
         ),
         "streamingQualityOption": SettingDescriptor(
             icon: "dial.medium",
-            description: "Original plays the file as is. Auto converts only when your connection needs it. A fixed rate converts anything above it, dropping HDR and Atmos."
+            description: "Original plays the file as is. Auto converts only when needed. A fixed rate converts anything above it, without HDR or Atmos."
         ),
         "audioLanguage": SettingDescriptor(
             icon: "waveform",
@@ -225,7 +225,7 @@ enum SettingsDescriptorStore {
         ),
         "subtitleMode": SettingDescriptor(
             icon: "captions.bubble",
-            description: "Foreign Audio shows subtitles when the audio is not in your language, otherwise forced ones only. Always shows them on every title."
+            description: "Foreign Audio shows subtitles only when a title isn't in your language. Always shows them on everything."
         ),
         "subtitleLanguage": SettingDescriptor(
             icon: "globe",
@@ -233,7 +233,7 @@ enum SettingsDescriptorStore {
         ),
         "subtitleSDH": SettingDescriptor(
             icon: "ear",
-            description: "Prefers subtitles for the deaf and hard of hearing, which also describe sounds and name who is speaking."
+            description: "Subtitles that also describe sounds and name who is speaking."
         ),
         "generatedSubtitles": SettingDescriptor(
             icon: "captions.bubble",
@@ -241,7 +241,7 @@ enum SettingsDescriptorStore {
         ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
-            description: "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before."
+            description: "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -249,7 +249,7 @@ enum SettingsDescriptorStore {
         ),
         "autoplayLimit": SettingDescriptor(
             icon: "moon.zzz",
-            description: "How many more episodes play on their own after the one you picked. After that, the next one waits for you."
+            description: "How many more episodes play on their own after the one you picked."
         ),
         "skipLength": SettingDescriptor(
             icon: "forward.fill",
@@ -261,29 +261,29 @@ enum SettingsDescriptorStore {
         ),
         "cinemaTrailers": SettingDescriptor(
             icon: "film.stack",
-            description: "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on."
+            description: "On Plex, plays trailers and your server's pre-roll video before a movie you start from the beginning. Your server's Cinema Trailers settings choose what plays."
         ),
         "atTheCredits": SettingDescriptor(
             icon: "rectangle.stack",
-            description: "What shows when the credits start. Up Next opens the next episode card with its countdown. Skip Button shows only Skip Credits and opens Up Next at the end. Nothing shows no button or card until the end. Countdown decides whether the next episode autoplays."
+            description: "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Nothing waits for the end. Countdown decides whether the next episode autoplays."
         ),
 
         // MARK: Live TV
         "combineSources": SettingDescriptor(
             icon: "square.stack.3d.down.right",
-            description: "Shows all Live TV sources together under one sidebar entry, or gives each source its own."
+            description: "Shows all Live TV sources together under one sidebar entry."
         ),
         "defaultLayout": SettingDescriptor(
             icon: "tv",
-            description: "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app."
+            description: "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app."
         ),
         "liveTVFavorites": SettingDescriptor(
             icon: "star.fill",
-            description: "Set the order of your favorite channels, from every source. To add one, hold Select on a channel in What's On or the guide."
+            description: "Set the order of your favorite channels. To add one, hold Select on a channel in What's On or the guide."
         ),
         "liveTVFavoriteRow": SettingDescriptor(
             icon: "star.fill",
-            description: "Hold Select to move this channel, then press Select to drop it. Select to remove it. Favorites you set in Plex come after these, in Plex's order."
+            description: "Hold Select to move this channel, then Select to drop it. Select on its own removes it. Favorites you set in Plex come after these, in Plex's order."
         ),
         "noLiveTVFavorites": SettingDescriptor(
             icon: "star",
@@ -291,7 +291,7 @@ enum SettingsDescriptorStore {
         ),
         "liveTVSuggestions": SettingDescriptor(
             icon: "sparkles",
-            description: "A For You row in What's On, suggesting what is on now like what you watch. It learns on this Apple TV only. Off hides the row."
+            description: "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only."
         ),
         "keepPlayingInGuide": SettingDescriptor(
             icon: "pip",
@@ -299,25 +299,25 @@ enum SettingsDescriptorStore {
         ),
         "confirmExitMultiview": SettingDescriptor(
             icon: "rectangle.split.2x2",
-            description: "Shows a confirmation dialog before closing multiview mode to prevent accidentally ending multiple streams."
+            description: "Asks before closing multiview, so one press can't end every stream."
         ),
 
         // MARK: Storage
         "cache": SettingDescriptor(
             icon: "internaldrive",
-            description: "View storage usage and manage cached images, metadata, and other temporary data."
+            description: "See how much Rivulet has cached, and clear it."
         ),
         "iCloudSync": SettingDescriptor(
             icon: "icloud",
-            description: "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone and iPad signed in to your Apple Account. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this."
+            description: "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone, iPad and Mac on your Apple Account. Sign-ins are encrypted in iCloud. Watch progress stays with your servers."
         ),
         "forceRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
-            description: "Clear metadata cache and reload all library content from your Plex server. Images will be kept."
+            description: "Reloads your libraries from all your servers. Cached images are kept."
         ),
         "clearAllCache": SettingDescriptor(
             icon: "trash",
-            description: "Remove all cached images and metadata. Content will be re-downloaded as needed."
+            description: "Removes all cached images and metadata. They download again as needed."
         ),
 
         // MARK: Servers
@@ -335,19 +335,19 @@ enum SettingsDescriptorStore {
         ),
         "plexServerLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+            description: "Off hides this server's channels from Live TV. Its libraries stay."
         ),
         "jellyfinLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+            description: "Off hides this server's channels from Live TV. Its libraries stay."
         ),
         "embyLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+            description: "Off hides this server's channels from Live TV. Its libraries stay."
         ),
         "src_showInLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay."
+            description: "Off hides this server's channels from Live TV. Its libraries stay."
         ),
         "plexServerRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
@@ -371,7 +371,7 @@ enum SettingsDescriptorStore {
         ),
         "jellyfinURL": SettingDescriptor(
             icon: "globe",
-            description: "Your Jellyfin server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser."
+            description: "Your Jellyfin server's address with its port, like http://192.168.1.100:8096."
         ),
         "jellyfinUsername": SettingDescriptor(
             icon: "person",
@@ -411,7 +411,7 @@ enum SettingsDescriptorStore {
         ),
         "embyURL": SettingDescriptor(
             icon: "globe",
-            description: "Your \(embyName) server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser."
+            description: "Your \(embyName) server's address with its port, like http://192.168.1.100:8096."
         ),
         "embyUsername": SettingDescriptor(
             icon: "person",
@@ -435,11 +435,11 @@ enum SettingsDescriptorStore {
         ),
         "connectPlex": SettingDescriptor(
             icon: "link",
-            description: "Connect to your Plex server to browse and stream your media library."
+            description: "Sign in to Plex to browse and play your libraries."
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Shows the profile picker each time Rivulet opens, and when you come back to it after more than 30 seconds on the Home screen, in another app or on the screensaver, allowing you to choose which profile to use."
+            description: "Shows the profile picker each time Rivulet opens, and when you come back after more than 30 seconds away: on the Home Screen, in another app or on the screensaver."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",
@@ -447,15 +447,15 @@ enum SettingsDescriptorStore {
         ),
         "plexLiveTVSource": SettingDescriptor(
             icon: "play.rectangle.fill",
-            description: "Plex Live TV source using your server's DVR tuners. Tap to view details or remove."
+            description: "Your Plex server's tuners. Select to see details or remove it."
         ),
         "dispatcharrSource": SettingDescriptor(
             icon: "antenna.radiowaves.left.and.right",
-            description: "Dispatcharr source providing managed IPTV channels. Tap to view details or remove."
+            description: "Channels from your Dispatcharr server. Select to see details or remove it."
         ),
         "m3uSource": SettingDescriptor(
             icon: "list.bullet.rectangle",
-            description: "M3U playlist source for IPTV channels. Tap to view details or remove."
+            description: "Channels from an M3U playlist. Select to see details or remove it."
         ),
         "addLiveTVSource": SettingDescriptor(
             icon: "plus.circle.fill",
@@ -463,7 +463,7 @@ enum SettingsDescriptorStore {
         ),
         "refreshChannels": SettingDescriptor(
             icon: "arrow.clockwise",
-            description: "Reload the channel list and EPG data from this source."
+            description: "Reloads this source's channels and guide."
         ),
         "removeSource": SettingDescriptor(
             icon: "trash",
@@ -527,7 +527,7 @@ enum SettingsDescriptorStore {
         ),
         "usernameField": SettingDescriptor(
             icon: "person",
-            description: "Dispatcharr only. Sign in with your Dispatcharr user so Rivulet can schedule recordings and series from the guide. Leave it empty to just watch."
+            description: "Dispatcharr only. Needed to record from the guide. Leave it empty to just watch."
         ),
         "passwordField": SettingDescriptor(
             icon: "key",
@@ -535,11 +535,11 @@ enum SettingsDescriptorStore {
         ),
         "channelProfileField": SettingDescriptor(
             icon: "line.3.horizontal.decrease.circle",
-            description: "Dispatcharr only. The name of a channel profile, to load just that set of channels. Leave it empty and you get every channel on the server."
+            description: "Dispatcharr only. A channel profile name, to load just those channels. Leave it empty for every channel."
         ),
         "m3uURLField": SettingDescriptor(
             icon: "list.bullet.rectangle",
-            description: "The playlist link your IPTV provider gave you, for example http://provider.example/playlist.m3u. It usually ends in .m3u or .m3u8."
+            description: "The playlist link your IPTV provider gave you, like http://provider.example/playlist.m3u."
         ),
         "epgURLField": SettingDescriptor(
             icon: "calendar",
@@ -561,7 +561,7 @@ enum SettingsDescriptorStore {
         ),
         "inputDiagnostics": SettingDescriptor(
             icon: "dot.radiowaves.left.and.right",
-            description: "Shows every remote press on screen, how long it was held and which remote sent it. Useful when reporting a remote problem."
+            description: "Shows every remote press on screen, how long it was held and which remote sent it."
         ),
         "inputTest": SettingDescriptor(
             icon: "checklist",
@@ -584,7 +584,7 @@ enum SettingsDescriptorStore {
         ),
         "cf_profanity": SettingDescriptor(
             icon: "exclamationmark.bubble.fill",
-            description: "Mutes profane words: mild and up, moderate and up, or strong only. Also applies to profanity in imported filter lists."
+            description: "Mutes swearing at the strength you pick. Also applies to imported filter lists."
         ),
         "cf_blasphemy": SettingDescriptor(
             icon: "hands.clap.fill",
@@ -612,19 +612,19 @@ enum SettingsDescriptorStore {
         ),
         "cf_violence": SettingDescriptor(
             icon: "burst.fill",
-            description: "Skips violent and gory scenes. Requires an imported filter list — set the Filter List URL below. Dialogue text alone can't detect these scenes."
+            description: "Skips violent and gory scenes. Needs a filter list: set Filter List URL below."
         ),
         "cf_sexNudity": SettingDescriptor(
             icon: "eye.slash.fill",
-            description: "Skips scenes with sex or nudity. Requires an imported filter list — set the Filter List URL below."
+            description: "Skips scenes with sex or nudity. Needs a filter list: set Filter List URL below."
         ),
         "cf_frightening": SettingDescriptor(
             icon: "theatermasks.fill",
-            description: "Skips frightening or intense scenes. Requires an imported filter list — set the Filter List URL below."
+            description: "Skips frightening or intense scenes. Needs a filter list: set Filter List URL below."
         ),
         "cf_substances": SettingDescriptor(
             icon: "pills.fill",
-            description: "Skips scenes featuring drug, alcohol, or tobacco use. Requires an imported filter list — set the Filter List URL below."
+            description: "Skips scenes with drug, alcohol or tobacco use. Needs a filter list: set Filter List URL below."
         ),
         "cf_sourceURL": SettingDescriptor(
             icon: "link",

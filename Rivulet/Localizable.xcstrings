@@ -1721,18 +1721,12 @@
         }
       }
     },
-    "A For You row in What's On, suggesting what is on now like what you watch. It learns on this Apple TV only. Off hides the row." : {
+    "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eine Reihe „Für dich“ in „Jetzt im TV“, die gerade laufende Sendungen vorschlägt, die zu dem passen, was du schaust. Gelernt wird nur auf diesem Apple TV. „Aus“ blendet die Reihe aus."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Μια σειρά «Για εσένα» στην ενότητα «Τι παίζει», με προτάσεις από όσα παρακολουθείς. Μαθαίνει μόνο σε αυτό το Apple TV. Η απενεργοποίηση κρύβει τη σειρά."
+            "value" : "Fügt „Jetzt im TV“ eine Reihe „Für dich“ hinzu, mit Sendern passend zu dem, was du schaust. Gelernt wird nur auf diesem Apple TV."
           }
         }
       }
@@ -3439,18 +3433,12 @@
         }
       }
     },
-    "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {
+    "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wähle deine Standardansicht für Live-TV: „Programm“ oder „Jetzt im TV“ mit Reihen zu dem, was gerade läuft, und der Mehrfachansicht wie in der Apple TV App."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Επίλεξε την προεπιλεγμένη προβολή ζωντανής τηλεόρασης: τον οδηγό προγράμματος ή το «Τι παίζει», με τρέχουσες εκπομπές και πολλαπλή προβολή, όπως στην εφαρμογή Apple TV."
+            "value" : "„Programm“ listet alle Sender nach Uhrzeit. „Jetzt im TV“ zeigt in Reihen, was gerade läuft, mit Mehrfachansicht, wie die Apple TV App."
           }
         }
       }
@@ -3503,90 +3491,72 @@
         }
       }
     },
-    "Clear metadata cache and reload all library content from your Plex server. Images will be kept." : {
+    "Reloads your libraries from all your servers. Cached images are kept." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Leert den Metadaten-Cache und lädt alle Mediatheksinhalte neu von deinem Plex-Server. Bilder bleiben erhalten."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Καθαρίζει την προσωρινή μνήμη μεταδεδομένων και φορτώνει ξανά τη βιβλιοθήκη από το Plex. Οι εικόνες διατηρούνται."
+            "value" : "Lädt deine Mediatheken neu von all deinen Servern. Zwischengespeicherte Bilder bleiben erhalten."
           }
         }
       }
     },
-    "Click to show or hide this library in the sidebar and on Home. Press and hold to move it up or down." : {
+    "Select to show or hide this library in the sidebar and on Home. Hold Select to move it up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um diese Mediathek in der Seitenleiste und auf der Startseite ein- oder auszublenden. Halte gedrückt, um sie nach oben oder unten zu verschieben."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πάτησε για εμφάνιση ή απόκρυψη της βιβλιοθήκης στην πλαϊνή στήλη και στην Αρχική. Κράτησε πατημένο για μετακίνηση πάνω ή κάτω."
+            "value" : "Drücke die Auswahltaste, um diese Mediathek in der Seitenleiste und auf der Startseite ein- oder auszublenden. Halte sie gedrückt, um sie zu verschieben."
           }
         }
       }
     },
-    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {
+    "Select to show or hide this playlist on Home. Once it is shown, hold Select to move it up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um diese Playlist auf der Startseite ein- oder auszublenden. Wird sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+            "value" : "Drücke die Auswahltaste, um diese Playlist auf der Startseite ein- oder auszublenden. Wird sie angezeigt, halte die Taste gedrückt, um sie zu verschieben."
           }
         }
       }
     },
-    "Click to show or hide this row in the sidebar. Press and hold to move it up or down." : {
+    "Select to show or hide this row in the sidebar. Hold Select to move it up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um diese Zeile in der Seitenleiste ein- oder auszublenden. Halte gedrückt, um sie nach oben oder unten zu verschieben."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πάτησε για εμφάνιση ή απόκρυψη αυτής της σειράς στην πλαϊνή στήλη. Κράτησε πατημένο για μετακίνηση."
+            "value" : "Drücke die Auswahltaste, um diese Zeile in der Seitenleiste ein- oder auszublenden. Halte sie gedrückt, um sie nach oben oder unten zu verschieben."
           }
         }
       }
     },
-    "Click to show or hide this row on Home. Press and hold to move it up or down." : {
+    "Select to show or hide this row on Home. Hold Select to move it up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um diese Reihe auf der Startseite ein- oder auszublenden. Halte gedrückt, um sie nach oben oder unten zu verschieben."
+            "value" : "Drücke die Auswahltaste, um diese Reihe auf der Startseite ein- oder auszublenden. Halte sie gedrückt, um sie nach oben oder unten zu verschieben."
           }
         }
       }
     },
-    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {
+    "Select to show or hide your favorite movies on Home. Once they are shown, hold Select to move them up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um deine Lieblingsfilme auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+            "value" : "Drücke die Auswahltaste, um deine Lieblingsfilme auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte die Taste gedrückt, um sie zu verschieben."
           }
         }
       }
     },
-    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {
+    "Select to show or hide your favorite TV shows on Home. Once they are shown, hold Select to move them up or down." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke, um deine Lieblingsserien auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+            "value" : "Drücke die Auswahltaste, um deine Lieblingsserien auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte die Taste gedrückt, um sie zu verschieben."
           }
         }
       }
@@ -3729,18 +3699,12 @@
         }
       }
     },
-    "Configure audio, subtitles, skip behavior, and autoplay." : {
+    "Quality, audio, subtitles, skipping and autoplay." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stelle Audio, Untertitel, Überspringen und Autoplay ein."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ρύθμισε ήχο, υπότιτλους, παραλείψεις και αυτόματη αναπαραγωγή."
+            "value" : "Qualität, Audio, Untertitel, Überspringen und Autoplay."
           }
         }
       }
@@ -3841,18 +3805,12 @@
         }
       }
     },
-    "Connect to your Plex server to browse and stream your media library." : {
+    "Sign in to Plex to browse and play your libraries." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verbinde dich mit deinem Plex-Server, um deine Mediathek zu durchsuchen und zu streamen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Συνδέσου στον διακομιστή Plex για περιήγηση και αναπαραγωγή της συλλογής σου."
+            "value" : "Melde dich bei Plex an, um deine Mediatheken zu durchsuchen und abzuspielen."
           }
         }
       }
@@ -5113,34 +5071,22 @@
         }
       }
     },
-    "Dispatcharr only. Sign in with your Dispatcharr user so Rivulet can schedule recordings and series from the guide. Leave it empty to just watch." : {
+    "Dispatcharr only. Needed to record from the guide. Leave it empty to just watch." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nur für Dispatcharr. Melde dich mit deinem Dispatcharr-Benutzer an, damit Rivulet Aufnahmen und Serien aus dem Programm planen kann. Lass das Feld leer, wenn du nur fernsehen möchtest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Μόνο για Dispatcharr. Συνδέσου με τον χρήστη Dispatcharr ώστε το Rivulet να προγραμματίζει εγγραφές και σειρές από τον οδηγό. Άφησέ το κενό μόνο για παρακολούθηση."
+            "value" : "Nur für Dispatcharr. Nötig, um aus dem Programm aufzunehmen. Lass das Feld leer, wenn du nur fernsehen möchtest."
           }
         }
       }
     },
-    "Dispatcharr only. The name of a channel profile, to load just that set of channels. Leave it empty and you get every channel on the server." : {
+    "Dispatcharr only. A channel profile name, to load just those channels. Leave it empty for every channel." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nur für Dispatcharr. Der Name eines Senderprofils, um nur diese Sender zu laden. Lässt du das Feld leer, erhältst du alle Sender des Servers."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Μόνο για Dispatcharr. Το όνομα ενός προφίλ καναλιών για φόρτωση μόνο αυτής της ομάδας. Άφησέ το κενό για όλα τα κανάλια."
+            "value" : "Nur für Dispatcharr. Der Name eines Senderprofils, um nur diese Sender zu laden. Leer bedeutet alle Sender."
           }
         }
       }
@@ -5161,18 +5107,12 @@
         }
       }
     },
-    "Dispatcharr source providing managed IPTV channels. Tap to view details or remove." : {
+    "Channels from your Dispatcharr server. Select to see details or remove it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dispatcharr-Quelle mit verwalteten IPTV-Sendern. Wähle sie aus, um Details anzuzeigen oder sie zu entfernen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πηγή Dispatcharr με διαχειριζόμενα κανάλια IPTV. Πάτησε για λεπτομέρειες ή αφαίρεση."
+            "value" : "Sender von deinem Dispatcharr-Server. Wähle die Quelle aus, um Details zu sehen oder sie zu entfernen."
           }
         }
       }
@@ -5187,12 +5127,12 @@
         }
       }
     },
-    "Dissolve fades from one photo to the next. Pan and Zoom also moves slowly across each photo while it is up." : {
+    "Dissolve fades from one photo to the next. Pan and Zoom also drifts slowly across each photo." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Überblenden“ blendet von einem Foto zum nächsten. „Schwenken und Zoomen“ fährt dabei zusätzlich langsam über jedes Foto."
+            "value" : "„Überblenden“ blendet von einem Foto zum nächsten. „Schwenken und Zoomen“ gleitet zusätzlich langsam über jedes Foto."
           }
         }
       }
@@ -6445,18 +6385,12 @@
         }
       }
     },
-    "Fills in missing intro, recap and credits markers from introdb.app, sending only the show ID and episode number. Your server's markers come first." : {
+    "Fills in missing intro, recap and credits markers from introdb.app." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ergänzt fehlende Intro-, Rückblick- und Abspannmarker über introdb.app und sendet dabei nur die Serien-ID und die Folgennummer. Die Marker deines Servers haben Vorrang."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Συμπληρώνει δείκτες εισαγωγής, ανακεφαλαίωσης και τίτλων τέλους από το introdb.app, στέλνοντας μόνο αναγνωριστικό σειράς και αριθμό επεισοδίου. Προτεραιότητα έχουν οι δείκτες του διακομιστή."
+            "value" : "Ergänzt fehlende Intro-, Rückblick- und Abspannmarker über introdb.app."
           }
         }
       }
@@ -6653,18 +6587,12 @@
         }
       }
     },
-    "Foreign Audio shows subtitles when the audio is not in your language, otherwise forced ones only. Always shows them on every title." : {
+    "Foreign Audio shows subtitles only when a title isn't in your language. Always shows them on everything." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Bei Fremdsprache“ zeigt Untertitel, wenn der Ton nicht in deiner Sprache ist, sonst nur erzwungene. „Immer“ zeigt sie bei jedem Titel."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Η επιλογή «Ξενόγλωσσος ήχος» εμφανίζει υπότιτλους όταν ο ήχος δεν είναι στη γλώσσα σου, αλλιώς μόνο υποχρεωτικούς υπότιτλους. Η επιλογή «Πάντα» τους εμφανίζει σε κάθε τίτλο."
+            "value" : "„Bei Fremdsprache“ zeigt Untertitel nur, wenn ein Titel nicht in deiner Sprache ist. „Immer“ zeigt sie bei allem."
           }
         }
       }
@@ -7337,18 +7265,12 @@
         }
       }
     },
-    "Hold Select to move this channel, then press Select to drop it. Select to remove it. Favorites you set in Plex come after these, in Plex's order." : {
+    "Hold Select to move this channel, then Select to drop it. Select on its own removes it. Favorites you set in Plex come after these, in Plex's order." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Halte die Auswahltaste gedrückt, um den Sender zu verschieben, und drücke sie zum Ablegen. Drücke sie, um ihn zu entfernen. Deine Plex-Favoriten folgen danach."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Κράτησε πατημένο το Επιλογή για μετακίνηση του καναλιού, μετά πάτησέ το για τοποθέτηση. Πάτησε Επιλογή για αφαίρεση. Τα αγαπημένα του Plex ακολουθούν με τη σειρά του Plex."
+            "value" : "Halte die Auswahltaste gedrückt, um den Sender zu verschieben, und drücke sie zum Ablegen. Ein einfacher Druck entfernt ihn. Deine Plex-Favoriten folgen danach, in der Plex-Reihenfolge."
           }
         }
       }
@@ -7491,12 +7413,12 @@
         }
       }
     },
-    "How many more episodes play on their own after the one you picked. After that, the next one waits for you." : {
+    "How many more episodes play on their own after the one you picked." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wie viele weitere Folgen nach der gewählten von selbst laufen. Danach wartet die nächste auf dich."
+            "value" : "Wie viele weitere Folgen nach der gewählten von selbst laufen."
           }
         }
       }
@@ -7565,18 +7487,12 @@
         }
       }
     },
-    "In-progress items show a Resume / Start from Beginning prompt before playing, like Apple TV." : {
+    "Before playing something you have started, asks whether to resume or start from the beginning, like the Apple TV app." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bei begonnenen Titeln erscheint vor der Wiedergabe die Auswahl „Fortsetzen“ oder „Von vorne beginnen“, wie bei Apple TV."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Οι τίτλοι σε εξέλιξη εμφανίζουν επιλογή «Συνέχεια / Από την αρχή», όπως στο Apple TV."
+            "value" : "Fragt vor der Wiedergabe eines begonnenen Titels, ob du fortsetzen oder von vorne beginnen möchtest, wie die Apple TV App."
           }
         }
       }
@@ -8311,18 +8227,12 @@
         }
       }
     },
-    "M3U playlist source for IPTV channels. Tap to view details or remove." : {
+    "Channels from an M3U playlist. Select to see details or remove it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "M3U-Playlist-Quelle für IPTV-Sender. Wähle sie aus, um Details anzuzeigen oder sie zu entfernen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πηγή λίστας M3U για κανάλια IPTV. Πάτησε για λεπτομέρειες ή αφαίρεση."
+            "value" : "Sender aus einer M3U-Playlist. Wähle die Quelle aus, um Details zu sehen oder sie zu entfernen."
           }
         }
       }
@@ -8767,18 +8677,12 @@
         }
       }
     },
-    "Mutes profane words: mild and up, moderate and up, or strong only. Also applies to profanity in imported filter lists." : {
+    "Mutes swearing at the strength you pick. Also applies to imported filter lists." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schaltet Schimpfwörter stumm: ab leicht, ab mittel oder nur stark. Gilt auch für Schimpfwörter in importierten Filterlisten."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σιγάζει βωμολοχίες: από ήπιες και πάνω, από μέτριες και πάνω ή μόνο έντονες. Ισχύει και για εισαγόμενες λίστες φίλτρων."
+            "value" : "Schaltet Schimpfwörter in der gewählten Stärke stumm. Gilt auch für importierte Filterlisten."
           }
         }
       }
@@ -9617,18 +9521,12 @@
         }
       }
     },
-    "Off hides this server's channels from Live TV, for when the same channels come from another source. Its libraries stay." : {
+    "Off hides this server's channels from Live TV. Its libraries stay." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bei „Aus“ werden die Sender dieses Servers in Live-TV ausgeblendet, etwa wenn dieselben Sender aus einer anderen Quelle kommen. Seine Mediatheken bleiben erhalten."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ανενεργό, κρύβει τα κανάλια αυτού του διακομιστή από τη ζωντανή τηλεόραση όταν τα ίδια προέρχονται από άλλη πηγή. Οι βιβλιοθήκες του παραμένουν."
+            "value" : "Bei „Aus“ werden die Sender dieses Servers in Live-TV ausgeblendet. Seine Mediatheken bleiben erhalten."
           }
         }
       }
@@ -9935,18 +9833,12 @@
         }
       }
     },
-    "Original plays the file as is. Auto converts only when your connection needs it. A fixed rate converts anything above it, dropping HDR and Atmos." : {
+    "Original plays the file as is. Auto converts only when needed. A fixed rate converts anything above it, without HDR or Atmos." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Original“ gibt die Datei unverändert wieder. „Automatisch“ konvertiert nur, wenn deine Verbindung es braucht. Eine feste Rate konvertiert alles darüber, ohne HDR und Atmos."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "«Αρχικό» παίζει το αρχείο όπως είναι. «Αυτόματο» το μετατρέπει μόνο αν απαιτείται από τη σύνδεση. Σταθερός ρυθμός μετατρέπει ό,τι τον υπερβαίνει, αφαιρώντας HDR και Atmos."
+            "value" : "„Original“ gibt die Datei unverändert wieder. „Automatisch“ konvertiert nur bei Bedarf. Eine feste Rate konvertiert alles darüber, ohne HDR und Atmos."
           }
         }
       }
@@ -10593,7 +10485,7 @@
         }
       }
     },
-    "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. Off, slideshows skip clips." : {
+    "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. When off, slideshows skip them." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -10603,18 +10495,12 @@
         }
       }
     },
-    "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on." : {
+    "On Plex, plays trailers and your server's pre-roll video before a movie you start from the beginning. Your server's Cinema Trailers settings choose what plays." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Spielt auf Plex vor einem Film, der von Anfang an startet, Trailer und das Pre-Roll-Video deines Servers ab. Was läuft, legen seine Cinema-Trailers-Einstellungen fest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αναπαράγει τρέιλερ και εισαγωγικά βίντεο από τον διακομιστή σας πριν από μια ταινία που ξεκινάτε από την αρχή μέσω Plex. Οι ρυθμίσεις Cinema Trailers του διακομιστή καθορίζουν τι θα αναπαραχθεί. Πατήστε Παράλειψη για να συνεχίσετε."
           }
         }
       }
@@ -10683,18 +10569,12 @@
         }
       }
     },
-    "Plex Live TV source using your server's DVR tuners. Tap to view details or remove." : {
+    "Your Plex server's tuners. Select to see details or remove it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Plex-Live-TV-Quelle mit den DVR-Tunern deines Servers. Wähle sie aus, um Details anzuzeigen oder sie zu entfernen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πηγή ζωντανής τηλεόρασης Plex με τους δέκτες DVR του διακομιστή. Πάτησε για λεπτομέρειες ή αφαίρεση."
+            "value" : "Die Tuner deines Plex-Servers. Wähle die Quelle aus, um Details zu sehen oder sie zu entfernen."
           }
         }
       }
@@ -10891,18 +10771,12 @@
         }
       }
     },
-    "Prefers subtitles for the deaf and hard of hearing, which also describe sounds and name who is speaking." : {
+    "Subtitles that also describe sounds and name who is speaking." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bevorzugt Untertitel für Gehörlose und Hörgeschädigte, die auch Geräusche beschreiben und angeben, wer spricht."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Προτιμά υπότιτλους για κωφά και βαρήκοα άτομα που περιγράφουν επίσης ήχους και αναφέρουν τον ομιλητή."
+            "value" : "Untertitel, die auch Geräusche beschreiben und angeben, wer spricht."
           }
         }
       }
@@ -11003,18 +10877,12 @@
         }
       }
     },
-    "Press and hold to move Live TV up or down. It leaves the sidebar when its sources are removed." : {
+    "Hold Select to move Live TV up or down. It leaves the sidebar when its sources are removed." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Halte gedrückt, um Live-TV nach oben oder unten zu verschieben. Es verschwindet aus der Seitenleiste, wenn seine Quellen entfernt werden."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Κράτησε πατημένο για μετακίνηση της ζωντανής τηλεόρασης πάνω ή κάτω. Η καταχώριση αφαιρείται όταν αφαιρεθούν όλες οι πηγές."
+            "value" : "Halte die Auswahltaste gedrückt, um Live-TV nach oben oder unten zu verschieben. Es verschwindet aus der Seitenleiste, wenn seine Quellen entfernt werden."
           }
         }
       }
@@ -11215,34 +11083,22 @@
         }
       }
     },
-    "Quality on cellular, a hotspot, Low Data Mode or a remote connection. Auto measures your connection and converts only when the file will not fit." : {
+    "Quality away from home. Auto converts only when your connection needs it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Qualität über Mobilfunk, Hotspot, im Datensparmodus oder von unterwegs. „Automatisch“ misst deine Verbindung und konvertiert nur, wenn die Datei zu groß ist."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ποιότητα σε δεδομένα κινητής, hotspot, λειτουργία χαμηλής κατανάλωσης δεδομένων ή απομακρυσμένη σύνδεση. Το «Αυτόματο» μετρά τη σύνδεση και μετατρέπει μόνο αν χρειάζεται."
+            "value" : "Qualität unterwegs. „Automatisch“ konvertiert nur, wenn deine Verbindung es braucht."
           }
         }
       }
     },
-    "Quality when the server is on your home network. Original plays the file untouched, with HDR, Dolby Vision and Atmos." : {
+    "Quality on your home network. Original plays the file untouched." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Qualität, wenn der Server in deinem Heimnetz ist. „Original“ spielt die Datei unverändert ab, mit HDR, Dolby Vision und Atmos."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ποιότητα με διακομιστή στο οικιακό δίκτυο. Το «Αρχικό» παίζει το αρχείο χωρίς αλλαγές, με HDR, Dolby Vision και Atmos."
+            "value" : "Qualität in deinem Heimnetz. „Original“ spielt die Datei unverändert ab."
           }
         }
       }
@@ -11901,18 +11757,12 @@
         }
       }
     },
-    "Reload the channel list and EPG data from this source." : {
+    "Reloads this source's channels and guide." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lädt die Senderliste und die EPG-Daten dieser Quelle neu."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Επαναφόρτωση λίστας καναλιών και δεδομένων EPG από αυτή την πηγή."
+            "value" : "Lädt die Sender und das Programm dieser Quelle neu."
           }
         }
       }
@@ -12061,18 +11911,12 @@
         }
       }
     },
-    "Remove all cached images and metadata. Content will be re-downloaded as needed." : {
+    "Removes all cached images and metadata. They download again as needed." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Entfernt alle zwischengespeicherten Bilder und Metadaten. Inhalte werden bei Bedarf erneut geladen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Αφαίρεση όλων των προσωρινά αποθηκευμένων εικόνων και μεταδεδομένων. Το περιεχόμενο θα ληφθεί ξανά όταν χρειαστεί."
+            "value" : "Entfernt alle zwischengespeicherten Bilder und Metadaten. Sie werden bei Bedarf erneut geladen."
           }
         }
       }
@@ -13433,18 +13277,12 @@
         }
       }
     },
-    "Set the order of your favorite channels, from every source. To add one, hold Select on a channel in What's On or the guide." : {
+    "Set the order of your favorite channels. To add one, hold Select on a channel in What's On or the guide." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lege die Reihenfolge deiner Favoriten aus allen Quellen fest. Zum Hinzufügen halte auf einem Sender in „Jetzt im TV“ oder im Programm die Auswahltaste gedrückt."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Όρισε τη σειρά των αγαπημένων καναλιών από κάθε πηγή. Για προσθήκη, κράτησε πατημένο το Επιλογή σε κανάλι στο «Τι παίζει» ή στον οδηγό."
+            "value" : "Lege die Reihenfolge deiner Lieblingssender fest. Zum Hinzufügen halte auf einem Sender in „Jetzt im TV“ oder im Programm die Auswahltaste gedrückt."
           }
         }
       }
@@ -13497,18 +13335,12 @@
         }
       }
     },
-    "Sharpens SD and 720p video with Apple's machine learning upscaler before your TV scales it. Uses more power, and stops on its own if the Apple TV can't keep up. HDR, Dolby Vision and Live TV play as before." : {
+    "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schärft SD- und 720p-Videos per maschinellem Lernen. Braucht mehr Energie und stoppt, wenn das Apple TV nicht mithält. HDR, Dolby Vision und Live-TV bleiben unverändert."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Βελτιώνει την ευκρίνεια βίντεο SD και 720p με τεχνολογία μηχανικής μάθησης της Apple πριν την κλιμάκωση από την τηλεόραση. Καταναλώνει περισσότερη ισχύ και σταματά αν δεν επαρκεί η απόδοση. HDR, Dolby Vision και ζωντανή τηλεόραση λειτουργούν όπως πριν."
+            "value" : "Schärft SD- und 720p-Videos mit Apples ML-Upscaler. Braucht mehr Energie und stoppt, wenn das Apple TV nicht mithält. HDR, Dolby Vision und Live-TV bleiben unverändert."
           }
         }
       }
@@ -13577,82 +13409,52 @@
         }
       }
     },
-    "Shows a confirmation dialog before closing multiview mode to prevent accidentally ending multiple streams." : {
+    "Asks before closing multiview, so one press can't end every stream." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeigt eine Bestätigung an, bevor die Mehrfachansicht geschlossen wird, damit du nicht versehentlich mehrere Streams beendest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εμφανίζει επιβεβαίωση πριν κλείσει η πολλαπλή προβολή, για να μην τερματίσεις κατά λάθος πολλές ροές."
+            "value" : "Fragt nach, bevor die Mehrfachansicht geschlossen wird, damit ein Tastendruck nicht alle Streams beendet."
           }
         }
       }
     },
-    "Shows a featured content banner at the top of each library with highlighted picks." : {
+    "Shows a banner of featured titles at the top of each library." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeigt oben in jeder Mediathek ein Banner mit ausgewählten Highlights."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εμφανίζει μεγάλο πανό επιλεγμένου περιεχομένου στην κορυφή κάθε βιβλιοθήκης."
+            "value" : "Zeigt oben in jeder Mediathek ein Banner mit ausgewählten Titeln."
           }
         }
       }
     },
-    "Shows all Live TV sources together under one sidebar entry, or gives each source its own." : {
+    "Shows all Live TV sources together under one sidebar entry." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeigt alle Live-TV-Quellen gemeinsam unter einem Eintrag in der Seitenleiste oder gibt jeder Quelle einen eigenen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εμφανίζει όλες τις πηγές ζωντανής τηλεόρασης μαζί στην πλαϊνή στήλη ή κάθε πηγή χωριστά."
+            "value" : "Zeigt alle Live-TV-Quellen gemeinsam unter einem Eintrag in der Seitenleiste."
           }
         }
       }
     },
-    "Shows every remote press on screen, how long it was held and which remote sent it. Useful when reporting a remote problem." : {
+    "Shows every remote press on screen, how long it was held and which remote sent it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeigt jeden Tastendruck der Fernbedienung auf dem Bildschirm, wie lange er gehalten wurde und welche Fernbedienung ihn gesendet hat. Hilfreich, wenn du ein Problem mit der Fernbedienung meldest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εμφανίζει στην οθόνη κάθε πάτημα τηλεχειριστηρίου, τη διάρκειά του και ποιο τηλεχειριστήριο το έστειλε. Χρήσιμο για αναφορές προβλημάτων."
+            "value" : "Zeigt jeden Tastendruck der Fernbedienung auf dem Bildschirm, wie lange er gehalten wurde und welche Fernbedienung ihn gesendet hat."
           }
         }
       }
     },
-    "Shows the profile picker each time Rivulet opens, and when you come back to it after more than 30 seconds on the Home screen, in another app or on the screensaver, allowing you to choose which profile to use." : {
+    "Shows the profile picker each time Rivulet opens, and when you come back after more than 30 seconds away: on the Home Screen, in another app or on the screensaver." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeigt die Profilauswahl bei jedem Start von Rivulet und wenn du nach über 30 Sekunden auf dem Home-Bildschirm, in einer anderen App oder im Bildschirmschoner zurückkehrst."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Εμφανίζει την επιλογή προφίλ κάθε φορά που ανοίγει το Rivulet, καθώς και όταν επιστρέφετε σε αυτό αφού έχετε παραμείνει για περισσότερα από 30 δευτερόλεπτα στην αρχική οθόνη, σε άλλη εφαρμογή ή στην προφύλαξη οθόνης, επιτρέποντάς σας να επιλέξετε το προφίλ που θέλετε να χρησιμοποιήσετε."
+            "value" : "Zeigt die Profilauswahl bei jedem Start von Rivulet und wenn du nach über 30 Sekunden zurückkehrst: vom Home-Bildschirm, aus einer anderen App oder vom Bildschirmschoner."
           }
         }
       }
@@ -14151,66 +13953,42 @@
         }
       }
     },
-    "Skips frightening or intense scenes. Requires an imported filter list — set the Filter List URL below." : {
+    "Skips frightening or intense scenes. Needs a filter list: set Filter List URL below." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überspringt beängstigende oder intensive Szenen. Erfordert eine importierte Filterliste: Lege unten die „Filterlisten-URL“ fest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παραλείπει τρομακτικές ή έντονες σκηνές. Απαιτεί εισαγόμενη λίστα φίλτρων· όρισέ την παρακάτω."
+            "value" : "Überspringt beängstigende oder intensive Szenen. Erfordert eine Filterliste: Lege unten die „Filterlisten-URL“ fest."
           }
         }
       }
     },
-    "Skips scenes featuring drug, alcohol, or tobacco use. Requires an imported filter list — set the Filter List URL below." : {
+    "Skips scenes with drug, alcohol or tobacco use. Needs a filter list: set Filter List URL below." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überspringt Szenen mit Drogen-, Alkohol- oder Tabakkonsum. Erfordert eine importierte Filterliste: Lege unten die „Filterlisten-URL“ fest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παραλείπει σκηνές με χρήση ναρκωτικών, αλκοόλ ή καπνού. Απαιτεί εισαγόμενη λίστα φίλτρων· όρισέ την παρακάτω."
+            "value" : "Überspringt Szenen mit Drogen-, Alkohol- oder Tabakkonsum. Erfordert eine Filterliste: Lege unten die „Filterlisten-URL“ fest."
           }
         }
       }
     },
-    "Skips scenes with sex or nudity. Requires an imported filter list — set the Filter List URL below." : {
+    "Skips scenes with sex or nudity. Needs a filter list: set Filter List URL below." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überspringt Szenen mit Sex oder Nacktheit. Erfordert eine importierte Filterliste: Lege unten die „Filterlisten-URL“ fest."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παραλείπει σκηνές σεξ ή γυμνού. Απαιτεί εισαγόμενη λίστα φίλτρων· όρισέ την παρακάτω."
+            "value" : "Überspringt Szenen mit Sex oder Nacktheit. Erfordert eine Filterliste: Lege unten die „Filterlisten-URL“ fest."
           }
         }
       }
     },
-    "Skips violent and gory scenes. Requires an imported filter list — set the Filter List URL below. Dialogue text alone can't detect these scenes." : {
+    "Skips violent and gory scenes. Needs a filter list: set Filter List URL below." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überspringt gewalttätige und blutige Szenen. Erfordert eine importierte Filterliste: Lege unten die „Filterlisten-URL“ fest. Am Dialogtext allein lassen sich diese Szenen nicht erkennen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Παραλείπει σκηνές βίας ή αίματος. Απαιτεί εισαγόμενη λίστα φίλτρων· όρισέ την παρακάτω. Μόνο από το κείμενο διαλόγου δεν εντοπίζονται."
+            "value" : "Überspringt gewalttätige und blutige Szenen. Erfordert eine Filterliste: Lege unten die „Filterlisten-URL“ fest."
           }
         }
       }
@@ -15427,18 +15205,12 @@
         }
       }
     },
-    "The playlist link your IPTV provider gave you, for example http://provider.example/playlist.m3u. It usually ends in .m3u or .m3u8." : {
+    "The playlist link your IPTV provider gave you, like http://provider.example/playlist.m3u." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Der Playlist-Link, den du von deinem IPTV-Anbieter erhalten hast, zum Beispiel http://provider.example/playlist.m3u. Er endet meist auf .m3u oder .m3u8."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ο σύνδεσμος λίστας από τον πάροχο IPTV, π.χ. http://provider.example/playlist.m3u. Συνήθως καταλήγει σε .m3u ή .m3u8."
+            "value" : "Der Playlist-Link, den du von deinem IPTV-Anbieter erhalten hast, zum Beispiel http://provider.example/playlist.m3u."
           }
         }
       }
@@ -15757,18 +15529,12 @@
         }
       }
     },
-    "This clears the metadata cache and reloads library content from your Plex server." : {
+    "This clears the metadata cache and reloads your libraries from all your servers." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Damit wird der Metadaten-Cache geleert und der Inhalt der Mediathek neu von deinem Plex-Server geladen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Καθαρίζει την προσωρινή μνήμη μεταδεδομένων και φορτώνει ξανά τη βιβλιοθήκη από το Plex."
+            "value" : "Damit wird der Metadaten-Cache geleert und deine Mediatheken werden neu von all deinen Servern geladen."
           }
         }
       }
@@ -17181,18 +16947,12 @@
         }
       }
     },
-    "Uses TMDB metadata and your watch history to surface personalized recommendations of unwatched content." : {
+    "Recommends unwatched titles based on your watch history and TMDB data." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nutzt TMDB-Metadaten und deinen Wiedergabeverlauf, um dir persönliche Empfehlungen für ungesehene Inhalte zu zeigen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Χρησιμοποιεί μεταδεδομένα TMDB και ιστορικό προβολών για εξατομικευμένες προτάσεις περιεχομένου που δεν έχεις δει."
+            "value" : "Empfiehlt ungesehene Titel anhand deines Wiedergabeverlaufs und der Daten von TMDB."
           }
         }
       }
@@ -17271,18 +17031,12 @@
         }
       }
     },
-    "View storage usage and manage cached images, metadata, and other temporary data." : {
+    "See how much Rivulet has cached, and clear it." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sieh dir die Speichernutzung an und verwalte zwischengespeicherte Bilder, Metadaten und andere temporäre Daten."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Δες τη χρήση αποθηκευτικού χώρου και διαχειρίσου προσωρινά αποθηκευμένες εικόνες, μεταδεδομένα και άλλα δεδομένα."
+            "value" : "Sieh, wie viel Rivulet zwischengespeichert hat, und leere den Speicher."
           }
         }
       }
@@ -17569,12 +17323,12 @@
         }
       }
     },
-    "What shows when the credits start. Up Next opens the next episode card with its countdown. Skip Button shows only Skip Credits and opens Up Next at the end. Nothing shows no button or card until the end. Countdown decides whether the next episode autoplays." : {
+    "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Nothing waits for the end. Countdown decides whether the next episode autoplays." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beim Abspann zeigt „Als Nächstes“ die nächste Folge mit Countdown, „Überspringen-Taste“ nur „Abspann überspringen“ und „Nichts“ bis zum Ende gar nichts."
+            "value" : "Beim Abspann öffnet „Als Nächstes“ die nächste Folge, „Überspringen-Taste“ zeigt nur „Abspann überspringen“ und „Nichts“ wartet. Der Countdown entscheidet über Autoplay."
           }
         }
       }
@@ -17643,18 +17397,12 @@
         }
       }
     },
-    "When a recap starts. Manual shows Skip Recap, Automatic skips it, Off shows nothing. Recap markers come from the community database below." : {
+    "What happens when a recap starts. Manual shows Skip Recap, Automatic skips it, and Off never shows the button. Markers come from the community database below." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beim Beginn eines Rückblicks: „Manuell“ zeigt „Rückblick überspringen“, „Automatisch“ überspringt ihn, „Aus“ zeigt nichts. Die Markierungen stammen aus der Community-Datenbank unten."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Στην αρχή ανακεφαλαίωσης. «Χειροκίνητο» εμφανίζει «Παράλειψη ανακεφαλαίωσης», «Αυτόματο» την παραλείπει και «Ανενεργό» δεν εμφανίζει τίποτα. Οι δείκτες προέρχονται από την κοινοτική βάση παρακάτω."
+            "value" : "Beim Rückblick zeigt „Manuell“ „Rückblick überspringen“, „Automatisch“ überspringt ihn und „Aus“ zeigt nichts. Die Markierungen stammen aus der Community-Datenbank unten."
           }
         }
       }
@@ -17885,12 +17633,12 @@
         }
       }
     },
-    "Your %@ server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {
+    "Your %@ server's address with its port, like http://192.168.1.100:8096." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die Adresse deines %@-Servers mit Port, zum Beispiel http://192.168.1.100:8096. Du kannst die Adresse aus deinem Browser einfügen."
+            "value" : "Die Adresse deines %@-Servers mit Port, zum Beispiel http://192.168.1.100:8096."
           }
         }
       }
@@ -18001,18 +17749,12 @@
         }
       }
     },
-    "Your Jellyfin server's address, including the port, for example http://192.168.1.100:8096. You can paste the address from your browser." : {
+    "Your Jellyfin server's address with its port, like http://192.168.1.100:8096." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die Adresse deines Jellyfin-Servers mit Port, zum Beispiel http://192.168.1.100:8096. Du kannst die Adresse aus deinem Browser einfügen."
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Η διεύθυνση του διακομιστή Jellyfin μαζί με τη θύρα, π.χ. http://192.168.1.100:8096. Μπορείς να την αντιγράψεις από τον περιηγητή."
+            "value" : "Die Adresse deines Jellyfin-Servers mit Port, zum Beispiel http://192.168.1.100:8096."
           }
         }
       }
@@ -18836,12 +18578,12 @@
         }
       }
     },
-    "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone and iPad signed in to your Apple Account. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this." : {
+    "Keeps your settings, servers and Live TV sources the same on every Apple TV, iPhone, iPad and Mac on your Apple Account. Sign-ins are encrypted in iCloud. Watch progress stays with your servers." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hält Einstellungen, Server und Live-TV-Quellen auf allen Apple TVs, iPhones und iPads mit deinem Apple-Account gleich. Anmeldungen liegen verschlüsselt in iCloud, den Fortschritt liefern deine Server."
+            "value" : "Hält Einstellungen, Server und Live-TV-Quellen auf allen Geräten mit deinem Apple-Account gleich. Anmeldungen liegen verschlüsselt in iCloud, der Fortschritt auf deinen Servern."
           }
         }
       }

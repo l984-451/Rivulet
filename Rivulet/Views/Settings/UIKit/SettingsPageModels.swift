@@ -1387,7 +1387,7 @@ enum SettingsContent {
             SettingsRowItem(id: "forceRefresh", title: "Force Refresh Libraries",
                             kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Force Refresh Libraries?",
-                               message: "This clears the metadata cache and reloads library content from your Plex server.",
+                               message: "This clears the metadata cache and reloads your libraries from all your servers.",
                                confirmTitle: "Refresh", destructive: false) {
                     Task {
                         await CacheManager.shared.clearAllCache()

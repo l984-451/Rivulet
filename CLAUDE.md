@@ -782,6 +782,15 @@ The old optimistic path (`PlexDataStore.updateItemWatchStatus`,
 reintroduce optimistic Continue Watching mutation from a shelf (reverted in
 `90bfd2b` for focus reasons).
 
+**The server counts a finished play itself.** PMS marks a title watched, clears its
+resume point and adds a play once a timeline passes its played threshold or first
+credits marker (measured on 1.43; a position under about a minute is never stored).
+A scrobble on top counts the play again: one viewing of an episode read as 3 plays.
+So each player asks first (`PlexNetworkManager.serverCountedPlay`, with the view count
+from when playback began) and scrobbles only when the server has not. After a scrobble,
+a `playing` report below the server's completion point brings the resume point back,
+which is why leaving at or after the credits mark also marks watched (`watchedMark`).
+
 Home answers the notification with Continue Watching and the promoted rows
 (`PlexDataStore.refreshAfterWatchStateChange`). The global `/hubs` (about 500 KB,
 over a second on the server) is fetched once a session for the hero's fallback, and

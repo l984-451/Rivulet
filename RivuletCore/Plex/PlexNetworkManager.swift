@@ -1272,6 +1272,22 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     }
 
+    /// Whether the server already counted the play that just finished. PMS marks a title
+    /// watched itself once a timeline passes its played threshold or first credits marker
+    /// (measured on 1.43), and a scrobble on top of that counts the same play again.
+    /// `playsBefore` is the item's view count when playback began.
+    func serverCountedPlay(serverURL: String, authToken: String, ratingKey: String, playsBefore: Int) async -> Bool {
+        guard let now = try? await getMetadata(serverURL: serverURL, authToken: authToken, ratingKey: ratingKey) else {
+            return false
+        }
+        return Self.playAlreadyCounted(viewOffset: now.viewOffset, viewCount: now.viewCount, playsBefore: playsBefore)
+    }
+
+    /// Watched with no resume point, and more plays than before.
+    nonisolated static func playAlreadyCounted(viewOffset: Int?, viewCount: Int?, playsBefore: Int) -> Bool {
+        (viewOffset ?? 0) == 0 && (viewCount ?? 0) > playsBefore
+    }
+
     /// Mark item as unwatched
     func markUnwatched(
         serverURL: String,

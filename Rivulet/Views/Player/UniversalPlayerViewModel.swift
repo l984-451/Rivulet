@@ -535,6 +535,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     private let reportingInterval: TimeInterval = 10
     private var lastReportedTime: TimeInterval = 0
+    /// The title this player marked watched at its credits, and the position it did so at.
+    private var watchedMark: (key: String, time: TimeInterval)?
     /// Paused timelines every `reportingInterval`, as Plex clients send, so the
     /// server can end a paused session (#403).
     private var pausedTimelineTask: Task<Void, Never>?
@@ -6726,9 +6728,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             return
         }
 
+        let ratingKey = metadata.ratingKey ?? ""
+        let playsBefore = metadata.viewCount ?? 0
+
         // 1. Report stopped state to Plex
         await PlexProgressReporter.shared.reportProgress(
-            ratingKey: metadata.ratingKey ?? "",
+            ratingKey: ratingKey,
             time: time,
             duration: duration,
             state: "stopped",
@@ -6736,10 +6741,14 @@ final class UniversalPlayerViewModel: ObservableObject {
             server: plexServer
         )
 
-        // 2. Mark as watched if > 90% complete
-        if duration > 0 && time / duration > 0.9 {
+        // 2. Mark as watched if > 90% complete, or if the viewer left at or after the point
+        // where the title was already marked watched (its credits): the stopped report above
+        // would otherwise leave a resume point there on a server that completes on percentage alone.
+        let pastWatchedMark = watchedMark.map { $0.key == ratingKey && time >= $0.time } ?? false
+        if duration > 0 && (time / duration > 0.9 || pastWatchedMark) {
             await PlexProgressReporter.shared.markAsWatched(
-                ratingKey: metadata.ratingKey ?? "",
+                ratingKey: ratingKey,
+                playsBefore: playsBefore,
                 server: plexServer
             )
         }
@@ -6807,6 +6816,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             return
         }
         guard let ratingKey = metadata.ratingKey, !ratingKey.isEmpty else { return }
+        let playsBefore = metadata.viewCount ?? 0
+        if watchedMark?.key != ratingKey { watchedMark = (ratingKey, currentTime) }
 
         // Report stopped state
         await PlexProgressReporter.shared.reportProgress(
@@ -6817,8 +6828,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             server: plexServer
         )
 
-        // Mark as watched (episode reached post-video, so it's effectively complete)
-        await PlexProgressReporter.shared.markAsWatched(ratingKey: ratingKey, server: plexServer)
+        // Mark as watched (episode reached post-video, so it's effectively complete). The server
+        // has usually counted the play itself by now; a second scrobble would count it again.
+        await PlexProgressReporter.shared.markAsWatched(ratingKey: ratingKey, playsBefore: playsBefore, server: plexServer)
     }
 
     // MARK: - Cleanup

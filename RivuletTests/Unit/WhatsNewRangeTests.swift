@@ -21,6 +21,12 @@ final class WhatsNewRangeTests: XCTestCase {
         XCTAssertEqual(WhatsNewRange.versions(all, current: "1.3.0 (126)", lastSeen: ""), ["1.3.0 (126)"])
     }
 
+    func test_capsAtFiveNewest() {
+        let many = (1...8).reversed().map { "1.0.0 (\($0))" }
+        XCTAssertEqual(WhatsNewRange.versions(many, current: "1.0.0 (8)", lastSeen: "1.0.0 (0)"),
+                       ["1.0.0 (8)", "1.0.0 (7)", "1.0.0 (6)", "1.0.0 (5)", "1.0.0 (4)"])
+    }
+
     func test_neverShowsNewerThanRunning() {
         XCTAssertEqual(WhatsNewRange.versions(all, current: "1.2.0 (124)", lastSeen: "1.2.0 (122)"), ["1.2.0 (124)"])
     }

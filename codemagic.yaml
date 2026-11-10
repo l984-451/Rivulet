@@ -467,6 +467,9 @@ workflows:
             exit 1
           fi
           OPTIONS="$HOME/export_options.plist"
+          # use-profiles can write method=ad-hoc, which exportArchive rejects for a Mac app.
+          /usr/libexec/PlistBuddy -c "Delete :method" "$OPTIONS" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$OPTIONS"
           /usr/libexec/PlistBuddy -c "Delete :installerSigningCertificate" "$OPTIONS" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $INSTALLER" "$OPTIONS"
           xcodebuild -exportArchive \

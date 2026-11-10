@@ -20,12 +20,8 @@ final class LaunchSplashView: UIView {
         static let sheenRest: CFTimeInterval = 0.8
         static let skyDrift: CFTimeInterval = 20
         static let bloomBreath: CFTimeInterval = 2.6
-        static let exit: CFTimeInterval = 0.6
-        /// How long a pour still running at finish takes to complete.
-        static let pourHurry: CFTimeInterval = 0.25
-        /// A finish this soon after launch only fades: nothing was waited on.
-        static let earlyFinish: CFTimeInterval = 0.3
-        static let quickFade: CFTimeInterval = 0.35
+        /// Home is ready when the exit starts, so it is short.
+        static let exit: CFTimeInterval = 0.25
     }
 
     private enum Layout {
@@ -55,7 +51,6 @@ final class LaunchSplashView: UIView {
     private let sheenBand = CAGradientLayer()
     private let art = UIImage(named: "LaunchRiver")?.cgImage
 
-    private static let pourKey = "pour"
     private var hasStarted = false
     private var isFinishing = false
     private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
@@ -156,7 +151,7 @@ final class LaunchSplashView: UIView {
         pour.duration = Timing.reveal
         pour.fillMode = .backwards
         pour.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        reveal.add(after(Timing.revealDelay, pour), forKey: Self.pourKey)
+        reveal.add(after(Timing.revealDelay, pour), forKey: "pour")
 
         let settle = CABasicAnimation(keyPath: "transform.scale")
         settle.fromValue = 0.95
@@ -250,48 +245,24 @@ final class LaunchSplashView: UIView {
 
     // MARK: - Exit
 
-    /// Plays the exit, then calls `completion`. A pour still running finishes in
-    /// `pourHurry` first, so a half-drawn R never zooms away; a finish right at launch just fades.
+    /// Plays the exit, then calls `completion`. Home is ready by now, so the exit
+    /// never waits on the entrance: a pour still running just zooms away with the rest.
     func finish(completion: @escaping () -> Void) {
         guard !isFinishing else { return }
         isFinishing = true
-        let now = CACurrentMediaTime()
-        // The pour carries its commit time once on screen, and is gone once it has played.
-        let pour = reveal.animation(forKey: Self.pourKey)
-        let pourStart = pour.map { $0.beginTime > 0 ? $0.beginTime : now }
-        let barelyShown = !hasStarted || pourStart.map { now - $0 < Timing.earlyFinish } ?? false
-
         CATransaction.begin()
         CATransaction.setCompletionBlock(completion)
-        if barelyShown || reduceMotion {
-            layer.add(fade(from: 1, to: 0, duration: Timing.quickFade), forKey: "exit")
-        } else {
-            var begin = now
-            // A pour still running is hurried to its end, so Home never waits on it.
-            if let pour, let pourStart, now < pourStart + pour.duration {
-                let hurry = CABasicAnimation(keyPath: "locations")
-                hurry.fromValue = reveal.presentation()?.locations
-                    ?? [NSNumber(value: Double(-Layout.revealFeather)), 0]
-                hurry.toValue = reveal.locations
-                hurry.duration = Timing.pourHurry
-                hurry.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                reveal.add(hurry, forKey: Self.pourKey)
-                begin = now + Timing.pourHurry
-            }
+        if !reduceMotion {
             let zoom = CABasicAnimation(keyPath: "transform.scale")
             zoom.fromValue = 1
             zoom.toValue = Layout.exitScale
             zoom.duration = Timing.exit
-            zoom.beginTime = begin
-            zoom.fillMode = .both
+            zoom.fillMode = .forwards
             zoom.isRemovedOnCompletion = false
             zoom.timingFunction = CAMediaTimingFunction(name: .easeIn)
             logo.add(zoom, forKey: "exit")
-            let fadeOut = fade(from: 1, to: 0, duration: Timing.exit)
-            fadeOut.beginTime = begin
-            fadeOut.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            layer.add(fadeOut, forKey: "exit")
         }
+        layer.add(fade(from: 1, to: 0, duration: Timing.exit), forKey: "exit")
         layer.opacity = 0
         CATransaction.commit()
     }

@@ -265,7 +265,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         // 3. Genre · rating.
         genreRatingRow.axis = .horizontal
         genreRatingRow.alignment = .center
-        genreRatingRow.spacing = 6
+        genreRatingRow.spacing = 12
         style(genreLabel, size: 25, weight: .medium, alpha: 1)
         genreRatingRow.addArrangedSubview(genreLabel)
         if let rating = item.contentRating, !rating.isEmpty {
@@ -549,7 +549,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         for raw in badges {
             let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
+            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text, filled: text == "4K")) }
         }
         addVersionsButton(detail)
     }
@@ -706,16 +706,18 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     /// Small bordered capsule badge (rating, DV, Atmos, SDH, …).
-    private static func badge(_ text: String = "") -> UILabel {
+    private static func badge(_ text: String = "", filled: Bool = false) -> UILabel {
         let l = PaddedLabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.text = text
         l.font = .systemFont(ofSize: 15, weight: .bold)
         l.textAlignment = .center
-        l.textColor = UIColor.white.withAlphaComponent(0.75)
+        l.textColor = filled ? .black : UIColor.white.withAlphaComponent(0.75)
         l.layer.borderColor = UIColor.white.withAlphaComponent(0.5).cgColor
-        l.layer.borderWidth = 1
-        l.layer.cornerRadius = 4
+        l.layer.borderWidth = filled ? 0 : 1
+        l.layer.cornerRadius = 5
+        l.backgroundColor = filled ? UIColor.white.withAlphaComponent(0.75) : .clear
+        l.clipsToBounds = true
         l.layer.cornerCurve = .continuous
         // Apple caps a badge at 22pt total height.
         l.heightAnchor.constraint(equalToConstant: 22).isActive = true

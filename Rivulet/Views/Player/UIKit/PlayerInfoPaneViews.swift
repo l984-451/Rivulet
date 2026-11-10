@@ -100,7 +100,7 @@ final class PlayerInfoCardView: UIView {
 
         let meta = UIStackView()
         meta.axis = .horizontal
-        meta.spacing = 6
+        meta.spacing = 12
         meta.alignment = .center
         let words = content.metaLine ?? [content.genre, content.runtimeMinutes.map { String(localized: "\($0) min") }].compactMap { $0 }
         if !words.isEmpty {
@@ -112,7 +112,7 @@ final class PlayerInfoCardView: UIView {
             meta.setCustomSpacing(15, after: label)
         }
         for badge in content.badges {
-            meta.addArrangedSubview(PlayerInfoBadgeView(text: badge))
+            meta.addArrangedSubview(PlayerInfoBadgeView(text: badge, filled: badge == "4K"))
         }
 
         let action = PlayerPaneActionButton(title: String(localized: "From Beginning"), symbol: "play.fill")
@@ -300,15 +300,16 @@ final class PlayerPaneActionButton: UIControl {
 
 /// Outlined badge (rating, HD, CC) after the Info card's meta line.
 private final class PlayerInfoBadgeView: UIView {
-    init(text: String) {
+    init(text: String, filled: Bool = false) {
         super.init(frame: .zero)
         let label = UILabel()
         label.text = text
         label.font = .systemFont(ofSize: 15, weight: .bold)
-        label.textColor = .white
+        label.textColor = filled ? .black : .white
         layer.borderColor = UIColor.white.cgColor
-        layer.borderWidth = 2
-        layer.cornerRadius = 4
+        layer.borderWidth = filled ? 0 : 2
+        layer.cornerRadius = 5
+        backgroundColor = filled ? .white : .clear
         addSubview(label)
         label.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

@@ -144,8 +144,8 @@ struct IOSPlexLibrariesView: View {
     }
 }
 
-/// One library: Recommended (its own rows under a hero, like Home) or Browse (every title).
-/// The page is remembered per library.
+/// One library: Recommended (its own rows under a hero, like Home), Browse (every title) or
+/// Folders (as on disk). The page is remembered per library.
 struct IOSPlexLibraryView: View {
     let library: MediaLibrary
     /// Only a tab root shows the avatar; a library pushed from the Library list does not.
@@ -157,12 +157,13 @@ struct IOSPlexLibraryView: View {
     @State private var rows: [MediaHub] = []
 
     enum Page: String, CaseIterable {
-        case recommended, browse
+        case recommended, browse, folders
 
         var title: String {
             switch self {
             case .recommended: String(localized: "Recommended")
             case .browse: String(localized: "Browse")
+            case .folders: String(localized: "Folders")
             }
         }
     }
@@ -170,10 +171,14 @@ struct IOSPlexLibraryView: View {
     init(library: MediaLibrary, showsAccount: Bool = false) {
         self.library = library
         self.showsAccount = showsAccount
-        _pageRaw = AppStorage(wrappedValue: Page.recommended.rawValue, "iosLibraryPage.\(library.settingKey)")
+        let initial: Page = library.browsesByFolder ? .folders : .recommended
+        _pageRaw = AppStorage(wrappedValue: initial.rawValue, "iosLibraryPage.\(library.settingKey)")
     }
 
-    private var page: Page { Page(rawValue: pageRaw) ?? .recommended }
+    private var pages: [Page] {
+        library.offersFolders(on: browse.provider(for: library.providerID)) ? Page.allCases : [.recommended, .browse]
+    }
+    private var page: Page { Page(rawValue: pageRaw).flatMap { pages.contains($0) ? $0 : nil } ?? .recommended }
     private var heroItems: [MediaItem] { page == .recommended && showHero ? HomeHero.libraryItems(rows) : [] }
 
     var body: some View {
@@ -182,6 +187,7 @@ struct IOSPlexLibraryView: View {
             switch page {
             case .recommended: IOSPlexLibraryRecommendedView(library: library, rows: $rows, heroItems: heroItems)
             case .browse: IOSPlexLibraryBrowseView(library: library)
+            case .folders: IOSFolderListView(library: library)
             }
         }
         .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID))
@@ -190,7 +196,7 @@ struct IOSPlexLibraryView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Picker("Page", selection: $pageRaw) {
-                        ForEach(Page.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                        ForEach(pages, id: \.self) { Text($0.title).tag($0.rawValue) }
                     }
                 } label: {
                     HStack(spacing: 4) {

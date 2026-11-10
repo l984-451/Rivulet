@@ -44,17 +44,15 @@ final class LibraryModeViewController: UIViewController {
                   })
     }
 
-    /// A Jellyfin or Emby library that browses by folder; opens on its folders.
+    /// A library through its provider. One with no metadata opens on its folders.
     convenience init(provider library: MediaLibrary) {
-        self.init(title: library.title, settingsKey: library.settingsKey, defaultMode: .folders,
+        self.init(title: library.title, settingsKey: library.settingsKey,
+                  defaultMode: library.browsesByFolder ? .folders : .titles,
                   makeGrid: {
                       PlexHomeViewController(mode: .library(key: library.settingsKey, title: library.title),
                                              providerLibrary: library)
                   },
-                  folderSource: {
-                      (MediaProviderRegistry.shared.provider(for: library.providerID) as? any FolderProvider)
-                          .map { ($0, library) }
-                  })
+                  folderSource: FolderListing.source(for: library))
     }
 
     @available(*, unavailable)

@@ -23,6 +23,11 @@ final class FolderListing {
 
     static let pageSize = 100
 
+    /// The library's own provider, from the registry.
+    static func source(for library: MediaLibrary) -> Source {
+        { (MediaProviderRegistry.shared.provider(for: library.providerID) as? any FolderProvider).map { ($0, library) } }
+    }
+
     let folder: MediaItemRef?
     private(set) var entries: [FolderEntry] = []
     private(set) var isLoading = false {
@@ -113,6 +118,22 @@ final class FolderListing {
         guard let index = entries.firstIndex(where: { $0.id == item.ref }),
               case .video = entries[index].content else { return }
         entries[index] = FolderEntry(id: item.ref, title: entries[index].title, content: .video(item))
+    }
+
+    /// The folder's photos, loaded, and `photo`'s place in them. Just `photo` when the
+    /// photo listing lacks it, rather than the wrong one.
+    func photos(openingAt photo: PhotoItem) async -> (listing: PhotoListing, index: Int)? {
+        let source = source
+        let photos = PhotoListing(folder: folder) {
+            guard let (provider, library) = source(), let photoProvider = provider as? any PhotoProvider else { return nil }
+            return (photoProvider, library)
+        }
+        await photos.loadFirst()?.value
+        if let index = photos.media.firstIndex(where: { $0.ref == photo.ref }) { return (photos, index) }
+        guard let (_, library) = source() else { return nil }
+        let single = PhotoListing(folder: nil) { (FixedPhotoProvider(items: [photo]), library) }
+        await single.loadFirst()?.value
+        return single.media.isEmpty ? nil : (single, 0)
     }
 
     private func fetch(_ page: Page) async throws -> FolderPage {

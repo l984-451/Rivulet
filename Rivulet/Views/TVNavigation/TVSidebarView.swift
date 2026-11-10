@@ -659,7 +659,9 @@ struct TVSidebarView: View {
         case .providerLibrary(let providerID, let libraryID):
             // The same page as a Plex library, through the provider.
             if let library = serverStore.libraries.first(where: { $0.providerID == providerID && $0.id == libraryID }) {
-                if library.browsesByFolder { return LibraryModeViewController(provider: library) }
+                if library.offersFolders(on: MediaProviderRegistry.shared.provider(for: library.providerID)) {
+                    return LibraryModeViewController(provider: library)
+                }
                 if library.kind == .photos {
                     return PhotoLibraryViewController(title: library.title, source: PhotoListing.source(for: library))
                 }

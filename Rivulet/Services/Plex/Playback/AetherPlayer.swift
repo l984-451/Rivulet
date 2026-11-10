@@ -139,10 +139,15 @@ final class AetherPlayer: PlayerProtocol {
     /// the torn-down session stays parked (clock intact, so the paused UI
     /// shows the true position) and play() performs the reload. Holds the
     /// background timestamp so the teardown-drain wait still applies.
-    private var pendingReloadSince: Date?
+    @Published private(set) var pendingReloadSince: Date?
 
     /// True while the engine is torn down awaiting Play: no video frame exists.
     var isParkedForReload: Bool { pendingReloadSince != nil }
+
+    /// `isParkedForReload` as it changes, for the pause screen's "no frame" state.
+    var isParkedForReloadPublisher: AnyPublisher<Bool, Never> {
+        $pendingReloadSince.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+    }
 
     /// One file of a stacked title.
     struct PartFile {

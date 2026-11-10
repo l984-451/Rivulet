@@ -153,6 +153,7 @@ Standing exceptions:
 - Downloads are iOS only.
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
 - Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
+- The pause screen is tvOS only: iOS and the Mac app keep their controls up while paused, as the system player does.
 
 ## Platform Boundary (tvOS / iOS)
 
@@ -719,7 +720,8 @@ functions over those signals in the same file (`cost`, `chooseSlot`, `choose`,
   floor (`restingPlacement`), and stays there while it reads (`goodEnoughCost`);
   it moves only when another spot reads clearly better (`moveMargin`), so a row
   keeps one look. `trailingCost` keeps it off the trailing edge unless needed.
-  The same hold applies to Top Shelf and the pause screen through `chooseSlot`.
+  The same hold applies to Top Shelf through `chooseSlot`. The pause screen
+  (`PauseScreenView`) does not read its artwork: its logo has a fixed place.
 - **Top Shelf logo**: `TopShelfImageCompositor.placement` runs the same `choose`
   over its own candidate rects.
 - **The Home hero does not read its artwork.** Its scrim is the Apple TV app's,

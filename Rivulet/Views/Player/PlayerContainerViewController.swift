@@ -30,8 +30,11 @@ class PlayerContainerViewController: UIViewController {
     private var railPillConstraints: [NSLayoutConstraint] = []
     private var pausedDimView: UIView?
     private var chromeScrim = ChromeScrimView()
-    private var ambientScrim: BottomScrimView?
     private var captionOverlay: CaptionOverlayView?
+    /// The pause screen (10 s and 2 min paused). Written only by `applyPauseScreen`.
+    private var pauseScreen: PauseScreenView?
+    /// Insights raised over the pause screen from its hint.
+    private var pauseInsights: PauseInsightsView?
     private var cancellables = Set<AnyCancellable>()
     /// The one floating panel shared by CC, audio, info and Up Next.
     private var activeRailPanel: PlayerRailPanelView?
@@ -197,8 +200,6 @@ class PlayerContainerViewController: UIViewController {
             dim.alpha = 0
             dim.isUserInteractionEnabled = false
 
-            let ambientBottomScrim = BottomScrimView()
-            ambientBottomScrim.alpha = 0
             let railView = PlayerRailView()
             let bar = PlayerProgressBarView()
             let proxy = ScrubberFocusProxyView()
@@ -225,7 +226,7 @@ class PlayerContainerViewController: UIViewController {
                 return true
             }
 
-            [chromeScrim, dim, ambientBottomScrim, railView, bar, proxy, pill].forEach {
+            [chromeScrim, dim, railView, bar, proxy, pill].forEach {
                 view.addSubview($0)
                 $0.translatesAutoresizingMaskIntoConstraints = false
             }
@@ -233,9 +234,6 @@ class PlayerContainerViewController: UIViewController {
             // matches, but state this is intentional, not incidental).
             view.bringSubviewToFront(chromeScrim)
             view.bringSubviewToFront(dim)
-            // Ambient bottom scrim sits above the dim/chrome scrim but below
-            // the scrubber, so during ambient pause the scrubber reads over it.
-            view.bringSubviewToFront(ambientBottomScrim)
             view.bringSubviewToFront(railView)
             view.bringSubviewToFront(bar)
             view.bringSubviewToFront(proxy)
@@ -251,14 +249,6 @@ class PlayerContainerViewController: UIViewController {
                 dim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 dim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 dim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-                // Ambient bottom scrim: full-width, pinned to the bottom, tall
-                // enough to sit behind the scrubber (which is ~118pt off the
-                // bottom) during ambient pause.
-                ambientBottomScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                ambientBottomScrim.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                ambientBottomScrim.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-                ambientBottomScrim.heightAnchor.constraint(equalToConstant: 320),
 
                 // Rail: the screen's bottom band, edge to edge (AVKit's layout).
                 railView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -317,11 +307,18 @@ class PlayerContainerViewController: UIViewController {
                 view.insertSubview(contentAnchor, belowSubview: railView)
             }
 
+            // The pause screen covers the video and captions and stays below the
+            // anchor: full-screen, so above it the anchor could not take focus.
+            let pause = PauseScreenView(frame: view.bounds)
+            pause.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            pause.progress = { [weak vm] in (vm?.currentTime ?? 0, vm?.duration ?? 0) }
+            view.insertSubview(pause, belowSubview: contentAnchor ?? railView)
+            pauseScreen = pause
+
             rail = railView
             progressBar = bar
             scrubberProxy = proxy
             skipPill = pill
-            ambientScrim = ambientBottomScrim
             pausedDimView = dim
 
             bindChrome(to: vm)
@@ -386,6 +383,7 @@ class PlayerContainerViewController: UIViewController {
         // Chrome hidden + a skip marker up: the pill is the lone affordance, so
         // it owns focus and a single Select jumps forward. (Ownership is false
         // whenever the rail/panel is up, so this never fights the checks above.)
+        if let pauseInsights { return [pauseInsights] }
         if viewModel?.skipPillOwnsFocus == true, let skipPill {
             return [skipPill]
         }
@@ -441,10 +439,10 @@ class PlayerContainerViewController: UIViewController {
                 panel.dismissPanel()
                 return
             }
-            // Ambient pause backdrop: back returns to the paused frame, it
-            // does not exit the player.
+            // Pause screen: back returns to the paused frame, it does not
+            // exit the player.
             if vm.backReturnsToPausedFrame {
-                vm.hidePausedPoster()
+                vm.dismissPauseScreen()
                 return
             }
             // Back from the transport buttons closes the whole chrome in one
@@ -539,6 +537,13 @@ class PlayerContainerViewController: UIViewController {
         }
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // Safety net for an exit that never stops the view model (`stopPlayback`
+        // otherwise brings the pause screen down through `applyPauseScreen`).
+        pauseScreen?.hide()
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         blockDismissResetWorkItem?.cancel()
@@ -566,6 +571,8 @@ class PlayerContainerViewController: UIViewController {
     /// Last-seen value of `viewModel.skipPillOwnsFocus`, so a change can
     /// trigger a focus re-resolution toward/away from the pill exactly once.
     private var lastSkipPillOwnsFocus = false
+    /// The pause screen was up on the last chrome pass; its arrival sets the fade's clock.
+    private var lastAmbient = false
 
     /// Flag to block dismiss calls that occur immediately after we handled a menu action
     /// This prevents the double-handling issue where handleMenuButton() closes something,
@@ -777,9 +784,14 @@ class PlayerContainerViewController: UIViewController {
 
     /// Up/Down: while scrubbing, Up snaps to the next chapter in the direction
     /// of travel and Down cancels. Otherwise they surface the controls as AVKit
-    /// does: Up lands on the first tool button, Down opens the Info pane.
+    /// does: Up lands on the first tool button, Down opens the Info pane
+    /// (Insights over the pause screen, from its hint).
     private func handleContentVertical(up: Bool) {
         guard let vm = viewModel else { return }
+        if !up, pauseScreen?.showsInsightsHint == true, !vm.isScrubbing {
+            openPauseInsights()
+            return
+        }
         vm.hidePausedPoster()
         if vm.isScrubbing {
             if up {
@@ -940,7 +952,7 @@ class PlayerContainerViewController: UIViewController {
                     panel.dismissPanel()
                 }
             } else if vm.backReturnsToPausedFrame {
-                vm.hidePausedPoster()
+                vm.dismissPauseScreen()
             } else if vm.showPausedPoster {
                 dismissPlayer()
             } else if vm.controlsFocusActive {
@@ -1232,10 +1244,32 @@ class PlayerContainerViewController: UIViewController {
             .sink { [weak self] _ in self?.captionOverlay?.style = CaptionAppearance.current() }
             .store(in: &cancellables)
 
-        // Ambient pause: the whole chrome yields to the clean backdrop.
+        // The pause screen: the whole chrome yields to it.
         vm.$pausePresentation
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.applyChromeVisibility() }
+            .sink { [weak self] _ in
+                self?.applyChromeVisibility()
+                self?.applyPauseScreen()
+            }
+            .store(in: &cancellables)
+
+        // A logo that resolves after the pause screen is up.
+        vm.$titleLogoImage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] image in self?.pauseScreen?.setLogo(image) }
+            .store(in: &cancellables)
+
+        // A paused return from sleep leaves the engine torn down (no frame, #523).
+        // AetherPlayer publishes that state; the current player's publisher is
+        // followed across item swaps, and no player means not parked.
+        vm.$aetherPlayer
+            .map { player -> AnyPublisher<Bool, Never> in
+                player?.isParkedForReloadPublisher ?? Just(false).eraseToAnyPublisher()
+            }
+            .switchToLatest()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyPauseScreen() }
             .store(in: &cancellables)
 
         vm.$playbackState
@@ -1273,6 +1307,7 @@ class PlayerContainerViewController: UIViewController {
         vm.$postVideoState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
+                self?.applyPauseScreen()
                 // Order follows focus: mount the page BEFORE the chrome gives up
                 // focus, and restore the chrome (re-enabling the content anchor)
                 // BEFORE the page is removed, so each focus update runs while its
@@ -1539,12 +1574,19 @@ class PlayerContainerViewController: UIViewController {
         return !trivia.visibleFacts(suppressed: suppressedTriviaIDsCache).isEmpty
     }
 
+    /// The pause screen offers Insights only for trivia, never for a cast list alone.
+    private var pauseInsightsAvailable: Bool {
+        guard let trivia = insightsTriviaCache else { return false }
+        return !trivia.visibleFacts(suppressed: suppressedTriviaIDsCache).isEmpty
+    }
+
     /// Re-derives the rail's Insights button visibility from the current
     /// cast + trivia snapshots. Called from both the `$insightsCast` and
     /// `$insightsTrivia` sinks since either can flip the combined
     /// availability independently of the other.
     private func updateInsightsAvailability() {
         rail?.setInsightsAvailable(insightsButtonShouldBeAvailable)
+        pauseScreen?.setInsightsAvailable(pauseInsightsAvailable)
     }
 
     /// Shared presenter for the rail panels; presenting one dismisses the last.
@@ -1875,8 +1917,8 @@ class PlayerContainerViewController: UIViewController {
         restartPaneIdleTimer()
         // Disarm them for the panel that just came up (see above).
         applyChromeVisibility()
-        // A rail panel is a full-screen-adjacent overlay the ambient-pause
-        // backdrop must not show through/around — see
+        // A rail panel is a full-screen-adjacent overlay the pause screen
+        // must not show through/around — see
         // UniversalPlayerViewModel.isRailPanelOpen.
         viewModel?.isRailPanelOpen = true
         view.setNeedsFocusUpdate(); view.updateFocusIfNeeded()
@@ -2004,6 +2046,8 @@ class PlayerContainerViewController: UIViewController {
     private func applyChromeVisibility() {
         guard let vm = viewModel else { return }
         let ambient = vm.pausePresentation != .frame
+        let ambientChanged = ambient != lastAmbient
+        lastAmbient = ambient
         let isLoading = vm.playbackState == .loading || vm.playbackState == .idle
         // The Up Next card sits over the video alone.
         let chromeVisible = (vm.showControls || vm.isScrubbing || vm.showsSkipBar)
@@ -2017,12 +2061,10 @@ class PlayerContainerViewController: UIViewController {
         if railVisible && !railWasVisible { rail?.resetFocusMemory() }
         railWasVisible = railVisible
         let paused = vm.playbackState == .paused && !ambient && hasPlayedSinceLoad
-        // Ambient pause keeps the scrubber up as a read-only position indicator.
-        let scrubberVisible = chromeVisible || (ambient && !isLoading)
-        // For an episode the rail stays at alpha 1 during ambient so its title
-        // holds; `setAmbient` fades the rest.
-        let keepRailTitle = ambient && vm.metadata.type == "episode"
-        let railAlpha: CGFloat = keepRailTitle ? 1 : (railVisible ? 1 : 0)
+        // The pause screen carries the title and the time left, so nothing of
+        // the chrome stays up under it.
+        let scrubberVisible = chromeVisible
+        let railAlpha: CGFloat = railVisible ? 1 : 0
 
         // The proxy is the rail's first focus landing, focusable as soon as the
         // chrome is up. `proxyHasFocus` keeps it focusable through a scrub it
@@ -2038,6 +2080,7 @@ class PlayerContainerViewController: UIViewController {
         let failed = vm.playbackState.isFailed
         let anchorEnabled = vm.postVideoState == .hidden
             && !failed
+            && pauseInsights == nil
             && !vm.controlsFocusActive
             && !vm.skipPillOwnsFocus
         // Requested after the alpha writes below: the pill and rail accept focus
@@ -2082,15 +2125,12 @@ class PlayerContainerViewController: UIViewController {
         let targets: [(UIView?, CGFloat)] = [
             (chromeScrim, chromeVisible ? 1 : 0),
             (progressBar, scrubberVisible && !paneOpen ? 1 : 0),
-            (ambientScrim, (ambient && !isLoading) ? 1 : 0),
             (rail, railAlpha),
             (skipPill, skipVisible ? 1 : 0),
             (pausedDimView, paused ? 1 : 0),
-            // The pause backdrop replaces the frame the captions belong to (#428).
+            // The pause screen covers the frame the captions belong to (#428).
             (captionOverlay, ambient ? 0 : 1),
         ]
-        // `setAmbient` drives the rail's sub-view alphas, which `targets` cannot see.
-        let railAmbientChanged = rail.map { $0.ambientState != (ambient, keepRailTitle) } ?? false
         let targetsChanged = targets.contains(where: { view, alpha in
             view.map { abs($0.alpha - alpha) > 0.01 } == true
         })
@@ -2099,17 +2139,18 @@ class PlayerContainerViewController: UIViewController {
         let captionLiftChanged = captionOverlay.map { $0.controlsVisible != chromeVisible || $0.paneOpen != paneOpen } ?? false
         captionOverlay?.controlsVisible = chromeVisible
         captionOverlay?.paneOpen = paneOpen
-        guard targetsChanged || railAmbientChanged || ownershipChanged
-                || captionLiftChanged || pillHomeChanged else {
+        guard targetsChanged || ownershipChanged || captionLiftChanged
+                || pillHomeChanged else {
             if anchorNeedsFocusUpdate {
                 setNeedsFocusUpdate()
                 updateFocusIfNeeded()
             }
             return
         }
-        UIView.animate(withDuration: 0.25) {
+        // The pause screen's arrival: the paused dim and chrome hand over to its scrim on its clock.
+        let fade = ambientChanged && ambient ? PauseScreenView.fadeDuration : 0.25
+        UIView.animate(withDuration: fade, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
             for (view, alpha) in targets { view?.alpha = alpha }
-            self.rail?.setAmbient(ambient, keepTitle: keepRailTitle)
             if captionLiftChanged { self.captionOverlay?.layoutIfNeeded() }
             if pillHomeChanged {
                 self.rail?.skipPillSlot.isHidden = !pillInRail
@@ -2124,6 +2165,87 @@ class PlayerContainerViewController: UIViewController {
         if ownershipChanged || anchorNeedsFocusUpdate {
             setNeedsFocusUpdate()
             updateFocusIfNeeded()
+        }
+    }
+
+    // MARK: - Pause screen
+
+    /// Single writer for the pause screen and for the picture's push-in under it.
+    /// Every way out of a pause (resume, Back, any input, an item swap, an error,
+    /// a stop) returns `pausePresentation` to `.frame`, which lands here.
+    private func applyPauseScreen() {
+        guard let vm = viewModel, let pauseScreen else { return }
+        let tier: PauseScreenView.Tier
+        // The Up Next page owns the screen; the pause screen would draw under its card.
+        switch vm.postVideoState == .hidden ? vm.pausePresentation : .frame {
+        case .frame:
+            closePauseInsights()
+            pauseScreen.hide()
+            return
+        case .info: tier = .info
+        case .art: tier = .art
+        case .dimmed: tier = .dimmed
+        }
+        // No frame exists while the engine is torn down after a sleep (#523): the art stands in.
+        let parked = vm.aetherPlayer?.isParkedForReload ?? false
+        if pauseScreen.isShowing {
+            pauseScreen.update(tier: tier, parked: parked)
+        } else {
+            pauseScreen.show(content: pauseScreenContent(vm), tier: tier, parked: parked)
+        }
+    }
+
+    private func pauseScreenContent(_ vm: UniversalPlayerViewModel) -> PauseScreenView.Content {
+        let metadata = vm.metadata
+        return PauseScreenView.Content(
+            title: PauseScreenText.title(for: metadata),
+            logo: vm.titleLogoImage,
+            detailLine: PauseScreenText.detailLine(for: metadata),
+            synopsis: PauseScreenText.synopsis(for: metadata),
+            artURL: vm.ambientBackdropURL,
+            insightsAvailable: pauseInsightsAvailable
+        )
+    }
+
+    /// Down from the pause screen's hint: Insights over the pause screen, no chrome.
+    private func openPauseInsights() {
+        guard pauseInsights == nil, let vm = viewModel, let pauseScreen,
+              let insights = paneContent(.insights, vm: vm)?.view as? InsightsPanelContainerView else { return }
+        let panel = PauseInsightsView(insights: insights)
+        panel.onClose = { [weak self] in self?.closePauseInsights() }
+        // Above the anchor, which would otherwise occlude it; the anchor is gated off meanwhile.
+        view.insertSubview(panel, aboveSubview: contentAnchor ?? pauseScreen)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            panel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: PlayerRailView.sideInset),
+            panel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PlayerRailView.sideInset),
+            panel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -50),
+        ])
+        pauseInsights = panel
+        pauseScreen.setPanelUp(true)
+        view.layoutIfNeeded()
+        panel.alpha = 0
+        panel.transform = CGAffineTransform(translationX: 0, y: 40)
+        UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseOut]) {
+            panel.alpha = 1
+            panel.transform = .identity
+        }
+        applyChromeVisibility()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    private func closePauseInsights() {
+        guard let panel = pauseInsights else { return }
+        pauseInsights = nil
+        pauseScreen?.setPanelUp(false)
+        UIView.animate(withDuration: 0.25, animations: { panel.alpha = 0 }) { _ in panel.removeFromSuperview() }
+        panel.isUserInteractionEnabled = false
+        applyChromeVisibility()
+        // Next turn: Up closes from inside a focus update, which ignores a new request.
+        DispatchQueue.main.async { [weak self] in
+            self?.setNeedsFocusUpdate()
+            self?.updateFocusIfNeeded()
         }
     }
 
@@ -2191,8 +2313,11 @@ class PlayerContainerViewController: UIViewController {
             } else {
                 vm.exitControlsFocus()
             }
-            // A user's move (not a re-resolution) counts as input for the paused poster.
-            if !context.focusHeading.isEmpty { vm.hidePausedPoster() }
+            // A user's move (not a re-resolution) counts as input for the paused poster,
+            // except inside Insights raised over it.
+            let inPauseInsights = [context.previouslyFocusedView, context.nextFocusedView]
+                .contains { view in pauseInsights.map { view?.isDescendant(of: $0) == true } ?? false }
+            if !context.focusHeading.isEmpty && !inPauseInsights { vm.hidePausedPoster() }
         }
         restartPaneIdleTimer()
     }
@@ -2285,27 +2410,6 @@ final class SideScrimView: UIView {
         gradient.locations = [0, 0.6, 1]
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
-
-/// Bottom-anchored legibility gradient for the ambient-pause scrubber. The
-/// glass rail normally grounds the scrubber; during ambient the rail is gone,
-/// so this thin transparent→black gradient keeps the scrubber readable over
-/// bright backdrops.
-final class BottomScrimView: UIView {
-    override class var layerClass: AnyClass { CAGradientLayer.self }
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        let gradient = layer as! CAGradientLayer
-        gradient.colors = [
-            UIColor.black.withAlphaComponent(0).cgColor,
-            UIColor.black.withAlphaComponent(0.55).cgColor,
-        ]
-        gradient.locations = [0, 1]
-        gradient.startPoint = CGPoint(x: 0.5, y: 0)
-        gradient.endPoint = CGPoint(x: 0.5, y: 1)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }

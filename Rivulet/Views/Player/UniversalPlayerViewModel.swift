@@ -96,28 +96,28 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// or immediately on `commitScrub()` / `cancelScrub()`.
     @Published private(set) var wheelScrubbing = false
 
-    /// The three tiers of the paused ambient presentation: `.frame` is the
-    /// live video frame (no overlay); `.ambient` shows the full-res
-    /// crossfaded backdrop + title logo after `pausedPosterDelay` seconds
-    /// paused; `.dimmed` adds a deeper black overlay after
-    /// `pausedPosterDimDelay` seconds paused (OLED burn-in guard).
+    /// The tiers of the pause screen (`PauseScreenView`), by time paused:
+    /// `.frame` is the bare paused frame, `.info` the details over it (10 s),
+    /// `.art` the title's backdrop under them (30 s), `.dimmed` the quieter,
+    /// dimmer state (2 min, an OLED burn-in guard).
     enum PausePresentation: Equatable {
         case frame
-        case ambient
+        case info
+        case art
         case dimmed
     }
     @Published private(set) var pausePresentation: PausePresentation = .frame
 
-    /// Kept for existing call sites; true in either ambient tier.
+    /// True in any pause-screen tier.
     var showPausedPoster: Bool { pausePresentation != .frame }
 
-    /// Back from the poster returns to the paused frame, which does not exist
+    /// Back from the pause screen returns to the paused frame, which does not exist
     /// while the engine is torn down after a sleep: Back must leave instead (#523).
     var backReturnsToPausedFrame: Bool {
         showPausedPoster && !(aetherPlayer?.isParkedForReload ?? false)
     }
 
-    /// Full-resolution backdrop for the ambient pause state: raw Plex art
+    /// Full-resolution backdrop for the pause screen: raw Plex art
     /// path with token, NOT the `/photo/:/transcode` downscale that
     /// `PlexNetworkManager.buildThumbnailURL` applies (the TV renders it at
     /// native size, full-bleed).
@@ -164,7 +164,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         )
     }
 
-    /// Title logo (clearArt) for the transport bar, resolved once per item:
+    /// Title logo (clearArt) for the pause screen, resolved once per item:
     /// prefer the Plex-provided clearLogo image, falling back to TMDB's
     /// images API via the shared cache (same precedence the home hero and
     /// media detail chrome use).
@@ -497,12 +497,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var pausedDueToAppInactive: Bool = false
     private let scrubUpdateInterval: TimeInterval = 0.1  // 100ms updates for smooth scrubbing
     private var seekIndicatorTimer: Timer?
-    private var pausedPosterTimer: Timer?
-    private let pausedPosterDelay: TimeInterval = 10.0
-    private var pausedPosterDimTimer: Timer?
-    private let pausedPosterDimDelay: TimeInterval = 120.0
-    /// True while a rail panel is presented, so the ambient-pause backdrop
-    /// stays off. Set by `PlayerContainerViewController`.
+    private var pausedPosterTimers: [Timer] = []
+    private static let pauseScreenSchedule: [(delay: TimeInterval, tier: PausePresentation)] =
+        [(10, .info), (30, .art), (120, .dimmed)]
+    /// True while a rail panel is presented, so the pause screen stays off.
+    /// Set by `PlayerContainerViewController`.
     var isRailPanelOpen = false {
         didSet {
             guard isRailPanelOpen != oldValue else { return }
@@ -1887,7 +1886,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Fetch season/show poster for Now Playing artwork (episodes)
         await fetchSeasonPosterIfNeeded()
 
-        // Resolve the title logo for the ambient-pause transport bar swap.
+        // Resolve the title logo for the pause screen.
         fetchTitleLogoIfNeeded()
 
         // Aether is the only VOD engine; ContentRouter.plan() emits the
@@ -2914,7 +2913,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         seasonPosterImage = image
     }
 
-    /// Resolve the title logo for the transport bar's ambient-pause swap:
+    /// Resolve the title logo for the pause screen:
     /// prefer the Plex-provided clearLogo image (same precedence as the
     /// home hero and media detail chrome), falling back to TMDB's images
     /// API via `TMDBLogoCache` when Plex doesn't carry one. Cancels any
@@ -3957,6 +3956,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         wheelScrubbingTimer?.invalidate()
         wheelScrubbingTimer = nil
         wheelScrubbing = false
+        // The pause screen comes down through its one path (`pausePresentation`
+        // back to `.frame`), so the container restores the picture and stops the
+        // screen's timers however the player is left.
+        cancelPausedPosterTimer()
         hideCompatibilityNotice()
 
         // Reset display criteria to default (allows TV to return to normal mode)
@@ -5032,54 +5035,42 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Paused Poster Timer
 
-    /// Start timers for the ambient pause presentation: `.ambient` after
-    /// `pausedPosterDelay` seconds paused, `.dimmed` after
-    /// `pausedPosterDimDelay` seconds paused. No-ops while a rail panel is
-    /// open (`isRailPanelOpen`) — the ambient backdrop is a full-screen
-    /// visual that would otherwise show through/around the panel.
+    /// Arms the pause screen's tiers (`pauseScreenSchedule`). No-ops while a rail
+    /// panel is open (`isRailPanelOpen`): the pause screen is full-screen and
+    /// would show through/around the panel.
     private func startPausedPosterTimer() {
         guard !isRailPanelOpen else { return }
-        pausedPosterTimer?.invalidate()
-        pausedPosterTimer = Timer.scheduledTimer(withTimeInterval: pausedPosterDelay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
-                withAnimation(.easeIn(duration: 1.0)) {
-                    self.pausePresentation = .ambient
-                }
-                // The rail goes unfocusable under the poster; hand focus back to
-                // the content anchor so arrows and Select still reach the player.
-                self.controlsFocusActive = false
-            }
-        }
-
-        pausedPosterDimTimer?.invalidate()
-        pausedPosterDimTimer = Timer.scheduledTimer(withTimeInterval: pausedPosterDimDelay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
-                withAnimation(.easeInOut(duration: 1.0)) {
-                    self.pausePresentation = .dimmed
+        pausedPosterTimers.forEach { $0.invalidate() }
+        pausedPosterTimers = Self.pauseScreenSchedule.map { step in
+            Timer.scheduledTimer(withTimeInterval: step.delay, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
+                    self.pausePresentation = step.tier
+                    // The rail goes unfocusable under the pause screen; hand focus back to
+                    // the content anchor so arrows and Select still reach the player.
+                    self.controlsFocusActive = false
                 }
             }
         }
     }
 
-    /// Cancel both ambient-pause timers and drop back to the live frame.
+    /// Cancel the pause-screen timers and drop back to the live frame.
     private func cancelPausedPosterTimer() {
-        pausedPosterTimer?.invalidate()
-        pausedPosterTimer = nil
-        pausedPosterDimTimer?.invalidate()
-        pausedPosterDimTimer = nil
-        if pausePresentation != .frame {
-            withAnimation(.easeOut(duration: 0.5)) {
-                pausePresentation = .frame
-            }
-        }
+        pausedPosterTimers.forEach { $0.invalidate() }
+        pausedPosterTimers = []
+        if pausePresentation != .frame { pausePresentation = .frame }
     }
 
-    /// Any control input drops the paused poster; while paused, its timer restarts from now.
+    /// Any control input drops the pause screen; while paused, its timer restarts from now.
     func hidePausedPoster() {
         cancelPausedPosterTimer()
         if playbackState == .paused { startPausedPosterTimer() }
+    }
+
+    /// Back from the pause screen: the bare paused frame, and the pause screen
+    /// stays down until playback resumes and pauses again.
+    func dismissPauseScreen() {
+        cancelPausedPosterTimer()
     }
 
     // MARK: - Marker Detection & Skipping

@@ -369,32 +369,14 @@ final class PlayerRailView: UIView {
         if available { defaultFocusButton = multiviewButton }
     }
 
-    // MARK: - Ambient pause
-
-    /// During ambient pause the controls fade out, but for a show the episode
-    /// `titleLabel` stays exactly where it is (same place, same size). The
-    /// container holds the rail's own alpha at 1 while ambient so this held
-    /// title can show through. `keepTitle` is false for movies (logo only).
-    ///
-    /// `ambientState` lets the container detect a real change (the sub-view
-    /// alpha shifts here aren't visible to its own top-level `targets` diff).
-    private(set) var ambientState: (ambient: Bool, keepTitle: Bool) = (false, false)
-
-    func setAmbient(_ ambient: Bool, keepTitle: Bool) {
-        ambientState = (ambient, keepTitle)
-        applyAlphas()
-    }
-
     private var isPaneOpen = false
 
-    /// One writer for the sub-view alphas ambient pause and the info pane share.
+    /// One writer for the sub-view alphas the info pane fades.
     private func applyAlphas() {
-        let ambient = ambientState.ambient
-        let chrome: CGFloat = ambient || isPaneOpen ? 0 : 1
+        let chrome: CGFloat = isPaneOpen ? 0 : 1
         subtitleLabel.alpha = chrome
         toolRow.alpha = chrome
-        pillRow.alpha = ambient ? 0 : 1
-        titleLabel.alpha = ambient ? (ambientState.keepTitle ? 1 : 0) : chrome
+        titleLabel.alpha = chrome
     }
 
     // MARK: - Focus

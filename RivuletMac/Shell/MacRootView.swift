@@ -23,6 +23,7 @@ struct MacRootView: View {
     @State private var shellBox = MacShellBox()
     @FocusedValue(\.macPageRefresh) private var pageRefresh: MacPageRefresh?
     @State private var showingWhatsNew = false
+    @State private var whatsNewVersions: [String] = []
     @State private var choosingProfile = false
     @State private var backgroundedAt: Date?
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
@@ -49,7 +50,7 @@ struct MacRootView: View {
             storedRow = row?.storageKey ?? "home"
         }
         .sheet(isPresented: $showingAccount) { MacAccountView(showsDone: true) }
-        .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(version: MacChangelog.currentVersion, showsContinue: true) }
+        .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(versions: whatsNewVersions, showsContinue: true) }
         .sheet(isPresented: $choosingProfile) { MacProfilePickerSheet() }
         .macPlaybackHost(playback)
         // Content is withheld until a profile is entered, and nothing of the locked profile's keeps playing.
@@ -338,7 +339,8 @@ struct MacRootView: View {
     private func showWhatsNewIfUpdated() {
         let current = MacChangelog.currentVersion
         guard plex.isConfigured, current != lastSeenBuild else { return }
+        whatsNewVersions = WhatsNewRange.versions(MacChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
-        showingWhatsNew = MacChangelog.lines(for: current) != nil
+        showingWhatsNew = !whatsNewVersions.isEmpty
     }
 }

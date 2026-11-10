@@ -42,17 +42,24 @@ enum MacChangelog {
 
 /// Shown once after an update whose build has notes, and from Help > What's New.
 struct MacWhatsNewView: View {
-    let version: String
+    /// Newest first: every build since the last one seen, or one from Help.
+    let versions: [String]
     var showsContinue = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("What's New").font(.largeTitle.bold())
-            Text("Version \(version)").font(.subheadline).foregroundStyle(.secondary)
             ScrollView {
-                MacChangelogLines(lines: MacChangelog.lines(for: version) ?? [])
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(versions, id: \.self) { version in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Version \(version)").font(.subheadline).foregroundStyle(.secondary)
+                            MacChangelogLines(lines: MacChangelog.lines(for: version) ?? [])
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if showsContinue {
                 Button("Continue") { dismiss() }.keyboardShortcut(.defaultAction).frame(maxWidth: .infinity)

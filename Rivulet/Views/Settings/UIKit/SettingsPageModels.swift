@@ -1630,20 +1630,13 @@ enum SettingsContent {
         vc.present(popup, animated: true)
     }
 
-    /// Builds the current-build changelog glass popup (or the most recent
-    /// changelog entry if this build has none, so it's never blank). Used by
-    /// the fresh-launch "What's New". Select/Menu dismiss; content-sized.
-    static func makeChangelogPopup() -> InfoPopupViewController {
-        // The changelog is keyed on the build-qualified version ("1.0.0 (50)").
-        let short = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
-        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
-        let qualified = "\(short) (\(build))"
-        let version = WhatsNewView.features(for: qualified) != nil
-            ? qualified
-            : (WhatsNewView.changelogs.first?.version ?? qualified)
-        let features = WhatsNewView.features(for: version) ?? []
-        return InfoPopupViewController(content: InfoPopupContent.changelog(version: version, features: features),
-                                       width: 1000, scrollable: true)
+    /// The fresh-launch "What's New": every build in `versions` (those since the last one
+    /// seen), or the newest entry if empty, so it's never blank. Select/Menu dismiss.
+    static func makeChangelogPopup(versions: [String]) -> InfoPopupViewController {
+        let entries = versions.isEmpty
+            ? Array(WhatsNewView.changelogs.prefix(1))
+            : WhatsNewView.changelogs.filter { versions.contains($0.version) }
+        return InfoPopupViewController(content: InfoPopupContent.changelog(entries), width: 1000, scrollable: true)
     }
 
     /// Licenses & Legal renders into the app's contained glass popup (not a

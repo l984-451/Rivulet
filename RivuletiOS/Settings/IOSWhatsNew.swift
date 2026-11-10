@@ -123,21 +123,24 @@ enum IOSChangelog {
 
 /// Shown once after an update whose build has notes.
 struct IOSWhatsNewSheet: View {
-    let version: String
+    /// Every build since the last one seen, newest first.
+    let versions: [String]
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("What's New")
-                            .font(.largeTitle.bold())
-                        Text("Version \(version)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    Text("What's New")
+                        .font(.largeTitle.bold())
+                    ForEach(versions, id: \.self) { version in
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Version \(version)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
+                        }
                     }
-                    IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)

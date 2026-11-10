@@ -57,6 +57,8 @@ struct TVSidebarView: View {
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
     @State private var showWhatsNew = false
+    /// The builds whose notes the launch What's New shows, newest first.
+    @State private var whatsNewVersions: [String] = []
     @State private var didApplyDebugLaunch = false
 
     @Namespace private var contentNamespace
@@ -769,7 +771,7 @@ struct TVSidebarView: View {
     /// the fresh-launch "What's New", instead of a bespoke SwiftUI dialog.
     private func presentWhatsNewPopup() {
         guard let top = Self.topPresentedViewController() else { showWhatsNew = false; return }
-        let popup = SettingsContent.makeChangelogPopup()
+        let popup = SettingsContent.makeChangelogPopup(versions: whatsNewVersions)
         popup.onDismiss = { showWhatsNew = false }
         top.present(popup, animated: true)
     }
@@ -931,7 +933,10 @@ struct TVSidebarView: View {
 
         if current != lastSeenBuild {
             // A new install sets up instead; What's New is for updates.
-            if setupComplete, WhatsNewView.features(for: current) != nil {
+            let versions = WhatsNewRange.versions(WhatsNewView.changelogs.map(\.version),
+                                                  current: current, lastSeen: lastSeenBuild)
+            if setupComplete, !versions.isEmpty {
+                whatsNewVersions = versions
                 showWhatsNew = true
             }
             lastSeenBuild = current

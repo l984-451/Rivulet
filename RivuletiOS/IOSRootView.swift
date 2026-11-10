@@ -13,6 +13,7 @@ struct IOSRootView: View {
     @StateObject private var playback = IOSPlaybackController()
     @State private var showingAccount = false
     @State private var showingWhatsNew = false
+    @State private var whatsNewVersions: [String] = []
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @State private var choosingProfile = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
@@ -80,7 +81,7 @@ struct IOSRootView: View {
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
         .sheet(isPresented: $showingAccount) { IOSAccountView().iosSessionObjects(plex) }
-        .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(version: IOSChangelog.currentVersion) }
+        .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(versions: whatsNewVersions) }
         .sheet(isPresented: $choosingProfile) { IOSProfilePickerSheet() }
         // Content is withheld until a profile is entered: ask who is watching,
         // and nothing of the locked profile's keeps playing.
@@ -238,8 +239,9 @@ struct IOSRootView: View {
     private func showWhatsNewIfUpdated() {
         let current = IOSChangelog.currentVersion
         guard plex.isConfigured, current != lastSeenBuild else { return }
+        whatsNewVersions = WhatsNewRange.versions(IOSChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
-        showingWhatsNew = IOSChangelog.lines(for: current) != nil
+        showingWhatsNew = !whatsNewVersions.isEmpty
     }
 
     #if DEBUG

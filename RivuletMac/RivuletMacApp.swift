@@ -70,7 +70,7 @@ struct RivuletMacApp: App {
         }
 
         Window("What's New", id: MacWhatsNewWindow.id) {
-            MacWhatsNewView(version: MacChangelog.entries.first?.version ?? MacChangelog.currentVersion)
+            MacWhatsNewView(versions: [MacChangelog.entries.first?.version ?? MacChangelog.currentVersion])
         }
         .windowResizability(.contentSize)
     }

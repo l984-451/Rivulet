@@ -530,16 +530,18 @@ enum InfoPopupContent {
         return l
     }
 
-    /// What's New: title, version, bullets and a Done pill that only shows Select (the card
+    /// What's New: title, each version with its bullets, and a Done pill that only shows Select (the card
     /// holds focus). Present content-sized.
-    static func changelog(version: String, features: [String]) -> UIView {
+    static func changelog(_ entries: [(version: String, features: [String])]) -> UIView {
         let stack = verticalStack(spacing: 8)
         stack.addArrangedSubview(label(String(localized: "What's New"), size: 44, weight: .bold, color: .white, lines: 1))
-        let ver = label(String(localized: "Version \(version)"), size: 22, weight: .regular, color: .white.withAlphaComponent(0.5), lines: 1)
-        stack.addArrangedSubview(ver)
-        stack.setCustomSpacing(24, after: ver)
-
-        addChangelogLines(features, to: stack, after: ver)
+        for (i, entry) in entries.enumerated() {
+            if i > 0, let last = stack.arrangedSubviews.last { stack.setCustomSpacing(40, after: last) }
+            let ver = label(String(localized: "Version \(entry.version)"), size: 22, weight: .regular, color: .white.withAlphaComponent(0.5), lines: 1)
+            stack.addArrangedSubview(ver)
+            stack.setCustomSpacing(24, after: ver)
+            addChangelogLines(entry.features, to: stack, after: ver)
+        }
 
         let done = label(String(localized: "Done"), size: 26, weight: .semibold, color: .black, lines: 1)
         done.textAlignment = .center

@@ -1,33 +1,207 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Map" : {},
-    "On This Day" : {},
-    "Photos from %@" : {},
-    "Slideshow" : {},
-    "Photos" : {},
-    "Unfavorite" : {},
-    "Videos" : {},
-    "Date Taken" : {},
-    "A to Z" : {},
-    "Z to A" : {},
-    "Newest First" : {},
-    "Oldest First" : {},
-    "Dissolve" : {},
-    "Pan and Zoom" : {},
-    "Slideshow Interval" : {},
-    "Transition" : {},
-    "Play Clips in Slideshow" : {},
-    "Direction" : {},
-    "Sort and Show" : {},
-    "" : {
-
+    "Map" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karte"
+          }
+        }
+      }
     },
-    " " : {
-
+    "On This Day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An diesem Tag"
+          }
+        }
+      }
     },
+    "Photos from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos aus %@"
+          }
+        }
+      }
+    },
+    "Slideshow" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow"
+          }
+        }
+      }
+    },
+    "Photos" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos"
+          }
+        }
+      }
+    },
+    "Unfavorite" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Favoriten entfernen"
+          }
+        }
+      }
+    },
+    "Videos" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos"
+          }
+        }
+      }
+    },
+    "Date Taken" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmedatum"
+          }
+        }
+      }
+    },
+    "A to Z" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A bis Z"
+          }
+        }
+      }
+    },
+    "Z to A" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Z bis A"
+          }
+        }
+      }
+    },
+    "Newest First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste zuerst"
+          }
+        }
+      }
+    },
+    "Oldest First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Älteste zuerst"
+          }
+        }
+      }
+    },
+    "Dissolve" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überblenden"
+          }
+        }
+      }
+    },
+    "Pan and Zoom" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwenken und Zoomen"
+          }
+        }
+      }
+    },
+    "Slideshow Interval" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow-Intervall"
+          }
+        }
+      }
+    },
+    "Transition" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übergang"
+          }
+        }
+      }
+    },
+    "Play Clips in Slideshow" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos in der Diashow abspielen"
+          }
+        }
+      }
+    },
+    "Direction" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reihenfolge"
+          }
+        }
+      }
+    },
+    "Sort and Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortieren und anzeigen"
+          }
+        }
+      }
+    },
+    "" : {},
+    " " : {},
     "At the Credits" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Abspann"
+          }
+        }
+      }
     },
     "Downloading Subtitles…" : {
       "localizations" : {
@@ -62,7 +236,14 @@
       }
     },
     "Nothing" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts"
+          }
+        }
+      }
     },
     "Search Failed" : {
       "localizations" : {
@@ -129,7 +310,14 @@
       }
     },
     "Skip Button" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen-Taste"
+          }
+        }
+      }
     },
     "Subtitle" : {
       "localizations" : {
@@ -148,7 +336,14 @@
       }
     },
     "Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Nothing waits for the end. Countdown decides autoplay." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Als Nächstes“ öffnet die Karte der nächsten Folge, sobald der Abspann beginnt. „Überspringen-Taste“ zeigt nur „Abspann überspringen“, „Als Nächstes“ öffnet sich dann am Ende. „Nichts“ wartet bis zum Ende. Ob es automatisch weitergeht, entscheidet der Countdown."
+          }
+        }
+      }
     },
     "\"%@\" is shared through iCloud. Remove it from this device only, or from every device?" : {
       "localizations" : {
@@ -236,6 +431,12 @@
     },
     "%@ · %@" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -283,14 +484,33 @@
       }
     },
     "%lld" : {
-
-    },
-    "%lld Episodes" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld Folgen"
+            "value" : "%lld"
+          }
+        }
+      }
+    },
+    "%lld Episodes" : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Folge"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Folgen"
+                }
+              }
+            }
           }
         },
         "el" : {
@@ -302,7 +522,14 @@
       }
     },
     "%lld More Episodes" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld weitere Folgen"
+          }
+        }
+      }
     },
     "%lld ch" : {
       "localizations" : {
@@ -625,7 +852,14 @@
       }
     },
     "1 More Episode" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 weitere Folge"
+          }
+        }
+      }
     },
     "10 seconds" : {
       "localizations" : {
@@ -1122,7 +1356,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeilen anordnen …"
+            "value" : "Reihen anordnen …"
           }
         },
         "el" : {
@@ -1362,7 +1596,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Automatische Wiedergabe"
+            "value" : "Autoplay"
           }
         },
         "el" : {
@@ -1628,7 +1862,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kanal zurück"
+            "value" : "Sender zurück"
           }
         },
         "el" : {
@@ -1660,7 +1894,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kanal weiter"
+            "value" : "Sender weiter"
           }
         },
         "el" : {
@@ -2746,7 +2980,14 @@
       }
     },
     "Critic Reviews" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kritiken"
+          }
+        }
+      }
     },
     "DNS lookup failed for EPG server" : {
       "localizations" : {
@@ -2781,7 +3022,14 @@
       }
     },
     "Decade" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahrzehnt"
+          }
+        }
+      }
     },
     "Default" : {
       "localizations" : {
@@ -3570,7 +3818,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Alle Zeilen deiner Server kommen in der ursprünglichen Reihenfolge zurück. Favoriten und Wiedergabelisten werden ausgeschaltet."
+            "value" : "Alle Reihen deiner Server kommen in der ursprünglichen Reihenfolge zurück. Favoriten und Playlists werden ausgeschaltet."
           }
         },
         "el" : {
@@ -3884,7 +4132,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kanäle filtern"
+            "value" : "Sender filtern"
           }
         },
         "el" : {
@@ -3932,7 +4180,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Für dich“ wählt Kanäle nach dem, was du schaust. Gelernt wird nur auf diesem Mac."
+            "value" : "„Für dich“ wählt Sender nach dem, was du schaust. Gelernt wird nur auf diesem Mac."
           }
         },
         "el" : {
@@ -4040,14 +4288,21 @@
       }
     },
     "Fresh" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frisch"
+          }
+        }
+      }
     },
     "From Beginning" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Von Anfang"
+            "value" : "Von Anfang an"
           }
         },
         "el" : {
@@ -4203,7 +4458,14 @@
       }
     },
     "Higher" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Höher"
+          }
+        }
+      }
     },
     "HTTP error %lld" : {
       "localizations" : {
@@ -4258,7 +4520,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hero-Wiedergabelisten"
+            "value" : "Hero-Playlists"
           }
         },
         "el" : {
@@ -4285,6 +4547,16 @@
         }
       }
     },
+    "Hidden libraries stay on the server and are left out of the sidebar, the Go menu and Home." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgeblendete Mediatheken bleiben auf dem Server und fehlen in der Seitenleiste, im Menü „Gehe zu“ und auf der Startseite."
+          }
+        }
+      }
+    },
     "Hidden libraries stay on the server and are only left out of the sidebar and the Go menu." : {
       "localizations" : {
         "de" : {
@@ -4302,7 +4574,14 @@
       }
     },
     "Hide" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausblenden"
+          }
+        }
+      }
     },
     "Hide All" : {
       "localizations" : {
@@ -4357,7 +4636,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeilen der Startseite"
+            "value" : "Startseitenreihen"
           }
         },
         "el" : {
@@ -4861,7 +5140,14 @@
       }
     },
     "Lower" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiefer"
+          }
+        }
+      }
     },
     "Lowest Quality" : {
       "localizations" : {
@@ -5272,7 +5558,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nächster Kanal"
+            "value" : "Nächster Sender"
           }
         },
         "el" : {
@@ -5496,7 +5782,14 @@
       }
     },
     "Not built yet. Parity source: %@" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nicht umgesetzt. Vorlage: %@"
+          }
+        }
+      }
     },
     "Not connected to the internet" : {
       "localizations" : {
@@ -6073,7 +6366,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hefte in Plex eine Mediathek an die Startseite an und aktualisiere dann."
+            "value" : "Pinne in Plex eine Mediathek an die Startseite an und aktualisiere dann."
           }
         },
         "el" : {
@@ -6345,10 +6638,24 @@
       }
     },
     "Plays trailers and pre-roll videos from your Plex server's Cinema Trailers settings before a movie that starts from the beginning." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spielt Trailer und Pre-Roll-Videos aus den Cinema-Trailers-Einstellungen deines Plex-Servers ab, bevor ein Film von Anfang an startet."
+          }
+        }
+      }
     },
     "Plex" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plex"
+          }
+        }
+      }
     },
     "Plex Account" : {
       "localizations" : {
@@ -6521,7 +6828,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vorheriger Kanal"
+            "value" : "Vorheriger Sender"
           }
         },
         "el" : {
@@ -6978,7 +7285,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kanäle und Programm aktualisieren"
+            "value" : "Sender und Programm aktualisieren"
           }
         },
         "el" : {
@@ -7112,7 +7419,14 @@
       }
     },
     "Remove from Continue Watching" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus „Weiter ansehen“ entfernen"
+          }
+        }
+      }
     },
     "Remove from Favorites" : {
       "localizations" : {
@@ -7167,7 +7481,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Entfernt zwischengespeicherte Artworks und Vorschaubilder und lädt dann Mediatheken und Startseitenzeilen neu von deinen Servern."
+            "value" : "Entfernt zwischengespeicherte Artworks und Vorschaubilder und lädt dann Mediatheken und Reihen der Startseite neu von deinen Servern."
           }
         },
         "el" : {
@@ -7295,7 +7609,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zeilen der Startseite zurücksetzen?"
+            "value" : "Reihen der Startseite zurücksetzen?"
           }
         },
         "el" : {
@@ -7391,7 +7705,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke in Live-TV mit der rechten Maustaste auf einen Kanal, um ihn hinzuzufügen."
+            "value" : "Klicke in Live-TV mit der rechten Maustaste auf einen Sender, um ihn hinzuzufügen."
           }
         },
         "el" : {
@@ -7407,7 +7721,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Klicke mit der rechten Maustaste auf einen Film oder eine Serie und wähle „Zu Favoriten hinzufügen“."
+            "value" : "Klicke mit der rechten Maustaste auf einen Film oder eine Serie und wähle „Als Favoriten sichern“."
           }
         },
         "el" : {
@@ -7451,7 +7765,14 @@
       }
     },
     "Rotten" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfault"
+          }
+        }
+      }
     },
     "Runtime" : {
       "localizations" : {
@@ -8172,7 +8493,14 @@
       }
     },
     "Skip" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen"
+          }
+        }
+      }
     },
     "Skip %@" : {
       "localizations" : {
@@ -8553,7 +8881,14 @@
       }
     },
     "Subtitle Height" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitelhöhe"
+          }
+        }
+      }
     },
     "Subtitle Language" : {
       "localizations" : {
@@ -8624,7 +8959,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zwischen „Läuft jetzt“ und Programm wechseln"
+            "value" : "Zwischen „Jetzt im TV“ und Programm wechseln"
           }
         },
         "el" : {
@@ -8698,7 +9033,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieser PIN hat nicht funktioniert."
+            "value" : "Diese PIN hat nicht funktioniert."
           }
         },
         "el" : {
@@ -8978,7 +9313,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Der Hero zeigt nur Trends, keine Wiedergabelisten."
+            "value" : "Der Hero zeigt nur „Angesagt“, keine Playlists."
           }
         },
         "el" : {
@@ -9720,7 +10055,14 @@
       }
     },
     "Trailers Before Movies" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trailer vor Filmen"
+          }
+        }
+      }
     },
     "Trending" : {
       "localizations" : {
@@ -10688,6 +11030,12 @@
     },
     "%@ + %lld more" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ + %lld weitere"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -10697,13 +11045,33 @@
       }
     },
     "%@ · Collection" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Sammlung"
+          }
+        }
+      }
     },
     "%@ · Genre" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Genre"
+          }
+        }
+      }
     },
     "%lld of %lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld von %lld"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -10713,40 +11081,123 @@
       }
     },
     "Actor" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schauspieler:in"
+          }
+        }
+      }
     },
     "Couldn't Load Photos" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos konnten nicht geladen werden"
+          }
+        }
+      }
     },
     "Couldn’t Turn Off" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deaktivieren nicht möglich"
+          }
+        }
+      }
     },
     "Find movies, TV shows, episodes, people, collections, and genres." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finde Filme, TV-Sendungen, Folgen, Personen, Sammlungen und Genres."
+          }
+        }
+      }
     },
     "Movies, Shows, People, and More" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filme, Serien, Personen und mehr"
+          }
+        }
+      }
     },
     "No Photos" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Fotos"
+          }
+        }
+      }
     },
     "No other server is reachable right now, so %@ stays on." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade ist kein anderer Server erreichbar, daher bleibt %@ aktiv."
+          }
+        }
+      }
     },
     "Only Server in Use" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einziger aktiver Server"
+          }
+        }
+      }
     },
     "Pause Slideshow" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow pausieren"
+          }
+        }
+      }
     },
     "People" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen"
+          }
+        }
+      }
     },
     "Ratings" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewertungen"
+          }
+        }
+      }
     },
     "S%lld, E%lld · %@:" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$lld, F%2$lld · %3$@:"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -10757,6 +11208,12 @@
     },
     "S%lld, E%lld:" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld:"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -10766,16 +11223,44 @@
       }
     },
     "Start Slideshow" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow starten"
+          }
+        }
+      }
     },
     "Subtitle %@" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel %@"
+          }
+        }
+      }
     },
     "The server did not answer." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat nicht geantwortet."
+          }
+        }
+      }
     },
     "Turn on another server first, or sign out of Plex." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schalte zuerst einen anderen Server ein oder melde dich von Plex ab."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

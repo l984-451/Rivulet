@@ -25,6 +25,9 @@ struct IOSPlexDetailView: View {
     @State private var summaryExpanded = false
 
     private var shown: MediaItem { detail?.item ?? item }
+
+    /// A season opens its show: only the season picker shows one season.
+    init(item: MediaItem) { self.item = item.seasonShow ?? item }
     private var isSeries: Bool { shown.kind == .show || shown.kind == .season }
     private var regular: Bool { sizeClass == .regular }
 

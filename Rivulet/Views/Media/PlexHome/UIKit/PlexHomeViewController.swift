@@ -5741,11 +5741,11 @@ final class PlexHomeViewController: UIViewController {
     }
 
 
-    /// Detail for a MediaItem (tile-menu "More Info", "Go to"): the season page, the episode page,
-    /// the standalone expanded detail for everything else.
+    /// Detail for a MediaItem (tile-menu "More Info", "Go to"): a season's show, the episode page,
+    /// the standalone expanded detail for everything else. Only a season pill opens a season page.
     private func selectMediaItem(_ item: MediaItem) {
-        if item.kind == .season {
-            present(SeasonDetailViewController(season: item), animated: true)
+        if item.kind == .season, let showRef = item.parentRef {
+            PreviewCarouselViewController.openShowDetail(showRef, from: self)
         } else if item.kind == .episode {
             let page = MediaItemDetailPageViewController(
                 item: item,
@@ -6237,8 +6237,20 @@ final class PlexHomeViewController: UIViewController {
         sourceItemID: String,
         sourceIndexPath: IndexPath,
         sourceIndexMap: [Int: Int]? = nil,
-        sourceItemIDs: [String]? = nil
+        sourceItemIDs: [String]? = nil,
+        seasonsResolved: Bool = false
     ) {
+        // A season tile opens its show (#608). Tiles keep their ids, so the morph still pairs them.
+        if !seasonsResolved, items.contains(where: { $0.kind == .season }) {
+            Task { @MainActor [weak self] in
+                let shows = await MediaProviderRegistry.shared.showsForSeasons(items)
+                self?.presentPreviewOverlay(
+                    items: shows, selectedIndex: selectedIndex, sourceRowID: sourceRowID,
+                    sourceItemID: sourceItemID, sourceIndexPath: sourceIndexPath,
+                    sourceIndexMap: sourceIndexMap, sourceItemIDs: sourceItemIDs, seasonsResolved: true)
+            }
+            return
+        }
         // Skip Preview (#416): open the carousel's own expanded detail directly. An
         // episode keeps its hero and Play, with the show's seasons below.
         if SettingsStore.bool("skipPreviewCarousel", default: false) {

@@ -833,8 +833,8 @@ struct TVSidebarView: View {
     }
 
     private func presentDetail(_ item: MediaItem, from top: UIViewController) {
-        if item.kind == .season {
-            top.present(SeasonDetailViewController(season: item), animated: true)
+        if item.kind == .season, let showRef = item.parentRef {
+            PreviewCarouselViewController.openShowDetail(showRef, from: top)
         } else if item.kind == .episode {
             let page = MediaItemDetailPageViewController(
                 item: item,

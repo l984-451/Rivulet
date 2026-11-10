@@ -948,6 +948,13 @@ tvOS's, and the other two are SwiftUI in `RivuletiOS/Photos/` and `RivuletMac/Ph
   - Server limits: HEIC is not indexed (0 of 4), `isFolder` is not an `/Items` parameter, and
     the legacy `X-Emby-Token` header answers 401 (the client sends `Authorization: MediaBrowser`).
 
+### Folders
+
+A video library can be browsed as it sits on disk, on all three apps. `MediaLibrary.offersFolders(on:)`
+decides where (any Plex movie or TV library, and every library that `browsesByFolder`); `FolderListing`
+in `RivuletCore/Folders/` is the one listing. A library with no metadata opens on Folders but always keeps
+its title grid and sort one pick away: folders-only (the 10-19 design) hid sorting from large libraries.
+
 ### iCloud sync
 
 Both apps sync through `RivuletCore/Sync/`. Design, measurements and the one-time

@@ -28,6 +28,7 @@ final class LibraryFolderBrowsingSettingTests: XCTestCase {
     func test_viewMode_roundTripsPerLibraryAndProfile() {
         settings.switchToUser(profileA)
         XCTAssertEqual(settings.viewMode("1"), .titles, "titles by default")
+        XCTAssertEqual(settings.viewMode("1", default: .folders), .folders, "caller's default when unset")
         for mode in [LibraryViewMode.collections, .folders, .titles] {
             settings.setViewMode(mode, for: "1")
             XCTAssertEqual(settings.viewMode("1"), mode)

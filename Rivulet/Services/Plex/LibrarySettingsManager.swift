@@ -452,10 +452,10 @@ class LibrarySettingsManager: ObservableObject {
 
     private let viewModeBaseKey = "libraryViewMode"
 
-    /// The view this profile last left the library on.
-    func viewMode(_ libraryKey: String) -> LibraryViewMode {
+    /// The view this profile last left the library on, else `fallback`.
+    func viewMode(_ libraryKey: String, default fallback: LibraryViewMode = .titles) -> LibraryViewMode {
         (userDefaults.dictionary(forKey: currentKey(viewModeBaseKey))?[libraryKey] as? String)
-            .flatMap(LibraryViewMode.init) ?? .titles
+            .flatMap(LibraryViewMode.init) ?? fallback
     }
 
     func setViewMode(_ mode: LibraryViewMode, for libraryKey: String) {

@@ -221,6 +221,8 @@ struct IOSPlexPosterCard: View {
     let item: MediaItem
     /// Fixed tile width, or nil to fill what the parent offers.
     var width: CGFloat? = nil
+    /// The width the image is requested at when `width` is nil (a grid column).
+    var imageWidth: CGFloat? = nil
     var showsCaption = true
 
     private var ratio: CGFloat { item.isMusicItem ? 1 : 2 / 3 }
@@ -230,7 +232,7 @@ struct IOSPlexPosterCard: View {
             IOSItemArtwork(
                 item: item,
                 kind: item.isMusicItem ? .thumb : .poster,
-                width: width ?? 180,
+                width: width ?? imageWidth ?? 180,
                 aspectRatio: ratio
             )
             .modifier(TileSize(width: width, ratio: ratio))
@@ -661,6 +663,7 @@ struct IOSPlexPosterGrid: View {
     @ScaledMetric(relativeTo: .body) private var minimumWidth: CGFloat = 104
     /// While iPhone Duo's fold runs down the grid's middle: the adaptive count rounded down to even.
     @State private var evenColumns: Int?
+    @State private var columnWidth: CGFloat?
 
     init(slots: [MediaItem?], slotAppeared: ((Int) -> Void)?) {
         self.slots = slots
@@ -683,7 +686,7 @@ struct IOSPlexPosterGrid: View {
             ForEach(slots.indices, id: \.self) { index in
                 Group {
                     if let item = slots[index] {
-                        NavigationLink(value: item) { IOSPlexPosterCard(item: item) }
+                        NavigationLink(value: item) { IOSPlexPosterCard(item: item, imageWidth: columnWidth) }
                             .buttonStyle(.plain)
                             .plexContextMenu(item)
                     } else {
@@ -700,6 +703,11 @@ struct IOSPlexPosterGrid: View {
             let fit = Int((proxy.size.width - 2 * IOSShelfGeometry.leading + 12) / (minimum + 12))
             return max(2, fit - fit % 2)
         } action: { evenColumns = $0 }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            let space = proxy.size.width - 2 * IOSShelfGeometry.leading
+            let count = evenColumns ?? max(1, Int((space + 12) / (minimum + 12)))
+            return ((space - 12 * CGFloat(count - 1)) / CGFloat(count)).rounded(.down)
+        } action: { columnWidth = $0 > 0 ? $0 : nil }
     }
 }
 

@@ -20,6 +20,7 @@ struct MacHomeHero: View {
     private static let parallax: CGFloat = 0.3
     @EnvironmentObject private var playback: MacPlaybackController
     @Environment(\.macOpen) private var open
+    @Environment(\.scenePhase) private var scenePhase
 
     private var height: CGFloat { min(max(width * 0.42, 300), 520) }
     private var index: Int { items.firstIndex { $0.ref == selection } ?? 0 }
@@ -58,15 +59,18 @@ struct MacHomeHero: View {
             .onHover { hovering = $0 }
             .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
             // Keyed on the shown page, so any move restarts the wait and a refresh that drops it re-seats.
-            .task(id: "\(current.ref.providerID)|\(current.ref.itemID)|\(items.count)|\(hovering)") {
+            .task(id: "\(current.ref.providerID)|\(current.ref.itemID)|\(items.count)|\(hovering)|\(autoAdvances)") {
                 if selection == nil || !items.contains(where: { $0.id == selection }) { selection = items.first?.id }
-                guard !hovering else { return }
+                guard !hovering, autoAdvances else { return }
                 try? await Task.sleep(for: .seconds(7))
                 guard !Task.isCancelled else { return }
                 page(by: 1)
             }
         }
     }
+
+    /// Rotation waits while the hero is out of view, under the player, or the app is not active.
+    private var autoAdvances: Bool { inView && !playback.isPresented && scenePhase == .active }
 
     private func page(by step: Int) {
         guard items.count > 1 else { return }

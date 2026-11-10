@@ -36,6 +36,11 @@ A native Apple TV app for Plex, Jellyfin, Emby, and Live TV.
 ---
 
 <br></br>
+> 
+> ### Build 1.3.0 is waiting on TestFlight App Store Review. This release will align iOS, MacOS, and tvOS version numbering for easier troubleshooting.
+>
+
+<br></br> 
 
 **Rivulet is built for Apple TV first. I care a lot about its speed, performance, and simplicity in tvOS.**
 

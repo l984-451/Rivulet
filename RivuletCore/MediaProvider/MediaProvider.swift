@@ -83,6 +83,9 @@ protocol MediaProvider: Sendable, Identifiable {
     /// Library-scoped hubs (the library's own Continue Watching, Recently Added,
     /// genre rows, etc.) — NOT the global home hubs.
     func hubs(in library: MediaLibrary) async throws -> [MediaHub]
+    /// The hubs each library promotes to Home, by library id. A library left out failed.
+    /// Default: each library's `hubs(in:)`, a few at a time; Plex answers in one request.
+    func promotedHubs(in libraries: [MediaLibrary]) async throws -> [String: [MediaHub]]
     /// The signed-in user on this server, when the server has its own users
     /// (Jellyfin). Per-user settings such as hidden libraries key on it.
     var accountID: String? { get }
@@ -282,6 +285,14 @@ extension MediaProvider {
         LibrarySortOption.expressible(for: kind)
     }
     var accountID: String? { nil }
+    func promotedHubs(in libraries: [MediaLibrary]) async throws -> [String: [MediaHub]] {
+        let found = await BoundedFanOut.map(libraries) { library in
+            (library.id, try? await hubs(in: library).filter(\.isPromoted))
+        }
+        var byLibrary: [String: [MediaHub]] = [:]
+        for case let (id, hubs?) in found { byLibrary[id] = hubs }
+        return byLibrary
+    }
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         try await hubs(in: library).first { $0.id == "\(library.id).recentlyAdded" }
     }

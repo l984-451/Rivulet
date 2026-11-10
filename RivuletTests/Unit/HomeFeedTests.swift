@@ -12,6 +12,14 @@
 import XCTest
 @testable import Rivulet
 
+/// Counts calls in flight and keeps the highest count seen.
+private actor InFlightGauge {
+    private(set) var peak = 0
+    private var current = 0
+    func enter() { current += 1; peak = max(peak, current) }
+    func leave() { current -= 1 }
+}
+
 final class HomeFeedTests: XCTestCase {
     private func item(_ id: String, provider: String = "plex:a") -> MediaItem {
         JellyfinFixtures.mediaItem(id, providerID: provider)
@@ -91,6 +99,23 @@ final class HomeFeedTests: XCTestCase {
         XCTAssertNil(rows.continueWatching, "a failed Continue Watching is nil, not empty")
         XCTAssertNil(rows.rowsByLibrary["1"], "a failed library has no entry")
         XCTAssertEqual(rows.rowsByLibrary["2"]?.count, 1)
+    }
+
+    func test_fetch_capsLibraryRequestsInFlight() async throws {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.libraryList = (1...12).map { library("\($0)") }
+        let gauge = InFlightGauge()
+        plex.hubsGate = {
+            await gauge.enter()
+            try await Task.sleep(for: .milliseconds(20))
+            await gauge.leave()
+        }
+
+        let rows = try await HomeFeed.fetch(plex, role: .selected)
+
+        XCTAssertEqual(rows.rowsByLibrary.count, 12, "every library still answers")
+        let peak = await gauge.peak
+        XCTAssertEqual(peak, BoundedFanOut.libraryRequests, "never more library requests at once than the width")
     }
 
     func test_fetch_throwsWhenLibrariesFail() async {
@@ -244,6 +269,26 @@ final class HomeFeedTests: XCTestCase {
 
         try await loader.load(selected: plex, secondary: [])
         XCTAssertEqual(latest?.shelves.count, 0)
+    }
+
+    @MainActor
+    func test_loader_aNewerLoadCancelsTheSelectedServersOldFetch() async throws {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.libraryList = [library("1")]
+        let cancelled = InFlightGauge()
+        plex.hubsGate = {
+            do { try await Task.sleep(for: .seconds(30)) } catch { await cancelled.enter(); throw error }
+        }
+        let loader = HomeFeedLoader()
+        let first = Task { try await loader.load(selected: plex, secondary: []) }
+        try await Task.sleep(for: .milliseconds(50))
+
+        plex.hubsGate = nil
+        try await loader.load(selected: plex, secondary: [])
+        _ = try? await first.value
+
+        let count = await cancelled.peak
+        XCTAssertEqual(count, 1, "the superseded fetch's library request was cancelled, not left to run")
     }
 
     @MainActor

@@ -411,6 +411,16 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
+    func promotedHubs(in libraries: [MediaLibrary]) async throws -> [String: [MediaHub]] {
+        try await plexCall {
+            try await networkManager.getPromotedHubs(
+                serverURL: serverURL, authToken: authToken, sectionIDs: libraries.map(\.id)
+            ).mapValues { hubs in
+                hubs.map { PlexMediaMapper.hub($0, providerID: id, serverURL: serverURL, authToken: authToken) }
+            }
+        }
+    }
+
     /// The library's own Recently Added hub, re-keyed to the id Home looks up.
     func recentlyAddedHub(in library: MediaLibrary) async throws -> MediaHub? {
         guard let hub = try await hubs(in: library).first(where: { $0.id.lowercased().contains("recentlyadded") }),

@@ -1024,6 +1024,42 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Hub ?? []
     }
 
+    /// The hubs each library promotes to Home, by section id, in one request (#474). Every
+    /// requested section gets an entry, empty when it promotes nothing.
+    /// Measured on PMS 1.43.4: `contentDirectoryID` takes a list and answers exactly the union
+    /// of one call per section, in the list's order; `excludeContinueWatching` drops
+    /// `home.continue` and `home.ondeck`; `pinnedContentDirectoryID` changes nothing.
+    func getPromotedHubs(serverURL: String, authToken: String, sectionIDs: [String],
+                         userId: Int? = nil, count: Int = 24) async throws -> [String: [PlexHub]] {
+        guard !sectionIDs.isEmpty else { return [:] }
+        guard var components = URLComponents(string: "\(serverURL)/hubs/promoted") else {
+            throw PlexAPIError.invalidURL
+        }
+        components.queryItems = [
+            URLQueryItem(name: "contentDirectoryID", value: sectionIDs.joined(separator: ",")),
+            URLQueryItem(name: "count", value: "\(count)"),
+            URLQueryItem(name: "excludeContinueWatching", value: "1")
+        ]
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
+        let container: PlexMediaContainerWrapper = try await request(
+            url,
+            headers: plexHeaders(authToken: authToken, userId: userId)
+        )
+        return Self.promotedHubsBySection(container.MediaContainer.Hub ?? [], sectionIDs: sectionIDs)
+    }
+
+    /// A promoted hub names no section, so it is filed under its items' `librarySectionID`.
+    /// A hub with no items is dropped: Home draws no empty row.
+    nonisolated static func promotedHubsBySection(_ hubs: [PlexHub], sectionIDs: [String]) -> [String: [PlexHub]] {
+        var bySection = Dictionary(uniqueKeysWithValues: sectionIDs.map { ($0, [PlexHub]()) })
+        for hub in hubs {
+            guard let section = hub.Metadata?.first?.librarySectionID.map(String.init),
+                  bySection[section] != nil else { continue }
+            bySection[section]?.append(hub)
+        }
+        return bySection
+    }
+
     /// Get library-specific hubs (recommendations for a specific library section)
     /// Returns Continue Watching, Recently Added, Recently Released, etc. for that library
     /// - Parameter count: Number of items per hub (default 24, Plex defaults to ~6)

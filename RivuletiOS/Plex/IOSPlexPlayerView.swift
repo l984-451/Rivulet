@@ -24,15 +24,21 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     private let plex: any PlayerBackend
     private var skippedMarkerIDs: Set<String> = []
-    private var lastReportBucket = -1
-    private var reportedStopped = false
     private var countdownTask: Task<Void, Never>?
     private var nextLookupTask: Task<Void, Never>?
     private var nextTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     private var longStallTask: Task<Void, Never>?
-    /// Paused timelines every 10 s, as Plex clients send, so the server can end a paused session.
-    private var pausedTimelineTask: Task<Void, Never>?
+    /// When this player reports to the server; the rule lives in RivuletCore.
+    private lazy var timeline: PlaybackTimeline = {
+        let timeline = PlaybackTimeline(position: { [weak self] in self?.player.currentTime ?? 0 }) { [weak self] state, time in
+            guard let self else { return { nil } }
+            let request = request, plex = plex
+            return { await plex.reportProgress(for: request, time: time, state: state.rawValue) }
+        }
+        timeline.onTerminated = { [weak self] in self?.endForServerTermination($0) }
+        return timeline
+    }()
     private var stallTracker = StallTracker()
     /// The player-menu pick; nil follows the Home or Away setting, item by item.
     private var sessionQuality: StreamingQuality?
@@ -74,7 +80,6 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         nextTask?.cancel()
         reloadTask?.cancel()
         longStallTask?.cancel()
-        pausedTimelineTask?.cancel()
         releaseThumbnails()
         let finish = finishItem(at: player.currentTime)
         let plex = plex
@@ -100,6 +105,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// `startsItem` picks the title's starting tracks from Plex's per-item picks and the saved intents.
     private func load(keepingTransport: Bool = false, startsItem: Bool = false) async {
         hasPlayed = false
+        timeline.begin()
         stallTracker.noteSeekOrLoad(at: .now)
         if startsItem {
             subtitlesPickedOff = false
@@ -474,8 +480,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     // MARK: - Plex reporting
 
-    /// Reports on every transport change and after seeks land, plus every
-    /// 10 s of playback; `.ended` reports stopped and scrobbles.
+    /// Feeds the timeline every transport change and playhead tick; `.ended` reports stopped and scrobbles.
     private func observePlayer() {
         player.$state
             .removeDuplicates()
@@ -506,35 +511,13 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.stallTracker.noteSeekOrLoad(at: .now) }
             .store(in: &cancellables)
-
-        player.$pendingSeekTarget
-            .removeDuplicates()
-            .dropFirst()
-            .filter { $0 == nil }
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                self.report(self.player.state == .playing ? "playing" : "paused")
-            }
-            .store(in: &cancellables)
     }
 
     private func stateChanged(_ state: AetherPlayer.State) {
-        pausedTimelineTask?.cancel()
+        timeline.transportChanged(state == .playing ? .playing : state == .paused ? .paused : .other)
         switch state {
         case .playing:
             hasPlayed = true
-            reportedStopped = false
-            report("playing")
-        case .paused:
-            report("paused")
-            pausedTimelineTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(10))
-                    guard !Task.isCancelled else { return }
-                    self?.report("paused")
-                }
-            }
         case .ended:
             finishItem(at: max(player.duration, player.currentTime))
             startUpNextCountdown()
@@ -548,32 +531,11 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private func tick(_ time: TimeInterval) {
         // A load's clock reads 0 until it starts; an intro at 0 must not fire mid-reload.
         if !player.isStarting { evaluateAutoSkip(at: time) }
-        guard player.state == .playing else { return }
-        let bucket = Int(time) / 10
-        if bucket != lastReportBucket {
-            lastReportBucket = bucket
-            report("playing")
-        }
-    }
-
-    private func report(_ state: String) {
-        // A session must open with "playing": the engine holds paused while loading, and a
-        // "paused" first makes Plex fire media.pause and never media.play (#433).
-        guard !reportedStopped, state != "paused" || hasPlayed else { return }
-        let request = request
-        let time = player.currentTime
-        let plex = plex
-        Task { [weak self] in
-            guard let reason = await plex.reportProgress(for: request, time: time, state: state),
-                  let self, self.request.id == request.id, !self.reportedStopped else { return }
-            self.endForServerTermination(reason)
-        }
+        timeline.tick(time)
     }
 
     /// The server stopped this stream: stop and show its reason, with nothing to retry.
     private func endForServerTermination(_ reason: String) {
-        reportedStopped = true
-        pausedTimelineTask?.cancel()
         countdownTask?.cancel()
         upNextCountdown = nil
         player.stop()
@@ -583,15 +545,14 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// Stopped, then a scrobble when the viewer got past the watched ceiling.
     @discardableResult
     private func finishItem(at time: TimeInterval) -> Task<Void, Never>? {
-        guard !reportedStopped else { return nil }
-        reportedStopped = true
+        guard let stopped = timeline.stop(at: time) else { return nil }
         let request = request
         let plex = plex
         let runtime = player.duration > 0 ? player.duration : request.item.durationSeconds
         let watched = (WatchProgressPolicy.progress(offsetSeconds: time, runtimeSeconds: runtime) ?? 0)
             >= WatchProgressPolicy.completionThreshold
         return Task {
-            await plex.reportProgress(for: request, time: time, state: "stopped")
+            await stopped.value
             if watched { await plex.markWatched(request) }
         }
     }
@@ -702,7 +663,6 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private func switchItem(to next: PlexMetadata, queueIndex: Int?) {
         countdownTask?.cancel()
         upNextCountdown = nil
-        pausedTimelineTask?.cancel()
         finishItem(at: player.currentTime)
         nextTask?.cancel()
         reloadTask?.cancel()
@@ -724,8 +684,6 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             nextEpisode = nil
             upNextDismissed = false
             skippedMarkerIDs = []
-            lastReportBucket = -1
-            reportedStopped = false
             serverStopReason = nil
             onItemChange?()
             lookUpNextEpisode()

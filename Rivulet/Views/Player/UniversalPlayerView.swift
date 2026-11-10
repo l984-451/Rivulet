@@ -782,8 +782,7 @@ struct UniversalPlayerView: View {
             inputTarget = nil
         }
         .onChange(of: viewModel.currentTime) { _, newTime in
-            // Report progress periodically
-            viewModel.reportPlaybackProgress(time: newTime, force: false)
+            viewModel.reportPlaybackProgress(time: newTime)
         }
         .onChange(of: viewModel.playbackState) { _, newState in
             // Immediately report state changes to the item's server

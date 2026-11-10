@@ -442,7 +442,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var upNextTier: Int?
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
-    @Published private(set) var itemGeneration = 0
+    @Published private(set) var itemGeneration = 0 {
+        didSet { timeline.begin() }
+    }
     var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
         if metadata.type == "episode" {
@@ -533,13 +535,16 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Progress Reporting
 
-    private let reportingInterval: TimeInterval = 10
-    private var lastReportedTime: TimeInterval = 0
+    /// When this player reports to the server; the rule lives in RivuletCore.
+    private lazy var timeline: PlaybackTimeline = {
+        let timeline = PlaybackTimeline(position: { [weak self] in self?.currentTime ?? 0 }) { [weak self] state, time in
+            self?.timelineReport(state, at: time) ?? { nil }
+        }
+        timeline.onTerminated = { [weak self] in self?.endForServerTermination($0) }
+        return timeline
+    }()
     /// The title this player marked watched at its credits, and the position it did so at.
     private var watchedMark: (key: String, time: TimeInterval)?
-    /// Paused timelines every `reportingInterval`, as Plex clients send, so the
-    /// server can end a paused session (#403).
-    private var pausedTimelineTask: Task<Void, Never>?
     /// `.provider` only: the play session's reporter. Recreated when the
     /// stream (and with it the play session) changes; nil once stopped.
     private var providerReporter: (any ProgressReporter)?
@@ -3830,8 +3835,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             diagnostics.noteEnd(.userExit, position: currentTime)
         }
         cinemaStopped = true
-        pausedTimelineTask?.cancel()
-        pausedTimelineTask = nil
+        timeline.transportChanged(.other)
         streamPreparationTask?.cancel()
         streamPreparationTask = nil
         streamWorkTask?.cancel()
@@ -6397,17 +6401,9 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // A playlist pick before the credits leaves the item resumable: stopped at the playhead, not watched.
         let reachedEnd = queueIndex == nil || hasTriggeredPostVideo || postVideoState != .hidden
-        if reachedEnd {
-            await markCurrentAsWatched()
-        } else if case .plex = source, let ratingKey = metadata.ratingKey, !ratingKey.isEmpty {
-            await PlexProgressReporter.shared.reportProgress(
-                ratingKey: ratingKey, time: currentTime, duration: duration,
-                state: "stopped", forceReport: true, server: plexServer)
-        }
+        if reachedEnd { await markCurrentAsWatched() }
         // The outgoing item's play session ends here.
-        if case .provider = source {
-            await stopProviderReporter(at: currentTime)
-        }
+        await timeline.stop(at: currentTime)?.value
 
         // Stop countdown and reset all countdown state
         countdownTimer?.invalidate()
@@ -6634,37 +6630,34 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Progress Tracking
 
-    /// Periodic progress, throttled to `reportingInterval` unless `force`.
-    func reportPlaybackProgress(time: TimeInterval, force: Bool) {
-        // Plex hears nothing about a clip: a webhook for it would read as the movie starting.
-        guard !isPlayingCinemaExtra else { return }
-        // Report every 10 seconds
-        guard force || abs(time - lastReportedTime) >= reportingInterval else { return }
-        lastReportedTime = time
-
-        if case .provider = source {
-            guard providerReporterStarted, let reporter = providerReporter else { return }
-            enqueueProviderReport { await reporter.progress(position: time) }
-            return
-        }
-
-        sendTimeline(time: time, state: isPlaying ? "playing" : "paused", force: false)
+    /// The playhead moved; the timeline decides whether that is a report.
+    func reportPlaybackProgress(time: TimeInterval) {
+        timeline.tick(time)
     }
 
-    /// One Plex timeline; ends playback if the reply says the server ended the session.
-    private func sendTimeline(time: TimeInterval, state: String, force: Bool) {
-        let stops = stopCount
-        Task {
-            let terminated = await PlexProgressReporter.shared.reportProgress(
-                ratingKey: self.metadata.ratingKey ?? "",
-                time: time,
-                duration: self.duration,
-                state: state,
-                forceReport: force,
-                server: plexServer
-            )
-            guard let terminated, stops == self.stopCount else { return }
-            self.endForServerTermination(terminated)
+    /// One report for the timeline, captured now: the item can change before it is sent.
+    private func timelineReport(_ state: PlaybackTimeline.State, at time: TimeInterval) -> @MainActor () async -> String? {
+        // The server hears nothing about a clip: a webhook for it would read as the movie starting.
+        guard !isPlayingCinemaExtra else { return { nil } }
+        if case .provider = source {
+            if state == .stopped { return { [weak self] in await self?.stopProviderReporter(at: time); return nil } }
+            guard let reporter = providerReporter else { return { nil } }
+            if !providerReporterStarted {
+                guard state == .playing else { return { nil } }
+                providerReporterStarted = true
+                enqueueProviderReport { await reporter.start(position: time) }
+            } else if state == .paused {
+                enqueueProviderReport { await reporter.paused(at: time) }
+            } else {
+                enqueueProviderReport { await reporter.progress(position: time) }
+            }
+            return { nil }
+        }
+        let ratingKey = metadata.ratingKey ?? "", duration = duration, server = plexServer
+        return {
+            await PlexProgressReporter.shared.reportProgress(
+                ratingKey: ratingKey, time: time, duration: duration,
+                state: state.rawValue, forceReport: true, server: server)
         }
     }
 
@@ -6677,41 +6670,15 @@ final class UniversalPlayerViewModel: ObservableObject {
         updatePlaybackState(.failed(.serverTerminated(reason)))
     }
 
-    /// Report a playback state change immediately.
+    /// A playback state change, as the timeline sees it.
     func reportPlaybackState(_ newState: UniversalPlaybackState) {
-        guard !isPlayingCinemaExtra else { return }
-        if case .provider = source {
-            reportProviderState(newState)
-            return
-        }
-
-        // Only report significant state changes
-        let plexState: String?
         switch newState {
-        case .playing:
-            plexState = "playing"
-        case .paused:
-            plexState = "paused"
+        case .playing: timeline.transportChanged(.playing)
+        case .paused: timeline.transportChanged(.paused)
         case .ended:
-            plexState = "stopped"
-        default:
-            plexState = nil
-        }
-
-        pausedTimelineTask?.cancel()
-        pausedTimelineTask = nil
-        guard let state = plexState else { return }
-
-        sendTimeline(time: currentTime, state: state, force: true)
-        if state == "paused" {
-            let interval = reportingInterval
-            pausedTimelineTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(interval))
-                    guard let self, !Task.isCancelled else { return }
-                    self.sendTimeline(time: self.currentTime, state: "paused", force: true)
-                }
-            }
+            timeline.transportChanged(.other)
+            timeline.stop(at: currentTime)
+        default: timeline.transportChanged(.other)
         }
     }
 
@@ -6723,8 +6690,13 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func reportFinalProgress(time: TimeInterval, duration: TimeInterval) async {
         guard !isPlayingCinemaExtra else { return }
+        // Already stopped (ended, marked at the credits, or ended by the server): nothing to add.
+        guard let stopped = timeline.stop(at: time) else {
+            NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
+            return
+        }
+        await stopped.value
         if case .provider(let playback) = source {
-            await stopProviderReporter(at: time)
             if duration > 0 && time / duration > 0.9 {
                 try? await playback.provider.markPlayed(playback.item.ref)
             }
@@ -6732,57 +6704,22 @@ final class UniversalPlayerViewModel: ObservableObject {
             return
         }
 
+        // Watched past 90%, or left at or after the point the title was already marked watched
+        // (its credits): the stopped report would otherwise leave a resume point there on a
+        // server that completes on percentage alone.
         let ratingKey = metadata.ratingKey ?? ""
-        let playsBefore = metadata.viewCount ?? 0
-
-        // 1. Report stopped state to Plex
-        await PlexProgressReporter.shared.reportProgress(
-            ratingKey: ratingKey,
-            time: time,
-            duration: duration,
-            state: "stopped",
-            forceReport: true,
-            server: plexServer
-        )
-
-        // 2. Mark as watched if > 90% complete, or if the viewer left at or after the point
-        // where the title was already marked watched (its credits): the stopped report above
-        // would otherwise leave a resume point there on a server that completes on percentage alone.
         let pastWatchedMark = watchedMark.map { $0.key == ratingKey && time >= $0.time } ?? false
         if duration > 0 && (time / duration > 0.9 || pastWatchedMark) {
             await PlexProgressReporter.shared.markAsWatched(
                 ratingKey: ratingKey,
-                playsBefore: playsBefore,
+                playsBefore: metadata.viewCount ?? 0,
                 server: plexServer
             )
         }
 
-        // 3. Wait for Plex server to process (2 seconds)
+        // Give the server a moment before the surfaces refetch.
         try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-        // 4. Trigger refresh after progress is confirmed
         NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
-    }
-
-    private func reportProviderState(_ newState: UniversalPlaybackState) {
-        guard let reporter = providerReporter else { return }
-        let position = currentTime
-        switch newState {
-        case .playing:
-            if providerReporterStarted {
-                enqueueProviderReport { await reporter.progress(position: position) }
-            } else {
-                providerReporterStarted = true
-                enqueueProviderReport { await reporter.start(position: position) }
-            }
-        case .paused:
-            guard providerReporterStarted else { return }
-            enqueueProviderReport { await reporter.paused(at: position) }
-        case .ended:
-            Task { await self.stopProviderReporter(at: position) }
-        default:
-            break
-        }
     }
 
     /// Send `stopped` once for the current play session, even if it never
@@ -6823,14 +6760,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         let playsBefore = metadata.viewCount ?? 0
         if watchedMark?.key != ratingKey { watchedMark = (ratingKey, currentTime) }
 
-        // Report stopped state
-        await PlexProgressReporter.shared.reportProgress(
-            ratingKey: ratingKey,
-            time: currentTime,
-            duration: duration,
-            state: "stopped",
-            server: plexServer
-        )
+        await timeline.stop(at: currentTime)?.value
 
         // Mark as watched (episode reached post-video, so it's effectively complete). The server
         // has usually counted the play itself by now; a second scrobble would count it again.

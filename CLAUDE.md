@@ -775,6 +775,11 @@ Two rules that look wrong until you know them:
   lives at the render sites on purpose. Folding it into the 90% ceiling changes
   every tile.
 
+**When a player reports is `PlaybackTimeline`** (`RivuletCore/Playback/`), used by all
+three apps for every server: it opens with `playing`, reports each 10 s, repeats `paused`,
+and goes quiet once stopped or ended by the server, until the next item. Players feed it
+transport changes and ticks and supply the send; do not put a timing rule in a player.
+
 **Changing watch state must repaint.** `.plexDataNeedsRefresh` is the live
 channel; all three UIKit surfaces observe it. Post it after the server call.
 The old optimistic path (`PlexDataStore.updateItemWatchStatus`,

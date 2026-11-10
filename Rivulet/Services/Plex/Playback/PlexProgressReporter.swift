@@ -118,6 +118,7 @@ actor PlexProgressReporter {
                 method: "GET",
                 headers: ["X-Plex-Token": server.token, "Accept": "application/json"]
             )
+            await PlexNetworkManager.shared.forgetRecentReads()
             return PlexNetworkManager.timelineTermination(in: data)
         } catch {
             playerDebugLog("📊 PlexProgress: Failed to report progress: \(error)")
@@ -158,6 +159,7 @@ actor PlexProgressReporter {
                 method: "GET",
                 headers: ["X-Plex-Token": server.token]
             )
+            await PlexNetworkManager.shared.forgetRecentReads()
         } catch {
             playerDebugLog("📊 PlexProgress: Failed to mark as watched: \(error)")
         }
@@ -179,6 +181,7 @@ actor PlexProgressReporter {
                 method: "GET",
                 headers: ["X-Plex-Token": server.token]
             )
+            await PlexNetworkManager.shared.forgetRecentReads()
         } catch {
             playerDebugLog("📊 PlexProgress: Failed to mark as unwatched: \(error)")
         }

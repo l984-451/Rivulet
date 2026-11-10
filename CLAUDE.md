@@ -780,6 +780,13 @@ The old optimistic path (`PlexDataStore.updateItemWatchStatus`,
 reintroduce optimistic Continue Watching mutation from a shelf (reverted in
 `90bfd2b` for focus reasons).
 
+Home answers the notification with Continue Watching and the promoted rows
+(`PlexDataStore.refreshAfterWatchStateChange`). The global `/hubs` (about 500 KB,
+over a second on the server) is fetched once a session for the hero's fallback, and
+each library's own hubs are refreshed by that library's page. A library or
+drill-in page that is off screen defers its refresh to `viewDidAppear`
+(`needsWatchStateRefresh`).
+
 ### Content margin and tile grid
 
 Every media surface (Home hero and shelves, library and watchlist grids, Search,
@@ -1327,6 +1334,14 @@ The Plex Discover API uses three different hosts:
 | Mutations | Resolve external GUID → discover `ratingKey` via matches endpoint first, then PUT actions |
 
 ## Plex server API gotchas
+
+**`getFullMetadata`, `getChildren` and `getAllLeaves` share a read for 10 seconds**
+(`RecentReads` in `PlexNetworkManager`), because a detail page asks for one title from
+several places at once and Play asks again. Every write in `PlexNetworkManager` calls
+`forgetRecentReads()` on its way out; so do `PlexProgressReporter`, the tvOS
+`.plexDataNeedsRefresh` observer in `PlexDataStore`, and `BrowseStore.watchStateDidChange`.
+A new write endpoint, or a write that goes around the manager, must call it too, or the
+page that repaints after the write shows the old state.
 
 **Search through `/hubs/search`, never the legacy `/search`.** Measured on PMS 1.43.5:
 `/search` caps each type at 15, so "christmas" returned 15 home videos and no film from

@@ -125,7 +125,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         // Playback and the menus' watched actions post this once the server has the change.
         NotificationCenter.default.publisher(for: .plexDataNeedsRefresh)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.load() }
+            .sink { [weak self] _ in self?.load(refresh: true) }
             .store(in: &refreshObservers)
     }
 
@@ -325,17 +325,22 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         dataSource.apply(snapshot, animatingDifferences: animated, completion: completion)
     }
 
-    private func load() {
+    /// A refresh only changes watch state, so it refetches the episodes and keeps the loaded detail.
+    private func load(refresh: Bool = false) {
         guard let provider else { return }
         loadToken &+= 1
         let token = loadToken
         let ref = season.ref
         let showRef = season.parentRef
+        let skipDetail = refresh && seasonDetail != nil
+        let skipShow = refresh && showDetail != nil
         Task { [weak self] in
-            let children = (try? await provider.children(of: ref)) ?? []
-            let detail = try? await provider.fullDetail(for: ref)
-            var show: MediaItemDetail?
-            if let showRef { show = try? await provider.fullDetail(for: showRef) }
+            async let childrenFetch = try? await provider.children(of: ref)
+            async let detailFetch: MediaItemDetail? = skipDetail ? nil : (try? await provider.fullDetail(for: ref))
+            async let showFetch: MediaItemDetail? = showRef == nil || skipShow ? nil : (try? await provider.fullDetail(for: showRef!))
+            let children = await childrenFetch ?? []
+            let detail = await detailFetch
+            let show = await showFetch
             guard let self, self.loadToken == token else { return }
             if let show { self.showDetail = show; self.showTitle = show.item.title }
             if let detail {

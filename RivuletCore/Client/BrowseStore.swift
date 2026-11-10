@@ -181,6 +181,7 @@ final class BrowseStore: ObservableObject {
 
     /// Called after playback or a watched toggle: repaint open pages, then Home.
     func watchStateDidChange() async {
+        PlexNetworkManager.shared.forgetRecentReads()
         watchStateRevision += 1
         await refresh()
     }

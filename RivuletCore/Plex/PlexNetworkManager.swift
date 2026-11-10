@@ -282,6 +282,25 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return data
     }
 
+    // MARK: - Recent reads
+
+    /// One title's metadata is asked for from several places within a second (a detail page's
+    /// header, watchlist check and episode list; Play, then the player). They share one request.
+    private let recentReads = RecentReads<PlexMediaContainerWrapper>(lifetime: 10)
+
+    private func recentRead(_ url: URL, authToken: String) async throws -> PlexMediaContainerWrapper {
+        let headers = plexHeaders(authToken: authToken)
+        return try await recentReads.value(for: "\(authToken)|\(url.absoluteString)") {
+            try await self.request(url, headers: headers)
+        }
+    }
+
+    /// Call after anything that changes what the server would answer (watch state, ratings,
+    /// track selection, metadata), so the next read is a fresh one.
+    func forgetRecentReads() {
+        recentReads.removeAll()
+    }
+
     // MARK: - Authentication
 
     /// Request a PIN code for authentication
@@ -657,10 +676,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidURL
         }
 
-        let container: PlexMediaContainerWrapper = try await request(
-            url,
-            headers: plexHeaders(authToken: authToken)
-        )
+        let container = try await recentRead(url, authToken: authToken)
 
         guard var item = container.MediaContainer.Metadata?.first else {
             throw PlexAPIError.notFound
@@ -814,10 +830,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidURL
         }
 
-        let container: PlexMediaContainerWrapper = try await request(
-            url,
-            headers: plexHeaders(authToken: authToken)
-        )
+        let container = try await recentRead(url, authToken: authToken)
 
         return container.MediaContainer.Metadata ?? []
     }
@@ -842,10 +855,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             throw PlexAPIError.invalidURL
         }
 
-        let container: PlexMediaContainerWrapper = try await request(
-            url,
-            headers: plexHeaders(authToken: authToken)
-        )
+        let container = try await recentRead(url, authToken: authToken)
 
         return container.MediaContainer.Metadata ?? []
     }
@@ -1165,6 +1175,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         duration: Int? = nil,
         sessionIdentifier: String? = nil
     ) async throws -> String? {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/:/timeline") else {
             throw PlexAPIError.invalidURL
         }
@@ -1230,6 +1241,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/:/scrobble") else {
             throw PlexAPIError.invalidURL
         }
@@ -1266,6 +1278,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/:/unscrobble") else {
             throw PlexAPIError.invalidURL
         }
@@ -1304,6 +1317,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         ratingKey: String,
         rating: Int?
     ) async throws {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/:/rate") else {
             throw PlexAPIError.invalidURL
         }
@@ -1348,6 +1362,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
+        defer { forgetRecentReads() }
         guard let url = URL(string: "\(serverURL)/library/metadata/\(ratingKey)/refresh") else {
             throw PlexAPIError.invalidURL
         }
@@ -1423,6 +1438,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     /// Deletes an item and its files from the server.
     func deleteMetadata(serverURL: String, authToken: String, ratingKey: String) async throws {
+        defer { forgetRecentReads() }
         guard let url = URL(string: "\(serverURL)/library/metadata/\(ratingKey)") else {
             throw PlexAPIError.invalidURL
         }
@@ -1446,6 +1462,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         ratingKey: String,
         resultKey: String
     ) async throws {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/library/metadata/\(ratingKey)/subtitles") else {
             throw PlexAPIError.invalidURL
         }
@@ -1471,6 +1488,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         authToken: String,
         ratingKey: String
     ) async throws {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/actions/removeFromContinueWatching") else {
             throw PlexAPIError.invalidURL
         }
@@ -1992,6 +2010,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         partId: Int,
         audioStreamID: Int
     ) async {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/library/parts/\(partId)") else {
             print("[Plex] Failed to build audio stream selection URL")
             return
@@ -2026,6 +2045,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         partId: Int,
         subtitleStreamID: Int
     ) async {
+        defer { forgetRecentReads() }
         guard var components = URLComponents(string: "\(serverURL)/library/parts/\(partId)") else {
             print("[Plex] Failed to build subtitle stream selection URL")
             return
@@ -3398,3 +3418,36 @@ nonisolated struct PlexLiveTuneError: LocalizedError {
     var errorDescription: String? { String(localized: "Tune failed: \(serverMessage)") }
 }
 
+// MARK: - Recent reads
+
+/// Shares one in-flight or just-finished read per key for `lifetime` seconds.
+/// A failed read is forgotten at once, so the next caller tries again.
+@MainActor
+final class RecentReads<Value: Sendable> {
+    private var entries: [String: (at: Date, task: Task<Value, Error>)] = [:]
+    private let lifetime: TimeInterval
+
+    init(lifetime: TimeInterval) {
+        self.lifetime = lifetime
+    }
+
+    func value(for key: String, now: Date = Date(),
+               _ load: @escaping @MainActor () async throws -> Value) async throws -> Value {
+        if let entry = entries[key], now.timeIntervalSince(entry.at) < lifetime {
+            return try await entry.task.value
+        }
+        entries = entries.filter { now.timeIntervalSince($0.value.at) < lifetime }
+        let task = Task { try await load() }
+        entries[key] = (now, task)
+        do {
+            return try await task.value
+        } catch {
+            if entries[key]?.task == task { entries[key] = nil }
+            throw error
+        }
+    }
+
+    func removeAll() {
+        entries.removeAll()
+    }
+}

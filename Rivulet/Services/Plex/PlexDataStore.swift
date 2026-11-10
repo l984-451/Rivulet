@@ -314,6 +314,14 @@ class PlexDataStore: ObservableObject {
             }
         }
 
+        // Pages refetch on this notification: they must read the server, not a read shared a
+        // moment ago. Registered first and run in place, so it is done before any of them start.
+        NotificationCenter.default.addObserver(
+            forName: .plexDataNeedsRefresh, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { PlexNetworkManager.shared.forgetRecentReads() }
+        }
+
         // Same for the sidebar order — it decides Home's row order too
         // (`librariesPinnedToHome`), so a reorder in Settings has to repaint on
         // the way back out. `dropFirst` skips the initial value; the
@@ -450,12 +458,26 @@ class PlexDataStore: ObservableObject {
         continueWatchingPollingTimer = nil
     }
 
-    /// Poll hubs silently (no loading indicator)
+    /// Poll hubs silently (no loading indicator). Home's rows come from Continue Watching and the
+    /// promoted hubs, so the global `/hubs` (about 500 KB, over a second to build on the server)
+    /// is fetched only until it is in hand; it feeds the hero's fallback.
     private func pollHubs() async {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
 
-        await fetchHubsFromServer(serverURL: serverURL, token: token, updateLoading: false)
+        await fetchHubsFromServer(serverURL: serverURL, token: token, updateLoading: false,
+                                  includeGlobalHubs: hubs.isEmpty)
+    }
+
+    /// After a watch-state change. Continue Watching and the promoted rows are what Home draws;
+    /// a library page refreshes its own hubs.
+    func refreshAfterWatchStateChange() async {
+        guard let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+        clearNextEpisodeCache()
+        await fetchContinueWatchingOnly(serverURL: serverURL, token: token)
+        await loadPromotedHubs(serverURL: serverURL, token: token, userId: profileManager.selectedUserId)
+        await TopShelfFeed.refresh()
     }
 
     /// Fast poll: refresh only the Continue Watching hub (small payload). When
@@ -761,7 +783,8 @@ class PlexDataStore: ObservableObject {
         hubsLoadTask = nil
     }
 
-    private func fetchHubsFromServer(serverURL: String, token: String, updateLoading: Bool) async {
+    private func fetchHubsFromServer(serverURL: String, token: String, updateLoading: Bool,
+                                     includeGlobalHubs: Bool = true) async {
         // A token captured before a profile change must not fetch, paint or cache.
         guard authManager.selectedServerToken == token else {
             if updateLoading { isLoadingHubs = false }
@@ -770,9 +793,13 @@ class PlexDataStore: ObservableObject {
         let userId = profileManager.selectedUserId
 
         do {
-            async let hubsTask = fetchHubsOffMain(serverURL: serverURL, token: token, userId: userId)
             async let continueWatchingTask = fetchContinueWatchingOffMain(serverURL: serverURL, token: token, userId: userId)
-            let fetchedHubs = try await hubsTask
+            let fetchedHubs: [PlexHub]
+            if includeGlobalHubs {
+                fetchedHubs = try await fetchHubsOffMain(serverURL: serverURL, token: token, userId: userId)
+            } else {
+                fetchedHubs = hubs
+            }
             // A thrown CW fetch (transient network error) must not be
             // conflated with a successful empty result: only a completed fetch
             // is allowed to clear `continueWatchingHub` and arm
@@ -784,6 +811,8 @@ class PlexDataStore: ObservableObject {
                 fetchedContinueWatching = try await continueWatchingTask
                 continueWatchingFetchCompleted = true
             } catch {
+                // With no `/hubs` request beside it, this is the fetch that notices a dead connection.
+                if !includeGlobalHubs { throw error }
                 DiagLog.error(.home, "Continue Watching fetch failed, keeping current hub: \(DiagLog.describe(error))")
             }
             guard authManager.selectedServerToken == token else {
@@ -817,7 +846,7 @@ class PlexDataStore: ObservableObject {
             if updateLoading {
                 self.isLoadingHubs = false
             }
-            await cacheManager.cacheHubs(fetchedHubs)
+            if includeGlobalHubs { await cacheManager.cacheHubs(fetchedHubs) }
             // Hubs or Continue Watching changed: re-project Home.
             projectHomeItems()
             // The fetch returned cleanly: the server connection is up. A still
@@ -840,7 +869,8 @@ class PlexDataStore: ObservableObject {
                    let newToken = authManager.selectedServerToken {
                     // Retry with new connection
                     print("📦 PlexDataStore: Retrying hubs fetch after connection recovery...")
-                    await fetchHubsFromServer(serverURL: newServerURL, token: newToken, updateLoading: updateLoading)
+                    await fetchHubsFromServer(serverURL: newServerURL, token: newToken, updateLoading: updateLoading,
+                                              includeGlobalHubs: includeGlobalHubs)
                     return
                 }
             }

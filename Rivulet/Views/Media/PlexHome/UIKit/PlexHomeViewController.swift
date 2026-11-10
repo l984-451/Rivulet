@@ -2077,6 +2077,10 @@ final class PlexHomeViewController: UIViewController {
         applyPendingPreviewRestoreIfNeeded()
         nudgeInitialHeroFocusIfNeeded()
         refreshOnReappearIfNeeded()
+        if needsWatchStateRefresh {
+            needsWatchStateRefresh = false
+            Task { await refreshPageAfterWatchStateChange() }
+        }
         refreshYearInReview()
         if !isDrillInPage { HalloweenBats.showIfHalloween(in: view) }
         if let window = view.window {
@@ -2099,6 +2103,31 @@ final class PlexHomeViewController: UIViewController {
         // Only a real dismissal. A carousel presented over the collection page
         // (.overFullScreen) never makes it disappear at all.
         if isBeingDismissed { onDismiss?() }
+    }
+
+    /// Set when a watch-state change arrived while this page was off screen.
+    private var needsWatchStateRefresh = false
+
+    /// Library and drill-in pages after a watch-state change: repaint badges and progress.
+    private func refreshPageAfterWatchStateChange() async {
+        switch mode {
+        case .library:
+            // Repaint badges (show unwatched counts, #333). The
+            // reload bumps the generation, which discards an
+            // in-flight letter count; ask again.
+            reloadLoadedGridPages()
+            loadAlphabetIndex()
+            await refreshThisLibraryHubs()
+        case .collection, .playlist, .playlists, .favorites:
+            // Playback and detail-page watch changes: re-request
+            // the loaded pages so badges and progress repaint.
+            // A playlist page also picks up entry edits; the grid, created and deleted lists.
+            // Mid-move a reload would reorder the grid under the held tile: run it after.
+            if entryMove?.isMoving == true { refreshAfterMove = true; return }
+            reloadLoadedGridPages()
+        case .home, .discover, .search, .watchlist:
+            break
+        }
     }
 
     /// Nonblocking stale-while-revalidate whenever the home surface comes back
@@ -3452,25 +3481,18 @@ final class PlexHomeViewController: UIViewController {
                     case .watchlist:
                         break  // playback state doesn't change what is on the watchlist
                     case .home:
-                        await self.dataStore.refreshHubs()
-                        await self.dataStore.refreshLibraryHubs()
+                        await self.dataStore.refreshAfterWatchStateChange()
                         if self.enablePersonalizedRecommendations {
                             await self.refreshRecommendations(force: true)
                         }
-                    case .library:
-                        // Repaint badges (show unwatched counts, #333). The
-                        // reload bumps the generation, which discards an
-                        // in-flight letter count; ask again.
-                        self.reloadLoadedGridPages()
-                        self.loadAlphabetIndex()
-                        await self.refreshThisLibraryHubs()
-                    case .collection, .playlist, .playlists, .favorites:
-                        // Playback and detail-page watch changes: re-request
-                        // the loaded pages so badges and progress repaint.
-                        // A playlist page also picks up entry edits; the grid, created and deleted lists.
-                        // Mid-move a reload would reorder the grid under the held tile: run it after.
-                        if self.entryMove?.isMoving == true { self.refreshAfterMove = true; return }
-                        self.reloadLoadedGridPages()
+                    case .library, .collection, .playlist, .playlists, .favorites:
+                        // A page nobody can see (another tab, under the player) waits
+                        // until it is shown again: see `viewDidAppear`.
+                        guard self.viewIfLoaded?.window != nil else {
+                            self.needsWatchStateRefresh = true
+                            return
+                        }
+                        await self.refreshPageAfterWatchStateChange()
                     }
                 }
             }
@@ -3539,6 +3561,15 @@ final class PlexHomeViewController: UIViewController {
     /// The list the hero shows, as Home last built it.
     private var listHeroItems: [MediaItem] = []
     private var lastHeroSources = PlexHomeViewController.heroSourcesSignature
+    /// The settings a library page's snapshot reads. An unrelated defaults write must not
+    /// rebuild a snapshot that holds every slot of the library.
+    private var librarySnapshotSettings: [Bool] {
+        let defaults = UserDefaults.standard
+        return [showHomeHero,
+                (defaults.object(forKey: "showLibraryRecentRows") as? Bool) ?? true,
+                (defaults.object(forKey: "showLibraryRecommendations") as? Bool) ?? true]
+    }
+    private var lastLibrarySnapshotSettings: [Bool] = []
     /// The watchlist's first entries mapped to library or TMDB items, and the entry ids they came from.
     private var watchlistHeroItems: [MediaItem] = []
     private var watchlistHeroSourceIDs: [String]?
@@ -3673,8 +3704,12 @@ final class PlexHomeViewController: UIViewController {
                 // or the surface is left blank with no focusable content.
                 if case .watchlist = self.mode { self.updateHomeState() }
                 // Only the row's leading tiles are worth prewarming; the grid's
-                // cells fetch their own art as they scroll into view.
-                self.prewarmWatchlistArtwork(Array(items.prefix(20)))
+                // cells fetch their own art as they scroll into view. Home and the
+                // Watchlist page are the only places that draw it.
+                switch self.mode {
+                case .home, .watchlist: self.prewarmWatchlistArtwork(Array(items.prefix(20)))
+                default: break
+                }
             }
             .store(in: &dataStoreObservers)
 
@@ -3721,6 +3756,7 @@ final class PlexHomeViewController: UIViewController {
     /// screen. `UserDefaults.didChangeNotification` fires once per change.
     /// We just re-evaluate the relevant subsystem; no need to filter by key.
     private func observeUserDefaults() {
+        lastLibrarySnapshotSettings = librarySnapshotSettings
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -3758,7 +3794,11 @@ final class PlexHomeViewController: UIViewController {
                 // on a re-apply. Cheap: the diffable snapshot is a no-op when
                 // the row set is unchanged.
                 if case .library = self.mode {
-                    self.applySnapshot(animated: false)
+                    let settings = self.librarySnapshotSettings
+                    if settings != self.lastLibrarySnapshotSettings {
+                        self.lastLibrarySnapshotSettings = settings
+                        self.applySnapshot(animated: false)
+                    }
                     // A provider library's hero skips selectHeroItemsIfNeeded,
                     // so a hero switched on here needs its backdrop. Free when
                     // the URL is unchanged.
@@ -5658,8 +5698,10 @@ final class PlexHomeViewController: UIViewController {
                 loadingThumbImage: thumbImage,
                 preferredMediaID: mediaID
             )
+            // The full refresh follows `.plexDataNeedsRefresh`, which the player posts once the
+            // server has the final position. This one only covers a page with no Home behind it.
             PlayerPresenter.present(viewModel: viewModel, from: self, onDismiss: { [weak self] in
-                Task { await self?.dataStore.refreshHubs() }
+                Task { await self?.dataStore.refreshContinueWatchingIfStale() }
             })
         }
     }

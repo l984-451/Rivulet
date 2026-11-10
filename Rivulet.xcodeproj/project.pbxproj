@@ -444,6 +444,7 @@
 				en,
 				de,
 				el,
+				fr,
 				Base,
 			);
 			mainGroup = A72E03D12EDA297D003A73DA;

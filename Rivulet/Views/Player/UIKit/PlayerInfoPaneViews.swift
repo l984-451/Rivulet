@@ -112,7 +112,7 @@ final class PlayerInfoCardView: UIView {
             meta.setCustomSpacing(15, after: label)
         }
         for badge in content.badges {
-            meta.addArrangedSubview(PlayerInfoBadgeView(text: badge, filled: badge == "4K"))
+            meta.addArrangedSubview(PlayerInfoBadgeView(text: badge, filled: MediaSource.filledBadges.contains(badge)))
         }
 
         let action = PlayerPaneActionButton(title: String(localized: "From Beginning"), symbol: "play.fill")

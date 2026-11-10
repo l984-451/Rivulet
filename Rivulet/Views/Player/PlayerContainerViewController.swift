@@ -1747,8 +1747,11 @@ class PlayerContainerViewController: UIViewController {
             let meta = vm.metadata
             var badges: [String] = []
             if let rating = meta.displayContentRating { badges.append(rating) }
-            if let resolution = meta.Media?.first?.videoResolution?.lowercased() {
-                badges.append(resolution == "4k" ? "4K" : (["1080", "720"].contains(resolution) ? "HD" : "SD"))
+            // No SD badge: Apple's TV app has none.
+            switch meta.Media?.first?.videoResolution?.lowercased() {
+            case "4k", "2160": badges.append("4K")
+            case "1080", "720": badges.append("HD")
+            default: break
             }
             if meta.hasDolbyVision { badges.append("Dolby Vision") } else if meta.hasHDR { badges.append("HDR") }
             if !vm.subtitleTracks.isEmpty { badges.append("CC") }

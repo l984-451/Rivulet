@@ -967,9 +967,9 @@ final class MediaDetailChromeView: UIView {
                                   alpha: Self.qualityRowAlpha).forEach(qualityRow.addArrangedSubview)
         }
 
-        for badge in Self.calmBadges(detail?.primarySource ?? playTargetSource) {
+        for badge in (detail?.primarySource ?? playTargetSource)?.detailBadges ?? [] {
             qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha,
-                                                         filled: Self.resolutionBadges.contains(badge)))
+                                                         filled: MediaSource.filledBadges.contains(badge)))
         }
     }
 
@@ -1013,29 +1013,6 @@ final class MediaDetailChromeView: UIView {
             views.append(ageStack)
         }
         return views
-    }
-
-    /// Drawn filled, as Apple draws its 4K, HD and SD badges.
-    static let resolutionBadges: Set<String> = ["4K", "HD", "SD"]
-
-    /// The row's quality badges, kept short: 4K, HD or SD as the Apple TV app labels them, every range
-    /// badge (DV, HDR10+ ...), and audio only when it is object audio.
-    static func calmBadges(_ source: MediaSource?) -> [String] {
-        guard let source else { return [] }
-        var badges: [String] = []
-        if let video = source.videoTracks.first {
-            switch VersionRanking.tier(label: source.videoResolution, height: video.height) {
-            case 2160: badges.append("4K")
-            case 720, 1080: badges.append("HD")
-            case 480, 576: badges.append("SD")
-            default: break
-            }
-        }
-        badges += source.rangeBadges
-        if let audio = source.audioBadge {
-            if audio.hasSuffix("Atmos") { badges.append("Atmos") } else if audio.hasPrefix("DTS-X") { badges.append("DTS:X") }
-        }
-        return badges
     }
 
     /// An emoji as the score's glyph (tomato when fresh at 60% and up, nauseated face when rotten,

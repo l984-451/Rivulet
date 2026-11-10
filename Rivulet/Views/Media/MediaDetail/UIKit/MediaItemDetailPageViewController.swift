@@ -540,19 +540,9 @@ final class MediaItemDetailPageViewController: UIViewController {
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
         showExtras(detail)
-        // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
-        // parenthetical channel-layout noise ("5.1(side)" → "5.1").
-        let source = detail.primarySource
-        var badges = source?.qualityBadges() ?? []
-        if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
-        if source?.audioTracks.contains(where: {
-            ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri")
-        }) ?? false { badges.append("AD") }
         badgeRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for raw in badges {
-            let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text, filled: text == "4K")) }
+        for text in detail.primarySource?.detailBadges ?? [] {
+            badgeRow.addArrangedSubview(Self.badge(text, filled: MediaSource.filledBadges.contains(text)))
         }
         addVersionsButton(detail)
     }

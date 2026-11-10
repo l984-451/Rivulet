@@ -3149,6 +3149,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Callers move to HLS, whose track ids are Plex stream ids, so the engine-indexed lists go too.
     private func releaseAetherPlayer() {
         guard let ap = aetherPlayer else { return }
+        aetherCancellables.removeAll()
         ap.stop()
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])
@@ -3854,7 +3855,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         AppHangContext.clearContent()
         bufferingStartedAt = nil
 
-        // Stop AetherPlayer if active
+        // Unbind first: stop() zeroes the engine clock, and a 0 reaching
+        // currentTime is reported to Plex and wipes the resume point (#605).
+        aetherCancellables.removeAll()
         aetherPlayer?.stop()
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])

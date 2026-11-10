@@ -307,22 +307,6 @@
     },
     "" : {},
     " " : {},
-    "At the Credits" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beim Abspann"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Au générique"
-          }
-        }
-      }
-    },
     "Downloading Subtitles…" : {
       "localizations" : {
         "de" : {
@@ -363,22 +347,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aucun sous-titre trouvé"
-          }
-        }
-      }
-    },
-    "Nothing" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rien"
           }
         }
       }
@@ -509,18 +477,18 @@
         }
       }
     },
-    "Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Nothing waits for the end. Countdown decides autoplay." : {
+    "Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Off waits for the end. Countdown decides autoplay." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Als Nächstes“ öffnet die Karte der nächsten Folge, sobald der Abspann beginnt. „Überspringen-Taste“ zeigt nur „Abspann überspringen“, „Als Nächstes“ öffnet sich dann am Ende. „Nichts“ wartet bis zum Ende. Ob es automatisch weitergeht, entscheidet der Countdown."
+            "value" : "„Als Nächstes“ öffnet die Karte der nächsten Folge, sobald der Abspann beginnt. „Überspringen-Taste“ zeigt nur „Abspann überspringen“, „Als Nächstes“ öffnet sich dann am Ende. „Aus“ wartet bis zum Ende. Ob es automatisch weitergeht, entscheidet der Countdown."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "À suivre ouvre la carte de l’épisode suivant au début du générique. Bouton Passer affiche seulement Passer le générique, puis À suivre s’ouvre à la fin. Rien n’attend la fin. Le compte à rebours décide de la lecture automatique."
+            "value" : "À suivre ouvre la carte de l’épisode suivant au début du générique. Bouton Passer affiche seulement Passer le générique, puis À suivre s’ouvre à la fin. Désactivé attend la fin. Le compte à rebours décide de la lecture automatique."
           }
         }
       }

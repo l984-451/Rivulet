@@ -592,7 +592,7 @@ enum SettingsContent {
                             })),
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
-            SettingsRowItem(id: "atTheCredits", title: "At the Credits", kind: .cycle(
+            SettingsRowItem(id: "atTheCredits", title: "Credits", kind: .cycle(
                 value: { CreditsBehavior.current().label },
                 next: {
                     let all = CreditsBehavior.allCases

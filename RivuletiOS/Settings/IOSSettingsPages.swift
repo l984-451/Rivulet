@@ -50,7 +50,7 @@ struct IOSLibrarySettingsView: View {
 struct IOSPlaybackSettingsView: View {
     @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
-    /// Observed so the skip pickers redraw (and At the Credits); read and written through `MarkerSkipMode`.
+    /// Observed so the skip pickers redraw (and Credits); read and written through `MarkerSkipMode`.
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipRecap") private var autoSkipRecap = false
     @AppStorage(CreditsBehavior.storageKey) private var atTheCredits = ""
@@ -103,13 +103,13 @@ struct IOSPlaybackSettingsView: View {
             }
 
             Section {
-                Picker("At the Credits", selection: Binding(
+                Picker("Credits", selection: Binding(
                     get: { CreditsBehavior.current() }, set: { CreditsBehavior.set($0) }
                 )) {
                     ForEach(CreditsBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
             } footer: {
-                Text("Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Nothing waits for the end. Countdown decides autoplay.")
+                Text("Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Off waits for the end. Countdown decides autoplay.")
             }
 
             Section {

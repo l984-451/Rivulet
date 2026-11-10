@@ -265,7 +265,7 @@ enum SettingsDescriptorStore {
         ),
         "atTheCredits": SettingDescriptor(
             icon: "rectangle.stack",
-            description: "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Nothing waits for the end. Countdown decides whether the next episode autoplays."
+            description: "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Off waits for the end. Countdown decides whether the next episode autoplays."
         ),
 
         // MARK: Live TV

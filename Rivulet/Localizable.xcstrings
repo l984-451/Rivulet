@@ -3215,22 +3215,6 @@
         }
       }
     },
-    "At the Credits" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beim Abspann"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Au générique"
-          }
-        }
-      }
-    },
     "Audio" : {
       "localizations" : {
         "de" : {
@@ -12935,22 +12919,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Non défini"
-          }
-        }
-      }
-    },
-    "Nothing" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rien"
           }
         }
       }
@@ -23993,18 +23961,18 @@
         }
       }
     },
-    "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Nothing waits for the end. Countdown decides whether the next episode autoplays." : {
+    "When the credits start, Up Next opens the next episode card, Skip Button shows only Skip Credits, and Off waits for the end. Countdown decides whether the next episode autoplays." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beim Abspann öffnet „Als Nächstes“ die nächste Folge, „Überspringen-Taste“ zeigt nur „Abspann überspringen“ und „Nichts“ wartet. Der Countdown entscheidet über Autoplay."
+            "value" : "Beim Abspann öffnet „Als Nächstes“ die nächste Folge, „Überspringen-Taste“ zeigt nur „Abspann überspringen“ und „Aus“ wartet. Der Countdown entscheidet über Autoplay."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Au générique : À suivre ouvre la carte de l’épisode suivant, Bouton Passer n’affiche que Passer le générique, Rien attend la fin. Le compte à rebours décide de la lecture automatique."
+            "value" : "Au générique : À suivre ouvre la carte de l’épisode suivant, Bouton Passer n’affiche que Passer le générique, Désactivé attend la fin. Le compte à rebours décide de la lecture automatique."
           }
         }
       }

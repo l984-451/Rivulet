@@ -15,7 +15,7 @@ enum CreditsBehavior: String, CaseIterable {
         switch self {
         case .upNext: return String(localized: "Up Next")
         case .skipButton: return String(localized: "Skip Button")
-        case .nothing: return String(localized: "Nothing")
+        case .nothing: return String(localized: "Off")
         }
     }
 

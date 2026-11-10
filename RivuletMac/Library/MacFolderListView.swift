@@ -81,6 +81,7 @@ struct MacFolderListView: View {
                 label(entry, detail: "›") { Image(systemName: "folder.fill").font(.title2).foregroundStyle(.secondary) }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: FolderRowDetail.spoken(for: entry)))
         case .video(let item):
             Button { actions.play(item) } label: {
                 label(entry, detail: FolderRowDetail.text(for: entry)) {
@@ -88,12 +89,14 @@ struct MacFolderListView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: FolderRowDetail.spoken(for: entry)))
             .macContextMenu(item, showsDetails: true)
         case .photo(let photo):
             Button { show(photo) } label: {
                 label(entry, detail: "") { MacImage(url: photo.thumbnail) }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: FolderRowDetail.spoken(for: entry)))
         }
     }
 

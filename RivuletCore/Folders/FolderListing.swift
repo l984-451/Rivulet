@@ -158,6 +158,13 @@ enum FolderRowDetail {
         }
     }
 
+    /// The row read aloud: its title, then the detail in words.
+    static func spoken(for entry: FolderEntry) -> String {
+        guard case .video(let item) = entry.content else { return entry.title }
+        let detail = item.isWatched && !item.isInProgress ? String(localized: "Watched") : text(for: entry)
+        return detail.isEmpty ? entry.title : "\(entry.title), \(detail)"
+    }
+
     /// "11 min", "1 hr 32 min": rounded to the minute, never under one.
     static func length(_ seconds: TimeInterval) -> String {
         let minutes = max(1, Int((seconds / 60).rounded()))

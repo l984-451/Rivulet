@@ -9,6 +9,11 @@
 import UIKit
 import os
 
+extension Notification.Name {
+    /// Any remote press or touch began, posted from the window before anything acts on it.
+    static let remoteInputBegan = Notification.Name("remoteInputBegan")
+}
+
 // MARK: - Handler
 
 /// A surface that wants first refusal on the remote's Menu press.
@@ -153,6 +158,7 @@ enum MenuPressInterceptor {
                     MainActor.assumeIsolated {
                         remoteGestures.observe(arrowBegan: nil, arrowFinished: false, touchBegan: true)
                     }
+                    NotificationCenter.default.post(name: .remoteInputBegan, object: nil)
                 }
                 originalFunc(obj, selector, event)
                 return
@@ -170,6 +176,9 @@ enum MenuPressInterceptor {
                 // gesture recognizer can consume it, which is exactly what the
                 // input probe needs. No-ops unless Input Diagnostics is on.
                 InputProbe.record(presses: pressesEvent.allPresses)
+                if pressesEvent.allPresses.contains(where: { $0.phase == .began }) {
+                    NotificationCenter.default.post(name: .remoteInputBegan, object: nil)
+                }
 
                 // Withholding drops the whole event, so a non-Menu press
                 // batched into the same one goes with it. The remote delivers

@@ -49,6 +49,11 @@ final class DirectionHintView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Fades the glyph only: the view keeps alpha 1, so it stays focusable.
+    func setGlyphVisible(_ visible: Bool) {
+        UIView.animate(withDuration: visible ? 0.2 : 0.6) { self.stack.alpha = visible ? 1 : 0 }
+    }
+
     /// For Auto Layout hosts; multiview sets frames.
     override var intrinsicContentSize: CGSize { stack.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize) }
 }

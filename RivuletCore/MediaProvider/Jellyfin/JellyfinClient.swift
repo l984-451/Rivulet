@@ -23,13 +23,20 @@ nonisolated final class JellyfinClient: Sendable {
     let authorization: String
     private let transport: Transport
 
+    /// One shared session with the 30 s request timeout the Plex client uses.
+    static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        return URLSession(configuration: config)
+    }()
+
     /// MainActor because the device identity (`PlexAPI`) is MainActor state.
     /// The header is built once here; every request after that is nonisolated.
     @MainActor
     init(
         baseURL: URL,
         token: String?,
-        transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
+        transport: @escaping Transport = { try await JellyfinClient.defaultSession.data(for: $0) }
     ) {
         self.baseURL = baseURL
         self.token = token

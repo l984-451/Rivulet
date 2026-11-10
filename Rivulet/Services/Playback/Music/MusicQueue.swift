@@ -53,7 +53,10 @@ final class MusicQueue: ObservableObject {
     @Published var duration: TimeInterval = 0
     @Published var repeatMode: MusicRepeatMode = .off
     @Published var isShuffled: Bool = false
-    @Published var showNowPlaying: Bool = false
+    /// Lyrics are fetched only while this is true (Now Playing is the one reader).
+    @Published var showNowPlaying: Bool = false {
+        didSet { if showNowPlaying, !oldValue { loadLyrics() } }
+    }
     /// A fast forward or rewind in progress: a `ShuttleGrammar` level, 0 when there is none.
     /// While it runs `currentTime` is the position the scan has reached.
     @Published private(set) var scanLevel = 0
@@ -527,9 +530,14 @@ final class MusicQueue: ObservableObject {
         }
     }
 
+    private var lyricsRef: MediaItemRef?
+
     /// Off the playback path: a slow or missing lyric lookup never delays the song.
     private func loadLyrics() {
+        guard showNowPlaying else { currentLyrics = nil; lyricsRef = nil; return }
+        guard currentTrack?.ref != lyricsRef else { return }
         currentLyrics = nil
+        lyricsRef = currentTrack?.ref
         guard let ref = currentTrack?.ref,
               let provider = musicRegistry?.provider(for: ref.providerID) else { return }
         Task { @MainActor in

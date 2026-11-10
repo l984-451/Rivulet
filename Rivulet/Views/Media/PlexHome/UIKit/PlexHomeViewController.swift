@@ -6251,13 +6251,12 @@ final class PlexHomeViewController: UIViewController {
             }
             return
         }
-        // Skip Preview (#416): open the carousel's own expanded detail directly. An
-        // episode keeps its hero and Play, with the show's seasons below.
-        if SettingsStore.bool("skipPreviewCarousel", default: false) {
+        // Skip Preview (#416, #593): the tapped tile alone grows into its expanded detail.
+        // An episode keeps its hero and Play, with the show's seasons below.
+        let skipPreview = SettingsStore.bool("skipPreviewCarousel", default: false)
+        if skipPreview {
             guard items.indices.contains(selectedIndex) else { return }
-            let item = items[selectedIndex]
-            if item.kind == .season { selectMediaItem(item) } else { presentStandaloneExpandedDetail(item) }
-            return
+            if items[selectedIndex].kind == .season { selectMediaItem(items[selectedIndex]); return }
         }
         // Capture the source cell's frame in window coordinates so the
         // entry-morph has something to interpolate from.
@@ -6269,7 +6268,12 @@ final class PlexHomeViewController: UIViewController {
         let entrySnapshots = previewEntrySnapshots(
             at: sourceIndexPath,
             itemIndexMap: sourceIndexMap
-        )
+        ).filter { !skipPreview || $0.itemIndex == selectedIndex }
+        // No tile to fly from: the blur-faded detail.
+        if skipPreview, entrySnapshots.isEmpty {
+            presentStandaloneExpandedDetail(items[selectedIndex])
+            return
+        }
 
         suppressPreviewPresentationFocusMemory()
         let carouselVC = PreviewCarouselViewController(
@@ -6279,6 +6283,7 @@ final class PlexHomeViewController: UIViewController {
             sourceTarget: sourceTarget,
             entrySnapshots: entrySnapshots,
             sourceItemIDs: sourceItemIDs,
+            opensExpanded: skipPreview,
             onPrepareDismiss: { [weak self] sourceTarget in
                 self?.preparePreviewRestoreForPendingDismiss(sourceTarget)
             },
@@ -6305,11 +6310,11 @@ final class PlexHomeViewController: UIViewController {
                     indexMap?[row] = cardIndex[id]
                 }
             }
-            let hiddenRow = self.previewHiddenRowID
+            let (hiddenRow, hiddenItem) = (self.previewHiddenRowID, self.previewHiddenItem)
             self.showPreviewTiles()
             let fresh = self.previewEntrySnapshots(
                 at: path, itemIndexMap: indexMap, afterScreenUpdates: true)
-            self.previewHiddenRowID = hiddenRow
+            (self.previewHiddenRowID, self.previewHiddenItem) = (hiddenRow, hiddenItem)
             self.applyPreviewTileHiding()
             return fresh
         }
@@ -6322,6 +6327,7 @@ final class PlexHomeViewController: UIViewController {
             // The flying cards are on screen now and stand in for the tiles.
             guard let self, carouselVC?.presentingViewController != nil, !entrySnapshots.isEmpty else { return }
             self.previewHiddenRowID = sourceRowID
+            self.previewHiddenItem = skipPreview ? sourceIndexPath.item : nil
             self.applyPreviewTileHiding()
         }
     }
@@ -6330,11 +6336,14 @@ final class PlexHomeViewController: UIViewController {
 
     /// Row whose tiles are hidden while the carousel flies them (nil: none).
     private var previewHiddenRowID: String?
+    /// The one tile hidden in that row when only it flies (Skip Preview); nil hides the row.
+    private var previewHiddenItem: Int?
 
     /// Apply `previewHiddenRowID` to the realized shelf rows.
     private func applyPreviewTileHiding() {
         for case let row as ShelfRowCell in collectionView.visibleCells {
             let section = collectionView.indexPath(for: row)?.section ?? -1
+            row.previewHiddenItem = previewHiddenItem
             row.tilesHiddenForPreview = previewHiddenRowID != nil
                 && sectionsSnapshot.indices.contains(section)
                 && sectionsSnapshot[section].id.raw == previewHiddenRowID
@@ -6343,6 +6352,7 @@ final class PlexHomeViewController: UIViewController {
 
     private func showPreviewTiles() {
         previewHiddenRowID = nil
+        previewHiddenItem = nil
         applyPreviewTileHiding()
     }
 
@@ -6949,6 +6959,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         guard indexPath.section < sectionsSnapshot.count else { return }
         let section = sectionsSnapshot[indexPath.section]
         // A row coming back on screen follows the carousel's current state.
+        (cell as? ShelfRowCell)?.previewHiddenItem = previewHiddenItem
         (cell as? ShelfRowCell)?.tilesHiddenForPreview =
             previewHiddenRowID != nil && section.id.raw == previewHiddenRowID
         switch section.kind {

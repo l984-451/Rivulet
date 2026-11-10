@@ -126,12 +126,19 @@ final class ShelfRowCell: UICollectionViewCell {
     /// True while the preview carousel covers this row: its tiles fly as the
     /// cards, so the real ones stay hidden. `willDisplay` covers reused cells.
     var tilesHiddenForPreview = false {
-        didSet { rowCollectionView.visibleCells.forEach(applyPreviewHiding) }
+        didSet {
+            for cell in rowCollectionView.visibleCells {
+                applyPreviewHiding(to: cell, item: rowCollectionView.indexPath(for: cell)?.item)
+            }
+        }
     }
+    /// Set before `tilesHiddenForPreview`: only this tile hides (Skip Preview flies one tile).
+    var previewHiddenItem: Int?
 
     /// `contentView`, so the cell stays laid out and focusable.
-    private func applyPreviewHiding(to cell: UICollectionViewCell) {
+    private func applyPreviewHiding(to cell: UICollectionViewCell, item: Int?) {
         cell.contentView.isHidden = tilesHiddenForPreview && !(cell is PosterSkeletonCell)
+            && (previewHiddenItem == nil || item == previewHiddenItem)
     }
 
     /// Item index to route focus to on the next focus update (preview-dismiss
@@ -258,6 +265,7 @@ final class ShelfRowCell: UICollectionViewCell {
         // different row would restore focus to an unrelated tile index.
         lastFocusedItemIndex = nil
         hasBoundContent = false
+        previewHiddenItem = nil
         tilesHiddenForPreview = false
         // A deferred reload belongs to the row this cell WAS showing.
         deferredApply = nil
@@ -589,7 +597,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView,
                         willDisplay cell: UICollectionViewCell,
                         forItemAt indexPath: IndexPath) {
-        applyPreviewHiding(to: cell)
+        applyPreviewHiding(to: cell, item: indexPath.item)
         onWillDisplayItem?(indexPath.item)
     }
 

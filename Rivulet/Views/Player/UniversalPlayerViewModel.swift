@@ -697,6 +697,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// `.provider` only: this item's Up Next fetch, shared by every caller
     /// for one `itemGeneration`. A fetch that found nothing is dropped so the
     /// next caller asks again.
+    /// One season-episode fetch per item and season, shared by the early resolve,
+    /// the Up Next panel and the end-of-playback funnel. nil result = failed (not kept).
+    private var plexSeasonFetch: (generation: Int, key: String, task: Task<[PlexMetadata]?, Never>)?
     private var providerUpNextFetch: (generation: Int, task: Task<(season: [MediaItem], next: MediaItem?), Never>)?
     /// `.provider` only: the next episode's prepare, keyed by its ratingKey,
     /// shared by the countdown-start prepare and the swap.
@@ -915,6 +918,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// window when one is entered. Muting is handled reactively via the
     /// published `isFilterMuting`. Called from both time observers.
     private func applyContentFilter(at time: TimeInterval) {
+        // Off for the item (settings are read once, in beginItem): every step below is a no-op
+        // unless leftover state from an enabled item still needs clearing.
+        if !contentFilter.isEnabled, silentSubtitleTrackId == nil, contentFilterNotice == nil,
+           !contentFilter.isFilterMuting { return }
         // Feed the currently on-screen dialogue so language cues mute in sync.
         // Cues resolve on the sourceTime axis, honoring the subtitle delay. On
         // the HLS route only a shown text track feeds this; otherwise language
@@ -1850,6 +1857,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func startPlayback() async {
         await beginCinemaExtrasIfNeeded()
+        // Overlaps the metadata fetch; it reads only artwork paths that fetch never writes.
+        let seasonPoster = Task { await fetchSeasonPosterIfNeeded() }
         // Fetch detailed metadata if markers or chapters are missing
         let hasMarkers = !(metadata.Marker ?? []).isEmpty
         let hasChapters = !(metadata.Chapter ?? []).isEmpty
@@ -1857,13 +1866,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         if !hasMarkers || !hasChapters || !hasStreamDetails {
             await fetchMarkersIfNeeded()
         }
-        // A Plex item's chapter images arrive with the fetch above; a provider
-        // item's come from its detail.
-        if case .provider = source, let chapters = metadata.Chapter {
-            chapterThumbnails = [:]
-            await fetchChapterThumbnails(chapters: chapters)
-        }
-
         // Arm the local content filter for this item: reload settings, restore
         // any cached filter list, then refresh it and read the subtitle file.
         // After the fetch above, because both key off the file, the external
@@ -1883,8 +1885,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
         }
 
-        // Fetch season/show poster for Now Playing artwork (episodes)
-        await fetchSeasonPosterIfNeeded()
+        // Season/show poster for Now Playing artwork (episodes)
+        await seasonPoster.value
 
         // Resolve the title logo for the pause screen.
         fetchTitleLogoIfNeeded()
@@ -2181,6 +2183,8 @@ final class UniversalPlayerViewModel: ObservableObject {
                 throw PlayerError.loadFailed("Unable to build HLS URL")
             }
 
+            // Overlaps the wait for the transcode to start.
+            let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             if !transcodeReady {
                 // HLS as the PRIMARY route (no direct-play URL existed), not a
@@ -2195,9 +2199,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 throw error
             }
 
-            // Log the HLS master manifest for debugging track labels and I-frame playlists
-            await logHLSManifest(url: hlsURL, headers: streamHeaders)
-
+            await chapterImages.value
             try loadAVPlayer(url: hlsURL, headers: streamHeaders)
 
             if let startTime, startTime > 0 {
@@ -2679,62 +2681,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             .store(in: &aetherCancellables)
     }
 
-    // MARK: - HLS Manifest Debugging
-
-    /// Fetch and log the HLS master manifest to inspect track labels and I-frame playlists.
-    private func logHLSManifest(url: URL, headers: [String: String]) async {
-        let url = avPlayerURL(url)
-        var request = URLRequest(url: url)
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            if let manifest = String(data: data, encoding: .utf8) {
-                print("[HLS Manifest] ===== Master Playlist =====")
-                for line in manifest.components(separatedBy: "\n") {
-                    print("[HLS Manifest] \(line)")
-                }
-                print("[HLS Manifest] ===== End =====")
-
-                // Quick summary
-                let hasIFrame = manifest.contains("EXT-X-I-FRAME")
-                let audioTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=AUDIO") }
-                let subtitleTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=SUBTITLES") }
-                print("[HLS Manifest] I-Frame playlist: \(hasIFrame ? "YES" : "NO")")
-                print("[HLS Manifest] Audio tracks: \(audioTags.count)")
-                print("[HLS Manifest] Subtitle tracks: \(subtitleTags.count)")
-
-                // Also fetch and log keyframe playlist if present
-                if let iframeLine = manifest.components(separatedBy: "\n")
-                    .first(where: { $0.contains("EXT-X-I-FRAME-STREAM-INF") }),
-                   let uriRange = iframeLine.range(of: "URI=\""),
-                   let endQuote = iframeLine[uriRange.upperBound...].firstIndex(of: "\"") {
-                    let keyframeRelative = String(iframeLine[uriRange.upperBound..<endQuote])
-                    let keyframeURL: URL?
-                    if keyframeRelative.contains("://") {
-                        keyframeURL = URL(string: keyframeRelative)
-                    } else {
-                        keyframeURL = URL(string: keyframeRelative, relativeTo: url.deletingLastPathComponent())
-                    }
-                    if let kfURL = keyframeURL {
-                        var kfRequest = URLRequest(url: kfURL)
-                        for (key, value) in headers { kfRequest.setValue(value, forHTTPHeaderField: key) }
-                        if let (kfData, _) = try? await URLSession.shared.data(for: kfRequest),
-                           let kfManifest = String(data: kfData, encoding: .utf8) {
-                            let kfLines = kfManifest.components(separatedBy: "\n")
-                            print("[HLS Manifest] ===== Keyframe Playlist (\(kfLines.count) lines) =====")
-                            for line in kfLines.prefix(20) { print("[HLS Manifest/KF] \(line)") }
-                            if kfLines.count > 20 { print("[HLS Manifest/KF] ... (\(kfLines.count - 20) more lines)") }
-                        }
-                    }
-                }
-            }
-        } catch {
-            print("[HLS Manifest] Failed to fetch: \(error.localizedDescription)")
-        }
-    }
-
     // MARK: - AVPlayer Creation
 
     /// Create an AVPlayer for a URL (direct play or HLS).
@@ -2996,60 +2942,31 @@ final class UniversalPlayerViewModel: ObservableObject {
         return "\(codecName) \(channelDesc)"
     }
 
-    /// Fetch chapter thumbnail images from Plex with limited concurrency.
-    /// Uses a concurrency limit to avoid N+1 API call patterns flagged by Sentry.
+    /// The hls route's only use of chapter images is AVPlayer's navigation markers, so they load
+    /// here, just before `loadAVPlayer`, and never on the Aether start path.
+    private func loadChapterThumbnailsForHLS() async {
+        chapterThumbnails = [:]
+        guard let chapters = metadata.Chapter, !chapters.isEmpty else { return }
+        let generation = itemGeneration
+        await fetchChapterThumbnails(chapters: chapters)
+        if generation != itemGeneration { chapterThumbnails = [:] }
+    }
+
+    /// Fetch chapter thumbnail images, three at a time, through the shared image cache
+    /// (it trusts raw-IP Plex servers, which `URLSession.shared` does not).
     private func fetchChapterThumbnails(chapters: [PlexChapter]) async {
         let thumbChapters: [(index: Int, url: URL)] = chapters.compactMap { chapter in
             guard let index = chapter.index, let url = chapterThumbnailURL(chapter) else { return nil }
             return (index, url)
         }
-        let thumbCount = thumbChapters.count
-        guard thumbCount > 0 else { return }
-        print("[Chapters] Fetching \(thumbCount) chapter thumbnails (max 3 concurrent)...")
+        guard !thumbChapters.isEmpty else { return }
 
-        // Use a limited concurrency approach to avoid N+1 API call detection
-        let maxConcurrency = 3
-
-        await withTaskGroup(of: (Int, Data?).self) { group in
-            var iterator = thumbChapters.makeIterator()
-            var inFlight = 0
-
-            // Seed initial batch
-            while inFlight < maxConcurrency, let (index, url) = iterator.next() {
-                group.addTask {
-                    do {
-                        let (data, _) = try await URLSession.shared.data(from: url)
-                        return (index, data)
-                    } catch {
-                        return (index, nil)
-                    }
-                }
-                inFlight += 1
-            }
-
-            // As each completes, start the next
-            for await (index, data) in group {
-                if let data {
-                    chapterThumbnails[index] = data
-                }
-                inFlight -= 1
-
-                // Start next fetch if available
-                if let (nextIndex, url) = iterator.next() {
-                    group.addTask {
-                        do {
-                            let (data, _) = try await URLSession.shared.data(from: url)
-                            return (nextIndex, data)
-                        } catch {
-                            return (nextIndex, nil)
-                        }
-                    }
-                    inFlight += 1
-                }
-            }
+        let results = await BoundedFanOut.map(thumbChapters, width: 3) { chapter in
+            (chapter.index, await ImageCacheManager.shared.imageData(for: chapter.url))
         }
-
-        print("[Chapters] Fetched \(chapterThumbnails.count)/\(thumbCount) chapter thumbnails")
+        for (index, data) in results {
+            if let data { chapterThumbnails[index] = data }
+        }
     }
 
     /// A Plex chapter's own thumb path; a provider chapter's image from its
@@ -3219,6 +3136,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Second half: load the preflighted URL and seek to where playback was.
     private func finishHLSSwitch(to hls: (url: URL, headers: [String: String], sessionId: String?),
                                  resumeTime: TimeInterval) async throws {
+        await loadChapterThumbnailsForHLS()
         try loadAVPlayer(url: hls.url, headers: hls.headers)
         if resumeTime > 0 {
             await player?.seek(to: CMTime(seconds: resumeTime, preferredTimescale: 600))
@@ -3396,7 +3314,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard let server = URL(string: serverURL),
               let direct = ContentRouter.buildDirectPlayURL(context: ContentRoutingContext(
                 metadata: probe, serverURL: server, authToken: authToken)) else { return nil }
-        let kbps = await ThroughputProbe.measure(url: direct.url, headers: rivuletDirectPlayHeaders())
+        let kbps = await ThroughputProbe.measure(
+            url: direct.url, headers: rivuletDirectPlayHeaders(),
+            bytes: { try await PlexNetworkManager.shared.openEndedBytes(for: $0) })
         if let kbps { lastThroughput = (kbps, Date()) }
         diagnostics.step("throughput_probe", detail: kbps.map { "\($0) kbps" } ?? "failed")
         return kbps
@@ -5561,7 +5481,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Update chapters (Plex returns these at metadata level, not inside Part)
             if let chapters = detailedMetadata.Chapter, !chapters.isEmpty {
                 metadata.Chapter = chapters
-                await fetchChapterThumbnails(chapters: chapters)
             }
 
             // Update Media (includes Part with stream details)
@@ -5707,7 +5626,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         // Fetch next episode
-        let resolvedNext = await fetchNextEpisode()
+        // Already resolved early (or folded Up Next): no second lookup.
+        let resolvedNext: PlexMetadata?
+        if playQueue == nil, let known = nextEpisode { resolvedNext = known } else { resolvedNext = await fetchNextEpisode() }
         guard generation == itemGeneration else { return }
         nextEpisode = resolvedNext
 
@@ -5822,23 +5743,23 @@ final class UniversalPlayerViewModel: ObservableObject {
             upNextEpisodes = []
             return
         }
-        do {
-            var episodes = try await PlexNetworkManager.shared.getChildren(
-                serverURL: serverURL, authToken: authToken, ratingKey: seasonKey)
-                .filter { $0.index != nil }
-                .sorted { ($0.index ?? 0) < ($1.index ?? 0) }
-            // Season finale: surface the next season's opener as the up-next row.
-            if episodes.last?.ratingKey == metadata.ratingKey,
-               let next = await fetchNextEpisode(),
-               next.parentRatingKey != metadata.parentRatingKey {
-                episodes.append(next)
-            }
-            guard generation == itemGeneration else { return }
-            upNextEpisodes = episodes
-        } catch {
+        guard var episodes = await plexSeasonChildren(seasonKey)?
+            .filter({ $0.index != nil })
+            .sorted(by: { ($0.index ?? 0) < ($1.index ?? 0) }) else {
             guard generation == itemGeneration else { return }
             upNextEpisodes = []
+            return
         }
+        // Season finale: surface the next season's opener as the up-next row.
+        if episodes.last?.ratingKey == metadata.ratingKey {
+            let resolved: PlexMetadata?
+            if let known = nextEpisode { resolved = known } else { resolved = await fetchNextEpisode() }
+            if let next = resolved, next.parentRatingKey != metadata.parentRatingKey {
+                episodes.append(next)
+            }
+        }
+        guard generation == itemGeneration else { return }
+        upNextEpisodes = episodes
     }
 
     /// Load cast for the Insights rail panel. TMDB credits are primary
@@ -6128,6 +6049,27 @@ final class UniversalPlayerViewModel: ObservableObject {
         return item.artwork.thumbnail ?? item.artwork.backdrop
     }
 
+    /// The season's episodes, one request per item however many callers ask.
+    private func plexSeasonChildren(_ seasonKey: String) async -> [PlexMetadata]? {
+        let generation = itemGeneration
+        let task: Task<[PlexMetadata]?, Never>
+        if let fetch = plexSeasonFetch, fetch.generation == generation, fetch.key == seasonKey {
+            task = fetch.task
+        } else {
+            let (serverURL, authToken) = (serverURL, authToken)
+            task = Task {
+                try? await PlexNetworkManager.shared.getChildren(
+                    serverURL: serverURL, authToken: authToken, ratingKey: seasonKey)
+            }
+            plexSeasonFetch = (generation, seasonKey, task)
+        }
+        let result = await task.value
+        if result == nil, plexSeasonFetch?.generation == generation, plexSeasonFetch?.key == seasonKey {
+            plexSeasonFetch = nil
+        }
+        return result
+    }
+
     /// Fetch the next episode for TV shows
     func fetchNextEpisode() async -> PlexMetadata? {
         // A playlist plays its next entry, any type. No side effects: the swap advances.
@@ -6155,11 +6097,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         do {
             // Get all episodes in current season
-            let episodes = try await networkManager.getChildren(
-                serverURL: serverURL,
-                authToken: authToken,
-                ratingKey: seasonKey
-            )
+            guard let episodes = await plexSeasonChildren(seasonKey) else {
+                print("🎬 [PostVideo] Failed to fetch next episode: season request failed")
+                return nil
+            }
 
             // Sort episodes by index and find the next one after current
             let sortedEpisodes = episodes
@@ -6562,6 +6503,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         cancelSkipCountdownTimer()
         userDeclinedAutoSkip = false
         nextEpisode = nil
+        chapterThumbnails = [:]
 
         // New episode: allow the early next-episode resolve to run again.
         nextEpisodeResolvedEarly = false

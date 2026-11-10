@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Per-slide hero content: logo or serif title, metadata row and a one-line tagline. The 0.22s logo
+// Per-slide hero content: logo or title, metadata row and a one-line tagline. The 0.22s logo
 // crossfade keeps time with `HeroOverlayView.displayedIndex` and the backdrop.
 
 import UIKit
@@ -52,13 +52,8 @@ final class HeroSlideView: UIView {
         logoImageView.translatesAutoresizingMaskIntoConstraints = false
         logoImageView.setContentHuggingPriority(.required, for: .horizontal)
 
-        // Fallback title: 72pt heavy serif, two lines max.
-        let baseFont = UIFont.systemFont(ofSize: 72, weight: .heavy)
-        if let serifDescriptor = baseFont.fontDescriptor.withDesign(.serif) {
-            fallbackTitleLabel.font = UIFont(descriptor: serifDescriptor, size: 72)
-        } else {
-            fallbackTitleLabel.font = baseFont
-        }
+        // Fallback title: 72pt bold, the detail page's face, two lines max.
+        fallbackTitleLabel.font = .systemFont(ofSize: 72, weight: .bold)
         fallbackTitleLabel.textColor = .white
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)

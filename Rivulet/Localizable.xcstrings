@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ + %lld more" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ + %lld weitere"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ + %2$lld more"
+          }
+        }
+      }
+    },
     "%@ Live TV" : {
       "localizations" : {
         "de" : {
@@ -119,6 +135,22 @@
         }
       }
     },
+    "%@ to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bis %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@"
+          }
+        }
+      }
+    },
     "%@ · %@" : {
       "localizations" : {
         "de" : {
@@ -137,6 +169,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ · Collection" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Sammlung"
+          }
+        }
+      }
+    },
+    "%@ · Genre" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Genre"
           }
         }
       }
@@ -270,7 +322,14 @@
       }
     },
     "%lld More Episodes" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld weitere Folgen"
+          }
+        }
+      }
     },
     "%lld Servers" : {
       "localizations" : {
@@ -866,6 +925,22 @@
         }
       }
     },
+    "%lld hr %lld min left" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %lld Std. %lld Min."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hr %2$lld min left"
+          }
+        }
+      }
+    },
     "%lld items" : {
       "localizations" : {
         "de" : {
@@ -936,6 +1011,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld λεπ."
+          }
+        }
+      }
+    },
+    "%lld min left" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %lld Min."
           }
         }
       }
@@ -1108,8 +1193,36 @@
         }
       }
     },
+    "%lld percent watched" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Prozent gesehen"
+          }
+        }
+      }
+    },
     "%lld photos" : {
       "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Foto"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Fotos"
+                }
+              }
+            }
+          }
+        },
         "en" : {
           "variations" : {
             "plural" : {
@@ -1242,6 +1355,16 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "%lld s" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld s"
           }
         }
       }
@@ -1525,7 +1648,14 @@
       }
     },
     "1 More Episode" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 weitere Folge"
+          }
+        }
+      }
     },
     "10 seconds" : {
       "localizations" : {
@@ -1671,6 +1801,16 @@
         }
       }
     },
+    "A to Z" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A bis Z"
+          }
+        }
+      }
+    },
     "A-Z" : {
       "localizations" : {
         "de" : {
@@ -1763,6 +1903,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Λογαριασμός"
+          }
+        }
+      }
+    },
+    "Actor" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schauspieler:in"
           }
         }
       }
@@ -2258,7 +2408,14 @@
       }
     },
     "At the Credits" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Abspann"
+          }
+        }
+      }
     },
     "Audio" : {
       "localizations" : {
@@ -3003,7 +3160,14 @@
       }
     },
     "Channel" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sender"
+          }
+        }
+      }
     },
     "Channel %@" : {
       "localizations" : {
@@ -3197,6 +3361,16 @@
         }
       }
     },
+    "Choose how slideshows in your photo libraries play." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lege fest, wie Diashows in deinen Fotomediatheken ablaufen."
+          }
+        }
+      }
+    },
     "Choose the Rivulet icon on the Apple TV Home Screen." : {
       "localizations" : {
         "de" : {
@@ -3245,8 +3419,26 @@
         }
       }
     },
-    "Choose what appears on Home and in what order." : {},
-    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {},
+    "Choose what appears on Home and in what order." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lege fest, was auf der Startseite erscheint und in welcher Reihenfolge."
+          }
+        }
+      }
+    },
+    "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lege fest, was der Hero zeigt. Mehrere Quellen werden gemischt. Schalte alle aus, um den Hero auszublenden."
+          }
+        }
+      }
+    },
     "Choose your default Live TV view: the TV guide, or What's On, with rows of what is on now and multiview like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -3343,7 +3535,16 @@
         }
       }
     },
-    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {},
+    "Click to show or hide this playlist on Home. Once it is shown, press and hold to move it up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke, um diese Playlist auf der Startseite ein- oder auszublenden. Wird sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
     "Click to show or hide this row in the sidebar. Press and hold to move it up or down." : {
       "localizations" : {
         "de" : {
@@ -3360,9 +3561,36 @@
         }
       }
     },
-    "Click to show or hide this row on Home. Press and hold to move it up or down." : {},
-    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {},
-    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {},
+    "Click to show or hide this row on Home. Press and hold to move it up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke, um diese Reihe auf der Startseite ein- oder auszublenden. Halte gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
+    "Click to show or hide your favorite movies on Home. Once they are shown, press and hold to move them up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke, um deine Lieblingsfilme auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
+    "Click to show or hide your favorite TV shows on Home. Once they are shown, press and hold to move them up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke, um deine Lieblingsserien auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte gedrückt, um sie nach oben oder unten zu verschieben."
+          }
+        }
+      }
+    },
     "Codec" : {
       "localizations" : {
         "de" : {
@@ -3471,6 +3699,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Σχολιασμός"
+          }
+        }
+      }
+    },
+    "Commercial" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Werbung"
           }
         }
       }
@@ -4340,7 +4578,14 @@
       }
     },
     "Critic Reviews" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kritiken"
+          }
+        }
+      }
     },
     "Crude & Sexual Language" : {
       "localizations" : {
@@ -4448,8 +4693,25 @@
         }
       }
     },
+    "Date Taken" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmedatum"
+          }
+        }
+      }
+    },
     "Decade" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahrzehnt"
+          }
+        }
+      }
     },
     "Decoded" : {
       "localizations" : {
@@ -4911,6 +5173,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Πηγή Dispatcharr με διαχειριζόμενα κανάλια IPTV. Πάτησε για λεπτομέρειες ή αφαίρεση."
+          }
+        }
+      }
+    },
+    "Dissolve" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überblenden"
+          }
+        }
+      }
+    },
+    "Dissolve fades from one photo to the next. Pan and Zoom also moves slowly across each photo while it is up." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Überblenden“ blendet von einem Foto zum nächsten. „Schwenken und Zoomen“ fährt dabei zusätzlich langsam über jedes Foto."
           }
         }
       }
@@ -5893,7 +6175,16 @@
         }
       }
     },
-    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {},
+    "Every row from your servers comes back in the original order. Favorites and playlists are turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Reihen deiner Server kommen in der ursprünglichen Reihenfolge zurück. Favoriten und Playlists werden ausgeschaltet."
+          }
+        }
+      }
+    },
     "Exit" : {
       "localizations" : {
         "de" : {
@@ -5942,8 +6233,26 @@
         }
       }
     },
-    "Favorite Movies" : {},
-    "Favorite TV Shows" : {},
+    "Favorite Movies" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsfilme"
+          }
+        }
+      }
+    },
+    "Favorite TV Shows" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingsserien"
+          }
+        }
+      }
+    },
     "FILE" : {
       "localizations" : {
         "de" : {
@@ -6483,7 +6792,14 @@
       }
     },
     "Fresh" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frisch"
+          }
+        }
+      }
     },
     "Frightening & Intense" : {
       "localizations" : {
@@ -6592,7 +6908,14 @@
       }
     },
     "Genre" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Genre"
+          }
+        }
+      }
     },
     "Genres" : {
       "localizations" : {
@@ -6844,7 +7167,16 @@
         }
       }
     },
-    "Hidden from Home" : {},
+    "Hidden from Home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Startseite ausgeblendet"
+          }
+        }
+      }
+    },
     "HTTP error %lld" : {
       "localizations" : {
         "de" : {
@@ -7010,7 +7342,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Halte die Auswahltaste gedrückt, um diesen Sender zu verschieben, und drücke sie erneut, um ihn abzulegen. Drücke die Auswahltaste, um ihn zu entfernen. Favoriten, die du in Plex festgelegt hast, folgen danach in der Plex-Reihenfolge."
+            "value" : "Halte die Auswahltaste gedrückt, um den Sender zu verschieben, und drücke sie zum Ablegen. Drücke sie, um ihn zu entfernen. Deine Plex-Favoriten folgen danach."
           }
         },
         "el" : {
@@ -7133,6 +7465,16 @@
         }
       }
     },
+    "How long each photo stays on screen during a slideshow." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie lange jedes Foto in einer Diashow zu sehen ist."
+          }
+        }
+      }
+    },
     "How long to wait before automatically playing the next episode. Set to Off to disable autoplay." : {
       "localizations" : {
         "de" : {
@@ -7150,7 +7492,14 @@
       }
     },
     "How many more episodes play on their own after the one you picked. After that, the next one waits for you." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie viele weitere Folgen nach der gewählten von selbst laufen. Danach wartet die nächste auf dich."
+          }
+        }
+      }
     },
     "How this source appears in Live TV. Leave it empty to use “%@”." : {
       "localizations" : {
@@ -7328,7 +7677,16 @@
         }
       }
     },
-    "Install YouTube from the App Store to watch this trailer." : {},
+    "Install YouTube from the App Store to watch this trailer." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiere YouTube aus dem App Store, um diesen Trailer anzusehen."
+          }
+        }
+      }
+    },
     "Instant Resume" : {
       "localizations" : {
         "de" : {
@@ -8027,6 +8385,16 @@
         }
       }
     },
+    "Map" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karte"
+          }
+        }
+      }
+    },
     "Mark All Unwatched" : {
       "localizations" : {
         "de" : {
@@ -8181,7 +8549,16 @@
         }
       }
     },
-    "Mixed" : {},
+    "Mixed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemischt"
+          }
+        }
+      }
+    },
     "Mode" : {
       "localizations" : {
         "de" : {
@@ -8363,7 +8740,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schalte Ausdrücke stumm und überspringe Szenen bei der Wiedergabe, ohne die Datei zu ändern. Ausdrücke werden anhand englischer Untertitel erkannt, Szenen anhand einer Filterliste übersprungen."
+            "value" : "Schaltet Ausdrücke stumm und überspringt Szenen bei der Wiedergabe, ohne die Datei zu ändern. Ausdrücke kommen aus englischen Untertiteln, Szenen aus einer Filterliste."
           }
         },
         "el" : {
@@ -8566,6 +8943,16 @@
         }
       }
     },
+    "Newest First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste zuerst"
+          }
+        }
+      }
+    },
     "Newest Releases" : {
       "localizations" : {
         "de" : {
@@ -8680,6 +9067,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Δεν υπάρχουν ακόμη αγαπημένα"
+          }
+        }
+      }
+    },
+    "No Plex server is connected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Plex-Server verbunden."
           }
         }
       }
@@ -9095,7 +9492,14 @@
       }
     },
     "Nothing" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts"
+          }
+        }
+      }
     },
     "Nothing in your Watchlist yet." : {
       "localizations" : {
@@ -9145,8 +9549,26 @@
         }
       }
     },
-    "Now Playing, %@" : {},
-    "Now Playing, %@, %@" : {},
+    "Now Playing, %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt läuft, %@"
+          }
+        }
+      }
+    },
+    "Now Playing, %@, %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt läuft, %1$@, %2$@"
+          }
+        }
+      }
+    },
     "OK" : {
       "localizations" : {
         "de" : {
@@ -9259,6 +9681,16 @@
         }
       }
     },
+    "Oldest First" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Älteste zuerst"
+          }
+        }
+      }
+    },
     "Oldest Releases" : {
       "localizations" : {
         "de" : {
@@ -9339,6 +9771,16 @@
         }
       }
     },
+    "On This Day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An diesem Tag"
+          }
+        }
+      }
+    },
     "On a device signed in to Jellyfin, open Settings, choose Quick Connect and enter this code." : {
       "localizations" : {
         "de" : {
@@ -9403,7 +9845,16 @@
         }
       }
     },
-    "Open in YouTube" : {},
+    "Open in YouTube" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In YouTube öffnen"
+          }
+        }
+      }
+    },
     "Optional" : {
       "localizations" : {
         "de" : {
@@ -9489,7 +9940,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "„Original“ gibt die Datei unverändert wieder. „Automatisch“ konvertiert nur, wenn deine Verbindung es erfordert. Eine feste Rate konvertiert alles darüber, wobei HDR und Atmos verloren gehen."
+            "value" : "„Original“ gibt die Datei unverändert wieder. „Automatisch“ konvertiert nur, wenn deine Verbindung es braucht. Eine feste Rate konvertiert alles darüber, ohne HDR und Atmos."
           }
         },
         "el" : {
@@ -9544,6 +9995,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Το PIN έληξε. Προσπαθήστε ξανά."
+          }
+        }
+      }
+    },
+    "Pan and Zoom" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schwenken und Zoomen"
           }
         }
       }
@@ -9612,6 +10073,16 @@
         }
       }
     },
+    "People" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen"
+          }
+        }
+      }
+    },
     "Perform these steps in order. Pressing Back will close this screen." : {
       "localizations" : {
         "de" : {
@@ -9676,6 +10147,26 @@
         }
       }
     },
+    "Photos" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos"
+          }
+        }
+      }
+    },
+    "Photos from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos aus %@"
+          }
+        }
+      }
+    },
     "Pin to %@" : {
       "localizations" : {
         "de" : {
@@ -9693,7 +10184,14 @@
       }
     },
     "Photos in View" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos im Ausschnitt"
+          }
+        }
+      }
     },
     "Pinned Collections" : {
       "localizations" : {
@@ -9787,6 +10285,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αναπαραγωγή ξανά"
+          }
+        }
+      }
+    },
+    "Play Clips in Slideshow" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos in der Diashow abspielen"
           }
         }
       }
@@ -10085,12 +10593,22 @@
         }
       }
     },
+    "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. Off, slideshows skip clips." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spielt jedes Video ganz ab, wenn die Diashow es erreicht, und macht dann mit dem nächsten Foto weiter. Ist die Option aus, überspringt die Diashow Videos."
+          }
+        }
+      }
+    },
     "Plays trailers and your server's pre-roll video before a movie you start from the beginning, on Plex. Your server's Cinema Trailers settings choose what plays. Press Skip to move on." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Spielt auf Plex Trailer und das Pre-Roll-Video deines Servers ab, bevor ein Film von Anfang an startet. Was läuft, legen die Cinema-Trailers-Einstellungen deines Servers fest. Mit „Überspringen“ geht es weiter."
+            "value" : "Spielt auf Plex vor einem Film, der von Anfang an startet, Trailer und das Pre-Roll-Video deines Servers ab. Was läuft, legen seine Cinema-Trailers-Einstellungen fest."
           }
         },
         "el" : {
@@ -10645,7 +11163,16 @@
         }
       }
     },
-    "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay." : {},
+    "Put every Home row back in its original order and show the ones you hid. Favorites and playlists are turned off; pinned collections stay." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stellt alle Reihen der Startseite in ihrer ursprünglichen Reihenfolge wieder her und zeigt ausgeblendete wieder an. Favoriten und Playlists werden ausgeschaltet, angepinnte Sammlungen bleiben."
+          }
+        }
+      }
+    },
     "Put every sidebar row back in its original order and show the ones you hid. Home's rows follow the library order." : {
       "localizations" : {
         "de" : {
@@ -10662,7 +11189,16 @@
         }
       }
     },
-    "Put the hero back to Trending only, with no playlists." : {},
+    "Put the hero back to Trending only, with no playlists." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setzt den Hero auf „Angesagt“ zurück, ohne Playlists."
+          }
+        }
+      }
+    },
     "Quality" : {
       "localizations" : {
         "de" : {
@@ -10684,7 +11220,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Qualität über Mobilfunk, einen Hotspot, im Datensparmodus oder bei einer Verbindung von außerhalb deines Heimnetzes. „Automatisch“ misst deine Verbindung und konvertiert nur, wenn die Datei zu groß für sie ist."
+            "value" : "Qualität über Mobilfunk, Hotspot, im Datensparmodus oder von unterwegs. „Automatisch“ misst deine Verbindung und konvertiert nur, wenn die Datei zu groß ist."
           }
         },
         "el" : {
@@ -10775,8 +11311,26 @@
         }
       }
     },
-    "Reset Home Rows?" : {},
-    "Reset the Hero?" : {},
+    "Reset Home Rows?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reihen der Startseite zurücksetzen?"
+          }
+        }
+      }
+    },
+    "Reset the Hero?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hero zurücksetzen?"
+          }
+        }
+      }
+    },
     "RT Audience" : {
       "localizations" : {
         "de" : {
@@ -11125,6 +11679,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Εγγραφές"
+          }
+        }
+      }
+    },
+    "Record…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnehmen …"
           }
         }
       }
@@ -11936,10 +12500,24 @@
       }
     },
     "Rotten" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verfault"
+          }
+        }
+      }
     },
     "Route" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Route"
+          }
+        }
+      }
     },
     "Rows" : {
       "localizations" : {
@@ -12032,19 +12610,19 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "S%lld F%lld"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "S%1$lld E%2$lld"
+            "value" : "S%1$lld F%2$lld"
           }
         },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Κ%1$lld Ε%2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld E%2$lld"
           }
         }
       }
@@ -12089,6 +12667,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Κ%1$lld, Ε%2$lld"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld · %@:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%1$lld, F%2$lld · %3$@:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld · %3$@:"
+          }
+        }
+      }
+    },
+    "S%lld, E%lld:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S%lld, F%lld:"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "S%1$lld, E%2$lld:"
           }
         }
       }
@@ -12164,7 +12774,14 @@
       }
     },
     "SOURCE" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QUELLE"
+          }
+        }
+      }
     },
     "SP" : {
       "localizations" : {
@@ -12486,6 +13103,22 @@
         }
       }
     },
+    "Season %lld · Episode %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Staffel %1$lld · Folge %2$lld"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Season %1$lld · Episode %2$lld"
+          }
+        }
+      }
+    },
     "See this server's details. A server shared with you shows who owns it." : {
       "localizations" : {
         "de" : {
@@ -12530,6 +13163,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Τα ξαναλέμε σε %lld"
+          }
+        }
+      }
+    },
+    "Segment" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segment"
           }
         }
       }
@@ -12859,7 +13502,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schärft SD- und 720p-Videos mit Apples Upscaler auf Basis von maschinellem Lernen, bevor dein Fernseher sie skaliert. Verbraucht mehr Energie und stoppt von selbst, wenn das Apple TV nicht mithalten kann. HDR, Dolby Vision und Live-TV werden wie bisher wiedergegeben."
+            "value" : "Schärft SD- und 720p-Videos per maschinellem Lernen. Braucht mehr Energie und stoppt, wenn das Apple TV nicht mithält. HDR, Dolby Vision und Live-TV bleiben unverändert."
           }
         },
         "el" : {
@@ -13002,8 +13645,8 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "Zeigt die Profilauswahl bei jedem Öffnen von Rivulet und wenn du nach mehr als 30 Sekunden auf dem Home-Bildschirm, in einer anderen App oder im Bildschirmschoner zurückkehrst, damit du wählen kannst, welches Profil du verwendest."
+            "state" : "translated",
+            "value" : "Zeigt die Profilauswahl bei jedem Start von Rivulet und wenn du nach über 30 Sekunden auf dem Home-Bildschirm, in einer anderen App oder im Bildschirmschoner zurückkehrst."
           }
         },
         "el" : {
@@ -13157,7 +13800,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Melde dich an, ohne ein Passwort einzugeben: Rivulet zeigt einen Code, den du auf einem bereits bei Jellyfin angemeldeten Gerät bestätigst. Quick Connect muss im Dashboard des Servers aktiviert sein."
+            "value" : "Anmelden ohne Passwort: Rivulet zeigt einen Code, den du auf einem bei Jellyfin angemeldeten Gerät bestätigst. Quick Connect muss im Server-Dashboard aktiv sein."
           }
         },
         "el" : {
@@ -13371,7 +14014,14 @@
       }
     },
     "Skip Button" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen-Taste"
+          }
+        }
+      }
     },
     "Skip Buttons" : {
       "localizations" : {
@@ -13565,6 +14215,26 @@
         }
       }
     },
+    "Slideshow" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow"
+          }
+        }
+      }
+    },
+    "Slideshow Interval" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diashow-Intervall"
+          }
+        }
+      }
+    },
     "Slurs" : {
       "localizations" : {
         "de" : {
@@ -13618,7 +14288,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beim Starten der Wiedergabe ist ein Fehler aufgetreten."
+            "value" : "Beim Starten der Wiedergabe ist etwas schiefgelaufen."
           }
         },
         "el" : {
@@ -13709,8 +14379,25 @@
         }
       }
     },
+    "Specials · Episode %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Specials · Folge %lld"
+          }
+        }
+      }
+    },
     "Speed" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geschwindigkeit"
+          }
+        }
+      }
     },
     "Sports" : {
       "localizations" : {
@@ -14006,6 +14693,16 @@
         }
       }
     },
+    "Subtitle %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untertitel %@"
+          }
+        }
+      }
+    },
     "Subtitle Language" : {
       "localizations" : {
         "de" : {
@@ -14214,7 +14911,16 @@
         }
       }
     },
-    "The hero shows Trending only, with no playlists." : {},
+    "The hero shows Trending only, with no playlists." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Hero zeigt nur „Angesagt“, keine Playlists."
+          }
+        }
+      }
+    },
     "The server didn't accept the sign-in." : {
       "localizations" : {
         "de" : {
@@ -14255,7 +14961,16 @@
         }
       }
     },
-    "This trailer plays in the YouTube app." : {},
+    "This trailer plays in the YouTube app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Trailer wird in der YouTube-App abgespielt."
+          }
+        }
+      }
+    },
     "TMDB users" : {
       "localizations" : {
         "de" : {
@@ -14729,7 +15444,14 @@
       }
     },
     "The report is saved and will be sent with your next attempt." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Bericht ist gespeichert und wird beim nächsten Versuch gesendet."
+          }
+        }
+      }
     },
     "The server couldn't convert this item" : {
       "localizations" : {
@@ -15099,6 +15821,16 @@
         }
       }
     },
+    "This item has no playable file." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Objekt hat keine abspielbare Datei."
+          }
+        }
+      }
+    },
     "This library could not be loaded." : {
       "localizations" : {
         "de" : {
@@ -15271,6 +16003,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ο διακομιστής δεν μπορεί να μεταδώσει αυτόν τον τίτλο στο Apple TV."
+          }
+        }
+      }
+    },
+    "This server can't stream this title to this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Server kann diesen Titel nicht auf dieses Gerät streamen."
           }
         }
       }
@@ -15761,6 +16503,16 @@
         }
       }
     },
+    "Transition" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übergang"
+          }
+        }
+      }
+    },
     "Trending" : {
       "localizations" : {
         "de" : {
@@ -16065,6 +16817,16 @@
         }
       }
     },
+    "Unfavorite" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Favoriten entfernen"
+          }
+        }
+      }
+    },
     "Unknown" : {
       "localizations" : {
         "de" : {
@@ -16114,7 +16876,14 @@
       }
     },
     "Unknown Place" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbekannter Ort"
+          }
+        }
+      }
     },
     "Unknown error" : {
       "localizations" : {
@@ -16196,11 +16965,35 @@
         }
       }
     },
+    "Untitled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Titel"
+          }
+        }
+      }
+    },
     "Unwatched" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungesehen"
+          }
+        }
+      }
     },
     "Unwatched Only" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur ungesehene"
+          }
+        }
+      }
     },
     "Up Next" : {
       "localizations" : {
@@ -16468,6 +17261,16 @@
         }
       }
     },
+    "Videos" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos"
+          }
+        }
+      }
+    },
     "View storage usage and manage cached images, metadata, and other temporary data." : {
       "localizations" : {
         "de" : {
@@ -16528,6 +17331,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Αναμονή για τη σύνδεσή σου…"
+          }
+        }
+      }
+    },
+    "Watch" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ansehen"
           }
         }
       }
@@ -16756,6 +17569,16 @@
         }
       }
     },
+    "What shows when the credits start. Up Next opens the next episode card with its countdown. Skip Button shows only Skip Credits and opens Up Next at the end. Nothing shows no button or card until the end. Countdown decides whether the next episode autoplays." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Abspann zeigt „Als Nächstes“ die nächste Folge mit Countdown, „Überspringen-Taste“ nur „Abspann überspringen“ und „Nichts“ bis zum Ende gar nichts."
+          }
+        }
+      }
+    },
     "What this source is called in Live TV. Optional." : {
       "localizations" : {
         "de" : {
@@ -16825,7 +17648,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn ein Rückblick beginnt. „Manuell“ zeigt „Rückblick überspringen“, „Automatisch“ überspringt ihn, „Aus“ zeigt nichts an. Die Rückblick-Markierungen stammen aus der Community-Datenbank unten."
+            "value" : "Beim Beginn eines Rückblicks: „Manuell“ zeigt „Rückblick überspringen“, „Automatisch“ überspringt ihn, „Aus“ zeigt nichts. Die Markierungen stammen aus der Community-Datenbank unten."
           }
         },
         "el" : {
@@ -17556,8 +18379,26 @@
         }
       }
     },
-    "YouTube" : {},
-    "YouTube Isn't Installed" : {},
+    "YouTube" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YouTube"
+          }
+        }
+      }
+    },
+    "YouTube Isn't Installed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YouTube ist nicht installiert"
+          }
+        }
+      }
+    },
     "You’re a late-night watcher" : {
       "localizations" : {
         "de" : {
@@ -17618,6 +18459,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Σου αρέσει να παρακολουθείς το βράδυ"
+          }
+        }
+      }
+    },
+    "Z to A" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Z bis A"
           }
         }
       }
@@ -17990,7 +18841,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hält deine Einstellungen, Server und Live-TV-Quellen auf jedem Apple TV, iPhone und iPad gleich, die mit deinem Apple-Account angemeldet sind. Anmeldungen liegen verschlüsselt in iCloud. Den Wiedergabefortschritt liefern deine Server, er gehört nicht dazu."
+            "value" : "Hält Einstellungen, Server und Live-TV-Quellen auf allen Apple TVs, iPhones und iPads mit deinem Apple-Account gleich. Anmeldungen liegen verschlüsselt in iCloud, den Fortschritt liefern deine Server."
           }
         }
       }

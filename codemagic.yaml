@@ -400,7 +400,9 @@ workflows:
 
       - name: Add certificates to keychain
         script: |
-          keychain add-certificates
+          # The default ACL allows only codesign and productsign; exportArchive
+          # signs the .pkg with productbuild, which would need a keychain prompt.
+          keychain add-certificates --allow-all-applications
           rm -f "$CM_BUILD_DIR/cert_key.pem"
 
       - name: Apply fetched signing profiles to Xcode project
@@ -472,10 +474,17 @@ workflows:
           /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$OPTIONS"
           /usr/libexec/PlistBuddy -c "Delete :installerSigningCertificate" "$OPTIONS" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $INSTALLER" "$OPTIONS"
-          xcodebuild -exportArchive \
+          echo "Export options:"; plutil -p "$OPTIONS"
+          if ! xcodebuild -exportArchive \
             -archivePath "$CM_BUILD_DIR/$ARCHIVE_PATH" \
             -exportOptionsPlist "$OPTIONS" \
-            -exportPath "$CM_BUILD_DIR/build/macos/pkg"
+            -exportPath "$CM_BUILD_DIR/build/macos/pkg"; then
+            # The real productbuild error is only in the distribution logs.
+            for log in "${TMPDIR:-/tmp}"/*.xcdistributionlogs/IDEDistribution*.log; do
+              echo "=== $log"; tail -n 80 "$log"
+            done
+            exit 70
+          fi
           ls "$CM_BUILD_DIR"/build/macos/pkg/*.pkg
 
       - name: Upload dSYMs to Sentry

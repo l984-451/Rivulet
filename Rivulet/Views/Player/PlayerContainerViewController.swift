@@ -285,8 +285,9 @@ class PlayerContainerViewController: UIViewController {
                 pill.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -56),
             ]
             let slotWidth = railView.skipPillSlot.widthAnchor.constraint(equalTo: pill.widthAnchor)
-            // Below required: the stack view zeroes a hidden slot's width.
-            slotWidth.priority = .defaultHigh
+            // Below the pill's compression resistance (750): the stack view zeroes a
+            // hidden slot's width, and at a tie the solver squashed the pill to 0 (#583).
+            slotWidth.priority = .defaultHigh - 1
             slotWidth.isActive = true
             railPillConstraints = [
                 pill.centerXAnchor.constraint(equalTo: railView.skipPillSlot.centerXAnchor),

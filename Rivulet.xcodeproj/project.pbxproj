@@ -46,6 +46,8 @@
 			remoteGlobalIDString = C40000040000000000000004;
 			remoteInfo = AssetPackExtension;
 		};
+		E60100000000000000000003 = {isa = PBXContainerItemProxy; containerPortal = A72E03D22EDA297D003A73DA; proxyType = 1; remoteGlobalIDString = B30000040000000000000004; remoteInfo = "Rivulet iOS"; };
+		E60200000000000000000003 = {isa = PBXContainerItemProxy; containerPortal = A72E03D22EDA297D003A73DA; proxyType = 1; remoteGlobalIDString = D50000040000000000000004; remoteInfo = "Rivulet Mac"; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -78,6 +80,8 @@
 		B30000010000000000000001 /* Rivulet iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Rivulet iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C40000020000000000000002 /* AssetPackExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = AssetPackExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D50000010000000000000001 /* Rivulet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rivulet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E60100000000000000000002 /* RivuletiOSPlaybackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RivuletiOSPlaybackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E60200000000000000000002 /* RivuletMacPlaybackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = RivuletMacPlaybackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -179,6 +183,7 @@
 			path = RivuletMac;
 			sourceTree = "<group>";
 		};
+		E60000000000000000000001 /* NativePlaybackTests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = NativePlaybackTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -225,6 +230,8 @@
 				D5000001000000000000000C /* SwiftDraw in Frameworks */,
 			);
 		};
+		E60100000000000000000006 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		E60200000000000000000006 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -238,6 +245,7 @@
 				A70B443C2F05AF3200DEF5ED /* TopShelfExtension */,
 				C40000070000000000000007 /* AssetPackExtension */,
 				A784830B2F062C2000F9E6D0 /* RivuletTests */,
+				E60000000000000000000001 /* NativePlaybackTests */,
 				A7F159532F04124A001B2177 /* Frameworks */,
 				A72E03DB2EDA297D003A73DA /* Products */,
 			);
@@ -252,6 +260,8 @@
 				A70B44392F05AF3200DEF5ED /* TopShelfExtension.appex */,
 				C40000020000000000000002 /* AssetPackExtension.appex */,
 				A784830A2F062C2000F9E6D0 /* RivuletTests.xctest */,
+				E60200000000000000000002 /* RivuletMacPlaybackTests.xctest */,
+				E60100000000000000000002 /* RivuletiOSPlaybackTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -406,6 +416,30 @@
 			productReference = D50000010000000000000001 /* Rivulet.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E60100000000000000000001 /* RivuletiOSPlaybackTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = E60100000000000000000008;
+            buildPhases = (E60100000000000000000005, E60100000000000000000006, E60100000000000000000007);
+            buildRules = ();
+            dependencies = (E60100000000000000000004);
+            fileSystemSynchronizedGroups = (E60000000000000000000001);
+            name = RivuletiOSPlaybackTests;
+            productName = RivuletiOSPlaybackTests;
+            productReference = E60100000000000000000002;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
+		E60200000000000000000001 /* RivuletMacPlaybackTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = E60200000000000000000008;
+            buildPhases = (E60200000000000000000005, E60200000000000000000006, E60200000000000000000007);
+            buildRules = ();
+            dependencies = (E60200000000000000000004);
+            fileSystemSynchronizedGroups = (E60000000000000000000001);
+            name = RivuletMacPlaybackTests;
+            productName = RivuletMacPlaybackTests;
+            productReference = E60200000000000000000002;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -467,6 +501,8 @@
 				A70B44382F05AF3200DEF5ED /* TopShelfExtension */,
 				C40000040000000000000004 /* AssetPackExtension */,
 				A78483092F062C2000F9E6D0 /* RivuletTests */,
+				E60200000000000000000001 /* RivuletMacPlaybackTests */,
+				E60100000000000000000001 /* RivuletiOSPlaybackTests */,
 			);
 		};
 /* End PBXProject section */
@@ -502,6 +538,8 @@
 			files = (
 			);
 		};
+		E60100000000000000000007 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		E60200000000000000000007 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -545,6 +583,8 @@
 			files = (
 			);
 		};
+		E60100000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		E60200000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -563,6 +603,8 @@
 			target = C40000040000000000000004 /* AssetPackExtension */;
 			targetProxy = C40000030000000000000003 /* PBXContainerItemProxy */;
 		};
+		E60100000000000000000004 = {isa = PBXTargetDependency; target = B30000040000000000000004; targetProxy = E60100000000000000000003; };
+		E60200000000000000000004 = {isa = PBXTargetDependency; target = D50000040000000000000004; targetProxy = E60200000000000000000003; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -1127,6 +1169,70 @@
 			};
 			name = Release;
 		};
+		E60100000000000000000009 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletiOSPlaybackTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = iphoneos;
+                IPHONEOS_DEPLOYMENT_TARGET = 26.0; TARGETED_DEVICE_FAMILY = "1,2";
+                SWIFT_VERSION = 6.0;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rivulet iOS.app/Rivulet iOS";
+            };
+            name = Debug;
+        };
+		E6010000000000000000000A = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletiOSPlaybackTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = iphoneos;
+                IPHONEOS_DEPLOYMENT_TARGET = 26.0; TARGETED_DEVICE_FAMILY = "1,2";
+                SWIFT_VERSION = 6.0;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rivulet iOS.app/Rivulet iOS";
+            };
+            name = Release;
+        };
+		E60200000000000000000009 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletMacPlaybackTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = macosx;
+                MACOSX_DEPLOYMENT_TARGET = 26.0;
+                SWIFT_VERSION = 6.0;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rivulet.app/Contents/MacOS/Rivulet";
+            };
+            name = Debug;
+        };
+		E6020000000000000000000A = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                PRODUCT_BUNDLE_IDENTIFIER = com.gstudios.RivuletMacPlaybackTests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = macosx;
+                MACOSX_DEPLOYMENT_TARGET = 26.0;
+                SWIFT_VERSION = 6.0;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Rivulet.app/Contents/MacOS/Rivulet";
+            };
+            name = Release;
+        };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1186,6 +1292,8 @@
 			);
 			defaultConfigurationName = Release;
 		};
+		E60100000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (E60100000000000000000009, E6010000000000000000000A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		E60200000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (E60200000000000000000009, E6020000000000000000000A); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

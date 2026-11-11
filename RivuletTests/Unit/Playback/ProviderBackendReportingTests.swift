@@ -270,3 +270,50 @@ struct ProviderCleanupTests {
         }
     }
 }
+
+@MainActor
+struct PlaybackPreparationTests {
+    @MainActor
+    private final class Reporter: Rivulet.ProgressReporter {
+        var stops = 0
+        func start(position: TimeInterval) async throws {}
+        func progress(position: TimeInterval) async {}
+        func paused(at position: TimeInterval) async {}
+        func stopped(at position: TimeInterval) async { stops += 1 }
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func invalidatedPreparationDiscardsOnlyNewSessions(_ cancelled: Bool, _ reused: Bool) async throws {
+        let reporter = Reporter()
+        let provider = StubMediaProvider(id: "provider:test", kind: .jellyfin)
+        provider.reporter = reporter
+        let item = JellyfinFixtures.mediaItem("item", providerID: provider.id)
+        let source = MediaSource(id: "source", container: "mp4", duration: 100, bitrate: nil,
+                                 fileSize: nil, fileName: nil, videoResolution: nil, videoTracks: [],
+                                 audioTracks: [], subtitleTracks: [], streamKind: .directPlay,
+                                 streamURL: URL(string: "https://media.invalid/video.mp4"))
+        provider.detailResult = MediaItemDetail(item: item, tagline: nil, genres: [], studios: [], cast: [],
+                                               directors: [], writers: [], chapters: [], mediaSources: [source],
+                                               trailerURL: nil, contentRating: nil, nextEpisode: nil, collections: [])
+        provider.streamResult = StreamInfo(source: source, playSessionID: "new-session", trackInfoAvailable: true)
+        let backend = ProviderBackend(provider: provider)
+        let request = try await backend.firstPlayback(of: item, fromBeginning: true, quality: .original)
+        let entered = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        defer { entered.continuation.finish(); release.continuation.finish() }
+        var active = true
+        let preparing = Task {
+            try await backend.preparePlayback(replacing: reused ? request : nil, while: { active }) {
+                entered.continuation.yield(())
+                for await _ in release.stream { break }
+                return request
+            }
+        }
+        for await _ in entered.stream { break }
+        if cancelled { preparing.cancel() } else { active = false }
+        release.continuation.yield(())
+        let accepted = try await preparing.value
+        #expect(accepted == nil)
+        #expect(reporter.stops == (reused ? 0 : 1))
+    }
+}

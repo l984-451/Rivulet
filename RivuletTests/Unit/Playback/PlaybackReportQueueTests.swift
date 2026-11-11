@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 import XCTest
+import Testing
 @testable import Rivulet
 
 @MainActor
@@ -64,5 +65,39 @@ final class PlaybackReportQueueTests: XCTestCase {
     func testSuccessfulRequestDoesNotWaitForItsDeadline() async throws {
         let value = try await PlaybackReportTimeout.run(for: .seconds(60)) { 42 }
         XCTAssertEqual(value, 42)
+    }
+}
+
+@Suite(.serialized, .timeLimit(.minutes(1)))
+struct PlaybackNetworkCancellationTests {
+    private final class HangingProtocol: URLProtocol {
+        static let events = AsyncStream<String>.makeStream()
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() { Self.events.continuation.yield("started") }
+        override func stopLoading() { Self.events.continuation.yield("cancelled") }
+    }
+
+    @Test
+    func deadlineCancelsAnActualURLSessionRequest() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HangingProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel(); HangingProtocol.events.continuation.finish() }
+        let url = try #require(URL(string: "https://timeout.invalid/report"))
+        do {
+            _ = try await PlaybackReportTimeout.run(for: .seconds(1)) {
+                try await session.data(from: url)
+            }
+            Issue.record("The unanswered request should time out")
+        } catch {
+            #expect((error as? URLError)?.code == .timedOut)
+        }
+        var events: [String] = []
+        for await event in HangingProtocol.events.stream {
+            events.append(event)
+            if event == "cancelled" { break }
+        }
+        #expect(events == ["started", "cancelled"])
     }
 }

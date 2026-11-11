@@ -6,7 +6,7 @@ import Foundation
 enum PlaybackReportTimeout {
     nonisolated static let duration: Duration = .seconds(5)
 
-    // Cleanup must survive cancellation of the report that precedes it, but remain bounded and awaited.
+    // Cleanup survives caller cancellation and gets its own cancellation deadline; completion is still awaited.
     static func cleanup(for duration: Duration = duration,
                         operation: @escaping @Sendable () async throws -> Void) async {
         await Task {
@@ -25,7 +25,8 @@ enum PlaybackReportTimeout {
         }
     }
 
-    // Cancels at the deadline, then awaits cooperative completion. Stop cleanup has its own deadline.
+    // Cancels at the deadline, then awaits cooperative completion: this is not a hard return deadline.
+    // Operations must honor cancellation (as URLSession does). Stop cleanup has its own deadline.
     static func run<Value: Sendable>(for duration: Duration = duration,
                                     operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
         try await withThrowingTaskGroup(of: Value.self) { group in

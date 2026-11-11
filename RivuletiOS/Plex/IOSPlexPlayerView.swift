@@ -58,10 +58,18 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var needsStartingTracks = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(request: PlexPlaybackRequest, plex: any PlayerBackend, queue: PlayQueue<PlexMetadata>? = nil) {
+    private let loadPlayer: (AetherPlayer, PlexPlaybackRequest, Bool) async throws -> Void
+
+    init(request: PlexPlaybackRequest, plex: any PlayerBackend, queue: PlayQueue<PlexMetadata>? = nil,
+         loadPlayer: @escaping (AetherPlayer, PlexPlaybackRequest, Bool) async throws -> Void = { player, request, keepingTransport in
+             try await player.load(url: request.url, headers: request.headers, startTime: request.startTime,
+                                   externalSubtitles: request.sidecarSubtitles, keepingTransport: keepingTransport,
+                                   stackedParts: request.stackedParts)
+         }) {
         self.request = request
         self.plex = plex
         self.queue = queue
+        self.loadPlayer = loadPlayer
         observePlayer()
     }
 
@@ -109,11 +117,15 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     // MARK: - Loading
 
+    private var canLoad: Bool { !ended && serverStopReason == nil && !Task.isCancelled }
+
     /// `startsItem` picks the title's starting tracks from Plex's per-item picks and the saved intents.
     private func load(keepingTransport: Bool = false, startsItem: Bool = false) async {
-        guard !ended, !Task.isCancelled else { return }
+        guard canLoad else { return }
+        let loadingRequest = request
         stallTracker.noteSeekOrLoad(at: .now)
         timeline.begin()
+        let session = playbackReports.session
         playbackStart.beginLoad(startsItem: startsItem)
         if startsItem {
             reportPosition = PlaybackReportPosition(startTime: request.startTime ?? 0)
@@ -124,7 +136,11 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
                 let start = TrackIntentResolver.startingPlexSelection(streams: plexStreams)
                 if start.audio != request.selectedPlexStreamID(streamType: 2)
                     || start.subtitle != SubtitlePick(request.selectedPlexStreamID(streamType: 3)) {
-                    await plex.selectStream(start, in: request)
+                    await plex.selectStream(start, in: loadingRequest)
+                    guard canLoad, playbackReports.session === session else {
+                        await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
+                        return
+                    }
                 }
                 chosenAudioID = start.audio
                 chosenSubtitle = start.subtitle
@@ -134,17 +150,21 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         // opens on its default tracks, so picks made on a transcode carry back.
         pendingEngineAudio = isTranscoding ? nil : chosenAudioID
         pendingEngineSubtitle = isTranscoding ? selectedSubtitleID.map(SubtitlePick.track) : chosenSubtitle
-        await plex.openPlaySession(request)
-        guard !ended, !Task.isCancelled else { return }
-        try? await player.load(
-            url: request.url,
-            headers: request.headers,
-            startTime: request.startTime,
-            externalSubtitles: request.sidecarSubtitles,
-            keepingTransport: keepingTransport,
-            stackedParts: request.stackedParts
-        )
-        guard !ended else { player.stop(); return }
+        guard canLoad, playbackReports.session === session else {
+            await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
+            return
+        }
+        await plex.openPlaySession(loadingRequest)
+        guard canLoad, playbackReports.session === session else {
+            await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
+            return
+        }
+        try? await loadPlayer(player, loadingRequest, keepingTransport)
+        guard canLoad, playbackReports.session === session else {
+            if playbackReports.session === session { player.stop() }
+            await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
+            return
+        }
         if player.audioIsDropped { fallBackToTranscode() }
     }
 
@@ -181,8 +201,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         // A file that never listed its tracks (a failed start) has no picks to carry.
         let picks = streams ?? (previous.plan == .original && !player.audioTracks.isEmpty ? enginePicksAsPlexIDs() : nil)
         reloadTask = Task { [weak self] in
-            guard let next = try? await plex.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: picks),
-                  let self, !Task.isCancelled else { return }
+            guard let self else { return }
+            guard let next = try? await plex.preparePlayback(replacing: previous, while: { self.canLoad }, operation: {
+                try await plex.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: picks)
+            }) else { return }
             // Same plan from a menu change: only the choice moves.
             if plan == nil, streams == nil, next.plan == previous.plan {
                 var kept = previous
@@ -195,7 +217,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             // Plex reads the part's selection when the session starts, which is the first fetch.
             if next.plan != .original, let picks {
                 await plex.selectStream(picks, in: previous)
-                guard !Task.isCancelled else { return }
+                guard canLoad else {
+                    await plex.discardPreparedPlayback(next, replacing: previous)
+                    return
+                }
                 if let audio = picks.audio { chosenAudioID = audio }
                 if let subtitle = picks.subtitle { chosenSubtitle = subtitle }
             }
@@ -399,10 +424,18 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         let audio = isTranscoding ? chosenAudioID : enginePicksAsPlexIDs().audio
         do {
             try await search.download(result)
-            guard let (next, id) = try await plex.requestWithNewSubtitle(previous, known: known, at: time),
-                  !Task.isCancelled else { return false }
+            guard canLoad else { return false }
+            guard let (next, id) = try await plex.requestWithNewSubtitle(previous, known: known, at: time) else { return false }
+            guard canLoad else {
+                await plex.discardPreparedPlayback(next, replacing: previous)
+                return false
+            }
             let picks = TrackPicks(audio: audio, subtitle: .track(id))
             if next.plan != .original { await plex.selectStream(picks, in: next) }
+            guard canLoad else {
+                await plex.discardPreparedPlayback(next, replacing: previous)
+                return false
+            }
             if let stream = next.item.Media?.first?.Part?.first?.Stream?.first(where: { $0.id == id }) {
                 TrackIntentStore.subtitleIntent = .afterPick(
                     MediaTrack(from: stream), replacing: TrackIntentStore.effectiveSubtitleIntent,
@@ -599,6 +632,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private func endForServerTermination(_ reason: String) {
         timeline.close()
         countdownTask?.cancel()
+        reloadTask?.cancel()
+        nextTask?.cancel()
+        nextLookupTask?.cancel()
+        longStallTask?.cancel()
         upNextCountdown = nil
         serverStopReason = reason
         player.stop()
@@ -735,9 +772,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         let previous = request
         nextTask = Task { [weak self] in
             // Up Next keeps the player-menu pick, else decides Home or Away again; a fresh reading is reused.
-            guard let self,
-                  let nextRequest = try? await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous),
-                  !Task.isCancelled else { return }
+            guard let self else { return }
+            guard let nextRequest = try? await self.plex.preparePlayback(replacing: previous, while: { self.canLoad }, operation: {
+                try await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous)
+            }) else { return }
             let plex = plex
             let pendingReports = playbackReports.tail
             Task {

@@ -40,6 +40,26 @@ protocol PlayerBackend: AnyObject {
     func watchStateDidChange() async
 }
 
+extension PlayerBackend {
+    func preparePlayback(replacing previous: PlexPlaybackRequest?,
+                         while isCurrent: @MainActor () -> Bool,
+                         operation: @MainActor () async throws -> PlexPlaybackRequest) async throws -> PlexPlaybackRequest? {
+        guard isCurrent(), !Task.isCancelled else { return nil }
+        let request = try await operation()
+        guard isCurrent(), !Task.isCancelled else {
+            await discardPreparedPlayback(request, replacing: previous)
+            return nil
+        }
+        return request
+    }
+
+    func discardPreparedPlayback(_ request: PlexPlaybackRequest, replacing previous: PlexPlaybackRequest? = nil) async {
+        if let previous, request.transcodeSessionID == previous.transcodeSessionID,
+           request.providerPlayback?.stream.playSessionID == previous.providerPlayback?.stream.playSessionID { return }
+        await PlaybackReportTimeout.cleanup { await self.stopTranscode(request) }
+    }
+}
+
 extension PlexSession: PlayerBackend {
     func upNextPlayback(for item: PlexMetadata, quality: StreamingQuality?,
                         previous: PlexPlaybackRequest?) async throws -> PlexPlaybackRequest {

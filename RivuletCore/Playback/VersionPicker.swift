@@ -5,11 +5,11 @@
 //  VersionPicker.swift
 //  Rivulet
 //
-//  The "Play Version" list for an item with more than one file. Built on the
-//  tile menu popup; the pick plays once and is not remembered.
+//  Which versions an item offers and how each is labelled. The tvOS popup and
+//  the iOS menu share this.
 //
 
-import UIKit
+import Foundation
 
 enum VersionPicker {
     /// The item's versions, best first, or empty when it has only one.
@@ -25,18 +25,6 @@ enum VersionPicker {
             guard base.filter({ $0 == label }).count > 1, let stem = fileStem(source.fileName) else { return label }
             return String(localized: "\(label) · \(stem)")
         }
-    }
-
-    static func present(_ versions: [MediaSource], from host: UIViewController,
-                        sourceFrame: CGRect?, onPick: @escaping (String) -> Void) {
-        guard versions.count >= 2 else { return }
-        let rows = zip(versions, labels(for: versions)).map { source, label in
-            TileMenuAction(verbatim: label, systemImage: "play.fill") { onPick(source.id) }
-        }
-        let popup = TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
-                                                header: TileMenuHeader(title: String(localized: "Play Version")))
-        // The popup runs its own entrance from `sourceFrame`.
-        host.topmostPresented.present(popup, animated: false)
     }
 
     /// Jellyfin treats a name ending in p or i after digits as a resolution; "4K" too.
@@ -65,7 +53,7 @@ enum VersionPicker {
         let name = source.versionName.flatMap { isResolutionName($0) ? nil : $0 }
         return [name, source.resolutionBadge, source.rangeBadge,
                 source.videoTracks.first.flatMap { codecName($0.codec) },
-                source.audioBadge, source.fileSize.map(PlayerInfoSheetStyle.fileSize)]
+                source.audioBadge, source.fileSize.map(fileSize)]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
@@ -73,5 +61,12 @@ enum VersionPicker {
     private static func fileStem(_ path: String?) -> String? {
         guard let path, !path.isEmpty else { return nil }
         return URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+    }
+
+    private static func fileSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useGB, .useMB, .useKB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 }

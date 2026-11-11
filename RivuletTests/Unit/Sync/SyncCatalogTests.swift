@@ -31,6 +31,14 @@ final class SyncCatalogTests: XCTestCase {
         XCTAssertTrue(SyncCatalog.isSynced("contentFilter.violence.enabled"))
     }
 
+    func test_photoPreferencesSync() {
+        for key in ["photoSlideInterval", "photoSlideTransition", "photoSlidePlaysClips"] {
+            XCTAssertTrue(SyncCatalog.isSynced(key), key)
+        }
+        XCTAssertTrue(SyncCatalog.isSynced("photoLibraryQuery.plex:abc.27"))
+        XCTAssertFalse(SyncCatalog.isSynced("photoLibraryQuery."))
+    }
+
     func test_familyPrefixDoesNotLeakToSimilarKeys() {
         XCTAssertFalse(SyncCatalog.isSynced("hiddenLibraryKeysExtra"))
         XCTAssertFalse(SyncCatalog.isSynced("hiddenLibraryKeys_other"))

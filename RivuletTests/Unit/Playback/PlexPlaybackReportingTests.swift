@@ -25,7 +25,7 @@ struct PlaybackStartupReportingTests {
 
     @Test func endedBeforeStartupDoesNotCloseTheIncomingTimeline() async throws {
         let reports = Reports()
-        let reporter = PlexProgressReporter(openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
             await reports.respond(url)
         }
         var metadata = PlexMetadata()
@@ -67,7 +67,7 @@ struct PlaybackReloadPositionTests {
     }
 
     private func makePlayer(_ reports: Reports) -> (UniversalPlayerViewModel, PlexProgressReporter) {
-        let reporter = PlexProgressReporter(openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
             await reports.respond(url)
         }
         var metadata = PlexMetadata()
@@ -78,6 +78,32 @@ struct PlaybackReloadPositionTests {
                                           plexProgressReporter: reporter)
         vm.plexPlaybackRefresh = {}
         return (vm, reporter)
+    }
+
+    @Test(arguments: [false, true])
+    func selectedShortSeekReportsReachPlex(_ forced: Bool) async throws {
+        let reports = Reports()
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
+            await reports.respond(url)
+        }
+        var metadata = PlexMetadata()
+        metadata.ratingKey = "100"
+        metadata.type = "movie"
+        metadata.duration = 200000
+        let vm = UniversalPlayerViewModel(metadata: metadata, serverURL: "https://plex.invalid", authToken: "test", plexProgressReporter: reporter)
+        vm.plexPlaybackRefresh = {}
+        defer { vm.stopPlayback(); reports.events.continuation.finish() }
+        let session = try #require(vm.buildRivuletHLSURL(offset: 0)?.headers["X-Plex-Session-Identifier"])
+        await reporter.beginPlaybackSession(ratingKey: "100", sessionIdentifier: session,
+                                             server: PlexServerAddress(address: "https://plex.invalid", token: "test"))
+        let start: TimeInterval = forced ? 100 : 99
+        let target: TimeInterval = forced ? 103 : 101
+        vm.updateAetherTime(start)
+        vm.updatePlaybackState(.playing)
+        vm.reportPlaybackProgress(time: target, force: forced)
+        await vm.reportFinalProgress(time: target, duration: 200)
+        #expect(reports.timelines.filter { $0.state == "playing" }.map(\.time) ==
+                (forced ? ["100000", "103000"] : ["99000", "101000"]))
     }
 
     @Test(arguments: [0.0, 42.0])
@@ -198,7 +224,7 @@ struct PlaybackHandoffPositionTests {
         }
         let outgoing = try episode("95230"), incoming = try episode("95682")
         let reports = Reports()
-        let reporter = PlexProgressReporter(openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
             await reports.respond(url)
         }
         let vm = UniversalPlayerViewModel(metadata: outgoing, serverURL: "https://plex.invalid", authToken: "test",
@@ -262,9 +288,37 @@ struct PlexRetryRefreshTests {
     }
 
     @Test(arguments: [false, true])
-    func successfulDeferredStopRefreshesAfterWatchedRestoration(_ restoreWatched: Bool) async throws {
+    func completionChecksServerCountBeforeCreditsAndFinalScrobbles(_ counted: Bool) async {
         let requests = Requests()
-        let reporter = PlexProgressReporter(stopRetryDelay: .milliseconds(20), openSession: { _, _, _, _ in }) { url, _ in
+        requests.stopFailures = 0
+        let reporter = PlexProgressReporter(countedPlay: { _, key, before in
+            #expect(key == "100")
+            #expect(before == 3)
+            return counted
+        }, openSession: { _, _, _, _ in }) { url, _ in
+            try await requests.respond(url)
+        }
+        var metadata = PlexMetadata()
+        metadata.ratingKey = "100"
+        metadata.viewCount = 3
+        metadata.duration = 100000
+        let vm = UniversalPlayerViewModel(metadata: metadata, serverURL: "https://plex.invalid", authToken: "test",
+                                          plexProgressReporter: reporter)
+        vm.plexPlaybackRefresh = {}
+        defer { vm.stopPlayback() }
+        await vm.markCurrentAsWatched()
+        await vm.reportFinalProgress(time: 95, duration: 100)
+        #expect(requests.events == (counted ? ["stopped"] : ["watched", "stopped", "watched"]))
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func successfulDeferredStopRefreshesAfterWatchedRestoration(_ restoreWatched: Bool, _ counted: Bool) async throws {
+        let requests = Requests()
+        let reporter = PlexProgressReporter(countedPlay: { _, key, before in
+            #expect(key == "100")
+            #expect(before == 3)
+            return counted
+        }, stopRetryDelay: .milliseconds(20), openSession: { _, _, _, _ in }) { url, _ in
             try await requests.respond(url)
         }
         let server = PlexServerAddress(address: "https://plex.invalid", token: "test")
@@ -284,11 +338,46 @@ struct PlexRetryRefreshTests {
             NotificationCenter.default.removeObserver(observer)
             continuation.finish()
         }
-        await reporter.retryStoppedReport(report, ratingKey: "100", server: server, restoreWatched: restoreWatched)
+        await reporter.retryStoppedReport(report, ratingKey: "100", server: server, restoreWatched: restoreWatched, playsBefore: 3)
         let eventsAtRefresh = try await PlaybackReportTimeout.run(for: .seconds(1)) {
             for await events in refreshes { return events }
             return []
         }
-        #expect(eventsAtRefresh == ["stopped", "stopped", "stopped"] + (restoreWatched ? ["watched"] : []))
+        #expect(eventsAtRefresh == ["stopped", "stopped", "stopped"] + (restoreWatched && !counted ? ["watched"] : []))
+    }
+}
+
+@MainActor
+struct PlaybackHLSCancellationTests {
+    @Test(arguments: [false, true])
+    func chapterLoadingCannotInstallAPlayerAfterExitOrCancellation(_ exits: Bool) async throws {
+        let entered = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        defer { entered.continuation.finish(); release.continuation.finish() }
+        let metadata = try JSONDecoder().decode(PlexMetadata.self, from: Data("""
+        {"ratingKey":"100","type":"movie","duration":100000,
+         "Chapter":[{"index":1,"startTimeOffset":0,"endTimeOffset":100000,"thumb":"/chapter/1"}]}
+        """.utf8))
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }, request: { _, _ in Data() })
+        let vm = UniversalPlayerViewModel(metadata: metadata, serverURL: "https://plex.invalid", authToken: "test", plexProgressReporter: reporter)
+        vm.chapterThumbnailFetch = { _ in
+            entered.continuation.yield(())
+            for await _ in release.stream { break }
+            return nil
+        }
+        defer { vm.stopPlayback() }
+        vm.updateAetherTime(42)
+        let loading = Task {
+            try await vm.finishHLSSwitch(to: (URL(fileURLWithPath: "/nonexistent/obsolete.m3u8"), [:], nil), resumeTime: 0)
+        }
+        for await _ in entered.stream { break }
+        if exits { vm.stopPlayback() } else { loading.cancel() }
+        release.continuation.yield(())
+        do {
+            try await loading.value
+            Issue.record("An obsolete HLS load must be cancelled")
+        } catch is CancellationError {} catch { Issue.record(error) }
+        #expect(vm.player == nil)
+        #expect(vm.currentTime == 42)
     }
 }

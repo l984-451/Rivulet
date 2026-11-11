@@ -18,13 +18,19 @@ nonisolated enum SidebarLibraryVisibility {
         }
     }
 
-    static func key(for library: MediaLibrary) -> String { "\(library.providerID)/\(library.id)" }
+    static func key(for library: MediaLibrary) -> String { key(providerID: library.providerID, libraryID: library.id) }
+    static func key(providerID: String, libraryID: String) -> String { "\(providerID)/\(libraryID)" }
 }
 
 extension BrowseStore {
     /// The libraries the sidebar lists: all of them less the hidden ones.
     var sidebarLibraries: [MediaLibrary] {
         libraries.filter { !hiddenSidebarLibraries.contains(SidebarLibraryVisibility.key(for: $0)) }
+    }
+
+    /// Every library not hidden, photo libraries included.
+    var shownLibraries: [MediaLibrary] {
+        (libraries + photoLibraries).filter(isSidebarLibraryShown)
     }
 
     func isSidebarLibraryShown(_ library: MediaLibrary) -> Bool {

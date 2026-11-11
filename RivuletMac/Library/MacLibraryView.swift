@@ -3,8 +3,8 @@
 
 import SwiftUI
 
-/// One library: Recommended (its own rows) or Browse (every title), with sort and
-/// filter. The page is remembered per library. Parity source: RivuletiOS/Plex/Library/IOSPlexLibraryView.swift.
+/// One library: Recommended (its own rows), Browse (every title, with sort and filter) or
+/// Folders (as on disk). The page is remembered per library. Parity source: RivuletiOS/Plex/Library/IOSPlexLibraryView.swift.
 struct MacLibraryView: View {
     let library: MediaLibrary
     @EnvironmentObject private var browse: BrowseStore
@@ -14,38 +14,45 @@ struct MacLibraryView: View {
     @State private var rows: [MediaHub] = []
 
     enum LibraryPage: String, CaseIterable {
-        case recommended, browse
+        case recommended, browse, folders
 
         var title: LocalizedStringKey {
             switch self {
             case .recommended: "Recommended"
             case .browse: "Browse"
+            case .folders: "Folders"
             }
         }
     }
 
     init(library: MediaLibrary) {
         self.library = library
-        _pageRaw = AppStorage(wrappedValue: LibraryPage.recommended.rawValue, "macLibraryPage.\(library.settingKey)")
+        let initial: LibraryPage = library.browsesByFolder ? .folders : .recommended
+        _pageRaw = AppStorage(wrappedValue: initial.rawValue, "macLibraryPage.\(library.settingKey)")
+    }
+
+    private var pages: [LibraryPage] {
+        library.offersFolders(on: browse.provider(for: library.providerID)) ? LibraryPage.allCases : [.recommended, .browse]
     }
 
     var body: some View {
         Group {
-            switch LibraryPage(rawValue: pageRaw) ?? .recommended {
+            switch LibraryPage(rawValue: pageRaw).flatMap({ pages.contains($0) ? $0 : nil }) ?? .recommended {
             case .recommended:
                 MacLibraryRecommendedView(library: library, rows: $rows, heroItems: showHero ? HomeHero.libraryItems(rows) : [])
             case .browse: MacLibraryBrowseView(library: library)
+            case .folders: MacFolderListView(library: library)
             }
         }
         .navigationTitle(browse.labels.title(library.title, providerID: library.providerID))
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Page", selection: $pageRaw) {
-                    ForEach(LibraryPage.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                    ForEach(pages, id: \.self) { Text($0.title).tag($0.rawValue) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 220)
+                .frame(width: pages.count > 2 ? 300 : 220)
             }
         }
     }

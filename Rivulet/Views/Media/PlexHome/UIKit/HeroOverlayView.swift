@@ -861,12 +861,7 @@ private final class MediaItemSlideView: UIView {
         logoImageView.translatesAutoresizingMaskIntoConstraints = false
         logoImageView.setContentHuggingPriority(.required, for: .horizontal)
 
-        let baseFont = UIFont.systemFont(ofSize: 72, weight: .heavy)
-        if let serifDescriptor = baseFont.fontDescriptor.withDesign(.serif) {
-            fallbackTitleLabel.font = UIFont(descriptor: serifDescriptor, size: 72)
-        } else {
-            fallbackTitleLabel.font = baseFont
-        }
+        fallbackTitleLabel.font = .systemFont(ofSize: 72, weight: .bold)
         fallbackTitleLabel.textColor = .white
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)

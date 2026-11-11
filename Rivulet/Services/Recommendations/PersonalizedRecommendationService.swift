@@ -131,8 +131,8 @@ actor PersonalizedRecommendationService {
 
         // Score candidates
         var scored: [(PlexMetadata, Double)] = []
-        for candidate in candidates {
-            let features = await WatchProfileBuilder.buildFeatures(for: candidate)
+        let candidateFeatures = await WatchProfileBuilder.buildFeatures(for: candidates)
+        for (candidate, features) in zip(candidates, candidateFeatures) {
             let itemScore = score(features: features, profile: profile, metadata: candidate)
             scored.append((candidate, itemScore))
         }
@@ -210,8 +210,8 @@ actor PersonalizedRecommendationService {
         let profile = await WatchProfileBuilder.build(from: watchedSample)
 
         var scored: [(PlexMetadata, Double)] = []
-        for item in unwatchedItems {
-            let features = await WatchProfileBuilder.buildFeatures(for: item)
+        let unwatchedFeatures = await WatchProfileBuilder.buildFeatures(for: unwatchedItems)
+        for (item, features) in zip(unwatchedItems, unwatchedFeatures) {
             let score = score(features: features, profile: profile, metadata: item)
             scored.append((item, score))
         }

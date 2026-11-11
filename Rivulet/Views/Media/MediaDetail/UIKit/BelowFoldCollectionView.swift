@@ -705,15 +705,35 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             episodesByID[id] = episode
             changed.append(.episode(id))
         }
-        guard !changed.isEmpty else { return }
+        // An episode the server no longer lists was deleted: animate it out of the rail.
+        let fresh = Set(episodes.map(\.ref.itemID))
+        let gone = Set(episodesByID.keys).subtracting(fresh)
         var snapshot = dataSource.snapshot()
+        if !gone.isEmpty {
+            let pruned = Self.prunedRail(cachedEpisodes, removing: gone)
+            let dropped = Set(cachedEpisodes).subtracting(pruned)
+            gone.forEach { episodesByID[$0] = nil }
+            cachedEpisodes = pruned
+            snapshot.deleteItems(Array(dropped.intersection(snapshot.itemIdentifiers)))
+        }
         // Only reconfigure identifiers the snapshot still holds — a refresh can
         // land after the rail has been re-configured for a different show.
         let present = Set(snapshot.itemIdentifiers)
         let targets = changed.filter { present.contains($0) }
-        guard !targets.isEmpty else { return }
-        snapshot.reconfigureItems(targets)
-        dataSource.apply(snapshot, animatingDifferences: false)
+        guard !targets.isEmpty || !gone.isEmpty else { return }
+        if !targets.isEmpty { snapshot.reconfigureItems(targets) }
+        dataSource.apply(snapshot, animatingDifferences: !gone.isEmpty)
+    }
+
+    /// The rail without the given episodes; a season divider left with no episode after it goes too.
+    static func prunedRail(_ rail: [BelowFoldItem], removing gone: Set<String>) -> [BelowFoldItem] {
+        let kept = rail.filter { if case let .episode(id) = $0 { return !gone.contains(id) } else { return true } }
+        return kept.enumerated().compactMap { index, item in
+            guard case .seasonDivider = item else { return item }
+            let next = kept.dropFirst(index + 1).first
+            if case .episode = next, index > 0 { return item }
+            return nil
+        }
     }
 
     private func ingestEpisodesOnly(_ episodes: [MediaItem]) {

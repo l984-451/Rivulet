@@ -39,8 +39,8 @@ final class LiveMultiviewViewController: UIViewController {
     private var tiles: [UUID: LiveMultiviewTileView] = [:]
     private var placeholderViews: [UIView] = []
 
-    private let watchHint = LiveMultiviewHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
-    private let editHint = LiveMultiviewHintView(pointsUp: false, text: nil)
+    private let watchHint = DirectionHintView(pointsUp: true, text: String(localized: "Swipe up to watch"))
+    private let editHint = DirectionHintView(pointsUp: false, text: nil)
 
     private let layoutButtons = UIStackView()
     private let focusLayoutButton = TransportControlButton(
@@ -86,6 +86,11 @@ final class LiveMultiviewViewController: UIViewController {
     private enum Metrics {
         static let side: CGFloat = 90
         static let gap: CGFloat = 36
+        /// Watch mode's tile area and gap: near the edges, with room for a
+        /// tile's focused scale. The bottom keeps the tiles clear of the edit hint.
+        static let watchInset = UIEdgeInsets(top: 40, left: 24, bottom: 44, right: 24)
+        static let watchGap: CGFloat = 20
+        static let editHintHeight: CGFloat = 20
         static let cardWidth: CGFloat = 340
         /// One Add More row: What's On's card plus its focus-growth room.
         static var rowHeight: CGFloat { MediaRowMetrics.liveHeight + MediaRowMetrics.focusGrowthPadding }
@@ -132,6 +137,9 @@ final class LiveMultiviewViewController: UIViewController {
         // Backgrounding ends every tile, as it ends the full-screen player (#390).
         NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
             .sink { [weak self] _ in self?.exitMultiview(handingOff: nil, animated: false) }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .remoteInputBegan)
+            .sink { [weak self] _ in self?.showEditHintBriefly() }
             .store(in: &cancellables)
 
         view.addSubview(watchHint)
@@ -239,7 +247,8 @@ final class LiveMultiviewViewController: UIViewController {
         // Clear of the watch tiles even at their focused scale: anything over
         // the hint's frame would make it unfocusable, and Down could not
         // reach it.
-        editHint.frame = CGRect(x: Metrics.side, y: bounds.height - 60, width: bounds.width - Metrics.side * 2, height: 56)
+        editHint.frame = CGRect(x: Metrics.side, y: bounds.height - Metrics.editHintHeight - 4,
+                                width: bounds.width - Metrics.side * 2, height: Metrics.editHintHeight)
         relayout(animated: false)
     }
 
@@ -425,6 +434,7 @@ final class LiveMultiviewViewController: UIViewController {
         updateFocusIfNeeded()
 
         relayout(animated: true)
+        showEditHintBriefly()
         UIView.animate(withDuration: 0.3, animations: {
             self.addMoreLabel.alpha = editing ? 1 : 0
             self.addMoreCollection.alpha = editing ? 1 : 0
@@ -443,6 +453,19 @@ final class LiveMultiviewViewController: UIViewController {
                 self.layoutButtons.isHidden = true
             }
         })
+    }
+
+    /// Watch mode's chevron shows for a few seconds after any input, then fades
+    /// so nothing static sits on screen (#368). It stays focusable throughout.
+    private var editHintFade: DispatchWorkItem?
+
+    private func showEditHintBriefly() {
+        editHintFade?.cancel()
+        editHint.setGlyphVisible(true)
+        guard mode == .watch else { return }
+        let fade = DispatchWorkItem { [weak self] in self?.editHint.setGlyphVisible(false) }
+        editHintFade = fade
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: fade)
     }
 
     // MARK: - Tiles
@@ -778,14 +801,16 @@ final class LiveMultiviewViewController: UIViewController {
         let bounds = view.bounds
         let editing = mode == .edit
         let fullScreen = entersFromFullScreen && streams.count == 1
+        var scores = false
+        if case .scores = viewModel.layoutMode, streams.count == 1 { scores = true }
+        // The scores list is text, so it keeps a title-safe margin.
         let rect = fullScreen ? bounds
             : editing
             ? CGRect(x: Metrics.side, y: Metrics.editTilesTop, width: bounds.width - Metrics.side * 2,
                      height: Metrics.editTilesHeight)
-            : bounds.insetBy(dx: 48, dy: 84)
+            : scores ? bounds.insetBy(dx: 48, dy: 84) : bounds.inset(by: Metrics.watchInset)
+        let gap = editing || scores ? Metrics.gap : Metrics.watchGap
 
-        var scores = false
-        if case .scores = viewModel.layoutMode, streams.count == 1 { scores = true }
         var mainId: UUID?
         if case .focus(let id) = viewModel.layoutMode, streams.count > 1 { mainId = id }
         // Editing one channel shows it big beside an empty slot, as a prompt
@@ -801,8 +826,8 @@ final class LiveMultiviewViewController: UIViewController {
 
         let mainIndex = mainId.flatMap { id in streams.firstIndex(where: { $0.id == id }) }
         var plan = Self.plan(count: streams.count, mainIndex: mainIndex,
-                             placeholder: wantsPlaceholder, in: rect, gap: Metrics.gap)
-        let scoresFrames = scores ? Self.scoresPlan(in: rect, gap: Metrics.gap) : nil
+                             placeholder: wantsPlaceholder, in: rect, gap: gap)
+        let scoresFrames = scores ? Self.scoresPlan(in: rect, gap: gap) : nil
         if let scoresFrames, !fullScreen { plan.tiles = [scoresFrames.main] }
 
         // The list holds the poller's subscription, so it lives only while the layout shows.
@@ -1354,43 +1379,6 @@ final class LiveMultiviewTileView: UIView {
             self.transform = focused ? CGAffineTransform(scaleX: 1.03, y: 1.03) : .identity
         }
     }
-}
-
-// MARK: - Mode hint
-
-/// "Swipe up to watch" over the edit view, and the chevron under the watch
-/// view. Focusable only so a move toward it has somewhere to land; the
-/// controller changes mode the moment it takes focus, so it never shows a
-/// focused look.
-final class LiveMultiviewHintView: UIView {
-    override var canBecomeFocused: Bool { true }
-
-    init(pointsUp: Bool, text: String?) {
-        super.init(frame: .zero)
-        let chevron = UIImageView(image: UIImage(systemName: pointsUp ? "chevron.compact.up" : "chevron.compact.down"))
-        chevron.tintColor = UIColor.white.withAlphaComponent(0.8)
-        chevron.preferredSymbolConfiguration = .init(pointSize: 34, weight: .semibold)
-
-        let stack = UIStackView(arrangedSubviews: [chevron])
-        stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 2
-        if let text {
-            let label = UILabel()
-            label.text = text
-            label.font = .systemFont(ofSize: 24, weight: .medium)
-            label.textColor = UIColor.white.withAlphaComponent(0.8)
-            stack.addArrangedSubview(label)
-        }
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 
 #if DEBUG

@@ -40,7 +40,24 @@ enum JellyfinPhotoMapper {
                                                  URLQueryItem(name: "maxHeight", value: "\(height)")]),
             playable: kind == .clip
                 ? JellyfinMediaMapper.item(dto, providerID: providerID, baseURL: baseURL)
-                : nil)
+                : nil,
+            isFavorite: dto.userData?.isFavorite == true,
+            coordinate: dto.latitude.flatMap { lat in
+                dto.longitude.map { PhotoCoordinate(latitude: lat, longitude: $0) }
+            },
+            details: kind == .folder ? nil : PhotoDetails(
+                takenAt: dto.dateCreated.flatMap(JellyfinMediaMapper.parseDate),
+                make: PhotoDetails.text(dto.cameraMake),
+                model: PhotoDetails.text(dto.cameraModel),
+                fNumber: dto.aperture.map(PhotoDetails.fNumber(apex:)),
+                exposureSeconds: dto.exposureTime,
+                iso: dto.isoSpeedRating,
+                focalLength: dto.focalLength,
+                width: dto.width,
+                height: dto.height,
+                fileName: PhotoDetails.fileName(dto.path),
+                // DateCreated is the camera's clock when EXIF gave a PremiereDate, else the file's instant.
+                takenAtClock: kind == .photo && dto.premiereDate != nil ? .wallClock : .instant))
     }
 
     /// A photo's PremiereDate is the camera's wall clock stamped Z: read its
@@ -73,9 +90,56 @@ extension JellyfinProvider: PhotoProvider {
         return try await count("Video") > 0 ? .videos : .photosOnly
     }
 
-    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, page: Page) async throws -> PhotoPage {
+    var photoSorts: [PhotoQuery.Sort] { [.dateTaken, .name] }
+    /// `sortBy=Random` repeats photos across pages, so the listing shuffles.
+    var shufflesPhotosOnServer: Bool { false }
+    var hasPhotoLocations: Bool { true }
+
+    /// The photos-and-clips request for one page, less its `parentId`.
+    /// Date Taken is `DateCreated`: the EXIF capture time when there is one, else the file's date.
+    static func photoQueryItems(_ query: PhotoQuery, folder: MediaItemRef?, page: Page) -> [URLQueryItem] {
+        let types = switch query.show {
+        case .all: "Photo,Video"
+        case .photos: "Photo"
+        case .videos: "Video"
+        }
+        var items = [
+            URLQueryItem(name: "fields", value: "DateCreated,RecursiveItemCount,Path,Width,Height"),
+            URLQueryItem(name: "includeItemTypes", value: types),
+            URLQueryItem(name: "sortBy", value: query.sort == .name ? "SortName" : "DateCreated,SortName"),
+            URLQueryItem(name: "sortOrder", value: query.ascending ? "Ascending" : "Descending"),
+            URLQueryItem(name: "startIndex", value: "\(page.offset)"),
+            URLQueryItem(name: "limit", value: "\(page.limit)"),
+            URLQueryItem(name: "enableTotalRecordCount", value: "true")
+        ]
+        // The root lists every photo in the library; a folder lists its own. Favorites are recursive.
+        if folder == nil || query.favoritesOnly { items.append(URLQueryItem(name: "recursive", value: "true")) }
+        if query.favoritesOnly { items.append(URLQueryItem(name: "filters", value: "IsFavorite")) }
+        // A photo's PremiereDate is the camera's wall clock stamped Z, so the days go as they are.
+        if let days = query.days() {
+            items.append(URLQueryItem(name: "minPremiereDate", value: "\(days.first)T00:00:00Z"))
+            items.append(URLQueryItem(name: "maxPremiereDate", value: "\(days.last)T23:59:59Z"))
+        }
+        return items
+    }
+
+    /// `Years` is ProductionYear, set only for photos with an EXIF date: the same photos
+    /// `minPremiereDate` finds (12.1). Others carry no taken date for a filter to match.
+    func photoYears(in library: MediaLibrary) async throws -> [Int] {
+        let result: JFQueryResult = try await client.get("Years", [
+            URLQueryItem(name: "parentId", value: library.id),
+            URLQueryItem(name: "recursive", value: "true"),
+            URLQueryItem(name: "includeItemTypes", value: "Photo")
+        ])
+        return (result.items ?? []).compactMap { $0.name.flatMap { Int($0) } }
+    }
+
+    func setPhotoFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await setFavorite(favorite, for: ref)
+    }
+
+    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, query: PhotoQuery, page: Page) async throws -> PhotoPage {
         let parent = URLQueryItem(name: "parentId", value: folder?.itemID ?? library.id)
-        let fields = URLQueryItem(name: "fields", value: "DateCreated,RecursiveItemCount")
         func map(_ result: JFQueryResult?) -> [PhotoItem] {
             (result?.items ?? []).compactMap {
                 JellyfinPhotoMapper.item($0, providerID: id, baseURL: client.baseURL)
@@ -85,25 +149,19 @@ extension JellyfinProvider: PhotoProvider {
         // Asked for once. Without `recursive=false` a library id recurses by
         // itself: nested albums and the library's own Folder join the root.
         func folders() async throws -> JFQueryResult? {
-            guard page.offset == 0 else { return nil }
+            guard page.offset == 0, query.listsAlbums else { return nil }
             return try await client.get("Items", [
-                parent, fields,
+                parent,
+                URLQueryItem(name: "fields", value: "DateCreated,RecursiveItemCount"),
                 URLQueryItem(name: "includeItemTypes", value: "PhotoAlbum,Folder"),
                 URLQueryItem(name: "recursive", value: "false"),
                 URLQueryItem(name: "sortBy", value: "SortName")
             ])
         }
         async let folderList = folders()
-        // The root lists every photo in the library; a folder lists its own.
-        let media: JFQueryResult = try await client.get("Items", [
-            parent, fields,
-            URLQueryItem(name: "includeItemTypes", value: "Photo,Video"),
-            URLQueryItem(name: "sortBy", value: "DateCreated,SortName"),
-            URLQueryItem(name: "sortOrder", value: "Descending"),
-            URLQueryItem(name: "startIndex", value: "\(page.offset)"),
-            URLQueryItem(name: "limit", value: "\(page.limit)"),
-            URLQueryItem(name: "enableTotalRecordCount", value: "true")
-        ] + (folder == nil ? [URLQueryItem(name: "recursive", value: "true")] : []))
+        // `userId` brings each photo's UserData (its favorite); `filters=IsFavorite` without it is a 500 on 12.1.
+        let user = URLQueryItem(name: "userId", value: userID)
+        let media: JFQueryResult = try await client.get("Items", [parent, user] + Self.photoQueryItems(query, folder: folder, page: page))
         let next = Page(offset: page.offset + page.limit, limit: page.limit)
         return PhotoPage(folders: map(try await folderList).filter { $0.kind == .folder },
                          media: map(media).filter { $0.kind != .folder },

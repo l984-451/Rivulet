@@ -26,15 +26,6 @@ final class FolderLibraryViewController: UIViewController {
         super.init(nibName: nil, bundle: nil)
     }
 
-    /// A Plex section by folder.
-    convenience init(plex library: PlexLibrary, viewMenu: (() -> UIMenu?)? = nil) {
-        self.init(title: library.title, viewMenu: viewMenu) {
-            guard let provider = MediaProviderRegistry.shared.plexProvider,
-                  let folders = provider as? any FolderProvider else { return nil }
-            return (folders, PlexMediaMapper.library(library, providerID: provider.id))
-        }
-    }
-
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 

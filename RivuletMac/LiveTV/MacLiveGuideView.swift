@@ -57,7 +57,7 @@ struct MacLiveGuideView: View {
     @State private var now = Date()
     @State private var hasPositioned = false
     @State private var lastJump = 0
-    private let clock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    private static let clock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ScrollView([.horizontal, .vertical]) {
@@ -80,7 +80,7 @@ struct MacLiveGuideView: View {
         .overlay(alignment: .topLeading) { ruler }
         .overlay(alignment: .topLeading) { corner }
         .background(.background)
-        .onReceive(clock) { _ in now = Date() }
+        .onReceive(Self.clock) { _ in now = Date() }
         .onAppear(perform: recentreIfStale)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in recentreIfStale() }
         .onChange(of: jumpToken) { _, token in

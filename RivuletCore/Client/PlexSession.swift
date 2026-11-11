@@ -222,19 +222,22 @@ final class PlexSession: ObservableObject {
 
     // MARK: - Playback
 
-    /// `quality` overrides the Home or Away setting; `previous` lends its fresh throughput reading.
+    /// `quality` overrides the Home or Away setting; `previous` lends its fresh throughput reading;
+    /// `startOffset` overrides the resume point.
     func playback(
         for item: PlexMetadata,
         fromBeginning: Bool = false,
         quality: StreamingQuality? = nil,
         previous: PlexPlaybackRequest? = nil,
-        version: VersionChoice = .best
+        version: VersionChoice = .best,
+        startOffset: TimeInterval? = nil
     ) async throws -> PlexPlaybackRequest {
         // A downloaded item plays its file everywhere, online or not.
         // Up Next after a download stays on that download's server.
         if var local = ClientHost.offline.localPlayback(
             for: item, serverID: item.serverID ?? previous?.downloadProviderID.flatMap(DownloadIdentity.plexMachineID(of:))) {
             if fromBeginning { local.startTime = nil }
+            if let startOffset { local.startTime = startOffset }
             return local
         }
         let full = try await metadata(for: item)
@@ -256,7 +259,7 @@ final class PlexSession: ObservableObject {
             quality: quality,
             plan: nil,
             measurement: previous?.freshMeasurement,
-            startTime: resumes && !fromBeginning ? resume : nil
+            startTime: startOffset ?? (resumes && !fromBeginning ? resume : nil)
         )
     }
 
@@ -307,7 +310,8 @@ final class PlexSession: ObservableObject {
            let key = VersionRanking.select(version, in: media).media.first?.Part?.first?.key,
            let probeURL = Self.directPlayURL(serverURL: serverURL, token: token, partKey: key) {
             // Detached: the probe's read loop must not run on the main actor.
-            let kbps = await ThroughputProbe.measure(url: probeURL)
+            let kbps = await ThroughputProbe.measure(
+                url: probeURL, bytes: { try await PlexNetworkManager.shared.openEndedBytes(for: $0) })
             measurement = (kbps, Date())
         }
         let cap = forced.map { $0.step?.kbps } ?? QualityDecision.capKbps(
@@ -453,7 +457,7 @@ final class PlexSession: ObservableObject {
 
 nonisolated struct PlexPlaybackRequest: Identifiable, Sendable {
     var id: String { item.id }
-    let item: PlexMetadata
+    var item: PlexMetadata
     let url: URL
     let headers: [String: String]
     let markers: [PlexMarker]

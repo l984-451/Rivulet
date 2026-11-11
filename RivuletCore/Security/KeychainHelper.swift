@@ -99,7 +99,10 @@ enum KeychainHelper {
     }
 
     /// Deletes every stored PIN, including profiles no longer in the home-user list.
-    static func deleteAllPins() {
+    static func deleteAllPins() { deleteAll(withPrefix: pinKeyPrefix) }
+
+    /// Deletes every item whose key starts with `prefix`.
+    static func deleteAll(withPrefix prefix: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -110,7 +113,7 @@ enum KeychainHelper {
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let items = result as? [[String: Any]] else { return }
         for account in items.compactMap({ $0[kSecAttrAccount as String] as? String })
-        where account.hasPrefix(pinKeyPrefix) {
+        where account.hasPrefix(prefix) {
             delete(account)
         }
     }

@@ -422,7 +422,8 @@ enum PlexMediaMapper {
                 originActorId: role.originActorId,
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let directors = (meta.Director ?? []).map {
@@ -436,7 +437,8 @@ enum PlexMediaMapper {
                 originFilter: "director",
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let writers = (meta.Writer ?? []).map {
@@ -450,7 +452,8 @@ enum PlexMediaMapper {
                 originFilter: "writer",
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let chapters = (meta.Chapter ?? []).map { ch in

@@ -14,13 +14,17 @@ import AVFoundation
 /// SwiftUI wrapper for AVPlayerLayer.
 struct AVPlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
+    var fillsScreen = false
 
     func makeUIView(context: Context) -> AVPlayerUIView {
-        AVPlayerUIView(player: player)
+        let view = AVPlayerUIView(player: player)
+        view.playerLayer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
+        return view
     }
 
     func updateUIView(_ uiView: AVPlayerUIView, context: Context) {
         uiView.playerLayer.player = player
+        uiView.playerLayer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
     }
 }
 

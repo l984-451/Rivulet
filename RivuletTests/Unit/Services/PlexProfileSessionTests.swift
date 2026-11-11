@@ -175,4 +175,30 @@ final class PlexProfileSessionTests: XCTestCase {
     func test_switchResponse_serverError_throws() {
         XCTAssertThrowsError(try PlexNetworkManager.homeUserToken(status: 500, data: Data()))
     }
+
+    // MARK: Account content token (#562)
+
+    private func contentToken(user: Int, unlocked: Bool = true, account: String? = "acct",
+                              profile: String? = "prof") -> String? {
+        Session.accountContentToken(accountToken: account, contentUserID: user,
+                                    contentUnlocked: unlocked, profileToken: profile)
+    }
+
+    func test_contentToken_owner_usesAccountToken() {
+        XCTAssertEqual(contentToken(user: 0), "acct")
+    }
+
+    func test_contentToken_otherProfile_usesItsOwnToken() {
+        XCTAssertEqual(contentToken(user: 7), "prof")
+    }
+
+    func test_contentToken_otherProfileWithoutToken_isNilNeverTheAccounts() {
+        XCTAssertNil(contentToken(user: 7, profile: nil))
+    }
+
+    func test_contentToken_lockedOrSignedOut_isNil() {
+        XCTAssertNil(contentToken(user: 0, unlocked: false))
+        XCTAssertNil(contentToken(user: 0, account: nil))
+        XCTAssertNil(contentToken(user: 7, account: nil))
+    }
 }

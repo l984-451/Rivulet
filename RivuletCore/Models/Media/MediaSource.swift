@@ -45,6 +45,36 @@ extension MediaSource {
 
     var resolutionBadge: String? { videoTracks.first.flatMap(resolutionLabel) }
 
+    /// 4K or HD, as the Apple TV app labels a title (detail pages); SD gets none, as in Apple's.
+    /// `resolutionBadge` is the technical label.
+    var definitionBadge: String? {
+        guard let video = videoTracks.first else { return nil }
+        switch VersionRanking.tier(label: videoResolution, height: video.height) {
+        case 2160: return "4K"
+        case 720, 1080: return "HD"
+        default: return nil
+        }
+    }
+
+    /// The detail pages' badge row in the Apple TV app's order: definition, range, object audio, then
+    /// CC, SDH and AD. Plain codecs are left to the Info popup.
+    var detailBadges: [String] {
+        var badges = [definitionBadge].compactMap { $0 } + rangeBadges
+        if let audio = audioBadge {
+            if audio.hasSuffix("Atmos") { badges.append("Atmos") } else if audio.hasPrefix("DTS-X") { badges.append("DTS:X") }
+        }
+        if subtitleTracks.contains(where: { ["eia_608", "eia_708"].contains($0.codec.lowercased()) }) { badges.append("CC") }
+        if subtitleTracks.contains(where: \.isHearingImpaired) { badges.append("SDH") }
+        if audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) {
+            badges.append("AD")
+        }
+        return badges
+    }
+
+    /// Drawn filled, as Apple draws its definition and HDR badges; CC, SDH and AD stay outlined.
+    /// DV and Atmos are logos in Apple's row, so ours stay outlined text.
+    static let filledBadges: Set<String> = ["4K", "HD", "HDR", "HDR10+", "HLG"]
+
     /// Range badges; a Dolby Vision file that also carries HDR10+ gets both (#371).
     var rangeBadges: [String] {
         guard let video = videoTracks.first else { return [] }

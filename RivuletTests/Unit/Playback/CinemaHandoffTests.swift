@@ -31,7 +31,7 @@ struct CinemaHandoffTests {
 
         let movie = try item("100", type: "movie")
         let clips = try (hasThirdClip ? ["22", "23", "24"] : ["22", "23"]).map { try item($0, type: "clip") }
-        let reporter = PlexProgressReporter(openSession: { _, _, _, _ in }, request: { _, _ in Data() })
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }, request: { _, _ in Data() })
         let vm = UniversalPlayerViewModel(metadata: movie, serverURL: "https://plex.invalid", authToken: "test",
                                           plexProgressReporter: reporter)
         defer { vm.stopPlayback() }

@@ -122,6 +122,19 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         XCTAssertEqual(captionFrame(placement: nil, heightUnits: -15, videoSize: wide).maxY, 980, accuracy: 0.5)
     }
 
+    /// Zoomed (#589), text rests on the screen while libass follows the cropped picture.
+    func testZoomedPictureKeepsTextOnScreenAndLibassOnThePicture() {
+        let wide = CGSize(width: 2_000, height: 800)
+        XCTAssertEqual(captionFrame(placement: nil, videoSize: wide, fillsScreen: true).maxY, 950, accuracy: 0.5)
+
+        let overlay = CaptionOverlayView(model: SubtitleModel(), videoSize: wide)
+        overlay.frame = CGRect(origin: .zero, size: canvas)
+        overlay.fillsScreen = true
+        overlay.layoutIfNeeded()
+        let ass = overlay.subviews.first { $0 is ASSOverlayView }?.frame ?? .zero
+        XCTAssertEqual(ass, CGRect(x: -750, y: 0, width: 2_500, height: 1_000))
+    }
+
     /// The rail still wins over a low setting, and a high one doesn't jump when it appears.
     func testHeightClearsTheRailWithoutDoubleLifting() {
         let railTop = canvas.height - SubtitleAdjustments.controlsFloor
@@ -212,7 +225,8 @@ final class CaptionOverlayPlacementTests: XCTestCase {
         controlsVisible: Bool = false,
         style: CaptionStyle = .default,
         heightUnits: Int = 0,
-        videoSize: CGSize? = nil
+        videoSize: CGSize? = nil,
+        fillsScreen: Bool = false
     ) -> CGRect {
         let model = SubtitleModel()
         let overlay = CaptionOverlayView(
@@ -222,6 +236,7 @@ final class CaptionOverlayPlacementTests: XCTestCase {
             videoSize: videoSize ?? canvas,
             heightUnits: heightUnits)
         overlay.frame = CGRect(origin: .zero, size: canvas)
+        overlay.fillsScreen = fillsScreen
         model.update(cues: [
             AetherSubtitleCue(
                 id: 1,

@@ -12,12 +12,20 @@ extension PlexSession {
         if request.isLocal { ClientHost.offline.noteProgress(for: request, offsetMs: 0, watched: true, persist: true) }
         guard !request.serverURL.isEmpty else { return }
         do {
-            try await PlexNetworkManager.shared.markWatched(
-                serverURL: request.serverURL,
-                authToken: request.token,
-                ratingKey: key,
-                reportingTimeout: PlaybackReportTimeout.duration
-            )
+            // The server usually counted the play itself as the timeline passed its threshold.
+            let counted = (try? await PlaybackReportTimeout.run {
+                await PlexNetworkManager.shared.serverCountedPlay(
+                    serverURL: request.serverURL, authToken: request.token, ratingKey: key,
+                    playsBefore: request.item.viewCount ?? 0)
+            }) ?? false
+            if !counted {
+                try await PlexNetworkManager.shared.markWatched(
+                    serverURL: request.serverURL,
+                    authToken: request.token,
+                    ratingKey: key,
+                    reportingTimeout: PlaybackReportTimeout.duration
+                )
+            }
             if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
         } catch {
             let duration = request.item.duration

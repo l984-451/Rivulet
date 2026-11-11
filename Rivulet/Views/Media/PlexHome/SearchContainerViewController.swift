@@ -94,7 +94,22 @@ final class SearchContainerViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if presentedViewController == nil { reportNested(false) }
+        #if DEBUG
+        if !debugQueryApplied, let query = ProcessInfo.processInfo.environment["RIVULET_SEARCH"] {
+            debugQueryApplied = true
+            // After sign-in settles: a search before the server is chosen finds nothing.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(6))
+                self?.searchController.searchBar.text = query
+                self?.results.updateSearchQuery(query)
+            }
+        }
+        #endif
     }
+
+    #if DEBUG
+    private var debugQueryApplied = false
+    #endif
 
     /// Leaving the tab (the shell caches this controller) resets the query and focus. Skipped while
     /// a music detail covers the page, so returning from an album keeps the user's place.

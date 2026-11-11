@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-import AetherEngine
 import AVFoundation
 import Combine
 
 enum PlaybackTransportState {
-    static func publisher(state: AnyPublisher<PlaybackState, Never>,
-                          phase: AnyPublisher<PlaybackPhase, Never>,
-                          nativeReady: AnyPublisher<Bool, Never> = Just(true).eraseToAnyPublisher()) -> AnyPublisher<PlaybackState, Never> {
+    enum State: Equatable {
+        case idle, loading, playing, paused, seeking, ended
+        case error(String)
+    }
+    enum Phase { case loading, playing, paused, rebuffering }
+
+    static func publisher(state: AnyPublisher<State, Never>,
+                          phase: AnyPublisher<Phase, Never>,
+                          nativeReady: AnyPublisher<Bool, Never> = Just(true).eraseToAnyPublisher()) -> AnyPublisher<State, Never> {
         state.combineLatest(phase, nativeReady)
             // Engine state records play intent before the incoming transport has rolled.
-            .scan((state: PlaybackState.idle, hasStarted: false)) { previous, input in
+            .scan((state: State.idle, hasStarted: false)) { previous, input in
                 let (state, phase, nativeReady) = input
                 guard state == .playing else {
                     switch state {

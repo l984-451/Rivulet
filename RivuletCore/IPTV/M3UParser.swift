@@ -229,22 +229,32 @@ actor M3UParser {
         return nil
     }
 
+    /// Compiled once per attribute name; the parser runs off the main actor, so the cache is locked.
+    private nonisolated static let regexCache = NSLock()
+    private nonisolated(unsafe) static var cachedRegexes: [String: [NSRegularExpression]] = [:]
+
+    private nonisolated static func attributeRegexes(for name: String) -> [NSRegularExpression] {
+        regexCache.lock()
+        defer { regexCache.unlock() }
+        if let cached = cachedRegexes[name] { return cached }
+        let compiled = [
+            "\(name)=\"([^\"]*)\"",
+            "\(name)='([^']*)'",
+            "\(name)=([^\\s,]+)"
+        ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+        cachedRegexes[name] = compiled
+        return compiled
+    }
+
     /// Extract an attribute value from the EXTINF attributes string
     /// - Parameters:
     ///   - string: The attributes portion of EXTINF line
     ///   - name: Attribute name to extract
     /// - Returns: The attribute value, or nil if not found
     private nonisolated static func extractAttribute(from string: String, name: String) -> String? {
-        // Look for patterns like: tvg-id="value" or tvg-id='value'
-        let patterns = [
-            "\(name)=\"([^\"]*)\"",  // Double quotes
-            "\(name)='([^']*)'",      // Single quotes
-            "\(name)=([^\\s,]+)"      // No quotes (until space or comma)
-        ]
-
-        for pattern in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
+        // Looks for tvg-id="value", tvg-id='value', then tvg-id=value (until space or comma).
+        for regex in attributeRegexes(for: name) {
+            if let match = regex.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)),
                let range = Range(match.range(at: 1), in: string) {
                 let value = String(string[range])
                 return value.isEmpty ? nil : value

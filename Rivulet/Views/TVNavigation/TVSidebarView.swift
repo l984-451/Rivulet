@@ -8,6 +8,7 @@
 //  Main tvOS navigation state, hosting the UIKit shell (RootShellViewController)
 //
 
+import Combine
 import SwiftUI
 import os.log
 import Sentry
@@ -56,6 +57,8 @@ struct TVSidebarView: View {
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
     @State private var showWhatsNew = false
+    /// The builds whose notes the launch What's New shows, newest first.
+    @State private var whatsNewVersions: [String] = []
     @State private var didApplyDebugLaunch = false
 
     @Namespace private var contentNamespace
@@ -82,11 +85,6 @@ struct TVSidebarView: View {
         ShellSidebarModel.profileName(plexProfile: profileManager.selectedUser?.displayName,
                                              plexUser: authManager.username,
                                              otherServerUsers: AccountName.otherServerUsers)
-    }
-
-    private var isMusicLibrarySelected: Bool {
-        guard case .library(let key) = selectedTab else { return false }
-        return dataStore.libraries.first(where: { $0.key == key })?.isMusicLibrary ?? false
     }
 
     /// The collapsed pill sits top-left, over the guide's info bar, which puts
@@ -168,7 +166,7 @@ struct TVSidebarView: View {
         RootShellHost(
             selection: tabSelection,
             interactionBlocked: nestedNavState.isNested || nestedNavState.isSettingsSubPage,
-            pillSuppressed: isMusicLibrarySelected || isLiveTVSelected || isSearchSelected,
+            pillSuppressed: isLiveTVSelected || isSearchSelected,
             collapseRequest: sidebarCollapseRequest,
             profilePanelOpen: showProfileSwitcher,
             profileRowRequest: sidebarProfileRowRequest,
@@ -327,23 +325,26 @@ struct TVSidebarView: View {
             // Start background preloading of Live TV data (low priority)
             liveTVDataStore.startBackgroundPreload()
         }
-        .onChange(of: deepLinkHandler.pendingPlayback) { _, metadata in
-            guard let metadata else { return }
+        // onReceive, not onChange: with a player presented over the shell, onChange never
+        // runs, so a link opened over a player was only seen after the player closed.
+        .onReceive(deepLinkHandler.$pendingPlayback.compactMap { $0 }.receive(on: DispatchQueue.main)) { playback in
+            guard deepLinkHandler.pendingPlayback != nil else { return }  // already delivered
             deepLinkHandler.pendingPlayback = nil
-            playForDeepLink(metadata)
+            playForDeepLink(playback.metadata, startOffset: playback.startOffset)
         }
         // Handle detail deep links from Siri search results
-        .onChange(of: deepLinkHandler.pendingDetail) { _, metadata in
-            guard let metadata else { return }
+        .onReceive(deepLinkHandler.$pendingDetail.compactMap { $0 }.receive(on: DispatchQueue.main)) { metadata in
+            guard deepLinkHandler.pendingDetail != nil else { return }  // already delivered
             deepLinkHandler.pendingDetail = nil
             presentDetailForDeepLink(metadata)
         }
-        .onChange(of: deepLinkHandler.pendingProviderLink) { _, link in
-            guard let link else { return }
+        .onReceive(deepLinkHandler.$pendingProviderLink.compactMap { $0 }.receive(on: DispatchQueue.main)) { link in
+            guard deepLinkHandler.pendingProviderLink != nil else { return }  // already delivered
             deepLinkHandler.pendingProviderLink = nil
             presentReplacingStack { top in
                 switch link.action {
-                case .play: ProviderPlayer.play(link.item, fromBeginning: false, from: top, onDismiss: nil)
+                case .play: ProviderPlayer.play(link.item, fromBeginning: false,
+                                                explicitStartOffset: link.startOffset, from: top, onDismiss: nil)
                 case .detail: presentDetail(link.item, from: top)
                 }
             }
@@ -643,8 +644,7 @@ struct TVSidebarView: View {
             // The shell caches per `SidebarTab`, so each library key gets its
             // own controller.
             if let lib = dataStore.libraries.first(where: { $0.key == key }) {
-                if lib.hasNoMetadataAgent { return FolderLibraryViewController(plex: lib) }
-                if lib.isVideoLibrary { return PlexLibraryModeViewController(library: lib) }
+                if lib.isVideoLibrary { return LibraryModeViewController(plex: lib) }
                 if lib.isPhotoLibrary {
                     return PhotoLibraryViewController(title: lib.title) {
                         guard let provider = MediaProviderRegistry.shared.plexProvider,
@@ -659,17 +659,11 @@ struct TVSidebarView: View {
         case .providerLibrary(let providerID, let libraryID):
             // The same page as a Plex library, through the provider.
             if let library = serverStore.libraries.first(where: { $0.providerID == providerID && $0.id == libraryID }) {
-                if library.browsesByFolder {
-                    return FolderLibraryViewController(title: library.title) {
-                        (MediaProviderRegistry.shared.provider(for: library.providerID) as? any FolderProvider)
-                            .map { ($0, library) }
-                    }
+                if library.offersFolders(on: MediaProviderRegistry.shared.provider(for: library.providerID)) {
+                    return LibraryModeViewController(provider: library)
                 }
                 if library.kind == .photos {
-                    return PhotoLibraryViewController(title: library.title) {
-                        (MediaProviderRegistry.shared.provider(for: library.providerID) as? any PhotoProvider)
-                            .map { ($0, library) }
-                    }
+                    return PhotoLibraryViewController(title: library.title, source: PhotoListing.source(for: library))
                 }
                 if library.kind == .music {
                     return MusicLibraryViewController(libraryKey: library.id, title: library.title,
@@ -743,6 +737,14 @@ struct TVSidebarView: View {
     /// DEBUG: jump straight to a library named by the RIVULET_OPEN_LIBRARY env
     /// var once libraries have loaded, so sim iteration skips the sidebar nav.
     private func applyDebugLaunchTab() {
+        #if DEBUG
+        // RIVULET_SEARCH=<query>: the Search tab with that query typed.
+        if !didApplyDebugLaunch, ProcessInfo.processInfo.environment["RIVULET_SEARCH"] != nil {
+            didApplyDebugLaunch = true
+            selectedTab = .search
+            return
+        }
+        #endif
         guard !didApplyDebugLaunch,
               let name = ProcessInfo.processInfo.environment["RIVULET_OPEN_LIBRARY"] else { return }
         #if DEBUG
@@ -765,7 +767,7 @@ struct TVSidebarView: View {
     /// the fresh-launch "What's New", instead of a bespoke SwiftUI dialog.
     private func presentWhatsNewPopup() {
         guard let top = Self.topPresentedViewController() else { showWhatsNew = false; return }
-        let popup = SettingsContent.makeChangelogPopup()
+        let popup = SettingsContent.makeChangelogPopup(versions: whatsNewVersions)
         popup.onDismiss = { showWhatsNew = false }
         top.present(popup, animated: true)
     }
@@ -814,11 +816,11 @@ struct TVSidebarView: View {
     }
 
     /// Play for a `rivulet://play` link. A show or a season resolves to the
-    /// episode its own Play button means; with none to play, its detail opens.
-    private func playForDeepLink(_ metadata: PlexMetadata) {
+    /// episode its own Play button means (ignoring any offset); with none to play, its detail opens.
+    private func playForDeepLink(_ metadata: PlexMetadata, startOffset: TimeInterval? = nil) {
         guard let item = deepLinkItem(metadata), item.kind == .show || item.kind == .season,
               let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
-            presentPlayerForDeepLink(metadata)
+            presentPlayerForDeepLink(metadata, startOffset: startOffset)
             return
         }
         Task { @MainActor in
@@ -831,8 +833,8 @@ struct TVSidebarView: View {
     }
 
     private func presentDetail(_ item: MediaItem, from top: UIViewController) {
-        if item.kind == .season {
-            top.present(SeasonDetailViewController(season: item), animated: true)
+        if item.kind == .season, let showRef = item.parentRef {
+            PreviewCarouselViewController.openShowDetail(showRef, from: top)
         } else if item.kind == .episode {
             let page = MediaItemDetailPageViewController(
                 item: item,
@@ -859,10 +861,12 @@ struct TVSidebarView: View {
 
     /// Play a MediaItem surfaced by the detail page: resolve full metadata by
     /// ratingKey (MediaItem carries no PlexMetadata), then hand to the player.
-    private func playDeepLinkItem(_ item: MediaItem, sourceID: String? = nil) {
+    private func playDeepLinkItem(_ item: MediaItem, sourceID: String? = nil,
+                                  startOffset: TimeInterval? = nil) {
         if !item.ref.isPlex {
             guard let top = Self.topPresentedViewController() else { return }
-            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID, from: top, onDismiss: nil)
+            ProviderPlayer.play(item, fromBeginning: false, sourceID: sourceID,
+                                explicitStartOffset: startOffset, from: top, onDismiss: nil)
             return
         }
         let ratingKey = item.ref.itemID
@@ -873,14 +877,15 @@ struct TVSidebarView: View {
             guard let meta = try? await PlexNetworkManager.shared.getFullMetadata(
                 serverURL: serverURL, authToken: token, ratingKey: ratingKey
             ) else { return }
-            presentPlayerForDeepLink(meta, mediaID: sourceID)
+            presentPlayerForDeepLink(meta, mediaID: sourceID, startOffset: startOffset)
         }
     }
 
     // MARK: - Deep Link Player
 
     /// Present player for a deep link from Top Shelf
-    private func presentPlayerForDeepLink(_ metadata: PlexMetadata, mediaID: String? = nil) {
+    private func presentPlayerForDeepLink(_ metadata: PlexMetadata, mediaID: String? = nil,
+                                          startOffset: TimeInterval? = nil) {
         Task {
             let (artImage, thumbImage) = await getPlayerImages(for: metadata)
 
@@ -889,7 +894,7 @@ struct TVSidebarView: View {
                     metadata: metadata,
                     serverURL: authManager.selectedServerURL ?? "",
                     authToken: authManager.selectedServerToken ?? "",
-                    startOffset: metadata.viewOffset.map { Double($0) / 1000.0 },
+                    startOffset: startOffset ?? metadata.viewOffset.map { Double($0) / 1000.0 },
                     loadingArtImage: artImage,
                     loadingThumbImage: thumbImage,
                     preferredMediaID: mediaID
@@ -924,7 +929,10 @@ struct TVSidebarView: View {
 
         if current != lastSeenBuild {
             // A new install sets up instead; What's New is for updates.
-            if setupComplete, WhatsNewView.features(for: current) != nil {
+            let versions = WhatsNewRange.versions(WhatsNewView.changelogs.map(\.version),
+                                                  current: current, lastSeen: lastSeenBuild)
+            if setupComplete, !versions.isEmpty {
+                whatsNewVersions = versions
                 showWhatsNew = true
             }
             lastSeenBuild = current

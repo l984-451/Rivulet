@@ -88,6 +88,10 @@ enum MediaRowMetrics {
 
     /// 1:1 square for music (artist/album/track): the poster's grid column.
     static let music = Tile(art: CGSize(width: poster.art.width, height: poster.art.width))
+
+    /// A cast or crew circle over name and subtitle (`CastCell`), the detail page's cast row.
+    /// The photo's focus effect is the system's, so the frame is the circle with no growth.
+    static let person = Tile(art: CGSize(width: poster.art.width, height: 355), growth: .zero)
     static let musicWidth = music.frame.width
     static let musicHeight = music.frame.height
 
@@ -110,6 +114,13 @@ enum MediaRowMetrics {
     static let playlistFullCount = 3
     static let playlist: Tile = {
         let width = gridWidth(columns: playlistFullCount)
+        return Tile(art: CGSize(width: width, height: (width * 9 / 16).rounded()), lockup: .card)
+    }()
+
+    /// Large 16:9 card, two across (the photo library's memories row). Unmeasured: the Apple TV
+    /// app is not on the simulator, so growth is the card default; measuring its two-across row is owed.
+    static let feature: Tile = {
+        let width = gridWidth(columns: 2)
         return Tile(art: CGSize(width: width, height: (width * 9 / 16).rounded()), lockup: .card)
     }()
 

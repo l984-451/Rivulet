@@ -276,7 +276,7 @@ final class PlexMusicProvider: MusicProvider, @unchecked Sendable {
 
     func resolveStream(for trackRef: MediaItemRef) async throws -> StreamInfo {
         try await plexCall {
-            let meta = try await networkManager.getFullMetadata(
+            let meta = try await networkManager.getMetadata(
                 serverURL: serverURL, authToken: authToken, ratingKey: trackRef.itemID
             )
             let sources: [MediaSource] = (meta.Media ?? []).flatMap { media in

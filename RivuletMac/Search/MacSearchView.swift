@@ -34,7 +34,7 @@ struct MacSearchView: View {
     @AppStorage("macRecentSearches") private var recentsRaw = ""
     @State private var query = ""
     @State private var scope = Scope.all
-    @State private var results: [MediaItem] = []
+    @State private var results = SearchHits()
     @State private var isSearching = false
     @State private var error: String?
     @FocusState private var fieldFocused: Bool
@@ -42,7 +42,7 @@ struct MacSearchView: View {
     var body: some View {
         content
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: "Movies, Shows, and Episodes")
+            .searchable(text: $query, prompt: "Movies, Shows, People, and More")
             .searchFocused($fieldFocused)
             .searchScopes($scope) {
                 ForEach(Scope.allCases) { Text($0.title).tag($0) }
@@ -75,6 +75,13 @@ struct MacSearchView: View {
                             MacTileButton(item: item) { MacSearchRow(item: item) }
                                 .listRowSeparator(.visible)
                         }
+                        ForEach(group.people) { person in
+                            Button { open(.person(person, providerID: person.providerID ?? "")) } label: {
+                                MacSearchPersonRow(person: person)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowSeparator(.visible)
+                        }
                     }
                 }
             }
@@ -88,7 +95,7 @@ struct MacSearchView: View {
             ContentUnavailableView(
                 "Search Your Libraries",
                 systemImage: "magnifyingglass",
-                description: Text("Find movies, TV shows, and episodes.")
+                description: Text("Find movies, TV shows, episodes, people, collections, and genres.")
             )
         } else {
             List {
@@ -132,6 +139,9 @@ struct MacSearchView: View {
         case .movies: String(localized: "Movies")
         case .shows: String(localized: "TV Shows")
         case .episodes: String(localized: "Episodes")
+        case .people: String(localized: "People")
+        case .collection(let name): String(localized: "\(name) · Collection")
+        case .genre(let name): String(localized: "\(name) · Genre")
         }
         return group.providerID.flatMap { browse.labels.badge(providerID: $0) }.map { "\(kind) · \($0)" } ?? kind
     }
@@ -150,7 +160,7 @@ struct MacSearchView: View {
         let value = trimmedQuery
         error = nil
         guard !value.isEmpty, browse.hasServers else {
-            results = []
+            results = SearchHits()
             isSearching = false
             return
         }
@@ -165,6 +175,41 @@ struct MacSearchView: View {
             self.error = error.localizedDescription
         }
         isSearching = false
+    }
+}
+
+/// A person result: round photo, name, then role.
+struct MacSearchPersonRow: View {
+    @EnvironmentObject private var browse: BrowseStore
+    @Environment(\.displayScale) private var displayScale
+    let person: MediaPerson
+    @State private var hovering = false
+
+    var body: some View {
+        let pixels = Int((54 * displayScale).rounded(.up))
+        HStack(spacing: 12) {
+            MacImage(url: browse.imageURL(person.imageURL, providerID: person.providerID ?? "", width: pixels, height: pixels))
+                .overlay {
+                    if person.imageURL == nil {
+                        Image(systemName: "person.fill").foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 54, height: 54)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: person.name).lineLimit(2)
+                if let role = person.role {
+                    Text(verbatim: role).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(.quaternary.opacity(hovering ? 0.6 : 0), in: .rect(cornerRadius: 8))
+        .contentShape(.rect)
+        .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
     }
 }
 

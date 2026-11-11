@@ -39,7 +39,8 @@ struct IOSPlexHomeView: View {
         .toolbar {
             IOSAccountToolbarItem()
         }
-        .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)) {
+        .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)
+                   + browse.hiddenSidebarLibraries.sorted()) {
             guard showHero else { return }
             trending = await browse.trendingHeroItems()
             if HeroSources.isOn(.watchlist) { watchlist = await browse.watchlistHeroItems() }

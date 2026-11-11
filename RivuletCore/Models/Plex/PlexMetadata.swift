@@ -392,6 +392,7 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
 
     // MARK: - Media Files
     var Media: [PlexMedia]?
+    var Geolocation: PlexGeolocation? = nil
 
     // MARK: - Cast & Crew
     var Role: [PlexRole]?

@@ -339,6 +339,40 @@ nonisolated struct PlexMedia: Codable, Sendable {
     let container: String?
     let videoFrameRate: String?
     let Part: [PlexPart]?
+    // Photo EXIF, on item requests: "f/1.6", "1/5", and ISO as a string. Lenient, as every video shares this type.
+    var make: PlexLenientText? = nil
+    var model: PlexLenientText? = nil
+    var lens: PlexLenientText? = nil
+    var aperture: PlexLenientText? = nil
+    var exposure: PlexLenientText? = nil
+    var iso: PlexLenientText? = nil
+}
+
+/// A string or a number as text; any other shape is nil rather than a failed decode.
+nonisolated struct PlexLenientText: Codable, Sendable {
+    let value: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let text = try? c.decode(String.self) { value = text }
+        else if let int = try? c.decode(Int.self) { value = String(int) }
+        else if let number = try? c.decode(Double.self) { value = String(number) }
+        else { value = nil }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(value)
+    }
+}
+
+/// A photo's place, sent only with `includeGeolocation=1`.
+nonisolated struct PlexGeolocation: Codable, Sendable {
+    nonisolated struct Point: Codable, Sendable {
+        let latitude: Double
+        let longitude: Double
+    }
+    let Coordinates: Point?
 }
 
 nonisolated struct PlexPart: Codable, Sendable {

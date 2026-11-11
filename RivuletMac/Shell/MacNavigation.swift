@@ -11,6 +11,12 @@ enum MacRoute: Hashable {
     case hub(MediaHub)
     case playlist(MediaPlaylist)
     case library(MediaLibrary)
+    /// A folder of a photo library.
+    case photos(MediaLibrary, folder: MediaItemRef, title: String)
+    /// A folder of a video library, as on disk.
+    case folder(MediaLibrary, folder: MediaItemRef, title: String)
+    /// One of a photo library's memories, as a flat grid.
+    case photoMemory(MediaLibrary, PhotoMemory)
     /// A cast or crew member; `providerID` is the server whose artwork URL the portrait is.
     case person(MediaPerson, providerID: String)
     /// Live TV's scheduled and finished recordings.
@@ -24,7 +30,8 @@ extension MacRoute {
         case .detail(let item): item.ref.providerID
         case .hub(let hub): hub.providerID
         case .playlist(let playlist): playlist.item.ref.providerID
-        case .library(let library): library.providerID
+        case .library(let library), .photos(let library, _, _), .folder(let library, _, _), .photoMemory(let library, _):
+            library.providerID
         case .person(_, let providerID): providerID
         case .liveRecordings: ""
         }
@@ -184,4 +191,11 @@ enum MacSettingsKeys {
     static let showPlaylists = "macShowPlaylists"
     /// Shared with tvOS and iOS (iCloud synced).
     static let showFavorites = "showFavoritesTab"
+}
+
+extension BrowseStore {
+    /// The sidebar's libraries, photo libraries included.
+    var sidebarAllLibraries: [MediaLibrary] {
+        sidebarLibraries + photoLibraries.filter(isSidebarLibraryShown)
+    }
 }

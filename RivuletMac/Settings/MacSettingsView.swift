@@ -19,6 +19,8 @@ struct MacSettingsView: View {
                 .tabItem { Label("Library", systemImage: "rectangle.stack") }
             MacPlaybackSettingsView()
                 .tabItem { Label("Playback", systemImage: "play.rectangle") }
+            MacPhotoSettingsView()
+                .tabItem { Label("Photos", systemImage: "photo.on.rectangle") }
             // Sources and server choice are the owner's, not a restricted profile's.
             if !profiles.isRestrictedProfile {
                 MacLiveTVSettingsView()

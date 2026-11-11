@@ -57,15 +57,61 @@ final class BelowFoldContentLoader {
             return content
         }
 
-        // Cast / directors come from the full detail (reuse the chrome's if
-        // present, otherwise fetch). Not via `??` — its RHS is a non-async
-        // autoclosure and can't host the await.
+        // Every independent fetch starts at once; each `try?` keeps a failed section empty.
+        async let fetchedDetail: MediaItemDetail? = detail != nil ? detail : (try? await provider.fullDetail(for: item.ref))
+        async let relatedFetch = try? await provider.related(for: item.ref, kind: item.kind)
         let resolvedDetail: MediaItemDetail?
-        if let detail {
-            resolvedDetail = detail
-        } else {
-            resolvedDetail = try? await provider.fullDetail(for: item.ref)
+
+        switch item.kind {
+        case .show:
+            async let seasons = try? await provider.children(of: item.ref)
+            async let episodes = try? await provider.allEpisodes(of: item.ref)
+            resolvedDetail = await fetchedDetail
+            content.seasons = await seasons ?? []
+            content.episodes = await episodes ?? []
+            let playTarget = EpisodePicker.showPlayTarget(
+                nextEpisode: resolvedDetail?.nextEpisode, seasons: content.seasons, episodes: content.episodes)
+            content.initialEpisode = content.episodes.first { $0.ref == playTarget?.ref }
+                ?? content.episodes.first
+            content.selectedSeason = content.seasons.first { $0.ref == content.initialEpisode?.parentRef }
+                ?? content.seasons.first
+
+        case .episode:
+            if let showRef = item.grandparentRef {
+                async let seasons = try? await provider.children(of: showRef)
+                async let episodes = try? await provider.allEpisodes(of: showRef)
+                // About card describes the SHOW, not this episode.
+                async let showDetail = try? await provider.fullDetail(for: showRef)
+                resolvedDetail = await fetchedDetail
+                content.seasons = await seasons ?? []
+                let currentSeasonID = item.parentRef?.itemID
+                content.selectedSeason = content.seasons.first(where: { $0.ref.itemID == currentSeasonID })
+                    ?? content.seasons.first
+                content.episodes = await episodes ?? []
+                content.showDetail = await showDetail
+            } else {
+                resolvedDetail = await fetchedDetail
+            }
+
+        case .season:
+            async let seasonEpisodes = try? await provider.children(of: item.ref)
+            if let showRef = item.parentRef {
+                async let seasons = try? await provider.children(of: showRef)
+                async let showDetail = try? await provider.fullDetail(for: showRef)
+                resolvedDetail = await fetchedDetail
+                content.seasons = await seasons ?? []
+                content.selectedSeason = content.seasons.first(where: { $0.ref.itemID == item.ref.itemID })
+                    ?? content.seasons.first
+                content.showDetail = await showDetail
+            } else {
+                resolvedDetail = await fetchedDetail
+            }
+            content.episodes = await seasonEpisodes ?? []
+
+        default:
+            resolvedDetail = await fetchedDetail  // movies: no seasons/episodes
         }
+
         content.cast = resolvedDetail?.cast ?? []
         content.directors = resolvedDetail?.directors ?? []
         content.detail = resolvedDetail
@@ -77,44 +123,8 @@ final class BelowFoldContentLoader {
         content.trailers = tiles.trailers
         content.extras = tiles.extras
 
-        // Seasons and episodes, by item kind.
-        switch item.kind {
-        case .show:
-            content.seasons = (try? await provider.children(of: item.ref)) ?? []
-            content.episodes = (try? await provider.allEpisodes(of: item.ref)) ?? []
-            let playTarget = EpisodePicker.showPlayTarget(
-                nextEpisode: resolvedDetail?.nextEpisode, seasons: content.seasons, episodes: content.episodes)
-            content.initialEpisode = content.episodes.first { $0.ref == playTarget?.ref }
-                ?? content.episodes.first
-            content.selectedSeason = content.seasons.first { $0.ref == content.initialEpisode?.parentRef }
-                ?? content.seasons.first
-
-        case .episode:
-            if let showRef = item.grandparentRef {
-                content.seasons = (try? await provider.children(of: showRef)) ?? []
-                let currentSeasonID = item.parentRef?.itemID
-                content.selectedSeason = content.seasons.first(where: { $0.ref.itemID == currentSeasonID })
-                    ?? content.seasons.first
-                content.episodes = (try? await provider.allEpisodes(of: showRef)) ?? []
-                // About card describes the SHOW, not this episode.
-                content.showDetail = try? await provider.fullDetail(for: showRef)
-            }
-
-        case .season:
-            if let showRef = item.parentRef {
-                content.seasons = (try? await provider.children(of: showRef)) ?? []
-                content.selectedSeason = content.seasons.first(where: { $0.ref.itemID == item.ref.itemID })
-                    ?? content.seasons.first
-                content.showDetail = try? await provider.fullDetail(for: showRef)
-            }
-            content.episodes = (try? await provider.children(of: item.ref)) ?? []
-
-        default:
-            break  // movies: no seasons/episodes
-        }
-
         // Related row and the collection row: one `/related` call feeds both.
-        if let related = try? await provider.related(for: item.ref, kind: item.kind) {
+        if let related = await relatedFetch {
             content.related = related.items
             content.collection = related.collection
         }

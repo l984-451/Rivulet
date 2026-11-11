@@ -982,6 +982,14 @@ final class GuideCategoryBarView: UIView {
     private var lastFocusedIndexPath: IndexPath?
     var onMoveDown: (() -> Void)?
     private var downSwipeBinding: DirectionalInputBinding?
+    /// Fades the pills out at the row's ends: the sign that more scroll into
+    /// view, and what keeps them off the clock. A mask, not a painted gradient,
+    /// because the guide's artwork shows through this row.
+    private let edgeMask = CAGradientLayer()
+    /// Short enough that a focused pill the engine scrolls in rests clear of it.
+    private static let edgeFadeWidth: CGFloat = 72
+    /// Room around the row for the focused pill's growth and shadow.
+    private static let maskOverhang: CGFloat = 40
 
     private lazy var collectionView: UICollectionView = {
         let layout = UICollectionViewFlowLayout()
@@ -1013,6 +1021,9 @@ final class GuideCategoryBarView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(collectionView)
+        edgeMask.startPoint = CGPoint(x: 0, y: 0.5)
+        edgeMask.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.mask = edgeMask
         downSwipeBinding = DirectionalInputBinding(
             gatedSwipesOn: collectionView,
             directions: [.down],
@@ -1032,6 +1043,40 @@ final class GuideCategoryBarView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         collectionView.frame = bounds
+        // The fade reads the content size, which the first pass has yet to measure.
+        collectionView.layoutIfNeeded()
+        updateEdgeMask()
+    }
+
+    /// How strongly each end fades, from 0 to 1: nothing beyond that end means
+    /// no fade, and it reaches full strength once a fade's width is out of view.
+    nonisolated static func edgeFades(offsetX: CGFloat, contentWidth: CGFloat, width: CGFloat,
+                                      fadeWidth: CGFloat) -> (leading: CGFloat, trailing: CGFloat) {
+        let hiddenTrailing = contentWidth - width - offsetX
+        return (leading: min(max(offsetX / fadeWidth, 0), 1),
+                trailing: min(max(hiddenTrailing / fadeWidth, 0), 1))
+    }
+
+    private func updateEdgeMask() {
+        let fades = Self.edgeFades(offsetX: collectionView.contentOffset.x,
+                                   contentWidth: collectionView.contentSize.width,
+                                   width: bounds.width, fadeWidth: Self.edgeFadeWidth)
+        let overhang = Self.maskOverhang
+        // Open above, below and to the left, but it ends at the row's right
+        // edge, where the clock starts.
+        let maskWidth = bounds.width + overhang
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        edgeMask.frame = CGRect(x: -overhang, y: -overhang,
+                                width: maskWidth, height: bounds.height + 2 * overhang)
+        edgeMask.colors = [UIColor.white.withAlphaComponent(1 - fades.leading).cgColor,
+                           UIColor.white.cgColor, UIColor.white.cgColor,
+                           UIColor.white.withAlphaComponent(1 - fades.trailing).cgColor]
+        if maskWidth > 0 {
+            edgeMask.locations = [overhang / maskWidth, (overhang + Self.edgeFadeWidth) / maskWidth,
+                                  (maskWidth - Self.edgeFadeWidth) / maskWidth, 1].map { NSNumber(value: Double($0)) }
+        }
+        CATransaction.commit()
     }
 
     func configure(
@@ -1056,6 +1101,8 @@ final class GuideCategoryBarView: UIView {
 
         if itemsChanged {
             collectionView.reloadData()
+            collectionView.layoutIfNeeded()
+            updateEdgeMask()
         } else if selectionChanged {
             refreshVisiblePills()
         }
@@ -1090,6 +1137,10 @@ final class GuideCategoryBarView: UIView {
 extension GuideCategoryBarView: UICollectionViewDataSource,
                                 UICollectionViewDelegate,
                                 UICollectionViewDelegateFlowLayout {
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        updateEdgeMask()
+    }
+
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         items.count
     }

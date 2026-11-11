@@ -155,6 +155,32 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.0 (126)", [
+            "New pause screen with the title's art and details. @priyanshuppal",
+            "New launch screen: Rivulet's R pours in and zooms into Home. @priyanshuppal",
+            "Badges match the Apple TV app, now on show pages too. @DennisR-git @danieldjupvik",
+            "Season tiles show the show's poster and open the show",
+            "Folder-only libraries can switch to a sorted title grid",
+            "Faster playback, and Plex counts a finished title once",
+            "Double tap the touch surface to zoom the picture",
+            "Skip Intro and Skip Credits buttons show up again",
+            "With credits playing out, Up Next's countdown ends when the video does",
+            "French is available, and German covers more of the app. @JoschaP",
+            "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",
+            "What's New shows every build you missed",
+        ]),
+        ("1.3.0 (125)", [
+            "Improved search to find more matches, genres, and people",
+            "Photos: favorites, slideshows, photo info, a map and a memories row",
+            "Direct Play buffers as far ahead as storage allows",
+            "Subtitle search should work for Jellyfin and Emby (please test)",
+            "Music plays TrueHD, DTS, and other formats",
+            "Plex home profiles now see their own watchlist",
+            "Added delete option in more long press menus",
+            "Live TV guide category pills fade at the edges. @rcork",
+            "Long-press menus scroll when they're taller than the screen",
+            "Music library title no longer covers top of menu",
+        ]),
         ("1.2.0 (124)", [
             "> Thank you to everyone who sent a PR!",
             "On a Dolby Vision TV, Profile 7 FEL keeps most of its enhancement layer",

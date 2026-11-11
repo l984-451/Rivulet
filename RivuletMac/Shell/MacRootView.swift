@@ -23,6 +23,7 @@ struct MacRootView: View {
     @State private var shellBox = MacShellBox()
     @FocusedValue(\.macPageRefresh) private var pageRefresh: MacPageRefresh?
     @State private var showingWhatsNew = false
+    @State private var whatsNewVersions: [String] = []
     @State private var choosingProfile = false
     @State private var backgroundedAt: Date?
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
@@ -49,7 +50,7 @@ struct MacRootView: View {
             storedRow = row?.storageKey ?? "home"
         }
         .sheet(isPresented: $showingAccount) { MacAccountView(showsDone: true) }
-        .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(version: MacChangelog.currentVersion, showsContinue: true) }
+        .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(versions: whatsNewVersions, showsContinue: true) }
         .sheet(isPresented: $choosingProfile) { MacProfilePickerSheet() }
         .macPlaybackHost(playback)
         // Content is withheld until a profile is entered, and nothing of the locked profile's keeps playing.
@@ -121,7 +122,7 @@ struct MacRootView: View {
             if case .library(let library) = selection, !browse.isSidebarLibraryShown(library) { selection = .home }
         }
         .onChange(of: browse.isLoadingOtherServers) { restoreRow() }
-        .onChange(of: browse.libraries, initial: true) { _, libraries in
+        .onChange(of: browse.libraries + browse.photoLibraries, initial: true) { _, libraries in
             restoreRow()
             guard case .library(let library) = selection, !libraries.isEmpty, !browse.isLoadingOtherServers else { return }
             // Match by id: a renamed or re-pinned library is the same row.
@@ -153,7 +154,7 @@ struct MacRootView: View {
             ForEach(serverGroups, id: \.providerID) { group in
                 Section(group.name ?? String(localized: "Library")) {
                     ForEach(group.libraries) { library in
-                        Label(library.title, systemImage: library.icon).tag(MacSidebarItem.library(library))
+                        Label(library.title, systemImage: library.kind == .photos ? "photo.on.rectangle" : library.icon).tag(MacSidebarItem.library(library))
                     }
                     if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
                         Label("Playlists", systemImage: "list.and.film")
@@ -170,7 +171,7 @@ struct MacRootView: View {
 
     /// One section per server, under its name once there are several.
     private var serverGroups: [(providerID: String, name: String?, libraries: [MediaLibrary])] {
-        let libraries = browse.sidebarLibraries.sidebarOrder(servers: browse.providerOrder)
+        let libraries = browse.sidebarAllLibraries.sidebarOrder(servers: browse.providerOrder)
         var ids: [String] = []
         for library in libraries where !ids.contains(library.providerID) { ids.append(library.providerID) }
         return ids.map { id in
@@ -190,7 +191,17 @@ struct MacRootView: View {
                         case .detail(let item): MacDetailView(item: item)
                         case .hub(let hub): MacHubGridView(hub: hub)
                         case .playlist(let playlist): MacPlaylistView(playlist: playlist)
-                        case .library(let library): MacLibraryView(library: library)
+                        case .library(let library): libraryPage(library)
+                        case .photos(let library, let folder, let title):
+                            MacPhotoLibraryView(library: library, folder: folder, title: title)
+                        case .folder(let library, let folder, let title):
+                            MacFolderListView(library: library, folder: folder, title: title)
+                        case .photoMemory(let library, let memory):
+                            if memory.kind == .map, let (provider, library) = PhotoListing.source(for: library)() {
+                                MacPhotoMapView(provider: provider, library: library)
+                            } else {
+                                MacPhotoLibraryView(library: library, memory: memory, title: memory.title)
+                            }
                         case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
                         case .liveRecordings: MacLiveRecordingsView()
                         }
@@ -212,6 +223,15 @@ struct MacRootView: View {
     }
 
     @ViewBuilder
+    private func libraryPage(_ library: MediaLibrary) -> some View {
+        if library.kind == .photos {
+            MacPhotoLibraryView(library: library, title: browse.labels.title(library.title, providerID: library.providerID))
+        } else {
+            MacLibraryView(library: library)
+        }
+    }
+
+    @ViewBuilder
     private var root: some View {
         switch current {
         case .liveTV:
@@ -221,7 +241,7 @@ struct MacRootView: View {
         case .home: MacHomeView()
         case .search: MacSearchView()
         case .favorites: MacFavoritesView()
-        case .library(let library): MacLibraryView(library: library)
+        case .library(let library): libraryPage(library)
         case .playlists(let providerID): MacPlaylistsView(providerID: providerID)
         }
     }
@@ -270,10 +290,10 @@ struct MacRootView: View {
     private func restoreRow() {
         guard !restoredRow else { return }
         if !["home", "search", "live-tv"].contains(storedRow) {
-            guard !browse.libraries.isEmpty, !browse.isLoadingOtherServers else { return }
+            guard !(browse.libraries + browse.photoLibraries).isEmpty, !browse.isLoadingOtherServers else { return }
         }
         restoredRow = true
-        guard let row = MacSidebarItem.restore(storedRow, libraries: browse.libraries) else { return }
+        guard let row = MacSidebarItem.restore(storedRow, libraries: browse.libraries + browse.photoLibraries) else { return }
         switch row {
         case .favorites where !(showFavorites && browse.offersFavorites): return
         case .playlists(let id) where !showPlaylists || browse.playlists[id] == nil: return
@@ -310,7 +330,7 @@ struct MacRootView: View {
             return
         }
         switch link.action {
-        case .play: playback.play(item)
+        case .play: playback.play(item, startOffset: link.startOffset)
         case .detail:
             playback.close()
             push(.detail(item))
@@ -321,7 +341,8 @@ struct MacRootView: View {
     private func showWhatsNewIfUpdated() {
         let current = MacChangelog.currentVersion
         guard plex.isConfigured, current != lastSeenBuild else { return }
+        whatsNewVersions = WhatsNewRange.versions(MacChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
-        showingWhatsNew = MacChangelog.lines(for: current) != nil
+        showingWhatsNew = !whatsNewVersions.isEmpty
     }
 }

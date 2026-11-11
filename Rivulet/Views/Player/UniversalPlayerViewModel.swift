@@ -73,6 +73,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var isBuffering = false
     @Published private(set) var errorMessage: String?
 
+    /// Touch-surface double tap zooms the picture to fill the screen (#589). Kept for the session.
+    @Published var fillsScreen = false
+
     @Published var showControls = true {
         didSet {
             // Focus mode cannot outlive visible controls.
@@ -97,28 +100,28 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// or immediately on `commitScrub()` / `cancelScrub()`.
     @Published private(set) var wheelScrubbing = false
 
-    /// The three tiers of the paused ambient presentation: `.frame` is the
-    /// live video frame (no overlay); `.ambient` shows the full-res
-    /// crossfaded backdrop + title logo after `pausedPosterDelay` seconds
-    /// paused; `.dimmed` adds a deeper black overlay after
-    /// `pausedPosterDimDelay` seconds paused (OLED burn-in guard).
+    /// The tiers of the pause screen (`PauseScreenView`), by time paused:
+    /// `.frame` is the bare paused frame, `.info` the details over it (10 s),
+    /// `.art` the title's backdrop under them (30 s), `.dimmed` the quieter,
+    /// dimmer state (2 min, an OLED burn-in guard).
     enum PausePresentation: Equatable {
         case frame
-        case ambient
+        case info
+        case art
         case dimmed
     }
     @Published private(set) var pausePresentation: PausePresentation = .frame
 
-    /// Kept for existing call sites; true in either ambient tier.
+    /// True in any pause-screen tier.
     var showPausedPoster: Bool { pausePresentation != .frame }
 
-    /// Back from the poster returns to the paused frame, which does not exist
+    /// Back from the pause screen returns to the paused frame, which does not exist
     /// while the engine is torn down after a sleep: Back must leave instead (#523).
     var backReturnsToPausedFrame: Bool {
         showPausedPoster && !(aetherPlayer?.isParkedForReload ?? false)
     }
 
-    /// Full-resolution backdrop for the ambient pause state: raw Plex art
+    /// Full-resolution backdrop for the pause screen: raw Plex art
     /// path with token, NOT the `/photo/:/transcode` downscale that
     /// `PlexNetworkManager.buildThumbnailURL` applies (the TV renders it at
     /// native size, full-bleed).
@@ -165,7 +168,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         )
     }
 
-    /// Title logo (clearArt) for the transport bar, resolved once per item:
+    /// Title logo (clearArt) for the pause screen, resolved once per item:
     /// prefer the Plex-provided clearLogo image, falling back to TMDB's
     /// images API via the shared cache (same precedence the home hero and
     /// media detail chrome use).
@@ -443,7 +446,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var upNextTier: Int?
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
-    @Published private(set) var itemGeneration = 0
+    @Published private(set) var itemGeneration = 0 {
+        didSet { timeline.begin(); serverEndedPlayback = false }
+    }
     var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
         if metadata.type == "episode" {
@@ -499,12 +504,11 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var pausedDueToAppInactive: Bool = false
     private let scrubUpdateInterval: TimeInterval = 0.1  // 100ms updates for smooth scrubbing
     private var seekIndicatorTimer: Timer?
-    private var pausedPosterTimer: Timer?
-    private let pausedPosterDelay: TimeInterval = 10.0
-    private var pausedPosterDimTimer: Timer?
-    private let pausedPosterDimDelay: TimeInterval = 120.0
-    /// True while a rail panel is presented, so the ambient-pause backdrop
-    /// stays off. Set by `PlayerContainerViewController`.
+    private var pausedPosterTimers: [Timer] = []
+    private static let pauseScreenSchedule: [(delay: TimeInterval, tier: PausePresentation)] =
+        [(10, .info), (30, .art), (120, .dimmed)]
+    /// True while a rail panel is presented, so the pause screen stays off.
+    /// Set by `PlayerContainerViewController`.
     var isRailPanelOpen = false {
         didSet {
             guard isRailPanelOpen != oldValue else { return }
@@ -547,12 +551,19 @@ final class UniversalPlayerViewModel: ObservableObject {
     private var plexTimelineStopped: Bool { plexStopDelivery != nil }
     private var watchedItemGeneration: Int?
     private var plexTimelineGeneration = 0
-    private var plexSessionGeneration = 0
-    private let reportingInterval: TimeInterval = 10
-    var heartbeatInterval: Duration = .seconds(10)
-    private var lastReportedTime: TimeInterval = 0
-    /// Keep paused and buffering sessions alive while the playhead is stationary.
-    private var timelineHeartbeatTask: Task<Void, Never>?
+    var heartbeatInterval: Duration {
+        get { timeline.heartbeatInterval }
+        set { timeline.heartbeatInterval = newValue }
+    }
+    private var serverEndedPlayback = false
+    /// When this player reports to the server; the rule lives in RivuletCore.
+    private lazy var timeline: PlaybackTimeline = {
+        let timeline = PlaybackTimeline(reports: playbackReports, position: { [weak self] in self?.currentTime ?? 0 }) { [weak self] state, time in
+            self?.timelineReport(state, at: time) ?? { nil }
+        }
+        timeline.onTerminated = { [weak self] in self?.endForServerTermination($0) }
+        return timeline
+    }()
     /// `.provider` only: the play session's reporter. Recreated when the
     /// stream (and with it the play session) changes; nil once stopped.
     private var providerReporter: (any ProgressReporter)?
@@ -647,6 +658,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         try await PlexNetworkManager.shared.getFullMetadata(serverURL: $0, authToken: $1, ratingKey: $2)
     }
 
+    var chapterThumbnailFetch: @Sendable (URL) async -> Data? = {
+        await ImageCacheManager.shared.imageData(for: $0)
+    }
     var plexMetadataLookup: (String, String, String) async throws -> PlexMetadata = {
         try await PlexNetworkManager.shared.getMetadata(serverURL: $0, authToken: $1, ratingKey: $2, includeGuids: true)
     }
@@ -736,6 +750,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// `.provider` only: this item's Up Next fetch, shared by every caller
     /// for one `itemGeneration`. A fetch that found nothing is dropped so the
     /// next caller asks again.
+    /// One season-episode fetch per item and season, shared by the early resolve,
+    /// the Up Next panel and the end-of-playback funnel. nil result = failed (not kept).
+    private var plexSeasonFetch: (generation: Int, key: String, task: Task<[PlexMetadata]?, Never>)?
     private var providerUpNextFetch: (generation: Int, task: Task<(season: [MediaItem], next: MediaItem?), Never>)?
     /// `.provider` only: the next episode's prepare, keyed by its ratingKey,
     /// shared by the countdown-start prepare and the swap.
@@ -844,8 +861,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Store the provider's current stream and a reporter for its play
     /// session. A new stream is a new play session, so the reporter follows it.
     private func setProviderStream(_ playback: ProviderPlayback) {
-        timelineHeartbeatTask?.cancel()
-        timelineHeartbeatTask = nil
+        timeline.begin()
         if case .provider(let current) = source {
             providerIsPaused = providerIsPaused && current.item.ref == playback.item.ref
         } else {
@@ -964,6 +980,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// window when one is entered. Muting is handled reactively via the
     /// published `isFilterMuting`. Called from both time observers.
     private func applyContentFilter(at time: TimeInterval) {
+        // Off for the item (settings are read once, in beginItem): every step below is a no-op
+        // unless leftover state from an enabled item still needs clearing.
+        if !contentFilter.isEnabled, silentSubtitleTrackId == nil, contentFilterNotice == nil,
+           !contentFilter.isFilterMuting { return }
         // Feed the currently on-screen dialogue so language cues mute in sync.
         // Cues resolve on the sourceTime axis, honoring the subtitle delay. On
         // the HLS route only a shown text track feeds this; otherwise language
@@ -1889,6 +1909,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func retryPlayback() async {
         // Reset error state and retry
+        serverEndedPlayback = false
+        timeline.begin()
         errorMessage = nil
         playbackState = .loading
         hasAttemptedRivuletHLSFallback = false
@@ -1907,6 +1929,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         let stops = stopCount
         await beginCinemaExtrasIfNeeded()
         guard stops == stopCount, !Task.isCancelled else { return }
+        // Overlaps the metadata fetch; it reads only artwork paths that fetch never writes.
+        let seasonPoster = Task { await fetchSeasonPosterIfNeeded() }
         // Fetch detailed metadata if markers or chapters are missing
         let hasMarkers = !(metadata.Marker ?? []).isEmpty
         let hasChapters = !(metadata.Chapter ?? []).isEmpty
@@ -1915,14 +1939,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             await fetchMarkersIfNeeded()
         }
         guard stops == stopCount, !Task.isCancelled else { return }
-        // A Plex item's chapter images arrive with the fetch above; a provider
-        // item's come from its detail.
-        if case .provider = source, let chapters = metadata.Chapter {
-            chapterThumbnails = [:]
-            await fetchChapterThumbnails(chapters: chapters)
-        }
-        guard stops == stopCount, !Task.isCancelled else { return }
-
         // Arm the local content filter for this item: reload settings, restore
         // any cached filter list, then refresh it and read the subtitle file.
         // After the fetch above, because both key off the file, the external
@@ -1942,11 +1958,11 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
         }
 
-        // Fetch season/show poster for Now Playing artwork (episodes)
-        await fetchSeasonPosterIfNeeded()
+        // Season/show poster for Now Playing artwork (episodes)
+        await seasonPoster.value
         guard stops == stopCount, !Task.isCancelled else { return }
 
-        // Resolve the title logo for the ambient-pause transport bar swap.
+        // Resolve the title logo for the pause screen.
         fetchTitleLogoIfNeeded()
 
         // Aether is the only VOD engine; ContentRouter.plan() emits the
@@ -2253,6 +2269,8 @@ final class UniversalPlayerViewModel: ObservableObject {
                 throw PlayerError.loadFailed("Unable to build HLS URL")
             }
 
+            // Overlaps the wait for the transcode to start.
+            let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
             if !transcodeReady {
@@ -2268,10 +2286,8 @@ final class UniversalPlayerViewModel: ObservableObject {
                 throw error
             }
 
-            // Log the HLS master manifest for debugging track labels and I-frame playlists
-            await logHLSManifest(url: hlsURL, headers: streamHeaders)
+            await chapterImages.value
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
-
             try loadAVPlayer(url: hlsURL, headers: streamHeaders, initialTime: startTime)
 
             if let startTime, startTime > 0 {
@@ -2757,62 +2773,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             .store(in: &aetherCancellables)
     }
 
-    // MARK: - HLS Manifest Debugging
-
-    /// Fetch and log the HLS master manifest to inspect track labels and I-frame playlists.
-    private func logHLSManifest(url: URL, headers: [String: String]) async {
-        let url = avPlayerURL(url)
-        var request = URLRequest(url: url)
-        for (key, value) in headers {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            if let manifest = String(data: data, encoding: .utf8) {
-                print("[HLS Manifest] ===== Master Playlist =====")
-                for line in manifest.components(separatedBy: "\n") {
-                    print("[HLS Manifest] \(line)")
-                }
-                print("[HLS Manifest] ===== End =====")
-
-                // Quick summary
-                let hasIFrame = manifest.contains("EXT-X-I-FRAME")
-                let audioTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=AUDIO") }
-                let subtitleTags = manifest.components(separatedBy: "\n").filter { $0.contains("TYPE=SUBTITLES") }
-                print("[HLS Manifest] I-Frame playlist: \(hasIFrame ? "YES" : "NO")")
-                print("[HLS Manifest] Audio tracks: \(audioTags.count)")
-                print("[HLS Manifest] Subtitle tracks: \(subtitleTags.count)")
-
-                // Also fetch and log keyframe playlist if present
-                if let iframeLine = manifest.components(separatedBy: "\n")
-                    .first(where: { $0.contains("EXT-X-I-FRAME-STREAM-INF") }),
-                   let uriRange = iframeLine.range(of: "URI=\""),
-                   let endQuote = iframeLine[uriRange.upperBound...].firstIndex(of: "\"") {
-                    let keyframeRelative = String(iframeLine[uriRange.upperBound..<endQuote])
-                    let keyframeURL: URL?
-                    if keyframeRelative.contains("://") {
-                        keyframeURL = URL(string: keyframeRelative)
-                    } else {
-                        keyframeURL = URL(string: keyframeRelative, relativeTo: url.deletingLastPathComponent())
-                    }
-                    if let kfURL = keyframeURL {
-                        var kfRequest = URLRequest(url: kfURL)
-                        for (key, value) in headers { kfRequest.setValue(value, forHTTPHeaderField: key) }
-                        if let (kfData, _) = try? await URLSession.shared.data(for: kfRequest),
-                           let kfManifest = String(data: kfData, encoding: .utf8) {
-                            let kfLines = kfManifest.components(separatedBy: "\n")
-                            print("[HLS Manifest] ===== Keyframe Playlist (\(kfLines.count) lines) =====")
-                            for line in kfLines.prefix(20) { print("[HLS Manifest/KF] \(line)") }
-                            if kfLines.count > 20 { print("[HLS Manifest/KF] ... (\(kfLines.count - 20) more lines)") }
-                        }
-                    }
-                }
-            }
-        } catch {
-            print("[HLS Manifest] Failed to fetch: \(error.localizedDescription)")
-        }
-    }
-
     // MARK: - AVPlayer Creation
 
     /// Create an AVPlayer for a URL (direct play or HLS).
@@ -2993,7 +2953,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         seasonPosterImage = image
     }
 
-    /// Resolve the title logo for the transport bar's ambient-pause swap:
+    /// Resolve the title logo for the pause screen:
     /// prefer the Plex-provided clearLogo image (same precedence as the
     /// home hero and media detail chrome), falling back to TMDB's images
     /// API via `TMDBLogoCache` when Plex doesn't carry one. Cancels any
@@ -3076,60 +3036,32 @@ final class UniversalPlayerViewModel: ObservableObject {
         return "\(codecName) \(channelDesc)"
     }
 
-    /// Fetch chapter thumbnail images from Plex with limited concurrency.
-    /// Uses a concurrency limit to avoid N+1 API call patterns flagged by Sentry.
+    /// The hls route's only use of chapter images is AVPlayer's navigation markers, so they load
+    /// here, just before `loadAVPlayer`, and never on the Aether start path.
+    private func loadChapterThumbnailsForHLS() async {
+        chapterThumbnails = [:]
+        guard let chapters = metadata.Chapter, !chapters.isEmpty else { return }
+        let generation = itemGeneration
+        await fetchChapterThumbnails(chapters: chapters)
+        if generation != itemGeneration { chapterThumbnails = [:] }
+    }
+
+    /// Fetch chapter thumbnail images, three at a time, through the shared image cache
+    /// (it trusts raw-IP Plex servers, which `URLSession.shared` does not).
     private func fetchChapterThumbnails(chapters: [PlexChapter]) async {
         let thumbChapters: [(index: Int, url: URL)] = chapters.compactMap { chapter in
             guard let index = chapter.index, let url = chapterThumbnailURL(chapter) else { return nil }
             return (index, url)
         }
-        let thumbCount = thumbChapters.count
-        guard thumbCount > 0 else { return }
-        print("[Chapters] Fetching \(thumbCount) chapter thumbnails (max 3 concurrent)...")
+        guard !thumbChapters.isEmpty else { return }
 
-        // Use a limited concurrency approach to avoid N+1 API call detection
-        let maxConcurrency = 3
-
-        await withTaskGroup(of: (Int, Data?).self) { group in
-            var iterator = thumbChapters.makeIterator()
-            var inFlight = 0
-
-            // Seed initial batch
-            while inFlight < maxConcurrency, let (index, url) = iterator.next() {
-                group.addTask {
-                    do {
-                        let (data, _) = try await URLSession.shared.data(from: url)
-                        return (index, data)
-                    } catch {
-                        return (index, nil)
-                    }
-                }
-                inFlight += 1
-            }
-
-            // As each completes, start the next
-            for await (index, data) in group {
-                if let data {
-                    chapterThumbnails[index] = data
-                }
-                inFlight -= 1
-
-                // Start next fetch if available
-                if let (nextIndex, url) = iterator.next() {
-                    group.addTask {
-                        do {
-                            let (data, _) = try await URLSession.shared.data(from: url)
-                            return (nextIndex, data)
-                        } catch {
-                            return (nextIndex, nil)
-                        }
-                    }
-                    inFlight += 1
-                }
-            }
+        let fetch = chapterThumbnailFetch
+        let results = await BoundedFanOut.map(thumbChapters, width: 3) { chapter in
+            (chapter.index, await fetch(chapter.url))
         }
-
-        print("[Chapters] Fetched \(chapterThumbnails.count)/\(thumbCount) chapter thumbnails")
+        for (index, data) in results {
+            if let data { chapterThumbnails[index] = data }
+        }
     }
 
     /// A Plex chapter's own thumb path; a provider chapter's image from its
@@ -3220,6 +3152,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         reason: String,
         failureKind: DirectPlayFailureKind
     ) async throws {
+        let stops = stopCount, generation = itemGeneration
         guard !isAttemptingRivuletHLSFallback else {
             throw PlayerError.loadFailed("HLS fallback already in progress")
         }
@@ -3248,6 +3181,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             throw PlayerError.loadFailed("Unable to build HLS fallback URL")
         }
 
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         // The Aether session is torn down here, so this is the point the
         // session stops being the planned route. Tagged before the preflight:
         // a fallback that dies in preflight still died on HLS.
@@ -3256,6 +3190,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         diagnostics.step("hls_fallback_preflight", detail: "reason=\(reason) kind=\(failureKind.rawValue)")
         let transcodeReady = await waitForHLSTranscodeReady(url: fallback.url, headers: fallback.headers)
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         if !transcodeReady {
             // RIVULET-19. Capture with the full causal chain: the Aether failure
             // that sent us here, plus what the server said on all 8 preflight
@@ -3293,18 +3228,24 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     /// Second half: load the preflighted URL and seek to where playback was.
-    private func finishHLSSwitch(to hls: (url: URL, headers: [String: String], sessionId: String?),
-                                 resumeTime: TimeInterval) async throws {
+    func finishHLSSwitch(to hls: (url: URL, headers: [String: String], sessionId: String?),
+                         resumeTime: TimeInterval) async throws {
+        let stops = stopCount, generation = itemGeneration
+        try Task.checkCancellation()
+        await loadChapterThumbnailsForHLS()
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         try loadAVPlayer(url: hls.url, headers: hls.headers, initialTime: resumeTime)
         if resumeTime > 0 {
             await player?.seek(to: CMTime(seconds: resumeTime, preferredTimescale: 600))
         }
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         stallTracker.noteSeekOrLoad(at: Date())
     }
 
     /// Callers move to HLS, whose track ids are Plex stream ids, so the engine-indexed lists go too.
     private func releaseAetherPlayer() {
         guard let ap = aetherPlayer else { return }
+        aetherCancellables.removeAll()
         ap.stop()
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])
@@ -3470,7 +3411,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard let server = URL(string: serverURL),
               let direct = ContentRouter.buildDirectPlayURL(context: ContentRoutingContext(
                 metadata: probe, serverURL: server, authToken: authToken)) else { return nil }
-        let kbps = await ThroughputProbe.measure(url: direct.url, headers: rivuletDirectPlayHeaders())
+        let kbps = await ThroughputProbe.measure(
+            url: direct.url, headers: rivuletDirectPlayHeaders(),
+            bytes: { try await PlexNetworkManager.shared.openEndedBytes(for: $0) })
         if let kbps { lastThroughput = (kbps, Date()) }
         diagnostics.step("throughput_probe", detail: kbps.map { "\($0) kbps" } ?? "failed")
         return kbps
@@ -3617,6 +3560,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     private func reloadTranscode(at time: TimeInterval, tracks: TrackPicks) async throws {
+        let stops = stopCount, generation = itemGeneration
         let hls: (url: URL, headers: [String: String], sessionId: String?)
         if case .provider = source {
             guard let switched = try await switchToProviderTranscode(
@@ -3633,12 +3577,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
             hls = built
         }
-        try Task.checkCancellation()
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         beginHLSSwitch(to: hls)
         guard await waitForHLSTranscodeReady(url: hls.url, headers: hls.headers) else {
             throw PlayerError.loadFailed("HLS transcode session failed to start")
         }
-        try Task.checkCancellation()
+        guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         try await finishHLSSwitch(to: hls, resumeTime: time)
         playbackPlan = PlaybackPlan(policy: .directPlayFirst, primary: .hls(url: hls.url, headers: hls.headers),
                                     fallbacks: [], reasoning: ["quality_reload"])
@@ -4000,8 +3944,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
         cinemaStopped = true
         pendingCinemaAdvanceGeneration = nil
-        timelineHeartbeatTask?.cancel()
-        timelineHeartbeatTask = nil
+        timeline.transportChanged(.other)
         streamPreparationTask?.cancel()
         streamPreparationTask = nil
         streamWorkTask?.cancel()
@@ -4025,7 +3968,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         AppHangContext.clearContent()
         bufferingStartedAt = nil
 
-        // Stop AetherPlayer if active
+        // Unbind first: stop() zeroes the engine clock, and a 0 reaching
+        // currentTime is reported to Plex and wipes the resume point (#605).
+        aetherCancellables.removeAll()
         aetherPlayer?.stop()
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])
@@ -4049,6 +3994,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         wheelScrubbingTimer?.invalidate()
         wheelScrubbingTimer = nil
         wheelScrubbing = false
+        // The pause screen comes down through its one path (`pausePresentation`
+        // back to `.frame`), so the container restores the picture and stops the
+        // screen's timers however the player is left.
+        cancelPausedPosterTimer()
         hideCompatibilityNotice()
 
         // Reset display criteria to default (allows TV to return to normal mode)
@@ -4204,9 +4153,13 @@ final class UniversalPlayerViewModel: ObservableObject {
         invalidatePlexCompletion(at: targetTime)
         reopenPlexTimeline(at: targetTime)
         // tvOS Show on Skip Back covers skips back of up to 30s in total.
-        if seconds < 0, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
+        // A skip back at 0 moves nowhere: no tick could arm the window, so it would never close.
+        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
            Self.systemShowsSubtitlesOnSkipBack() {
             openCaptionWindow(until: base)
+        } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {
+            // Skipped forward past the point: done, even if no tick ever armed the window.
+            endReplayWindow()
         }
         inFlightRelativeSeekTarget = targetTime
         seekGeneration += 1
@@ -4273,6 +4226,13 @@ final class UniversalPlayerViewModel: ObservableObject {
         let window = existing.observing(currentTime: time)
         replayWindow = window
         guard window.shouldRevert(currentTime: time) else { return }
+        endReplayWindow()
+    }
+
+    /// Closes the replay window and turns off the subtitles it turned on (#595).
+    /// For a seek that leaves the window; a manual pick uses `clearReplayWindow`.
+    func endReplayWindow() {
+        guard let window = replayWindow else { return }
         replayWindow = nil
         if window.priorSubtitleTrackId == nil {
             selectSubtitleTrackWithoutSaving(id: nil, reloadsTranscode: false)
@@ -4299,10 +4259,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
     }
 
-    /// Clears any active replay window without reverting subtitles, wherever
-    /// playback or subtitle state moves out from under it. Internal for
-    /// `UniversalPlayerView`'s `.seekAbsolute` handler.
-    func clearReplayWindow() {
+    /// Clears any active replay window without reverting subtitles: a manual
+    /// pick, teardown, or a new item whose tracks are not the window's.
+    private func clearReplayWindow() {
         replayWindow = nil
     }
 
@@ -4451,7 +4410,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         stopScrubTimer()
         stopWheelScrubbingTimer()
         if isScrubbing {
-            clearReplayWindow()
+            endReplayWindow()
             await seek(to: scrubTime)
             isScrubbing = false
             scrubSpeed = 0
@@ -4704,65 +4663,96 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Subtitle Search
 
-    /// PMS lets any non-restricted user search and download, not just the admin (measured).
-    var canSearchSubtitles: Bool {
-        guard case .plex = source else { return false }
-        return metadata.ratingKey != nil && PlexUserProfileManager.shared.selectedUser?.restricted != true
+    /// Whether the menu offers "Search for Subtitles": the server's rights and providers decide.
+    @Published private(set) var subtitleSearchAvailable = false
+
+    private var subtitleSearcher: (any SubtitleSearching)? {
+        switch source {
+        case .plex:
+            metadata.ratingKey.map { PlexSubtitleSearch(serverURL: serverURL, token: authToken, ratingKey: $0) }
+        case .provider(let playback):
+            ProviderSubtitleSearch(provider: playback.provider, ref: playback.item.ref)
+        }
     }
 
-    /// The subtitle preference's language, else the device's, as ISO 639-1.
-    private var subtitleSearchLanguage: String {
-        let device = Locale.LanguageCode(TrackLanguage.device).identifier(.alpha2) ?? "en"
-        guard let preferred = TrackIntentStore.effectiveSubtitleIntent.language else { return device }
-        let code = TrackLanguage.normalize(preferred)
-        return code.isEmpty ? device : Locale.LanguageCode(code).identifier(.alpha2) ?? device
+    func refreshSubtitleSearchAvailability() async {
+        let generation = itemGeneration
+        let available = await subtitleSearcher?.isAvailable() ?? false
+        guard generation == itemGeneration else { return }
+        subtitleSearchAvailable = available
     }
 
-    func searchSubtitles() async throws -> [PlexStream] {
-        guard let ratingKey = metadata.ratingKey else { return [] }
-        return try await PlexNetworkManager.shared.searchSubtitles(
-            serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, language: subtitleSearchLanguage)
+    func searchSubtitles() async throws -> [SubtitleSearchResult] {
+        let language = SubtitleSearchLanguage.alpha2(
+            preferred: TrackIntentStore.effectiveSubtitleIntent.language, device: TrackLanguage.device)
+        return try await subtitleSearcher?.search(language: language) ?? []
     }
 
     /// Downloads `result`, waits for the server to list it, then reloads at the
-    /// playhead with it on. A reload re-registers every sidecar in Plex's order,
+    /// playhead with it on. A reload re-registers every sidecar in the server's order,
     /// which `TrackMerge` pairs on; adding one to the live engine would not.
-    func installSubtitle(_ result: PlexStream) async {
-        guard let ratingKey = metadata.ratingKey, let resultKey = result.key else { return }
-        let network = PlexNetworkManager.shared
+    func installSubtitle(_ result: SubtitleSearchResult) async {
+        guard let searcher = subtitleSearcher else { return }
         let generation = itemGeneration
-        let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         var tracks = currentPlexTrackIDs()
+        let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
         showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
         do {
-            try await network.downloadSubtitle(
-                serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, resultKey: resultKey)
-            for _ in 0..<10 {
-                try await Task.sleep(for: .seconds(1.5))
-                let fresh = try await network.getMetadata(serverURL: serverURL, authToken: authToken, ratingKey: ratingKey)
-                guard generation == itemGeneration else { return }
-                let media = VersionRanking.select(playingMediaID.map(VersionChoice.source) ?? .best,
-                                                  in: fresh.Media ?? []).media
-                guard let added = media.first?.Part?.first?.Stream?.first(where: {
-                    $0.isSubtitle && $0.key != nil && !known.contains($0.id)
-                }) else { continue }
-                metadata.Media = media
-                TrackIntentStore.subtitleIntent = .afterPick(
-                    MediaTrack(from: added), replacing: TrackIntentStore.effectiveSubtitleIntent,
-                    audioLanguage: playingAudioLanguage)
-                tracks.subtitle = .track(added.id)
-                hideCompatibilityNotice()
-                enqueueStreamWork { vm in
-                    await vm.reloadStream(toOriginal: vm.aetherPlayer != nil, reason: "subtitle_download",
-                                          tracks: tracks, restoring: vm.planSnapshot)
-                }
-                return
+            try await searcher.download(result)
+            let arrived: MediaTrack?
+            if let search = searcher as? PlexSubtitleSearch {
+                arrived = try await installedPlexSubtitle(search, known: known, generation: generation)
+            } else if let search = searcher as? ProviderSubtitleSearch {
+                arrived = try await installedProviderSubtitle(search, known: known, generation: generation)
+            } else {
+                arrived = nil
             }
-            showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive"))
+            guard generation == itemGeneration else { return }
+            guard let arrived else { return showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive")) }
+            TrackIntentStore.subtitleIntent = .afterPick(
+                arrived, replacing: TrackIntentStore.effectiveSubtitleIntent, audioLanguage: playingAudioLanguage)
+            tracks.subtitle = .track(arrived.id)
+            hideCompatibilityNotice()
+            enqueueStreamWork { vm in
+                await vm.reloadStream(toOriginal: vm.aetherPlayer != nil, reason: "subtitle_download",
+                                      tracks: tracks, restoring: vm.planSnapshot)
+            }
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
             showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
         }
+    }
+
+    /// Waits for the sidecar to show on the Plex item, then adopts the fresh version list.
+    private func installedPlexSubtitle(_ search: PlexSubtitleSearch, known: Set<Int>, generation: Int) async throws -> MediaTrack? {
+        let network = search.network
+        for _ in 0..<SubtitleArrival.attempts {
+            try await Task.sleep(for: SubtitleArrival.interval)
+            let fresh = try await network.getMetadata(serverURL: serverURL, authToken: authToken, ratingKey: search.ratingKey)
+            guard generation == itemGeneration else { return nil }
+            let media = VersionRanking.select(playingMediaID.map(VersionChoice.source) ?? .best,
+                                              in: fresh.Media ?? []).media
+            guard let added = media.first?.Part?.first?.Stream?.first(where: {
+                $0.isSubtitle && $0.key != nil && !known.contains($0.id)
+            }) else { continue }
+            metadata.Media = media
+            return MediaTrack(from: added)
+        }
+        return nil
+    }
+
+    /// The same for a provider item: its refreshed detail replaces the playing one.
+    private func installedProviderSubtitle(_ search: ProviderSubtitleSearch, known: Set<Int>, generation: Int) async throws -> MediaTrack? {
+        guard case .provider(var playback) = source else { return nil }
+        let sourceID = playback.stream.source.id
+        guard let (detail, trackID) = try await search.detailWithNewSubtitle(sourceID: sourceID, known: known),
+              generation == itemGeneration,
+              let file = detail.mediaSources.first(where: { $0.id == sourceID }) ?? detail.mediaSources.first
+        else { return nil }
+        playback.detail = detail
+        source = .provider(playback)
+        metadata = ProviderPlaybackMetadata.make(detail: detail, source: file, extras: playback.extras)
+        return plexSubtitleTracksFromMetadata().first { $0.id == trackID }
     }
 
     /// Native (AVKit) subtitle picker bridge. Track ids ARE engine indices on
@@ -5091,54 +5081,42 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Paused Poster Timer
 
-    /// Start timers for the ambient pause presentation: `.ambient` after
-    /// `pausedPosterDelay` seconds paused, `.dimmed` after
-    /// `pausedPosterDimDelay` seconds paused. No-ops while a rail panel is
-    /// open (`isRailPanelOpen`) — the ambient backdrop is a full-screen
-    /// visual that would otherwise show through/around the panel.
+    /// Arms the pause screen's tiers (`pauseScreenSchedule`). No-ops while a rail
+    /// panel is open (`isRailPanelOpen`): the pause screen is full-screen and
+    /// would show through/around the panel.
     private func startPausedPosterTimer() {
         guard !isRailPanelOpen else { return }
-        pausedPosterTimer?.invalidate()
-        pausedPosterTimer = Timer.scheduledTimer(withTimeInterval: pausedPosterDelay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
-                withAnimation(.easeIn(duration: 1.0)) {
-                    self.pausePresentation = .ambient
-                }
-                // The rail goes unfocusable under the poster; hand focus back to
-                // the content anchor so arrows and Select still reach the player.
-                self.controlsFocusActive = false
-            }
-        }
-
-        pausedPosterDimTimer?.invalidate()
-        pausedPosterDimTimer = Timer.scheduledTimer(withTimeInterval: pausedPosterDimDelay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
-                withAnimation(.easeInOut(duration: 1.0)) {
-                    self.pausePresentation = .dimmed
+        pausedPosterTimers.forEach { $0.invalidate() }
+        pausedPosterTimers = Self.pauseScreenSchedule.map { step in
+            Timer.scheduledTimer(withTimeInterval: step.delay, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.playbackState == .paused, !self.isRailPanelOpen else { return }
+                    self.pausePresentation = step.tier
+                    // The rail goes unfocusable under the pause screen; hand focus back to
+                    // the content anchor so arrows and Select still reach the player.
+                    self.controlsFocusActive = false
                 }
             }
         }
     }
 
-    /// Cancel both ambient-pause timers and drop back to the live frame.
+    /// Cancel the pause-screen timers and drop back to the live frame.
     private func cancelPausedPosterTimer() {
-        pausedPosterTimer?.invalidate()
-        pausedPosterTimer = nil
-        pausedPosterDimTimer?.invalidate()
-        pausedPosterDimTimer = nil
-        if pausePresentation != .frame {
-            withAnimation(.easeOut(duration: 0.5)) {
-                pausePresentation = .frame
-            }
-        }
+        pausedPosterTimers.forEach { $0.invalidate() }
+        pausedPosterTimers = []
+        if pausePresentation != .frame { pausePresentation = .frame }
     }
 
-    /// Any control input drops the paused poster; while paused, its timer restarts from now.
+    /// Any control input drops the pause screen; while paused, its timer restarts from now.
     func hidePausedPoster() {
         cancelPausedPosterTimer()
         if playbackState == .paused { startPausedPosterTimer() }
+    }
+
+    /// Back from the pause screen: the bare paused frame, and the pause screen
+    /// stays down until playback resumes and pauses again.
+    func dismissPauseScreen() {
+        cancelPausedPosterTimer()
     }
 
     // MARK: - Marker Detection & Skipping
@@ -5263,6 +5241,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                     hasTriggeredPostVideo = true
                     triggerPostVideoTransition()
                 }
+                if !opensUpNextAtCredits { triggerUpNextBeforeEndIfDue(at: time) }
                 return
             }
         }
@@ -5292,24 +5271,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
         }
 
-        // No credits markers: Up Next opens one countdown before the end, so autoplay lands at the
-        // end. Countdown off opens it at the end. At least 85% watched, for short videos.
-        if metadata.creditsMarkers.isEmpty && duration > 60 && opensUpNextAtCredits {
-            let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
-            let minCompletionTime = duration * 0.85  // At least 85% watched
-
-            // Reset flag if user rewound before trigger point
-            if time < triggerTime - 10 && hasTriggeredPostVideo {
-                hasTriggeredPostVideo = false
-                upNextCollapsed = false
-            }
-
-            // Only trigger if we're both near the end AND have watched most of the content
-            if time >= triggerTime && time >= minCompletionTime && !hasTriggeredPostVideo {
-                hasTriggeredPostVideo = true
-                triggerPostVideoTransition()
-                return
-            }
+        // No credits markers, or credits that play out (#592): Up Next opens one countdown before
+        // the end, so autoplay lands at the end. Countdown off opens it at the end. At least 85%
+        // watched, for short videos.
+        if metadata.creditsMarkers.isEmpty || !opensUpNextAtCredits,
+           triggerUpNextBeforeEndIfDue(at: time) {
+            return
         }
 
         // No active marker: clear the pill and reset the per-marker auto-skip
@@ -5510,11 +5477,8 @@ final class UniversalPlayerViewModel: ObservableObject {
             skippedRecapIds.insert(recapId)
         }
 
-        // Marker skip (manual or auto) is a user-initiated seek that bypasses
-        // commitScrub/.seekAbsolute: clear any active replay window so a
-        // stale invocation point can't spuriously revert subtitles later,
-        // disconnected from where playback actually landed post-skip.
-        clearReplayWindow()
+        // A marker skip leaves the replay window like any absolute seek.
+        endReplayWindow()
 
         switch MarkerSkipPolicy.outcome(
             isCredits: marker.isCredits,
@@ -5628,7 +5592,6 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Update chapters (Plex returns these at metadata level, not inside Part)
             if let chapters = detailedMetadata.Chapter, !chapters.isEmpty {
                 metadata.Chapter = chapters
-                await fetchChapterThumbnails(chapters: chapters)
             }
 
             // Update Media (includes Part with stream details)
@@ -5693,6 +5656,21 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     // MARK: - Post-Video Handling
+
+    /// Opens Up Next one countdown before the end once 85% is watched; a rewind well before re-arms it.
+    @discardableResult
+    private func triggerUpNextBeforeEndIfDue(at time: TimeInterval) -> Bool {
+        guard duration > 60 else { return false }
+        let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
+        if time < triggerTime - 10 && hasTriggeredPostVideo {
+            hasTriggeredPostVideo = false
+            upNextCollapsed = false
+        }
+        guard time >= triggerTime, time >= duration * 0.85, !hasTriggeredPostVideo else { return false }
+        hasTriggeredPostVideo = true
+        triggerPostVideoTransition()
+        return true
+    }
 
     /// Up Next opens at the credits only for the "Up Next" choice; movies and playlists keep their own path.
     private var opensUpNextAtCredits: Bool {
@@ -5789,7 +5767,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         // Fetch next episode
-        let resolvedNext = await fetchNextEpisode()
+        // Already resolved early (or folded Up Next): no second lookup.
+        let resolvedNext: PlexMetadata?
+        if playQueue == nil, let known = nextEpisode { resolvedNext = known } else { resolvedNext = await fetchNextEpisode() }
         guard generation == itemGeneration, stops == stopCount, timeline == plexTimelineGeneration else { return }
         nextEpisode = resolvedNext
 
@@ -5897,23 +5877,23 @@ final class UniversalPlayerViewModel: ObservableObject {
             upNextEpisodes = []
             return
         }
-        do {
-            var episodes = try await PlexNetworkManager.shared.getChildren(
-                serverURL: serverURL, authToken: authToken, ratingKey: seasonKey)
-                .filter { $0.index != nil }
-                .sorted { ($0.index ?? 0) < ($1.index ?? 0) }
-            // Season finale: surface the next season's opener as the up-next row.
-            if episodes.last?.ratingKey == metadata.ratingKey,
-               let next = await fetchNextEpisode(),
-               next.parentRatingKey != metadata.parentRatingKey {
-                episodes.append(next)
-            }
-            guard generation == itemGeneration else { return }
-            upNextEpisodes = episodes
-        } catch {
+        guard var episodes = await plexSeasonChildren(seasonKey)?
+            .filter({ $0.index != nil })
+            .sorted(by: { ($0.index ?? 0) < ($1.index ?? 0) }) else {
             guard generation == itemGeneration else { return }
             upNextEpisodes = []
+            return
         }
+        // Season finale: surface the next season's opener as the up-next row.
+        if episodes.last?.ratingKey == metadata.ratingKey {
+            let resolved: PlexMetadata?
+            if let known = nextEpisode { resolved = known } else { resolved = await fetchNextEpisode() }
+            if let next = resolved, next.parentRatingKey != metadata.parentRatingKey {
+                episodes.append(next)
+            }
+        }
+        guard generation == itemGeneration else { return }
+        upNextEpisodes = episodes
     }
 
     /// Load cast for the Insights rail panel. TMDB credits are primary
@@ -6203,6 +6183,27 @@ final class UniversalPlayerViewModel: ObservableObject {
         return item.artwork.thumbnail ?? item.artwork.backdrop
     }
 
+    /// The season's episodes, one request per item however many callers ask.
+    private func plexSeasonChildren(_ seasonKey: String) async -> [PlexMetadata]? {
+        let generation = itemGeneration
+        let task: Task<[PlexMetadata]?, Never>
+        if let fetch = plexSeasonFetch, fetch.generation == generation, fetch.key == seasonKey {
+            task = fetch.task
+        } else {
+            let (serverURL, authToken) = (serverURL, authToken)
+            task = Task {
+                try? await PlexNetworkManager.shared.getChildren(
+                    serverURL: serverURL, authToken: authToken, ratingKey: seasonKey)
+            }
+            plexSeasonFetch = (generation, seasonKey, task)
+        }
+        let result = await task.value
+        if result == nil, plexSeasonFetch?.generation == generation, plexSeasonFetch?.key == seasonKey {
+            plexSeasonFetch = nil
+        }
+        return result
+    }
+
     /// Fetch the next episode for TV shows
     func fetchNextEpisode() async -> PlexMetadata? {
         // A playlist plays its next entry, any type. No side effects: the swap advances.
@@ -6230,11 +6231,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         do {
             // Get all episodes in current season
-            let episodes = try await networkManager.getChildren(
-                serverURL: serverURL,
-                authToken: authToken,
-                ratingKey: seasonKey
-            )
+            guard let episodes = await plexSeasonChildren(seasonKey) else {
+                print("🎬 [PostVideo] Failed to fetch next episode: season request failed")
+                return nil
+            }
 
             // Sort episodes by index and find the next one after current
             let sortedEpisodes = episodes
@@ -6537,15 +6537,16 @@ final class UniversalPlayerViewModel: ObservableObject {
             let delivery = plexStopDelivery, wasWatched = watchedItemGeneration == itemGeneration
             let restoreWatched = reachedEnd || wasWatched || delivery?.requiresWatchedUpdate == true
             let ratingKey = metadata.ratingKey, reporter = plexProgressReporter, server = plexServer
+            let playsBefore = metadata.viewCount ?? 0
             playbackReports.enqueue {
                 guard let ratingKey else { return }
                 if restoreWatched, !wasWatched || delivery?.requiresWatchedUpdate == true {
-                    let marked = await reporter.markAsWatched(ratingKey: ratingKey, server: server)
+                    let marked = await reporter.markAsWatched(ratingKey: ratingKey, playsBefore: playsBefore, server: server)
                     delivery?.requiresWatchedUpdate = !marked
                 }
                 if let pending = delivery?.pendingReport {
                     await reporter.retryStoppedReport(pending, ratingKey: ratingKey,
-                                                      server: server, restoreWatched: restoreWatched)
+                                                      server: server, restoreWatched: restoreWatched, playsBefore: playsBefore)
                 }
             }
         }
@@ -6592,7 +6593,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         duration = Self.metadataDuration(metadata)
         plexPlaybackSessionIdentifier = UUID().uuidString
         plexStopDelivery = nil
-        lastReportedTime = 0
         // metadata isn't @Published (its ratingKey is the only identity
         // signal), so bump this explicitly for anything that caches
         // per-item state and needs to reset across the swap.
@@ -6655,6 +6655,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         cancelSkipCountdownTimer()
         userDeclinedAutoSkip = false
         nextEpisode = nil
+        chapterThumbnails = [:]
 
         // New episode: allow the early next-episode resolve to run again.
         nextEpisodeResolvedEarly = false
@@ -6707,7 +6708,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         await startPlayback()
         guard stops == stopCount, !Task.isCancelled else { return }
         isSwappingItem = false
-        if case .plex = source { reportPlaybackState(playbackState) }
+        reportPlaybackState(playbackState)
 
         // Safe to allow post-video detection now: the old time observer has been
         // replaced and time values reflect the new episode's actual position.
@@ -6787,51 +6788,61 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Progress Tracking
 
-    /// Periodic progress, throttled to `reportingInterval` unless `force`.
-    func reportPlaybackProgress(time: TimeInterval, force: Bool) {
-        // Plex hears nothing about a clip: a webhook for it would read as the movie starting.
-        guard !isPlayingCinemaExtra else { return }
-        // Report every 10 seconds
-        guard force || abs(time - lastReportedTime) >= reportingInterval else { return }
-        lastReportedTime = time
-
-        if case .provider = source {
-            guard providerReporterStarted else { return }
-            enqueueProviderReport(providerIsPaused ? "paused" : "playing", at: time)
-            return
-        }
-
-        guard !isSwappingItem else { return }
-        switch playbackState {
-        case .playing, .paused:
-            sendTimeline(time: time, state: isPlaying ? "playing" : "paused", force: force)
-        case .buffering where currentItemHasStarted, .loading where currentItemHasStarted:
-            sendTimeline(time: time, state: "buffering", force: force)
-        default:
-            break
-        }
+    func reportPlaybackProgress(time: TimeInterval, force: Bool = false) {
+        guard !isPlayingCinemaExtra, !isSwappingItem else { return }
+        timeline.tick(time, force: force)
     }
 
-    /// One Plex timeline; ends playback if the reply says the server ended the session.
+    private func timelineReport(_ state: PlaybackTimeline.State, at time: TimeInterval) -> @MainActor () async -> String? {
+        if case .provider = source {
+            let reportState: String
+            switch state {
+            case .playing:
+                reportState = providerReporterStarted ? "playing" : "start"
+                providerReporterStarted = true
+                providerIsPaused = false
+            case .paused:
+                providerIsPaused = true
+                providerReporterStarted = true
+                reportState = "paused"
+            case .buffering:
+                providerReporterStarted = true
+                reportState = providerIsPaused ? "paused" : "playing"
+            case .stopped: reportState = "stopped"
+            }
+            let report = prepareProviderReport(reportState, at: time)
+            if state == .stopped {
+                providerReporter = nil
+                providerReporterStarted = false
+            }
+            return report ?? { nil }
+        }
+        return preparePlexReport(time: time, state: state.rawValue, force: true) ?? { nil }
+    }
+
     @discardableResult
     private func sendTimeline(time: TimeInterval, state: String, force: Bool) -> Task<Void, Never>? {
-        guard !isPlayingCinemaExtra else { return playbackReports.tail }
+        guard let report = preparePlexReport(time: time, state: state, force: force) else { return playbackReports.tail }
+        return timeline.enqueue(report)
+    }
+
+    private func preparePlexReport(time: TimeInterval, state: String, force: Bool) -> (@MainActor @Sendable () async -> String?)? {
+        guard !isPlayingCinemaExtra, !serverEndedPlayback else { return nil }
         if state == "stopped" {
             if plexStopDelivery == nil { plexStopDelivery = PlexStopDelivery() }
-            timelineHeartbeatTask?.cancel()
-            timelineHeartbeatTask = nil
+            timeline.close()
         } else if plexTimelineStopped || (isReloadingStream && state != "buffering") {
-            return playbackReports.tail
+            return nil
         }
         let stopDelivery = state == "stopped" ? plexStopDelivery : nil
-        guard stopDelivery?.delivered != true else { return playbackReports.tail }
-        let stops = stopCount, generation = itemGeneration, session = plexSessionGeneration
+        guard stopDelivery?.delivered != true else { return nil }
+        let generation = itemGeneration
         let wasWatched = watchedItemGeneration == generation || stopDelivery?.requiresWatchedUpdate == true
         let ratingKey = metadata.ratingKey ?? "", duration = duration, server = plexServer
         let sessionIdentifier = plexPlaybackSessionIdentifier
         let reporter = plexProgressReporter
-        return playbackReports.enqueue { [weak self] in
-            guard stopDelivery?.delivered != true else { return }
+        return {
+            guard stopDelivery?.delivered != true else { return nil }
             let result: PlexProgressReporter.ProgressResult
             if let pending = stopDelivery?.pendingReport {
                 result = await reporter.send(pending)
@@ -6841,13 +6852,11 @@ final class UniversalPlayerViewModel: ObservableObject {
                     forceReport: force, sessionIdentifier: sessionIdentifier, server: server)
             }
             if case .failed(let pending) = result { stopDelivery?.pendingReport = pending }
-            guard case .sent(let terminated) = result else { return }
+            guard case .sent(let terminated) = result else { return nil }
             stopDelivery?.delivered = true
             stopDelivery?.pendingReport = nil
             if state == "stopped" { stopDelivery?.requiresWatchedUpdate = wasWatched }
-            guard let self, let terminated, stops == self.stopCount,
-                  generation == self.itemGeneration, session == self.plexSessionGeneration, !self.plexTimelineStopped else { return }
-            self.endForServerTermination(terminated)
+            return terminated
         }
     }
 
@@ -6880,7 +6889,6 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard let ratingKey = metadata.ratingKey else { return }
         sendTimeline(time: currentTime, state: "stopped", force: true)
         plexTimelineGeneration += 1
-        plexSessionGeneration += 1
         if time < plexCompletionBoundary {
             watchedItemGeneration = nil
             hasTriggeredPostVideo = false
@@ -6898,6 +6906,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         } else {
             mediaIndex = nil
         }
+        timeline.begin()
         beginPlexPlaybackSession(ratingKey: ratingKey, mediaIndex: mediaIndex, resetReporting: true)
     }
 
@@ -6913,50 +6922,28 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// The server stopped this stream (dashboard Stop, paused too long): stop and show its reason (#403).
     private func endForServerTermination(_ reason: String) {
         if case .failed = playbackState { return }
+        serverEndedPlayback = true
+        timeline.close()
         DiagLog.notice(.playback, "Plex server terminated the session")
         stopPlayback()
         errorMessage = reason
         updatePlaybackState(.failed(.serverTerminated(reason)))
     }
 
-    /// Report a playback state change immediately.
+    /// A playback state change, as the timeline sees it.
     func reportPlaybackState(_ newState: UniversalPlaybackState) {
-        guard !isPlayingCinemaExtra else { return }
-        if case .provider = source {
-            reportProviderState(newState)
-            return
-        }
-
-        guard !isSwappingItem, !plexTimelineStopped else { return }
-        // Only report significant state changes
-        let plexState: String?
+        guard !isPlayingCinemaExtra, !serverEndedPlayback, !isSwappingItem else { return }
+        if case .plex = source, plexTimelineStopped { return }
+        if case .provider = source, providerReporter == nil { return }
         switch newState {
-        case .playing:
-            plexState = "playing"
-        case .paused:
-            plexState = "paused"
-        case .ended:
-            plexState = currentItemHasStarted ? "stopped" : nil
+        case .playing: timeline.transportChanged(.playing)
+        case .paused: timeline.transportChanged(.paused, hasStarted: currentItemHasStarted)
         case .buffering, .loading:
-            plexState = currentItemHasStarted ? "buffering" : nil
-        default:
-            plexState = nil
-        }
-
-        timelineHeartbeatTask?.cancel()
-        timelineHeartbeatTask = nil
-        guard let state = plexState else { return }
-
-        sendTimeline(time: currentTime, state: state, force: false)
-        if state == "paused" || state == "buffering" {
-            let interval = heartbeatInterval
-            timelineHeartbeatTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: interval)
-                    guard let self, !Task.isCancelled else { return }
-                    await self.sendTimeline(time: self.currentTime, state: state, force: true)?.value
-                }
-            }
+            guard currentItemHasStarted || providerReporterStarted else { return }
+            timeline.transportChanged(.buffering, hasStarted: true)
+        case .ended:
+            if currentItemHasStarted || providerReporterStarted { timeline.stop(at: currentTime) }
+        default: timeline.transportChanged(.other)
         }
     }
 
@@ -6968,6 +6955,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func reportFinalProgress(time: TimeInterval, duration: TimeInterval) async {
         guard !isPlayingCinemaExtra else { return }
+        guard !serverEndedPlayback else { return }
         if case .provider(let playback) = source {
             await stopProviderReporter(at: time)
             if duration > 0 && time / duration > 0.9 {
@@ -6982,7 +6970,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         let generation = itemGeneration, timeline = plexTimelineGeneration
         let wasWatched = watchedItemGeneration == generation || plexStopDelivery?.requiresWatchedUpdate == true
         let restoreWatched = wasWatched || (duration > 0 && time / duration > 0.9)
-        let ratingKey = metadata.ratingKey, server = plexServer
+        let ratingKey = metadata.ratingKey, server = plexServer, playsBefore = metadata.viewCount ?? 0
         let stopped = sendTimeline(time: time, state: "stopped", force: true)
         let delivery = plexStopDelivery
         await stopped?.value
@@ -6990,46 +6978,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         if restoreWatched { await markCurrentAsWatched() }
         if let pending = delivery?.pendingReport, let ratingKey {
             await plexProgressReporter.retryStoppedReport(pending, ratingKey: ratingKey,
-                                                          server: server, restoreWatched: restoreWatched)
+                                                          server: server, restoreWatched: restoreWatched, playsBefore: playsBefore)
         }
 
         await plexPlaybackRefresh()
-    }
-
-    private func reportProviderState(_ newState: UniversalPlaybackState) {
-        guard providerReporter != nil else { return }
-        timelineHeartbeatTask?.cancel()
-        timelineHeartbeatTask = nil
-        let position = currentTime
-        switch newState {
-        case .playing:
-            providerIsPaused = false
-            if providerReporterStarted {
-                enqueueProviderReport("playing", at: position)
-            } else {
-                providerReporterStarted = true
-                enqueueProviderReport("start", at: position)
-            }
-        case .paused, .buffering, .loading:
-            guard providerReporterStarted || currentItemHasStarted else { return }
-            providerReporterStarted = true
-            if newState == .paused { providerIsPaused = true }
-            let state = providerIsPaused ? "paused" : "playing"
-            enqueueProviderReport(state, at: position)
-            let key = providerReportingKey, interval = heartbeatInterval
-            timelineHeartbeatTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: interval)
-                    guard !Task.isCancelled, let self, self.providerReportingKey == key,
-                          self.providerReporterStarted else { return }
-                    await self.enqueueProviderReport(state, at: self.currentTime)?.value
-                }
-            }
-        case .ended:
-            enqueueProviderStop(at: position)
-        default:
-            break
-        }
     }
 
     /// Send `stopped` once for the current play session, even if it never
@@ -7040,19 +6992,18 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     @discardableResult
     private func enqueueProviderStop(at position: TimeInterval) -> Task<Void, Never>? {
-        timelineHeartbeatTask?.cancel()
-        timelineHeartbeatTask = nil
-        let stop = enqueueProviderReport("stopped", at: position)
+        timeline.close()
+        let report = prepareProviderReport("stopped", at: position)
         providerReporter = nil
         providerReporterStarted = false
-        return stop
+        guard let report else { return playbackReports.tail }
+        return playbackReports.enqueue { _ = await report() }
     }
 
-    @discardableResult
-    private func enqueueProviderReport(_ state: String, at position: TimeInterval) -> Task<Void, Never>? {
-        guard let reporter = providerReporter else { return playbackReports.tail }
+    private func prepareProviderReport(_ state: String, at position: TimeInterval) -> (@MainActor @Sendable () async -> String?)? {
+        guard let reporter = providerReporter else { return nil }
         let ledger = providerReportLedger, key = providerReportingKey, timeout = providerReportTimeout
-        return playbackReports.enqueue {
+        return {
             try? await PlaybackReportTimeout.run(for: timeout) { @MainActor in
                 switch state {
                 case "start": await ledger.open(key, make: { reporter }, position: position)
@@ -7060,6 +7011,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 default: await ledger.report(key, make: { reporter }, state: state, time: position)
                 }
             }
+            return nil
         }
     }
 
@@ -7088,9 +7040,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         watchedItemGeneration = itemGeneration
         plexStopDelivery?.requiresWatchedUpdate = false
         let server = plexServer, reporter = plexProgressReporter, generation = itemGeneration
-        let timeline = plexTimelineGeneration, stopDelivery = plexStopDelivery
+        let timeline = plexTimelineGeneration, stopDelivery = plexStopDelivery, playsBefore = metadata.viewCount ?? 0
         return playbackReports.enqueue { [weak self] in
-            let marked = await reporter.markAsWatched(ratingKey: ratingKey, server: server)
+            let marked = await reporter.markAsWatched(ratingKey: ratingKey, playsBefore: playsBefore, server: server)
             stopDelivery?.requiresWatchedUpdate = !marked
             if !marked, self?.watchedItemGeneration == generation, self?.plexTimelineGeneration == timeline {
                 self?.watchedItemGeneration = nil

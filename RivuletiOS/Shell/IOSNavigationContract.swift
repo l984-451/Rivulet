@@ -90,7 +90,8 @@ private struct IOSPlexDestinations: ViewModifier {
             .iosPlexActionHost()
             .navigationDestination(for: MediaItem.self) { detail($0, sourceID: IOSPlexDetailRoute.sourceID($0, scope: "")) }
             .navigationDestination(for: IOSPlexDetailRoute.self) { detail($0.item, sourceID: $0.sourceID) }
-            .navigationDestination(for: MediaLibrary.self) { IOSPlexLibraryView(library: $0).iosPlexActionHost() }
+            .navigationDestination(for: MediaPerson.self) { IOSPersonView(person: $0).iosPlexActionHost() }
+            .navigationDestination(for: MediaLibrary.self) { IOSLibraryPage(library: $0).iosPlexActionHost() }
             .navigationDestination(for: IOSPlexHubRoute.self) { IOSPlexHubGridView(route: $0).iosPlexActionHost() }
             .navigationDestination(for: IOSPlexPlaylistRoute.self) { IOSPlexPlaylistView(route: $0).iosPlexActionHost() }
     }

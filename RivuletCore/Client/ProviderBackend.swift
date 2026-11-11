@@ -31,13 +31,14 @@ final class ProviderBackend: PlayerBackend {
     /// `item` as a request: the stream and extras from its provider, the quality decision, the resume point.
     func firstPlayback(of item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                        quality: StreamingQuality? = nil,
-                       throughput: (kbps: Int, at: Date)? = nil) async throws -> PlexPlaybackRequest {
+                       throughput: (kbps: Int, at: Date)? = nil,
+                       startOffset: TimeInterval? = nil) async throws -> PlexPlaybackRequest {
         register([item])
         let playback = try await ProviderPlayback.prepare(
             item: item, provider: provider, version: sourceID.map(VersionChoice.source) ?? .best,
-            quality: quality, throughput: throughput, fromBeginning: fromBeginning)
-        let start = ProviderPlayback.startOffset(detailOffset: playback.detail.item.userState.viewOffset,
-                                                 fromBeginning: fromBeginning)
+            quality: quality, throughput: throughput, fromBeginning: fromBeginning, explicitStartOffset: startOffset)
+        let start = startOffset ?? ProviderPlayback.startOffset(detailOffset: playback.detail.item.userState.viewOffset,
+                                                                fromBeginning: fromBeginning)
         return try await request(from: playback, startTime: start, picks: nil)
     }
 
@@ -66,6 +67,18 @@ final class ProviderBackend: PlayerBackend {
         guard let playback = request.providerPlayback else { throw MediaProviderError.notFound }
         let next = try await playback.reloaded(quality: quality, plan: plan, at: time, tracks: streams)
         return try await self.request(from: next, startTime: time > 1 ? time : nil, picks: streams)
+    }
+
+    func requestWithNewSubtitle(_ request: PlexPlaybackRequest, known: Set<Int>,
+                                at time: TimeInterval) async throws -> (request: PlexPlaybackRequest, trackID: Int)? {
+        guard var playback = request.providerPlayback,
+              let search = request.subtitleSearch as? ProviderSubtitleSearch,
+              let (detail, trackID) = try await search.detailWithNewSubtitle(sourceID: playback.stream.source.id, known: known)
+        else { return nil }
+        playback.detail = detail
+        let picks = TrackPicks(audio: nil, subtitle: .track(trackID))
+        let next = try await playback.reloaded(quality: request.quality, plan: request.plan, at: time, tracks: picks)
+        return (try await self.request(from: next, startTime: time > 1 ? time : nil, picks: picks), trackID)
     }
 
     /// The player's request for `playback`. A transcode starts on the tracks the saved intents pick

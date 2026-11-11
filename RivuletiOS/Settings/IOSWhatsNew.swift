@@ -4,10 +4,30 @@
 import SwiftUI
 
 /// The iOS release notes. Keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest
-/// first; CI takes the build number from the `ios-vX.Y.Z-<build>` tag, so the key must match it.
+/// first; CI takes the build number from the shared `vX.Y.Z-<build>` tag, so the key must match it.
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.0 (126)", [
+            "Video libraries can be browsed by folder",
+            "Season tiles show the show's poster and open the show",
+            "Faster playback",
+            "Artwork stays on your device between launches",
+            "Finishing a title adds one play in Plex, not two or three",
+            "French is available, and German covers more of the app. @JoschaP",
+            "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",
+            "What's New shows every build you missed",
+        ]),
+        ("1.3.0 (125)", [
+            "Photos, with favorites, slideshows, photo info, a map and a memories row",
+            "Improved search to find more matches, genres, and people",
+            "Cast and crew on a title open their page, with their movies and shows",
+            "Subtitle search in the player. Jellyfin and Emby should work (please test)",
+            "Plex home profiles now see their own watchlist",
+            "Hide libraries from Home in Settings > Library",
+            "Direct Play buffers as far ahead as storage allows",
+            "Added delete option in more long press menus",
+        ]),
         ("1.0.7 (87)", [
             "On a Dolby Vision display, Profile 7 FEL keeps most of its enhancement layer",
             "Play from several Plex servers at once",
@@ -113,21 +133,24 @@ enum IOSChangelog {
 
 /// Shown once after an update whose build has notes.
 struct IOSWhatsNewSheet: View {
-    let version: String
+    /// Every build since the last one seen, newest first.
+    let versions: [String]
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("What's New")
-                            .font(.largeTitle.bold())
-                        Text("Version \(version)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    Text("What's New")
+                        .font(.largeTitle.bold())
+                    ForEach(versions, id: \.self) { version in
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Version \(version)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
+                        }
                     }
-                    IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)

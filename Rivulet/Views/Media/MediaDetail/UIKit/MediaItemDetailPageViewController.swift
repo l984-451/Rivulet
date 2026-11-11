@@ -265,7 +265,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         // 3. Genre · rating.
         genreRatingRow.axis = .horizontal
         genreRatingRow.alignment = .center
-        genreRatingRow.spacing = 6
+        genreRatingRow.spacing = 12
         style(genreLabel, size: 25, weight: .medium, alpha: 1)
         genreRatingRow.addArrangedSubview(genreLabel)
         if let rating = item.contentRating, !rating.isEmpty {
@@ -508,16 +508,19 @@ final class MediaItemDetailPageViewController: UIViewController {
             guard let self, let provider = self.provider else { return }
             // For an episode or a season, the show supplies the series title AND
             // the genres (their own detail usually has no genres).
+            let itemRef = self.item.ref
+            let showRef = self.showRef
+            async let showFetch: MediaItemDetail? = showRef == nil ? nil : (try? await provider.fullDetail(for: showRef!))
+            async let detailFetch = try? await provider.fullDetail(for: itemRef)
             var showGenres: [String] = []
-            if let showRef = self.showRef,
-               let showDetail = try? await provider.fullDetail(for: showRef) {
+            if let showDetail = await showFetch {
                 showGenres = showDetail.genres
                 await MainActor.run {
                     self.show = showDetail.item
                     if (self.showTitleLabel.text ?? "").isEmpty { self.setShowTitle(showDetail.item.title) }
                 }
             }
-            guard let detail = try? await provider.fullDetail(for: self.item.ref) else {
+            guard let detail = await detailFetch else {
                 if !showGenres.isEmpty { await MainActor.run { self.setGenres(showGenres) } }
                 return
             }
@@ -537,19 +540,9 @@ final class MediaItemDetailPageViewController: UIViewController {
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
         showExtras(detail)
-        // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
-        // parenthetical channel-layout noise ("5.1(side)" → "5.1").
-        let source = detail.primarySource
-        var badges = source?.qualityBadges() ?? []
-        if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
-        if source?.audioTracks.contains(where: {
-            ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri")
-        }) ?? false { badges.append("AD") }
         badgeRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for raw in badges {
-            let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
+        for text in detail.primarySource?.detailBadges ?? [] {
+            badgeRow.addArrangedSubview(Self.badge(text, filled: MediaSource.filledBadges.contains(text)))
         }
         addVersionsButton(detail)
     }
@@ -706,16 +699,18 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     /// Small bordered capsule badge (rating, DV, Atmos, SDH, …).
-    private static func badge(_ text: String = "") -> UILabel {
+    private static func badge(_ text: String = "", filled: Bool = false) -> UILabel {
         let l = PaddedLabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.text = text
         l.font = .systemFont(ofSize: 15, weight: .bold)
         l.textAlignment = .center
-        l.textColor = UIColor.white.withAlphaComponent(0.75)
+        l.textColor = filled ? .black : UIColor.white.withAlphaComponent(0.75)
         l.layer.borderColor = UIColor.white.withAlphaComponent(0.5).cgColor
-        l.layer.borderWidth = 1
-        l.layer.cornerRadius = 4
+        l.layer.borderWidth = filled ? 0 : 1
+        l.layer.cornerRadius = 5
+        l.backgroundColor = filled ? UIColor.white.withAlphaComponent(0.75) : .clear
+        l.clipsToBounds = true
         l.layer.cornerCurve = .continuous
         // Apple caps a badge at 22pt total height.
         l.heightAnchor.constraint(equalToConstant: 22).isActive = true

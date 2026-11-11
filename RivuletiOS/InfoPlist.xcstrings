@@ -21,6 +21,12 @@
             "state" : "translated",
             "value" : "Το Rivulet συνδέεται με τους διακομιστές Plex και τις πηγές ζωντανής τηλεόρασης στο τοπικό σας δίκτυο για να αναπαράγει το περιεχόμενό σας."
           }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet se connecte aux serveurs multimédias de votre réseau local, comme votre serveur Plex, pour diffuser votre bibliothèque."
+          }
         }
       }
     }

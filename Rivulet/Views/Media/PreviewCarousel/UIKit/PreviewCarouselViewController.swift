@@ -128,6 +128,9 @@ final class PreviewCarouselViewController: UIViewController {
     /// Menu dismisses it. The detail for a drill-in such as a Related poster.
     private let standaloneDetail: Bool
     private let blurFade = BlurFadeTransitioningDelegate()
+    /// Skip Preview (#593): the tapped tile alone grows straight to the expanded detail and
+    /// shrinks back to its tile on Menu. The carousel never shows.
+    private let opensExpanded: Bool
 
     init(
         items: [MediaItem],
@@ -137,6 +140,7 @@ final class PreviewCarouselViewController: UIViewController {
         entrySnapshots: [PreviewEntrySnapshot] = [],
         sourceItemIDs: [String]? = nil,
         standaloneDetail: Bool = false,
+        opensExpanded: Bool = false,
         onPrepareDismiss: @escaping (PreviewSourceTarget?) -> Void = { _ in },
         onDismiss: @escaping (PreviewSourceTarget?) -> Void
     ) {
@@ -150,6 +154,7 @@ final class PreviewCarouselViewController: UIViewController {
         self.onPrepareDismiss = onPrepareDismiss
         self.dismissSourceTarget = sourceTarget
         self.standaloneDetail = standaloneDetail
+        self.opensExpanded = opensExpanded
         self.onDismiss = onDismiss
         super.init(nibName: nil, bundle: nil)
         if standaloneDetail {
@@ -486,7 +491,7 @@ final class PreviewCarouselViewController: UIViewController {
         hasRunEntryMorph = true
 
         if !entrySnapshots.isEmpty {
-            runRowEntryMorph()
+            if opensExpanded { runExpandFlight() } else { runRowEntryMorph() }
             return
         }
 
@@ -577,7 +582,8 @@ final class PreviewCarouselViewController: UIViewController {
                 let window = EntryMorphWindowView(
                     content: entry.snapshotView,
                     sourceSize: entry.sourceFrame.size,
-                    backdrop: items.indices.contains(entry.itemIndex) ? flightBackdrop(for: entry.itemIndex) : nil
+                    backdrop: items.indices.contains(entry.itemIndex)
+                        ? flightBackdrop(for: entry.itemIndex, fullScreen: opensExpanded) : nil
                 )
                 window.layer.cornerRadius = entry.cornerRadius
                 window.layer.zPosition = entry.itemIndex == selectedIndex
@@ -593,8 +599,9 @@ final class PreviewCarouselViewController: UIViewController {
     }
 
     /// The card's artwork for a flying window, placed as the backdrop plane
-    /// places it so the swap to the live carousel shows nothing.
-    private func flightBackdrop(for index: Int) -> EntryMorphWindowView.Backdrop {
+    /// places it so the swap to the live carousel shows nothing. `fullScreen`: placed
+    /// as the expanded hero draws it instead.
+    private func flightBackdrop(for index: Int, fullScreen: Bool = false) -> EntryMorphWindowView.Backdrop {
         let imageView = UIImageView(image: backdropPlane.image(for: index))
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
@@ -603,6 +610,11 @@ final class PreviewCarouselViewController: UIViewController {
             Task { [weak imageView] in
                 imageView?.image = await ImageCacheManager.shared.image(for: url, quality: .full)
             }
+        }
+        if fullScreen {
+            return EntryMorphWindowView.Backdrop(
+                imageView: imageView, cardSize: view.bounds.size,
+                artInCard: CGRect(origin: .zero, size: view.bounds.size))
         }
         let card = carouselFrameInView(for: index)
         return EntryMorphWindowView.Backdrop(
@@ -682,6 +694,45 @@ final class PreviewCarouselViewController: UIViewController {
             self.entrySnapshotContainer.isHidden = true
             self.state.completeEntryMorph()
             self.updateCurrentCellChrome(animated: true)
+        }
+        morpher.startAnimation()
+    }
+
+    /// Skip Preview's entry: the tile grows to full screen on the shelf spring, the expanded
+    /// detail is swapped in under it, and the window fades out to reveal the chrome.
+    private func runExpandFlight() {
+        prepareEntrySnapshotsIfNeeded()
+        collectionView.layoutIfNeeded()
+        collectionView.contentOffset = layout.contentOffsetCentered(index: selectedIndex)
+        syncCards()
+        backdrop.alpha = 0
+        backdropPlane.alpha = 0
+        collectionView.alpha = 0
+
+        let windows = entryMorphWindows.map(\.window)
+        let morpher = Self.makeShelfTransitionAnimator()
+        morpher.addAnimations { [weak self] in
+            guard let self else { return }
+            for window in windows {
+                window.setWindow(self.view.bounds)
+                window.layer.cornerRadius = 0
+                window.tileAlpha = 0
+            }
+            self.backdrop.alpha = 1
+        }
+        morpher.addCompletion { [weak self] _ in
+            guard let self else { return }
+            self.expandedDetail.alpha = 0
+            self.enterStandaloneExpanded()
+            UIView.animate(withDuration: 0.3, animations: {
+                windows.forEach { $0.alpha = 0 }
+                self.expandedDetail.alpha = 1
+            }, completion: { _ in
+                windows.forEach { $0.removeFromSuperview() }
+                self.entryMorphWindows.removeAll()
+                // A Menu during the fade has started the exit flight in this container.
+                if self.state.phase != .exiting { self.entrySnapshotContainer.isHidden = true }
+            })
         }
         morpher.startAnimation()
     }
@@ -840,9 +891,9 @@ final class PreviewCarouselViewController: UIViewController {
             // Lower section: let the focus engine move up one row.
             return false
         }
-        // Up from the hero is Menu's collapse. Standalone has no carousel, so Up does nothing.
+        // Up from the hero is Menu's collapse. Without a carousel to rest on, Up does nothing.
         if state.phase == .expandedHero {
-            if standaloneDetail { return true }
+            if standaloneDetail || opensExpanded { return true }
             handleMenuPress()
             return true
         }
@@ -1102,8 +1153,12 @@ final class PreviewCarouselViewController: UIViewController {
         let prefetchIndex = newIndex + direction * 2
         if items.indices.contains(prefetchIndex) {
             let item = items[prefetchIndex]
-            for url in [item.artwork.backdrop ?? item.artwork.poster, item.artwork.logo].compactMap({ $0 }) {
-                Task { _ = await ImageCacheManager.shared.image(for: url) }
+            // The plane decodes the backdrop at full size itself: only the bytes are fetched here.
+            if let backdrop = item.artwork.backdrop ?? item.artwork.poster {
+                Task { await ImageCacheManager.shared.warmOriginal(backdrop) }
+            }
+            if let logo = item.artwork.logo {
+                Task { _ = await ImageCacheManager.shared.image(for: logo) }
             }
         }
 
@@ -1234,6 +1289,9 @@ final class PreviewCarouselViewController: UIViewController {
             // Standalone: the transitioning delegate blur-fades back to the previous detail.
             if standaloneDetail { dismiss(animated: true) }
             else { performDismissMorph() }
+        case .collapseToCarousel where opensExpanded:
+            // No carousel: the hero shrinks straight back to its tile.
+            performDismissMorph()
         case .collapseToCarousel:
             // `exitAction` already moved the phase to `.carouselStable`.
             collapseExpandedCard()
@@ -1380,7 +1438,8 @@ final class PreviewCarouselViewController: UIViewController {
         onPrepareDismiss(dismissSourceTarget)
         // Fly only when the centred card has a tile on screen to land on.
         if !entrySnapshots.isEmpty {
-            let tiles = freshEntrySnapshots?(dismissSourceTarget) ?? []
+            let tiles = (freshEntrySnapshots?(dismissSourceTarget) ?? [])
+                .filter { !opensExpanded || $0.itemIndex == selectedIndex }
             if tiles.contains(where: { $0.itemIndex == selectedIndex }) {
                 runRowExitMorph(to: tiles)
                 return
@@ -1418,18 +1477,19 @@ final class PreviewCarouselViewController: UIViewController {
             let window = EntryMorphWindowView(
                 content: tile.snapshotView,
                 sourceSize: tile.sourceFrame.size,
-                backdrop: flightBackdrop(for: tile.itemIndex))
+                backdrop: flightBackdrop(for: tile.itemIndex, fullScreen: opensExpanded))
             window.layer.cornerRadius = PreviewCarouselGeometry.cornerRadius
             window.layer.zPosition = tile.itemIndex == selectedIndex
                 ? 100
                 : CGFloat(50 - abs(tile.itemIndex - selectedIndex))
-            window.setWindow(carouselFrameInView(for: tile.itemIndex))
+            window.setWindow(opensExpanded ? view.bounds : carouselFrameInView(for: tile.itemIndex))
+            if opensExpanded { window.layer.cornerRadius = 0 }
             window.tileAlpha = 0
             window.dimAlpha = flightDim(for: tile.itemIndex)
             entrySnapshotContainer.addSubview(window)
             windows.append((window, tile))
         }
-        let peeks = tilelessPeekWindows(flying: Set(windows.map(\.tile.itemIndex)))
+        let peeks = opensExpanded ? [] : tilelessPeekWindows(flying: Set(windows.map(\.tile.itemIndex)))
 
         backdropPlane.alpha = 0
         collectionView.alpha = 0

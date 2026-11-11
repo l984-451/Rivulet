@@ -721,9 +721,24 @@ final class PlayerProgressBarView: UIView {
         return nil
     }
 
+    /// Hash of everything the marker views are drawn from; they rebuild only when it changes.
+    private var renderedMarkersKey: Int?
+
     private func renderMarkers() {
-        markersContainer.subviews.forEach { $0.removeFromSuperview() }
         let trackWidth = track.bounds.width
+        var hasher = Hasher()
+        hasher.combine(duration)
+        hasher.combine(trackWidth)
+        hasher.combine(markersContainer.bounds.height)
+        for marker in lastMarkers {
+            hasher.combine(marker.type)
+            hasher.combine(marker.startTimeOffset)
+            hasher.combine(marker.endTimeOffset)
+        }
+        let key = hasher.finalize()
+        guard key != renderedMarkersKey else { return }
+        renderedMarkersKey = key
+        markersContainer.subviews.forEach { $0.removeFromSuperview() }
         guard duration > 0, trackWidth > 0 else { return }
         for marker in lastMarkers {
             let startProgress = max(0, marker.startTimeSeconds / duration)

@@ -26,8 +26,7 @@ final class MacPlexPlayback: ObservableObject {
 
     private let plex: any PlayerBackend
     private var skippedMarkerIDs: Set<String> = []
-    private var lastReportBucket = -1
-    private var reportedStopped = false
+    private var reportedStopped: Bool { timeline.isStopped }
     private let playbackReports = PlaybackReportQueue()
     private var reportPosition = PlaybackReportPosition()
     /// Set by `end()`: a load or reload still in flight must not start playback afterwards.
@@ -39,8 +38,17 @@ final class MacPlexPlayback: ObservableObject {
     private var nextTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     private var longStallTask: Task<Void, Never>?
-    /// Keep paused and loading sessions alive while the playhead is stationary.
-    private var timelineHeartbeatTask: Task<Void, Never>?
+    private lazy var timeline: PlaybackTimeline = {
+        let timeline = PlaybackTimeline(reports: playbackReports, position: { [weak self] in self?.player.currentTime ?? 0 }) { [weak self] state, time in
+            guard let self, !self.isPlayingCinemaExtra else { return { nil } }
+            let request = request, plex = plex
+            let position = reportPosition.resolve(time, isLoading: player.state == .loading,
+                                                  isStarting: player.isStarting, hasStarted: playbackStart.streamHasPlayed)
+            return { await plex.reportProgress(for: request, time: position, state: state.rawValue) }
+        }
+        timeline.onTerminated = { [weak self] in self?.endForServerTermination($0) }
+        return timeline
+    }()
     private var stallTracker = StallTracker()
     /// The player-menu pick; nil follows the Home or Away setting, item by item.
     private var sessionQuality: StreamingQuality?
@@ -133,7 +141,7 @@ final class MacPlexPlayback: ObservableObject {
         nextTask?.cancel()
         reloadTask?.cancel()
         longStallTask?.cancel()
-        timelineHeartbeatTask?.cancel()
+        timeline.transportChanged(.other)
         releaseThumbnails()
         let finish = finishItem(at: player.currentTime)
         let plex = plex
@@ -155,6 +163,7 @@ final class MacPlexPlayback: ObservableObject {
     /// `startsItem` picks the title's starting tracks from Plex's per-item picks and the saved intents.
     private func load(keepingTransport: Bool = false, startsItem: Bool = false) async {
         stallTracker.noteSeekOrLoad(at: .now)
+        timeline.begin()
         playbackStart.beginLoad(startsItem: startsItem)
         if startsItem {
             reportPosition = PlaybackReportPosition(startTime: request.startTime ?? 0)
@@ -254,9 +263,7 @@ final class MacPlexPlayback: ObservableObject {
     private func stallChanged(_ stalled: Bool) {
         longStallTask?.cancel()
         if playbackStart.itemHasPlayed, !reportedStopped, player.state == .playing {
-            timelineHeartbeatTask?.cancel()
             report(stalled ? "buffering" : "playing")
-            if stalled { startTimelineHeartbeat() }
         }
         guard stalled, request.quality == .auto else { return }
         switch stallTracker.bufferingStarted(at: .now) {
@@ -411,6 +418,59 @@ final class MacPlexPlayback: ObservableObject {
 
     private var plexStreams: [PlexStream] { request.item.Media?.first?.Part?.first?.Stream ?? [] }
 
+    // MARK: - Subtitle search
+
+    /// Whether the Subtitles menu offers a search: the server's rights and providers decide.
+    @Published private(set) var subtitleSearchAvailable = false
+
+    func refreshSubtitleSearch() async {
+        let id = request.id
+        let available = await request.subtitleSearch?.isAvailable() ?? false
+        if id == request.id { subtitleSearchAvailable = available }
+    }
+
+    func makeSubtitleSearch() -> SubtitleSearchModel {
+        SubtitleSearchModel(
+            search: { [weak self] in
+                guard let search = self?.request.subtitleSearch else { return [] }
+                let language = SubtitleSearchLanguage.alpha2(
+                    preferred: TrackIntentStore.effectiveSubtitleIntent.language, device: TrackLanguage.device)
+                return try await search.search(language: language)
+            },
+            install: { [weak self] in await self?.installSubtitle($0) ?? false })
+    }
+
+    /// Downloads a result, waits for the server to list it, then reloads at the playhead with it on.
+    private func installSubtitle(_ result: SubtitleSearchResult) async -> Bool {
+        let previous = request
+        guard let search = previous.subtitleSearch else { return false }
+        let known = Set(plexStreams.filter(\.isSubtitle).map(\.id))
+        let time = player.pendingSeekTarget ?? player.currentTime
+        let audio = isTranscoding ? chosenAudioID : enginePicksAsPlexIDs().audio
+        do {
+            try await search.download(result)
+            guard let (next, id) = try await plex.requestWithNewSubtitle(previous, known: known, at: time),
+                  !Task.isCancelled else { return false }
+            let picks = TrackPicks(audio: audio, subtitle: .track(id))
+            if next.plan != .original { await plex.selectStream(picks, in: next) }
+            if let stream = next.item.Media?.first?.Part?.first?.Stream?.first(where: { $0.id == id }) {
+                TrackIntentStore.subtitleIntent = .afterPick(
+                    MediaTrack(from: stream), replacing: TrackIntentStore.effectiveSubtitleIntent,
+                    audioLanguage: mediaAudio.first { $0.id == selectedAudioID }.flatMap { $0.languageCode ?? $0.language })
+            }
+            reloadTask?.cancel()
+            subtitlesPickedOff = false
+            if let audio { chosenAudioID = audio }
+            chosenSubtitle = .track(id)
+            Task { await plex.stopTranscode(previous) }
+            request = next
+            await load(keepingTransport: true)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     /// The engine's playing tracks as server stream ids, joined as `TrackMerge` joins them.
     private func enginePicksAsPlexIDs() -> TrackPicks {
         let streams = plexStreams
@@ -488,8 +548,7 @@ final class MacPlexPlayback: ObservableObject {
 
     // MARK: - Plex reporting
 
-    /// Reports on every transport change and after seeks land, plus every
-    /// 10 s of playback; `.ended` reports stopped and scrobbles.
+    /// Feeds the timeline every transport change and playhead tick; `.ended` reports stopped and scrobbles.
     private func observePlayer() {
         player.$state
             .removeDuplicates()
@@ -539,30 +598,32 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     private func stateChanged(_ state: AetherPlayer.State) {
-        guard !ended else { return }
-        timelineHeartbeatTask?.cancel()
+        guard serverStopReason == nil, !ended else { return }
         switch state {
         case .playing:
             playbackStart.didPlay()
-            reportedStopped = false
             report("playing")
         case .paused, .loading:
-            guard !reportedStopped, let timelineState = heartbeatState else { return }
+            guard !reportedStopped, let timelineState = heartbeatState else {
+                timeline.transportChanged(.other)
+                return
+            }
             report(timelineState)
-            startTimelineHeartbeat()
         case .ended:
+            timeline.transportChanged(.other)
             finishItem(at: max(player.duration, player.currentTime))
             if isPlayingCinemaExtra {
                 advanceCinemaExtras()
             } else {
-                startUpNextCountdown()
+                if upNextCountdown == nil { startUpNextCountdown() }
                 // Nothing next: return to the page instead of the engine's cleared (black) frame.
                 if nextEpisode == nil { onFinished?() }
             }
         case .failed:
+            timeline.transportChanged(.other)
             if isPlayingCinemaExtra { advanceCinemaExtras() } else { fallBackToTranscode() }
         default:
-            break
+            timeline.transportChanged(.other)
         }
     }
 
@@ -572,53 +633,32 @@ final class MacPlexPlayback: ObservableObject {
                                      isStalled: player.isStalled)
     }
 
-    private func startTimelineHeartbeat() {
-        timelineHeartbeatTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
-                guard !Task.isCancelled, let self, !self.ended, !self.reportedStopped,
-                      let state = self.heartbeatState else { return }
-                await self.report(state)?.value
-            }
-        }
-    }
-
     private func tick(_ time: TimeInterval) {
         guard playbackStart.streamHasPlayed else { return }
         // A load's clock reads 0 until it starts; an intro at 0 must not fire mid-reload.
         if !player.isStarting { evaluateAutoSkip(at: time) }
         guard player.state == .playing, !player.isStalled else { return }
-        let bucket = Int(time) / 10
-        if bucket != lastReportBucket {
-            lastReportBucket = bucket
-            report("playing")
-        }
+        timeline.tick(time)
+        updateCountdownBeforeEnd()
     }
 
-    @discardableResult
-    private func report(_ state: String) -> Task<Void, Never>? {
-        // A session must open with "playing": the engine holds paused while loading, and a
-        // "paused" first makes Plex fire media.pause and never media.play (#433).
-        guard !reportedStopped, !isPlayingCinemaExtra, playbackStart.itemHasPlayed else { return nil }
-        let request = request
-        let time = reportPosition.resolve(player.currentTime, isLoading: player.state == .loading,
-                                          isStarting: player.isStarting, hasStarted: playbackStart.streamHasPlayed)
-        let plex = plex
-        return playbackReports.enqueue { [weak self] in
-            guard let reason = await plex.reportProgress(for: request, time: time, state: state),
-                  let self, self.request.id == request.id, !self.reportedStopped else { return }
-            self.endForServerTermination(reason)
+    private func report(_ state: String) {
+        guard serverStopReason == nil, !ended, playbackStart.itemHasPlayed, !isPlayingCinemaExtra else { return }
+        switch state {
+        case "playing": timeline.transportChanged(.playing)
+        case "paused": timeline.transportChanged(.paused, hasStarted: playbackStart.itemHasPlayed)
+        case "buffering": timeline.transportChanged(.buffering, hasStarted: playbackStart.itemHasPlayed)
+        default: timeline.transportChanged(.other)
         }
     }
 
     /// The server stopped this stream: stop and show its reason, with nothing to retry.
     private func endForServerTermination(_ reason: String) {
-        reportedStopped = true
-        timelineHeartbeatTask?.cancel()
+        timeline.close()
         countdownTask?.cancel()
         upNextCountdown = nil
-        player.stop()
         serverStopReason = reason
+        player.stop()
     }
 
     /// Stopped, then a scrobble when the viewer got past the watched ceiling.
@@ -626,7 +666,6 @@ final class MacPlexPlayback: ObservableObject {
     private func finishItem(at time: TimeInterval) -> Task<Void, Never>? {
         guard !isPlayingCinemaExtra else { return nil }
         guard !reportedStopped, playbackStart.itemHasPlayed else { return playbackReports.tail }
-        reportedStopped = true
         let request = request
         let plex = plex
         let time = reportPosition.resolve(time, isLoading: player.state == .loading,
@@ -634,8 +673,8 @@ final class MacPlexPlayback: ObservableObject {
         let runtime = player.duration > 0 ? player.duration : request.item.durationSeconds
         let watched = (WatchProgressPolicy.progress(offsetSeconds: time, runtimeSeconds: runtime) ?? 0)
             >= WatchProgressPolicy.completionThreshold
+        guard timeline.stop(at: time) != nil else { return playbackReports.tail }
         return playbackReports.enqueue {
-            await plex.reportProgress(for: request, time: time, state: "stopped")
             if watched { await plex.markWatched(request) }
         }
     }
@@ -691,14 +730,22 @@ final class MacPlexPlayback: ObservableObject {
 
     // MARK: - Up Next
 
-    /// Near the end: inside the credits marker, or the last 30 s. Only "Up Next" opens it early;
-    /// the other choices wait for the end of the file.
+    /// Near the end: inside the credits marker, or the last 30 s. The other choices play the
+    /// credits out and open it one countdown before the end, so autoplay lands at the end (#592).
     var isNearEnd: Bool {
         if player.state == .ended { return true }
-        guard CreditsBehavior.current().showsUpNextAtCredits else { return false }
-        if activeMarker?.type == "credits" { return true }
         let duration = player.duration
+        guard CreditsBehavior.current().showsUpNextAtCredits else {
+            return opensUpNextBeforeEnd
+        }
+        if activeMarker?.type == "credits" { return true }
         return duration > 60 && player.currentTime >= duration - 30
+    }
+
+    /// Credits play out and the countdown is on: Up Next and its countdown start before the end.
+    private var opensUpNextBeforeEnd: Bool {
+        let countdown = TimeInterval(AutoplayCountdown.current.rawValue), duration = player.duration
+        return countdown > 0 && duration > 60 && player.currentTime >= duration - countdown
     }
 
     private func lookUpNextEpisode() {
@@ -714,6 +761,17 @@ final class MacPlexPlayback: ObservableObject {
             let next = await plex.nextEpisode(after: episode, in: request)
             guard !Task.isCancelled else { return }
             self?.nextEpisode = next
+        }
+    }
+
+    /// Starts the countdown one countdown before the end; a rewind out of that window stops it.
+    private func updateCountdownBeforeEnd() {
+        guard player.state != .ended, !CreditsBehavior.current().showsUpNextAtCredits else { return }
+        if opensUpNextBeforeEnd {
+            if upNextCountdown == nil { startUpNextCountdown() }
+        } else if upNextCountdown != nil {
+            countdownTask?.cancel()
+            upNextCountdown = nil
         }
     }
 
@@ -757,7 +815,7 @@ final class MacPlexPlayback: ObservableObject {
         episodesInARow = autoplayed ? episodesInARow + 1 : 1
         countdownTask?.cancel()
         upNextCountdown = nil
-        timelineHeartbeatTask?.cancel()
+        timeline.transportChanged(.other)
         finishItem(at: player.currentTime)
         nextTask?.cancel()
         reloadTask?.cancel()
@@ -797,8 +855,6 @@ final class MacPlexPlayback: ObservableObject {
             nextEpisode = nil
             upNextDismissed = false
             skippedMarkerIDs = []
-            lastReportBucket = -1
-            reportedStopped = false
             serverStopReason = nil
             onItemChange?()
             lookUpNextEpisode()

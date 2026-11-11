@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-import AetherEngine
 import Combine
 import Testing
 @testable import Rivulet
@@ -9,10 +8,10 @@ import Testing
 @MainActor
 struct PlaybackTransportStateTests {
     @Test func rebufferingPreservesPlayIntentButReplacementMustStartAgain() {
-        let state = CurrentValueSubject<PlaybackState, Never>(.playing)
-        let phase = CurrentValueSubject<PlaybackPhase, Never>(.playing)
+        let state = CurrentValueSubject<PlaybackTransportState.State, Never>(.playing)
+        let phase = CurrentValueSubject<PlaybackTransportState.Phase, Never>(.playing)
         let ready = CurrentValueSubject<Bool, Never>(true)
-        var reports: [PlaybackState] = []
+        var reports: [PlaybackTransportState.State] = []
         let subscription = PlaybackTransportState.publisher(state: state.eraseToAnyPublisher(),
                                                              phase: phase.eraseToAnyPublisher(),
                                                              nativeReady: ready.eraseToAnyPublisher())
@@ -36,10 +35,10 @@ struct PlaybackTransportStateTests {
     }
 
     @Test func nativeHandoffRejectsPlayingUntilTheIncomingItemIsReady() {
-        let state = CurrentValueSubject<PlaybackState, Never>(.loading)
-        let phase = CurrentValueSubject<PlaybackPhase, Never>(.loading)
+        let state = CurrentValueSubject<PlaybackTransportState.State, Never>(.loading)
+        let phase = CurrentValueSubject<PlaybackTransportState.Phase, Never>(.loading)
         let ready = CurrentValueSubject<Bool, Never>(false)
-        var reports: [PlaybackState] = []
+        var reports: [PlaybackTransportState.State] = []
         let subscription = PlaybackTransportState.publisher(state: state.eraseToAnyPublisher(),
                                                              phase: phase.eraseToAnyPublisher(),
                                                              nativeReady: ready.eraseToAnyPublisher())
@@ -53,9 +52,9 @@ struct PlaybackTransportStateTests {
     }
 
     @Test func incomingItemWaitsForTransportInsteadOfPlayIntent() {
-        let state = CurrentValueSubject<PlaybackState, Never>(.playing)
-        let phase = CurrentValueSubject<PlaybackPhase, Never>(.playing)
-        var reports: [PlaybackState] = []
+        let state = CurrentValueSubject<PlaybackTransportState.State, Never>(.playing)
+        let phase = CurrentValueSubject<PlaybackTransportState.Phase, Never>(.playing)
+        var reports: [PlaybackTransportState.State] = []
         let subscription = PlaybackTransportState.publisher(state: state.eraseToAnyPublisher(),
                                                              phase: phase.eraseToAnyPublisher())
             .sink { reports.append($0) }
@@ -71,9 +70,9 @@ struct PlaybackTransportStateTests {
     }
 
     @Test func pausedMountResumeAndRebufferDoNotInventExtraStarts() {
-        let state = CurrentValueSubject<PlaybackState, Never>(.loading)
-        let phase = CurrentValueSubject<PlaybackPhase, Never>(.loading)
-        var reports: [PlaybackState] = []
+        let state = CurrentValueSubject<PlaybackTransportState.State, Never>(.loading)
+        let phase = CurrentValueSubject<PlaybackTransportState.Phase, Never>(.loading)
+        var reports: [PlaybackTransportState.State] = []
         let subscription = PlaybackTransportState.publisher(state: state.eraseToAnyPublisher(),
                                                              phase: phase.eraseToAnyPublisher())
             .sink { reports.append($0) }

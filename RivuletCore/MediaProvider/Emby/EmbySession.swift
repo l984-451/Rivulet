@@ -34,6 +34,8 @@ enum EmbySession {
         var enableLiveTvAccess = false
         /// Nil when the server did not say, which counts as allowed.
         var enableContentDownloading: Bool?
+        /// Nil when the server did not say, which counts as allowed.
+        var enableSubtitleDownloading: Bool?
 
         init() {}
 
@@ -43,6 +45,7 @@ enum EmbySession {
             enableContentDeletionFromFolders = (dto?.enableContentDeletionFromFolders ?? []).map(\.value)
             enableLiveTvAccess = dto?.enableLiveTvAccess ?? false
             enableContentDownloading = dto?.enableContentDownloading
+            enableSubtitleDownloading = dto?.enableSubtitleDownloading
         }
     }
 

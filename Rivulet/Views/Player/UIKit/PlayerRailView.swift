@@ -20,7 +20,7 @@ final class PlayerRailView: UIView {
     /// Inset of the scrub bar and the pill row from the screen edges.
     static let sideInset: CGFloat = 80
 
-    private enum Metrics {
+    enum Metrics {
         static let titleLeading: CGFloat = 84
         static let subtitleTop: CGFloat = 18
         static let titleTop: CGFloat = 62
@@ -103,8 +103,7 @@ final class PlayerRailView: UIView {
     var onRecord: (() -> Void)?
     var onMultiview: (() -> Void)?
 
-    private let subtitleLabel = UILabel()
-    private let titleLabel = UILabel()
+    private let (subtitleLabel, titleLabel) = PlayerRailView.makeTitleLabels()
     private let toolRow = UIStackView()
     /// Holds the tool row's room for the host's skip pill while the controls are up (#556).
     /// The pill is the host's view, laid over this; the slot itself draws nothing.
@@ -118,14 +117,6 @@ final class PlayerRailView: UIView {
 
     init() {
         super.init(frame: .zero)
-
-        // AVKit's title block: a 25pt medium line over a 57pt bold title, each
-        // with a soft wide shadow.
-        subtitleLabel.font = .systemFont(ofSize: 25, weight: .medium)
-        subtitleLabel.textColor = .white
-        titleLabel.font = .systemFont(ofSize: 57, weight: .bold)
-        titleLabel.textColor = .white
-        applyChromeTextShadow([subtitleLabel, titleLabel])
 
         // Up from the video lands on the leftmost tool, so the rarely used ones
         // (Content Filter, then Quality) sit right of Subtitles/Audio.
@@ -232,6 +223,17 @@ final class PlayerRailView: UIView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// AVKit's title block: a 25pt medium eyebrow over a 57pt bold title, each with a soft wide shadow.
+    static func makeTitleLabels() -> (eyebrow: UILabel, title: UILabel) {
+        let eyebrow = UILabel(), title = UILabel()
+        eyebrow.font = .systemFont(ofSize: 25, weight: .medium)
+        eyebrow.textColor = .white
+        title.font = .systemFont(ofSize: 57, weight: .bold)
+        title.textColor = .white
+        applyChromeTextShadow([eyebrow, title])
+        return (eyebrow, title)
+    }
 
     // MARK: - Content
 
@@ -367,32 +369,14 @@ final class PlayerRailView: UIView {
         if available { defaultFocusButton = multiviewButton }
     }
 
-    // MARK: - Ambient pause
-
-    /// During ambient pause the controls fade out, but for a show the episode
-    /// `titleLabel` stays exactly where it is (same place, same size). The
-    /// container holds the rail's own alpha at 1 while ambient so this held
-    /// title can show through. `keepTitle` is false for movies (logo only).
-    ///
-    /// `ambientState` lets the container detect a real change (the sub-view
-    /// alpha shifts here aren't visible to its own top-level `targets` diff).
-    private(set) var ambientState: (ambient: Bool, keepTitle: Bool) = (false, false)
-
-    func setAmbient(_ ambient: Bool, keepTitle: Bool) {
-        ambientState = (ambient, keepTitle)
-        applyAlphas()
-    }
-
     private var isPaneOpen = false
 
-    /// One writer for the sub-view alphas ambient pause and the info pane share.
+    /// One writer for the sub-view alphas the info pane fades.
     private func applyAlphas() {
-        let ambient = ambientState.ambient
-        let chrome: CGFloat = ambient || isPaneOpen ? 0 : 1
+        let chrome: CGFloat = isPaneOpen ? 0 : 1
         subtitleLabel.alpha = chrome
         toolRow.alpha = chrome
-        pillRow.alpha = ambient ? 0 : 1
-        titleLabel.alpha = ambient ? (ambientState.keepTitle ? 1 : 0) : chrome
+        titleLabel.alpha = chrome
     }
 
     // MARK: - Focus

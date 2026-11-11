@@ -73,6 +73,15 @@ final class CaptionOverlayView: UIView {
         }
     }
 
+    /// The picture is zoomed to fill the screen (#589): libass and image cues
+    /// follow the cropped picture, text captions stay on screen.
+    var fillsScreen = false {
+        didSet {
+            guard fillsScreen != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+
     /// The global Height setting, in stepper units. Applies to the default band only.
     var heightUnits: Int {
         didSet {
@@ -307,15 +316,21 @@ final class CaptionOverlayView: UIView {
 
     // MARK: Geometry
 
-    /// The picture's rect inside `bounds`, aspect-fit (how both the engine
-    /// surface and AVPlayerLayer place video). Falls back to the full bounds
-    /// when the size is unknown.
+    /// The part of the picture on screen. Text captions are placed in it.
     private func videoRect(in size: CGSize) -> CGRect {
+        pictureRect(in: size).intersection(CGRect(origin: .zero, size: size))
+    }
+
+    /// The picture's rect inside `bounds`, aspect-fit, or aspect-fill when zoomed
+    /// (it then overhangs). Matches the engine surface and AVPlayerLayer. Falls
+    /// back to the full bounds when the size is unknown.
+    private func pictureRect(in size: CGSize) -> CGRect {
         guard videoSize.width > 0, videoSize.height > 0,
               size.width > 0, size.height > 0 else {
             return CGRect(origin: .zero, size: size)
         }
-        let scale = min(size.width / videoSize.width, size.height / videoSize.height)
+        let fit = (size.width / videoSize.width, size.height / videoSize.height)
+        let scale = fillsScreen ? max(fit.0, fit.1) : min(fit.0, fit.1)
         let w = videoSize.width * scale
         let h = videoSize.height * scale
         return CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
@@ -363,21 +378,22 @@ final class CaptionOverlayView: UIView {
         guard size.width > 0, size.height > 0 else { return }
 
         let rect = videoRect(in: size)
+        let picture = pictureRect(in: size)
         let pointSize = baseFontSize(in: size)
 
         // libass draws over the picture only, like the bitmap cues below.
         assView.storageSize = videoSize
-        assView.linePosition = assLinePosition(in: size, rect: rect)
-        assView.frame = rect
+        assView.linePosition = assLinePosition(in: size, rect: picture)
+        assView.frame = picture
 
         // `SubtitleImage.position` is normalized to the source video frame, so
-        // map it onto the on-screen video rect, not the bounds.
+        // map it onto the picture, not the bounds.
         for entry in bitmapCues {
             entry.view.frame = CGRect(
-                x: rect.minX + entry.position.minX * rect.width,
-                y: rect.minY + entry.position.minY * rect.height,
-                width: entry.position.width * rect.width,
-                height: entry.position.height * rect.height
+                x: picture.minX + entry.position.minX * picture.width,
+                y: picture.minY + entry.position.minY * picture.height,
+                width: entry.position.width * picture.width,
+                height: entry.position.height * picture.height
             )
         }
 
@@ -539,7 +555,8 @@ final class CaptionOverlayView: UIView {
     /// ponytail: the lift jumps on the next rendered frame instead of riding the rail's 0.25 s fade; interpolate linePosition in the display link if it reads as a snap on device.
     private func assLinePosition(in size: CGSize, rect: CGRect) -> Double {
         guard rect.height > 0 else { return 0 }
-        let resting = max(0, size.height - rect.maxY) + rect.height * SubtitleAdjustments.bottomMarginFraction
+        // Unclamped: a zoomed picture's overhang below the screen counts as lift.
+        let resting = size.height - rect.maxY + rect.height * SubtitleAdjustments.bottomMarginFraction
         let lift = bottomPadding(in: size) - resting
         return Double(min(max(lift / rect.height * 100, 0), 100))
     }

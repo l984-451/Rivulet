@@ -86,6 +86,12 @@ final class JellyfinPhotoMapperTests: XCTestCase {
                        DateComponents(year: 2001, month: 1, day: 3), "and west of UTC")
     }
 
+    func test_takenClock_isTheCamerasWithEXIF_elseAnInstant() {
+        XCTAssertEqual(map(Self.photo)?.details?.takenAtClock, .wallClock)
+        XCTAssertEqual(map(Self.photoWithoutEXIF)?.details?.takenAtClock, .instant)
+        XCTAssertEqual(map(Self.clip)?.details?.takenAtClock, .instant)
+    }
+
     func test_date_withoutEXIF_andForAClip_isAnInstant() {
         XCTAssertEqual(map(Self.photoWithoutEXIF)?.date, JellyfinMediaMapper.parseDate("2001-04-03T07:42:06.0000000Z"))
         XCTAssertEqual(map(Self.clip)?.date, JellyfinMediaMapper.parseDate("2001-01-17T06:07:11.0000000Z"))
@@ -138,6 +144,33 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         XCTAssertEqual(server.requests.count, 1)
     }
 
+    // Invented values, in the list shape: EXIF and GPS come without `fields`.
+    private static let detailedPhoto = #"{"Name":"beach","Id":"p20","DateCreated":"2001-01-03T01:00:00.0000000Z","PremiereDate":"2001-01-03T01:00:00.0000000Z","Type":"Photo","ImageTags":{"Primary":"t"},"MediaType":"Photo","CameraMake":"Apple","CameraModel":"iPhone Air","ExposureTime":0.0125,"FocalLength":5.96,"IsoSpeedRating":125,"Aperture":1.3561438531849228,"Latitude":10.5,"Longitude":-20.25,"Width":4032,"Height":3024,"Path":"/photos/trip/beach.jpg","UserData":{"IsFavorite":true}}"#
+
+    func test_photo_mapsFavoriteCoordinateAndEXIF() throws {
+        let photo = try XCTUnwrap(map(Self.detailedPhoto))
+        XCTAssertTrue(photo.isFavorite)
+        XCTAssertEqual(photo.coordinate, PhotoCoordinate(latitude: 10.5, longitude: -20.25))
+        let details = try XCTUnwrap(photo.details)
+        XCTAssertEqual(details.cameraLine, "Apple iPhone Air")
+        XCTAssertEqual(details.fNumber, 1.6, "APEX aperture as an f-number")
+        XCTAssertEqual(details.exposureSeconds, 0.0125)
+        XCTAssertEqual(details.iso, 125)
+        XCTAssertEqual(details.focalLength, 5.96)
+        XCTAssertEqual([details.width, details.height], [4032, 3024])
+        XCTAssertEqual(details.fileName, "beach.jpg")
+        XCTAssertEqual(details.takenAt, JellyfinMediaMapper.parseDate("2001-01-03T01:00:00.0000000Z"))
+        XCTAssertEqual(details.exposureLine, "f/1.6 · 1/80 s · ISO 125 · 6 mm")
+    }
+
+    func test_photoWithoutEXIF_hasNoCameraOrPlace() throws {
+        let photo = try XCTUnwrap(map(Self.photoWithoutEXIF))
+        XCTAssertFalse(photo.isFavorite)
+        XCTAssertNil(photo.coordinate)
+        XCTAssertNil(photo.details?.cameraLine)
+        XCTAssertNil(map(Self.album)?.details)
+    }
+
     // MARK: - Requests
 
     func test_root_asksItsOwnFoldersOnce_andEveryPhotoRecursively() async throws {
@@ -149,7 +182,7 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         server.respond("/Items", query: ["includeItemTypes": "Photo,Video"],
                        body: list([Self.photoWithoutEXIF, Self.clip, Self.photo], total: 450))
 
-        let page = try await provider().photoPage(in: library, folder: nil, page: Page(offset: 0, limit: 200))
+        let page = try await provider().photoPage(in: library, folder: nil, query: .default, page: Page(offset: 0, limit: 200))
 
         XCTAssertEqual(page.folders.map(\.title), ["Trip"])
         XCTAssertEqual(page.media.map(\.kind), [.photo, .clip, .photo])
@@ -161,7 +194,8 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         XCTAssertEqual(media?["sortBy"], "DateCreated,SortName")
         XCTAssertEqual(media?["sortOrder"], "Descending")
         XCTAssertEqual([media?["startIndex"], media?["limit"]], ["0", "200"])
-        XCTAssertEqual(media?["fields"], "DateCreated,RecursiveItemCount", "DateCreated arrives only when asked for")
+        XCTAssertEqual(media?["fields"], "DateCreated,RecursiveItemCount,Path,Width,Height",
+                       "DateCreated, the path and the size arrive only when asked for")
     }
 
     func test_folder_listsItsSubAlbums_andItsOwnMedia() async throws {
@@ -169,7 +203,7 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         server.respond("/Items", query: ["includeItemTypes": "Photo,Video"], body: list([Self.photoWithoutEXIF, Self.clip]))
 
         let page = try await provider().photoPage(
-            in: library, folder: MediaItemRef(providerID: "jellyfin:srv", itemID: "trip"),
+            in: library, folder: MediaItemRef(providerID: "jellyfin:srv", itemID: "trip"), query: .default,
             page: Page(offset: 0, limit: 200))
 
         XCTAssertEqual(page.folders.map(\.title), ["Day Two"])
@@ -182,7 +216,7 @@ final class JellyfinPhotoMapperTests: XCTestCase {
         server.respond("/Items", query: ["includeItemTypes": "Photo,Video"], body: list([Self.photo], total: 201))
 
         let page = try await provider().photoPage(
-            in: library, folder: MediaItemRef(providerID: "jellyfin:srv", itemID: "trip"),
+            in: library, folder: MediaItemRef(providerID: "jellyfin:srv", itemID: "trip"), query: .default,
             page: Page(offset: 200, limit: 200))
 
         XCTAssertNil(page.nextPage)

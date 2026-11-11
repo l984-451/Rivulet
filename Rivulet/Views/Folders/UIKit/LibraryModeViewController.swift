@@ -2,25 +2,57 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //
-//  PlexLibraryModeViewController.swift
+//  LibraryModeViewController.swift
 //  Rivulet
 //
-//  A Plex movie or show library tab: its title grid or its folders, swapped in
-//  place. The choice is saved per library and profile.
+//  A video library tab: its title grid or its folders, swapped in place.
+//  The choice is saved per library and profile.
 //
 
 import UIKit
 
 @MainActor
-final class PlexLibraryModeViewController: UIViewController {
-    private let library: PlexLibrary
+final class LibraryModeViewController: UIViewController {
+    private let libraryTitle: String
+    private let settingsKey: String
+    private let defaultMode: LibraryViewMode
+    private let makeGrid: () -> PlexHomeViewController
+    private let folderSource: FolderListing.Source
     private var grid: PlexHomeViewController?
     private var folders: FolderLibraryViewController?
     private var active: UIViewController?
 
-    init(library: PlexLibrary) {
-        self.library = library
+    init(title: String, settingsKey: String, defaultMode: LibraryViewMode,
+         makeGrid: @escaping () -> PlexHomeViewController, folderSource: @escaping FolderListing.Source) {
+        self.libraryTitle = title
+        self.settingsKey = settingsKey
+        self.defaultMode = defaultMode
+        self.makeGrid = makeGrid
+        self.folderSource = folderSource
         super.init(nibName: nil, bundle: nil)
+    }
+
+    /// A Plex movie or show section. One with no metadata agent opens on its folders.
+    convenience init(plex library: PlexLibrary) {
+        self.init(title: library.title, settingsKey: library.key,
+                  defaultMode: library.hasNoMetadataAgent ? .folders : .titles,
+                  makeGrid: { PlexHomeViewController(mode: .library(key: library.key, title: library.title)) },
+                  folderSource: {
+                      guard let provider = MediaProviderRegistry.shared.plexProvider,
+                            let folders = provider as? any FolderProvider else { return nil }
+                      return (folders, PlexMediaMapper.library(library, providerID: provider.id))
+                  })
+    }
+
+    /// A library through its provider. One with no metadata opens on its folders.
+    convenience init(provider library: MediaLibrary) {
+        self.init(title: library.title, settingsKey: library.settingsKey,
+                  defaultMode: library.browsesByFolder ? .folders : .titles,
+                  makeGrid: {
+                      PlexHomeViewController(mode: .library(key: library.settingsKey, title: library.title),
+                                             providerLibrary: library)
+                  },
+                  folderSource: FolderListing.source(for: library))
     }
 
     @available(*, unavailable)
@@ -29,7 +61,7 @@ final class PlexLibraryModeViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        let mode = LibrarySettingsManager.shared.viewMode(library.key)
+        let mode = LibrarySettingsManager.shared.viewMode(settingsKey, default: defaultMode)
         if mode != .folders { gridPage().setGridShowsCollections(mode == .collections) }
         show(byFolder: mode == .folders)
     }
@@ -40,27 +72,27 @@ final class PlexLibraryModeViewController: UIViewController {
     private func page(byFolder: Bool) -> UIViewController {
         guard byFolder else { return gridPage() }
         if let folders { return folders }
-        let page = FolderLibraryViewController(plex: library) { [weak self] in
+        let page = FolderLibraryViewController(title: libraryTitle, viewMenu: { [weak self] in
             guard let self else { return nil }
             // Collections only once the grid has seen some.
             let modes: [LibraryViewMode] = grid?.hasCollections == true
                 ? [.titles, .collections, .folders] : [.titles, .folders]
             return LibraryViewMode.menu(modes, current: .folders) { [weak self] in self?.select($0) }
-        }
+        }, source: folderSource)
         folders = page
         return page
     }
 
     private func gridPage() -> PlexHomeViewController {
         if let grid { return grid }
-        let page = PlexHomeViewController(mode: .library(key: library.key, title: library.title))
+        let page = makeGrid()
         page.onSelectViewMode = { [weak self] in self?.select($0) }
         grid = page
         return page
     }
 
     private func select(_ mode: LibraryViewMode) {
-        LibrarySettingsManager.shared.setViewMode(mode, for: library.key)
+        LibrarySettingsManager.shared.setViewMode(mode, for: settingsKey)
         // Next turn: the menu's button is in the page being removed.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }

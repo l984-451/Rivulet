@@ -41,6 +41,9 @@ class PlexDataStore: ObservableObject {
     /// Per-library hubs for Home screen (keyed by library key)
     @Published var libraryHubs: [String: [PlexHub]] = [:]
     @Published var isLoadingLibraryHubs = false
+    /// Each pinned library's Home rows from `/hubs/promoted` (one request, shared with iOS
+    /// through `getPromotedHubs`). Until it answers, `homeHubs` reads `libraryHubs`.
+    private var promotedHubs: [String: [PlexHub]] = [:]
 
     /// First page of each pinned collection (see `HomeCollectionPins`), keyed
     /// by `Pin.id`. nil means not fetched this session; [] means fetched and
@@ -311,6 +314,14 @@ class PlexDataStore: ObservableObject {
             }
         }
 
+        // Pages refetch on this notification: they must read the server, not a read shared a
+        // moment ago. Registered first and run in place, so it is done before any of them start.
+        NotificationCenter.default.addObserver(
+            forName: .plexDataNeedsRefresh, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { PlexNetworkManager.shared.forgetRecentReads() }
+        }
+
         // Same for the sidebar order — it decides Home's row order too
         // (`librariesPinnedToHome`), so a reorder in Settings has to repaint on
         // the way back out. `dropFirst` skips the initial value; the
@@ -447,12 +458,26 @@ class PlexDataStore: ObservableObject {
         continueWatchingPollingTimer = nil
     }
 
-    /// Poll hubs silently (no loading indicator)
+    /// Poll hubs silently (no loading indicator). Home's rows come from Continue Watching and the
+    /// promoted hubs, so the global `/hubs` (about 500 KB, over a second to build on the server)
+    /// is fetched only until it is in hand; it feeds the hero's fallback.
     private func pollHubs() async {
         guard let serverURL = authManager.selectedServerURL,
               let token = authManager.selectedServerToken else { return }
 
-        await fetchHubsFromServer(serverURL: serverURL, token: token, updateLoading: false)
+        await fetchHubsFromServer(serverURL: serverURL, token: token, updateLoading: false,
+                                  includeGlobalHubs: hubs.isEmpty)
+    }
+
+    /// After a watch-state change. Continue Watching and the promoted rows are what Home draws;
+    /// a library page refreshes its own hubs.
+    func refreshAfterWatchStateChange() async {
+        guard let serverURL = authManager.selectedServerURL,
+              let token = authManager.selectedServerToken else { return }
+        clearNextEpisodeCache()
+        await fetchContinueWatchingOnly(serverURL: serverURL, token: token)
+        await loadPromotedHubs(serverURL: serverURL, token: token, userId: profileManager.selectedUserId)
+        await TopShelfFeed.refresh()
     }
 
     /// Fast poll: refresh only the Continue Watching hub (small payload). When
@@ -589,6 +614,7 @@ class PlexDataStore: ObservableObject {
         // A fetch still out for the previous profile must not dedupe the reload below.
         isLoadingLibraries = false
         libraryHubs.removeAll()
+        promotedHubs.removeAll()
         pinnedCollectionItems.removeAll()
         lastRecentlyAddedStamp = nil
         homeItems = []
@@ -757,7 +783,8 @@ class PlexDataStore: ObservableObject {
         hubsLoadTask = nil
     }
 
-    private func fetchHubsFromServer(serverURL: String, token: String, updateLoading: Bool) async {
+    private func fetchHubsFromServer(serverURL: String, token: String, updateLoading: Bool,
+                                     includeGlobalHubs: Bool = true) async {
         // A token captured before a profile change must not fetch, paint or cache.
         guard authManager.selectedServerToken == token else {
             if updateLoading { isLoadingHubs = false }
@@ -766,9 +793,13 @@ class PlexDataStore: ObservableObject {
         let userId = profileManager.selectedUserId
 
         do {
-            async let hubsTask = fetchHubsOffMain(serverURL: serverURL, token: token, userId: userId)
             async let continueWatchingTask = fetchContinueWatchingOffMain(serverURL: serverURL, token: token, userId: userId)
-            let fetchedHubs = try await hubsTask
+            let fetchedHubs: [PlexHub]
+            if includeGlobalHubs {
+                fetchedHubs = try await fetchHubsOffMain(serverURL: serverURL, token: token, userId: userId)
+            } else {
+                fetchedHubs = hubs
+            }
             // A thrown CW fetch (transient network error) must not be
             // conflated with a successful empty result: only a completed fetch
             // is allowed to clear `continueWatchingHub` and arm
@@ -780,6 +811,8 @@ class PlexDataStore: ObservableObject {
                 fetchedContinueWatching = try await continueWatchingTask
                 continueWatchingFetchCompleted = true
             } catch {
+                // With no `/hubs` request beside it, this is the fetch that notices a dead connection.
+                if !includeGlobalHubs { throw error }
                 DiagLog.error(.home, "Continue Watching fetch failed, keeping current hub: \(DiagLog.describe(error))")
             }
             guard authManager.selectedServerToken == token else {
@@ -813,7 +846,7 @@ class PlexDataStore: ObservableObject {
             if updateLoading {
                 self.isLoadingHubs = false
             }
-            await cacheManager.cacheHubs(fetchedHubs)
+            if includeGlobalHubs { await cacheManager.cacheHubs(fetchedHubs) }
             // Hubs or Continue Watching changed: re-project Home.
             projectHomeItems()
             // The fetch returned cleanly: the server connection is up. A still
@@ -836,7 +869,8 @@ class PlexDataStore: ObservableObject {
                    let newToken = authManager.selectedServerToken {
                     // Retry with new connection
                     print("📦 PlexDataStore: Retrying hubs fetch after connection recovery...")
-                    await fetchHubsFromServer(serverURL: newServerURL, token: newToken, updateLoading: updateLoading)
+                    await fetchHubsFromServer(serverURL: newServerURL, token: newToken, updateLoading: updateLoading,
+                                              includeGlobalHubs: includeGlobalHubs)
                     return
                 }
             }
@@ -990,63 +1024,28 @@ class PlexDataStore: ObservableObject {
                 projectAllLoadedItems()
             }
 
-            // Fetch remaining libraries from network in parallel
-            if !librariesNeedingFetch.isEmpty {
-                await withTaskGroup(of: (String, String, [PlexHub]?).self) { group in
-                    for library in librariesNeedingFetch {
-                        let sectionId = library.key.replacingOccurrences(of: "/library/sections/", with: "")
-                        group.addTask {
-                            do {
-                                let hubs = try await self.networkManager.getLibraryHubs(
-                                    serverURL: serverURL,
-                                    authToken: token,
-                                    sectionId: sectionId,
-                                    userId: userId,
-                                    count: 24
-                                )
-                                return (library.key, library.title, hubs)
-                            } catch {
-                                DiagLog.error(.home, "Library \(library.key) (\(library.type)) hubs failed: \(DiagLog.describe(error))")
-                                Self.reportLibraryHubFetchFailure(library: library, error: error)
-                                return (library.key, library.title, nil)
-                            }
-                        }
-                    }
+            // Home's rows first, in one request (#474); the library pages' hubs follow.
+            await loadPromotedHubs(serverURL: serverURL, token: token, userId: userId)
 
-                    for await (key, _, hubs) in group where authManager.selectedServerToken == token {
-                        await noteLibraryHubFetchResult(key: key, hubs: hubs)
-                    }
-                }
-            }
-
-            // Also background-refresh libraries that were served from cache
+            // Missing libraries first, then a background refresh of those served from cache.
             let fetchKeys = Set(librariesNeedingFetch.map { $0.key })
             let cachedLibraries = librariesToFetch.filter { !fetchKeys.contains($0.key) }
-            if !cachedLibraries.isEmpty {
-                await withTaskGroup(of: (String, String, [PlexHub]?).self) { group in
-                    for library in cachedLibraries {
-                        let sectionId = library.key.replacingOccurrences(of: "/library/sections/", with: "")
-                        group.addTask {
-                            do {
-                                let hubs = try await self.networkManager.getLibraryHubs(
-                                    serverURL: serverURL,
-                                    authToken: token,
-                                    sectionId: sectionId,
-                                    userId: userId,
-                                    count: 24
-                                )
-                                return (library.key, library.title, hubs)
-                            } catch {
-                                DiagLog.error(.home, "Library \(library.key) (\(library.type)) hubs refresh failed: \(DiagLog.describe(error))")
-                                Self.reportLibraryHubFetchFailure(library: library, error: error)
-                                return (library.key, library.title, nil)
-                            }
-                        }
+            for libraries in [librariesNeedingFetch, cachedLibraries] where !libraries.isEmpty {
+                let results = await BoundedFanOut.map(libraries) { library in
+                    let sectionId = library.key.replacingOccurrences(of: "/library/sections/", with: "")
+                    do {
+                        let hubs = try await self.networkManager.getLibraryHubs(
+                            serverURL: serverURL, authToken: token, sectionId: sectionId, userId: userId, count: 24
+                        )
+                        return (library.key, Optional(hubs))
+                    } catch {
+                        DiagLog.error(.home, "Library \(library.key) (\(library.type)) hubs failed: \(DiagLog.describe(error))")
+                        Self.reportLibraryHubFetchFailure(library: library, error: error)
+                        return (library.key, nil)
                     }
-
-                    for await (key, _, hubs) in group where authManager.selectedServerToken == token {
-                        await noteLibraryHubFetchResult(key: key, hubs: hubs)
-                    }
+                }
+                for (key, hubs) in results where authManager.selectedServerToken == token {
+                    await noteLibraryHubFetchResult(key: key, hubs: hubs)
                 }
             }
 
@@ -1080,6 +1079,7 @@ class PlexDataStore: ObservableObject {
     /// Refresh hubs for all libraries on Home screen
     func refreshLibraryHubs() async {
         libraryHubs.removeAll()
+        promotedHubs.removeAll()
         await cacheManager.clearLibraryHubsCache()
         await loadLibraryHubsIfNeeded()
     }
@@ -1145,7 +1145,34 @@ class PlexDataStore: ObservableObject {
     /// offer a pin Plex already provides, so both must read this one
     /// derivation. Empty for a library whose hubs have not loaded.
     func promotedHubKeys(forLibraryKey key: String) -> Set<String> {
-        Set((libraryHubs[key] ?? []).filter { $0.promoted == true }.compactMap(\.key))
+        Set(homeHubs(forLibraryKey: key).compactMap(\.key))
+    }
+
+    /// The hubs a pinned library promotes to Home: `/hubs/promoted`'s answer, else the
+    /// promoted flag on its loaded library hubs (a warm launch before that request lands).
+    func homeHubs(forLibraryKey key: String) -> [PlexHub] {
+        promotedHubs[key] ?? (libraryHubs[key] ?? []).filter { $0.promoted == true }
+    }
+
+    /// One request for every pinned library's Home rows. A failure keeps the last answer.
+    private func loadPromotedHubs(serverURL: String, token: String, userId: Int?) async {
+        let libraries = librariesPinnedToHome
+        let ids = libraries.map { $0.key.replacingOccurrences(of: "/library/sections/", with: "") }
+        do {
+            let byID = try await networkManager.getPromotedHubs(
+                serverURL: serverURL, authToken: token, sectionIDs: ids, userId: userId
+            )
+            guard authManager.selectedServerToken == token else { return }
+            var hubs: [String: [PlexHub]] = [:]
+            for (library, id) in zip(libraries, ids) { hubs[library.key] = byID[id] }
+            #if DEBUG
+            hubs = hubs.mapValues { TVScreenshotMode.demoTitles($0) }
+            #endif
+            promotedHubs = hubs
+            projectHomeItems()
+        } catch {
+            DiagLog.error(.home, "Promoted hubs failed: \(DiagLog.describe(error))")
+        }
     }
 
     /// Applies one library's hub-fetch outcome. Failure (nil) keeps the last-known hubs.
@@ -1182,8 +1209,9 @@ class PlexDataStore: ObservableObject {
         // Home mirrors the server's own state. Measured on PMS 1.43.3:
         // - `PlexLibrary.hidden` (/library/sections) picks libraries: 0 pinned to Home,
         //   1 hidden from Home, 2 hidden from Home and the sidebar ("Pin to home").
-        // - `PlexHub.promoted` (/hubs/sections/{key}) is set on exactly one hub per
-        //   library. It is `promotedToOwnHome`, not `promotedToRecommended`.
+        // - Which hubs: `/hubs/promoted` (`homeHubs`). `PlexHub.promoted` on
+        //   /hubs/sections/{key} is `promotedToOwnHome`, but it missed a Recently Added
+        //   row that `/hubs/promoted` lists (PMS 1.43.4).
         // - Global `/hubs` is the wrong source: it merges movie libraries into one
         //   row and adds `home.playlists`, which the Plex app never shows.
         // - `/hubs/continueWatching` is the merged in-progress + On Deck hub.
@@ -1220,8 +1248,7 @@ class PlexDataStore: ObservableObject {
         // in Manage Recommendations lands.
         let pins = HomeCollectionPins.pins
         for library in librariesPinnedToHome {
-            for hub in libraryHubs[library.key] ?? [] {
-                guard hub.promoted == true else { continue }
+            for hub in homeHubs(forLibraryKey: library.key) {
                 // A library's own in-progress hub would duplicate the global
                 // Continue Watching row above.
                 guard !Self.isContinueWatchingFamily(hubIdentifier: hub.hubIdentifier) else { continue }
@@ -1859,6 +1886,7 @@ class PlexDataStore: ObservableObject {
         libraries = []
         hasLoadedLibraries = false
         libraryHubs.removeAll()
+        promotedHubs.removeAll()
         pinnedCollectionItems.removeAll()
         lastRecentlyAddedStamp = nil
         homeItems = []

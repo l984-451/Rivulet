@@ -30,6 +30,8 @@ nonisolated enum HomeFeed {
     /// One server's answer.
     struct ServerRows: Sendable, Equatable {
         var libraries: [MediaLibrary] = []
+        /// Its photo libraries, listed only; no rows are fetched for them.
+        var photoLibraries: [MediaLibrary] = []
         /// Nil when its fetch failed, so the last answer stands.
         var continueWatching: [MediaItem]?
         /// Rows after Continue Watching, by library id. A library missing here failed.
@@ -49,6 +51,7 @@ nonisolated enum HomeFeed {
 
     struct Assembled: Sendable, Equatable {
         var libraries: [MediaLibrary]
+        var photoLibraries: [MediaLibrary] = []
         /// Each server's Continue Watching items, the selected server first, for the merge.
         var continueWatching: [[MediaItem]]
         var shelves: [MediaHub]
@@ -57,51 +60,47 @@ nonisolated enum HomeFeed {
         var failures: [String: String] = [:]
     }
 
-    static func assemble(selected: ServerRows?, others: [ServerRows]) -> Assembled {
+    /// `hiddenLibraries` (`SidebarLibraryVisibility` keys) leave their rows off Home, as on tvOS.
+    static func assemble(selected: ServerRows?, others: [ServerRows], hiddenLibraries: Set<String> = []) -> Assembled {
         let servers = (selected.map { [$0] } ?? []) + others
         return Assembled(
             libraries: servers.flatMap(\.libraries),
+            photoLibraries: servers.flatMap(\.photoLibraries),
             continueWatching: servers.map { $0.continueWatching ?? [] },
-            shelves: servers.flatMap { server in server.libraries.flatMap { server.rowsByLibrary[$0.id] ?? [] } })
+            shelves: servers.flatMap { server in
+                server.libraries
+                    .filter { !hiddenLibraries.contains(SidebarLibraryVisibility.key(for: $0)) }
+                    .flatMap { server.rowsByLibrary[$0.id] ?? [] }
+            })
     }
 
     /// Fetches one server's Home. Only the library list can fail the call; a failed
     /// Continue Watching or library row is recorded as missing (see `ServerRows`).
     static func fetch(_ provider: any MediaProvider, role: Role) async throws -> ServerRows {
         async let continuing = try? await provider.continueWatching(limit: continueWatchingLimit)
-        let libraries = try await provider.libraries().filter { videoKinds.contains($0.kind) }
-        let wanted = role == .selected ? libraries.filter(\.isPinnedToHome) : libraries
-        let rows = await withTaskGroup(of: (String, [MediaHub]?).self) { group in
-            for library in wanted {
-                group.addTask { (library.id, await libraryRows(provider, library, role: role)) }
+        let all = try await provider.libraries()
+        let libraries = all.filter { videoKinds.contains($0.kind) }
+        var hubs: [String: [MediaHub]] = [:]
+        switch role {
+        case .selected:
+            // A failed call leaves every library missing, so their last rows stand.
+            let promoted = (try? await provider.promotedHubs(in: libraries.filter(\.isPinnedToHome))) ?? [:]
+            hubs = promoted.mapValues { $0.filter { $0.isPromoted && !$0.isContinueWatchingFamily } }
+        case .secondary:
+            let found = await BoundedFanOut.map(libraries) { library in
+                (library.id, try? await provider.recentlyAddedHub(in: library).map { [$0] } ?? [])
             }
-            var found: [String: [MediaHub]] = [:]
-            for await (id, hubs) in group { found[id] = hubs }
-            return found
-        }
-        return ServerRows(libraries: libraries, continueWatching: await continuing, rowsByLibrary: rows)
-    }
-
-    /// Nil when the library's fetch failed; empty when it answered with no row.
-    private static func libraryRows(_ provider: any MediaProvider, _ library: MediaLibrary, role: Role) async -> [MediaHub]? {
-        let hubs: [MediaHub]
-        do {
-            switch role {
-            case .selected:
-                hubs = try await provider.hubs(in: library).filter {
-                    $0.isPromoted && !$0.isContinueWatchingFamily && !$0.items.isEmpty
-                }
-            case .secondary:
-                hubs = try await provider.recentlyAddedHub(in: library).map { $0.items.isEmpty ? [] : [$0] } ?? []
-            }
-        } catch {
-            return nil
+            for case let (id, rows?) in found { hubs[id] = rows }
         }
         // Two servers can share a hub id, so a row's id names its server.
-        return hubs.map {
-            MediaHub(id: "\(provider.id)|\($0.id)", providerID: $0.providerID, title: $0.title, style: $0.style,
-                     items: $0.items, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
+        let rows = hubs.mapValues { rows in
+            rows.filter { !$0.items.isEmpty }.map {
+                MediaHub(id: "\(provider.id)|\($0.id)", providerID: $0.providerID, title: $0.title, style: $0.style,
+                         items: $0.items, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
+            }
         }
+        return ServerRows(libraries: libraries, photoLibraries: all.filter { $0.kind == .photos },
+                          continueWatching: await continuing, rowsByLibrary: rows)
     }
 
     /// A library's own page of rows (its Recommended), in the server's order, empty rows dropped.
@@ -138,16 +137,21 @@ final class HomeFeedLoader {
     var onChange: ((HomeFeed.Assembled) -> Void)?
     /// Called once the secondary servers have all answered.
     var onSecondaryFinished: (() -> Void)?
+    /// Libraries left off Home; set it, then `publish()`.
+    var hiddenLibraries: Set<String> = []
 
     private var selectedID: String?
     private var secondaryIDs: [String] = []
     private var generation = 0
     private var secondaryTask: Task<Void, Never>?
+    /// The selected server's fetch; a newer load cancels it rather than leave its requests running.
+    private var selectedTask: Task<HomeFeed.ServerRows, Error>?
 
     /// Forgets every answer: a different server or profile.
     func reset() {
         generation += 1
         secondaryTask?.cancel()
+        selectedTask?.cancel()
         servers = [:]
         failures = [:]
         isLoadingSecondary = false
@@ -160,6 +164,7 @@ final class HomeFeedLoader {
 
     func load(selected: (any MediaProvider)?, secondary: [any MediaProvider]) async throws {
         secondaryTask?.cancel()
+        selectedTask?.cancel()
         generation += 1
         let current = generation
         selectedID = selected?.id
@@ -197,8 +202,10 @@ final class HomeFeedLoader {
             if servers.isEmpty, let message = failures.values.first { throw HomeFeedError(message: message) }
             return
         }
+        let fetch = Task { try await HomeFeed.fetch(selected, role: .selected) }
+        selectedTask = fetch
         do {
-            let rows = try await HomeFeed.fetch(selected, role: .selected)
+            let rows = try await withTaskCancellationHandler { try await fetch.value } onCancel: { fetch.cancel() }
             guard generation == current else { return }
             record(.success(rows), for: selected.id)
             publish()
@@ -224,10 +231,10 @@ final class HomeFeedLoader {
     }
 
     /// Waits for the selected server's first answer, or its failure, then publishes everything known.
-    private func publish() {
+    func publish() {
         if let selectedID, servers[selectedID] == nil, failures[selectedID] == nil { return }
         var home = HomeFeed.assemble(selected: selectedID.flatMap { servers[$0] },
-                                     others: secondaryIDs.compactMap { servers[$0] })
+                                     others: secondaryIDs.compactMap { servers[$0] }, hiddenLibraries: hiddenLibraries)
         home.failures = failures
         onChange?(home)
     }

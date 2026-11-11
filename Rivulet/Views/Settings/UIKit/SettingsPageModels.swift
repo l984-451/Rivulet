@@ -217,6 +217,7 @@ enum SettingsContent {
         case .appearance:  return appearance
         case .playback:    return playback
         case .liveTV:      return liveTV
+        case .photos:      return photos
         case .music:       return music
         case .servers:     return servers
         case .plex:        return plex
@@ -423,6 +424,7 @@ enum SettingsContent {
             // Music library for every visible Plex music library.
 //            SettingsRowItem(id: "cat_music",      title: "Music",      kind: .navigation(.music)),
             SettingsRowItem(id: "cat_liveTV",     title: "Live TV",    kind: .navigation(.liveTV)),
+            SettingsRowItem(id: "cat_photos",     title: "Photos",     kind: .navigation(.photos)),
             SettingsRowItem(id: "cat_servers",    title: "Servers",    kind: .navigation(.servers)),
             SettingsRowItem(id: "cache",          title: "Cache & Storage", kind: .navigation(.cache)),
             SettingsRowItem(id: "iCloudSync",     title: "iCloud Sync",
@@ -441,6 +443,28 @@ enum SettingsContent {
         case .off: return String(localized: "Off")
         case .noAccount: return String(localized: "Sign in to iCloud on this device")
         }
+    }
+
+    // MARK: Photos
+
+    private static var photos: [SettingsRowItem] {
+        [
+            SettingsRowItem(id: PhotoPreferences.intervalKey, title: "Slideshow Interval", kind: .cycle(
+                value: { String(localized: "\(Int(PhotoPreferences.slideInterval)) s") },
+                next: {
+                    let all = PhotoPreferences.intervals
+                    let i = all.firstIndex(of: PhotoPreferences.slideInterval) ?? 0
+                    PhotoPreferences.slideInterval = all[(i + 1) % all.count]
+                })),
+            SettingsRowItem(id: PhotoPreferences.transitionKey, title: "Transition", kind: .cycle(
+                value: {
+                    PhotoPreferences.transition == .dissolve
+                        ? String(localized: "Dissolve") : String(localized: "Pan and Zoom")
+                },
+                next: { PhotoPreferences.transition = PhotoPreferences.transition == .dissolve ? .panAndZoom : .dissolve })),
+            SettingsRowItem(id: PhotoPreferences.playsClipsKey, title: "Play Clips in Slideshow", kind: .toggle(
+                get: { PhotoPreferences.playsClips }, set: { PhotoPreferences.playsClips = $0 })),
+        ]
     }
 
     // MARK: Appearance
@@ -568,7 +592,7 @@ enum SettingsContent {
                             })),
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
-            SettingsRowItem(id: "atTheCredits", title: "At the Credits", kind: .cycle(
+            SettingsRowItem(id: "atTheCredits", title: "Credits", kind: .cycle(
                 value: { CreditsBehavior.current().label },
                 next: {
                     let all = CreditsBehavior.allCases
@@ -1363,7 +1387,7 @@ enum SettingsContent {
             SettingsRowItem(id: "forceRefresh", title: "Force Refresh Libraries",
                             kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Force Refresh Libraries?",
-                               message: "This clears the metadata cache and reloads library content from your Plex server.",
+                               message: "This clears the metadata cache and reloads your libraries from all your servers.",
                                confirmTitle: "Refresh", destructive: false) {
                     Task {
                         await CacheManager.shared.clearAllCache()
@@ -1606,20 +1630,13 @@ enum SettingsContent {
         vc.present(popup, animated: true)
     }
 
-    /// Builds the current-build changelog glass popup (or the most recent
-    /// changelog entry if this build has none, so it's never blank). Used by
-    /// the fresh-launch "What's New". Select/Menu dismiss; content-sized.
-    static func makeChangelogPopup() -> InfoPopupViewController {
-        // The changelog is keyed on the build-qualified version ("1.0.0 (50)").
-        let short = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
-        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
-        let qualified = "\(short) (\(build))"
-        let version = WhatsNewView.features(for: qualified) != nil
-            ? qualified
-            : (WhatsNewView.changelogs.first?.version ?? qualified)
-        let features = WhatsNewView.features(for: version) ?? []
-        return InfoPopupViewController(content: InfoPopupContent.changelog(version: version, features: features),
-                                       width: 1000, scrollable: true)
+    /// The fresh-launch "What's New": every build in `versions` (those since the last one
+    /// seen), or the newest entry if empty, so it's never blank. Select/Menu dismiss.
+    static func makeChangelogPopup(versions: [String]) -> InfoPopupViewController {
+        let entries = versions.isEmpty
+            ? Array(WhatsNewView.changelogs.prefix(1))
+            : WhatsNewView.changelogs.filter { versions.contains($0.version) }
+        return InfoPopupViewController(content: InfoPopupContent.changelog(entries), width: 1000, scrollable: true)
     }
 
     /// Licenses & Legal renders into the app's contained glass popup (not a

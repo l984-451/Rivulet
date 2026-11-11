@@ -71,7 +71,7 @@ final class PlexPlaybackLifecycleTests: XCTestCase {
     }
 
     private func makeReporter(_ requests: Requests) -> PlexProgressReporter {
-        PlexProgressReporter(
+        PlexProgressReporter(countedPlay: { _, _, _ in false },
             stopRetryDelay: .milliseconds(100),
             openSession: { await requests.openSession($0, key: $1, index: $2, session: $3) },
             request: { url, _ in try await requests.respond(url) })
@@ -387,7 +387,12 @@ final class PlexPlaybackLifecycleTests: XCTestCase {
     func testEpisodeCreditsChoicesPreserveReportingUntilPlaybackFinishes() async throws {
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: CreditsBehavior.storageKey)
-        defer { defaults.set(previous, forKey: CreditsBehavior.storageKey) }
+        let countdown = defaults.object(forKey: AutoplayCountdown.storageKey)
+        defaults.set(5, forKey: AutoplayCountdown.storageKey)
+        defer {
+            defaults.set(previous, forKey: CreditsBehavior.storageKey)
+            defaults.set(countdown, forKey: AutoplayCountdown.storageKey)
+        }
         let credits = PlexMarker(id: 1, type: "credits", startTimeOffset: 90000, endTimeOffset: 100000)
 
         for choice in [CreditsBehavior.upNext, .skipButton, .nothing] {
@@ -545,9 +550,9 @@ final class PlexPlaybackLifecycleTests: XCTestCase {
             #"{"ratingKey":"200","type":"episode","title":"Next","parentRatingKey":"season","index":2,"duration":100000,"Media":[{"id":1,"Part":[{"id":1,"key":"/library/parts/1/next.mkv"}]}]}"#.utf8))
         await vm.playEpisode(next)
         XCTAssertEqual(vm.metadata.ratingKey, "200")
-        XCTAssertTrue(requests.watchedKeys.contains("100"), "The final stop must not leave the outgoing episode in progress")
         vm.reportPlaybackState(.playing)
         await vm.reportFinalProgress(time: 20, duration: 100)
+        XCTAssertTrue(requests.watchedKeys.contains("100"), "The final stop must not leave the outgoing episode in progress")
         XCTAssertEqual(requests.events, ["playing:100", "watched:100", "stopped:100", "watched:100", "playing:200", "stopped:200"])
         let incomingSession = try XCTUnwrap(vm.buildRivuletHLSURL(offset: 0)?.headers["X-Plex-Session-Identifier"])
         XCTAssertNotEqual(outgoingSession, incomingSession)
@@ -737,7 +742,7 @@ final class PlexPlaybackLifecycleTests: XCTestCase {
         let requests = Requests()
         let arrived = expectation(description: "scrobble in flight")
         arrived.assertForOverFulfill = false
-        let reporter = PlexProgressReporter(requestTimeout: .milliseconds(100), openSession: { await requests.openSession($0, key: $1, index: $2, session: $3) }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, requestTimeout: .milliseconds(100), openSession: { await requests.openSession($0, key: $1, index: $2, session: $3) }) { url, _ in
             if url.path == "/:/scrobble" {
                 arrived.fulfill()
                 try await Task.sleep(for: .seconds(60))

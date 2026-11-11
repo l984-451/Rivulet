@@ -21,16 +21,17 @@ final class EmbyPhotoFolderTests: XCTestCase {
     private let base = EmbyBrowseFixtures.baseURL
     private let photos = MediaLibrary(id: "9", providerID: "emby:srv", title: "Photos", kind: .photos)
     private let misc = MediaLibrary(id: "11", providerID: "emby:srv", title: "Misc Mixed", kind: .mixed)
-    private var zone: TimeZone!
-
-    // West of UTC, where a wall-clock time read as UTC shows as the day before.
-    override func setUp() {
-        zone = NSTimeZone.default
-        NSTimeZone.default = TimeZone(identifier: "America/Chicago")!
+    /// West of UTC, where a wall-clock time read as UTC shows as the day before. Passed in rather
+    /// than set as the default zone: the date parser and `Calendar.current` don't both follow
+    /// `NSTimeZone.default`, so that only held on a machine already in Chicago.
+    private static let chicago = TimeZone(identifier: "America/Chicago")!
+    private static var chicagoCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = chicago
+        return calendar
     }
 
     override func tearDown() async throws {
-        NSTimeZone.default = zone
         XCTAssertEqual(server.headerProblems, [])
         try await super.tearDown()
     }
@@ -126,6 +127,15 @@ final class EmbyPhotoFolderTests: XCTestCase {
         let photo = try XCTUnwrap(EmbyPhotoMapper.item(late, providerID: pid, baseURL: base))
         XCTAssertEqual(day(photo.date), DateComponents(year: 2025, month: 1, day: 3))
         XCTAssertEqual(day(try map(Fixtures.rootMedia)?.date), DateComponents(year: 2025, month: 12, day: 9))
+        let west = EmbyPhotoMapper.date(late, kind: .photo, in: Self.chicago)
+        XCTAssertEqual(west.map { Self.chicagoCalendar.dateComponents([.year, .month, .day], from: $0) },
+                       DateComponents(year: 2025, month: 1, day: 3), "and west of UTC")
+    }
+
+    func test_takenClock_isTheCamerasWithEXIF_elseAnInstant() throws {
+        XCTAssertEqual(try map(Fixtures.rootMedia)?.details?.takenAtClock, .wallClock)
+        XCTAssertEqual(try map(Fixtures.rootMedia, at: 2)?.details?.takenAtClock, .instant)
+        XCTAssertEqual(try map(Fixtures.rootMedia, at: 3)?.details?.takenAtClock, .instant)
     }
 
     func test_dateWithoutEXIF_andForAClip_isAnInstant() throws {
@@ -133,12 +143,36 @@ final class EmbyPhotoFolderTests: XCTestCase {
         XCTAssertEqual(try map(Fixtures.rootMedia, at: 3)?.date, EmbyJSON.date("2025-07-16T06:46:37.0000000Z"))
     }
 
+    func test_photo_detailsAreSizeAndFileOnly_andNoPlace() throws {
+        let photo = try XCTUnwrap(try map(Fixtures.rootMedia))
+        XCTAssertNil(photo.coordinate, "Emby sends no GPS")
+        XCTAssertNil(photo.details?.cameraLine, "nor EXIF")
+        XCTAssertNil(photo.details?.exposureLine)
+        XCTAssertEqual([photo.details?.width, photo.details?.height], [4032, 3024])
+        XCTAssertEqual(photo.details?.fileName, "photo-5.jpg")
+        XCTAssertEqual(photo.details?.takenAt, EmbyJSON.date("2025-12-09T16:42:20.0000000Z"))
+        XCTAssertFalse(photo.isFavorite)
+        let favorite = Fixtures.rootMedia.replacingOccurrences(of: #""IsFavorite":false"#, with: #""IsFavorite":true"#)
+        XCTAssertTrue(try XCTUnwrap(try map(favorite)).isFavorite)
+        XCTAssertNil(try map(Fixtures.libraryAlbums)?.details)
+    }
+
+    func test_favorites_skipTheAlbums_andRecurse() async throws {
+        server.respond("/Users/\(uid)/Items", body: Fixtures.rootMedia)
+        let trip = MediaItemRef(providerID: pid, itemID: "1653")
+        _ = try await provider().photoPage(in: photos, folder: trip, query: PhotoQuery(favoritesOnly: true),
+                                           page: Page(offset: 0, limit: 100))
+        XCTAssertEqual(server.requests.count, 1, "no album request")
+        let sent = query(server.requests[0])
+        XCTAssertEqual([sent["Filters"], sent["Recursive"]], ["IsFavorite", "true"])
+    }
+
     // MARK: - photoPage
 
     func test_root_listsFoldersNonRecursively_andEveryPhotoRecursively() async throws {
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "PhotoAlbum,Folder"], body: Fixtures.libraryAlbums)
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "Photo,Video"], body: Fixtures.rootMedia)
-        let result = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 0, limit: 100))
+        let result = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 0, limit: 100))
         XCTAssertEqual(result.folders.map(\.title), ["Trip"])
         XCTAssertEqual(result.media.map(\.title), ["photo-5", "photo-2", "trip-6", "clip-1"])
         XCTAssertEqual(result.media.map(\.kind), [.photo, .photo, .photo, .clip])
@@ -159,7 +193,7 @@ final class EmbyPhotoFolderTests: XCTestCase {
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "PhotoAlbum,Folder"], body: Fixtures.albumFolders)
         server.respond("/Users/\(uid)/Items", query: ["IncludeItemTypes": "Photo,Video"], body: Fixtures.albumMedia)
         let trip = MediaItemRef(providerID: pid, itemID: "1653")
-        let result = try await provider().photoPage(in: photos, folder: trip, page: Page(offset: 0, limit: 100))
+        let result = try await provider().photoPage(in: photos, folder: trip, query: .default, page: Page(offset: 0, limit: 100))
         XCTAssertEqual(result.folders.map(\.title), ["Day Two"])
         XCTAssertEqual(result.media.map(\.kind), [.photo, .photo, .photo, .clip])
         for request in server.requests {
@@ -170,11 +204,11 @@ final class EmbyPhotoFolderTests: XCTestCase {
 
     func test_laterPages_skipTheFoldersAndPageAgainstTheTotal() async throws {
         server.respond("/Users/\(uid)/Items", body: Fixtures.rootMedia.replacingOccurrences(of: #""TotalRecordCount":4"#, with: #""TotalRecordCount":11"#))
-        let result = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 4, limit: 4))
+        let result = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 4, limit: 4))
         XCTAssertEqual(server.requests.count, 1, "folders are asked for once")
         XCTAssertTrue(result.folders.isEmpty)
         XCTAssertEqual(result.nextPage?.offset, 8)
-        let last = try await provider().photoPage(in: photos, folder: nil, page: Page(offset: 8, limit: 4))
+        let last = try await provider().photoPage(in: photos, folder: nil, query: .default, page: Page(offset: 8, limit: 4))
         XCTAssertNil(last.nextPage)
     }
 

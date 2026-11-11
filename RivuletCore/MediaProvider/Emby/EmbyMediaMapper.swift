@@ -198,7 +198,8 @@ enum EmbyMediaMapper {
                     imageURL: imageURL(baseURL, itemID: id, type: "Primary", tag: p.primaryImageTag),
                     titleTmdbId: tmdbID,
                     titleIsMovie: dto.type == "Movie",
-                    backdropURL: backdrop
+                    backdropURL: backdrop,
+                    providerID: providerID
                 )
             }
         }

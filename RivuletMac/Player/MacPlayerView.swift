@@ -25,6 +25,7 @@ struct MacPlayerView: View {
     @State private var containerHeight: CGFloat = 0
     @State private var isFullScreen = false
     @State private var showsChapters = false
+    @State private var subtitleSearch: SubtitleSearchModel?
     @State private var showsPlaylist = false
     @AppStorage(SkipLengthKeys.back) private var skipBackSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
@@ -90,6 +91,10 @@ struct MacPlayerView: View {
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
         }
+        .sheet(item: $subtitleSearch) { model in
+            MacSubtitleSearchPane(model: model)
+        }
+        .task(id: session.request.id) { await session.refreshSubtitleSearch() }
     }
 
     // MARK: - State
@@ -348,6 +353,9 @@ struct MacPlayerView: View {
                 ForEach(session.subtitleTracks) { MacTrackLabel(track: $0).tag(Optional($0.id)) }
             }
             .pickerStyle(.inline)
+            if session.subtitleSearchAvailable {
+                Button("Search for Subtitles") { subtitleSearch = session.makeSubtitleSearch() }
+            }
             Section("Subtitle Height") {
                 Button("Lower") { CaptionHeight.step(by: -1) }
                     .disabled(captionHeightUnits <= CaptionHeight.unitRange.lowerBound)
@@ -454,7 +462,7 @@ struct MacPlayerView: View {
     /// the controls keep them up. The cursor goes with them until it moves.
     private func scheduleHide() {
         hideTask?.cancel()
-        guard chromeVisible, isPlaying, failure == nil, !overControls, !showsChapters, !showsPlaylist else { return }
+        guard chromeVisible, isPlaying, failure == nil, !overControls, !showsChapters, !showsPlaylist, subtitleSearch == nil else { return }
         hideTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled, scrubValue == nil else { return }

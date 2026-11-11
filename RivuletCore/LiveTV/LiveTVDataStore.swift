@@ -37,7 +37,15 @@ class LiveTVDataStore: ObservableObject {
 
     /// How far ahead the guide fills. Plex serves 8 days; providers with less
     /// just return nothing past their end.
-    static let epgMaxHoursAhead = 192
+    nonisolated static let epgMaxHoursAhead = 192
+    /// How far the launch preload fills, until a Live TV screen first appears.
+    nonisolated static let epgLaunchHoursAhead = 24
+    private var liveTVScreenSeen = false
+
+    /// The fill ceiling in hours ahead of now.
+    nonisolated static func fillHorizonHours(liveTVScreenSeen: Bool) -> Int {
+        liveTVScreenSeen ? epgMaxHoursAhead : epgLaunchHoursAhead
+    }
     /// Hours per background fill request.
     private static let fillChunkHours = 12
     private var fillTask: Task<Void, Never>?
@@ -453,8 +461,8 @@ class LiveTVDataStore: ObservableObject {
         // Collected before the channels go, or there is nothing left to purge.
         let removed = Set(channels.lazy.filter { ids.contains($0.sourceId) }.map(\.id))
         channels.removeAll { ids.contains($0.sourceId) }
-        for channelId in removed {
-            epg.removeValue(forKey: channelId)
+        if epg.keys.contains(where: removed.contains) {
+            epg = epg.filter { !removed.contains($0.key) }
         }
     }
 
@@ -884,8 +892,12 @@ class LiveTVDataStore: ObservableObject {
         }
     }
 
+    private var sourceInfoRun = 0
+
     /// Update source info for UI
     private func updateSourceInfo() async {
+        sourceInfoRun += 1
+        let run = sourceInfoRun
         var infos: [LiveTVSourceInfo] = []
 
         // One pass instead of a filter per provider: on a large lineup the
@@ -896,15 +908,24 @@ class LiveTVDataStore: ObservableObject {
             channelCounts[channel.sourceId, default: 0] += 1
         }
 
-        for (id, provider) in providers {
-            let isConnected = await provider.isConnected
+        // Probed together: a dead source's timeout no longer queues the others behind it.
+        let probed = providers
+        let connected = await withTaskGroup(of: (String, Bool).self) { group in
+            for (id, provider) in probed {
+                group.addTask { (id, await provider.isConnected) }
+            }
+            return await group.reduce(into: [String: Bool]()) { $0[$1.0] = $1.1 }
+        }
+        // A newer run supersedes this one, so a slow probe cannot overwrite fresher state.
+        guard run == sourceInfoRun else { return }
 
+        for (id, provider) in probed {
             infos.append(LiveTVSourceInfo(
                 id: id,
                 sourceType: provider.sourceType,
                 displayName: provider.displayName,
                 channelCount: channelCounts[id] ?? 0,
-                isConnected: isConnected,
+                isConnected: connected[id] ?? false,
                 lastSync: nil,  // TODO: Track last sync time
                 channelProfile: (provider as? IPTVProvider)?.channelProfile
             ))
@@ -1016,7 +1037,8 @@ class LiveTVDataStore: ObservableObject {
                 if !merged.channels.isEmpty { self.lastChannelsLoad = Date() }
             }
 
-            await self.updateSourceInfo()
+            // Not awaited: nothing reads the probe result before it publishes `sources`.
+            Task { await self.updateSourceInfo() }
         }
         channelLoad = (task, providersGeneration)
 
@@ -1197,7 +1219,8 @@ class LiveTVDataStore: ObservableObject {
     /// nothing left to fetch, no source answered, or a full load replaced the grid.
     private func extendEPG() async -> Bool {
         guard !isLoadingEPG, let from = epgLoadedThrough else { return false }
-        let ceiling = Date().addingTimeInterval(Double(Self.epgMaxHoursAhead) * 3600)
+        let horizon = Self.fillHorizonHours(liveTVScreenSeen: liveTVScreenSeen)
+        let ceiling = Date().addingTimeInterval(Double(horizon) * 3600)
         let to = min(from.addingTimeInterval(Double(Self.fillChunkHours) * 3600), ceiling)
         // An hour's minimum, so the moving ceiling doesn't buy a request per tick.
         guard to.timeIntervalSince(from) >= 3600, await mergeEPG(from: from, to: to),
@@ -1354,6 +1377,12 @@ class LiveTVDataStore: ObservableObject {
     /// If data is already loaded, this does nothing. Otherwise it cancels
     /// background task and starts high priority load.
     func elevatePreloadPriority() async {
+        // First Live TV screen of the session: fetch the far days too.
+        if !liveTVScreenSeen {
+            liveTVScreenSeen = true
+            fillGuide()
+        }
+
         // If already loaded, nothing to do
         guard epg.isEmpty else {
             return
@@ -1598,9 +1627,10 @@ class LiveTVDataStore: ObservableObject {
 
     private func rememberEventSlots() {
         let seen = epg.compactMap { id, programs in
-            programs.contains { $0.isPregameBlock || $0.isEmptySlot } ? id : nil
+            eventSlotIds.contains(id) ? nil
+                : programs.contains { $0.isPregameBlock || $0.isEmptySlot } ? id : nil
         }
-        guard !eventSlotIds.isSuperset(of: seen) else { return }
+        guard !seen.isEmpty else { return }
         eventSlotIds.formUnion(seen)
         userDefaults.set(Array(eventSlotIds), forKey: eventSlotsKey)
     }

@@ -24,10 +24,14 @@ struct ContentView: View {
     @StateObject private var authManager = PlexAuthManager.shared
     @StateObject private var profileManager = PlexUserProfileManager.shared
     #if DEBUG
-    @State private var showSplash = false
+    /// `RIVULET_SPLASH=1` shows the launch splash in a debug build.
+    private static let launchesWithSplash = ProcessInfo.processInfo.environment["RIVULET_SPLASH"] != nil
     #else
-    @State private var showSplash = true
+    private static let launchesWithSplash = true
     #endif
+    /// Whether the splash is wanted. Turning false plays its exit; `splashGone` then removes it.
+    @State private var showSplash = Self.launchesWithSplash
+    @State private var splashGone = !Self.launchesWithSplash
 
     /// Caps how long the splash waits for the hero backdrop once the content is
     /// ready, so a slow image/network can't hold the splash up. Cancelled if the
@@ -39,12 +43,11 @@ struct ContentView: View {
         TVSidebarView()
             .modifier(AutoPlayLauncherModifier())
             .overlay {
-                if showSplash {
-                    splashOverlay
-                        .transition(.opacity)
+                if !splashGone {
+                    LaunchSplash(finished: !showSplash) { splashGone = true }
+                        .ignoresSafeArea()
                 }
             }
-            .animation(.easeOut(duration: 0.4), value: showSplash)
         .onChange(of: authManager.hasCredentials) { _, hasCredentials in
             splashLog.info("hasCredentials changed to \(hasCredentials)")
             if !hasCredentials {
@@ -157,21 +160,19 @@ struct ContentView: View {
             }
         }
     }
+}
 
-    private var splashOverlay: some View {
-        ZStack {
-            VStack(spacing: 24) {
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.white.opacity(0.6))
+/// The launch splash is UIKit (`LaunchSplashView`): its animations must keep their
+/// pace while launch holds the main thread. `finished` plays the exit, and `onGone`
+/// runs when it has played.
+private struct LaunchSplash: UIViewRepresentable {
+    let finished: Bool
+    let onGone: () -> Void
 
-                ProgressView()
-                    .tint(.white.opacity(0.5))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial, ignoresSafeAreaEdges: .all)
-        .allowsHitTesting(true)
+    func makeUIView(context: Context) -> LaunchSplashView { LaunchSplashView() }
+
+    func updateUIView(_ view: LaunchSplashView, context: Context) {
+        if finished { view.finish(completion: onGone) }
     }
 }
 

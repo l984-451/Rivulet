@@ -149,7 +149,10 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     var hubsError: Error?
     /// Libraries whose `hubs(in:)` throws, the others answering.
     var failingHubLibraries: Set<String> = []
+    /// Awaited before `hubs(in:)` answers, so a test can hold library fetches open.
+    var hubsGate: (@Sendable () async throws -> Void)?
     func hubs(in library: MediaLibrary) async throws -> [MediaHub] {
+        try await hubsGate?()
         if let hubsError { throw hubsError }
         if failingHubLibraries.contains(library.id) { throw MediaProviderError.unreachable }
         return hubsByLibrary[library.id] ?? []

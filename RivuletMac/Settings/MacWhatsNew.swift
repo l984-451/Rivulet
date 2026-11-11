@@ -3,10 +3,26 @@
 
 import SwiftUI
 
-/// The Mac release notes, keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest first.
+/// The Mac release notes, keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest first;
+/// CI takes the build number from the shared `vX.Y.Z-<build>` tag.
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum MacChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.0 (126)", [
+            "Photos, with favorites, slideshows, photo info, a map and a memories row",
+            "Improved search to find more matches, genres, and people",
+            "Subtitle search in the player. Jellyfin and Emby should work (please test)",
+            "Plex home profiles now see their own watchlist",
+            "Hidden libraries stay off Home and the hero",
+            "Direct Play buffers as far ahead as storage allows",
+            "Added delete option in more long press menus",
+            "Video libraries can be browsed by folder",
+            "Season tiles show the show's poster and open the show",
+            "Faster playback, and finishing a title adds one play in Plex",
+            "With credits playing out, Up Next's countdown ends when the video does",
+            "Artwork stays on your device between launches",
+            "French is available, and German covers more of the app. @JoschaP",
+        ]),
         ("1.0.0 (1)", [
             "Rivulet now has a native Mac app",
             "Plex, Jellyfin and Emby in one place, with Continue Watching merged across servers",
@@ -32,17 +48,24 @@ enum MacChangelog {
 
 /// Shown once after an update whose build has notes, and from Help > What's New.
 struct MacWhatsNewView: View {
-    let version: String
+    /// Newest first: every build since the last one seen, or one from Help.
+    let versions: [String]
     var showsContinue = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("What's New").font(.largeTitle.bold())
-            Text("Version \(version)").font(.subheadline).foregroundStyle(.secondary)
             ScrollView {
-                MacChangelogLines(lines: MacChangelog.lines(for: version) ?? [])
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(versions, id: \.self) { version in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Version \(version)").font(.subheadline).foregroundStyle(.secondary)
+                            MacChangelogLines(lines: MacChangelog.lines(for: version) ?? [])
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if showsContinue {
                 Button("Continue") { dismiss() }.keyboardShortcut(.defaultAction).frame(maxWidth: .infinity)

@@ -25811,6 +25811,17 @@
           }
         }
       }
+    },
+    "library.decade" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@er"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

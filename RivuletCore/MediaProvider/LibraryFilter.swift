@@ -31,7 +31,8 @@ struct LibraryFilter: Equatable, Sendable {
     /// Every year of the decade, for servers that filter by a year list.
     var decadeYears: [Int] { decade.map { Array($0..<($0 + 10)) } ?? [] }
 
-    static func decadeTitle(_ decade: Int) -> String { "\(decade)s" }
+    /// "1990s"; German reads "1990er". The year goes in as text: a number takes the locale's grouping ("1.990er").
+    static func decadeTitle(_ decade: Int) -> String { String(localized: "library.decade", defaultValue: "\(String(decade))s") }
 }
 
 struct LibraryFilterOptions: Equatable, Sendable {

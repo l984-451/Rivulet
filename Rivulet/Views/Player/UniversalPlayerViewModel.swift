@@ -4030,7 +4030,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         let base = inFlightRelativeSeekTarget ?? currentTime
         let targetTime = max(0, min(base + seconds, duration))
         // tvOS Show on Skip Back covers skips back of up to 30s in total.
-        if seconds < 0, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
+        // A skip back at 0 moves nowhere: no tick could arm the window, so it would never close.
+        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
            Self.systemShowsSubtitlesOnSkipBack() {
             openCaptionWindow(until: base)
         } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {

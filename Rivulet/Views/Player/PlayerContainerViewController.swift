@@ -1764,6 +1764,7 @@ class PlayerContainerViewController: UIViewController {
                 badges: badges))
             card.onFromBeginning = { [weak self, weak vm] in
                 self?.activeRailPanel?.dismissPanel()
+                vm?.endReplayWindow()
                 Task {
                     await vm?.seek(to: 0)
                     vm?.resume()
@@ -1791,6 +1792,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
+                        vm?.endReplayWindow()
                         Task { await vm?.seek(to: start, exact: true) }
                     })
             }

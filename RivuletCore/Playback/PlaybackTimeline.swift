@@ -5,8 +5,8 @@ import Foundation
 
 /// When a player tells its server where it is, for every app and server. A session opens with
 /// `playing` (#433), reports each 10 s of playback, repeats paused and buffering reports every 10 s so the server can
-/// end a paused session (#403), and says nothing once it has stopped or the server ended it (#605),
-/// until `begin()` or a fresh `playing`.
+/// end a paused session (#403), and says nothing once it has stopped (until `begin()` or a fresh
+/// `playing`) or the server ended it (until `begin()`, #605).
 @MainActor
 final class PlaybackTimeline {
     enum State: String, Sendable { case playing, paused, buffering, stopped }

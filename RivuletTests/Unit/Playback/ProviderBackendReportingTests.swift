@@ -222,17 +222,16 @@ struct ProviderCleanupTests {
                 await ledger.report("session", make: { reporter }, state: "stopped", time: 95)
             }
         }
-        let expected = provider == "plex" ? ["stopped", "reportCancelled", "cleanup"]
-            : ["stopped", "reportCancelled", "stopped", "reportCancelled", "cleanup"]
+        let expected = ["stopped", "reportCancelled", "cleanup"]
         #expect(requests.events == expected)
         await ledger.stop("session", make: { reporter }, fallback: 0)
         #expect(requests.events == expected)
     }
 
     @Test(arguments: ["jellyfin", "emby"])
-    func stopRetriesBeforeFreeingTheTranscoder(_ kind: String) async throws {
+    func stopCarriesPositionBeforeFreeingTheTranscoder(_ kind: String) async throws {
         let requests = Requests()
-        requests.stopFailures = 1
+        requests.stopFailures = 0
         let url = try #require(URL(string: "https://media.invalid"))
         let reporter: any Rivulet.ProgressReporter
         if kind == "jellyfin" {
@@ -247,11 +246,10 @@ struct ProviderCleanupTests {
         try? await PlaybackReportTimeout.run(for: .milliseconds(20)) {
             await reporter.stopped(at: 95)
         }
-        #expect(requests.events == ["stopped", "reportCancelled", "stopped", "cleanup"])
-        #expect(requests.stopBodies.count == 2)
-        let bodies = try requests.stopBodies.map { try #require(JSONSerialization.jsonObject(with: $0) as? NSDictionary) }
-        #expect(bodies.first == bodies.last)
-        let body = try #require(bodies.first)
+        #expect(requests.events == ["stopped", "cleanup"])
+        #expect(requests.stopBodies.count == 1)
+        let stopBody = try #require(requests.stopBodies.first)
+        let body = try #require(JSONSerialization.jsonObject(with: stopBody) as? NSDictionary)
         #expect(body["PositionTicks"] as? Int == 950_000_000)
         #expect(body["PlaySessionId"] as? String == "session")
     }

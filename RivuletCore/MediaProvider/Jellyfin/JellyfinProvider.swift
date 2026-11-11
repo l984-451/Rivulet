@@ -831,7 +831,7 @@ struct JellyfinProgressReporter: ProgressReporter {
     }
 
     func stopped(at position: TimeInterval) async {
-        await PlaybackReportTimeout.finalReport(for: reportTimeout) {
+        await PlaybackReportTimeout.cleanup(for: reportTimeout) {
             try await client.post("Sessions/Playing/Stopped", body: report(position, paused: false))
         }
         // Best effort: the server also reaps an idle encode on its own.

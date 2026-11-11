@@ -31,6 +31,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     private var countdownTask: Task<Void, Never>?
     private var nextLookupTask: Task<Void, Never>?
     private var nextTask: Task<Void, Never>?
+    /// The outgoing item has reported stopped and the next one is being prepared: it must not reopen.
+    private var switchingItem = false
     private var reloadTask: Task<Void, Never>?
     private var longStallTask: Task<Void, Never>?
     private lazy var timeline: PlaybackTimeline = {
@@ -619,7 +621,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     private func report(_ state: String) {
-        guard serverStopReason == nil, !ended, playbackStart.itemHasPlayed else { return }
+        guard serverStopReason == nil, !ended, !switchingItem, playbackStart.itemHasPlayed else { return }
         switch state {
         case "playing": timeline.transportChanged(.playing)
         case "paused": timeline.transportChanged(.paused, hasStarted: playbackStart.itemHasPlayed)
@@ -770,9 +772,12 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         reloadTask?.cancel()
         longStallTask?.cancel()
         let previous = request
+        switchingItem = true
         nextTask = Task { [weak self] in
             // Up Next keeps the player-menu pick, else decides Home or Away again; a fresh reading is reused.
             guard let self else { return }
+            // A cancelled switch leaves the flag to whatever replaced it.
+            defer { if !Task.isCancelled { self.switchingItem = false } }
             guard let nextRequest = try? await self.plex.preparePlayback(replacing: previous, while: { self.canLoad }, operation: {
                 try await self.plex.upNextPlayback(for: next, quality: self.sessionQuality, previous: previous)
             }) else { return }
@@ -794,6 +799,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             serverStopReason = nil
             onItemChange?()
             lookUpNextEpisode()
+            switchingItem = false
             await load(startsItem: true)
         }
     }

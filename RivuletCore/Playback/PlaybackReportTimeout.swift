@@ -14,17 +14,6 @@ enum PlaybackReportTimeout {
         }.value
     }
 
-    // A final report gets one fresh deadline even when the caller cancelled its first attempt.
-    static func finalReport(for duration: Duration = duration,
-                            operation: @escaping @Sendable () async throws -> Void) async {
-        do { try await run(for: duration, operation: operation) }
-        catch {
-            await Task {
-                try? await run(for: duration, operation: operation)
-            }.value
-        }
-    }
-
     // Cancels at the deadline, then awaits cooperative completion: this is not a hard return deadline.
     // Operations must honor cancellation (as URLSession does). Stop cleanup has its own deadline.
     static func run<Value: Sendable>(for duration: Duration = duration,

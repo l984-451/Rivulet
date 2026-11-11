@@ -6955,7 +6955,11 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     func reportFinalProgress(time: TimeInterval, duration: TimeInterval) async {
         guard !isPlayingCinemaExtra else { return }
-        guard !serverEndedPlayback else { return }
+        // The server ended the session: nothing to report, but its watch state may have moved.
+        guard !serverEndedPlayback else {
+            NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
+            return
+        }
         if case .provider(let playback) = source {
             await stopProviderReporter(at: time)
             if duration > 0 && time / duration > 0.9 {

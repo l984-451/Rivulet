@@ -170,7 +170,7 @@ struct EmbyProgressReporter: ProgressReporter {
 
     func stopped(at position: TimeInterval) async {
         if let body = report(position, paused: false) {
-            await PlaybackReportTimeout.finalReport(for: reportTimeout) {
+            await PlaybackReportTimeout.cleanup(for: reportTimeout) {
                 try await client.post("Sessions/Playing/Stopped", body: body)
             }
         }

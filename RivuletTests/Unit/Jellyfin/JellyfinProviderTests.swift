@@ -177,12 +177,12 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertTrue(kill.url!.query!.contains("playSessionId=ps3"))
     }
 
-    func test_progressReporter_sendsTicksAndIDs() async {
+    func test_progressReporter_sendsTicksAndIDs() async throws {
         server.respond("/Sessions/Playing", status: 204)
         server.respond("/Sessions/Playing/Progress", status: 204)
         server.respond("/Sessions/Playing/Stopped", status: 204)
         let reporter = provider().progressReporter(for: ref, sourceID: "src-4k", playSessionID: "psid-1")
-        await reporter.start(position: 412)
+        try await reporter.start(position: 412)
         await reporter.paused(at: 61.5)
         await reporter.stopped(at: 62)
         XCTAssertEqual(server.requests.map { $0.url!.path },

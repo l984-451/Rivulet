@@ -36,13 +36,16 @@ struct PlexTimelineReporter: ProgressReporter {
         await report(position, "stopped")
         onEnd()
         guard session?.isTranscode == true, let playSessionID else { return }
-        await networkManager.stopTranscodeSession(serverURL: serverURL, authToken: authToken, sessionId: playSessionID)
+        await PlaybackReportTimeout.cleanup {
+            await networkManager.stopTranscodeSession(serverURL: serverURL, authToken: authToken, sessionId: playSessionID)
+        }
     }
 
     private func report(_ position: TimeInterval, _ state: String) async {
         _ = try? await networkManager.reportProgress(
             serverURL: serverURL, authToken: authToken, ratingKey: ratingKey, timeMs: Int(position * 1000),
-            state: state, duration: session?.durationMs, sessionIdentifier: timelineSession
+            state: state, duration: session?.durationMs, sessionIdentifier: timelineSession,
+            reportingTimeout: PlaybackReportTimeout.duration
         )
     }
 }

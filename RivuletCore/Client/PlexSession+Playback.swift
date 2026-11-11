@@ -15,7 +15,8 @@ extension PlexSession {
             try await PlexNetworkManager.shared.markWatched(
                 serverURL: request.serverURL,
                 authToken: request.token,
-                ratingKey: key
+                ratingKey: key,
+                reportingTimeout: PlaybackReportTimeout.duration
             )
             if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
         } catch {

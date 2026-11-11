@@ -1127,7 +1127,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         timeMs: Int,
         state: String = "playing",
         duration: Int? = nil,
-        sessionIdentifier: String? = nil
+        sessionIdentifier: String? = nil,
+        reportingTimeout: Duration? = nil
     ) async throws -> String? {
         guard var components = URLComponents(string: "\(serverURL)/:/timeline") else {
             throw PlexAPIError.invalidURL
@@ -1162,7 +1163,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await session.data(for: request)
+        let session = session, reportRequest = request
+        let data: Data, response: URLResponse
+        if let reportingTimeout {
+            (data, response) = try await PlaybackReportTimeout.run(for: reportingTimeout) {
+                try await session.data(for: reportRequest)
+            }
+        } else {
+            (data, response) = try await session.data(for: reportRequest)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -1192,7 +1201,8 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     func markWatched(
         serverURL: String,
         authToken: String,
-        ratingKey: String
+        ratingKey: String,
+        reportingTimeout: Duration? = nil
     ) async throws {
         guard var components = URLComponents(string: "\(serverURL)/:/scrobble") else {
             throw PlexAPIError.invalidURL
@@ -1213,7 +1223,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             request.addValue(value, forHTTPHeaderField: key)
         }
 
-        let (_, response) = try await session.data(for: request)
+        let session = session, reportRequest = request
+        let response: URLResponse
+        if let reportingTimeout {
+            (_, response) = try await PlaybackReportTimeout.run(for: reportingTimeout) {
+                try await session.data(for: reportRequest)
+            }
+        } else {
+            (_, response) = try await session.data(for: request)
+        }
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             if let httpResponse = response as? HTTPURLResponse {

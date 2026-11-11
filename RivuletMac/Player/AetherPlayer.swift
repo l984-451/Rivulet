@@ -207,7 +207,9 @@ final class AetherPlayer: ObservableObject {
     }
 
     private func wirePublishers() {
-        engine.$state
+        PlaybackTransportState.publisher(state: engine.$state.eraseToAnyPublisher(),
+                                         phase: engine.$playbackPhase.eraseToAnyPublisher(),
+                                         nativeReady: PlaybackTransportState.nativeReadiness(engine.$currentAVPlayer.eraseToAnyPublisher()))
             // errorInfo is assigned right before state, so read it on this turn.
             .map { [engine] state in (state, engine.errorInfo) }
             .receive(on: DispatchQueue.main)

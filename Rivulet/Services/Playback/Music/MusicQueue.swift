@@ -506,7 +506,7 @@ final class MusicQueue: ObservableObject {
                 }
                 player.load(url: url, headers: [:])
                 reporter = provider.progressReporter(for: track.ref, stream: stream)
-                if let reporter { Task { await reporter.start(position: 0) } }
+                if let reporter { Task { try? await reporter.start(position: 0) } }
 
                 // Update Now Playing
                 nowPlayingBridge.update(

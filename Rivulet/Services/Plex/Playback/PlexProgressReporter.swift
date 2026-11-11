@@ -33,13 +33,27 @@ actor PlexProgressReporter {
     private var lastReportedStates: [String: String] = [:]
     /// Play session per server|ratingKey, shared by stream requests and timeline reports.
     private var playbackSessions: [String: String] = [:]
+    private var stopRetries: [String: Task<Void, Never>] = [:]
 
+    private let stopRetryDelay: Duration
+    private let openSession: @Sendable (PlexServerAddress, String, Int, String) async -> Void
     private let request: @Sendable (URL, [String: String]) async throws -> Data
 
-    init(request: @escaping @Sendable (URL, [String: String]) async throws -> Data = { url, headers in
+    init(requestTimeout: Duration = PlaybackReportTimeout.duration, stopRetryDelay: Duration = .seconds(5),
+         openSession: @escaping @Sendable (PlexServerAddress, String, Int, String) async -> Void = { server, key, index, session in
+             await PlexNetworkManager.shared.openDirectPlaySession(
+                 serverURL: server.address, authToken: server.token, ratingKey: key,
+                 mediaIndex: index, sessionIdentifier: session)
+         }, request: @escaping @Sendable (URL, [String: String]) async throws -> Data = { url, headers in
         try await PlexNetworkManager.shared.requestData(url, method: "GET", headers: headers)
     }) {
-        self.request = request
+        self.stopRetryDelay = stopRetryDelay
+        self.openSession = openSession
+        self.request = { url, headers in
+            try await PlaybackReportTimeout.run(for: requestTimeout) {
+                try await request(url, headers)
+            }
+        }
     }
 
     /// Seconds of playback that must pass before the same state is re-reported.
@@ -158,20 +172,45 @@ actor PlexProgressReporter {
         return .failed(report)
     }
 
+    func retryStoppedReport(_ report: TimelineReport, ratingKey: String,
+                            server: PlexServerAddress, restoreWatched: Bool) {
+        guard report.state == "stopped", stopRetries[report.key] == nil,
+              playbackSessions[report.key] == report.session else { return }
+        stopRetries[report.key] = Task {
+            defer { stopRetries[report.key] = nil }
+            do { try await Task.sleep(for: stopRetryDelay) }
+            catch { return }
+            guard !Task.isCancelled, case .sent = await send(report) else { return }
+            if restoreWatched, !Task.isCancelled {
+                await markAsWatched(ratingKey: ratingKey, server: server)
+            }
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: self)
+            }
+        }
+    }
+
     func beginPlaybackSession(ratingKey: String, mediaIndex: Int? = nil,
-                              sessionIdentifier: String = UUID().uuidString,
+                              sessionIdentifier: String = UUID().uuidString, resetReporting: Bool = false,
                               server explicit: PlexServerAddress? = nil) async {
         guard !ratingKey.isEmpty, let server = await server(explicit) else { return }
         let key = server.address + "|" + ratingKey
-        if playbackSessions[key] != sessionIdentifier {
+        // An old stop/scrobble must finish before a replay can write this item's resume point.
+        if let retry = stopRetries[key] {
+            retry.cancel()
+            await retry.value
+        }
+        if resetReporting || playbackSessions[key] != sessionIdentifier {
             playbackSessions[key] = sessionIdentifier
             lastReportedTimes[key] = nil
             lastReportedStates[key] = nil
         }
         if let mediaIndex {
-            await PlexNetworkManager.shared.openDirectPlaySession(
-                serverURL: server.address, authToken: server.token, ratingKey: ratingKey,
-                mediaIndex: mediaIndex, sessionIdentifier: sessionIdentifier)
+            let openSession = openSession
+            try? await PlaybackReportTimeout.run {
+                await openSession(server, ratingKey, mediaIndex, sessionIdentifier)
+            }
         }
     }
 

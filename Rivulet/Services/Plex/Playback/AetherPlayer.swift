@@ -189,7 +189,9 @@ final class AetherPlayer: PlayerProtocol {
     }
 
     private func wireUpPublishers() {
-        engine.$state
+        PlaybackTransportState.publisher(state: engine.$state.eraseToAnyPublisher(),
+                                         phase: engine.$playbackPhase.eraseToAnyPublisher(),
+                                         nativeReady: PlaybackTransportState.nativeReadiness(engine.$currentAVPlayer.eraseToAnyPublisher()))
             // Read `errorInfo` on the PUBLISHING turn, not after the hop.
             // AetherEngine assigns it immediately before `state` and clears it
             // when state leaves `.error`, so it is exact here and merely
@@ -199,7 +201,7 @@ final class AetherPlayer: PlayerProtocol {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] aetherState, errorInfo in
                 guard let self else { return }
-                self.engineIsPlaying = (aetherState == .playing)
+                self.engineIsPlaying = (self.engine.state == .playing)
                 // A load of another file (a stacked part, a version) drops the engine's speed; put it back.
                 if aetherState == .playing, self._playbackRate != 1 { self.engine.setRate(self._playbackRate) }
                 // Recompute BEFORE publishing the state so the view model's
@@ -672,6 +674,7 @@ final class AetherPlayer: PlayerProtocol {
     // MARK: - PlayerProtocol state
 
     var isPlaying: Bool { engine.state == .playing }
+    var playbackState: UniversalPlaybackState { stateSubject.value }
     var currentTime: TimeInterval { engine.currentTime + partStart }
     var duration: TimeInterval { stack?.duration ?? engine.duration }
 

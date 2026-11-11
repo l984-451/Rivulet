@@ -5,17 +5,32 @@
 //  over a description block. An episode has two focus stops: the thumb plays, the description opens details.
 
 import UIKit
-import TVUIKit
 
 /// Which sub-target of an episode card currently holds focus. Episodes split
 /// into two focus stops (thumb = play, description = details); trailers stay
 /// single-target (`.thumb` only).
 enum EpisodeFocusKind { case none, thumb, description }
 
-/// A TVCardView thumbnail that reports focus. Select comes from EpisodeCell's
-/// tap recognizer, which waits out the hold that opens the episode menu; the
-/// presses still reach TVCardView for its native press-down motion.
-final class EpisodeThumbCardView: TVCardView {
+final class EpisodeThumbCardView: UIView {
+    let contentView = UIView()
+    override var canBecomeFocused: Bool { true }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentView)
+        let reserve = MediaRowMetrics.focusGrowth / 2
+        NSLayoutConstraint.activate([
+            contentView.topAnchor.constraint(equalTo: topAnchor, constant: reserve),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: reserve),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -reserve),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -reserve),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("EpisodeThumbCardView is not Storyboard-backed") }
+
     /// (isFocused, nextFocusedView, coordinator)
     var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
 
@@ -88,9 +103,6 @@ final class EpisodeCell: UIView {
 
     // MARK: - Subviews
 
-    /// TVUIKit card around the thumbnail — gives Apple's native tvOS focus
-    /// treatment (parallax tilt + scale + specular EDGE SHEEN), like the
-    /// home-screen cards. Image + overlays live in `thumbnailCard.contentView`.
     private let thumbnailCard = EpisodeThumbCardView()
     private let thumbnailImageView = UIImageView()
 
@@ -102,7 +114,7 @@ final class EpisodeCell: UIView {
     private let durationIcon = UIImageView()
     private let durationLabel = UILabel()
 
-    /// Subtype icon shown top-trailing on trailer/extra tiles (film, camera, etc.).
+    /// Subtype icon shown top-leading on trailer/extra tiles (film, camera, etc.).
     private let subtypeIcon = UIImageView()
 
     private let progressTrack = UIView()
@@ -130,6 +142,7 @@ final class EpisodeCell: UIView {
     private let ratingBadge = PaddingLabel()
 
     private var imageToken: UInt64 = 0
+    private var scrimTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -142,16 +155,17 @@ final class EpisodeCell: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("EpisodeCell is not Storyboard-backed") }
 
+    deinit { scrimTask?.cancel() }
+
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
         // No card background, as Apple's; unclipped so the focus scale and metadata box show.
         backgroundColor = .clear
         clipsToBounds = false
 
-        // Image and overlays go in contentView so they ride the card's focus motion.
         thumbnailCard.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailCard.contentSize = CGSize(width: Self.cardWidth + MediaRowMetrics.focusGrowth, height: Self.thumbHeight)
         thumbnailCard.contentView.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        thumbnailCard.contentView.layer.cornerRadius = Self.cornerRadius
         let hold = TileLongPress.makeRecognizer(target: self, action: #selector(handleHold(_:)))
         addGestureRecognizer(hold)
         thumbnailCard.addGestureRecognizer(
@@ -167,18 +181,23 @@ final class EpisodeCell: UIView {
 
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.contentMode = .scaleAspectFill
-        thumbnailImageView.clipsToBounds = true
+        thumbnailImageView.adjustsImageWhenAncestorFocused = true
+        thumbnailImageView.clipsToBounds = false
+        thumbnailImageView.layer.cornerRadius = Self.cornerRadius
+        thumbnailImageView.overlayContentView.insetsLayoutMarginsFromSafeArea = false
+        thumbnailImageView.overlayContentView.directionalLayoutMargins =
+            NSDirectionalEdgeInsets(top: 15, leading: 20, bottom: 15, trailing: 20)
         thumbnailCard.contentView.addSubview(thumbnailImageView)
 
         // A trailer's title rides inside the artwork, over a scrim.
         trailerScrim.translatesAutoresizingMaskIntoConstraints = false
         trailerScrim.isHidden = true
-        thumbnailCard.contentView.addSubview(trailerScrim)
+        thumbnailImageView.overlayContentView.addSubview(trailerScrim)
         trailerTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         trailerTitleLabel.font = .systemFont(ofSize: 22, weight: .semibold)
         trailerTitleLabel.textColor = .white
         trailerTitleLabel.isHidden = true
-        thumbnailCard.contentView.addSubview(trailerTitleLabel)
+        thumbnailImageView.overlayContentView.addSubview(trailerTitleLabel)
 
         // Duration badge (bottom-leading)
         durationBadge.translatesAutoresizingMaskIntoConstraints = false
@@ -186,17 +205,17 @@ final class EpisodeCell: UIView {
         durationBadge.layer.cornerRadius = 0
         durationBadge.layer.cornerCurve = .continuous
         durationBadge.isHidden = true
-        thumbnailCard.contentView.addSubview(durationBadge)
+        thumbnailImageView.overlayContentView.addSubview(durationBadge)
 
         durationIcon.translatesAutoresizingMaskIntoConstraints = false
         durationIcon.image = UIImage(systemName: "play.fill")
         durationIcon.tintColor = .white
         durationIcon.contentMode = .scaleAspectFit
-        durationIcon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+        durationIcon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         durationBadge.addSubview(durationIcon)
 
         durationLabel.translatesAutoresizingMaskIntoConstraints = false
-        durationLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        durationLabel.font = .systemFont(ofSize: 21, weight: .semibold)
         durationLabel.textColor = .white
         durationBadge.addSubview(durationLabel)
 
@@ -204,22 +223,21 @@ final class EpisodeCell: UIView {
         progressTrack.translatesAutoresizingMaskIntoConstraints = false
         progressTrack.backgroundColor = UIColor.black.withAlphaComponent(0.5)
         progressTrack.isHidden = true
-        thumbnailCard.contentView.addSubview(progressTrack)
+        thumbnailImageView.overlayContentView.addSubview(progressTrack)
 
         progressFill.translatesAutoresizingMaskIntoConstraints = false
         progressFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
         progressTrack.addSubview(progressFill)
 
-        // Watched tag (top-trailing)
         watchedGlyph.isHidden = true
-        thumbnailCard.contentView.addSubview(watchedGlyph)
+        thumbnailImageView.overlayContentView.addSubview(watchedGlyph)
 
         // Subtype icon (top-leading) — shown on trailer/extra tiles only.
         subtypeIcon.translatesAutoresizingMaskIntoConstraints = false
         subtypeIcon.contentMode = .scaleAspectFit
         subtypeIcon.tintColor = .white
         subtypeIcon.isHidden = true
-        thumbnailCard.contentView.addSubview(subtypeIcon)
+        thumbnailImageView.overlayContentView.addSubview(subtypeIcon)
 
         // Description block — gets a subtle rounded box only when focused (ATV+).
         descriptionBlock.translatesAutoresizingMaskIntoConstraints = false
@@ -327,12 +345,12 @@ final class EpisodeCell: UIView {
             thumbnailCard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -reserve),
             thumbHeightConstraint,
 
-            trailerScrim.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
-            trailerScrim.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
-            trailerScrim.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
+            trailerScrim.leadingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.leadingAnchor),
+            trailerScrim.trailingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.trailingAnchor),
+            trailerScrim.bottomAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.bottomAnchor),
             trailerScrim.heightAnchor.constraint(equalToConstant: 120),
             trailerTitleLabel.leadingAnchor.constraint(equalTo: durationBadge.leadingAnchor),
-            trailerTitleLabel.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor, constant: -16),
+            trailerTitleLabel.trailingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.trailingAnchor, constant: -16),
             trailerTitleLabel.bottomAnchor.constraint(equalTo: durationBadge.topAnchor, constant: -2),
 
             thumbnailImageView.topAnchor.constraint(equalTo: thumbnailCard.contentView.topAnchor),
@@ -340,35 +358,33 @@ final class EpisodeCell: UIView {
             thumbnailImageView.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
             thumbnailImageView.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
 
-            // Duration badge: 8pt inset from bottom-leading; 8/4 inner padding.
-            durationBadge.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor, constant: 12),
-            durationBadge.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor, constant: -10),
+            durationBadge.leadingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.leadingAnchor),
+            durationBadge.bottomAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.bottomAnchor),
             durationIcon.leadingAnchor.constraint(equalTo: durationBadge.leadingAnchor),
             durationIcon.centerYAnchor.constraint(equalTo: durationBadge.centerYAnchor),
-            durationLabel.leadingAnchor.constraint(equalTo: durationIcon.trailingAnchor, constant: 4),
+            durationLabel.leadingAnchor.constraint(equalTo: durationIcon.trailingAnchor, constant: 8),
             durationLabel.trailingAnchor.constraint(equalTo: durationBadge.trailingAnchor),
             durationLabel.topAnchor.constraint(equalTo: durationBadge.topAnchor),
             durationLabel.bottomAnchor.constraint(equalTo: durationBadge.bottomAnchor),
 
             // Progress bar: full width, 3pt, pinned bottom.
-            progressTrack.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
-            progressTrack.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
-            progressTrack.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
+            progressTrack.leadingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.leadingAnchor),
+            progressTrack.trailingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.trailingAnchor),
+            progressTrack.bottomAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.bottomAnchor),
             progressTrack.heightAnchor.constraint(equalToConstant: 3),
             progressFill.leadingAnchor.constraint(equalTo: progressTrack.leadingAnchor),
             progressFill.topAnchor.constraint(equalTo: progressTrack.topAnchor),
             progressFill.bottomAnchor.constraint(equalTo: progressTrack.bottomAnchor),
             progressFillWidth,
 
-            // Watched tag: top-trailing.
             // Bottom-left, same spot as the runtime badge (the two are
             // mutually exclusive — watched hides the runtime badge).
-            watchedGlyph.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor, constant: 12),
-            watchedGlyph.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor, constant: -10),
+            watchedGlyph.leadingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.leadingAnchor),
+            watchedGlyph.bottomAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.bottomAnchor),
 
             // Subtype icon: top-leading corner of the thumbnail.
-            subtypeIcon.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor, constant: 10),
-            subtypeIcon.topAnchor.constraint(equalTo: thumbnailCard.contentView.topAnchor, constant: 10),
+            subtypeIcon.leadingAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.leadingAnchor, constant: -2),
+            subtypeIcon.topAnchor.constraint(equalTo: thumbnailImageView.overlayContentView.layoutMarginsGuide.topAnchor),
             subtypeIcon.widthAnchor.constraint(equalToConstant: 22),
             subtypeIcon.heightAnchor.constraint(equalToConstant: 22),
 
@@ -477,18 +493,22 @@ final class EpisodeCell: UIView {
     var artworkView: UIView { thumbnailCard.contentView }
     var artworkLoaded: Bool { thumbnailImageView.image != nil }
 
-    private func loadThumbnail(_ url: URL?) {
+    private func invalidateThumbnail() {
         imageToken &+= 1
+        scrimTask?.cancel()
+        scrimTask = nil
+    }
+
+    private func loadThumbnail(_ url: URL?, withScrim: Bool = true) {
+        invalidateThumbnail()
         let token = imageToken
         // A memory hit paints in this pass (no pop after the rail's fade).
-        thumbnailImageView.image = url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
+        setThumbnailImage(url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }, withScrim: withScrim)
         if let url, thumbnailImageView.image == nil {
             Task { [weak self] in
                 let image = await ImageCacheManager.shared.image(for: url)
-                await MainActor.run {
-                    guard let self, self.imageToken == token else { return }
-                    self.thumbnailImageView.image = image
-                }
+                guard let self, self.imageToken == token else { return }
+                self.setThumbnailImage(image, withScrim: withScrim)
             }
         }
     }
@@ -522,18 +542,27 @@ final class EpisodeCell: UIView {
         subtypeIcon.image = UIImage(systemName: trailer.subtype.glyphName, withConfiguration: config)
         subtypeIcon.isHidden = false
 
-        imageToken &+= 1
+        loadThumbnail(trailer.artworkURL, withScrim: false)
+    }
+
+    private func setThumbnailImage(_ image: UIImage?, withScrim: Bool) {
+        guard let image, withScrim else {
+            thumbnailImageView.image = image
+            return
+        }
+        // A separate fade overlay showed a bright bottom edge during focus loss after preview expansion.
+        // Compositing keeps the fade and artwork in the same image through native focus transitions.
+        let aspectRatio = Self.cardWidth / (Self.thumbHeight - MediaRowMetrics.focusGrowth)
+        if let cached = ArtworkScrim.cachedImage(for: image, aspectRatio: aspectRatio) {
+            thumbnailImageView.image = cached
+            return
+        }
+        thumbnailImageView.image = image
         let token = imageToken
-        let url = trailer.artworkURL
-        thumbnailImageView.image = url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
-        if let url, thumbnailImageView.image == nil {
-            Task { [weak self] in
-                let image = await ImageCacheManager.shared.image(for: url)
-                await MainActor.run {
-                    guard let self, self.imageToken == token else { return }
-                    self.thumbnailImageView.image = image
-                }
-            }
+        scrimTask = Task { [weak self] in
+            let rendered = await ArtworkScrim.image(for: image, aspectRatio: aspectRatio)
+            guard let self, self.imageToken == token, let rendered else { return }
+            self.thumbnailImageView.image = rendered
         }
     }
 
@@ -541,7 +570,6 @@ final class EpisodeCell: UIView {
     private func setTrailerLayout(_ trailer: Bool) {
         let height = trailer ? Self.trailerThumbHeight : Self.thumbHeight
         thumbHeightConstraint.constant = height
-        thumbnailCard.contentSize = CGSize(width: Self.cardWidth + MediaRowMetrics.focusGrowth, height: height)
         trailerScrim.isHidden = !trailer
         trailerTitleLabel.isHidden = !trailer
         descriptionBlock.isHidden = trailer
@@ -606,6 +634,7 @@ final class EpisodeCell: UIView {
 
     /// Clear focus visuals + state on reuse.
     func resetFocusVisual() {
+        invalidateThumbnail()
         glassLeading.constant = 0
         glassTrailing.constant = 0
         thumbFocused = false

@@ -197,10 +197,10 @@ struct MacRootView: View {
                         case .folder(let library, let folder, let title):
                             MacFolderListView(library: library, folder: folder, title: title)
                         case .photoMemory(let library, let memory):
-                            if memory.kind == .map, let (provider, library) = PhotoListing.source(for: library)() {
+                            MacPhotoLibraryView(library: library, memory: memory, title: memory.title)
+                        case .photoMap(let library):
+                            if let (provider, library) = PhotoListing.source(for: library)() {
                                 MacPhotoMapView(provider: provider, library: library)
-                            } else {
-                                MacPhotoLibraryView(library: library, memory: memory, title: memory.title)
                             }
                         case .person(let person, let providerID): MacPersonView(person: person, providerID: providerID)
                         case .liveRecordings: MacLiveRecordingsView()

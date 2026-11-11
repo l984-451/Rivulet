@@ -16,6 +16,8 @@ struct MacPhotoLibraryView: View {
     @State private var query: PhotoQuery
     @State private var viewing: Viewing?
     @State private var shuffling = false
+    /// The root's Map button, once a probe finds a located photo.
+    @State private var hasMap = false
 
     private struct Viewing {
         let model: PhotoListingModel
@@ -60,12 +62,19 @@ struct MacPhotoLibraryView: View {
                             .disabled(model.media.isEmpty)
                         Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                             .disabled(model.media.isEmpty)
+                        if hasMap {
+                            Button("Map", systemImage: "map") { open(.photoMap(library)) }
+                        }
                         // Photos already in hand (On This Day) have no order or filter to change.
                         if model.listing.source()?.provider.photoSorts.isEmpty != true { optionsMenu }
                     }
                 }
             }
             .toolbar(viewing == nil ? .automatic : .hidden, for: .windowToolbar)
+            .task {
+                guard folder == nil, memory == nil, let (provider, library) = PhotoListing.source(for: library)() else { return }
+                hasMap = await PhotoMemories.hasLocations(provider: provider, library: library)
+            }
     }
 
     private func startSlideshow() {

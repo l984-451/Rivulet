@@ -6,8 +6,8 @@
 //  Rivulet
 //
 //  The memories row at the top of a photo library: On This Day, Photos from
-//  <year>, Favorites and Map. No server has a memories endpoint, so each is a
-//  query over the seam.
+//  <year> and Favorites, plus the probe behind the library's Map button. No
+//  server has a memories endpoint, so each is a query over the seam.
 //
 
 import Foundation
@@ -16,10 +16,9 @@ nonisolated struct PhotoMemory: Hashable, Sendable {
     enum Kind: Hashable, Sendable { case onThisDay, year(Int), favorites, map }
     let kind: Kind
     let title: String
-    /// nil only for `.map`.
     let cover: PhotoItem?
     /// What opening it lists: fixed items (On This Day) or a query.
-    enum Content: Hashable, Sendable { case items([PhotoItem]), query(PhotoQuery), map }
+    enum Content: Hashable, Sendable { case items([PhotoItem]), query(PhotoQuery) }
     let content: Content
 }
 
@@ -67,14 +66,12 @@ nonisolated enum PhotoMemories {
         return past[day % past.count]
     }
 
-    /// Order: On This Day, Photos from <year>, Favorites, Map. Each only when non-empty; Map only when
-    /// `hasPhotoLocations` and a probe finds a coordinate. A failed request drops its memory, never the row.
+    /// Order: On This Day, Photos from <year>, Favorites. Each only when non-empty.
+    /// A failed request drops its memory, never the row.
     @MainActor static func load(provider: any PhotoProvider, library: MediaLibrary, today: Date) async -> [PhotoMemory] {
         let calendar = Calendar.current
         let favoritesQuery = PhotoQuery(favoritesOnly: true)
         async let favorites = media(provider, library, favoritesQuery, limit: 1)
-        async let located = provider.hasPhotoLocations
-            ? media(provider, library, PhotoQuery(show: .photos), limit: mapProbeLimit) : nil
         let years = (try? await provider.photoYears(in: library)) ?? []
 
         let ranges = onThisDayRanges(today: today, years: years, calendar: calendar)
@@ -110,10 +107,14 @@ nonisolated enum PhotoMemories {
             memories.append(PhotoMemory(kind: .favorites, title: String(localized: "Favorites"),
                                         cover: cover, content: .query(favoritesQuery)))
         }
-        if await located?.contains(where: { $0.coordinate != nil }) == true {
-            memories.append(PhotoMemory(kind: .map, title: String(localized: "Map"), cover: nil, content: .map))
-        }
         return memories
+    }
+
+    /// Whether the library's Map has anything to show: the server reports places and a probe finds one.
+    @MainActor static func hasLocations(provider: any PhotoProvider, library: MediaLibrary) async -> Bool {
+        guard provider.hasPhotoLocations else { return false }
+        let probe = await media(provider, library, PhotoQuery(show: .photos), limit: mapProbeLimit)
+        return probe?.contains { $0.coordinate != nil } == true
     }
 
     /// The first `limit` photos and clips at the library's root for `query`, or nil on failure.

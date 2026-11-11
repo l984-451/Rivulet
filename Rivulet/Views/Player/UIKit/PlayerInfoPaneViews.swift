@@ -276,6 +276,13 @@ final class PlayerPaneActionButton: UIControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Relabels in place, so a focused button keeps focus (the photo pane's Favorite).
+    func set(title: String, symbol: String) {
+        label.text = title
+        icon.image = UIImage(systemName: symbol,
+                             withConfiguration: UIImage.SymbolConfiguration(pointSize: 29, weight: .medium))
+    }
+
     override var canBecomeFocused: Bool { true }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

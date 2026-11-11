@@ -126,14 +126,15 @@ final class PhotoMemoriesTests: XCTestCase {
     }
 
     @MainActor
-    func test_load_favoritesAndMap() async {
+    func test_load_favorites_andLocationsProbe() async {
         let local = Calendar.current
         let provider = FilteringProvider(items: [
             photo("a", day(2020, 1, 5, in: local), favorite: true, coordinate: PhotoCoordinate(latitude: 1, longitude: 2))
         ])
         let memories = await PhotoMemories.load(provider: provider, library: library, today: day(2026, 11, 9, in: local))
-        XCTAssertEqual(memories.map(\.kind), [.year(2020), .favorites, .map])
-        XCTAssertNil(memories[2].cover)
+        XCTAssertEqual(memories.map(\.kind), [.year(2020), .favorites])
+        let located = await PhotoMemories.hasLocations(provider: provider, library: library)
+        XCTAssertTrue(located)
     }
 
     /// Opening a memory: fixed items list as they are and write favorites to the library's server;

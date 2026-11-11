@@ -82,10 +82,7 @@ final class PhotoMemoryCell: UICollectionViewCell {
         cover = memory.cover
         loadTask?.cancel()
         artworkView.image = memory.cover?.thumbnail.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
-        guard let cover = memory.cover else {
-            artworkView.image = MusicChrome.placeholder("map", side: MediaRowMetrics.feature.art.height)
-            return
-        }
+        guard let cover = memory.cover else { return }
         // The 520 px thumbnail first, then the full photo decoded to the card's size.
         loadTask = Task { [weak self] in
             for url in [cover.thumbnail, cover.full].compactMap({ $0 }) {

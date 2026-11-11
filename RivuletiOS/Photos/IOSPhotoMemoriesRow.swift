@@ -19,11 +19,7 @@ struct IOSPhotoMemoriesRow: View {
                     LazyHStack(spacing: 12) {
                         ForEach(memories, id: \.self) { memory in
                             NavigationLink {
-                                if memory.kind == .map, let (provider, library) = PhotoListing.source(for: library)() {
-                                    IOSPhotoMapView(provider: provider, library: library)
-                                } else {
-                                    IOSPhotoLibraryView(library: library, memory: memory).iosPlexActionHost()
-                                }
+                                IOSPhotoLibraryView(library: library, memory: memory).iosPlexActionHost()
                             } label: {
                                 card(memory)
                             }
@@ -77,8 +73,6 @@ private struct IOSPhotoMemoryArt: View {
             .overlay {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
-                } else if cover == nil {
-                    Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.secondary)
                 }
             }
             .clipped()

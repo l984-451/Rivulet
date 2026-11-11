@@ -19,6 +19,8 @@ struct IOSPhotoLibraryView: View {
     @State private var resume: (model: PhotoListingModel, clip: PhotoItem)?
     @State private var resumeArmed = false
     @State private var shuffling = false
+    /// The root's Map button, once a probe finds a located photo.
+    @State private var hasMap = false
     @Environment(\.plexActions) private var actions
     @EnvironmentObject private var playback: IOSPlaybackController
 
@@ -74,6 +76,10 @@ struct IOSPhotoLibraryView: View {
         .task {
             if model.folders.isEmpty, model.media.isEmpty, !model.isLoading { model.listing.loadFirst() }
         }
+        .task {
+            guard folder == nil, memory == nil, let (provider, library) = PhotoListing.source(for: library)() else { return }
+            hasMap = await PhotoMemories.hasLocations(provider: provider, library: library)
+        }
         .onAppear {
             // Back from a folder, whose Sort or Show may have changed the library's.
             let saved = PhotoPreferences.query(for: library, narrowedBy: query)
@@ -85,6 +91,13 @@ struct IOSPhotoLibraryView: View {
                     .disabled(model.media.isEmpty)
                 Button("Shuffle", systemImage: "shuffle") { startShuffle() }
                     .disabled(model.media.isEmpty)
+                if hasMap, let (provider, library) = PhotoListing.source(for: library)() {
+                    NavigationLink {
+                        IOSPhotoMapView(provider: provider, library: library)
+                    } label: {
+                        Label("Map", systemImage: "map")
+                    }
+                }
                 // Photos already in hand (On This Day) have no order or filter to change.
                 if model.listing.source()?.provider.photoSorts.isEmpty != true { optionsMenu }
             }

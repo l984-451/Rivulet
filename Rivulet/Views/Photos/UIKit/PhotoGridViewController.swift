@@ -21,6 +21,8 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     var onOpenFolder: ((PhotoItem) -> Void)?
     /// Set on the library root, which loads the memories row after its first page.
     var onOpenMemory: ((PhotoMemory) -> Void)?
+    /// Set on the library root; its Map pill shows once a probe finds a located photo.
+    var onOpenMap: (() -> Void)?
 
     private let listing: PhotoListing
     private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
@@ -35,6 +37,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private var postedBelowTop = false
     private let slideshowButton = MusicChrome.pill(title: String(localized: "Slideshow"), symbol: "play.fill")
     private let shuffleButton = MusicChrome.pill(title: String(localized: "Shuffle"), symbol: "shuffle")
+    private let mapButton = MusicChrome.pill(title: String(localized: "Map"), symbol: "map")
     private let sortButton = MusicChrome.pill(title: nil, symbol: "arrow.up.arrow.down")
     private let showButton = MusicChrome.pill(title: nil, symbol: "line.3.horizontal.decrease")
     /// The menu button a Sort or Show choice came from, where focus returns once the grid reloads.
@@ -47,7 +50,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private static let ambientDelay: TimeInterval = 0.6
     private var pendingAmbient: DispatchWorkItem?
 
-    init(title: String, listing: PhotoListing) {
+    init(title: String?, listing: PhotoListing) {
         self.listing = listing
         super.init(nibName: nil, bundle: nil)
         self.title = title
@@ -92,6 +95,9 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
 
         slideshowButton.addAction(UIAction { [weak self] _ in self?.startSlideshow() }, for: .primaryActionTriggered)
         shuffleButton.addAction(UIAction { [weak self] _ in self?.startShuffle() }, for: .primaryActionTriggered)
+        mapButton.addAction(UIAction { [weak self] _ in self?.onOpenMap?() }, for: .primaryActionTriggered)
+        // Hidden rather than added later: re-adding the header's buttons would drop their focus.
+        mapButton.isHidden = true
         sortButton.showsMenuAsPrimaryAction = true
         showButton.showsMenuAsPrimaryAction = true
         refreshMenus()
@@ -151,7 +157,7 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
         // The page title, scrolling away with the content.
         section.boundarySupplementaryItems = [NSCollectionLayoutBoundarySupplementaryItem(
             layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
-                                               heightDimension: .absolute(PhotoGridHeaderView.height)),
+                                               heightDimension: .absolute(PhotoGridHeaderView.height(titled: title != nil))),
             elementKind: Self.headerKind, alignment: .top)]
         return section
     }
@@ -215,6 +221,12 @@ final class PhotoGridViewController: UIViewController, SidebarTabReselecting {
     private func loadMemories() {
         guard onOpenMemory != nil, !memoriesRequested, let (provider, library) = listing.source() else { return }
         memoriesRequested = true
+        if onOpenMap != nil {
+            Task { [weak self] in
+                let located = await PhotoMemories.hasLocations(provider: provider, library: library)
+                self?.mapButton.isHidden = !located
+            }
+        }
         Task { [weak self] in
             let found = await PhotoMemories.load(provider: provider, library: library, today: .now)
             guard !Task.isCancelled, let self else { return }
@@ -444,7 +456,7 @@ extension PhotoGridViewController: UICollectionViewDataSource {
             ofKind: kind, withReuseIdentifier: Self.headerKind, for: indexPath) as! PhotoGridHeaderView
         // Photos already in hand (On This Day) have no order or filter to change.
         let sortable = listing.source().map { !$0.provider.photoSorts.isEmpty } ?? true
-        header.configure(title: title, buttons: [slideshowButton, shuffleButton]
+        header.configure(title: title, buttons: [slideshowButton, shuffleButton, mapButton]
                          + (sortable ? [sortButton, showButton] : []))
         return header
     }
@@ -502,9 +514,11 @@ extension PhotoGridViewController: UICollectionViewDelegate {
 
 // MARK: - Header
 
-/// The page title and its buttons, clear of the shell's pill, on the content margin.
+/// The page title, when it has one, and its buttons, clear of the shell's pill, on the content margin.
 private final class PhotoGridHeaderView: UICollectionReusableView {
-    static let height = ShellPillMetrics.contentClearance + 58 + 30 + MusicMetrics.pillHeight + 50
+    static func height(titled: Bool) -> CGFloat {
+        ShellPillMetrics.contentClearance + (titled ? 58 + 30 : 0) + MusicMetrics.pillHeight + 50
+    }
     private let label = UILabel()
     private let row = UIStackView()
     /// Up from a tile right of the buttons lands on the first of them.
@@ -514,19 +528,20 @@ private final class PhotoGridHeaderView: UICollectionReusableView {
         super.init(frame: frame)
         label.font = .systemFont(ofSize: 48, weight: .bold)
         label.textColor = .white
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
         row.axis = .horizontal
         row.spacing = 24
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
+        // A hidden label takes its spacing with it.
+        let column = UIStackView(arrangedSubviews: [label, row])
+        column.axis = .vertical
+        column.alignment = .leading
+        column.spacing = 30
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
         addLayoutGuide(upGuide)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -MediaRowMetrics.rowTrailing),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: ShellPillMetrics.contentClearance),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
-            row.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 30),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
+            column.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -MediaRowMetrics.rowTrailing),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: ShellPillMetrics.contentClearance),
             upGuide.leadingAnchor.constraint(equalTo: row.trailingAnchor),
             upGuide.trailingAnchor.constraint(equalTo: trailingAnchor),
             upGuide.topAnchor.constraint(equalTo: row.topAnchor),
@@ -540,6 +555,7 @@ private final class PhotoGridHeaderView: UICollectionReusableView {
     /// The buttons belong to the grid; re-adding ones already here would drop their focus.
     func configure(title: String?, buttons: [UIButton]) {
         label.text = title
+        label.isHidden = title == nil
         if row.arrangedSubviews != buttons {
             row.arrangedSubviews.forEach { $0.removeFromSuperview() }
             buttons.forEach(row.addArrangedSubview)

@@ -17,6 +17,8 @@ enum MacRoute: Hashable {
     case folder(MediaLibrary, folder: MediaItemRef, title: String)
     /// One of a photo library's memories, as a flat grid.
     case photoMemory(MediaLibrary, PhotoMemory)
+    /// A photo library's located photos on a map.
+    case photoMap(MediaLibrary)
     /// A cast or crew member; `providerID` is the server whose artwork URL the portrait is.
     case person(MediaPerson, providerID: String)
     /// Live TV's scheduled and finished recordings.
@@ -30,7 +32,8 @@ extension MacRoute {
         case .detail(let item): item.ref.providerID
         case .hub(let hub): hub.providerID
         case .playlist(let playlist): playlist.item.ref.providerID
-        case .library(let library), .photos(let library, _, _), .folder(let library, _, _), .photoMemory(let library, _):
+        case .library(let library), .photos(let library, _, _), .folder(let library, _, _), .photoMemory(let library, _),
+             .photoMap(let library):
             library.providerID
         case .person(_, let providerID): providerID
         case .liveRecordings: ""

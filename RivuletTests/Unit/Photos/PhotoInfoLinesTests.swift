@@ -40,6 +40,23 @@ final class PhotoInfoLinesTests: XCTestCase {
         ])
     }
 
+    func test_card_splitsLikeThePlayersInfoCard() {
+        let details = PhotoDetails(
+            takenAt: stamped, make: "Apple", model: "iPhone Air", fNumber: 1.6, exposureSeconds: 0.0125,
+            width: 4284, height: 5712, fileName: "trip-8.jpg", takenAtClock: .wallClock)
+        let card = PhotoInfoLines.card(for: item(details), locale: locale, timeZone: chicago)
+        XCTAssertTrue(card.title.hasPrefix("November 3, 2025"), card.title)
+        XCTAssertEqual(card.summary, "Apple iPhone Air • f/1.6 · 1/80 s")
+        XCTAssertEqual(card.meta, "4284 × 5712 • trip-8.jpg")
+    }
+
+    func test_card_withoutADate_titlesTheFileName() {
+        let card = PhotoInfoLines.card(for: item(PhotoDetails(fileName: "a.jpg")), locale: locale, timeZone: chicago)
+        XCTAssertEqual(card.title, "a.jpg")
+        XCTAssertNil(card.summary)
+        XCTAssertNil(card.meta)
+    }
+
     func test_instant_readsInTheDeviceZone() {
         let lines = PhotoInfoLines.lines(for: item(PhotoDetails(takenAt: stamped, takenAtClock: .instant)),
                                          locale: locale, timeZone: chicago)

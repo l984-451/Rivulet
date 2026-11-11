@@ -15,15 +15,32 @@ enum PhotoInfoLines {
     /// A wall-clock time shows as stamped; an instant and a day (Plex, no time) read in `timeZone`.
     static func lines(for item: PhotoItem, locale: Locale = .current, timeZone: TimeZone = .current) -> [String] {
         guard let details = item.details else { return [] }
-        let taken = details.takenAt.map { date in
+        let size = details.width.flatMap { width in details.height.map { "\(width) × \($0)" } }
+        return [taken(details, locale, timeZone), details.cameraLine, details.lens, details.exposureLine,
+                size, details.fileName].compactMap { $0 }
+    }
+
+    /// tvOS's info card, laid out as the player's: the day taken as the title (else the file name, else the
+    /// item's title), camera, lens and exposure as the summary, size and file name on the meta line.
+    static func card(for item: PhotoItem, locale: Locale = .current,
+                     timeZone: TimeZone = .current) -> (title: String, summary: String?, meta: String?) {
+        guard let details = item.details else { return (item.title, nil, nil) }
+        let taken = taken(details, locale, timeZone)
+        let size = details.width.flatMap { width in details.height.map { "\(width) × \($0)" } }
+        let summary = [details.cameraLine, details.lens, details.exposureLine].compactMap { $0 }
+        let meta = [size, taken == nil ? nil : details.fileName].compactMap { $0 }
+        return (taken ?? details.fileName ?? item.title,
+                summary.isEmpty ? nil : summary.joined(separator: " • "),
+                meta.isEmpty ? nil : meta.joined(separator: " • "))
+    }
+
+    private static func taken(_ details: PhotoDetails, _ locale: Locale, _ timeZone: TimeZone) -> String? {
+        details.takenAt.map { date in
             date.formatted(Date.FormatStyle(
                 date: .long, time: details.takenAtClock == .day ? .omitted : .shortened,
                 locale: locale, calendar: locale.calendar,
                 timeZone: details.takenAtClock == .wallClock ? .gmt : timeZone))
         }
-        let size = details.width.flatMap { width in details.height.map { "\(width) × \($0)" } }
-        return [taken, details.cameraLine, details.lens, details.exposureLine, size, details.fileName]
-            .compactMap { $0 }
     }
 
     /// The viewer's caption: the day taken, long ("November 9, 2023"), under its place; the place

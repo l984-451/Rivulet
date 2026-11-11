@@ -39,9 +39,6 @@ struct MacPhotoMemoriesRow: View {
     private func card(_ memory: PhotoMemory) -> some View {
         MacImage(url: memory.cover?.full ?? memory.cover?.thumbnail)
             .frame(width: 420, height: 236)
-            .overlay {
-                if memory.cover == nil { Image(systemName: "map.fill").font(.largeTitle).foregroundStyle(.secondary) }
-            }
             .overlay(alignment: .bottomLeading) {
                 Text(verbatim: memory.title)
                     .font(.title2.weight(.bold))

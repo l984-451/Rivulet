@@ -217,7 +217,10 @@ final class AetherPlayer: ObservableObject {
     }
 
     private func wirePublishers() {
-        engine.$state
+        PlaybackTransportState.publisher(state: engine.$state.map(\.transportState).eraseToAnyPublisher(),
+                                         phase: engine.$playbackPhase.map(\.transportPhase).eraseToAnyPublisher(),
+                                         nativeReady: PlaybackTransportState.nativeReadiness(engine.$currentAVPlayer.eraseToAnyPublisher()))
+            .map(\.engineState)
             // errorInfo is assigned right before state, so read it on this turn.
             .map { [engine] state in (state, engine.errorInfo) }
             .receive(on: DispatchQueue.main)
@@ -1416,5 +1419,44 @@ nonisolated private final class SoftwarePiPBridge: NSObject, AVPictureInPictureS
             await self?.player?.skip(by: seconds)
         }
         completionHandler()
+    }
+}
+
+private extension PlaybackState {
+    var transportState: PlaybackTransportState.State {
+        switch self {
+        case .idle: .idle
+        case .loading: .loading
+        case .playing: .playing
+        case .paused: .paused
+        case .seeking: .seeking
+        case .ended: .ended
+        case .error(let message): .error(message)
+        }
+    }
+}
+
+private extension PlaybackTransportState.State {
+    var engineState: PlaybackState {
+        switch self {
+        case .idle: .idle
+        case .loading: .loading
+        case .playing: .playing
+        case .paused: .paused
+        case .seeking: .seeking
+        case .ended: .ended
+        case .error(let message): .error(message)
+        }
+    }
+}
+
+private extension PlaybackPhase {
+    var transportPhase: PlaybackTransportState.Phase {
+        switch self {
+        case .playing: .playing
+        case .paused: .paused
+        case .rebuffering: .rebuffering
+        default: .loading
+        }
     }
 }

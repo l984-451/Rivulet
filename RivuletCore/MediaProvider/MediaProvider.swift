@@ -15,7 +15,7 @@ import Foundation
 /// concrete reporter (e.g. `PlexTimelineReporter`) capturing whatever
 /// session state it needs.
 protocol ProgressReporter: Sendable {
-    func start(position: TimeInterval) async
+    func start(position: TimeInterval) async throws
     func progress(position: TimeInterval) async
     func paused(at position: TimeInterval) async
     func stopped(at position: TimeInterval) async

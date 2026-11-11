@@ -394,7 +394,8 @@ final class PlexSession: ObservableObject {
                 timeMs: offsetMs,
                 state: state,
                 duration: request.item.duration,
-                sessionIdentifier: request.directPlaySessionID
+                sessionIdentifier: request.directPlaySessionID,
+                reportingTimeout: PlaybackReportTimeout.duration
             )
             if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
             return terminated

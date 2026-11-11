@@ -13,9 +13,12 @@ final class ProviderBackend: PlayerBackend {
     /// Titles the player can be asked about again (Up Next, playlist entries), by item id.
     private var items: [String: MediaItem] = [:]
     private let ledger = ProviderReportLedger()
+    private let reportTimeout: Duration
 
-    init(provider: any MediaProvider, onWatchStateChange: @escaping @MainActor () async -> Void = {}) {
+    init(provider: any MediaProvider, reportTimeout: Duration = PlaybackReportTimeout.duration,
+         onWatchStateChange: @escaping @MainActor () async -> Void = {}) {
         self.provider = provider
+        self.reportTimeout = reportTimeout
         self.onWatchStateChange = onWatchStateChange
     }
 
@@ -142,20 +145,26 @@ final class ProviderBackend: PlayerBackend {
             return nil
         }
         guard let playback = request.providerPlayback else { return nil }
-        await ledger.report(reportKey(request), make: { reporter(for: playback) }, state: state, time: time)
+        try? await PlaybackReportTimeout.run(for: reportTimeout) { @MainActor in
+            await self.ledger.report(self.reportKey(request), make: { self.reporter(for: playback) }, state: state, time: time)
+        }
         return nil
     }
 
     func openPlaySession(_ request: PlexPlaybackRequest) async {
         guard let playback = request.providerPlayback else { return }
-        await ledger.open(reportKey(request), make: { reporter(for: playback) }, position: request.startTime ?? 0)
+        try? await PlaybackReportTimeout.run(for: reportTimeout) { @MainActor in
+            await self.ledger.open(self.reportKey(request), make: { self.reporter(for: playback) }, position: request.startTime ?? 0)
+        }
     }
 
     /// Ends a replaced stream's session, direct play or transcode, at the last position it reported,
     /// so the server frees what it holds without moving the resume point.
     func stopTranscode(_ request: PlexPlaybackRequest) async {
         guard let playback = request.providerPlayback else { return }
-        await ledger.stop(reportKey(request), make: { reporter(for: playback) }, fallback: request.startTime ?? 0)
+        try? await PlaybackReportTimeout.run(for: reportTimeout) { @MainActor in
+            await self.ledger.stop(self.reportKey(request), make: { self.reporter(for: playback) }, fallback: request.startTime ?? 0)
+        }
     }
 
     private func reporter(for playback: ProviderPlayback) -> any ProgressReporter {
@@ -179,7 +188,9 @@ final class ProviderBackend: PlayerBackend {
             return
         }
         guard let ref = request.providerPlayback?.item.ref else { return }
-        try? await provider.markPlayed(ref)
+        try? await PlaybackReportTimeout.run(for: reportTimeout) { @MainActor in
+            try await self.provider.markPlayed(ref)
+        }
     }
 
     func nextEpisode(after episode: PlexMetadata, in request: PlexPlaybackRequest) async -> PlexMetadata? {

@@ -13,14 +13,17 @@ extension PlexSession {
         guard !request.serverURL.isEmpty else { return }
         do {
             // The server usually counted the play itself as the timeline passed its threshold.
-            let counted = await PlexNetworkManager.shared.serverCountedPlay(
-                serverURL: request.serverURL, authToken: request.token, ratingKey: key,
-                playsBefore: request.item.viewCount ?? 0)
+            let counted = (try? await PlaybackReportTimeout.run {
+                await PlexNetworkManager.shared.serverCountedPlay(
+                    serverURL: request.serverURL, authToken: request.token, ratingKey: key,
+                    playsBefore: request.item.viewCount ?? 0)
+            }) ?? false
             if !counted {
                 try await PlexNetworkManager.shared.markWatched(
                     serverURL: request.serverURL,
                     authToken: request.token,
-                    ratingKey: key
+                    ratingKey: key,
+                    reportingTimeout: PlaybackReportTimeout.duration
                 )
             }
             if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }

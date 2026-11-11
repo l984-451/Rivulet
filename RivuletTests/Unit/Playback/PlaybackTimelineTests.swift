@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import Testing
 import XCTest
 @testable import Rivulet
 
 @MainActor
 final class PlaybackTimelineTests: XCTestCase {
+    private let reports = PlaybackReportQueue()
     private var sent: [String] = []
     private var position: TimeInterval = 0
     /// The server's reply to the next report: its reason when it has ended the session.
@@ -13,7 +15,7 @@ final class PlaybackTimelineTests: XCTestCase {
     private var terminated: [String] = []
 
     private func makeTimeline(interval: TimeInterval = 10) -> PlaybackTimeline {
-        let timeline = PlaybackTimeline(interval: interval, position: { [unowned self] in position }) { [unowned self] state, time in
+        let timeline = PlaybackTimeline(interval: interval, reports: reports, position: { [unowned self] in position }) { [unowned self] state, time in
             sent.append("\(state.rawValue)@\(Int(time))")
             let reply = termination
             return { reply }
@@ -24,7 +26,7 @@ final class PlaybackTimelineTests: XCTestCase {
 
     /// Lets the report tasks run.
     private func settle() async {
-        for _ in 0..<5 { await Task.yield() }
+        await reports.tail?.value
     }
 
     // #433: the engine holds paused while loading; a session must open with playing.
@@ -134,5 +136,101 @@ final class PlaybackTimelineTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(120))
         XCTAssertGreaterThanOrEqual(count, 3)
         XCTAssertEqual(sent.filter { $0.hasPrefix("paused") }.count, count)
+    }
+
+    func testBufferingRequiresPlayingAndKeepsItsStateOnForcedSeek() async {
+        let timeline = makeTimeline()
+        timeline.transportChanged(.buffering)
+        timeline.tick(12, force: true)
+        XCTAssertTrue(sent.isEmpty)
+        timeline.transportChanged(.playing)
+        position = 42
+        timeline.transportChanged(.buffering)
+        timeline.tick(43, force: true)
+        await timeline.stop(at: 43)?.value
+        XCTAssertEqual(sent, ["playing@0", "buffering@42", "buffering@43", "stopped@43"])
+    }
+
+    func testRepeatedTransportNotificationsDoNotDuplicateReportsButSeekingDoes() async {
+        let timeline = makeTimeline()
+        timeline.transportChanged(.playing)
+        timeline.transportChanged(.playing)
+        position = 2
+        timeline.transportChanged(.playing)
+        timeline.transportChanged(.buffering)
+        timeline.transportChanged(.buffering)
+        timeline.transportChanged(.paused)
+        timeline.transportChanged(.paused)
+        await timeline.stop(at: 2)?.value
+        XCTAssertEqual(sent, ["playing@0", "playing@2", "buffering@2", "paused@2", "stopped@2"])
+    }
+
+    func testStopAndWatchedWaitForPendingProgressBeforeIncomingSession() async {
+        let arrived = expectation(description: "outgoing progress held")
+        var release: CheckedContinuation<Void, Never>?
+        var delivered: [String] = []
+        var item = "first"
+        let timeline = PlaybackTimeline(reports: reports, position: { 42 }) { state, _ in
+            let captured = item
+            return {
+                if captured == "first", state == .playing {
+                    await withCheckedContinuation { release = $0; arrived.fulfill() }
+                }
+                delivered.append("\(captured):\(state.rawValue)")
+                return nil
+            }
+        }
+        timeline.transportChanged(.playing)
+        await fulfillment(of: [arrived], timeout: 1)
+        timeline.stop(at: 95)
+        reports.enqueue { delivered.append("first:watched") }
+        item = "second"
+        timeline.begin()
+        timeline.transportChanged(.playing)
+        XCTAssertTrue(delivered.isEmpty)
+        release?.resume()
+        await reports.tail?.value
+        XCTAssertEqual(delivered, ["first:playing", "first:stopped", "first:watched", "second:playing"])
+    }
+
+}
+
+@MainActor
+struct PlaybackTimelineTerminationTests {
+    @Test(arguments: [false, true])
+    func terminationRevokesQueuedWritesWithoutRevokingTheNextItem(_ advances: Bool) async {
+        let reports = PlaybackReportQueue()
+        let entered = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        defer { entered.continuation.finish(); release.continuation.finish() }
+        var delivered: [String] = []
+        var item = "first"
+        let timeline = PlaybackTimeline(reports: reports, position: { 1 }) { state, time in
+            let label = "\(item):\(state.rawValue)@\(Int(time))"
+            return {
+                delivered.append(label)
+                if label == "first:playing@1" {
+                    entered.continuation.yield(())
+                    for await _ in release.stream { break }
+                    return "Stopped by server"
+                }
+                return nil
+            }
+        }
+        timeline.transportChanged(.playing)
+        for await _ in entered.stream { break }
+        timeline.tick(10)
+        timeline.tick(20)
+        timeline.stop(at: 30)
+        reports.enqueue { delivered.append("first:watched") }
+        if advances {
+            item = "second"
+            timeline.begin()
+            timeline.transportChanged(.playing)
+        }
+        release.continuation.yield(())
+        await reports.tail?.value
+        #expect(delivered == ["first:playing@1"] + (advances ? ["second:playing@1"] : []))
+        #expect(timeline.isStopped == !advances)
     }
 }

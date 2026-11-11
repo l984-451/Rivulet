@@ -4,13 +4,13 @@
 import Foundation
 
 /// When a player tells its server where it is, for every app and server. A session opens with
-/// `playing` (#433), reports each 10 s of playback, repeats `paused` every 10 s so the server can
-/// end a paused session (#403), and says nothing once it has stopped or the server ended it (#605),
-/// until `begin()` or a fresh `playing`.
+/// `playing` (#433), reports each 10 s of playback, repeats paused and buffering reports every 10 s so the server can
+/// end a paused session (#403), and says nothing once it has stopped (until `begin()` or a fresh
+/// `playing`) or the server ended it (until `begin()`, #605).
 @MainActor
 final class PlaybackTimeline {
-    enum State: String, Sendable { case playing, paused, stopped }
-    enum Transport { case playing, paused, other }
+    enum State: String, Sendable { case playing, paused, buffering, stopped }
+    enum Transport { case playing, paused, buffering, other }
 
     /// Captures the item when called; the returned send gives the server's reason when it has ended the session.
     typealias Report = (State, TimeInterval) -> @MainActor () async -> String?
@@ -18,47 +18,56 @@ final class PlaybackTimeline {
     var onTerminated: ((String) -> Void)?
     private(set) var isStopped = false
 
+    var heartbeatInterval: Duration
+    private let reports: PlaybackReportQueue
     private let interval: TimeInterval
     private let position: () -> TimeInterval
     private let report: Report
     private var transport = Transport.other
     private var hasPlayed = false
     private var lastBucket: Int?
-    private var generation = 0
+    private var lastPosition: TimeInterval?
     private var keepalive: Task<Void, Never>?
 
-    init(interval: TimeInterval = 10, position: @escaping () -> TimeInterval, report: @escaping Report) {
+    init(interval: TimeInterval = 10, reports: PlaybackReportQueue? = nil, position: @escaping () -> TimeInterval, report: @escaping Report) {
         self.interval = interval
+        self.heartbeatInterval = .seconds(interval)
+        self.reports = reports ?? PlaybackReportQueue()
         self.position = position
         self.report = report
     }
 
     /// A new play session (the next item, or a reload): it opens again and must start with `playing`.
     func begin() {
-        generation += 1
+        reports.beginSession()
         cancelKeepalive()
         hasPlayed = false
+        transport = .other
         isStopped = false
         lastBucket = nil
+        lastPosition = nil
     }
 
-    func transportChanged(_ new: Transport) {
+    func transportChanged(_ new: Transport, hasStarted: Bool = false) {
+        guard !reports.session.isRevoked else { return }
+        if !isStopped, new == transport, lastPosition == position() { return }
         cancelKeepalive()
         transport = new
+        hasPlayed = hasPlayed || hasStarted
         switch new {
         case .playing:
             hasPlayed = true
-            // Sought back into an ended item and carried on.
             isStopped = false
             send(.playing, at: position())
-        case .paused:
-            guard hasPlayed else { return }
-            send(.paused, at: position())
-            keepalive = Task { [weak self, interval] in
-                while true {
-                    try? await Task.sleep(for: .seconds(interval))
+        case .paused, .buffering:
+            guard hasPlayed, !isStopped else { return }
+            let state: State = new == .paused ? .paused : .buffering
+            send(state, at: position())
+            keepalive = Task { [weak self, heartbeatInterval] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: heartbeatInterval)
                     guard !Task.isCancelled, let self else { return }
-                    self.send(.paused, at: self.position())
+                    await self.send(state, at: self.position())?.value
                 }
             }
         case .other:
@@ -67,11 +76,17 @@ final class PlaybackTimeline {
     }
 
     /// The playhead moved: one report per `interval` of it, and after a seek.
-    func tick(_ time: TimeInterval) {
-        guard transport != .other, let current = bucket(time), current != lastBucket else { return }
-        if transport == .playing { hasPlayed = true }
-        guard hasPlayed else { return }
-        send(transport == .playing ? .playing : .paused, at: time)
+    func tick(_ time: TimeInterval, force: Bool = false) {
+        guard !isStopped, transport != .other, hasPlayed,
+              let current = bucket(time), force || current != lastBucket else { return }
+        let state: State
+        switch transport {
+        case .playing: state = .playing
+        case .paused: state = .paused
+        case .buffering: state = .buffering
+        case .other: return
+        }
+        send(state, at: time)
     }
 
     /// Reports `stopped` and goes quiet. Nil when the session had already stopped.
@@ -80,22 +95,31 @@ final class PlaybackTimeline {
         guard !isStopped else { return nil }
         close()
         let op = report(.stopped, time)
-        return Task { _ = await op() }
+        return enqueue(op)
     }
 
-    private func send(_ state: State, at time: TimeInterval) {
-        guard !isStopped else { return }
+    @discardableResult
+    private func send(_ state: State, at time: TimeInterval) -> Task<Void, Never>? {
+        guard !isStopped else { return nil }
         lastBucket = bucket(time)
+        lastPosition = time
         let op = report(state, time)
-        let generation = generation
-        Task { [weak self] in
-            guard let reason = await op(), let self, generation == self.generation, !self.isStopped else { return }
+        return enqueue(op)
+    }
+
+    @discardableResult
+    func enqueue(_ op: @escaping @MainActor () async -> String?) -> Task<Void, Never> {
+        let session = reports.session
+        return reports.enqueue { [weak self] in
+            guard let reason = await op() else { return }
+            session.isRevoked = true
+            guard let self, self.reports.session === session else { return }
             self.close()
             self.onTerminated?(reason)
         }
     }
 
-    private func close() {
+    func close() {
         isStopped = true
         cancelKeepalive()
     }

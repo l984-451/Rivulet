@@ -14,12 +14,56 @@ import Foundation
 actor PlexProgressReporter {
     static let shared = PlexProgressReporter()
 
+    enum ProgressResult: Sendable {
+        case sent(termination: String?)
+        case skipped
+        case failed(TimelineReport?)
+    }
+
+    struct TimelineReport: Sendable {
+        fileprivate let url: URL
+        fileprivate let headers: [String: String]
+        fileprivate let key: String
+        fileprivate let session: String?
+        fileprivate let time: TimeInterval
+        fileprivate let state: String
+    }
+
     private var lastReportedTimes: [String: TimeInterval] = [:]
     private var lastReportedStates: [String: String] = [:]
-    /// Play session per server|ratingKey for a direct-play item; its timeline carries the id.
-    private var directPlaySessions: [String: String] = [:]
+    /// Play session per server|ratingKey, shared by stream requests and timeline reports.
+    private var playbackSessions: [String: String] = [:]
+    private var stopRetries: [String: Task<Void, Never>] = [:]
 
-    private init() {}
+    private let countedPlay: @Sendable (PlexServerAddress, String, Int) async -> Bool
+    private let stopRetryDelay: Duration
+    private let openSession: @Sendable (PlexServerAddress, String, Int, String) async -> Void
+    private let request: @Sendable (URL, [String: String]) async throws -> Data
+
+    init(countedPlay: @escaping @Sendable (PlexServerAddress, String, Int) async -> Bool = { server, key, count in
+        await PlexNetworkManager.shared.serverCountedPlay(
+            serverURL: server.address, authToken: server.token, ratingKey: key, playsBefore: count)
+    }, requestTimeout: Duration = PlaybackReportTimeout.duration, stopRetryDelay: Duration = .seconds(5),
+         openSession: @escaping @Sendable (PlexServerAddress, String, Int, String) async -> Void = { server, key, index, session in
+             await PlexNetworkManager.shared.openDirectPlaySession(
+                 serverURL: server.address, authToken: server.token, ratingKey: key,
+                 mediaIndex: index, sessionIdentifier: session)
+         }, request: @escaping @Sendable (URL, [String: String]) async throws -> Data = { url, headers in
+        try await PlexNetworkManager.shared.requestData(url, method: "GET", headers: headers)
+    }) {
+        self.countedPlay = { server, key, count in
+            (try? await PlaybackReportTimeout.run(for: requestTimeout) {
+                await countedPlay(server, key, count)
+            }) ?? false
+        }
+        self.stopRetryDelay = stopRetryDelay
+        self.openSession = openSession
+        self.request = { url, headers in
+            try await PlaybackReportTimeout.run(for: requestTimeout) {
+                try await request(url, headers)
+            }
+        }
+    }
 
     /// Seconds of playback that must pass before the same state is re-reported.
     static let reportThrottle: TimeInterval = 5
@@ -56,7 +100,7 @@ actor PlexProgressReporter {
     ///   - duration: Total duration in seconds
     ///   - state: Playback state ("playing", "paused", "stopped")
     ///   - forceReport: If true, bypasses throttle to report immediately (for state changes)
-    /// - Returns: The server's reason when it has ended this play session (#403), else nil.
+    /// - Returns: Delivery status and the server's termination reason, if any (#403).
     @discardableResult
     func reportProgress(
         ratingKey: String,
@@ -64,23 +108,25 @@ actor PlexProgressReporter {
         duration: TimeInterval,
         state: String,
         forceReport: Bool = false,
+        sessionIdentifier: String? = nil,
         server explicit: PlexServerAddress? = nil
-    ) async -> String? {
-        guard !ratingKey.isEmpty else { return nil }
-        guard let server = await server(explicit) else { return nil }
+    ) async -> ProgressResult {
+        guard !ratingKey.isEmpty else { return .failed(nil) }
+        guard let server = await server(explicit) else { return .failed(nil) }
         // Keyed by server too: two servers can share a ratingKey.
         let key = server.address + "|" + ratingKey
+        let session = sessionIdentifier ?? playbackSessions[key]
+        let isCurrentSession = session == playbackSessions[key]
 
         guard Self.shouldReport(state: state,
                                 time: time,
-                                lastState: lastReportedStates[key],
-                                lastTime: lastReportedTimes[key],
-                                force: forceReport) else { return nil }
-        lastReportedTimes[key] = time
-        lastReportedStates[key] = state
+                                lastState: isCurrentSession ? lastReportedStates[key] : nil,
+                                lastTime: isCurrentSession ? lastReportedTimes[key] : nil,
+                                force: forceReport) else { return .skipped }
 
-        let timeMs = Int(time * 1000)
-        let durationMs = Int(duration * 1000)
+        let durationMs = Self.milliseconds(duration)
+        let positionMs = Self.milliseconds(time)
+        let timeMs = durationMs > 0 ? min(positionMs, durationMs) : positionMs
 
         // Get Plex client identifiers on MainActor
         let clientInfo = await MainActor.run {
@@ -105,69 +151,99 @@ actor PlexProgressReporter {
             URLQueryItem(name: "X-Plex-Device", value: clientInfo.device),
             URLQueryItem(name: "X-Plex-Product", value: clientInfo.product)
         ]
-        if let session = directPlaySessions[key] {
+        if let session {
             components?.queryItems?.append(URLQueryItem(name: "X-Plex-Session-Identifier", value: session))
-            if state == "stopped" { directPlaySessions[key] = nil }
         }
 
-        guard let url = components?.url else { return nil }
+        guard let url = components?.url else { return .failed(nil) }
 
-        do {
-            let data = try await PlexNetworkManager.shared.requestData(
-                url,
-                method: "GET",
-                headers: ["X-Plex-Token": server.token, "Accept": "application/json"]
-            )
-            await PlexNetworkManager.shared.forgetRecentReads()
-            return PlexNetworkManager.timelineTermination(in: data)
-        } catch {
-            playerDebugLog("📊 PlexProgress: Failed to report progress: \(error)")
-            return nil
+        return await send(TimelineReport(url: url, headers: ["X-Plex-Token": server.token, "Accept": "application/json"],
+                                         key: key, session: session, time: time, state: state))
+    }
+
+    func send(_ report: TimelineReport) async -> ProgressResult {
+        let attempts = report.state == "stopped" ? 2 : 1
+        for attempt in 1...attempts {
+            do {
+                let data = try await request(report.url, report.headers)
+                if playbackSessions[report.key] == report.session {
+                    lastReportedTimes[report.key] = report.time
+                    lastReportedStates[report.key] = report.state
+                    if report.state == "stopped" { playbackSessions[report.key] = nil }
+                }
+                await PlexNetworkManager.shared.forgetRecentReads()
+                let termination = PlexNetworkManager.timelineTermination(in: data)
+                return .sent(termination: termination)
+            } catch {
+                DiagLog.error(.playback, "Plex timeline failed state=\(report.state) attempt=\(attempt) error=\(DiagLog.describe(error))")
+                guard attempt < attempts, Self.isTransient(error) else { return .failed(report) }
+            }
+        }
+        return .failed(report)
+    }
+
+    func retryStoppedReport(_ report: TimelineReport, ratingKey: String,
+                            server: PlexServerAddress, restoreWatched: Bool, playsBefore: Int? = nil) {
+        guard report.state == "stopped", stopRetries[report.key] == nil,
+              playbackSessions[report.key] == report.session else { return }
+        stopRetries[report.key] = Task {
+            defer { stopRetries[report.key] = nil }
+            do { try await Task.sleep(for: stopRetryDelay) }
+            catch { return }
+            guard !Task.isCancelled, case .sent = await send(report) else { return }
+            if restoreWatched, !Task.isCancelled {
+                await markAsWatched(ratingKey: ratingKey, playsBefore: playsBefore, server: server)
+            }
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: self)
+            }
         }
     }
 
-    /// Opens a Plex play session for a file the engine plays directly, so the
-    /// server dashboard shows its bandwidth (#423). The item's next "stopped" report ends it.
-    func beginDirectPlaySession(ratingKey: String, mediaIndex: Int, server explicit: PlexServerAddress? = nil) async {
+    func beginPlaybackSession(ratingKey: String, mediaIndex: Int? = nil,
+                              sessionIdentifier: String = UUID().uuidString, resetReporting: Bool = false,
+                              server explicit: PlexServerAddress? = nil) async {
         guard !ratingKey.isEmpty, let server = await server(explicit) else { return }
-        let session = UUID().uuidString
-        directPlaySessions[server.address + "|" + ratingKey] = session
-        await PlexNetworkManager.shared.openDirectPlaySession(
-            serverURL: server.address, authToken: server.token, ratingKey: ratingKey,
-            mediaIndex: mediaIndex, sessionIdentifier: session)
-    }
-
-    /// Drops the direct-play session when the item moves onto a server transcode.
-    func endDirectPlaySession(ratingKey: String, server explicit: PlexServerAddress? = nil) async {
-        guard let server = await server(explicit) else { return }
-        directPlaySessions[server.address + "|" + ratingKey] = nil
+        let key = server.address + "|" + ratingKey
+        // An old stop/scrobble must finish before a replay can write this item's resume point.
+        if let retry = stopRetries[key] {
+            retry.cancel()
+            await retry.value
+        }
+        if resetReporting || playbackSessions[key] != sessionIdentifier {
+            playbackSessions[key] = sessionIdentifier
+            lastReportedTimes[key] = nil
+            lastReportedStates[key] = nil
+        }
+        if let mediaIndex {
+            let openSession = openSession
+            try? await PlaybackReportTimeout.run {
+                await openSession(server, ratingKey, mediaIndex, sessionIdentifier)
+            }
+        }
     }
 
     /// Marks an item as fully watched (scrobble)
     /// - Parameter ratingKey: The Plex rating key for the media item
-    /// - Parameter playsBefore: the item's view count when playback began. Given, the scrobble is
-    ///   skipped when the server already counted this play (see `serverCountedPlay`).
-    func markAsWatched(ratingKey: String, playsBefore: Int? = nil, server explicit: PlexServerAddress? = nil) async {
-        guard !ratingKey.isEmpty else { return }
-        guard let server = await server(explicit) else { return }
-        if let playsBefore, await PlexNetworkManager.shared.serverCountedPlay(
-            serverURL: server.address, authToken: server.token, ratingKey: ratingKey, playsBefore: playsBefore) {
-            return
-        }
+    @discardableResult
+    func markAsWatched(ratingKey: String, playsBefore: Int? = nil, server explicit: PlexServerAddress? = nil) async -> Bool {
+        guard !ratingKey.isEmpty else { return false }
+        guard let server = await server(explicit) else { return false }
+
+        if let playsBefore, await countedPlay(server, ratingKey, playsBefore) { return true }
 
         let urlString = "\(server.address)/:/scrobble?identifier=com.plexapp.plugins.library&key=\(ratingKey)"
 
-        guard let url = URL(string: urlString) else { return }
+        guard let url = URL(string: urlString) else { return false }
 
         do {
-            _ = try await PlexNetworkManager.shared.requestData(
-                url,
-                method: "GET",
-                headers: ["X-Plex-Token": server.token]
-            )
+            _ = try await request(url, ["X-Plex-Token": server.token])
             await PlexNetworkManager.shared.forgetRecentReads()
+            return true
         } catch {
-            playerDebugLog("📊 PlexProgress: Failed to mark as watched: \(error)")
+            DiagLog.error(.playback, "Plex watched failed item=\(ratingKey) error=\(DiagLog.describe(error))")
+            return false
         }
     }
 
@@ -194,6 +270,20 @@ actor PlexProgressReporter {
     }
 
     // MARK: - Helpers
+
+    private static func milliseconds(_ seconds: TimeInterval) -> Int {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        return Int(min(seconds * 1000, Double(Int.max).nextDown))
+    }
+
+    private static func isTransient(_ error: Error) -> Bool {
+        if case PlexAPIError.httpError(let status, _) = error {
+            return status == 408 || status == 429 || (500...599).contains(status)
+        }
+        guard let error = error as? URLError else { return false }
+        return [.timedOut, .networkConnectionLost, .notConnectedToInternet,
+                .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed].contains(error.code)
+    }
 
     /// The item's own server when the caller knows it (the player does), else the selected one.
     private func server(_ explicit: PlexServerAddress?) async -> PlexServerAddress? {

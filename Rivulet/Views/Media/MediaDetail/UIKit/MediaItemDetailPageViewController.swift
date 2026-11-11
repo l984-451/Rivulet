@@ -42,7 +42,9 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let heroContent = UIView()
     private let belowFold = UIView()
     private let belowFoldTitle = UILabel()
-    private let infoColumns = InfoColumnsView()
+    private let infoColumns = InfoColumnsView(style: .footer)
+    private var detail: MediaItemDetail?
+    private var directionalInput: DirectionalInputBinding?
     /// 0 hero, 1 below-fold from the top, 2 scrolled on to the info columns (only with extras).
     private var scrollStage = 0
     private let extrasShelf = ExtrasShelfView(leading: PreviewCarouselGeometry.expandedChromeInset)
@@ -59,6 +61,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let dateLabel = UILabel()
     private let badgeRow = UIStackView()
     private var playButton: FocusableActionButton?
+    private weak var lastFocusedHeroButton: FocusableActionButton?
     /// The Play pill's own label, held so a post-playback refresh can flip
     /// Play ↔ Resume without rebuilding (and re-focusing) the action row.
     private weak var playTitleLabel: UILabel?
@@ -160,6 +163,14 @@ final class MediaItemDetailPageViewController: UIViewController {
         menuTap.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         view.addGestureRecognizer(menuTap)
 
+        directionalInput = DirectionalInputBinding(
+            gatedSwipesOn: view, directions: [.up, .down],
+            shouldHandle: { [weak self] in self?.nextScrollStage(for: $0) != nil },
+            onSwipe: { [weak self] direction in
+                guard let self, let stage = self.nextScrollStage(for: direction) else { return }
+                self.setScrollStage(stage)
+            })
+
         loadBackdrop()
         loadDetail()
 
@@ -176,53 +187,70 @@ final class MediaItemDetailPageViewController: UIViewController {
     // MARK: - Down/Up page scroll
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        // A press the version picker declines bubbles here; it must not scroll the page.
-        guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
-            switch press.type {
-            case .downArrow where scrollStage == 0:
-                setScrollStage(1); return
-            case .downArrow where scrollStage == 1 && hasExtras:
-                setScrollStage(2); return
-            case .upArrow where scrollStage > 0:
-                setScrollStage(scrollStage - 1); return
-            default: break
+            if let direction = DirectionalInputBinding.Direction.allCases.first(where: { $0.pressType == press.type }),
+               let stage = nextScrollStage(for: direction) {
+                setScrollStage(stage)
+                return
             }
         }
         super.pressesBegan(presses, with: event)
     }
 
+    private func nextScrollStage(for direction: DirectionalInputBinding.Direction) -> Int? {
+        guard presentedViewController == nil else { return nil }
+        switch direction {
+        case .down where scrollStage == 0: return 1
+        case .down where scrollStage == 1 && hasExtras: return 2
+        case .up where scrollStage > 0: return scrollStage - 1
+        default: return nil
+        }
+    }
+
     private func setScrollStage(_ stage: Int) {
-        let wasHero = scrollStage == 0
         scrollStage = stage
         view.layoutIfNeeded()
         let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
         // Stage 1 aligns the below-fold's TOP with the screen top (one viewport),
         // making the light-top / dark-bottom split fill the screen.
-        let target = stage == 0 ? 0 : (stage == 1 ? min(view.bounds.height, maxY) : maxY)
+        let target: CGFloat
+        switch stage {
+        case 0: target = 0
+        case 1: target = min(view.bounds.height, maxY)
+        default: target = maxY
+        }
         // The extras row is a focus stop only once the page is scrolled to it.
         if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
+        heroContent.isUserInteractionEnabled = stage == 0
+        extrasShelf.isUserInteractionEnabled = stage == 1 && hasExtras
+        infoColumns.isUserInteractionEnabled = stage == (hasExtras ? 2 : 1)
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
-        }
-        if hasExtras, wasHero != (stage == 0) {
-            setNeedsFocusUpdate()
-            updateFocusIfNeeded()
+            self.setNeedsFocusUpdate()
+            self.updateFocusIfNeeded()
         }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        if scrollStage > 0, hasExtras, let card = extrasShelf.firstCard { return [card] }
+        if scrollStage == 1, hasExtras, let card = extrasShelf.firstCard { return [card] }
+        if scrollStage > 0 { return [infoColumns] }
+        if let lastFocusedHeroButton, lastFocusedHeroButton.isDescendant(of: heroContent) {
+            return [lastFocusedHeroButton]
+        }
         if let playButton { return [playButton] }
         return super.preferredFocusEnvironments
     }
 
-    /// Up and Down leave the extras row by scrolling the page, never by focusing the hero above it.
-    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        if scrollStage > 0, extrasShelf.contains(context.previouslyFocusedView),
-           context.nextFocusedView?.isDescendant(of: view) == true,
-           !extrasShelf.contains(context.nextFocusedView) { return false }
-        return super.shouldUpdateFocus(in: context)
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        rememberHeroFocus(context.nextFocusedView)
+    }
+
+    func rememberHeroFocus(_ focusedView: UIView?) {
+        if let button = focusedView as? FocusableActionButton,
+           button.isDescendant(of: heroContent) {
+            lastFocusedHeroButton = button
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -335,6 +363,13 @@ final class MediaItemDetailPageViewController: UIViewController {
         belowFold.addSubview(belowFoldTitle)
 
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
+        infoColumns.isUserInteractionEnabled = false
+        infoColumns.onSelect = { [weak self] in
+            guard let self, let detail = self.detail, self.presentedViewController == nil else { return }
+            self.present(InfoPopupViewController(content: InfoPopupContent.fullInfo(detail: detail),
+                                                width: InfoPopupViewController.infoWidth, height: 900,
+                                                scrollable: true), animated: true)
+        }
         belowFold.addSubview(infoColumns)
 
         // Hidden until the detail says there are extras.
@@ -535,11 +570,13 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     private func applyDetail(_ detail: MediaItemDetail, fallbackGenres: [String]) {
+        self.detail = detail
         // The seed can be stale on open; `detail` is a fresh read, so reuse it.
         applyWatchState(from: detail.item)
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
         showExtras(detail)
+        if scrollStage > 0 { setScrollStage(scrollStage) }
         badgeRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for text in detail.primarySource?.detailBadges ?? [] {
             badgeRow.addArrangedSubview(Self.badge(text, filled: MediaSource.filledBadges.contains(text)))
@@ -554,6 +591,7 @@ final class MediaItemDetailPageViewController: UIViewController {
             youTubeVideoID: detail.youTubeTrailerID, providerID: item.ref.providerID)
         let tiles = split.trailers + split.extras
         guard !tiles.isEmpty, !hasExtras else { return }
+        if scrollStage > 0 { scrollStage = 2 }
         hasExtras = true
         extrasShelf.configure(tiles)
         extrasShelf.isHidden = false

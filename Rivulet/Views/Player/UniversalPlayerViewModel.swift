@@ -206,7 +206,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Skip Marker State
     @Published private(set) var activeMarker: PlexMarker? {
-        didSet { print("[583] activeMarker=\(activeMarker?.type ?? "nil") t=\(currentTime)"); if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
+        didSet { if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
     }
     @Published private(set) var showSkipButton = false
     /// Menu hid the pill for this marker or this Up Next fold; it still shows in the controls (#556).
@@ -5014,7 +5014,6 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Check if current time is within a marker range (or approaching one)
     /// Also triggers post-video summary at credits marker or 45s before end
     private func checkMarkers(at time: TimeInterval) {
-        if Int(time * 10) % 50 == 0 { print("[583] tick t=\(time) markers=\((metadata.Marker ?? []).map { "\($0.type ?? "?")@\($0.startTimeSeconds)" }) scrub=\(isScrubbing) pv=\(postVideoState)") }
         // Don't check while scrubbing or if post-video already showing
         guard !isScrubbing, postVideoState == .hidden else { return }
 

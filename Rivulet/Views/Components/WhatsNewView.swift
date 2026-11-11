@@ -155,9 +155,11 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
-        // confirm build number at release
         ("1.3.0 (127)", [
             "Updated AetherEngine to 7.62.1",
+            "Fixed watch progress reporting through credits, reloads and episode changes",
+            "Photos fixes",
+            "French: fixed the Play and Continue Watching labels",
         ]),
         ("1.3.0 (126)", [
             "New pause screen with the title's art and details. @priyanshuppal",

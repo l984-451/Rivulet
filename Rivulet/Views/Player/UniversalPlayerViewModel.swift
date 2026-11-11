@@ -72,6 +72,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var isBuffering = false
     @Published private(set) var errorMessage: String?
 
+    /// Touch-surface double tap zooms the picture to fill the screen (#589). Kept for the session.
+    @Published var fillsScreen = false
+
     @Published var showControls = true {
         didSet {
             // Focus mode cannot outlive visible controls.

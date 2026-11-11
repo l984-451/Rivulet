@@ -1031,25 +1031,48 @@ class PlayerContainerViewController: UIViewController {
         tap.allowedPressTypes = []
         view.addGestureRecognizer(tap)
         touchSurfaceTapGesture = tap
+
+        // Double tap zooms, as AVKit's tap-to-zoom does (#589). The single tap
+        // waits it out, which is the same short delay AVKit pays.
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        doubleTap.allowedPressTypes = []
+        view.addGestureRecognizer(doubleTap)
+        tap.require(toFail: doubleTap)
+    }
+
+    /// True when the touch-surface tap was the touch half of a clickpad click.
+    private var tapWasClick: Bool {
+        RemoteInputHandler.isClickpadDown
+            || CACurrentMediaTime() - RemoteInputHandler.lastClickpadDownAt < 0.6
+            || CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt < 0.6
+    }
+
+    private var touchSurfaceTapAllowed: Bool {
+        guard let vm = viewModel else { return false }
+        return !vm.isScrubbing
+            && vm.postVideoState == .hidden
+            && !vm.playbackState.isFailed
+            && descriptionOverlay == nil
     }
 
     @objc private func handleTouchSurfaceTap() {
-        guard let vm = viewModel else { return }
-        guard !vm.isScrubbing,
-              vm.postVideoState == .hidden,
-              !vm.playbackState.isFailed,
-              descriptionOverlay == nil
-        else { return }
+        guard let vm = viewModel, touchSurfaceTapAllowed else { return }
 
         // With the controls up, a bare tap (not a click) cycles the bar
         // between play time and the clock.
-        let clicked = RemoteInputHandler.isClickpadDown
-            || CACurrentMediaTime() - RemoteInputHandler.lastClickpadDownAt < 0.6
-        if vm.showControls, !clicked, let bar = progressBar {
+        if vm.showControls, !tapWasClick, let bar = progressBar {
             bar.setShowsClockTimes(!bar.showsClockTimes)
             SettingsStore.setBool(Self.clockTimesKey, bar.showsClockTimes)
         }
         vm.showControlsTemporarily()
+    }
+
+    @objc private func handleTouchSurfaceDoubleTap() {
+        // A double click is two play/pause presses, never a zoom.
+        guard let vm = viewModel, touchSurfaceTapAllowed, !tapWasClick else { return }
+        vm.fillsScreen.toggle()
     }
 
     private static let clockTimesKey = "playerShowsClockTimes"
@@ -1217,6 +1240,11 @@ class PlayerContainerViewController: UIViewController {
         vm.$videoSize
             .receive(on: DispatchQueue.main)
             .sink { [weak self] size in self?.captionOverlay?.videoSize = size }
+            .store(in: &cancellables)
+
+        vm.$fillsScreen
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] fills in self?.captionOverlay?.fillsScreen = fills }
             .store(in: &cancellables)
 
         vm.$subtitleHeightUnits

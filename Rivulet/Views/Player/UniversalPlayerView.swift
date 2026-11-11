@@ -848,9 +848,9 @@ struct UniversalPlayerView: View {
             // Aether route: host the engine's own render surface. It
             // covers both backends (AVPlayerLayer / sample-buffer layer)
             // and survives internal AVPlayer swaps without rebinding.
-            AetherVideoSurfaceView(player: aether)
+            AetherVideoSurfaceView(player: aether, fillsScreen: viewModel.fillsScreen)
         } else if let player = viewModel.player, viewModel.streamURL != nil {
-            AVPlayerLayerView(player: player)
+            AVPlayerLayerView(player: player, fillsScreen: viewModel.fillsScreen)
         }
     }
 

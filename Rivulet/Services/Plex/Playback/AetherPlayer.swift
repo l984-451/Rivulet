@@ -1359,6 +1359,13 @@ final class AetherPlayer: PlayerProtocol {
         engine.bind(view: view)
     }
 
+    /// Fill the screen, cropping the picture, instead of fitting it (#589).
+    /// The engine keeps it across its internal host swaps.
+    var fillsScreen: Bool {
+        get { engine.videoGravity == .resizeAspectFill }
+        set { engine.videoGravity = newValue ? .resizeAspectFill : .resizeAspect }
+    }
+
     func unbind(surface: UIView) {
         guard let view = surface as? AetherPlayerView else { return }
         engine.unbind(view: view)

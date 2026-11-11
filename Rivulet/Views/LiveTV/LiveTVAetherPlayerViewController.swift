@@ -54,6 +54,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var lastResortPlayer: AVPlayer?
     private var lastResortLayer: AVPlayerLayer?
 
+    /// Touch-surface double tap zooms the picture to fill the screen (#589).
+    private var fillsScreen = false
+
     /// Escalating recovery for playback failures (a Plex session can die
     /// server-side after load): 0 = primary, 1 = fresh URL + engine demux,
     /// 2 = fresh URL + bare AVPlayer.
@@ -365,6 +368,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         mountSubtitleOverlay()
         observeCaptionAppearance()
         setupChrome()
+        setupZoomGesture()
 
         inputCoordinator.target = self
         NowPlayingService.shared.attachLive(inputCoordinator: inputCoordinator)
@@ -413,6 +417,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             aetherPlayer = aether
             aether.bind(view: engineSurfaceView)
         }
+        aether.fillsScreen = fillsScreen
         windowSeeker.attach(LiveWindowSeekController.Player(
             window: { [weak aether] in
                 guard let shift = aether?.liveTimeshift, let range = shift.seekableRange else { return nil }
@@ -726,6 +731,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         resetNativeLegibleState()
         subtitleModel.update(cues: [])
         aether.unbind(view: engineSurfaceView)
+        // The next surface (a multiview tile) fits its picture.
+        aether.fillsScreen = false
 
         let handoff = LiveTVSessionHandoff(channel: channel, player: aether,
                                            keepalive: liveKeepalive, isNativeHLSRoute: isNativeHLSRoute)
@@ -808,6 +815,24 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     // MARK: - Chrome (glass rail + panels)
+
+    private func setupZoomGesture() {
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleZoomDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        doubleTap.allowedPressTypes = []
+        view.addGestureRecognizer(doubleTap)
+    }
+
+    @objc private func handleZoomDoubleTap() {
+        // A double click lands as two taps too; it belongs to the presses.
+        guard CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt > 0.6,
+              scrubTarget == nil, descriptionOverlay == nil else { return }
+        fillsScreen.toggle()
+        aetherPlayer?.fillsScreen = fillsScreen
+        lastResortLayer?.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
+        syncSubtitleOverlay()
+    }
 
     private func setupChrome() {
         // Focus catcher: 1pt, transparent, always present.
@@ -2612,7 +2637,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 let avPlayer = AVPlayer(url: freshURL)
                 let layer = AVPlayerLayer(player: avPlayer)
                 layer.frame = view.bounds
-                layer.videoGravity = .resizeAspect
+                layer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
                 view.layer.insertSublayer(layer, at: 0)
                 lastResortPlayer = avPlayer
                 lastResortLayer = layer
@@ -2690,6 +2715,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
         // captions on the picture rather than in the pillar/letterbox.
         overlay.videoSize = aetherPlayer?.videoSize ?? .zero
+        overlay.fillsScreen = fillsScreen
         overlay.heightUnits = subtitleHeightUnits
         let pane = activePanel?.isPane == true
         if overlay.paneOpen != pane {

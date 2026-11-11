@@ -107,6 +107,9 @@ enum MenuPressInterceptor {
     private static var swallowState = MenuPressSwallowState()
     /// Counted here because this hook sees each gesture before the focus engine acts on it.
     private(set) static var remoteGestures = RemoteGestureCounter()
+    /// When the last press of any kind began. A clickpad click also lands as a touch-surface
+    /// tap, so tap handlers check this to tell a click from a bare tap.
+    private(set) static var lastPressBeganAt: CFTimeInterval = 0
 
     private struct WeakHandler {
         weak var value: (any MenuBackHandling)?
@@ -177,6 +180,7 @@ enum MenuPressInterceptor {
                 // input probe needs. No-ops unless Input Diagnostics is on.
                 InputProbe.record(presses: pressesEvent.allPresses)
                 if pressesEvent.allPresses.contains(where: { $0.phase == .began }) {
+                    lastPressBeganAt = CACurrentMediaTime()
                     NotificationCenter.default.post(name: .remoteInputBegan, object: nil)
                 }
 

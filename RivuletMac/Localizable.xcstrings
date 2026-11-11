@@ -3318,7 +3318,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reprendre la lecture"
+            "value" : "Continuer à regarder"
           }
         }
       }
@@ -8892,7 +8892,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire"
+            "value" : "Regarder"
           }
         }
       }
@@ -8908,7 +8908,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire à nouveau"
+            "value" : "Regarder à nouveau"
           }
         }
       }
@@ -8924,7 +8924,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire le premier épisode"
+            "value" : "Regarder le premier épisode"
           }
         }
       }
@@ -8946,7 +8946,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire S%1$lld, É%2$lld"
+            "value" : "Regarder S%1$lld, É%2$lld"
           }
         }
       }
@@ -8968,7 +8968,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire une autre version"
+            "value" : "Regarder une autre version"
           }
         }
       }
@@ -8990,7 +8990,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire depuis le début"
+            "value" : "Regarder depuis le début"
           }
         }
       }
@@ -9012,7 +9012,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lire à partir d’ici"
+            "value" : "Regarder à partir d’ici"
           }
         }
       }
@@ -10331,7 +10331,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Retirer de Reprendre la lecture"
+            "value" : "Retirer de Continuer à regarder"
           }
         }
       }

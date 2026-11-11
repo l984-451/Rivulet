@@ -19,6 +19,7 @@ enum MacChangelog {
             "Video libraries can be browsed by folder",
             "Season tiles show the show's poster and open the show",
             "Faster playback, and finishing a title adds one play in Plex",
+            "With credits playing out, Up Next's countdown ends when the video does",
             "Artwork stays on your device between launches",
             "French is available, and German covers more of the app. @JoschaP",
         ]),

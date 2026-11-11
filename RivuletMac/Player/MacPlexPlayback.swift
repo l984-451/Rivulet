@@ -579,7 +579,7 @@ final class MacPlexPlayback: ObservableObject {
             if isPlayingCinemaExtra {
                 advanceCinemaExtras()
             } else {
-                startUpNextCountdown()
+                if upNextCountdown == nil { startUpNextCountdown() }
                 // Nothing next: return to the page instead of the engine's cleared (black) frame.
                 if nextEpisode == nil { onFinished?() }
             }
@@ -594,6 +594,7 @@ final class MacPlexPlayback: ObservableObject {
         // A load's clock reads 0 until it starts; an intro at 0 must not fire mid-reload.
         if !player.isStarting { evaluateAutoSkip(at: time) }
         timeline.tick(time)
+        updateCountdownBeforeEnd()
     }
 
     /// The server stopped this stream: stop and show its reason, with nothing to retry.
@@ -670,14 +671,22 @@ final class MacPlexPlayback: ObservableObject {
 
     // MARK: - Up Next
 
-    /// Near the end: inside the credits marker, or the last 30 s. Only "Up Next" opens it early;
-    /// the other choices wait for the end of the file.
+    /// Near the end: inside the credits marker, or the last 30 s. The other choices play the
+    /// credits out and open it one countdown before the end, so autoplay lands at the end (#592).
     var isNearEnd: Bool {
         if player.state == .ended { return true }
-        guard CreditsBehavior.current().showsUpNextAtCredits else { return false }
-        if activeMarker?.type == "credits" { return true }
         let duration = player.duration
+        guard CreditsBehavior.current().showsUpNextAtCredits else {
+            return opensUpNextBeforeEnd
+        }
+        if activeMarker?.type == "credits" { return true }
         return duration > 60 && player.currentTime >= duration - 30
+    }
+
+    /// Credits play out and the countdown is on: Up Next and its countdown start before the end.
+    private var opensUpNextBeforeEnd: Bool {
+        let countdown = TimeInterval(AutoplayCountdown.current.rawValue), duration = player.duration
+        return countdown > 0 && duration > 60 && player.currentTime >= duration - countdown
     }
 
     private func lookUpNextEpisode() {
@@ -693,6 +702,17 @@ final class MacPlexPlayback: ObservableObject {
             let next = await plex.nextEpisode(after: episode, in: request)
             guard !Task.isCancelled else { return }
             self?.nextEpisode = next
+        }
+    }
+
+    /// Starts the countdown one countdown before the end; a rewind out of that window stops it.
+    private func updateCountdownBeforeEnd() {
+        guard player.state != .ended, !CreditsBehavior.current().showsUpNextAtCredits else { return }
+        if opensUpNextBeforeEnd {
+            if upNextCountdown == nil { startUpNextCountdown() }
+        } else if upNextCountdown != nil {
+            countdownTask?.cancel()
+            upNextCountdown = nil
         }
     }
 

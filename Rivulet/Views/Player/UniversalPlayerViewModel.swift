@@ -206,7 +206,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     // MARK: - Skip Marker State
     @Published private(set) var activeMarker: PlexMarker? {
-        didSet { if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
+        didSet { print("[583] activeMarker=\(activeMarker?.type ?? "nil") t=\(currentTime)"); if (activeMarker == nil) != (oldValue == nil) { skipPillDismissed = false } }
     }
     @Published private(set) var showSkipButton = false
     /// Menu hid the pill for this marker or this Up Next fold; it still shows in the controls (#556).
@@ -5014,6 +5014,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// Check if current time is within a marker range (or approaching one)
     /// Also triggers post-video summary at credits marker or 45s before end
     private func checkMarkers(at time: TimeInterval) {
+        if Int(time * 10) % 50 == 0 { print("[583] tick t=\(time) markers=\((metadata.Marker ?? []).map { "\($0.type ?? "?")@\($0.startTimeSeconds)" }) scrub=\(isScrubbing) pv=\(postVideoState)") }
         // Don't check while scrubbing or if post-video already showing
         guard !isScrubbing, postVideoState == .hidden else { return }
 
@@ -5128,6 +5129,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                     hasTriggeredPostVideo = true
                     triggerPostVideoTransition()
                 }
+                if !opensUpNextAtCredits { triggerUpNextBeforeEndIfDue(at: time) }
                 return
             }
         }
@@ -5157,24 +5159,12 @@ final class UniversalPlayerViewModel: ObservableObject {
             }
         }
 
-        // No credits markers: Up Next opens one countdown before the end, so autoplay lands at the
-        // end. Countdown off opens it at the end. At least 85% watched, for short videos.
-        if metadata.creditsMarkers.isEmpty && duration > 60 && opensUpNextAtCredits {
-            let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
-            let minCompletionTime = duration * 0.85  // At least 85% watched
-
-            // Reset flag if user rewound before trigger point
-            if time < triggerTime - 10 && hasTriggeredPostVideo {
-                hasTriggeredPostVideo = false
-                upNextCollapsed = false
-            }
-
-            // Only trigger if we're both near the end AND have watched most of the content
-            if time >= triggerTime && time >= minCompletionTime && !hasTriggeredPostVideo {
-                hasTriggeredPostVideo = true
-                triggerPostVideoTransition()
-                return
-            }
+        // No credits markers, or credits that play out (#592): Up Next opens one countdown before
+        // the end, so autoplay lands at the end. Countdown off opens it at the end. At least 85%
+        // watched, for short videos.
+        if metadata.creditsMarkers.isEmpty || !opensUpNextAtCredits,
+           triggerUpNextBeforeEndIfDue(at: time) {
+            return
         }
 
         // No active marker: clear the pill and reset the per-marker auto-skip
@@ -5558,6 +5548,21 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     // MARK: - Post-Video Handling
+
+    /// Opens Up Next one countdown before the end once 85% is watched; a rewind well before re-arms it.
+    @discardableResult
+    private func triggerUpNextBeforeEndIfDue(at time: TimeInterval) -> Bool {
+        guard duration > 60 else { return false }
+        let triggerTime = duration - TimeInterval(autoplayCountdownSetting)
+        if time < triggerTime - 10 && hasTriggeredPostVideo {
+            hasTriggeredPostVideo = false
+            upNextCollapsed = false
+        }
+        guard time >= triggerTime, time >= duration * 0.85, !hasTriggeredPostVideo else { return false }
+        hasTriggeredPostVideo = true
+        triggerPostVideoTransition()
+        return true
+    }
 
     /// Up Next opens at the credits only for the "Up Next" choice; movies and playlists keep their own path.
     private var opensUpNextAtCredits: Bool {

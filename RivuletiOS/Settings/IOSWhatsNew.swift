@@ -8,6 +8,16 @@ import SwiftUI
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.0 (126)", [
+            "Video libraries can be browsed by folder",
+            "Season tiles show the show's poster and open the show",
+            "Faster playback",
+            "Artwork stays on your device between launches",
+            "Finishing a title adds one play in Plex, not two or three",
+            "French is available, and German covers more of the app. @JoschaP",
+            "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",
+            "What's New shows every build you missed",
+        ]),
         ("1.3.0 (125)", [
             "Photos, with favorites, slideshows, photo info, a map and a memories row",
             "Improved search to find more matches, genres, and people",

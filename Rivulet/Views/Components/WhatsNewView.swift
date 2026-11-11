@@ -155,6 +155,18 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.0 (126)", [
+            "New pause screen with the title's art and details. @priyanshuppal",
+            "New launch screen: Rivulet's R pours in and zooms into Home. @priyanshuppal",
+            "4K, HD and SD badges, now on show pages too. @DennisR-git @danieldjupvik",
+            "Season tiles show the show's poster and open the show",
+            "Folder-only libraries can switch to a sorted title grid",
+            "Faster playback",
+            "Plex counts a finished title once",
+            "French is available, and German covers more of the app. @JoschaP",
+            "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",
+            "What's New shows every build you missed",
+        ]),
         ("1.3.0 (125)", [
             "Improved search to find more matches, genres, and people",
             "Photos: favorites, slideshows, photo info, a map and a memories row",

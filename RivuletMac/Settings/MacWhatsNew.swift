@@ -16,6 +16,11 @@ enum MacChangelog {
             "Hidden libraries stay off Home and the hero",
             "Direct Play buffers as far ahead as storage allows",
             "Added delete option in more long press menus",
+            "Video libraries can be browsed by folder",
+            "Season tiles show the show's poster and open the show",
+            "Faster playback, and finishing a title adds one play in Plex",
+            "Artwork stays on your device between launches",
+            "French is available, and German covers more of the app. @JoschaP",
         ]),
         ("1.0.0 (1)", [
             "Rivulet now has a native Mac app",

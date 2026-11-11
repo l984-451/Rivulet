@@ -162,6 +162,7 @@ struct WhatsNewView: View {
             "Season tiles show the show's poster and open the show",
             "Folder-only libraries can switch to a sorted title grid",
             "Faster playback",
+            "Skip Intro and Skip Credits buttons show up again",
             "Plex counts a finished title once",
             "French is available, and German covers more of the app. @JoschaP",
             "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",

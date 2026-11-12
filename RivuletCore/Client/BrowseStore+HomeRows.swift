@@ -89,6 +89,9 @@ extension BrowseStore {
         HomeRowSettings.identifier(ofShelf: hub.id, selectedProviderID: registry.plexProvider?.id)
     }
 
+    /// A shelf switched off in Settings > Home > Rows.
+    func isHomeRowHidden(_ hub: MediaHub) -> Bool { HomeRowSettings.isHidden(hiddenID(of: hub)) }
+
     private var continueWatchingIDs: [String] {
         HomeRowSettings.continueWatchingIdentifiers(
             hasSelectedPlex: registry.plexProvider != nil,

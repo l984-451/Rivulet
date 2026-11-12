@@ -56,7 +56,7 @@ struct MacHomeView: View {
     private var heroItems: [MediaItem] {
         HomeHero.items(sources: HeroSources.sources, continueWatching: browse.continueWatching, shelves: browse.shelves,
                        watchlist: watchlist, trending: trending, personal: browse.personalRows,
-                       heroPins: HomePlaylistPins.pins(in: .hero))
+                       heroPins: HomePlaylistPins.pins(in: .hero), isRowHidden: browse.isHomeRowHidden)
     }
 }
 

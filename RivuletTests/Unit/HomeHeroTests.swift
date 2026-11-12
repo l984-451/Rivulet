@@ -60,6 +60,13 @@ final class HomeHeroTests: XCTestCase {
         XCTAssertEqual(result.map(\.ref.itemID), ["a1", "b1", "a2", "b2"])
     }
 
+    func test_recentlyAdded_skipsHiddenRows_unlessEveryOneIsHidden() {
+        let a = shelf("plex:a|movie.recentlyadded.1", [item("a1")])
+        let b = shelf("plex:a|show.recentlyadded.2", [item("b1")])
+        XCTAssertEqual(HomeHero.recentlyAdded([a, b], isRowHidden: { $0.id == b.id }).map(\.ref.itemID), ["a1"])
+        XCTAssertEqual(HomeHero.recentlyAdded([a, b], isRowHidden: { _ in true }).map(\.ref.itemID), ["a1", "b1"])
+    }
+
     func test_anEmptyChoiceFallsBackToTrending_thenToRows() {
         let rows = [shelf("a", [item("r1"), item("r2")])]
         XCTAssertEqual(items([.watchlist], shelves: rows, trending: [item("t")]).map(\.ref.itemID), ["t"])

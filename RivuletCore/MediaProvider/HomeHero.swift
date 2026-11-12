@@ -29,13 +29,13 @@ nonisolated enum HomeHero {
     /// trending, and with no trending match, Home's rows.
     static func items(sources: Set<HeroSources.Source>, continueWatching: [MediaItem], shelves: [MediaHub],
                       watchlist: [MediaItem], trending: [MediaItem], personal: [PersonalRow],
-                      heroPins: [HomePlaylistPins.Pin]) -> [MediaItem] {
+                      heroPins: [HomePlaylistPins.Pin], isRowHidden: (MediaHub) -> Bool = { _ in false }) -> [MediaItem] {
         var lists: [[MediaItem]] = []
         for source in HeroSources.Source.allCases where sources.contains(source) {
             switch source {
             case .trending: lists.append(trending)
             case .continueWatching: lists.append(continueWatching.prefix(HomeFeed.railLimit).filter(hasBackdrop))
-            case .recentlyAdded: lists.append(recentlyAdded(shelves))
+            case .recentlyAdded: lists.append(recentlyAdded(shelves, isRowHidden: isRowHidden))
             case .watchlist: lists.append(watchlist)
             case .favoriteMovies, .favoriteShows:
                 let kind: MediaLibrary.LibraryKind = source == .favoriteShows ? .shows : .movies
@@ -49,10 +49,15 @@ nonisolated enum HomeHero {
     }
 
     /// One item from each recently added row in turn, so no library's additions bury another's.
-    static func recentlyAdded(_ shelves: [MediaHub]) -> [MediaItem] {
-        let rows = shelves.filter { $0.id.lowercased().contains("recentlyadded") }
-            .map { Array($0.items.prefix(HomeFeed.railLimit)) }
-        return roundRobin(rows).filter(hasBackdrop)
+    static func recentlyAdded(_ shelves: [MediaHub], isRowHidden: (MediaHub) -> Bool = { _ in false }) -> [MediaItem] {
+        let rows = shownOrAll(shelves.filter { $0.id.lowercased().contains("recentlyadded") }, isHidden: isRowHidden)
+        return roundRobin(rows.map { Array($0.items.prefix(HomeFeed.railLimit)) }).filter(hasBackdrop)
+    }
+
+    /// The rows Home shows; all of them when every one is hidden, so the hero can stand in for the rows (#597).
+    static func shownOrAll<T>(_ rows: [T], isHidden: (T) -> Bool) -> [T] {
+        let shown = rows.filter { !isHidden($0) }
+        return shown.isEmpty ? rows : shown
     }
 
     /// Up to six featured items, two per row, one per show.

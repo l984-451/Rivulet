@@ -3624,7 +3624,7 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// The hero's slides when it shows lists (`HeroSources`), from Home's rows as
-    /// just built, hidden ones included, mixed by `HomeHero.mix`. Empty when only trending is on.
+    /// just built, mixed by `HomeHero.mix`. Recently Added reads only the shown rows (#597). Empty when only trending is on.
     private func heroItemsForList(from sections: [HomeSectionData], rail: [(row: CachedHomeHub, kind: MediaProviderKind)]) -> [MediaItem] {
         guard !HeroSources.isTrendingOnly else { return [] }
         let hasBackdrop = { (item: MediaItem) in (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop) != nil }
@@ -3646,8 +3646,9 @@ final class PlexHomeViewController: UIViewController {
                                                        watched: \.userState.lastViewedAt).map(\.item)
                     : rows.first ?? [])
             case .recentlyAdded:
-                let rows = rail.filter { !$0.row.isContinueWatching && Self.isRecentlyAddedRow($0.row) }
-                lists.append(Array(Self.roundRobin(rows.map(\.row.items)).filter(Self.isHeroCandidate).prefix(10)))
+                let rows = HomeHero.shownOrAll(rail.map(\.row).filter { !$0.isContinueWatching && Self.isRecentlyAddedRow($0) },
+                                               isHidden: { HomeRowSettings.isHidden($0.hubIdentifier) })
+                lists.append(Array(Self.roundRobin(rows.map(\.items)).filter(Self.isHeroCandidate).prefix(10)))
             case .watchlist:
                 refreshWatchlistHeroIfNeeded()
                 lists.append(watchlistHeroItems)
@@ -4850,8 +4851,8 @@ final class PlexHomeViewController: UIViewController {
             sections.insert(.yearInReview(), at: anchor.map { $0 + 1 } ?? 0)
         }
 
-        // The hero reads every row, hidden ones included, so Settings > Home >
-        // Rows never changes it. A warm launch has only the cached visible rows.
+        // The hero reads every row, hidden ones included: Continue Watching and an
+        // all-hidden Recently Added still feed it. A warm launch has only the cached visible rows.
         let heroRail = Self.homeRail(
             plex: dataStore.allHomeItems.isEmpty ? dataStore.homeItems : dataStore.allHomeItems,
             otherServers: servers.homeRowsInSidebarOrder, libraryOrder: Self.sidebarLibraryOrder(),

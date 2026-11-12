@@ -84,6 +84,7 @@ final class ExpandedDetailContainerView: UIView {
     private let seasonsHeader = UIView()
     private let seasonPillScroll = UIScrollView()
     private let seasonPillRow = UIStackView()
+    private let seasonFocusGuide = UIFocusGuide()
     private var seasonPills: [SeasonPillView] = []
     private var seasonRefIDs: [String] = []   // parallel to seasonPills (pill → season ref.itemID)
     private var selectedSeasonIndex = 0
@@ -99,11 +100,13 @@ final class ExpandedDetailContainerView: UIView {
         didSet { applyPillFocusability() }
     }
 
-    /// Pills are focusable only while targeted, so Up from the episodes cannot land on
-    /// the wrong pill; the Up handler targets them and focuses the selected one.
+    /// Enter the selected season from episodes; enable its neighbours once in the pill row.
     private func applyPillFocusability() {
-        let on = detailsFocusTarget == .pills
-        for pill in seasonPills where pill.focusEnabled != on { pill.focusEnabled = on }
+        for (index, pill) in seasonPills.enumerated() {
+            pill.focusEnabled = detailsFocusTarget == .pills || index == selectedSeasonIndex
+        }
+        seasonFocusGuide.preferredFocusEnvironments = seasonPillsFocusEnvironment.map { [$0] } ?? []
+        seasonFocusGuide.isEnabled = detailsFocusTarget == .episodes && hasSeasonPills
     }
     /// True while a season pill (not an episode) holds focus. Drives the VC's
     /// Up/Down handling (Up from a pill collapses; Down from a pill → episodes).
@@ -248,6 +251,13 @@ final class ExpandedDetailContainerView: UIView {
         // `revealSeasonPill` scrolls instead: the engine's minimal scroll leaves the next pill off-window.
         seasonPillScroll.isScrollEnabled = false
         seasonsHeader.addSubview(seasonPillScroll)
+        seasonsHeader.addLayoutGuide(seasonFocusGuide)
+        NSLayoutConstraint.activate([
+            seasonFocusGuide.topAnchor.constraint(equalTo: seasonPillScroll.topAnchor),
+            seasonFocusGuide.bottomAnchor.constraint(equalTo: seasonPillScroll.bottomAnchor),
+            seasonFocusGuide.leadingAnchor.constraint(equalTo: seasonsHeader.leadingAnchor),
+            seasonFocusGuide.trailingAnchor.constraint(equalTo: seasonsHeader.trailingAnchor),
+        ])
         seasonPillRow.translatesAutoresizingMaskIntoConstraints = false
         seasonPillRow.axis = .horizontal
         seasonPillRow.spacing = 8
@@ -727,7 +737,10 @@ final class ExpandedDetailContainerView: UIView {
         seasonPills.removeAll()
         seasonRefIDs = refIDs
         // Only show pills when there's a real choice (2+ seasons).
-        guard labels.count > 1 else { return }
+        guard labels.count > 1 else {
+            applyPillFocusability()
+            return
+        }
         selectedSeasonIndex = min(selectedIndex, labels.count - 1)
         for (i, label) in labels.enumerated() {
             let pill = SeasonPillView()
@@ -765,7 +778,7 @@ final class ExpandedDetailContainerView: UIView {
             seasonPillRow.addArrangedSubview(pill)
             seasonPills.append(pill)
         }
-        applyPillFocusability()   // match the current target (.episodes at build → non-focusable)
+        applyPillFocusability()
         // Open on the current season even when it's past the visible window.
         revealSeasonPill(selectedSeasonIndex, animated: false)
     }
@@ -776,6 +789,7 @@ final class ExpandedDetailContainerView: UIView {
         guard index >= 0, index < seasonPills.count else { return }
         selectedSeasonIndex = index
         for (i, pill) in seasonPills.enumerated() { pill.setSelected(i == index) }
+        applyPillFocusability()
         // While focus is in the row the engine scrolls the pill in itself; don't
         // run a second scroll against it. This covers the other direction — the
         // pill following the focused episode's season.

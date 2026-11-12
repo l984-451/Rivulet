@@ -302,4 +302,19 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         for r in [2.33, 2.35, 2.39, 2.40, 2.42, 2.55] { XCTAssertEqual(MediaSource.aspectRatioName(r), "CinemaScope", "\(r)") }
         for r in [1.5, 1.66, 2.0, 2.2, 2.76] { XCTAssertNil(MediaSource.aspectRatioName(r), "\(r)") }
     }
+
+    /// The quality row names the item's server only once a second server is signed in.
+    @MainActor
+    func test_serverName_onlyWithMoreThanOneServer() {
+        let registry = MediaProviderRegistry()
+        registry.register(StubMediaProvider(id: "plex:home", displayName: "Home"))
+        let item = JellyfinFixtures.mediaItem("m1", providerID: "plex:home")
+        XCTAssertNil(MediaDetailChromeView.serverName(for: item, in: registry))
+        XCTAssertEqual(MediaDetailChromeView.serverName(for: item, always: true, in: registry), "Home")
+
+        registry.register(StubMediaProvider(id: "jellyfin:den", kind: .jellyfin, displayName: "Den"))
+        XCTAssertEqual(MediaDetailChromeView.serverName(for: item, in: registry), "Home")
+        let unknown = JellyfinFixtures.mediaItem("m2", providerID: "plex:gone")
+        XCTAssertNil(MediaDetailChromeView.serverName(for: unknown, in: registry))
+    }
 }

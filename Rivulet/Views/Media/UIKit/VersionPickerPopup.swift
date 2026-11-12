@@ -23,4 +23,17 @@ extension VersionPicker {
         // The popup runs its own entrance from `sourceFrame`.
         host.topmostPresented.present(popup, animated: false)
     }
+
+    /// The list across copies: each row says where its file is. `title` heads it (a show names
+    /// the episode Play starts).
+    static func present(_ options: [Option], title: String = String(localized: "Play Version"),
+                        from host: UIViewController, sourceFrame: CGRect?, onPick: @escaping (Option) -> Void) {
+        guard options.count >= 2 else { return }
+        let rows = zip(options, labels(for: options)).map { option, label in
+            TileMenuAction(verbatim: label, systemImage: "play.fill") { onPick(option) }
+        }
+        let popup = TileMenuPopupViewController(sections: [rows], sourceFrame: sourceFrame,
+                                                header: TileMenuHeader(title: title))
+        host.topmostPresented.present(popup, animated: false)
+    }
 }

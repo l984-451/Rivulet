@@ -22282,6 +22282,28 @@
         }
       }
     },
+    "This Copy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Kopie"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αυτό το αντίγραφο"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette copie"
+          }
+        }
+      }
+    },
     "This Dolby Vision file has no fallback layer this Apple TV can decode." : {
       "localizations" : {
         "de" : {

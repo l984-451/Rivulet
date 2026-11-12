@@ -76,6 +76,11 @@ nonisolated struct PlexDevice: Codable, Sendable {
     /// NOT the plex.direct subdomain hash — that lives in each connection's `uri`.
     var machineIdentifier: String?
 
+    /// `provides` is a comma list ("server,client,player" on a server that is also a player).
+    var isServer: Bool {
+        provides.split(separator: ",").contains { $0.trimmingCharacters(in: .whitespaces) == "server" }
+    }
+
     enum CodingKeys: String, CodingKey {
         case name, product, productVersion, platform, platformVersion, device
         case clientIdentifier, createdAt, lastSeenAt, provides, ownerId

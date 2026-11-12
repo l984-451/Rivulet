@@ -383,7 +383,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         // Only Plex Media Servers. Each device's `machineIdentifier` is populated
         // at decode time from its `clientIdentifier` (the same value the old
         // pms/servers.xml fetch returned), so no separate round-trip is needed.
-        let servers = devices.filter { $0.provides == "server" }
+        let servers = devices.filter(\.isServer)
         PlexCertificateDelegate.registerCertificateHashes(from: servers)
         return servers
     }

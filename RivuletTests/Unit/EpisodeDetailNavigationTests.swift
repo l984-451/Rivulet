@@ -91,6 +91,7 @@ struct EpisodeDetailNavigationTests {
 
         for card in cards {
             card.sendActions(for: .primaryActionTriggered)
+            try await waitUntil { page.presentedViewController is InfoPopupViewController }
             let popup = try #require(page.presentedViewController as? InfoPopupViewController)
             try await waitUntil { popup.isBeingPresented == false }
             #expect(binding.gestureRecognizerShouldBegin(up) == false)

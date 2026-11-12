@@ -1113,6 +1113,8 @@ final class PreviewCarouselViewController: UIViewController {
         case .down:
             if state.isCarouselInputEnabled { return true }
             if state.phase == .expandedHero { return true }
+            // Same handler as the click: the selected season's first episode, not the one under the pill.
+            if state.phase == .detailsStable { return touchBeganOnSeasonPills && expandedDetail.focusIsOnPills }
             return false
         case .up:
             if state.phase == .expandedHero { return true }

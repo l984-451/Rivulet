@@ -221,14 +221,15 @@ final class MediaItemDetailPageViewController: UIViewController {
         }
         // The extras row is a focus stop only once the page is scrolled to it.
         if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
-        heroContent.isUserInteractionEnabled = stage == 0
+        // The hero keeps focus until the detail gives the info columns cards to land on.
+        heroContent.isUserInteractionEnabled = stage == 0 || detail == nil
         extrasShelf.isUserInteractionEnabled = stage == 1 && hasExtras
         infoColumns.isUserInteractionEnabled = stage == (hasExtras ? 2 : 1)
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
-            self.setNeedsFocusUpdate()
-            self.updateFocusIfNeeded()
         }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -365,10 +366,16 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
         infoColumns.isUserInteractionEnabled = false
         infoColumns.onSelect = { [weak self] in
-            guard let self, let detail = self.detail, self.presentedViewController == nil else { return }
-            self.present(InfoPopupViewController(content: InfoPopupContent.fullInfo(detail: detail),
-                                                width: InfoPopupViewController.infoWidth, height: 900,
-                                                scrollable: true), animated: true)
+            guard let self, var detail = self.detail, self.presentedViewController == nil else { return }
+            Task { [weak self] in
+                // The Worker's scores, as the show and season pages add them.
+                let extra = await RatingsClient.shared.ratings(for: detail, within: 1)
+                if !extra.isEmpty { detail.ratings = MediaRating.ordered(detail.ratings + extra) }
+                guard let self, self.presentedViewController == nil else { return }
+                self.present(InfoPopupViewController(content: InfoPopupContent.fullInfo(detail: detail),
+                                                    width: InfoPopupViewController.infoWidth, height: 900,
+                                                    scrollable: true), animated: true)
+            }
         }
         belowFold.addSubview(infoColumns)
 

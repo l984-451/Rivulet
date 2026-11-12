@@ -454,8 +454,27 @@ class LibrarySettingsManager: ObservableObject {
 
     /// The view this profile last left the library on, else `fallback`.
     func viewMode(_ libraryKey: String, default fallback: LibraryViewMode = .titles) -> LibraryViewMode {
-        (userDefaults.dictionary(forKey: currentKey(viewModeBaseKey))?[libraryKey] as? String)
-            .flatMap(LibraryViewMode.init) ?? fallback
+        savedViewMode(libraryKey) ?? fallback
+    }
+
+    func savedViewMode(_ libraryKey: String) -> LibraryViewMode? {
+        (userDefaults.dictionary(forKey: currentKey(viewModeBaseKey))?[libraryKey] as? String).flatMap(LibraryViewMode.init)
+    }
+
+    // MARK: - Unwatched filter (#618)
+
+    private let unwatchedOnlyBaseKey = "libraryUnwatchedOnly"
+
+    /// Whether this profile last left the library's Titles grid on Unwatched Only.
+    func unwatchedOnly(_ libraryKey: String) -> Bool {
+        userDefaults.dictionary(forKey: currentKey(unwatchedOnlyBaseKey))?[libraryKey] as? Bool ?? false
+    }
+
+    func setUnwatchedOnly(_ on: Bool, for libraryKey: String) {
+        guard on != unwatchedOnly(libraryKey) else { return }
+        var flags = userDefaults.dictionary(forKey: currentKey(unwatchedOnlyBaseKey)) ?? [:]
+        flags[libraryKey] = on ? true : nil
+        userDefaults.set(flags, forKey: currentKey(unwatchedOnlyBaseKey))
     }
 
     func setViewMode(_ mode: LibraryViewMode, for libraryKey: String) {

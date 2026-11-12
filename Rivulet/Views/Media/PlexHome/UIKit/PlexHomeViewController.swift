@@ -492,7 +492,9 @@ final class PlexHomeViewController: UIViewController {
         // Library mode restores the persisted per-library sort; Home never reads gridSort.
         if case .library(let key, _) = mode {
             self.gridSort = LibrarySettingsManager.shared.getSortOption(for: key)
-            self.libraryFilter = Self.sessionFilters[key] ?? .none
+            var filter = Self.sessionFilters[key] ?? .none
+            filter.unwatchedOnly = LibrarySettingsManager.shared.unwatchedOnly(key)
+            self.libraryFilter = filter
         } else {
             self.gridSort = .addedAtDesc
         }
@@ -664,7 +666,7 @@ final class PlexHomeViewController: UIViewController {
     /// in server order.
     private var gridShowsCollections = false
     /// Genre, Decade and Unwatched on the Titles grid of a video library, kept per library for the
-    /// session (never persisted).
+    /// session. Unwatched also persists per profile (`LibrarySettingsManager.unwatchedOnly`).
     private var libraryFilter = LibraryFilter.none
     private var filterOptions = LibraryFilterOptions()
     private static var sessionFilters: [String: LibraryFilter] = [:]
@@ -1937,6 +1939,7 @@ final class PlexHomeViewController: UIViewController {
         guard case .library(let key, _) = mode, filter != libraryFilter else { return }
         libraryFilter = filter
         Self.sessionFilters[key] = filter.isActive ? filter : nil
+        LibrarySettingsManager.shared.setUnwatchedOnly(filter.unwatchedOnly, for: key)
         resetGrid()
         pageZero = .loading
         applySnapshot(animated: false)

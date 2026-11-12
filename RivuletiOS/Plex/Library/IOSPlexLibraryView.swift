@@ -296,6 +296,7 @@ private struct IOSPlexLibraryBrowseView: View {
     init(library: MediaLibrary) {
         self.library = library
         _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.settingKey)")
+        _filter = State(initialValue: .remembered(library.settingKey))
     }
 
     /// The sorts the library page offers, in its order: all of them on Plex, else what the server can apply.
@@ -387,6 +388,9 @@ private struct IOSPlexLibraryBrowseView: View {
                 }
                 .tint(filter.isActive ? .accentColor : nil)
             }
+        }
+        .onChange(of: filter.unwatchedOnly) { _, on in
+            UserDefaults.standard.set(on, forKey: LibraryFilter.unwatchedOnlyKey(library.settingKey))
         }
         .task(id: library.id) {
             guard offersGenreAndDecade, let provider = browse.provider(for: library.providerID) else { return }

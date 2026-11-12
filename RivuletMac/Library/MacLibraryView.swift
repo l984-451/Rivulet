@@ -132,6 +132,7 @@ private struct MacLibraryBrowseView: View {
     init(library: MediaLibrary) {
         self.library = library
         _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "macLibrarySort.\(library.settingKey)")
+        _filter = State(initialValue: .remembered(library.settingKey))
     }
 
     /// All sorts on Plex, else what the server can apply.
@@ -220,6 +221,9 @@ private struct MacLibraryBrowseView: View {
             }
         }
         .macPageRefresh { Task { await refetchLoaded() } }
+        .onChange(of: filter.unwatchedOnly) { _, on in
+            UserDefaults.standard.set(on, forKey: LibraryFilter.unwatchedOnlyKey(library.settingKey))
+        }
         .task(id: library.id) {
             guard offersGenreAndDecade, let provider = browse.provider(for: library.providerID) else { return }
             filterOptions = (try? await provider.filterOptions(in: library)) ?? LibraryFilterOptions()

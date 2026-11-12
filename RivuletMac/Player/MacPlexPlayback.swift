@@ -186,7 +186,8 @@ final class MacPlexPlayback: ObservableObject {
             needsStartingTracks = !isTranscoding
             // Plex reads the part's selection when a transcode session starts.
             if isTranscoding {
-                let start = TrackIntentResolver.startingPlexSelection(streams: plexStreams)
+                let start = TrackIntentResolver.startingPlexSelection(
+                    streams: plexStreams, series: SeriesTrackMemory.key(for: request))
                 if start.audio != request.selectedPlexStreamID(streamType: 2)
                     || start.subtitle != SubtitlePick(request.selectedPlexStreamID(streamType: 3)) {
                     await plex.selectStream(start, in: loadingRequest)
@@ -412,6 +413,9 @@ final class MacPlexPlayback: ObservableObject {
            TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: tracks)?.id != id {
             TrackIntentStore.audioIntent = AudioIntent(from: track)
         }
+        if let track = tracks.first(where: { $0.id == id }), let series = SeriesTrackMemory.key(for: request) {
+            SeriesTrackMemory.remember(audio: AudioIntent(from: track), for: series)
+        }
         let subtitle = foreignAudioSubtitle(forAudio: tracks.first { $0.id == id })
         guard isTranscoding else {
             player.selectAudioTrack(id: id)
@@ -435,13 +439,19 @@ final class MacPlexPlayback: ObservableObject {
     func selectSubtitle(_ id: Int?) {
         subtitlesPickedOff = id == nil
         let audio = mediaAudio.first { $0.id == selectedAudioID }
-        TrackIntentStore.subtitleIntent = .afterPick(
-            id.flatMap { id in mediaSubtitles.first { $0.id == id } },
-            replacing: TrackIntentStore.effectiveSubtitleIntent,
-            audioLanguage: audio?.languageCode ?? audio?.language)
+        rememberSubtitlePick(id.flatMap { id in mediaSubtitles.first { $0.id == id } },
+                             audioLanguage: audio?.languageCode ?? audio?.language)
         guard isTranscoding else { return player.selectSubtitleTrack(id: id) }
         chosenSubtitle = SubtitlePick(id)
         reload(quality: request.quality, plan: request.plan, streams: TrackPicks(audio: nil, subtitle: SubtitlePick(id)))
+    }
+
+    /// A subtitle pick becomes the saved intent and the series' pick, the same intent for both.
+    private func rememberSubtitlePick(_ track: MediaTrack?, audioLanguage: String?) {
+        let intent = SubtitleIntent.afterPick(track, replacing: TrackIntentStore.effectiveSubtitleIntent,
+                                              audioLanguage: audioLanguage)
+        TrackIntentStore.subtitleIntent = intent
+        if let series = SeriesTrackMemory.key(for: request) { SeriesTrackMemory.remember(subtitle: intent, for: series) }
     }
 
     private var plexStreams: [PlexStream] { request.item.Media?.first?.Part?.first?.Stream ?? [] }
@@ -490,9 +500,8 @@ final class MacPlexPlayback: ObservableObject {
                 return false
             }
             if let stream = next.item.Media?.first?.Part?.first?.Stream?.first(where: { $0.id == id }) {
-                TrackIntentStore.subtitleIntent = .afterPick(
-                    MediaTrack(from: stream), replacing: TrackIntentStore.effectiveSubtitleIntent,
-                    audioLanguage: mediaAudio.first { $0.id == selectedAudioID }.flatMap { $0.languageCode ?? $0.language })
+                rememberSubtitlePick(MediaTrack(from: stream),
+                                     audioLanguage: mediaAudio.first { $0.id == selectedAudioID }.flatMap { $0.languageCode ?? $0.language })
             }
             reloadTask?.cancel()
             subtitlesPickedOff = false
@@ -549,19 +558,26 @@ final class MacPlexPlayback: ObservableObject {
         player.selectSubtitleTrack(id: match)
     }
 
-    /// Direct play: Plex's per-item picks, else the saved intents, resolved on the engine's
-    /// tracks so its audio-description and commentary flags count.
+    /// Direct play: the series' picks, then Plex's per-item picks, else the saved intents,
+    /// resolved on the engine's tracks so its audio-description and commentary flags count.
     private func pickStartingTracks() {
         needsStartingTracks = false
         let streams = plexStreams
         let audio = mediaAudio
+        let series = SeriesTrackMemory.key(for: request)
         let chosenIndex = TrackIntentResolver.plexChosenAudioStreamID(
             in: streams, hasAudioIntent: TrackIntentStore.audioIntent != nil
         ).flatMap { id in streams.first { $0.id == id }?.index }
-        let audioTrack = audio.first { chosenIndex != nil && $0.streamIndex == chosenIndex }
+        let audioTrack = SeriesTrackMemory.audio(for: series, in: audio)
+            ?? audio.first { chosenIndex != nil && $0.streamIndex == chosenIndex }
             ?? TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)
         if let audioTrack, audioTrack.id != player.currentAudioTrackId { player.selectAudioTrack(id: audioTrack.id) }
 
+        if let remembered = SeriesTrackMemory.subtitle(
+            for: series, in: mediaSubtitles, audioLanguage: audioTrack?.languageCode ?? audioTrack?.language) {
+            if remembered.trackID != player.currentSubtitleTrackId { player.selectSubtitleTrack(id: remembered.trackID) }
+            return
+        }
         let intent = TrackIntentStore.effectiveSubtitleIntent
         if let chosen = TrackIntentResolver.plexChosenSubtitleStreamID(in: streams, intent: intent) {
             pendingEngineSubtitle = .track(chosen)

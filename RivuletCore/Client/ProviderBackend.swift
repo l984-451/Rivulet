@@ -93,7 +93,8 @@ final class ProviderBackend: PlayerBackend {
             if picks == nil {
                 let shim = ProviderPlaybackMetadata.make(detail: playback.detail, source: source, extras: playback.extras)
                 let streams = shim.Media?.first?.Part?.first?.Stream ?? []
-                let wanted = TrackIntentResolver.startingPlexSelection(streams: streams)
+                let wanted = TrackIntentResolver.startingPlexSelection(
+                    streams: streams, series: SeriesTrackMemory.key(providerItem: playback.item))
                 let audio = streams.first { $0.isAudio && $0.selected == true }?.id
                 let subtitle = SubtitlePick(streams.first { $0.isSubtitle && $0.selected == true }?.id)
                 if wanted.audio != audio || wanted.subtitle != subtitle {

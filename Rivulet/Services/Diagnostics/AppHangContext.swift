@@ -136,7 +136,8 @@ enum AppHangContext {
         message: String,
         data: [String: Any]? = nil
     ) {
-        let crumb = Breadcrumb(level: .info, category: category)
+        // Debug: context for the event they ride on, not worth a log line each.
+        let crumb = Breadcrumb(level: .debug, category: category)
         crumb.message = message
         if let data { crumb.data = data }
         SentryBridge.addBreadcrumb(crumb)

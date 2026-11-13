@@ -243,6 +243,7 @@ enum SettingsContent {
         case .autoplayCountdownPicker: return autoplayCountdownPicker
         case .skipIntervalPicker:     return skipIntervalPicker
         case .skipBackIntervalPicker: return skipBackIntervalPicker
+        case .heightSpeakersPicker:   return heightSpeakersPicker
         case .subtitleModePicker:     return subtitleModePicker
         case .autoplayLimitPicker:    return autoplayLimitPicker
         case .homeQualityPicker:      return qualityPicker(home: true)
@@ -379,6 +380,21 @@ enum SettingsContent {
                 isSelected: { AutoplayLimit.current == opt },
                 select: { SettingsStore.setInt(AutoplayLimit.storageKey, opt.rawValue) }))
         }
+    }
+
+    /// "" is Off; the rest are the layouts the engine renders heights into.
+    private static var heightSpeakersPicker: [SettingsRowItem] {
+        ["", "5.1.2", "5.1.4", "7.1.2", "7.1.4", "9.1.6"].map { layout in
+            SettingsRowItem(id: "hs_\(layout.isEmpty ? "off" : layout)", verbatim: layout.isEmpty ? String(localized: "Off") : layout,
+                            kind: .selectable(isSelected: { heightSpeakers == layout }, value: { nil }, handler: { vc in
+                SettingsStore.setString(AetherPlayer.heightSpeakersKey, layout)
+                (vc as? SettingsPageViewController)?.onPop?()
+            }))
+        }
+    }
+
+    private static var heightSpeakers: String {
+        SettingsStore.string(AetherPlayer.heightSpeakersKey, default: "")
     }
 
     /// Read at play time by the player (`StreamingQuality.setting`).
@@ -608,12 +624,26 @@ enum SettingsContent {
                                          })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
+        ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
                             kind: .navigationValue(.contentFilter, value: {
                                 SettingsStore.bool(ContentFilterManager.Keys.enabled, default: false) ? String(localized: "On") : String(localized: "Off")
                             })),
         ]
+    }
+
+    /// Rows for the self-built options (#609, Scripts/enthusiast-build.py); none in the App Store build.
+    private static var selfBuiltHomeTheaterRows: [SettingsRowItem] {
+        var rows: [SettingsRowItem] = []
+        if AetherPlayer.buildsFEL {
+            rows.append(toggle("dolbyVisionFEL", "Dolby Vision FEL", key: AetherPlayer.dolbyVisionFELKey, default: true))
+        }
+        if AetherPlayer.buildsHeightAudio {
+            rows.append(SettingsRowItem(id: "heightSpeakers", title: "Height Speakers",
+                                        kind: .navigationValue(.heightSpeakersPicker, value: { heightSpeakers.isEmpty ? String(localized: "Off") : heightSpeakers })))
+        }
+        return rows
     }
 
     private static var generatedSubtitlesValue: String {

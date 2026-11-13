@@ -640,6 +640,7 @@ private final class CardBandGradientView: UIView {
 /// without opening the Plex server dashboard.
 /// How a Dolby Vision source reaches the screen, for the Details tab.
 enum DolbyVisionPlayback: String, Equatable {
+    case dualLayer = "Dual Layer (FEL)"
     case convertedTo81 = "Profile 8.1 (converted)"
     case convertedTo81Unconfirmed = "Profile 8.1 (converted), TV not confirmed"
     case dolbyVision = "Dolby Vision"
@@ -650,6 +651,7 @@ enum DolbyVisionPlayback: String, Equatable {
     /// Display text; rawValue stays the stable English.
     var title: String {
         switch self {
+        case .dualLayer: String(localized: "Dual Layer (FEL)")
         case .convertedTo81: String(localized: "Profile 8.1 (converted)")
         case .convertedTo81Unconfirmed: String(localized: "Profile 8.1 (converted), TV not confirmed")
         case .dolbyVision: "Dolby Vision"
@@ -659,13 +661,18 @@ enum DolbyVisionPlayback: String, Equatable {
         }
     }
 
+    /// A Profile 7 source shown as Dolby Vision without the 8.1 rewrite is on
+    /// the engine's dual-layer route, which only FEL takes.
+    /// videoFormat read SDR on the dual-layer route in #362; an unconverted P7 on the software route is it.
     /// The engine reads SDR until it proves the panel is in HDR, which a TV already in HDR may never
     /// prove (#438), so Dolby Vision sent to a Dolby Vision TV is "not confirmed", never SDR.
-    init?(sourceProfile: Int?, convertedTo81: Bool,
+    init?(sourceProfile: Int?, convertedTo81: Bool, onSoftwareRoute: Bool = false,
           presentsDolbyVision: Bool, presentsHDR: Bool, panelSupportsDolbyVision: Bool = false) {
-        guard sourceProfile != nil else { return nil }
-        if presentsDolbyVision {
-            self = convertedTo81 ? .convertedTo81 : .dolbyVision
+        guard let sourceProfile else { return nil }
+        if sourceProfile == 7, !convertedTo81, onSoftwareRoute {
+            self = .dualLayer
+        } else if presentsDolbyVision {
+            self = convertedTo81 ? .convertedTo81 : sourceProfile == 7 ? .dualLayer : .dolbyVision
         } else if panelSupportsDolbyVision {
             self = convertedTo81 ? .convertedTo81Unconfirmed : .dolbyVisionUnconfirmed
         } else {

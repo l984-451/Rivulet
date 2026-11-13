@@ -41,6 +41,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("sq_") { return descriptors["streamingQualityOption"] }
         if id.hasPrefix("al_") { return descriptors["audioLanguage"] }
         if id.hasPrefix("sl_") { return descriptors["subtitleLanguage"] }
+        if id.hasPrefix("hs_") { return descriptors["heightSpeakers"] }
         if id.hasPrefix("sm_") { return descriptors["subtitleMode"] }
         if id.hasPrefix("ai_") { return descriptors["appIcon"] }
         if id.hasPrefix("hh_") { return descriptors["homeHero"] }
@@ -243,9 +244,17 @@ enum SettingsDescriptorStore {
             icon: "captions.bubble",
             description: "English only for now. With Subtitles set to Always, a title with no subtitles in your language gets them written from its dialogue. Downloads 230 MB."
         ),
+        "heightSpeakers": SettingDescriptor(
+            icon: "hifispeaker.2",
+            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
+        ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
             description: "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed."
+        ),
+        "dolbyVisionFEL": SettingDescriptor(
+            icon: "4k.tv",
+            description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects. Off folds the enhancement layer into 8.1."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -680,6 +689,7 @@ enum SettingsDescriptorStore {
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
         case .skipIntervalPicker: return ("forward.fill", .systemBlue)
         case .skipBackIntervalPicker: return ("backward.fill", .systemBlue)
+        case .heightSpeakersPicker: return ("hifispeaker.2", .systemCyan)
         case .subtitleModePicker: return ("captions.bubble", .systemYellow)
         case .autoplayLimitPicker: return ("moon.zzz", .systemPurple)
         case .homeQualityPicker: return ("house.fill", .systemBlue)

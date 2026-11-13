@@ -34,4 +34,8 @@ missing = [name for ref, (name, _) in wanted.items() if ref not in found]
 if missing:
     sys.exit(f"Package traits missing for: {', '.join(missing)}")
 for name, block in wanted.values():
-    print(name, "traits:", ", ".join(re.findall(r"\t\t\t\t(\w+),", block)))
+    traits = re.findall(r"\t\t\t\t(\w+),", block)
+    print(name, "traits:", ", ".join(traits))
+    # Self-built only (Scripts/enthusiast-build.py); never in a store build.
+    if name == "AetherEngine" and {"DualLayerDolbyVision", "DolbyVisionStillReshaping", "TrueHDObjectAudio", "DTSXObjectAudio"} & set(traits):
+        sys.exit("AetherEngine has self-build-only traits committed; run Scripts/enthusiast-build.py with no flags")

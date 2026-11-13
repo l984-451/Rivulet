@@ -40,6 +40,7 @@ struct RivuletApp: App {
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
         SkipLengthKeys.migrateLegacyKeys()
+        OpenSourceLicenses.linksLibTrueHD = AetherPlayer.buildsHeightAudio
         // Every surface is dark artwork, so menus, popups and alerts stay dark in Light mode
         // too; Settings alone follows the system. On the window: SwiftUI's preferredColorScheme
         // never reached UIKit's presented popups.

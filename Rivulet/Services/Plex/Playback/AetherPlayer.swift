@@ -786,6 +786,7 @@ final class AetherPlayer: PlayerProtocol {
     var dolbyVisionPlayback: DolbyVisionPlayback? {
         DolbyVisionPlayback(sourceProfile: engine.sourceDVProfile,
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
+                            onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
                             presentsHDR: engine.videoFormat != .sdr,
                             panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
@@ -1019,8 +1020,19 @@ final class AetherPlayer: PlayerProtocol {
         return text.contains(".m3u8") || text.contains("format=hls")
     }
 
+    /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
+    static let heightSpeakersKey = "heightSpeakers"
+
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
+
+    /// Profile 7 FEL composition; absent = on.
+    static let dolbyVisionFELKey = "dolbyVisionFEL"
+
+    /// Engine traits only a self-built app carries (#609, Scripts/enthusiast-build.py).
+    static let buildsFEL = AetherEngine.OptionalComponent.dualLayerDolbyVision.isBuiltIn
+    static let buildsHeightAudio = AetherEngine.OptionalComponent.trueHDObjectAudio.isBuiltIn
+        || AetherEngine.OptionalComponent.dtsxObjectAudio.isBuiltIn
 
     /// DVB teletext caption page, applied to BOTH live and VOD loads. A
     /// `liveTeletextPage` UserDefaults key overrides everything (0 = force
@@ -1166,6 +1178,16 @@ final class AetherPlayer: PlayerProtocol {
             // way whichever surface plays it (VOD recordings/rips included).
             teletextPage: Self.regionTeletextPage()
         )
+        // Settings → Playback → Height Speakers: TrueHD Atmos and DTS:X keep their heights as a
+        // rendered bed (lossless PCM, APAC on AirPlay) instead of 7.1 without them.
+        if Self.buildsHeightAudio,
+           let layout = SpatialSpeakerLayout(rawValue: UserDefaults.standard.string(forKey: Self.heightSpeakersKey) ?? "") {
+            options.objectAudioRendering = .render(layout)
+        }
+        // Profile 7 FEL composes both layers (#345). The engine doesn't check the panel,
+        // so keep the native route where the TV can't show Dolby Vision.
+        let felOn = UserDefaults.standard.object(forKey: Self.dolbyVisionFELKey) as? Bool ?? true
+        options.preferDualLayerDolbyVision = Self.buildsFEL && felOn && AetherEngine.displayCapabilities.supportsDolbyVision
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()

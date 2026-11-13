@@ -364,6 +364,7 @@ extension PlexLiveTVChannel {
             URLQueryItem(name: "X-Plex-Version", value: productVersion),
             URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
             URLQueryItem(name: "X-Plex-Platform", value: "Generic"),
+            URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
             URLQueryItem(name: "X-Plex-Client-Profile-Name", value: "Generic"),
             URLQueryItem(name: "X-Plex-Token", value: authToken),
         ]

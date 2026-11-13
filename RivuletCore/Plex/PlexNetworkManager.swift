@@ -312,6 +312,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         request.addValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.addValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         request.addValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        request.addValue(PlexAPI.playerTitle, forHTTPHeaderField: "X-Plex-Device-Name")
 
         let (data, response) = try await session.data(for: request)
 
@@ -1621,6 +1622,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Token", value: authToken),
             URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
             URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+            URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
             URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName)
         ])
         components.queryItems = existingItems
@@ -1648,6 +1650,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Token", value: authToken),
             URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
             URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+            URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
             URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
             URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName)
         ])
@@ -1690,6 +1693,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                 URLQueryItem(name: "X-Plex-Token", value: authToken),
                 URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
                 URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+                URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
                 URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
                 URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName),
 
@@ -1742,6 +1746,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                 URLQueryItem(name: "X-Plex-Token", value: authToken),
                 URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
                 URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+                URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
                 URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
                 URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName),
 
@@ -1814,6 +1819,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Token", value: authToken),
             URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
             URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+            URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
             URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
             URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName),
 
@@ -3073,6 +3079,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "X-Plex-Token", value: authToken),
             URLQueryItem(name: "X-Plex-Client-Identifier", value: PlexAPI.clientIdentifier),
             URLQueryItem(name: "X-Plex-Platform", value: PlexAPI.platform),
+            URLQueryItem(name: "X-Plex-Device-Name", value: PlexAPI.playerTitle),
             URLQueryItem(name: "X-Plex-Device", value: PlexAPI.deviceName),
             URLQueryItem(name: "X-Plex-Product", value: PlexAPI.productName)
         ]
@@ -3092,6 +3099,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
             "X-Plex-Product": PlexAPI.productName,
             "X-Plex-Platform": PlexAPI.platform,
+            "X-Plex-Device-Name": PlexAPI.playerTitle,
             "X-Plex-Device": PlexAPI.deviceName
         ]
 

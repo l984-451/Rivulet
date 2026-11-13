@@ -2075,6 +2075,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             "X-Plex-Token": authToken,
             "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
             "X-Plex-Platform": PlexAPI.platform,
+            "X-Plex-Device-Name": PlexAPI.playerTitle,
             "X-Plex-Device": PlexAPI.deviceName,
             "X-Plex-Product": PlexAPI.productName
         ]

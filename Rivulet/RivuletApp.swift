@@ -18,6 +18,7 @@ import Sentry
 struct RivuletApp: App {
     init() {
         HostPlatform.installUIKit()
+        PlexAPI.setPlayerTitle(UIDevice.current.name)
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
         // Other servers' library settings belong to their own users, so they load with the sign-in.

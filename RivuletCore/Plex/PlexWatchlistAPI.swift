@@ -290,6 +290,7 @@ final class PlexWatchlistAPI: PlexWatchlistAPIProtocol, Sendable {
         request.addValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.addValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         request.addValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        request.addValue(PlexAPI.playerTitle, forHTTPHeaderField: "X-Plex-Device-Name")
     }
 }
 

@@ -134,6 +134,7 @@ actor PlexProgressReporter {
                 clientId: PlexAPI.clientIdentifier,
                 platform: PlexAPI.platform,
                 device: PlexAPI.deviceName,
+                title: PlexAPI.playerTitle,
                 product: PlexAPI.productName
             )
         }
@@ -149,6 +150,7 @@ actor PlexProgressReporter {
             URLQueryItem(name: "X-Plex-Client-Identifier", value: clientInfo.clientId),
             URLQueryItem(name: "X-Plex-Platform", value: clientInfo.platform),
             URLQueryItem(name: "X-Plex-Device", value: clientInfo.device),
+            URLQueryItem(name: "X-Plex-Device-Name", value: clientInfo.title),
             URLQueryItem(name: "X-Plex-Product", value: clientInfo.product)
         ]
         if let session {

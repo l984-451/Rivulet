@@ -1441,7 +1441,9 @@ canonical form working Plex clients ship; do not "fix" it back to raw commas.
 **Reports go to self-hosted GlitchTip on Unraid.** The Sentry SDK and
 `SentryBridge` are unchanged; only the DSN (Codemagic env group `rivulet`) and the
 dSYM upload URL point at `errors.gurleystudios.com`, which is public only for ingest
-and CI's dSYM upload. Query it with the REST API (`/api/0/projects/rivulet/rivulet/issues/`,
+and CI's dSYM upload. Ingest needs an attested pass in the DSN path (`IngestPass`, from
+insights-api `/v1/ingest-pass`): a device that can't attest never starts Sentry. Aspen
+reports new issues and spikes (`glitchtip-watch.py` on Tower). Query it with the REST API (`/api/0/projects/rivulet/rivulet/issues/`,
 token in `~/.config/rivulet/glitchtip-token`, LAN `http://192.168.1.140:8766`).
 A tvOS **simulator** build defines `DEBUG` even in Release, so Sentry never runs
 there unless `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is overridden on the command line.

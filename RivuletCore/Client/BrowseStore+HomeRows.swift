@@ -19,6 +19,7 @@ struct HomeRowEntry: Identifiable {
         case continueWatching
         case shelf(hiddenID: String)
         case favorites(MediaLibrary.LibraryKind)
+        case favoriteChannels
         case playlist(HomePlaylistPins.Pin)
     }
 
@@ -108,6 +109,11 @@ extension BrowseStore {
         if let cw = continueWatchingHub, isContinueWatchingShown { rows.append((HomeRowOrder.continueWatchingKey, cw)) }
         for hub in shelves where !HomeRowSettings.isHidden(hiddenID(of: hub)) { rows.append((hiddenID(of: hub), hub)) }
         for row in PersonalRows.homeRows(personalRows) { rows.append((row.identifier, personalHub(row))) }
+        if FavoriteChannelsRow.isShown {
+            // A place holder: each app draws the cards from `LiveTVDataStore`, and nothing while there are none.
+            rows.append((FavoriteChannelsRow.identifier, MediaHub(id: FavoriteChannelsRow.identifier, providerID: "",
+                                                                  title: FavoriteChannelsRow.title, style: .shelf, items: [])))
+        }
         return HomeRowOrder.arrange(rows, key: \.key).map(\.hub)
     }
 
@@ -130,6 +136,10 @@ extension BrowseStore {
                 entries.append(HomeRowEntry(id: PersonalRows.favoritesIdentifier(kind), title: PersonalRows.favoritesTitle(kind),
                                                kind: .favorites(kind), isOn: PersonalRows.showsFavorites(kind)))
             }
+        }
+        if LiveTVDataStore.shared.offersHomeFavorites {
+            entries.append(HomeRowEntry(id: FavoriteChannelsRow.identifier, title: FavoriteChannelsRow.title,
+                                        kind: .favoriteChannels, isOn: FavoriteChannelsRow.isShown))
         }
         for pin in playlistEntries {
             let id = PersonalRows.playlistRowID(providerID: pin.providerID, playlistID: pin.playlistID)
@@ -162,6 +172,7 @@ extension BrowseStore {
         case .continueWatching: continueWatchingIDs.forEach { HomeRowSettings.setHidden(!shown, for: $0) }
         case .shelf(let id): HomeRowSettings.setHidden(!shown, for: id)
         case .favorites(let kind): PersonalRows.setShowsFavorites(shown, kind)
+        case .favoriteChannels: FavoriteChannelsRow.setShown(shown)
         case .playlist(let pin):
             if shown { HomePlaylistPins.pin(pin) } else { HomePlaylistPins.unpin(MediaItemRef(providerID: pin.providerID, itemID: pin.playlistID)) }
         }
@@ -173,6 +184,7 @@ extension BrowseStore {
         HomeRowSettings.showAll()
         HomeRowOrder.reset()
         PersonalRows.favoriteKinds.forEach { PersonalRows.setShowsFavorites(false, $0) }
+        FavoriteChannelsRow.setShown(false)
         HomePlaylistPins.removeAll()
     }
 }

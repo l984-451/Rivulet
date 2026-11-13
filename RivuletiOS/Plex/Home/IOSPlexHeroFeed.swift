@@ -26,7 +26,13 @@ struct IOSPlexHeroFeed: View {
                                         selection: $heroSelection)
                     }
                     ForEach(banners) { IOSServerFailureBanner(failure: $0) }
-                    ForEach(rows) { IOSPlexShelfView(hub: $0) }
+                    ForEach(rows) { hub in
+                        if hub.id == FavoriteChannelsRow.identifier {
+                            IOSFavoriteChannelsRow()
+                        } else {
+                            IOSPlexShelfView(hub: hub)
+                        }
+                    }
                 }
                 .padding(.bottom, 24)
             }

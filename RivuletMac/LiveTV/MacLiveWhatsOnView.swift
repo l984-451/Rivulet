@@ -285,3 +285,53 @@ private struct MacLiveCardArt: View {
         }
     }
 }
+
+/// Home's Favorite Channels row (#623): What's On's Favorites cards, and nothing while there are none.
+struct MacFavoriteChannelsRow: View {
+    @EnvironmentObject private var playback: MacPlaybackController
+    @ObservedObject private var store = LiveTVDataStore.shared
+    @StateObject private var recorder = LiveRecorder()
+    @State private var selection: LiveProgrammeSelection?
+    @State private var pendingPlay: UnifiedChannel?
+
+    var body: some View {
+        if !store.homeFavoriteCards.isEmpty {
+            TimelineView(.everyMinute) { context in
+                MacLiveRail(title: FavoriteChannelsRow.title, items: store.homeFavoriteCards) { item, width in
+                    card(item, width: width, now: context.date)
+                }
+            }
+            .sheet(item: $selection, onDismiss: playPending) { selection in
+                MacLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
+            }
+            .liveRecorder(recorder)
+            .environmentObject(recorder)
+        }
+    }
+
+    @ViewBuilder
+    private func card(_ item: LiveCardItem, width: CGFloat, now: Date) -> some View {
+        if let channel = item.channel {
+            Button {
+                if item.kind == .channel {
+                    playback.playLive(channel)
+                } else {
+                    selection = LiveProgrammeSelection(channel: channel, program: item.program)
+                }
+            } label: { MacLiveCard(item: item, now: now, width: width) }
+            .buttonStyle(.plain)
+            .contextMenu {
+                MacLiveMenuContent(sections: LiveMenu.sections(
+                    channel: channel, program: item.program, recorder: recorder,
+                    watch: { playback.playLive($0) }, details: { selection = $0 }
+                ))
+            }
+        }
+    }
+
+    private func playPending() {
+        guard let channel = pendingPlay else { return }
+        pendingPlay = nil
+        playback.playLive(channel)
+    }
+}

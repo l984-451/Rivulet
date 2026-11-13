@@ -22,8 +22,17 @@ final class PersonalHomeRows: ObservableObject {
     /// Home rows and those the hero shows (`HeroSources`).
     @Published private(set) var rows: [PersonalRow] = []
 
-    /// The rows Home draws; the rest are fetched for the hero only.
-    var homeRows: CachedHomeRail { PersonalRows.homeRows(rows).map(Self.cached) }
+    /// The rows Home draws; the rest are fetched for the hero only. Favorite Channels is a
+    /// placeholder that holds the row's place; Home draws its cards from `LiveTVDataStore`.
+    var homeRows: CachedHomeRail {
+        var hubs = PersonalRows.homeRows(rows).map(Self.cached)
+        if !LiveTVDataStore.shared.homeFavoriteCards.isEmpty {
+            hubs.append(CachedHomeHub(id: FavoriteChannelsRow.identifier, title: FavoriteChannelsRow.title,
+                                      isContinueWatching: false, hubKey: nil,
+                                      hubIdentifier: FavoriteChannelsRow.identifier, totalSize: nil, items: []))
+        }
+        return hubs
+    }
 
     /// The servers Home shows: the selected Plex server and every other signed in.
     static var providers: [any MediaProvider] {

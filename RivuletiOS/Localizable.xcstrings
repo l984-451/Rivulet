@@ -5147,6 +5147,28 @@
         }
       }
     },
+    "Favorite Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingssender"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αγαπημένα κανάλια"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaînes favorites"
+          }
+        }
+      }
+    },
     "Favorite Movies" : {
       "localizations" : {
         "de" : {

@@ -4789,6 +4789,22 @@
         }
       }
     },
+    "Select to show or hide your favorite Live TV channels on Home. Once they are shown, hold Select to move them up or down." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke die Auswahltaste, um deine Lieblingssender auf der Startseite ein- oder auszublenden. Werden sie angezeigt, halte die Taste gedrückt, um sie zu verschieben."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionnez pour afficher ou masquer vos chaînes favorites sur l’accueil. Une fois affichées, maintenez Sélectionner pour les déplacer."
+          }
+        }
+      }
+    },
     "Select to show or hide your favorite movies on Home. Once they are shown, hold Select to move them up or down." : {
       "localizations" : {
         "de" : {
@@ -8449,6 +8465,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bonus"
+          }
+        }
+      }
+    },
+    "Favorite Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieblingssender"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αγαπημένα κανάλια"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaînes favorites"
           }
         }
       }

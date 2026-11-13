@@ -79,7 +79,13 @@ struct MacHeroFeed: View {
                     MacHomeHero(items: heroItems, width: width, selection: $selection)
                 }
                 ForEach(banners) { MacServerFailureBanner(failure: $0) }
-                ForEach(rows) { MacShelfView(hub: $0) }
+                ForEach(rows) { hub in
+                    if hub.id == FavoriteChannelsRow.identifier {
+                        MacFavoriteChannelsRow()
+                    } else {
+                        MacShelfView(hub: hub)
+                    }
+                }
             }
             .padding(.bottom, 28)
         }

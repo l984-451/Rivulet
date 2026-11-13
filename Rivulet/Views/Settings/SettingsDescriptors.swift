@@ -146,6 +146,10 @@ enum SettingsDescriptorStore {
             icon: "star",
             description: "Select to show or hide your favorite TV shows on Home. Once they are shown, hold Select to move them up or down."
         ),
+        "homeFavoriteChannels": SettingDescriptor(
+            icon: "star",
+            description: "Select to show or hide your favorite Live TV channels on Home. Once they are shown, hold Select to move them up or down."
+        ),
         "resetHomeHero": SettingDescriptor(
             icon: "arrow.counterclockwise",
             description: "Put the hero back to Trending only, with no playlists."

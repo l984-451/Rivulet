@@ -16,6 +16,7 @@ final class ShelfRowCell: UICollectionViewCell {
         case poster
         case music   // 1:1 square (same width as poster)
         case live    // Live TV Browse card (16:9, four across)
+        case homeLive // the same card on Home, at Home's margin
         case person  // cast or crew circle (CastCollectionCell), poster width
         case episode // Search's episode card (EpisodeCollectionCell), the detail page's rail
 
@@ -31,7 +32,7 @@ final class ShelfRowCell: UICollectionViewCell {
             case .music:            return MediaRowMetrics.music
             case .person:           return MediaRowMetrics.person
             case .episode:          return EpisodeCollectionCell.searchTile
-            case .live:             return nil
+            case .live, .homeLive:  return nil
             }
         }
         /// Spacing between cell frames.
@@ -41,12 +42,12 @@ final class ShelfRowCell: UICollectionViewCell {
             case .continueWatching: return MediaRowMetrics.cwFullCount
             case .episode:          return 4
             case .poster, .music, .person: return MediaRowMetrics.posterFullCount
-            case .live:             return MediaRowMetrics.liveFullCount
+            case .live, .homeLive:  return MediaRowMetrics.liveFullCount
             }
         }
         var pitch: CGFloat { tileWidth + gap }
         /// Inset of the first cell frame: it rests the artwork on the margin.
-        var leading: CGFloat { tile?.leading ?? MediaRowMetrics.liveLeading }
+        var leading: CGFloat { tile?.leading ?? margin }
         /// The row's margin, where its header and its artwork rest.
         var margin: CGFloat { self == .live ? MediaRowMetrics.liveLeading : MediaRowMetrics.rowLeading }
     }
@@ -580,7 +581,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
             switch tileKind {
             case .continueWatching: layout = .continueWatching
             case .music: layout = .music
-            case .poster, .live, .person, .episode: layout = .poster
+            case .poster, .live, .homeLive, .person, .episode: layout = .poster
             }
             cell.configure(layout: layout)
             return cell

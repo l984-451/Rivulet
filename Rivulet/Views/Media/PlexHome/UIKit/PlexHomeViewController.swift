@@ -127,6 +127,8 @@ enum HomeSectionKind: Equatable {
     case searchPeople
     /// Home only — the Year in Review banner, one card.
     case yearInReview
+    /// Home only — Favorite Channels (#623): What's On's Favorites cards, from `liveCards`.
+    case liveChannels
 }
 
 struct HomeSectionData {
@@ -156,6 +158,8 @@ struct HomeSectionData {
     var sourceBadge: String? = nil
     /// Search's People row.
     var people: [MediaPerson] = []
+    /// The Favorite Channels row.
+    var liveCards: [LiveCardItem] = []
 
     /// True when this section holds music (artist/album/track). Sections are
     /// content-uniform (a whole row / library is music or not), so the first
@@ -223,6 +227,23 @@ struct HomeSectionData {
             hubKey: nil,
             hubIdentifier: nil
         )
+    }
+
+    static func liveChannels(cards: [LiveCardItem]) -> HomeSectionData {
+        var section = HomeSectionData(
+            id: HomeSectionID(raw: FavoriteChannelsRow.identifier),
+            kind: .liveChannels,
+            title: FavoriteChannelsRow.title,
+            headerStyle: .swiftUIInfiniteRow,
+            totalSize: nil,
+            items: [],
+            watchlistItems: [],
+            heroItems: [],
+            hubKey: nil,
+            hubIdentifier: FavoriteChannelsRow.identifier
+        )
+        section.liveCards = cards
+        return section
     }
 
     static func recommendations(items: [MediaItem]) -> HomeSectionData {
@@ -2959,6 +2980,11 @@ final class PlexHomeViewController: UIViewController {
             return makeHubSectionLayout(section: section, isContinueWatching: false)
         case .searchPeople:
             return makeHubSectionLayout(section: section, isContinueWatching: false, tile: MediaRowMetrics.person)
+        case .liveChannels:
+            // The Live TV card: its frame is its artwork.
+            let card = CGSize(width: MediaRowMetrics.liveWidth, height: MediaRowMetrics.liveHeight)
+            return makeHubSectionLayout(section: section, isContinueWatching: false,
+                                        tile: MediaRowMetrics.Tile(art: card, growth: .zero))
         case .recommendationsLoading, .recommendationsError:
             return makeRecommendationsStateLayout()
         case .sortHeader:
@@ -3200,6 +3226,7 @@ final class PlexHomeViewController: UIViewController {
             loadedCount = section.items.count
         case .watchlist, .watchlistGrid: loadedCount = section.watchlistItems.count
         case .searchPeople: loadedCount = section.people.count
+        case .liveChannels: loadedCount = section.liveCards.count
         }
         header.configure(
             title: section.title ?? "",
@@ -3311,7 +3338,7 @@ final class PlexHomeViewController: UIViewController {
             cell.overlay.autoAdvanceGate = { [weak self] in self?.heroCanAutoAdvance ?? false }
             return cell
 
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople:
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
             Perf.interval(.cellPrepare, key: perfKey) {
                 configureShelfRow(cell, sectionID: section.id)
@@ -3548,6 +3575,18 @@ final class PlexHomeViewController: UIViewController {
                 .sink { [weak self] in
                     self?.otherServersHomeRowsChanged()
                 }
+                .store(in: &dataStoreObservers)
+
+            // Favorite Channels: the lineup, the guide and the favorites, and each minute for what is on.
+            let live = LiveTVDataStore.shared
+            live.$channels.map { _ in () }
+                .merge(with: live.$epg.map { _ in () },
+                       live.$favoriteIds.map { _ in () },
+                       live.$unfavoritedIds.map { _ in () },
+                       Timer.publish(every: 60, on: .main, in: .common).autoconnect().map { _ in () })
+                .filter { FavoriteChannelsRow.isShown }
+                .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+                .sink { [weak self] in self?.otherServersHomeRowsChanged() }
                 .store(in: &dataStoreObservers)
         }
     }
@@ -3892,7 +3931,7 @@ final class PlexHomeViewController: UIViewController {
                                   itemID: isPlaceholder ? Self.heroLoadingItemToken : "hero-overlay")]
             case .sortHeader:
                 ids = [Self.sortHeaderItemID]
-            case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople:
+            case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
                 // Shelf rows are ONE diffable item — the ShelfRowCell hosts
                 // the tiles in its own horizontal collection view (and shows
                 // the pagination skeleton itself). Content changes don't
@@ -3956,7 +3995,7 @@ final class PlexHomeViewController: UIViewController {
 
     private func isShelfKind(_ kind: HomeSectionKind) -> Bool {
         switch kind {
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople: return true
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels: return true
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
              .sortHeader, .searchPrompt, .searchState, .yearInReview: return false
         }
@@ -3970,6 +4009,7 @@ final class PlexHomeViewController: UIViewController {
         switch section.kind {
         case .watchlist: section.watchlistItems.count
         case .searchPeople: section.people.count
+        case .liveChannels: section.liveCards.count
         default: section.items.count
         }
     }
@@ -3981,6 +4021,9 @@ final class PlexHomeViewController: UIViewController {
             for item in section.watchlistItems { hasher.combine(item.id) }
         } else if section.kind == .searchPeople {
             for person in section.people { hasher.combine(person.providerID); hasher.combine(person.id) }
+        } else if section.kind == .liveChannels {
+            // Identity only, as What's On: new programmes are pushed into the cards on screen.
+            for card in section.liveCards { hasher.combine(card.id) }
         } else {
             for item in section.items {
                 hasher.combine(item.ref.itemID)
@@ -4019,6 +4062,7 @@ final class PlexHomeViewController: UIViewController {
         }
         cell.configure(
             kind: section.kind == .continueWatching ? .continueWatching
+                : section.kind == .liveChannels ? .homeLive
                 : section.kind == .searchPeople ? .person
                 : section.isEpisodeRow ? .episode : (section.isMusic ? .music : .poster),
             realCount: shelfRealCount(section),
@@ -4026,6 +4070,12 @@ final class PlexHomeViewController: UIViewController {
             contentToken: shelfContentToken(section),
             initialOffset: shelfOffsets[sectionID] ?? 0
         )
+        if section.kind == .liveChannels, let inner = cell.rowCollectionView {
+            for case let card as LiveCardCell in inner.visibleCells {
+                guard let path = inner.indexPath(for: card), path.item < section.liveCards.count else { continue }
+                card.configure(section.liveCards[path.item])
+            }
+        }
     }
 
     /// Binds a row's tile provider to a captured section value, so the row's count and its tiles come
@@ -4083,6 +4133,10 @@ final class PlexHomeViewController: UIViewController {
         guard indexPath.item < shelfRealCount(section) else { return nil }
 
         switch section.kind {
+        case .liveChannels:
+            let cell = innerCV.dequeueReusableCell(withReuseIdentifier: LiveCardCell.reuseID, for: indexPath) as! LiveCardCell
+            cell.configure(section.liveCards[indexPath.item])
+            return cell
         case .continueWatching:
             let cell = innerCV.dequeueReusableCell(withReuseIdentifier: ContinueWatchingCell.reuseID, for: indexPath) as! ContinueWatchingCell
             Perf.interval(.cellPrepare, key: perfKey) {
@@ -4136,6 +4190,13 @@ final class PlexHomeViewController: UIViewController {
         let section = sectionsSnapshot[sectionIndex]
         guard itemIndex < shelfRealCount(section) else { return }
         switch section.kind {
+        case .liveChannels:
+            let card = section.liveCards[itemIndex]
+            if card.kind == .channel, let channel = card.channel {
+                playLiveChannel(channel)
+            } else {
+                presentLiveCardMenu(card, sourceFrame: tileFrameInWindow(at: IndexPath(item: itemIndex, section: sectionIndex)))
+            }
         case .continueWatching:
             // Instant Resume on: a CW tile resumes straight away. Off: it
             // behaves like every other shelf row and opens the preview carousel.
@@ -4187,7 +4248,7 @@ final class PlexHomeViewController: UIViewController {
             break
         case .hero, .watchlist, .watchlistGrid, .recommendations, .grid, .discoverList,
              .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .liveChannels:
             return  // No pagination for these (hubKey == nil)
         }
         guard itemIndex >= section.items.count - 5 else { return }
@@ -4196,12 +4257,43 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
+    // MARK: - Favorite Channels
+
+    /// What's On's channel menu: Watch, Multiview, Record and the favorite toggle.
+    private func presentLiveCardMenu(_ card: LiveCardItem, sourceFrame: CGRect?) {
+        guard let channel = card.channel else { return }
+        LiveProgramMenu.present(program: card.program, channel: channel, from: self, sourceFrame: sourceFrame,
+                                onWatch: { [weak self] in self?.playLiveChannel($0) },
+                                onMultiview: { [weak self] in self?.presentLiveMultiview(adopting: nil, adding: $0) })
+    }
+
+    private func playLiveChannel(_ channel: UnifiedChannel, adopting session: LiveTVSessionHandoff? = nil,
+                                 animated: Bool = true) {
+        let player = LiveTVAetherPlayerViewController(channel: channel, adopting: session)
+        player.modalPresentationStyle = .fullScreen
+        player.onOpenMultiview = { [weak self] in self?.presentLiveMultiview(adopting: $0, adding: nil, fromPlayer: true) }
+        present(player, animated: animated)
+    }
+
+    private func presentLiveMultiview(adopting session: LiveTVSessionHandoff?, adding channel: UnifiedChannel?,
+                                      fromPlayer: Bool = false) {
+        let multiview = LiveMultiviewViewController(adopting: session, adding: channel, sourceIdFilter: nil)
+        multiview.entersFromFullScreen = fromPlayer
+        multiview.onWatchFullScreen = { [weak self] in self?.playLiveChannel($0.channel, adopting: $0, animated: false) }
+        present(multiview, animated: !fromPlayer)
+    }
+
     /// Select long-press on a shelf tile → the tile action menu popup.
     /// Same per-section routing the context-menu delegate used before the
     /// system path died on tvOS 26 (see TileMenuPopupViewController).
     private func presentShelfTileMenu(sectionID: HomeSectionID, itemIndex: Int) {
         guard let section = shelfSection(id: sectionID) else { return }
         switch section.kind {
+        case .liveChannels:
+            guard itemIndex < section.liveCards.count,
+                  let sectionIndex = sectionsSnapshot.firstIndex(where: { $0.id == sectionID }) else { return }
+            presentLiveCardMenu(section.liveCards[itemIndex],
+                                sourceFrame: tileFrameInWindow(at: IndexPath(item: itemIndex, section: sectionIndex)))
         case .continueWatching, .recentlyAdded, .recommendations:
             guard itemIndex < section.items.count else { return }
             let item = section.items[itemIndex]
@@ -4374,7 +4466,8 @@ final class PlexHomeViewController: UIViewController {
             }
             return playableItem(section.items[itemIndex])
         case .watchlist, .watchlistGrid, .hero, .grid, .recommendationsLoading,
-             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview, .searchPeople:
+             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview, .searchPeople,
+             .liveChannels:
             return nil
         }
     }
@@ -4719,6 +4812,10 @@ final class PlexHomeViewController: UIViewController {
             if labelsServers, hub.isContinueWatching {
                 if let row = mergedContinueWatching { sections.append(row) }
                 mergedContinueWatching = nil
+                continue
+            }
+            if hub.id == FavoriteChannelsRow.identifier {
+                sections.append(.liveChannels(cards: LiveTVDataStore.shared.homeFavoriteCards))
                 continue
             }
             let id = HomeSectionID(raw: hub.id)
@@ -5731,7 +5828,7 @@ final class PlexHomeViewController: UIViewController {
             return  // the embedded buttons open their own menus
         case .searchPrompt, .searchState:
             return  // recents pills / Try Again are FocusableActionButtons
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople:
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
             return  // shelf rows route taps through their own delegate (handleShelfTap)
         case .grid:
             guard let item = section.items[safe: indexPath.item], !item.isGridPlaceholder else { return }
@@ -6534,7 +6631,7 @@ final class PlexHomeViewController: UIViewController {
         let section = sectionsSnapshot[sectionIndex]
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .yearInReview, .searchPeople:
+             .searchPrompt, .searchState, .yearInReview, .searchPeople, .liveChannels:
             return nil
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -6926,7 +7023,8 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         // Left moves resolve normally — no interception.
         let section = sectionsSnapshot[prevIndexPath.section]
         switch section.kind {
-        case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid, .searchPeople:
+        case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid, .searchPeople,
+             .liveChannels:
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader, .grid,
              .watchlistGrid, .searchPrompt, .searchState, .yearInReview:
@@ -6969,7 +7067,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
              .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .watchlistGrid:
             return  // No pagination for these (the watchlist is fetched whole)
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList:
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .liveChannels:
             return  // Shelf rows paginate from their own willDisplay (shelfWillDisplay)
         case .grid:
             // Sparse grid: fetch the page this slot lives in, plus a
@@ -7837,7 +7935,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let section = sectionsSnapshot[indexPath.section]
         switch section.kind {
         case .continueWatching, .recentlyAdded, .watchlist, .watchlistGrid, .recommendations,
-             .grid, .discoverList, .searchGrid, .searchPeople:
+             .grid, .discoverList, .searchGrid, .searchPeople, .liveChannels:
             // Orthogonal rows AND the grid get the walk-back redirect:
             // point at the previous cell when it's already on screen
             // (ported from MediaLibraryViewController.updateLeftEdgeGuide).

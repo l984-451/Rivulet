@@ -43,11 +43,11 @@ final class IOSFixPassTests: XCTestCase {
 
     // MARK: - Sorts
 
-    func test_librarySorts_plexOffersAllFourEvenOnATVLibrary() {
+    func test_librarySorts_plexOffersTheTVOSListPlusReleaseDate() {
         let showSorts = LibrarySortOption.expressible(for: .shows)
-        XCTAssertFalse(showSorts.contains(.releaseDateDesc), "the premise: the seam's TV list lacks Release Date")
+        XCTAssertTrue(showSorts.contains(.lastEpisodeAddedDesc), "New Episodes, as on tvOS (#599)")
         XCTAssertEqual(IOSLibrarySorts.menu(offered: showSorts, isPlex: true),
-                       [.titleAsc, .addedAtDesc, .releaseDateDesc, .ratingDesc])
+                       showSorts + [.releaseDateDesc, .releaseDateAsc])
     }
 
     func test_librarySorts_anotherServerOffersWhatItCanApply() {

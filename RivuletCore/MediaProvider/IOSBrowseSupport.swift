@@ -236,13 +236,12 @@ extension Array where Element == MediaLibrary {
     }
 }
 
-/// The sorts the iOS library page offers, in its order.
+/// The sorts the iOS and Mac library pages offer: the provider's, as on tvOS (#599).
 nonisolated enum IOSLibrarySorts {
-    static let all: [LibrarySortOption] = [.titleAsc, .addedAtDesc, .releaseDateDesc, .ratingDesc]
-
-    /// Plex answers every one of them for a movie or TV library; another server offers what it can apply.
+    /// Plex also sorts a TV library by release date, which the seam's list leaves out.
     static func menu(offered: [LibrarySortOption], isPlex: Bool) -> [LibrarySortOption] {
-        isPlex ? all : all.filter { offered.contains($0) }
+        guard isPlex else { return offered }
+        return offered + [.releaseDateDesc, .releaseDateAsc].filter { !offered.contains($0) }
     }
 }
 

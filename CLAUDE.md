@@ -478,16 +478,15 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   went to the shell's edge catcher, Select and Menu did nothing. A view that
   overlays a focus surface must be exactly its own footprint, and anything
   larger (the letter indicator) must be `isHidden` before a focus request.
-- **A held Up/Down hands focus to tvOS's fast-scroll index bar after ~1.5s.**
-  The engine moves row by row, then focuses `_UIFocusFastScrollingIndexBarView`
-  (a hidden subview of the collection, the "dots") and stops issuing focus
-  moves. That hand-off bypasses `shouldUpdateFocus` and happens even under
-  `indexDisplayMode = .alwaysHidden`; on this self-scrolling collection the
-  system bar scrolls nothing, so focus just vanishes. `PlexHomeViewController`
-  treats the hand-off as the fast-mode signal and drives the offset itself
-  while the arrow stays down (`heldArrow`, `stepFastScroll`), landing on the
-  centre tile on release. Do not refuse the engine's repeat moves instead:
-  after the same ~1.5s it escalates past the collection to the sidebar.
+- **Held Up/Down can hand focus to tvOS's fast-scroll index bar.** Home and
+  Library leave vertical scrolling enabled for UIKit. Preserve Left, Select
+  and Menu recovery from the index bar; hiding the index does not establish
+  that it cannot take focus. Verify held-arrow scrolling and visible tile
+  focus after release on a device, including with uncached posters.
+  Earlier custom-scroll captures showed that the index-bar hand-off bypassed
+  `shouldUpdateFocus`, and refusing repeat moves escalated focus to the sidebar.
+  These are device observations, not API guarantees for every OS version.
+  Do not restore a manual offset driver alongside UIKit's native scrolling.
 
 ### Context Menus (long-press)
 

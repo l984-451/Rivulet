@@ -136,6 +136,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        collectionView.settleFocusScroll()
         themeVideo.setActive(false)
     }
 
@@ -184,6 +185,27 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     }
 
     @objc private func dismissSelf() { dismiss(animated: true) }
+
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
+                                   targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard scrollView === collectionView else { return }
+        targetContentOffset.pointee = collectionView.focusScrollTarget(proposed: targetContentOffset.pointee)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard scrollView === collectionView else { return }
+        collectionView.endFocusDragging(willDecelerate: decelerate)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === collectionView else { return }
+        collectionView.finishFocusScroll()
+    }
+
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        guard scrollView === collectionView else { return }
+        collectionView.finishFocusScroll()
+    }
 
     // MARK: - Build
 
@@ -260,7 +282,6 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         collectionView = FocusScrollControlledCollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         // The header pins at the top; every episode row centres (see the class).
-        collectionView.isScrollEnabled = false
         collectionView.topSectionIndex = 0
         collectionView.topBand = Self.headerTop
         collectionView.backgroundColor = .clear

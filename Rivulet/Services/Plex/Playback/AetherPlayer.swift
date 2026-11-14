@@ -1082,6 +1082,7 @@ final class AetherPlayer: PlayerProtocol {
         startTime: TimeInterval?,
         subtitleLanguageHintsByStreamIndex: [Int: String],
         preferredAudioLanguages: [String] = [],
+        audioStreamIndex: Int? = nil,
         preferredSubtitleLanguages: [String] = [],
         externalSubtitles: [SidecarSubtitle] = [],
         isLive: Bool = false,
@@ -1094,6 +1095,7 @@ final class AetherPlayer: PlayerProtocol {
             partLoad = nil
             try await loadFile(url: url, headers: headers, startTime: startTime,
                                preferredAudioLanguages: preferredAudioLanguages,
+                               audioStreamIndex: audioStreamIndex,
                                preferredSubtitleLanguages: preferredSubtitleLanguages,
                                externalSubtitles: externalSubtitles, isLive: isLive)
             return
@@ -1101,8 +1103,10 @@ final class AetherPlayer: PlayerProtocol {
         partLoad = (headers, preferredAudioLanguages, preferredSubtitleLanguages)
         let (index, offset) = stackedParts.locate(startTime ?? 0)
         partIndex = index
+        // Stream indexes match across the files of one release.
         try await loadFile(url: stackedParts.files[index].url, headers: headers, startTime: offset,
                            preferredAudioLanguages: preferredAudioLanguages,
+                           audioStreamIndex: audioStreamIndex,
                            preferredSubtitleLanguages: preferredSubtitleLanguages,
                            externalSubtitles: stackedParts.files[index].externalSubtitles, isLive: false)
     }
@@ -1120,15 +1124,15 @@ final class AetherPlayer: PlayerProtocol {
         partIndex = index
         engine.prepareForItemReplacement()
         do {
+            // Stream indexes match across the files of one release, so the part opens on the playing audio.
             try await loadFile(url: stack.files[index].url, headers: partLoad.headers, startTime: offset,
-                               preferredAudioLanguages: partLoad.audio,
+                               preferredAudioLanguages: partLoad.audio, audioStreamIndex: audio,
                                preferredSubtitleLanguages: partLoad.subtitles,
                                externalSubtitles: stack.files[index].externalSubtitles, isLive: false)
         } catch {
             // The load already published the failure.
             return
         }
-        // Stream indexes match across the files of one release.
         if let audio, audio != activeAudioTrackId, audioTracks.contains(where: { $0.id == audio }) {
             selectAudioTrack(id: audio)
         }
@@ -1153,6 +1157,7 @@ final class AetherPlayer: PlayerProtocol {
         headers: [String: String]?,
         startTime: TimeInterval?,
         preferredAudioLanguages: [String],
+        audioStreamIndex: Int? = nil,
         preferredSubtitleLanguages: [String],
         externalSubtitles: [SidecarSubtitle],
         isLive: Bool
@@ -1226,7 +1231,11 @@ final class AetherPlayer: PlayerProtocol {
         userIntendsToPlay = true
         pendingReloadSince = nil
         do {
-            try await engine.load(url: url, startPosition: startTime, options: options)
+            // Opens on the host's audio pick. Switching once the engine lists its tracks rebuilds
+            // the load before its display handshake ends, and the rebuild serves Dolby Vision as
+            // its HDR10 base (#627).
+            try await engine.load(url: url, startPosition: startTime, options: options,
+                                  audioSourceStreamIndex: audioStreamIndex.flatMap { Int32(exactly: $0) })
         } catch {
             // User navigated away / switched items mid-load. Rethrow untouched
             // and stay off errorSubject: wrapping it as PlayerError.loadFailed

@@ -699,8 +699,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// The clips still to play ahead of `cinemaFeature`.
     private var cinemaQueue: [PlexMetadata] = []
     private var cinemaFeatureVersion: VersionChoice?
-    /// The pre-play picks, held for the movie: a clip's first track pass would consume them.
-    private var cinemaFeaturePicks: (audio: Int?, subtitle: InitialSubtitleSelection)?
     private var cinemaStopped = false
     private var hasCheckedCinemaExtras = false
     /// The item that already moved on, so a skip racing the clip's end advances once.
@@ -729,9 +727,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         // Server order, or the version's index into the file list is lost on the way back.
         cinemaFeature?.Media = serverOrderedMedia
         cinemaFeatureVersion = baseVersionChoice
-        cinemaFeaturePicks = (initialAudioTrackId, initialSubtitleSelection)
-        initialAudioTrackId = nil
-        initialSubtitleSelection = .auto
         cinemaQueue = Array(clips.dropFirst())
         metadata = first
         playingMediaID = nil
@@ -782,13 +777,11 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Initialization
 
-    /// Pre-play subtitle choice from the item-detail picker. Distinguishes
-    /// "user hasn't picked yet" from "user explicitly turned subs off"
-    /// from "user picked this specific subtitle track".
-    enum InitialSubtitleSelection {
-        case auto              // No preselection — fall through to the stored SubtitleIntent.
-        case off               // User explicitly chose Off in the pre-play picker.
-        case track(id: Int)    // User picked a specific subtitle track.
+    /// The subtitle a reload of the same title carries: none (the saved intent decides), off, or a Plex stream id.
+    enum CarriedSubtitleSelection {
+        case auto
+        case off
+        case track(id: Int)
     }
 
     init(
@@ -799,8 +792,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         playQueue: PlayQueue<PlaylistEntry>? = nil,
         loadingArtImage: UIImage? = nil,
         loadingThumbImage: UIImage? = nil,
-        initialAudioTrackId: Int? = nil,
-        initialSubtitleSelection: InitialSubtitleSelection = .auto,
         preferredMediaID: String? = nil,
         plexProgressReporter: PlexProgressReporter = .shared
     ) {
@@ -821,8 +812,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         self.playQueue = playQueue
         self.loadingArtImage = loadingArtImage
         self.loadingThumbImage = loadingThumbImage
-        self.initialAudioTrackId = initialAudioTrackId
-        self.initialSubtitleSelection = initialSubtitleSelection
         // The server's duration until the engine reports its own, so the bar's
         // fill shows with the first times instead of a second after them.
         self.duration = Self.metadataDuration(metadata)
@@ -1261,7 +1250,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
               offersGeneratedSubtitles, currentSubtitleTrackId == nil, !subtitlesPickedOff,
               case .track(_, false, _, _) = TrackIntentStore.effectiveSubtitleIntent,
               playingAudioLanguage.map({ TrackLanguage.normalize($0) == "eng" }) ?? true else { return }
-        if case .off = initialSubtitleSelection { return }
+        if case .off = carriedSubtitleSelection { return }
         selectSubtitleTrackWithoutSaving(id: Self.generatedSubtitleId)
     }
 
@@ -2444,6 +2433,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let deadline = AetherLoadTimeoutPolicy.startupLoadDeadline
         let hints = aetherSubtitleLanguageHintsByStreamIndex()
         let audioLanguages = aetherPreferredAudioLanguages()
+        // The track `applyAudioPreference` will pick, so the engine opens on it instead of
+        // switching to it mid-load (see AetherPlayer.loadFile).
+        let audioStreamIndex = TrackIntentResolver.audioStreamIndex(
+            ofPlexStream: startingTrackSelection.audio, in: metadata.Media?.first?.Part?.first?.Stream ?? [])
         let subtitleLanguages = aetherPreferredSubtitleLanguages()
         let externalSubtitles = aetherExternalSubtitles()
         let stackedParts = stackedParts()
@@ -2456,6 +2449,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     startTime: startTime,
                     subtitleLanguageHintsByStreamIndex: hints,
                     preferredAudioLanguages: audioLanguages,
+                    audioStreamIndex: audioStreamIndex,
                     preferredSubtitleLanguages: subtitleLanguages,
                     externalSubtitles: externalSubtitles,
                     stackedParts: stackedParts
@@ -2564,7 +2558,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func aetherPreferredAudioLanguages() -> [String] {
         var languages: [String] = []
 
-        if let id = initialAudioTrackId,
+        if let id = carriedAudioTrackId,
            let track = plexAudioTracksFromMetadata().first(where: { $0.id == id }) {
             languages.append(contentsOf: languageCandidates(for: track))
         }
@@ -2591,7 +2585,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func aetherPreferredSubtitleLanguages() -> [String] {
         var languages: [String] = []
 
-        switch initialSubtitleSelection {
+        switch carriedSubtitleSelection {
         case .track(let id):
             if let track = plexSubtitleTracksFromMetadata().first(where: { $0.id == id }) {
                 languages.append(contentsOf: languageCandidates(for: track))
@@ -3796,11 +3790,11 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         hasAttemptedRivuletHLSFallback = !allowsHLSFallback
         directPlayProbeStatus = nil
         // Engine ids differ from Plex ids, so the picks re-apply once the engine lists its tracks.
-        initialAudioTrackId = tracks.audio
+        carriedAudioTrackId = tracks.audio
         switch tracks.subtitle {
-        case .off: initialSubtitleSelection = .off
-        case .track(let id): initialSubtitleSelection = .track(id: id)
-        case nil: initialSubtitleSelection = .auto
+        case .off: carriedSubtitleSelection = .off
+        case .track(let id): carriedSubtitleSelection = .track(id: id)
+        case nil: carriedSubtitleSelection = .auto
         }
         hasAppliedAudioPreference = false
         hasAppliedSubtitlePreference = false
@@ -3831,10 +3825,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// What `applyAudioPreference` and `applySubtitlePreference` will pick on the Plex list, so a
     /// transcode starts on those tracks instead of restarting once they load. nil leaves the server's choice.
     private var startingTrackSelection: TrackPicks {
-        let override = initialAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
+        let override = carriedAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
         let start = TrackIntentResolver.startingPlexSelection(streams: metadata.Media?.first?.Part?.first?.Stream ?? [],
                                                               audioOverride: override)
-        switch initialSubtitleSelection {
+        switch carriedSubtitleSelection {
         case .off:
             return TrackPicks(audio: start.audio, subtitle: .off)
         case .track(let id) where plexSubtitleTracksFromMetadata().contains(where: { $0.id == id }):
@@ -5106,13 +5100,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var subtitlesPickedOff = false
     private var hasAppliedAudioPreference = false
 
-    /// Pre-play track selections passed in from the item-detail picker.
-    /// Override the saved-preference auto-apply on first track population
-    /// — explicit user choice wins over remembered language preferences.
-    /// Cleared after consumption so subsequent re-applications fall back
-    /// to the preference managers.
-    private var initialAudioTrackId: Int?
-    private var initialSubtitleSelection: InitialSubtitleSelection = .auto
+    /// The playing tracks, carried through a reload of the same title as Plex stream ids.
+    /// Cleared once applied, so the next item resolves from the saved intents.
+    private var carriedAudioTrackId: Int?
+    private var carriedSubtitleSelection: CarriedSubtitleSelection = .auto
 
     /// Rebuild `audioTracks` / `subtitleTracks`.
     ///
@@ -5184,68 +5175,41 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         updateCaptionsOnMute()
     }
 
-    /// Plex's `selected` audio stream when it outranks the global intent: a
-    /// per-item pick (selected but not the file default), or, with no audio
-    /// language set in Rivulet, the server's pick from the account's language (#382).
+    /// The server's audio pick from the account's language, while no audio language is saved (#382).
     private var plexChosenAudioStreamId: Int? {
         TrackIntentResolver.plexChosenAudioStreamID(in: metadata.Media?.first?.Part?.first?.Stream ?? [],
                                                     hasAudioIntent: TrackIntentStore.audioIntent != nil)
     }
 
-    /// Apply saved audio preference, in the numbered priority below. Every tier
-    /// selects explicitly, even when the id already matches: neither direct play
-    /// nor Plex's HLS session reliably starts on the persisted selection.
+    /// Select the audio the load opened on (`startingTrackSelection`), mapped onto the merged list
+    /// and not ranked again (#627). Selects explicitly even when the id already matches: Plex's HLS
+    /// session doesn't reliably start on the persisted selection.
     private func applyAudioPreference() {
-        // 1. Pre-play picker (this session). Its id is a Plex stream id.
-        if let id = initialAudioTrackId {
-            initialAudioTrackId = nil
-            if let track = audioTrackMatchingPlexStreamId(id) {
-                selectAudioTrackWithoutSaving(id: track.id)
-                return
-            }
-        }
-
-        // 2. Plex's choice (see `plexChosenAudioStreamId`).
-        if let selectedId = plexChosenAudioStreamId,
-           let track = audioTrackMatchingPlexStreamId(selectedId) {
+        let carried = carriedAudioTrackId != nil
+        let opened = startingTrackSelection.audio.flatMap(audioTrackMatchingPlexStreamId)
+        carriedAudioTrackId = nil
+        if let track = TrackIntentResolver.engineAudio(opened: opened, in: audioTracks, carried: carried) {
             selectAudioTrackWithoutSaving(id: track.id)
-            return
-        }
-
-        // 3. Global audio intent (defaults to English when nothing stored).
-        //    Excludes commentary / audio-description tracks from every
-        //    automatic tier — see TrackIntentResolver.resolveAudio.
-        if let match = TrackIntentResolver.resolveAudio(
-            intent: TrackIntentStore.effectiveAudioIntent,
-            in: audioTracks
-        ) {
-            selectAudioTrackWithoutSaving(id: match.id)
-            return
-        }
-
-        // 4. Plex default fallback.
-        if let id = currentAudioTrackId,
-           audioTracks.contains(where: { $0.id == id }) {
+        } else if let id = currentAudioTrackId, audioTracks.contains(where: { $0.id == id }) {
             selectAudioTrackWithoutSaving(id: id)
         }
     }
 
     /// Apply saved subtitle preference
     private func applySubtitlePreference() {
-        // 1. Pre-play picker selection (this session); `.auto` falls through.
-        switch initialSubtitleSelection {
+        // 1. The selection a reload carried; `.auto` falls through.
+        switch carriedSubtitleSelection {
         case .off:
-            initialSubtitleSelection = .auto
+            carriedSubtitleSelection = .auto
             subtitlesPickedOff = true
-            noteCaptions("at start: off was picked before playing")
+            noteCaptions("at start: off carried through the reload")
             selectSubtitleTrackWithoutSaving(id: nil)
             return
         case .track(let id):
-            // Pre-play picker id is a PLEX stream id (it runs before any engine
-            // exists) — resolve it positionally onto the merged list.
-            initialSubtitleSelection = .auto
+            // A Plex stream id: resolve it onto the merged list.
+            carriedSubtitleSelection = .auto
             if let track = subtitleTrackMatchingPlexStreamId(id) {
-                noteCaptions("at start: a track was picked before playing")
+                noteCaptions("at start: a track carried through the reload")
                 selectSubtitleTrackWithoutSaving(id: track.id)
                 return
             }
@@ -5320,7 +5284,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Plex stream id -> merged track
     //
-    // The pre-play picker and Plex's `selected` flag speak Plex stream ids. On
+    // Carried picks and Plex's `selected` flag speak Plex stream ids. On
     // aether, join on the container stream index; sidecars pair by order.
 
     private func audioTrackMatchingPlexStreamId(_ id: Int) -> MediaTrack? {
@@ -6927,11 +6891,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             if metadata.ratingKey == cinemaFeature?.ratingKey {
                 cinemaFeature = nil
                 cinemaFeatureVersion = nil
-                if let picks = cinemaFeaturePicks {
-                    initialAudioTrackId = picks.audio
-                    initialSubtitleSelection = picks.subtitle
-                    cinemaFeaturePicks = nil
-                }
             }
             playingMediaID = nil
             playingMediaServerIndex = 0

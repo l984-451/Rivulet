@@ -646,21 +646,17 @@ enum TrackIntentStore {
 // MARK: - Starting Tracks
 
 extension TrackIntentResolver {
-    /// Plex's `selected` audio stream when it outranks the global intent: a per-item pick
-    /// (selected but not the file default), or, with no audio language set, the server's
-    /// pick from the account's language (#382).
+    /// The server's audio pick from the account's language, followed only while no audio language is
+    /// saved (#382). With one saved, its `selected` stream is ignored, as subtitles' is (#636): it can't
+    /// tell a pick from the account's auto-select, other apps, or Rivulet's own transcode requests.
     static func plexChosenAudioStreamID(in streams: [PlexStream], hasAudioIntent: Bool) -> Int? {
-        let audio = streams.filter(\.isAudio)
-        guard let selectedID = audio.first(where: { $0.selected == true })?.id else { return nil }
-        if !hasAudioIntent { return selectedID }
-        guard let defaultID = audio.first(where: { $0.default == true })?.id else { return nil }
-        return selectedID != defaultID ? selectedID : nil
+        guard !hasAudioIntent else { return nil }
+        return streams.first { $0.isAudio && $0.selected == true }?.id
     }
 
-    /// The stream ids a title starts on: Plex's per-item audio pick, then the stored intents.
-    /// The subtitle is always the saved choice's: the server's `selected` subtitle comes from
-    /// other apps and the account's auto-select, and following it overrode the setting (#636).
-    /// `audioOverride` is a pick made before playback.
+    /// The stream ids a title starts on, from the stored intents (the server's audio pick only
+    /// while no audio language is saved). The subtitle is always the saved choice's (#636).
+    /// `audioOverride` is the playing track, carried through a reload of the same title.
     static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> TrackPicks {
         let audio = streams.filter(\.isAudio).map { MediaTrack(from: $0) }
         let subtitles = streams.filter(\.isSubtitle).map { MediaTrack(from: $0) }
@@ -672,6 +668,24 @@ extension TrackIntentResolver {
         let subtitle = resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent, in: subtitles,
                                        audioLanguage: playing?.languageCode ?? playing?.language)
         return TrackPicks(audio: audioID, subtitle: SubtitlePick(subtitle?.id))
+    }
+
+    /// The audio to select once the engine lists its tracks: `opened`, the starting pick the load
+    /// opened on, mapped onto the engine's list rather than ranked again (#627). The one exception
+    /// is a commentary or description flag the engine reads and Plex can't: the intent then ranks
+    /// the engine's list. A `carried` pick is never second-guessed.
+    static func engineAudio(opened: MediaTrack?, in tracks: [MediaTrack], carried: Bool = false,
+                            intent: AudioIntent = TrackIntentStore.effectiveAudioIntent) -> MediaTrack? {
+        if let opened, carried || !(opened.isCommentary || opened.isAudioDescription) { return opened }
+        return resolveAudio(intent: intent, in: tracks) ?? opened
+    }
+
+    /// The container stream index of the Plex audio stream `id`: the track AetherEngine opens a
+    /// file on (`audioSourceStreamIndex`). Its `index`, not its `id`, because a Jellyfin stream's
+    /// id is the server's own numbering, offset by any sidecar files.
+    static func audioStreamIndex(ofPlexStream id: Int?, in streams: [PlexStream]) -> Int? {
+        guard let id else { return nil }
+        return streams.first { $0.isAudio && $0.id == id }?.index
     }
 }
 

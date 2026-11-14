@@ -635,9 +635,12 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     private let deletionAllowed = OSAllocatedUnfairLock<Bool?>(initialState: nil)
 
     /// Owner only, and only with the server's "Allow media deletion" on.
+    /// A read the server never answered is not kept, so it is asked again (#561).
     func canDeleteMedia() async -> Bool {
         if let known = deletionAllowed.withLock({ $0 }) { return known }
-        let answer = await networkManager.canDeleteMedia(serverURL: serverURL, authToken: authToken)
+        guard let answer = await networkManager.canDeleteMedia(serverURL: serverURL, authToken: authToken) else {
+            return false
+        }
         deletionAllowed.withLock { $0 = answer }
         return answer
     }

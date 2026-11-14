@@ -303,8 +303,11 @@ final class BrowseStore: ObservableObject {
     private func loadPermissions(_ providers: [any MediaProvider]) async {
         for provider in providers where !checkedPermissions.contains(provider.id) {
             checkedPermissions.insert(provider.id)
-            if await provider.canDeleteMedia() { deletableProviders.insert(provider.id) }
             if await !provider.canRefreshMetadata() { refreshBlocked.insert(provider.id) }
+        }
+        // Delete is asked on every refresh until allowed; providers keep the answers servers gave (#561).
+        for provider in providers where !deletableProviders.contains(provider.id) {
+            if await provider.canDeleteMedia() { deletableProviders.insert(provider.id) }
         }
         // Download is asked until a server answers, so one failed read never hides it for the session.
         var asked = downloadPermissions

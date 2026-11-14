@@ -148,6 +148,41 @@ final class PlaylistPlaybackTests: XCTestCase {
         XCTAssertEqual(vm.startOffset, 30)
     }
 
+    func test_hasNextItem_followsThePlaylist() {
+        let provider = StubMediaProvider(id: pid, kind: .jellyfin)
+        XCTAssertTrue(queueVM(provider, [item("m1"), item("m2")], at: 0).hasNextItem)
+        XCTAssertFalse(queueVM(provider, [item("m1"), item("m2")], at: 1).hasNextItem)
+    }
+
+    /// Siri's "next episode" mid-item moves the playlist on and leaves the item it left resumable.
+    func test_skipToNextItem_midItem_playsTheNextEntry_andDoesNotMarkPlayed() async {
+        let provider = StubMediaProvider(id: pid, kind: .jellyfin)
+        let m2 = item("m2")
+        let vm = queueVM(provider, [item("m1"), m2, item("m3")], at: 0, next: m2)
+
+        await vm.skipToNextItem()
+        XCTAssertEqual(vm.metadata.ratingKey, "m2")
+        XCTAssertEqual(vm.playQueue?.index, 1)
+        XCTAssertTrue(provider.markedPlayed.isEmpty)
+    }
+
+    func test_skipToNextItem_movieOutsideAPlaylist_doesNothing() async {
+        let provider = StubMediaProvider(id: pid, kind: .jellyfin)
+        let m1 = item("m1")
+        let url = URL(string: "http://media.local/m1")!
+        let playback = ProviderPlayback(provider: provider, item: m1, detail: detail(m1, url: url),
+                                        stream: StreamInfo(source: source(url: url), playSessionID: "ps1",
+                                                           trackInfoAvailable: true),
+                                        extras: PlaybackExtras())
+        let vm = UniversalPlayerViewModel(providerPlayback: playback, startOffset: nil)
+        vm.reportPlaybackState(.playing)
+
+        await vm.skipToNextItem()
+        XCTAssertEqual(vm.metadata.ratingKey, "m1")
+        XCTAssertFalse(vm.hasNextItem)
+        XCTAssertTrue(provider.playbackCalls.isEmpty)
+    }
+
     /// A pick from the list goes by position, so the same title again still plays.
     func test_queueJump_sameTitleLaterInList() async {
         let provider = StubMediaProvider(id: pid, kind: .jellyfin)

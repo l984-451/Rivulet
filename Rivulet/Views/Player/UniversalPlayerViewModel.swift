@@ -6482,10 +6482,30 @@ final class UniversalPlayerViewModel: ObservableObject {
         await playNextEpisode(queueIndex: index)
     }
 
+    /// Whether something follows this item: the next episode, once resolved, or a playlist's next entry.
+    var hasNextItem: Bool { nextEpisode != nil || playQueue?.next != nil }
+
+    /// Siri's "next episode" (the system's next-track command), from anywhere in the episode:
+    /// plays what Up Next would, resolving it first when that hasn't happened yet. Before the
+    /// credits the episode it leaves stays resumable, as a playlist pick does.
+    func skipToNextItem() async {
+        if nextEpisode == nil {
+            guard playQueue != nil || metadata.type == "episode" else { return }
+            if playQueue == nil, metadata.parentRatingKey == nil || metadata.index == nil {
+                await fetchFullMetadataIfNeeded()
+            }
+            let generation = itemGeneration
+            guard let next = await fetchNextEpisode(), generation == itemGeneration else { return }
+            nextEpisode = next
+        }
+        await playNextEpisode(skipped: true)
+    }
+
     /// Play the next episode. `autoplayed` is the countdown running out; any
     /// other start comes from the remote and begins a new run.
-    /// `queueIndex` is a playlist jump; nil moves a playlist on by one.
-    func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
+    /// `queueIndex` is a playlist jump; nil moves a playlist on by one. `skipped` is Siri's
+    /// "next episode": like a jump, it leaves an item it didn't reach the end of resumable.
+    func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil, skipped: Bool = false) async {
         guard let next = nextEpisode else { return }
         // A provider swap awaits its provider first, so a second call (the
         // countdown and a Play Now press) must not start another one.
@@ -6526,8 +6546,8 @@ final class UniversalPlayerViewModel: ObservableObject {
         longStallTask?.cancel()
         longStallTask = nil
 
-        // A playlist pick before the credits leaves the item resumable: stopped at the playhead, not watched.
-        let reachedEnd = queueIndex == nil || hasTriggeredPostVideo || postVideoState != .hidden
+        // A playlist pick or a skip before the credits leaves the item resumable: stopped at the playhead, not watched.
+        let reachedEnd = (queueIndex == nil && !skipped) || hasTriggeredPostVideo || postVideoState != .hidden
         if case .provider = source {
             await stopProviderReporter(at: currentTime)
             guard stops == stopCount else { return }

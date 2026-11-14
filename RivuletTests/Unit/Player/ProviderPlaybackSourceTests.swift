@@ -279,6 +279,62 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertTrue(result.season.isEmpty)
     }
 
+    /// Siri's "next episode" mid-episode: resolves the next episode itself, then plays it.
+    func test_skipToNextItem_playsTheNextEpisode() async {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let e1 = episode("e1", season: 1, number: 1)
+        let e2 = episode("e2", season: 1, number: 2)
+        provider.childrenByParent["season1"] = [e1, e2]
+        let current = ProviderPlayback(provider: provider, item: e1, detail: detail(e1, source: stream().source),
+                                       stream: stream(), extras: PlaybackExtras())
+        let vm = UniversalPlayerViewModel(providerPlayback: current, startOffset: nil)
+        vm.reportPlaybackState(.playing)
+        let nextSource = source(kind: .directPlay, url: nil)
+        provider.detailResult = detail(e2, source: nextSource)
+        provider.streamResult = StreamInfo(source: nextSource, playSessionID: "ps2", trackInfoAvailable: true)
+        XCTAssertNil(vm.nextEpisode)
+
+        await vm.skipToNextItem()
+        XCTAssertEqual(vm.metadata.ratingKey, "e2")
+        // Skipped before the credits: e1 stays resumable.
+        XCTAssertTrue(provider.markedPlayed.isEmpty)
+    }
+
+    /// After the credits a skip is the same as Up Next's Play: the episode it leaves is watched.
+    func test_skipToNextItem_afterCredits_marksTheEpisodeWatched() async {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let e1 = episode("e1", season: 1, number: 1)
+        let e2 = episode("e2", season: 1, number: 2)
+        provider.childrenByParent["season1"] = [e1, e2]
+        let current = ProviderPlayback(provider: provider, item: e1, detail: detail(e1, source: stream().source),
+                                       stream: stream(), extras: PlaybackExtras())
+        let vm = UniversalPlayerViewModel(providerPlayback: current, startOffset: nil)
+        vm.reportPlaybackState(.playing)
+        let nextSource = source(kind: .directPlay, url: nil)
+        provider.detailResult = detail(e2, source: nextSource)
+        provider.streamResult = StreamInfo(source: nextSource, playSessionID: "ps2", trackInfoAvailable: true)
+
+        await vm.handlePlaybackEnded()
+        vm.cancelCountdown()
+        await vm.skipToNextItem()
+        XCTAssertEqual(vm.metadata.ratingKey, "e2")
+        XCTAssertEqual(provider.markedPlayed.first, e1.ref)
+    }
+
+    func test_skipToNextItem_lastEpisode_staysPut() async {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let e1 = episode("e1", season: 1, number: 1)
+        provider.childrenByParent["season1"] = [e1]
+        let current = ProviderPlayback(provider: provider, item: e1, detail: detail(e1, source: stream().source),
+                                       stream: stream(), extras: PlaybackExtras())
+        let vm = UniversalPlayerViewModel(providerPlayback: current, startOffset: nil)
+        vm.reportPlaybackState(.playing)
+
+        await vm.skipToNextItem()
+        XCTAssertEqual(vm.metadata.ratingKey, "e1")
+        XCTAssertFalse(vm.hasNextItem)
+    }
+
     func test_providerAutoplay_swapsSourceAndReporter() async throws {
         let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
         let first = RecordingReporter()

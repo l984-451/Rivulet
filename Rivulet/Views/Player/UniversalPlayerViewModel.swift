@@ -1939,6 +1939,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             await fetchMarkersIfNeeded()
         }
         guard stops == stopCount, !Task.isCancelled else { return }
+        applySeriesTrackMemory()
         // Arm the local content filter for this item: reload settings, restore
         // any cached filter list, then refresh it and read the subtitle file.
         // After the fetch above, because both key off the file, the external
@@ -4615,6 +4616,9 @@ final class UniversalPlayerViewModel: ObservableObject {
         // then persist the user's explicit choice as the saved preference so
         // future playback sessions restore it.
         selectAudioTrackWithoutSaving(id: id)
+        if let track = audioTracks.first(where: { $0.id == id }), let series = seriesTrackKey {
+            SeriesTrackMemory.remember(audio: AudioIntent(from: track), for: series)
+        }
 
         // Picking what the intent already chooses (Original's main track) leaves it alone.
         if let track = audioTracks.first(where: { $0.id == id }),
@@ -4652,14 +4656,19 @@ final class UniversalPlayerViewModel: ObservableObject {
         // Off holds for this title even where the saved mode would show subtitles.
         subtitlesPickedOff = id == nil
 
-        // Generated subtitles save no preference; they carry on through this session's next items.
+        // Generated subtitles save no preference; they carry on through this session's next items,
+        // and the series' subtitle pick gives way, or the next episode would turn them off.
         guard id != Self.generatedSubtitleId else {
             generatedSubtitlesPickedOn = metadata.ratingKey
+            if let series = seriesTrackKey { SeriesTrackMemory.forgetSubtitle(for: series) }
             return
         }
-        TrackIntentStore.subtitleIntent = .afterPick(
+        let intent = SubtitleIntent.afterPick(
             id.flatMap { id in subtitleTracks.first { $0.id == id } },
             replacing: TrackIntentStore.effectiveSubtitleIntent, audioLanguage: playingAudioLanguage)
+        TrackIntentStore.subtitleIntent = intent
+        // The same intent, so the series follows Foreign Audio as the setting does (#432).
+        if let series = seriesTrackKey { SeriesTrackMemory.remember(subtitle: intent, for: series) }
     }
 
     // MARK: - Subtitle Search
@@ -4846,6 +4855,34 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
         syncSilentSubtitleRead()
         updateCaptionsOnMute()
+    }
+
+    /// The series this episode belongs to, for `SeriesTrackMemory`; nil for anything else.
+    private var seriesTrackKey: String? {
+        if case .provider(let playback) = source { return SeriesTrackMemory.key(providerItem: playback.item) }
+        guard metadata.type == "episode" else { return nil }
+        return SeriesTrackMemory.key(showGUID: metadata.grandparentGuid, showID: metadata.grandparentRatingKey,
+                                     server: serverURL)
+    }
+
+    /// The series' remembered picks become this episode's starting picks, so every route
+    /// (direct play, transcode) starts on them. Picks already set win.
+    private func applySeriesTrackMemory() {
+        guard let series = seriesTrackKey, let entry = SeriesTrackMemory.entry(for: series) else { return }
+        let streams = metadata.Media?.first?.Part?.first?.Stream ?? []
+        let audio = plexAudioTracksFromMetadata()
+        // The subtitles are judged against the audio the episode plays when the series has no audio pick.
+        let fallbackAudio = TrackIntentResolver.startingPlexSelection(streams: streams).audio
+            .flatMap { id in audio.first { $0.id == id } }
+        let picks = SeriesTrackMemory.startingPicks(entry, audio: audio, subtitles: plexSubtitleTracksFromMetadata(),
+                                                    fallbackAudio: fallbackAudio)
+        if initialAudioTrackId == nil, let audio = picks.audio { initialAudioTrackId = audio }
+        if case .auto = initialSubtitleSelection, let subtitle = picks.subtitle {
+            switch subtitle {
+            case .off: initialSubtitleSelection = .off
+            case .track(let id): initialSubtitleSelection = .track(id: id)
+            }
+        }
     }
 
     /// Plex's `selected` audio stream when it outranks the global intent: a
@@ -6670,6 +6707,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // New metadata requires a fresh route/URL plan unless a preloaded URL is provided.
         resetPreparedStreamContext()
+        // Before the stream is prepared, so a transcode starts on the series' tracks.
+        applySeriesTrackMemory()
         // Stopped only once the new item has replaced it, so the old item never fails mid-swap.
         let outgoingTranscode = plexSessionId
         plexSessionId = nil

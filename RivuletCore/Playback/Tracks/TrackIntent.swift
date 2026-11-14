@@ -679,22 +679,27 @@ extension TrackIntentResolver {
         return track.id
     }
 
-    /// The stream ids a title starts on: Plex's per-item picks, then the stored intents.
-    /// The subtitle is always decided. `audioOverride` is a pick made before playback.
-    static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> TrackPicks {
+    /// The stream ids a title starts on: the series' picks (`SeriesTrackMemory`), Plex's
+    /// per-item picks, then the stored intents. The subtitle is always decided.
+    /// `audioOverride` is a pick made before playback.
+    static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil, series: String? = nil) -> TrackPicks {
         let audio = streams.filter(\.isAudio).map { MediaTrack(from: $0) }
         let subtitles = streams.filter(\.isSubtitle).map { MediaTrack(from: $0) }
         let chosenAudio = audioOverride
+            ?? SeriesTrackMemory.audio(for: series, in: audio)?.id
             ?? plexChosenAudioStreamID(in: streams, hasAudioIntent: TrackIntentStore.audioIntent != nil)
         let audioID = chosenAudio.flatMap { id in audio.contains { $0.id == id } ? id : nil }
             ?? resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
+        let playing = audio.first { $0.id == audioID }
+        let playingLanguage = playing?.languageCode ?? playing?.language
+        if let remembered = SeriesTrackMemory.subtitle(for: series, in: subtitles, audioLanguage: playingLanguage) {
+            return TrackPicks(audio: audioID, subtitle: remembered)
+        }
         let intent = TrackIntentStore.effectiveSubtitleIntent
         if let chosen = plexChosenSubtitleStreamID(in: streams, intent: intent) {
             return TrackPicks(audio: audioID, subtitle: .track(chosen))
         }
-        let playing = audio.first { $0.id == audioID }
-        let subtitle = resolveSubtitle(intent: intent, in: subtitles,
-                                       audioLanguage: playing?.languageCode ?? playing?.language)
+        let subtitle = resolveSubtitle(intent: intent, in: subtitles, audioLanguage: playingLanguage)
         return TrackPicks(audio: audioID, subtitle: SubtitlePick(subtitle?.id))
     }
 }

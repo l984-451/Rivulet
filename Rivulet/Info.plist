@@ -11,6 +11,19 @@
 	<true/>
 	<key>BAUsesAppleHosting</key>
 	<true/>
+	<!-- Alternate icons are the bare image stacks in Assets.xcassets. tvOS takes an
+	     array of stack names here; ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES writes
+	     the iOS dictionary instead, which App Store Connect rejects (ITMS-90471), so
+	     that setting stays unset on this target. -->
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundleAlternateIcons</key>
+		<array>
+			<string>AppIconSimpleColor</string>
+			<string>AppIconSimpleWhite</string>
+			<string>AppIconPixel</string>
+		</array>
+	</dict>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

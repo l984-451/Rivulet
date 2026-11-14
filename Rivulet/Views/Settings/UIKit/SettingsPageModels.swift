@@ -490,7 +490,8 @@ enum SettingsContent {
             // Leading block is unheaded, like an Apple TV Settings page's first
             // group: it sits directly under the page title.
             SettingsRowItem(id: "libraries", title: "Sidebar", kind: .navigation(.libraries)),
-            // App Icon row withheld on tvOS: App Store Connect rejects the alternate icons (ITMS-90471).
+            SettingsRowItem(id: "appIcon", title: "App Icon",
+                            kind: .navigationValue(.appIconPicker, value: { AppIcon.current.title })),
             // Profiles themselves are switched from the sidebar now, so this is
             // all that is left of the retired User Profiles page.
             SettingsRowItem(id: "profilePickerOnLaunch", title: "Profile Picker on Launch",

@@ -1310,7 +1310,7 @@
 			repositoryURL = "https://github.com/superuser404notfound/AetherEngine";
 			requirement = {
 				kind = exactVersion;
-				version = 7.62.1;
+				version = 7.66.1;
 			};
 			traits = (
 				DolbyVisionFelCurves,

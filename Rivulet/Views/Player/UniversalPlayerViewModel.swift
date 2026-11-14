@@ -2394,6 +2394,10 @@ final class UniversalPlayerViewModel: ObservableObject {
         let deadline = AetherLoadTimeoutPolicy.startupLoadDeadline
         let hints = aetherSubtitleLanguageHintsByStreamIndex()
         let audioLanguages = aetherPreferredAudioLanguages()
+        // The track `applyAudioPreference` will pick, so the engine opens on it instead of
+        // switching to it mid-load (see AetherPlayer.loadFile).
+        let audioStreamIndex = TrackIntentResolver.audioStreamIndex(
+            ofPlexStream: startingTrackSelection.audio, in: metadata.Media?.first?.Part?.first?.Stream ?? [])
         let subtitleLanguages = aetherPreferredSubtitleLanguages()
         let externalSubtitles = aetherExternalSubtitles()
         let stackedParts = stackedParts()
@@ -2406,6 +2410,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                     startTime: startTime,
                     subtitleLanguageHintsByStreamIndex: hints,
                     preferredAudioLanguages: audioLanguages,
+                    audioStreamIndex: audioStreamIndex,
                     preferredSubtitleLanguages: subtitleLanguages,
                     externalSubtitles: externalSubtitles,
                     stackedParts: stackedParts

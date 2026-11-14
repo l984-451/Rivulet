@@ -794,4 +794,39 @@ final class TrackPreferenceTests: XCTestCase {
             """#))
         XCTAssertEqual(start.subtitle, .track(0))
     }
+
+    // MARK: - Opening audio
+
+    /// The reported file: the better English track is listed second. The engine opens on the
+    /// starting pick by container index, or it switches to it mid-load and drops Dolby Vision.
+    func testStartingAudioOpensOnTheSecondTrackByContainerIndex() {
+        TrackIntentStore.audioIntent = AudioIntent(language: "eng", codec: "dts", channels: 8)
+        let streams = self.streams(#"""
+            [{"id":101,"streamType":2,"index":1,"languageCode":"eng","codec":"eac3","channels":8,"default":true},
+             {"id":102,"streamType":2,"index":2,"languageCode":"eng","codec":"dca","channels":8}]
+            """#)
+        let start = TrackIntentResolver.startingPlexSelection(streams: streams)
+        XCTAssertEqual(start.audio, 102)
+        XCTAssertEqual(TrackIntentResolver.audioStreamIndex(ofPlexStream: start.audio, in: streams), 2)
+    }
+
+    /// A Jellyfin stream's id is the server's own numbering, offset by sidecars; the engine needs `index`.
+    func testAudioStreamIndexIsTheContainerIndexNotTheID() {
+        let streams = self.streams(#"""
+            [{"id":0,"streamType":3,"languageCode":"eng","codec":"srt","key":"/s/0"},
+             {"id":3,"streamType":2,"index":2,"languageCode":"eng","codec":"eac3"}]
+            """#)
+        XCTAssertEqual(TrackIntentResolver.audioStreamIndex(ofPlexStream: 3, in: streams), 2)
+    }
+
+    /// Only an audio stream maps; anything else leaves the engine's own pick.
+    func testAudioStreamIndexIgnoresOtherStreams() {
+        let streams = self.streams(#"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","codec":"eac3"},
+             {"id":4,"streamType":3,"index":4,"languageCode":"eng","codec":"srt"}]
+            """#)
+        XCTAssertNil(TrackIntentResolver.audioStreamIndex(ofPlexStream: 4, in: streams))
+        XCTAssertNil(TrackIntentResolver.audioStreamIndex(ofPlexStream: 9, in: streams))
+        XCTAssertNil(TrackIntentResolver.audioStreamIndex(ofPlexStream: nil, in: streams))
+    }
 }

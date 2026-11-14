@@ -697,6 +697,14 @@ extension TrackIntentResolver {
                                        audioLanguage: playing?.languageCode ?? playing?.language)
         return TrackPicks(audio: audioID, subtitle: SubtitlePick(subtitle?.id))
     }
+
+    /// The container stream index of the Plex audio stream `id`: the track AetherEngine opens a
+    /// file on (`audioSourceStreamIndex`). Its `index`, not its `id`, because a Jellyfin stream's
+    /// id is the server's own numbering, offset by any sidecar files.
+    static func audioStreamIndex(ofPlexStream id: Int?, in streams: [PlexStream]) -> Int? {
+        guard let id else { return nil }
+        return streams.first { $0.isAudio && $0.id == id }?.index
+    }
 }
 
 // MARK: - Settings

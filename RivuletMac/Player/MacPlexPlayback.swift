@@ -65,13 +65,13 @@ final class MacPlexPlayback: ObservableObject {
     private var needsStartingTracks = false
     private var cancellables = Set<AnyCancellable>()
 
-    private let loadPlayer: (AetherPlayer, PlexPlaybackRequest, Bool) async throws -> Void
+    private let loadPlayer: (AetherPlayer, PlexPlaybackRequest, Bool, Int?) async throws -> Void
 
     init(request: PlexPlaybackRequest, plex: any PlayerBackend, queue: PlayQueue<PlexMetadata>? = nil,
-         loadPlayer: @escaping (AetherPlayer, PlexPlaybackRequest, Bool) async throws -> Void = { player, request, keepingTransport in
+         loadPlayer: @escaping (AetherPlayer, PlexPlaybackRequest, Bool, Int?) async throws -> Void = { player, request, keepingTransport, audioStreamIndex in
              try await player.load(url: request.url, headers: request.headers, startTime: request.startTime,
-                                   externalSubtitles: request.sidecarSubtitles, keepingTransport: keepingTransport,
-                                   stackedParts: request.stackedParts)
+                                   externalSubtitles: request.sidecarSubtitles, audioStreamIndex: audioStreamIndex,
+                                   keepingTransport: keepingTransport, stackedParts: request.stackedParts)
          }) {
         self.request = request
         self.plex = plex
@@ -212,7 +212,7 @@ final class MacPlexPlayback: ObservableObject {
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
             return
         }
-        try? await loadPlayer(player, loadingRequest, keepingTransport)
+        try? await loadPlayer(player, loadingRequest, keepingTransport, openingAudioStreamIndex)
         guard canLoad, playbackReports.session === session else {
             if playbackReports.session === session { player.stop() }
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
@@ -445,6 +445,20 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     private var plexStreams: [PlexStream] { request.item.Media?.first?.Part?.first?.Stream ?? [] }
+
+    /// The audio a direct-play load opens on: the pick carried in, else a new item's starting
+    /// pick. Otherwise the engine switches to it once it lists its tracks, which rebuilds the
+    /// load before its display handshake ends and serves Dolby Vision as its HDR10 base (#627).
+    private var openingAudioStreamIndex: Int? {
+        guard !isTranscoding else { return nil }
+        let streams = plexStreams
+        if let carried = TrackIntentResolver.audioStreamIndex(ofPlexStream: pendingEngineAudio, in: streams) {
+            return carried
+        }
+        guard needsStartingTracks else { return nil }
+        return TrackIntentResolver.audioStreamIndex(
+            ofPlexStream: TrackIntentResolver.startingPlexSelection(streams: streams).audio, in: streams)
+    }
 
     // MARK: - Subtitle search
 

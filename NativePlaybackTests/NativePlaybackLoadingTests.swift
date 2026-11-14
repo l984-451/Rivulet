@@ -57,7 +57,7 @@ struct NativePlaybackLoadingTests {
         let nextEngine = AsyncStream<Void>.makeStream()
         defer { nextEngine.continuation.finish(); gate.release() }
         let playback = Playback(request: original, plex: backend,
-                                queue: PlayQueue(entries: [original.item, replacement.item], startingAt: 0)) { _, request, _ in
+                                queue: PlayQueue(entries: [original.item, replacement.item], startingAt: 0)) { _, request, _, _ in
             events.append("engine:\(request.id)")
             if suspension == .engine { await gate.waitOnce() }
             if request.id == replacement.id { nextEngine.continuation.yield(()) }

@@ -1052,7 +1052,9 @@ final class PreviewCarouselViewController: UIViewController {
         // 0, not nil: nil means ask the server for its resume point.
         let offsetSec = item.userState.viewOffset
         let resume: Double? = fromBeginning ? 0 : (offsetSec > 0 ? offsetSec : nil)
-        presentPlayer(ratingKey: item.ref.itemID, resumeOffset: resume, mediaID: sourceID)
+        // The item's own server: a version picked from another copy is not always the one on screen.
+        ExtraPlayer.presentPlayer(ratingKey: item.ref.itemID, resumeOffset: resume, mediaID: sourceID,
+                                  server: MediaProviderRegistry.shared.plexServer(for: item.ref.providerID), from: self)
     }
 
     private func presentEpisodePage(_ episode: MediaItem) {
@@ -1068,13 +1070,6 @@ final class PreviewCarouselViewController: UIViewController {
     /// The Plex server the item on screen lives on, which may not be the selected one (#87).
     private var shownItemServer: PlexServerAddress? {
         MediaProviderRegistry.shared.plexServer(for: expandedDetail.item?.ref.providerID)
-    }
-
-    /// Fetches a Plex ratingKey's metadata and presents the player. A nil `resumeOffset`
-    /// means ask the server: the only place an extra's resume point appears (#303).
-    private func presentPlayer(ratingKey: String, resumeOffset: Double?, mediaID: String? = nil) {
-        ExtraPlayer.presentPlayer(ratingKey: ratingKey, resumeOffset: resumeOffset, mediaID: mediaID,
-                                  server: shownItemServer, from: self)
     }
 
     private func presentExtraPlayer(_ trailer: BelowFoldTrailer) {

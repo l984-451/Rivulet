@@ -170,6 +170,17 @@ final class PlexMediaMapperTests: XCTestCase {
         XCTAssertNil(map(movie).seriesTitle)
     }
 
+    func test_detail_carriesThePlexGuidAndLibrary() {
+        var meta = PlexMetadata()
+        meta.ratingKey = "1"
+        meta.type = "movie"
+        meta.guid = "plex://movie/abc"
+        meta.librarySectionTitle = "Movies 4K"
+        let detail = PlexMediaMapper.detail(meta, providerID: "plex:abc", serverURL: "https://x", authToken: "T")
+        XCTAssertEqual(detail.plexGUID, "plex://movie/abc")
+        XCTAssertEqual(detail.library, "Movies 4K")
+    }
+
     func test_detail_guids_becomeExternalIDs() {
         var meta = PlexMetadata()
         meta.ratingKey = "1"

@@ -518,7 +518,9 @@ enum PlexMediaMapper {
             collections: collections,
             extras: extras,
             contentAdvisory: meta.CommonSenseMedia?.first.map(Self.contentAdvisory(from:)),
-            externalIDs: externalIDs(meta.Guid)
+            externalIDs: externalIDs(meta.Guid),
+            plexGUID: meta.guid,
+            library: meta.librarySectionTitle
         )
     }
 

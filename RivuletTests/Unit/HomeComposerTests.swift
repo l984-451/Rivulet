@@ -46,11 +46,12 @@ final class HomeComposerTests: XCTestCase {
 final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     nonisolated let id: String
     nonisolated let kind: MediaProviderKind
-    nonisolated let displayName = "Stub"
+    nonisolated let displayName: String
 
-    init(id: String = "stub", kind: MediaProviderKind = .plex) {
+    init(id: String = "stub", kind: MediaProviderKind = .plex, displayName: String = "Stub") {
         self.id = id
         self.kind = kind
+        self.displayName = displayName
     }
     let connectionState = ConnectionState.connected
     let supportsWatchlist = false

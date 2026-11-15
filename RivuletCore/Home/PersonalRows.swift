@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 //
-//  Home rows the user asks for in Settings > Home > Rows: Favorite Movies and Favorite
-//  TV Shows (off by default), one row each per server, and the playlists switched on there
+//  Home rows the user asks for in Settings > Home > Rows: Favorite Movies, Favorite
+//  TV Shows and, on tvOS, Favorite Albums (off by default), one row each per server, and the playlists switched on there
 //  (`HomePlaylistPins`). The hero reads the same lists. Both apps fetch them here and
 //  each draws the result in its own Home.
 //
@@ -27,15 +27,25 @@ nonisolated enum PersonalRows {
     /// Tiles per row. None of these rows pages; a playlist's own page lists the rest.
     static let rowLimit = 50
 
-    /// The library kinds with a favorites row. Mixed libraries (home videos) have none.
-    static let favoriteKinds: [MediaLibrary.LibraryKind] = [.movies, .shows]
+    /// The video kinds with a favorites row: the hero, the Favorites page and iOS read only these.
+    static let videoFavoriteKinds: [MediaLibrary.LibraryKind] = [.movies, .shows]
+
+    /// The library kinds with a favorites row on tvOS Home. Mixed libraries (home videos) have none.
+    /// A music library's favorites are albums on Jellyfin and Emby; Plex is left out (`requests`),
+    /// its music section's favorites are artists.
+    static let favoriteKinds: [MediaLibrary.LibraryKind] = videoFavoriteKinds + [.music]
 
     static let favoritesChangedNotification = Notification.Name("homeFavoritesSettingChanged")
 
     static let playlistRowPrefix = "rivulet.playlist."
 
     private static func favoritesKey(_ kind: MediaLibrary.LibraryKind) -> String {
-        HomeSettingsScope.key(kind == .shows ? "showHomeFavoriteShows" : "showHomeFavoriteMovies")
+        let base = switch kind {
+        case .shows: "showHomeFavoriteShows"
+        case .music: "showHomeFavoriteAlbums"
+        default: "showHomeFavoriteMovies"
+        }
+        return HomeSettingsScope.key(base)
     }
 
     /// Off by default, so a fresh install's Home is still what the servers say.
@@ -49,7 +59,11 @@ nonisolated enum PersonalRows {
     }
 
     static func favoritesIdentifier(_ kind: MediaLibrary.LibraryKind) -> String {
-        kind == .shows ? "rivulet.favorites.shows" : "rivulet.favorites.movies"
+        switch kind {
+        case .shows: "rivulet.favorites.shows"
+        case .music: "rivulet.favorites.albums"
+        default: "rivulet.favorites.movies"
+        }
     }
 
     static func playlistRowID(providerID: String, playlistID: String) -> String {
@@ -57,17 +71,25 @@ nonisolated enum PersonalRows {
     }
 
     static func favoritesTitle(_ kind: MediaLibrary.LibraryKind) -> String {
-        kind == .shows ? String(localized: "Favorite TV Shows") : String(localized: "Favorite Movies")
+        switch kind {
+        case .shows: String(localized: "Favorite TV Shows")
+        case .music: String(localized: "Favorite Albums")
+        default: String(localized: "Favorite Movies")
+        }
     }
 
-    /// The hero source that shows a favorites kind.
-    static func heroSource(_ kind: MediaLibrary.LibraryKind) -> HeroSources.Source {
-        kind == .shows ? .favoriteShows : .favoriteMovies
+    /// The hero source that shows a favorites kind; albums have none.
+    static func heroSource(_ kind: MediaLibrary.LibraryKind) -> HeroSources.Source? {
+        switch kind {
+        case .shows: .favoriteShows
+        case .movies: .favoriteMovies
+        default: nil
+        }
     }
 
     /// The kinds whose favorites are fetched: a Home row or a hero source asks for them.
     static var wantedKinds: [MediaLibrary.LibraryKind] {
-        favoriteKinds.filter { showsFavorites($0) || HeroSources.isOn(heroSource($0)) }
+        favoriteKinds.filter { kind in showsFavorites(kind) || heroSource(kind).map(HeroSources.isOn) == true }
     }
 
     /// Every playlist the hero or Home shows, hero pins after row pins, once each.
@@ -91,7 +113,8 @@ nonisolated enum PersonalRows {
     static func requests(libraries: [(provider: any MediaProvider, library: MediaLibrary, key: String)],
                          kinds: [MediaLibrary.LibraryKind]) -> [FavoritesRequest] {
         var found: [FavoritesRequest] = []
-        for (provider, library, key) in libraries where kinds.contains(library.kind) && provider.supportsFavorites {
+        for (provider, library, key) in libraries where kinds.contains(library.kind) && provider.supportsFavorites
+            && !(library.kind == .music && provider.kind == .plex) {
             if let i = found.firstIndex(where: { $0.provider.id == provider.id && $0.kind == library.kind }) {
                 found[i].libraries.append(library)
             } else {
@@ -104,6 +127,11 @@ nonisolated enum PersonalRows {
     /// Whether any server has favorites, so Settings offers the rows.
     static func offersFavorites(_ providers: [any MediaProvider]) -> Bool {
         providers.contains { $0.supportsFavorites }
+    }
+
+    /// Whether a server has favorite albums (Jellyfin, Emby), so Settings offers Favorite Albums.
+    static func offersAlbumFavorites(_ providers: [any MediaProvider]) -> Bool {
+        providers.contains { $0.supportsFavorites && $0.kind != .plex }
     }
 
     /// Fetches the rows. A row whose fetch fails keeps its last items from `previous`, so a

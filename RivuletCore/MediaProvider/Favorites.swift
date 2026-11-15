@@ -41,7 +41,7 @@ enum FavoritesFeed {
         let limit = Self.limit
         let found = await withTaskGroup(of: [MediaItem].self) { group in
             for provider in providers where provider.supportsFavorites {
-                let kinds = PersonalRows.favoriteKinds
+                let kinds = PersonalRows.videoFavoriteKinds
                     + (includeAlbums && provider.kind != .plex ? [.music] : [])
                 group.addTask {
                     let libraries = ((try? await provider.libraries()) ?? [])

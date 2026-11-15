@@ -44,6 +44,9 @@ final class PersonalHomeRows: ObservableObject {
     /// Whether any signed-in server has favorites, so Settings offers the rows and the Favorites page.
     static var offersFavorites: Bool { PersonalRows.offersFavorites(providers) }
 
+    /// Whether a signed-in server has favorite albums, so Settings offers Favorite Albums.
+    static var offersAlbumFavorites: Bool { PersonalRows.offersAlbumFavorites(providers) }
+
     private static func cached(_ row: PersonalRow) -> CachedHomeHub {
         var hub = CachedHomeHub(id: row.id, title: row.title, isContinueWatching: false, hubKey: nil,
                                 hubIdentifier: row.identifier, totalSize: nil, items: row.items)

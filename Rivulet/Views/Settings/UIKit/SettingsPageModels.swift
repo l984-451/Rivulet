@@ -1190,7 +1190,8 @@ enum SettingsContent {
         // loading, or nothing in it) sits at the end of the on rows, unmovable.
         // Favorites are offered only where a server has them.
         for kind in PersonalRows.favoriteKinds
-        where PersonalHomeRows.offersFavorites && !listedFavorites.contains(kind) {
+        where PersonalHomeRows.offersFavorites && !listedFavorites.contains(kind)
+            && (kind != .music || PersonalHomeRows.offersAlbumFavorites) {
             add(favoritesRow(kind, onReorder: nil), isOn: PersonalRows.showsFavorites(kind))
         }
         if LiveTVDataStore.shared.offersHomeFavorites && !listedChannels {
@@ -1253,8 +1254,9 @@ enum SettingsContent {
     }
 
     private static func favoritesRow(_ kind: MediaLibrary.LibraryKind, onReorder: ((Bool) -> Void)?) -> SettingsRowItem {
-        SettingsRowItem(id: kind == .shows ? "homeFavoriteShows" : "homeFavoriteMovies",
-                        title: kind == .shows ? "Favorite TV Shows" : "Favorite Movies", kind: .toggle(
+        SettingsRowItem(id: kind == .shows ? "homeFavoriteShows" : kind == .music ? "homeFavoriteAlbums" : "homeFavoriteMovies",
+                        title: kind == .shows ? "Favorite TV Shows" : kind == .music ? "Favorite Albums" : "Favorite Movies",
+                        kind: .toggle(
             get: { PersonalRows.showsFavorites(kind) },
             set: { shown in
                 if shown { HomeRowOrder.placeLast(PersonalRows.favoritesIdentifier(kind), among: shownHomeRowKeys()) }

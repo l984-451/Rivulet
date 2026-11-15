@@ -3796,7 +3796,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func waitForHLSTranscodeReady(url: URL, headers: [String: String]) async -> Bool {
         await prepareHLSRelay(for: url)
         let url = avPlayerURL(url)
-        await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers)
+        if let verdict = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
+            diagnostics.step("transcode_decision", detail: verdict)
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10

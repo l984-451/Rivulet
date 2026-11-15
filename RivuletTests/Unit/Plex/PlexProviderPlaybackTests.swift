@@ -46,8 +46,9 @@ final class PlexProviderPlaybackTests: XCTestCase {
         override func stopTranscodeSession(serverURL: String, authToken: String, sessionId: String) async {
             calls.append("stop(\(sessionId))")
         }
-        override func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async {
+        override func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> String? {
             calls.append("decision(\(hlsURL.path))")
+            return nil
         }
         override func openDirectPlaySession(serverURL: String, authToken: String, ratingKey: String,
                                             mediaIndex: Int, sessionIdentifier: String) async {

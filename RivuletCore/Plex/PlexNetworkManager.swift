@@ -2131,25 +2131,40 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// Opens a transcode session with a `/decision` request carrying the same parameters.
     /// PMS can answer `start.m3u8` with 400 (measured on 1.43.4) or start a session that never
     /// muxes until a decision has run, so call this before the first playlist fetch.
-    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async {
+    /// Returns the server's verdict for the diagnostics, nil when it gave none.
+    @discardableResult
+    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> String? {
         let startPath = "/video/:/transcode/universal/start.m3u8"
         guard var components = URLComponents(url: hlsURL, resolvingAgainstBaseURL: false),
-              components.path.hasSuffix(startPath) else { return }
+              components.path.hasSuffix(startPath) else { return nil }
         components.path = components.path.replacingOccurrences(of: startPath, with: "/video/:/transcode/universal/decision")
-        guard let decisionURL = components.url else { return }
+        guard let decisionURL = components.url else { return nil }
 
         var request = URLRequest(url: decisionURL, timeoutInterval: 15)
         for (key, value) in headers {
             request.addValue(value, forHTTPHeaderField: key)
         }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
-            let (_, response) = try await session.data(for: request)
+            let (data, response) = try await session.data(for: request)
             if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
                 print("[Plex] Transcode decision returned HTTP \(status)")
             }
+            return Self.transcodeVerdict(in: data)
         } catch {
             print("[Plex] Decision request failed: \(error.localizedDescription)")
+            return nil
         }
+    }
+
+    /// A decision body's codes and PMS's own sentence: "general=2000 transcode=4005: Cannot convert this item. …".
+    nonisolated static func transcodeVerdict(in data: Data) -> String? {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let container = body["MediaContainer"] as? [String: Any],
+              let general = container["generalDecisionCode"] else { return nil }
+        let transcode = container["transcodeDecisionCode"].map { "\($0)" } ?? "none"
+        let text = container["transcodeDecisionText"] ?? container["generalDecisionText"] ?? ""
+        return "general=\(general) transcode=\(transcode): \(text)"
     }
 
     /// The selected text subtitle of a `start.m3u8` transcode as one ASS document.

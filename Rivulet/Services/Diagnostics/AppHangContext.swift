@@ -27,6 +27,7 @@ enum AppHangContext {
         static let contentResolution = "content_resolution"
         static let contentHDR = "content_hdr"
         static let contentVideoCodec = "content_video_codec"
+        static let contentBitrate = "content_bitrate"
     }
 
     // MARK: - Last-known values (so breadcrumbs can carry full context)
@@ -53,9 +54,17 @@ enum AppHangContext {
     static func setPlaybackRoute(_ route: String?) {
         let value = route ?? "none"
         guard value != currentRoute else { return }
+        let wasPlaying = currentRoute != "none"
         currentRoute = value
         setTag(TagKey.playbackRoute, value)
-        breadcrumb(category: "playback_route", message: value)
+        // Whether the route is Aether or the hls fallback is in the message ("none" = torn down).
+        breadcrumb(category: "playback_route", message: value, data: ["screen": currentScreen])
+        // A route is the player session: memory is sampled from its start to its stop.
+        if route == nil {
+            MemoryDiagnostics.playbackDidStop()
+        } else if !wasPlaying {
+            MemoryDiagnostics.playbackDidStart()
+        }
     }
 
     /// Record the playback lifecycle state (idle/loading/ready/playing/paused/
@@ -82,14 +91,15 @@ enum AppHangContext {
     /// tags is a shrug. Pass coarse, low-cardinality strings (e.g. "4k"/"1080",
     /// "dolby_vision"/"hdr"/"sdr", "hevc"/"h264"). Call `clearContent()` on
     /// teardown so a later hang off the player isn't tagged with stale content.
-    static func setContent(resolution: String, hdr: String, videoCodec: String) {
+    static func setContent(resolution: String, hdr: String, videoCodec: String, bitrate: String = "unknown") {
+        setTag(TagKey.contentBitrate, bitrate)
         setTag(TagKey.contentResolution, resolution)
         setTag(TagKey.contentHDR, hdr)
         setTag(TagKey.contentVideoCodec, videoCodec)
         breadcrumb(
             category: "playback_content",
             message: "\(resolution)/\(hdr)/\(videoCodec)",
-            data: ["resolution": resolution, "hdr": hdr, "video_codec": videoCodec]
+            data: ["resolution": resolution, "hdr": hdr, "video_codec": videoCodec, "bitrate": bitrate]
         )
     }
 
@@ -98,6 +108,7 @@ enum AppHangContext {
         setTag(TagKey.contentResolution, "none")
         setTag(TagKey.contentHDR, "none")
         setTag(TagKey.contentVideoCodec, "none")
+        setTag(TagKey.contentBitrate, "none")
     }
 
     // MARK: - Main-thread blocking sections

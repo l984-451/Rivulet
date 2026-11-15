@@ -181,6 +181,7 @@ struct TVSidebarView: View {
         .ignoresSafeArea()
         .onChange(of: selectedTab) { _, newTab in
             nestedNavState.isNested = false
+            AppHangContext.setScreen(newTab.diagnosticsLabel)
         }
         .onChange(of: authManager.hasCredentials) { old, new in
             // Clear watchlist state on logout.

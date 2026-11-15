@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 nonisolated enum AudioTrackTitle {
     /// Format vocabulary, from the titles on a real library ("DTS-HD MA / 5.1 / 48 kHz / 3596 kbps").
@@ -21,8 +22,24 @@ nonisolated enum AudioTrackTitle {
     /// Where a language or country name is likely to be written in some other language.
     private static let nameLocales = ["en", "fr", "de", "es", "it", "pt", "ru", "zh", "ja", "ko", "hi", "ar"]
 
+    private struct Key: Hashable { let title: String?, language: String?, code: String? }
+    private static let cache = OSAllocatedUnfairLock(initialState: [Key: String?]())
+
     /// The title with language and format removed; nil when nothing is left to say.
+    /// Cleaning builds large regexes and the menus ask for every track against every other
+    /// on each state change, so a track list of any size held the main thread for seconds.
     static func description(of title: String?, language: String?, languageCode: String?) -> String? {
+        let key = Key(title: title, language: language, code: languageCode)
+        if let hit = cache.withLock({ $0[key] }) { return hit }
+        let result = compute(of: title, language: language, languageCode: languageCode)
+        cache.withLock {
+            if $0.count > 1024 { $0.removeAll() }
+            $0[key] = .some(result)
+        }
+        return result
+    }
+
+    private static func compute(of title: String?, language: String?, languageCode: String?) -> String? {
         guard var text = title?.trimmingCharacters(in: .whitespacesAndNewlines), !text.contains("://"),
               !text.split(whereSeparator: \.isWhitespace).contains(where: { $0.split(separator: ".").count >= 4 })
         else { return nil }

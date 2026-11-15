@@ -567,6 +567,42 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         XCTAssertEqual(provider.playbackCalls, ["detail(show)"])
     }
 
+    private func castDetail(_ item: MediaItem, cast: [MediaPerson]) -> MediaItemDetail {
+        MediaItemDetail(
+            item: item, tagline: nil, genres: [], studios: [], cast: cast, directors: [], writers: [],
+            chapters: [], mediaSources: [stream().source], trailerURL: nil, contentRating: nil,
+            nextEpisode: nil, collections: []
+        )
+    }
+
+    private func person(_ name: String) -> MediaPerson {
+        MediaPerson(id: name, name: name, role: "Role of \(name)", imageURL: nil, providerID: "jellyfin:srv")
+    }
+
+    /// No TMDB id: Insights lists the episode's own cast from the server.
+    func test_providerInsightsCast_fallsBackToTheServersCast() async {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        let episode = artEpisode(own: art("e1"), show: art("show"))
+        var playback = artPlayback(episode, provider: provider)
+        playback.detail = castDetail(episode, cast: [person("Guest")])
+        let vm = UniversalPlayerViewModel(providerPlayback: playback, startOffset: nil)
+
+        await vm.loadInsightsCast()
+        XCTAssertEqual(vm.insightsCast.map(\.name), ["Guest"])
+    }
+
+    /// An episode with no cast of its own takes its show's, from the one series fetch.
+    func test_providerInsightsCast_episodeWithoutCast_usesTheShows() async {
+        let provider = StubMediaProvider(id: "jellyfin:srv", kind: .jellyfin)
+        provider.detailResult = castDetail(JellyfinFixtures.mediaItem("show", kind: .show), cast: [person("Lead")])
+        let episode = artEpisode(own: art("e1"), show: art("show"))
+        let vm = UniversalPlayerViewModel(providerPlayback: artPlayback(episode, provider: provider), startOffset: nil)
+
+        await vm.loadInsightsCast()
+        XCTAssertEqual(vm.insightsCast.map(\.name), ["Lead"])
+        XCTAssertEqual(provider.playbackCalls, ["detail(show)"])
+    }
+
     // MARK: - Scrub thumbnails
 
     func test_scrubThumbnailSource_prefersServerThumbnails() {

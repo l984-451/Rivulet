@@ -6075,6 +6075,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 titleTmdbId: tmdbId, titleIsMovie: isMovie)
         }
 
+        // Jellyfin and Emby fallback: the server's own cast, from the detail playback already holds,
+        // then (episodes) the show's, from the series detail the TMDB id lookup fetched.
+        if people.isEmpty, case .provider(let playback) = source {
+            people = playback.detail.cast
+            if people.isEmpty, metadata.type == "episode" {
+                people = await providerShowDetail(playback)?.cast ?? []
+            }
+        }
+
         guard generation == itemGeneration else { return }
         insightsCast = people
     }
@@ -6179,22 +6188,24 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         return playback
     }
 
-    /// `.provider` only: the series detail's ids, fetched once per show.
-    private var providerShowIDs: (show: MediaItemRef, task: Task<[String: String], Never>)?
+    /// `.provider` only: the series detail (ids and cast), fetched once per show.
+    private var providerShow: (show: MediaItemRef, task: Task<MediaItemDetail?, Never>)?
+
+    /// A provider episode's series detail; nil when the episode has no show or the fetch fails.
+    private func providerShowDetail(_ playback: ProviderPlayback) async -> MediaItemDetail? {
+        guard let show = playback.item.grandparentRef else { return nil }
+        if let cached = providerShow, cached.show == show { return await cached.task.value }
+        let provider = playback.provider
+        let task = Task { try? await provider.fullDetail(for: show) }
+        providerShow = (show, task)
+        return await task.value
+    }
 
     /// A provider episode's show TMDB id: the series' own, else resolved from
     /// its tvdb or imdb id. nil when the episode has no show.
     func providerShowTmdbID(_ playback: ProviderPlayback) async -> Int? {
-        guard let show = playback.item.grandparentRef else { return nil }
-        let task: Task<[String: String], Never>
-        if let cached = providerShowIDs, cached.show == show {
-            task = cached.task
-        } else {
-            let provider = playback.provider
-            task = Task { (try? await provider.fullDetail(for: show))?.externalIDs ?? [:] }
-            providerShowIDs = (show, task)
-        }
-        let ids = await task.value
+        guard playback.item.grandparentRef != nil else { return nil }
+        let ids = await providerShowDetail(playback)?.externalIDs ?? [:]
         return await InsightsShowIDResolver.shared.resolve(ShowExternalIDs(
             tmdb: ids["tmdb"].flatMap { Int($0) },
             tvdb: ids["tvdb"].flatMap { Int($0) },

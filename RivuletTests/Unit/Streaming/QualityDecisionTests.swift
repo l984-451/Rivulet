@@ -58,7 +58,9 @@ final class QualityDecisionTests: XCTestCase {
     func test_probeRateMath() {
         XCTAssertEqual(ThroughputProbe.kbps(bytes: 2_500_000, seconds: 1), 20000)
         XCTAssertNil(ThroughputProbe.kbps(bytes: 1000, seconds: 1))     // too little to judge
-        XCTAssertNil(ThroughputProbe.kbps(bytes: 2_500_000, seconds: 0))
+        // A read too quick to time is a fast link, not a failed probe: rated as 50 ms.
+        XCTAssertEqual(ThroughputProbe.kbps(bytes: ThroughputProbe.byteLimit, seconds: 0.002), 671088)
+        XCTAssertEqual(ThroughputProbe.kbps(bytes: 2_500_000, seconds: 0), 400000)
     }
 
     func test_sourceKbps_fallsBackToSizeOverDuration() throws {

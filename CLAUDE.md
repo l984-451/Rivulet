@@ -1038,6 +1038,37 @@ owner steps (developer portal, CloudKit schema deploy, profiles) are in
   registry's `populateFromCurrentAuth` (iOS follows `onSecondaryProvidersChanged`).
   Do not add a second refresh route.
 
+### Seerr requests
+
+Request missing movies and shows through a Seerr server, on all three apps and for every server
+type (Seerr tracks Plex, Jellyfin and Emby libraries). Settings > Servers > Seerr (iOS: Account
+sheet; Mac: Settings > Account) takes a server address and Seerr's API key (Keychain; neither is
+in `SyncCatalog`, so the key never reaches iCloud).
+
+- **Shared, in `RivuletCore/Seerr/`**: `SeerrClient` (the REST calls), `SeerrModels` (states and
+  their rules), `SeerrCatalog` (on/off, search, a title's target, More Like This, the quality
+  profile cache) and `SeerrRequestModel` (a title's state and requests, for the SwiftUI apps).
+  The tvOS UIKit surfaces call the same pieces directly.
+- **Search adds a Request section**: titles Seerr can fetch, minus those it reports Available,
+  each with its state. tvOS: `SeerrSearchResults` in `PlexHomeViewController`'s search mode, Select
+  opens the detail page and a long press a quick request menu; iOS and Mac: a section in their
+  search lists.
+- **A title not in the library gets a Request button in Play's place** (tvOS `SeerrRequestPill`,
+  iOS `IOSSeerrRequestButton`, Mac `MacSeerrRequestButton`). A movie asks for a quality profile,
+  then requests; a show lists its seasons, then asks for quality. The quality list is every
+  Radarr or Sonarr profile, Seerr's default first and 4K servers last, skipped when there is one.
+- **Every request uses the admin API key**, so it is approved automatically and Seerr records
+  the admin as requester. That is why a restricted profile gets neither the row nor the button.
+- **Seerr's `MediaStatus` follows its server code, not its published spec**: 6 is Blocklisted
+  and 7 Deleted (`SeerrMediaStatus`).
+- **Detail pages for titles not in the library** (Discover's too) read Plex Discover through
+  `getFullMetadata` + `PlexMediaMapper.detail` (`DiscoverDetailSource`, registered for the TMDB
+  id), then Seerr, then TMDB; Seerr's YouTube trailer rides `trailerURL`. Discover sends
+  `librarySectionID` and tag ids as strings, which `PlexMediaContainer` and `PlexTag` read
+  leniently. iOS and Mac load such a title in their detail views' `loadCatalogTitle`; tvOS fills
+  its lower rows from `MetadataOnlyBelowFold`. Languages, Accessibility, seasons and the More menu
+  are left out: there is no file and no server.
+
 ### Glass UI Style
 
 All focusable rows use consistent styling (see `Docs/DESIGN_GUIDE.md`):

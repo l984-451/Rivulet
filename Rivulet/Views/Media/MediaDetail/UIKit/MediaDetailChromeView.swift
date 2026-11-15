@@ -759,6 +759,11 @@ final class MediaDetailChromeView: UIView {
         // The pill is the row's primary focus target (playFocusable feeds
         // the carousel's land-on-primary routing).
         playButton = pill
+        // With Seerr set up, Request takes Play's place and becomes the primary focus target.
+        if let request = SeerrRequestPill.make(for: item) {
+            actionButtonsStack.insertArrangedSubview(request, at: 0)
+            playButton = request
+        }
     }
 
     /// Watchlist pill — same hardcoded geometry as the Play pill

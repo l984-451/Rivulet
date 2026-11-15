@@ -54,6 +54,8 @@ final class BelowFoldContentLoader {
     func load(for item: MediaItem, detail: MediaItemDetail?) async -> BelowFoldContent {
         var content = BelowFoldContent()
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
+            // A title not in the library has no server; its rows come from its catalog detail.
+            if let rows = await MetadataOnlyBelowFold.content(for: item, detail: detail) { return rows }
             return content
         }
 

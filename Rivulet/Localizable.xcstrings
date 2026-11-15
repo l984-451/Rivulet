@@ -23,6 +23,9 @@
         }
       }
     },
+    "%@ (Default)" : {
+
+    },
     "%@ + %lld more" : {
       "localizations" : {
         "de" : {
@@ -236,6 +239,9 @@
           }
         }
       }
+    },
+    "%@ · 4K" : {
+
     },
     "%@ · Collection" : {
       "localizations" : {
@@ -2483,6 +2489,9 @@
         }
       }
     },
+    "API Key" : {
+
+    },
     "Artwork" : {
       "localizations" : {
         "de" : {
@@ -3747,6 +3756,9 @@
         }
       }
     },
+    "Available" : {
+
+    },
     "Average rating" : {
       "localizations" : {
         "de" : {
@@ -4540,6 +4552,9 @@
         }
       }
     },
+    "Check Connection" : {
+
+    },
     "Check the connection to your server and try again." : {
       "localizations" : {
         "de" : {
@@ -4605,6 +4620,9 @@
           }
         }
       }
+    },
+    "Checks the address and the API key." : {
+
     },
     "Checks the connection and adds the source if it works. If it does not, Rivulet tells you why." : {
       "localizations" : {
@@ -4765,6 +4783,21 @@
         }
       }
     },
+    "Couldn’t Connect" : {
+
+    },
+    "Couldn’t Request" : {
+
+    },
+    "Enter the server address and an API key first." : {
+
+    },
+    "Find the API key in Seerr under Settings > General. Requests are made as Seerr's admin and approved automatically. Restricted profiles can't request." : {
+
+    },
+    "Forgets the address and API key on this Apple TV." : {
+
+    },
     "iCloud" : {
       "localizations" : {
         "de" : {
@@ -4854,6 +4887,9 @@
         }
       }
     },
+    "Partially Available" : {
+
+    },
     "Playing away from home needs a Plex Pass or Remote Watch Pass." : {
       "localizations" : {
         "de" : {
@@ -4878,6 +4914,9 @@
     },
     "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Processing" : {
+
+    },
     "Profile Picker" : {
       "localizations" : {
         "de" : {
@@ -4901,6 +4940,27 @@
       }
     },
     "Recording in Progress" : {
+
+    },
+    "Remove Seerr" : {
+
+    },
+    "Remove Seerr?" : {
+
+    },
+    "Request" : {
+
+    },
+    "Request %@" : {
+
+    },
+    "Request All Seasons" : {
+
+    },
+    "Request movies and shows through your Seerr server. Search then shows a Request row for titles you don't have, and their detail pages a Request button." : {
+
+    },
+    "Requested" : {
 
     },
     "Rivulet is free and open source. A tip helps keep it going." : {
@@ -4946,6 +5006,37 @@
           }
         }
       }
+    },
+    "Search stops showing titles to request. Seerr itself is unchanged." : {
+
+    },
+    "Seerr" : {
+
+    },
+    "Seerr %@, signed in as %@. Search now shows titles you can request." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Seerr %1$@, signed in as %2$@. Search now shows titles you can request."
+          }
+        }
+      }
+    },
+    "Seerr answered with an error (%lld)." : {
+
+    },
+    "Seerr didn’t accept the API key." : {
+
+    },
+    "Seerr Isn’t Set Up" : {
+
+    },
+    "Seerr isn’t set up. Add it in Settings > Servers." : {
+
+    },
+    "Seerr's address, such as 192.168.1.10:5055 or https://seerr.example.com." : {
+
     },
     "Server Can't Play This" : {
       "localizations" : {
@@ -5013,6 +5104,9 @@
           }
         }
       }
+    },
+    "That address didn’t answer like a Seerr server." : {
+
     },
     "The App Store couldn't be reached. Try again later." : {
       "localizations" : {
@@ -15382,6 +15476,9 @@
           }
         }
       }
+    },
+    "Unavailable" : {
+
     },
     "Video" : {
       "localizations" : {

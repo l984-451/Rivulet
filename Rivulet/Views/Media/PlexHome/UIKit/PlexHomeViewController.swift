@@ -1028,6 +1028,21 @@ final class PlexHomeViewController: UIViewController {
     private var otherServersSearchHits = SearchHits()
     private var isSearchLoading = false
     private var searchError: String?
+    /// Seerr's Request row: titles Seerr can fetch that the library doesn't have.
+    private lazy var seerr = SeerrSearchResults { [weak self] in
+        guard let self else { return }
+        var snap = self.dataSource.snapshot()
+        guard snap.sectionIdentifiers.contains(SeerrSearchResults.sectionID) else { return }
+        snap.reconfigureItems(snap.itemIdentifiers(inSection: SeerrSearchResults.sectionID))
+        self.dataSource.apply(snap, animatingDifferences: false)
+    }
+
+    private func openSeerrTile(_ section: HomeSectionData, itemIndex: Int) -> Bool {
+        guard let sectionIndex = sectionsSnapshot.firstIndex(where: { $0.id == section.id }) else { return false }
+        return seerr.select(section: section.id, index: itemIndex, from: self, sourceFrame: focusedTileFrame()) { [weak self] in
+            Task { @MainActor in self?.presentPreview(forSection: section, indexPath: IndexPath(item: itemIndex, section: sectionIndex)) }
+        }
+    }
     private var lastSubmittedQuery = ""
     private var searchTask: Task<Void, Never>?
     private var searchToken = 0
@@ -1209,6 +1224,7 @@ final class PlexHomeViewController: UIViewController {
 
         async let plex = plexSearch(query)
         async let others = otherServersSearch(query)
+        async let requestable = seerr.fetch(query)
         let (plexResult, othersResult) = await (plex, others)
         guard token == searchToken else { return }
 
@@ -1222,6 +1238,12 @@ final class PlexHomeViewController: UIViewController {
         lastSubmittedQuery = query
         applySnapshot(animated: false)
         reconfigureVisibleSearchCells()
+        // Seerr answers on its own time; its row joins the results when it does.
+        let found = await requestable
+        if token == searchToken {
+            seerr.apply(found)
+            applySnapshot(animated: false)
+        }
     }
 
     /// Movies & TV, then each collection and genre shelf, People, Episodes & Seasons, and Music.
@@ -1240,7 +1262,7 @@ final class PlexHomeViewController: UIViewController {
 
         let plex = plexSearchHits
         let others = otherServersSearchHits
-        guard !plex.isEmpty || !others.isEmpty || !plexSearchMusic.isEmpty else { return [.searchState()] }
+        guard !plex.isEmpty || !others.isEmpty || !plexSearchMusic.isEmpty || seerr.hasResults else { return [.searchState()] }
 
         func titles(_ hits: SearchHits, _ kinds: Set<MediaKind>) -> [MediaItem] {
             hits.titles.filter { kinds.contains($0.kind) }
@@ -1278,7 +1300,7 @@ final class PlexHomeViewController: UIViewController {
             sections.append(.searchGrid(id: id, title: String(localized: "Music"), items: mapToMediaItems(plexSearchMusic)))
             searchGroupMetas[id] = plexSearchMusic
         }
-        return sections
+        return sections + seerr.sections()
     }
 
     /// The prompt/state cells render controller state that isn't part of the
@@ -4173,6 +4195,7 @@ final class PlexHomeViewController: UIViewController {
                 if section.kind == .searchGrid {
                     cell.setSourceBadge(Self.sourceBadge(for: item.ref,
                                                          labelsServers: ServerDataStore.shared.labelsServers))
+                    if let badge = seerr.badge(section: section.id, index: indexPath.item) { cell.setSourceBadge(badge) }
                 }
                 cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? PosterCaption.text(for: item) : nil)
             }
@@ -4319,6 +4342,7 @@ final class PlexHomeViewController: UIViewController {
             presentDiscoverTileMenu(sectionID: sectionID, itemIndex: itemIndex)
         case .searchGrid:
             guard itemIndex < section.items.count else { return }
+            if openSeerrTile(section, itemIndex: itemIndex) { return }
             // Music results (artist/album/track) route to the music surfaces;
             // the Plex watched/watchlist menu doesn't apply to them.
             if let meta = searchGroupMetas[sectionID]?[safe: itemIndex],

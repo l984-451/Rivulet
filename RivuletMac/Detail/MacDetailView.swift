@@ -75,7 +75,8 @@ struct MacDetailView: View {
         if detail != nil || shown.overview != nil {
             summaryView.padding(.horizontal, MacMetrics.pageMargin)
         }
-        if isSeries { episodesSection }
+        // A title not in the library has no seasons to browse; Request lists them.
+        if isSeries, !shown.isMetadataOnly { episodesSection }
         MacDetailExtras(detail: detail?.adding(extras: seasonExtras))
         if !members.isEmpty {
             MacRail(title: String(localized: "In This Collection"), kind: .poster, items: members) { member, width in
@@ -194,6 +195,7 @@ struct MacDetailView: View {
     // MARK: - Loading
 
     private func load() async {
+        if item.isMetadataOnly { return await loadCatalogTitle() }
         do {
             let provider = try browse.provider(for: item.ref)
             let loaded = try await provider.fullDetail(for: item.ref)
@@ -224,6 +226,22 @@ struct MacDetailView: View {
     }
 
     /// Selecting a new season loads it through `.task(id: seasonKey)`; the same season reloads here so watch state repaints.
+    /// A title not in the library (a Seerr result, a Discover pick) has no server: its page reads
+    /// the catalog's detail (Plex Discover, then Seerr, then TMDB) and its recommendations.
+    private func loadCatalogTitle() async {
+        guard let source = MetadataSourceRegistry.shared.source(for: item.ref.providerID) else { return }
+        do {
+            detail = try await source.itemDetail(item.ref)
+            error = nil
+            loadedRevision = browse.watchStateRevision
+            if related.isEmpty { related = await SeerrCatalog.related(to: item) }
+        } catch let error where isCancellationError(error) {
+            return
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     private func selectSeason(_ key: MediaItemRef?) async {
         if key == seasonKey {
             await loadEpisodes(force: true)

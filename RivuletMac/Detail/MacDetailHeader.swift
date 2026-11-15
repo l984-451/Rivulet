@@ -20,6 +20,8 @@ struct MacDetailHeader: View {
     @State private var onList: Bool?
     @State private var onScreen = false
     @State private var inView = true
+    /// Seerr's state for a title not in the library; nil otherwise or when Seerr is off.
+    @State private var request: SeerrRequestModel?
 
     private var height: CGFloat { min(max(width * 0.42, 380), 640) }
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
@@ -52,6 +54,11 @@ struct MacDetailHeader: View {
         .onDisappear { onScreen = false }
         .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
         .task(id: item.ref) { await loadWatchlistState() }
+        .task(id: item.ref) {
+            guard let model = SeerrRequestModel(item: item) else { request = nil; return }
+            request = model
+            await model.load()
+        }
         .onReceive(watchlist.$watchlistItems.dropFirst()) { _ in Task { await loadWatchlistState() } }
     }
 
@@ -93,6 +100,8 @@ struct MacDetailHeader: View {
 
     private var actionRow: some View {
         HStack(spacing: 10) {
+            // A title not in the library: Request in Play's place.
+            if let request { MacSeerrRequestButton(model: request) }
             if canPlay {
                 playButton
                 if let target = playTarget, target.isInProgress {
@@ -125,16 +134,19 @@ struct MacDetailHeader: View {
                     actions.setFavorite(item, !isFavorite)
                 }
             }
-            Menu {
-                // No Delete: the page would be left showing what it deleted.
-                MacItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
-            } label: {
-                Image(systemName: "ellipsis")
+            // A title not in the library has no server for More's actions.
+            if !item.isMetadataOnly {
+                Menu {
+                    // No Delete: the page would be left showing what it deleted.
+                    MacItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
+                .accessibilityLabel("More")
             }
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More")
-            .accessibilityLabel("More")
         }
         .buttonStyle(.bordered)
         .controlSize(.large)

@@ -380,6 +380,8 @@ enum InfoPopupContent {
         if !video.isEmpty { info.append((String(localized: "Video"), video.joined(separator: " · "))) }
         if let ratio = source?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
         addSection(title: String(localized: "Information"), rows: info, to: stack)
+        // A title not in the library has no file, so no tracks to describe.
+        if detail.item.isMetadataOnly { return stack }
 
         // Languages
         var langs: [(String, String)] = []

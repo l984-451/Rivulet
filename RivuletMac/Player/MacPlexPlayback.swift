@@ -550,7 +550,7 @@ final class MacPlexPlayback: ObservableObject {
         player.selectSubtitleTrack(id: match)
     }
 
-    /// Direct play: Plex's per-item picks, else the saved intents, resolved on the engine's
+    /// Direct play: Plex's per-item audio pick, else the saved intents, resolved on the engine's
     /// tracks so its audio-description and commentary flags count.
     private func pickStartingTracks() {
         needsStartingTracks = false
@@ -563,13 +563,9 @@ final class MacPlexPlayback: ObservableObject {
             ?? TrackIntentResolver.resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)
         if let audioTrack, audioTrack.id != player.currentAudioTrackId { player.selectAudioTrack(id: audioTrack.id) }
 
-        let intent = TrackIntentStore.effectiveSubtitleIntent
-        if let chosen = TrackIntentResolver.plexChosenSubtitleStreamID(in: streams, intent: intent) {
-            pendingEngineSubtitle = .track(chosen)
-            return
-        }
         let subtitle = TrackIntentResolver.resolveSubtitle(
-            intent: intent, in: mediaSubtitles, audioLanguage: audioTrack?.languageCode ?? audioTrack?.language)
+            intent: TrackIntentStore.effectiveSubtitleIntent, in: mediaSubtitles,
+            audioLanguage: audioTrack?.languageCode ?? audioTrack?.language)
         if subtitle?.id != player.currentSubtitleTrackId { player.selectSubtitleTrack(id: subtitle?.id) }
     }
 

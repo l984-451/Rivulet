@@ -5044,6 +5044,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         case .off:
             initialSubtitleSelection = .auto
             subtitlesPickedOff = true
+            noteCaptions("at start: off was picked before playing")
             selectSubtitleTrackWithoutSaving(id: nil)
             return
         case .track(let id):
@@ -5051,6 +5052,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             // exists) — resolve it positionally onto the merged list.
             initialSubtitleSelection = .auto
             if let track = subtitleTrackMatchingPlexStreamId(id) {
+                noteCaptions("at start: a track was picked before playing")
                 selectSubtitleTrackWithoutSaving(id: track.id)
                 return
             }
@@ -5060,21 +5062,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // Generated subtitles carry on to the next item; preferRealSubtitlesOverGenerated decides.
         guard !showsGeneratedSubtitles else { return }
-
-        // 2. Plex's per-item explicit selection. A `selected: true` stream
-        //    that's neither the default nor the forced one is a deliberate
-        //    user pick (here, or in Plex Web / mobile) — honor it over the
-        //    global intent.
-        let plexSubStreams = (metadata.Media?.first?.Part?.first?.Stream ?? []).filter { $0.isSubtitle }
-        if let selectedId = plexSubStreams.first(where: { $0.selected == true })?.id,
-           let track = subtitleTrackMatchingPlexStreamId(selectedId),
-           !track.isDefault, !track.isForced,
-           TrackIntentResolver.plexSelectedSubtitleMayOverride(
-               track, intent: TrackIntentStore.effectiveSubtitleIntent
-           ) {
-            selectSubtitleTrackWithoutSaving(id: track.id)
-            return
-        }
 
         applyGlobalSubtitleIntent()
     }
@@ -5086,14 +5073,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     }
 
     private func applyGlobalSubtitleIntent() {
-        // 3. Global subtitle intent, read only: no match means off for this
+        // 2. Global subtitle intent, read only: no match means off for this
         //    title, and the stored intent is kept. Only a user pick writes it.
-        if let match = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
-                                                           in: subtitleTracks, audioLanguage: playingAudioLanguage) {
-            selectSubtitleTrackWithoutSaving(id: match.id)
-        } else {
-            selectSubtitleTrackWithoutSaving(id: nil)
-        }
+        let match = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
+                                                        in: subtitleTracks, audioLanguage: playingAudioLanguage)
+        noteCaptions("saved choice \(TrackIntentStore.effectiveSubtitleIntent), audio \(playingAudioLanguage ?? "und"): "
+            + (match.map { describeSubtitle($0.id) } ?? "off"))
+        selectSubtitleTrackWithoutSaving(id: match?.id)
     }
 
     /// Select a subtitle track without persisting intent (auto-selection).

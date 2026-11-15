@@ -341,19 +341,6 @@ enum TrackIntentResolver {
         }
     }
 
-    /// Whether Plex's per-item `selected: true` subtitle stream may override
-    /// the stored global intent.
-    ///
-    /// It normally wins, even over a global Off, but a regular stream never overrides a
-    /// forced intent: Plex also sets `selected` from its own auto-select.
-    static func plexSelectedSubtitleMayOverride(
-        _ track: MediaTrack,
-        intent: SubtitleIntent?
-    ) -> Bool {
-        guard case .track(_, let forced, _, _)? = intent else { return true }
-        return track.isForced == forced
-    }
-
     // MARK: Audio
 
     /// Resolve the stored audio intent against the tracks of the current title.
@@ -670,17 +657,10 @@ extension TrackIntentResolver {
         return selectedID != defaultID ? selectedID : nil
     }
 
-    /// Plex's `selected` subtitle stream when it is a deliberate per-item pick (neither the
-    /// default nor forced, here or in Plex Web / mobile) that may override `intent`.
-    static func plexChosenSubtitleStreamID(in streams: [PlexStream], intent: SubtitleIntent) -> Int? {
-        guard let stream = streams.first(where: { $0.isSubtitle && $0.selected == true }) else { return nil }
-        let track = MediaTrack(from: stream)
-        guard !track.isDefault, !track.isForced, plexSelectedSubtitleMayOverride(track, intent: intent) else { return nil }
-        return track.id
-    }
-
-    /// The stream ids a title starts on: Plex's per-item picks, then the stored intents.
-    /// The subtitle is always decided. `audioOverride` is a pick made before playback.
+    /// The stream ids a title starts on: Plex's per-item audio pick, then the stored intents.
+    /// The subtitle is always the saved choice's: the server's `selected` subtitle comes from
+    /// other apps and the account's auto-select, and following it overrode the setting (#636).
+    /// `audioOverride` is a pick made before playback.
     static func startingPlexSelection(streams: [PlexStream], audioOverride: Int? = nil) -> TrackPicks {
         let audio = streams.filter(\.isAudio).map { MediaTrack(from: $0) }
         let subtitles = streams.filter(\.isSubtitle).map { MediaTrack(from: $0) }
@@ -688,12 +668,8 @@ extension TrackIntentResolver {
             ?? plexChosenAudioStreamID(in: streams, hasAudioIntent: TrackIntentStore.audioIntent != nil)
         let audioID = chosenAudio.flatMap { id in audio.contains { $0.id == id } ? id : nil }
             ?? resolveAudio(intent: TrackIntentStore.effectiveAudioIntent, in: audio)?.id
-        let intent = TrackIntentStore.effectiveSubtitleIntent
-        if let chosen = plexChosenSubtitleStreamID(in: streams, intent: intent) {
-            return TrackPicks(audio: audioID, subtitle: .track(chosen))
-        }
         let playing = audio.first { $0.id == audioID }
-        let subtitle = resolveSubtitle(intent: intent, in: subtitles,
+        let subtitle = resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent, in: subtitles,
                                        audioLanguage: playing?.languageCode ?? playing?.language)
         return TrackPicks(audio: audioID, subtitle: SubtitlePick(subtitle?.id))
     }

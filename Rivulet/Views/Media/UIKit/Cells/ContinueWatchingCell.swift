@@ -30,6 +30,11 @@ final class ContinueWatchingCell: UICollectionViewCell {
     private let placeholderIcon = UIImageView()
     private let titleLogoView = ContinueWatchingTitleLogoView()
     private let infoBar = MediaProgressInfoBar()
+    /// Title lines under the card (Settings → Titles Under Posters, see `setCaption`).
+    private let captionTitle = UILabel()
+    private let captionSubtitle = UILabel()
+    /// Lifts the card by half the caption so it keeps its row position in a taller cell.
+    private var cardCenterYConstraint: NSLayoutConstraint!
 
     private var artworkLoadTask: Task<Void, Never>?
     private var currentArtworkURL: URL?
@@ -63,8 +68,9 @@ final class ContinueWatchingCell: UICollectionViewCell {
         let host = Self.tile.hostSize
         card.contentSize = host
         contentView.addSubview(card)
+        cardCenterYConstraint = card.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
         NSLayoutConstraint.activate([
-            card.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            cardCenterYConstraint,
             card.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             card.widthAnchor.constraint(equalToConstant: host.width),
             card.heightAnchor.constraint(equalToConstant: host.height)
@@ -130,6 +136,54 @@ final class ContinueWatchingCell: UICollectionViewCell {
             infoBar.centerYAnchor.constraint(equalTo: card.contentView.bottomAnchor,
                                              constant: -MediaProgressInfoBar.centerFromBottom)
         ])
+        setUpCaption()
+    }
+
+    /// The poster rows' caption (`PosterCell.setCaption`): under the host frame, the focused
+    /// card's extent, on the resting card's width.
+    private func setUpCaption() {
+        for (label, size, weight) in [(captionTitle, CGFloat(24), UIFont.Weight.medium),
+                                      (captionSubtitle, CGFloat(21), UIFont.Weight.regular)] {
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.font = .systemFont(ofSize: size, weight: weight)
+            label.lineBreakMode = .byTruncatingTail
+            label.isHidden = true
+            contentView.addSubview(label)
+        }
+        setCaptionFocused(false)
+        let half = Self.tile.art.width / 2
+        NSLayoutConstraint.activate([
+            captionTitle.topAnchor.constraint(equalTo: card.bottomAnchor, constant: 4),
+            captionTitle.leadingAnchor.constraint(equalTo: card.centerXAnchor, constant: -half),
+            captionTitle.trailingAnchor.constraint(equalTo: card.centerXAnchor, constant: half),
+            captionSubtitle.topAnchor.constraint(equalTo: captionTitle.bottomAnchor, constant: 1),
+            captionSubtitle.leadingAnchor.constraint(equalTo: captionTitle.leadingAnchor),
+            captionSubtitle.trailingAnchor.constraint(equalTo: captionTitle.trailingAnchor)
+        ])
+    }
+
+    private func setCaptionFocused(_ focused: Bool) {
+        captionTitle.textColor = UIColor.white.withAlphaComponent(focused ? 1 : 0.75)
+        captionSubtitle.textColor = UIColor.white.withAlphaComponent(focused ? 0.7 : 0.45)
+    }
+
+    /// Shows a title and subtitle under the card. The cell must be taller than the tile by
+    /// `MediaRowMetrics.posterCaptionHeight` (ShelfRowCell's `captionHeight`); call after `configure`.
+    func setCaption(title: String?, subtitle: String?) {
+        let shows = !(title ?? "").isEmpty
+        captionTitle.text = title
+        captionSubtitle.text = subtitle
+        captionTitle.isHidden = !shows
+        captionSubtitle.isHidden = !shows || (subtitle ?? "").isEmpty
+        cardCenterYConstraint.constant = shows ? -MediaRowMetrics.posterCaptionHeight / 2 : 0
+    }
+
+    /// Caption lines for a card: the show and the episode's own title for an episode, since the
+    /// card's status row already names its number; title and year otherwise.
+    static func caption(for item: MediaItem) -> (title: String, subtitle: String?) {
+        guard item.kind == .episode else { return PosterCell.caption(for: item) }
+        let show = item.seriesTitle ?? item.title
+        return (show, show == item.title ? nil : item.title)
     }
 
     /// The status row's glyph, label and bar fill follow focus, on the focus clock.
@@ -141,6 +195,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
         coordinator.addCoordinatedAnimations({
             self.card.transform = nowFocused ? Self.tile.focusScale : .identity
             self.infoBar.setFocused(nowFocused)
+            self.setCaptionFocused(nowFocused)
         }, completion: nil)
         // Apple's floating view clears its rim while focused.
         card.contentView.layer.borderColor = nowFocused ? UIColor.clear.cgColor : Self.restingRim
@@ -213,6 +268,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
         placeholderIcon.isHidden = true
         titleLogoView.prepareForReuse()
         infoBar.reset()
+        setCaption(title: nil, subtitle: nil)
     }
 
     // MARK: - Artwork

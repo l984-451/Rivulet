@@ -4100,12 +4100,12 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
-    /// Poster rows carry a title and year line under each tile; Continue Watching, music and the
+    /// Poster rows and Continue Watching carry a title line under each tile; music and the
     /// watchlist do not.
     private static func shelfCaptionHeight(_ section: HomeSectionData) -> CGFloat {
         guard MediaRowMetrics.showsPosterTitles else { return 0 }
         switch section.kind {
-        case .recentlyAdded, .recommendations, .discoverList:
+        case .continueWatching, .recentlyAdded, .recommendations, .discoverList:
             return section.isMusic ? 0 : MediaRowMetrics.posterCaptionHeight
         default:
             return 0
@@ -4186,6 +4186,13 @@ final class PlexHomeViewController: UIViewController {
             let cell = innerCV.dequeueReusableCell(withReuseIdentifier: ContinueWatchingCell.reuseID, for: indexPath) as! ContinueWatchingCell
             Perf.interval(.cellPrepare, key: perfKey) {
                 cell.configure(item: section.items[indexPath.item])
+            }
+            // Always set, as for posters: a reconfigured cell skips `prepareForReuse`.
+            if Self.shelfCaptionHeight(section) > 0 {
+                let caption = ContinueWatchingCell.caption(for: section.items[indexPath.item])
+                cell.setCaption(title: caption.title, subtitle: caption.subtitle)
+            } else {
+                cell.setCaption(title: nil, subtitle: nil)
             }
             // The next few cards build now, so one reaching the edge arrives finished.
             let ahead = (indexPath.item + 1)..<min(indexPath.item + 5, section.items.count)

@@ -151,4 +151,13 @@ final class LiveShelvesTests: XCTestCase {
                                                           scheduledRecordings: []), sourceIdFilter: nil, now: Date())
         XCTAssertEqual(shelves.map(\.id).filter { $0.hasPrefix("group|") }, ["group|Zulu", "group|Alpha", "group|Mid"])
     }
+
+    func test_backgroundBuild_matchesBuild() async {
+        let channels = (1...12).map { channel("c\($0)", group: $0 % 2 == 0 ? "Even" : "Odd", number: ChannelNumber(major: $0)) }
+        let epg = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, [program($0.id, "Football", from: -60, to: 60)]) })
+        let input = LiveShelves.Input(channels: channels, epg: epg, suggestionsEnabled: false)
+        let built = await LiveShelves.buildInBackground(input, sourceIdFilter: nil, now: now)
+        XCTAssertEqual(built.map(\.id), LiveShelves.build(input, sourceIdFilter: nil, now: now).map(\.id))
+        XCTAssertEqual(built.first?.items.count, 12)
+    }
 }

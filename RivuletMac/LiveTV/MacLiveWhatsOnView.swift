@@ -31,12 +31,17 @@ struct MacLiveWhatsOnView<Header: View>: View {
     @ObservedObject private var store = LiveTVDataStore.shared
     @State private var shelves: [LiveShelf] = []
     @State private var now = Date()
+    /// A rebuild asked for while one runs off the main thread waits for it: cancelling would
+    /// discard a slow build every time.
+    @State private var isRebuilding = false
+    @State private var rebuildAgain = false
+    @State private var hasBuilt = false
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 header()
-                ForEach(shelves) { shelf in
+                ForEach(shownShelves) { shelf in
                     MacLiveRail(title: shelf.title, items: shelf.items) { item, width in
                         card(item, width: width)
                     }
@@ -45,13 +50,9 @@ struct MacLiveWhatsOnView<Header: View>: View {
             .padding(.vertical, 16)
         }
         .overlay {
-            if shelves.isEmpty {
-                if store.isLoadingEPG || store.isLoadingChannels {
-                    ProgressView()
-                } else {
-                    ContentUnavailableView("Nothing On Right Now", systemImage: "tv",
-                                           description: Text("Try the Guide to see what's coming up."))
-                }
+            if shownShelves.isEmpty {
+                ContentUnavailableView("Nothing On Right Now", systemImage: "tv",
+                                       description: Text("Try the Guide to see what's coming up."))
             }
         }
         .onAppear(perform: rebuild)
@@ -59,33 +60,61 @@ struct MacLiveWhatsOnView<Header: View>: View {
         .onReceive(MacLiveWhatsOnFeed.tick) { _ in rebuild() }
     }
 
+    /// Stand-ins until the first rows land, or while an empty lineup still loads, so the rows land in place.
+    private var shownShelves: [LiveShelf] {
+        shelves.isEmpty && (!hasBuilt || store.isLoadingEPG || store.isLoadingChannels) ? LiveShelf.placeholders : shelves
+    }
+
     private func rebuild() {
-        now = Date()
-        shelves = LiveTVDataStore.shared.whatsOnShelves(sourceIdFilter: nil, now: now).filter { !$0.items.isEmpty }
+        guard !isRebuilding else {
+            rebuildAgain = true
+            return
+        }
+        isRebuilding = true
+        let now = Date()
+        Task {
+            let built = await LiveTVDataStore.shared.whatsOnShelvesInBackground(sourceIdFilter: nil, now: now)
+            let rows = built.filter { !$0.items.isEmpty }
+            // An empty build a newer one replaces (made before the channels loaded) keeps what shows.
+            if !rows.isEmpty || !rebuildAgain {
+                self.now = now
+                shelves = rows
+                hasBuilt = true
+            }
+            isRebuilding = false
+            if rebuildAgain {
+                rebuildAgain = false
+                rebuild()
+            }
+        }
     }
 
     @ViewBuilder
     private func card(_ item: LiveCardItem, width: CGFloat) -> some View {
         let tile = MacLiveCard(item: item, now: now, width: width)
-        switch item.kind {
-        case .recording:
-            NavigationLink(value: MacRoute.liveRecordings) { tile }
-                .buttonStyle(.plain)
-        case .channel, .upcoming:
-            if let channel = item.channel {
-                Button {
-                    if item.kind == .channel {
-                        onWatch(channel)
-                    } else {
-                        onDetails(LiveProgrammeSelection(channel: channel, program: item.program))
+        if item.isPlaceholder {
+            tile.redacted(reason: .placeholder).allowsHitTesting(false).accessibilityHidden(true)
+        } else {
+            switch item.kind {
+            case .recording:
+                NavigationLink(value: MacRoute.liveRecordings) { tile }
+                    .buttonStyle(.plain)
+            case .channel, .upcoming:
+                if let channel = item.channel {
+                    Button {
+                        if item.kind == .channel {
+                            onWatch(channel)
+                        } else {
+                            onDetails(LiveProgrammeSelection(channel: channel, program: item.program))
+                        }
+                    } label: { tile }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        MacLiveMenuContent(sections: LiveMenu.sections(
+                            channel: channel, program: item.program, recorder: recorder,
+                            watch: onWatch, details: onDetails
+                        ))
                     }
-                } label: { tile }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    MacLiveMenuContent(sections: LiveMenu.sections(
-                        channel: channel, program: item.program, recorder: recorder,
-                        watch: onWatch, details: onDetails
-                    ))
                 }
             }
         }

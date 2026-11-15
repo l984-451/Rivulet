@@ -51,6 +51,12 @@ final class LiveBrowseViewController: UIViewController {
 
     private var cancellables = Set<AnyCancellable>()
     private var minuteTimer: Timer?
+    /// The rows being built off the main thread. A rebuild asked for meanwhile
+    /// runs once it lands: cancelling would discard a slow build every time.
+    private var shelfTask: Task<Void, Never>?
+    private var shelvesStale = false
+    /// Real rows have landed; until then the page shows `LiveShelf.placeholders`.
+    private var hasBuiltShelves = false
     private var backdropTask: Task<Void, Never>?
     private var measureTask: Task<Void, Never>?
     private var backdropURL: URL?
@@ -116,7 +122,11 @@ final class LiveBrowseViewController: UIViewController {
             .store(in: &cancellables)
         store.$isLoadingChannels
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] loading in self?.updateEmptyState(loading: loading) }
+            .sink { [weak self] loading in
+                self?.updateEmptyState(loading: loading)
+                // An empty lineup kept the stand-ins while it loaded.
+                if !loading, self?.hasBuiltShelves == false { self?.rebuildShelves() }
+            }
             .store(in: &cancellables)
         // Backgrounding ends the corner channel too: its tune expires (#390).
         NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
@@ -451,15 +461,31 @@ final class LiveBrowseViewController: UIViewController {
         }
     }
 
-    /// The What's On rows for a source (nil: every source). Static so
-    /// multiview's Add More offers the same rows.
-    static func buildShelves(sourceIdFilter: String?, now: Date = Date()) -> [Shelf] {
-        LiveTVDataStore.shared.whatsOnShelves(sourceIdFilter: sourceIdFilter, now: now)
-    }
-
     private func rebuildShelves() {
         guard dataSource != nil else { return }
-        let built = Self.buildShelves(sourceIdFilter: sourceIdFilter).filter { !$0.items.isEmpty }
+        if !hasBuiltShelves, shelves.isEmpty { applyShelves(LiveShelf.placeholders) }
+        guard shelfTask == nil else {
+            shelvesStale = true
+            return
+        }
+        shelfTask = Task { [weak self, sourceIdFilter] in
+            let built = await LiveTVDataStore.shared.whatsOnShelvesInBackground(sourceIdFilter: sourceIdFilter)
+            guard let self else { return }
+            shelfTask = nil
+            let rows = built.filter { !$0.items.isEmpty }
+            // An empty build made before the channels loaded, or one a newer build replaces, keeps what shows.
+            if !rows.isEmpty || !(shelvesStale || LiveTVDataStore.shared.isLoadingChannels) {
+                hasBuiltShelves = true
+                applyShelves(rows)
+            }
+            if shelvesStale {
+                shelvesStale = false
+                rebuildShelves()
+            }
+        }
+    }
+
+    private func applyShelves(_ built: [Shelf]) {
         shelves = Dictionary(built.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let existing = Set(dataSource.snapshot().itemIdentifiers)
         var snapshot = NSDiffableDataSourceSnapshot<String, String>()
@@ -477,7 +503,7 @@ final class LiveBrowseViewController: UIViewController {
         // and give it something to say before anything has focus.
         if let focused = focusedItem() {
             showInfo(for: focused)
-        } else if titleLabel.text == nil, let first = built.first?.items.first {
+        } else if titleLabel.text == nil, let first = built.first?.items.first, !first.isPlaceholder {
             showInfo(for: first)
         }
         updateEmptyState(loading: LiveTVDataStore.shared.isLoadingChannels)

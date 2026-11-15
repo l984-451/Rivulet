@@ -14,7 +14,7 @@ import Foundation
 
 /// A channel watched long enough to count (a minute, full screen). Keeps what
 /// was on, not the stream.
-struct LiveViewing: Codable, Equatable {
+nonisolated struct LiveViewing: Codable, Equatable, Sendable {
     let channelId: String
     let at: Date
     let title: String?
@@ -22,7 +22,7 @@ struct LiveViewing: Codable, Equatable {
     let genre: String?
 }
 
-enum LiveSuggestions {
+nonisolated enum LiveSuggestions {
     typealias Candidate = (channel: UnifiedChannel, program: UnifiedProgram?, genre: LiveGenre?)
 
     /// A score at or above this is a suggestion: one genre match from today at

@@ -3,6 +3,7 @@
 
 import AppKit
 import AVKit
+import Combine
 import SwiftUI
 
 /// The full-window player: the engine surface, captions and overlay controls that hide when the
@@ -27,6 +28,9 @@ struct MacPlayerView: View {
     @State private var showsChapters = false
     @State private var subtitleSearch: SubtitleSearchModel?
     @State private var showsPlaylist = false
+    @State private var showsWatchTogether = false
+    @State private var watchTogetherNotice: String?
+    @ObservedObject private var room = WatchTogetherSession.shared
     @AppStorage(SkipLengthKeys.back) private var skipBackSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
     @AppStorage(AudioSync.key) private var audioDelayMs = 0
@@ -90,6 +94,25 @@ struct MacPlayerView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
+        }
+        .overlay(alignment: .top) {
+            if let watchTogetherNotice {
+                Text(watchTogetherNotice)
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.top, 12)
+            }
+        }
+        .task {
+            for await notice in room.notices.values {
+                watchTogetherNotice = notice
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    if watchTogetherNotice == notice { watchTogetherNotice = nil }
+                }
+            }
         }
         .sheet(item: $subtitleSearch) { model in
             MacSubtitleSearchPane(model: model)
@@ -195,7 +218,7 @@ struct MacPlayerView: View {
                     scrubValue: $scrubValue,
                     scrubStill: session.scrubStill,
                     onCommit: { time in
-                        Task { await player.seek(to: time) }
+                        controller.seek(to: time)
                         scheduleHide()
                     },
                     onStep: { direction in controller.skip(forward: direction > 0) }
@@ -294,6 +317,12 @@ struct MacPlayerView: View {
                             }
                         }
                     }
+            }
+            iconButton("Watch Together", systemImage: room.code == nil ? "person.2" : "person.2.fill") {
+                showsWatchTogether.toggle()
+            }
+            .popover(isPresented: $showsWatchTogether, arrowEdge: .top) {
+                MacWatchTogetherPane(playback: session)
             }
             iconButton(isFullScreen ? "Exit Full Screen" : "Full Screen",
                        systemImage: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",

@@ -91,6 +91,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     func end() {
         ended = true
+        WatchTogetherClient.shared.playbackClosed(self)
         countdownTask?.cancel()
         nextLookupTask?.cancel()
         nextTask?.cancel()
@@ -597,7 +598,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         case .ended:
             timeline.transportChanged(.other)
             finishItem(at: max(player.duration, player.currentTime))
-            startUpNextCountdown()
+            // A guest waits on the last frame: the host decides what follows.
+            if !WatchTogetherClient.shared.blocksLocalAdvance(self) { startUpNextCountdown() }
         case .failed:
             timeline.transportChanged(.other)
             fallBackToTranscode()
@@ -678,6 +680,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     func skip(_ marker: PlexMarker) {
         skippedMarkerIDs.insert(marker.stableID)
         objectWillChange.send()
+        // In a room the skip goes to everyone.
+        guard !WatchTogetherClient.shared.requestSeek(to: marker.end, from: self) else { return }
         Task { await player.seek(to: marker.end, exact: true) }
     }
 
@@ -700,6 +704,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     func seekToChapter(_ chapter: PlexChapter) {
         guard let start = chapter.startTimeOffset else { return }
+        // In a room the seek goes to everyone.
+        guard !WatchTogetherClient.shared.requestSeek(to: TimeInterval(start) / 1000, from: self) else { return }
         Task { await player.seek(to: TimeInterval(start) / 1000, exact: true) }
     }
 
@@ -753,13 +759,14 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     func playNext() {
-        guard let next = nextEpisode else { return }
+        guard let next = nextEpisode, !WatchTogetherClient.shared.blocksLocalAdvance(self) else { return }
         switchItem(to: next, queueIndex: queue.map { $0.index + 1 })
     }
 
     /// The Playlist pane's pick, by position: a title can be in the list twice.
     func playEntry(at index: Int) {
-        guard let queue, queue.entries.indices.contains(index), index != queue.index else { return }
+        guard let queue, queue.entries.indices.contains(index), index != queue.index,
+              !WatchTogetherClient.shared.blocksLocalAdvance(self) else { return }
         switchItem(to: queue.entries[index], queueIndex: index)
     }
 
@@ -800,6 +807,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             onItemChange?()
             lookUpNextEpisode()
             switchingItem = false
+            WatchTogetherClient.shared.itemChanged(self)
             await load(startsItem: true)
         }
     }
@@ -813,6 +821,9 @@ private struct IOSPlexPlayerScreen: View {
     @State private var showsPlaylist = false
     @State private var showsChapters = false
     @State private var subtitleSearch: SubtitleSearchModel?
+    @State private var showsWatchTogether = false
+    @State private var watchTogetherNotice: String?
+    @ObservedObject private var room = WatchTogetherSession.shared
 
     var body: some View {
         let item = session.request.item
@@ -826,7 +837,8 @@ private struct IOSPlexPlayerScreen: View {
                 position: player.pendingSeekTarget ?? player.currentTime,
                 duration: player.duration > 0 ? player.duration : item.durationSeconds
             ),
-            rate: player.rate,
+            // The room owns the speed: every copy has to run at the same one.
+            rate: room.isActive ? nil : player.rate,
             // A downloaded file has one quality: the one on disk.
             quality: session.request.isLocal ? nil : IOSPlayerQuality(
                 choices: StreamingQuality.allChoices,
@@ -843,9 +855,9 @@ private struct IOSPlexPlayerScreen: View {
             canPictureInPicture: controller.isPictureInPicturePossible,
             actions: IOSPlayerChromeActions(
                 close: controller.close,
-                playPause: player.togglePlayPause,
-                skip: { seconds in Task { await player.skip(by: seconds) } },
-                seek: { time in Task { await player.seek(to: time) } },
+                playPause: { IOSWatchTogether.togglePlayPause(session) },
+                skip: { seconds in IOSWatchTogether.skip(session, by: seconds) },
+                seek: { time in IOSWatchTogether.seek(session, to: time) },
                 scrubStill: session.scrubStill,
                 setRate: player.setRate,
                 selectQuality: session.switchQuality,
@@ -872,6 +884,13 @@ private struct IOSPlexPlayerScreen: View {
                 )
             }
         } trailing: {
+            Button { showsWatchTogether = true } label: {
+                Image(systemName: room.code == nil ? "person.2" : "person.2.fill")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .accessibilityLabel("Watch Together")
             if !session.chapters.isEmpty {
                 Button { showsChapters = true } label: {
                     Image(systemName: "list.bullet.rectangle")
@@ -898,6 +917,28 @@ private struct IOSPlexPlayerScreen: View {
             IOSSubtitleSearchPane(model: model)
         }
         .task(id: session.request.id) { await session.refreshSubtitleSearch() }
+        .sheet(isPresented: $showsWatchTogether) {
+            IOSWatchTogetherPane(playback: session)
+        }
+        .overlay(alignment: .top) {
+            if let watchTogetherNotice {
+                Text(watchTogetherNotice)
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.top, 12)
+            }
+        }
+        .task {
+            for await notice in room.notices.values {
+                watchTogetherNotice = notice
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    if watchTogetherNotice == notice { watchTogetherNotice = nil }
+                }
+            }
+        }
         .sheet(isPresented: $showsPlaylist) {
             if let queue = session.queue {
                 IOSPlayerPlaylistPane(queue: queue) { index in

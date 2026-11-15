@@ -144,6 +144,7 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     func end() {
+        WatchTogetherClient.shared.playbackClosed(self)
         ended = true
         cancellables.removeAll()
         countdownTask?.cancel()
@@ -650,7 +651,8 @@ final class MacPlexPlayback: ObservableObject {
             finishItem(at: max(player.duration, player.currentTime))
             if isPlayingCinemaExtra {
                 advanceCinemaExtras()
-            } else {
+            } else if !WatchTogetherClient.shared.blocksLocalAdvance(self) {
+                // A guest waits on the last frame: the host decides what follows.
                 if upNextCountdown == nil { startUpNextCountdown() }
                 // Nothing next: return to the page instead of the engine's cleared (black) frame.
                 if nextEpisode == nil { onFinished?() }
@@ -737,6 +739,8 @@ final class MacPlexPlayback: ObservableObject {
     func skip(_ marker: PlexMarker) {
         skippedMarkerIDs.insert(marker.stableID)
         objectWillChange.send()
+        // In a room the skip goes to everyone.
+        guard !WatchTogetherClient.shared.requestSeek(to: marker.end, from: self) else { return }
         Task { await player.seek(to: marker.end, exact: true) }
     }
 
@@ -759,6 +763,8 @@ final class MacPlexPlayback: ObservableObject {
 
     func seekToChapter(_ chapter: PlexChapter) {
         guard let start = chapter.startTimeOffset else { return }
+        // In a room the seek goes to everyone.
+        guard !WatchTogetherClient.shared.requestSeek(to: TimeInterval(start) / 1000, from: self) else { return }
         Task { await player.seek(to: TimeInterval(start) / 1000, exact: true) }
     }
 
@@ -839,13 +845,14 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     func playNext() {
-        guard let next = nextEpisode else { return }
+        guard let next = nextEpisode, !WatchTogetherClient.shared.blocksLocalAdvance(self) else { return }
         switchItem(to: next, queueIndex: queue.map { $0.index + 1 })
     }
 
     /// The Playlist pane's pick, by position: a title can be in the list twice.
     func playEntry(at index: Int) {
-        guard let queue, queue.entries.indices.contains(index), index != queue.index else { return }
+        guard let queue, queue.entries.indices.contains(index), index != queue.index,
+              !WatchTogetherClient.shared.blocksLocalAdvance(self) else { return }
         switchItem(to: queue.entries[index], queueIndex: index)
     }
 
@@ -903,6 +910,7 @@ final class MacPlexPlayback: ObservableObject {
             serverStopReason = nil
             onItemChange?()
             lookUpNextEpisode()
+            WatchTogetherClient.shared.itemChanged(self)
             switchingItem = false
             await load(startsItem: true)
         }

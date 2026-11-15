@@ -24,7 +24,7 @@ final class ShellSidebarModelTests: XCTestCase {
                 .flatMap(\.items).map(\.tab)
         }
         XCTAssertEqual(tabs(showFavorites: true, hasServer: true),
-                       [.account, .search, .home, .watchlist, .favorites, .settings])
+                       [.account, .search, .home, .watchlist, .favorites, .watchTogether, .settings])
         XCTAssertFalse(tabs(showFavorites: false, hasServer: true).contains(.favorites))
         XCTAssertFalse(tabs(showFavorites: true, hasServer: false).contains(.favorites))
     }
@@ -104,7 +104,7 @@ final class ShellSidebarModelTests: XCTestCase {
     func test_withServer_keepsEveryTab() {
         XCTAssertEqual(tabs(hasServer: true, liveTV: true, libraries: [movies], playlistServers: [primary]),
                        [.account, .search, .home, .discover, .watchlist, .library(key: "1"),
-                        .playlists(providerID: "plex:primary"), .liveTV(sourceId: nil), .settings])
+                        .playlists(providerID: "plex:primary"), .liveTV(sourceId: nil), .watchTogether, .settings])
     }
 
     func test_playlistsRow_onlyForServersWithPlaylists() {

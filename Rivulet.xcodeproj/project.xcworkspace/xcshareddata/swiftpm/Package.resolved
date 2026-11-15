@@ -1,5 +1,5 @@
 {
-  "originHash" : "08c6e113bad74ce3aa53be88c6aa7294e48ca39bdc48b09cc0646f5f66e17236",
+  "originHash" : "a8ca039ecc46b63b39fccc3240467ab7ce0f3dcf1b3802e223f65c5457adcf2b",
   "pins" : [
     {
       "identity" : "aetherengine",
@@ -43,6 +43,15 @@
       "state" : {
         "revision" : "caff700968700467c089a3f38c8b4180620518b5",
         "version" : "2.2.0"
+      }
+    },
+    {
+      "identity" : "openwatchparty",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/edde746/openwatchparty",
+      "state" : {
+        "revision" : "d2579d7c7e9fce1bf3844f04379d6bc009b219c0",
+        "version" : "1.1.0"
       }
     },
     {

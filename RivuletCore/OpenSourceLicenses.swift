@@ -119,6 +119,11 @@ enum OpenSourceLicenses {
                 licenseText: libunibreakZlib
             ),
             Entry(
+                name: "Open Watch Party",
+                summary: "Keeps players in sync for Watch Together. Open Watch Party SDK 1.1.0, used under the Apache License, Version 2.0. Source: https://github.com/edde746/openwatchparty",
+                licenseText: fluidAudioApache2
+            ),
+            Entry(
                 name: "FluidAudio",
                 summary: "Runs the on-device speech model behind generated subtitles and the content filter. Used under the Apache License, Version 2.0. Source: https://github.com/FluidInference/FluidAudio",
                 licenseText: fluidAudioApache2

@@ -54,7 +54,7 @@ enum SeekIndicator: Equatable {
 }
 
 @MainActor
-final class UniversalPlayerViewModel: ObservableObject {
+final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Published State
 
@@ -1335,7 +1335,9 @@ final class UniversalPlayerViewModel: ObservableObject {
                 self.pausedDueToAppInactive = true
                 print("[Player] App entering background — pausing")
                 Task { @MainActor in
-                    self.pause()
+                    // Not `pause()`: going to the background is this device's business, not a room's.
+                    self.activePlayer_pause()
+                    self.showControlsTemporarily()
                 }
             }
         }
@@ -1799,6 +1801,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             Task { await advanceCinemaExtras() }
             return
         }
+        #if DEBUG
+        if state == .playing { WatchTogetherCoordinator.shared.debugHostIfAsked(self) }
+        #endif
         recordStallTransition(from: playbackState, to: state)
         trackQualityStall(from: playbackState, to: state)
         playbackState = state
@@ -4011,7 +4016,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     func togglePlayPause() {
         if isPlaying {
             hidePausedPoster()
-            activePlayer_pause()
+            requestPause()
             showControlsTemporarily()
         } else {
             resume()
@@ -4025,14 +4030,96 @@ final class UniversalPlayerViewModel: ObservableObject {
         if plexStopDelivery?.allowsReplay == true {
             reopenPlexTimeline(at: currentTime)
         }
-        activePlayer_play()
+        requestPlay()
         showControlsTemporarily()
     }
 
     /// Pause playback (used by remote commands)
     func pause() {
-        activePlayer_pause()
+        requestPause()
         showControlsTemporarily()
+    }
+
+    // MARK: - Watch Together
+
+    /// A room takes the press, and the SDK drives the player when the relay answers.
+    private func requestPlay() {
+        if !WatchTogetherCoordinator.shared.play(from: self) { activePlayer_play() }
+    }
+
+    private func requestPause() {
+        if !WatchTogetherCoordinator.shared.pause(from: self) { activePlayer_pause() }
+    }
+
+    /// Set while a guest sits on the last frame waiting for the host's next title.
+    private var isParkedAtEnd = false
+
+    var syncPosition: TimeInterval {
+        if let ap = aetherPlayer { return ap.precisePosition }
+        return player?.currentTime().seconds ?? currentTime
+    }
+
+    var syncDuration: TimeInterval { duration }
+    var syncIsBuffering: Bool { isBuffering }
+
+    var syncIntendsToPlay: Bool {
+        if let ap = aetherPlayer { return ap.intendsToPlay }
+        return (player?.rate ?? 0) > 0 || isBuffering
+    }
+
+    var syncHasFrame: Bool {
+        switch playbackState {
+        case .playing, .paused, .buffering, .ended: true
+        default: false
+        }
+    }
+
+    func syncPlay() {
+        hidePausedPoster()
+        activePlayer_play()
+    }
+
+    func syncPause() {
+        activePlayer_pause()
+    }
+
+    func syncSetRate(_ rate: Float) {
+        if let ap = aetherPlayer {
+            ap.playbackRate = rate
+        } else if let player {
+            player.defaultRate = rate
+            if player.rate > 0 { player.rate = rate }
+        }
+    }
+
+    func syncSeek(to time: TimeInterval) async -> TimeInterval? {
+        guard let ap = aetherPlayer else {
+            await player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
+            return player?.currentTime().seconds
+        }
+        let outcomes = ap.seekEvents.map { event -> WatchTogetherSeekOutcome in
+            switch event.outcome {
+            case .began: .began
+            case .landed(let rendered): .landed(rendered)
+            case .settledElsewhere: .gaveUp
+            }
+        }.eraseToAnyPublisher()
+        return await watchTogetherLanding(of: outcomes) { await ap.seek(to: time) }
+    }
+
+    #if DEBUG
+    var debugRate: Float { aetherPlayer?.playbackRate ?? player?.rate ?? 0 }
+    #endif
+
+    func showWatchTogetherNotice(_ notice: String) {
+        showCompatibilityNotice(notice)
+    }
+
+    /// Runs the normal ending for a guest that stopped waiting on a host.
+    func finishParkedPlayback() {
+        guard isParkedAtEnd else { return }
+        isParkedAtEnd = false
+        Task { await finishPlayback() }
     }
 
     // MARK: - Active Player Helpers
@@ -4135,13 +4222,20 @@ final class UniversalPlayerViewModel: ObservableObject {
         inFlightRelativeSeekTarget = nil
         stallTracker.noteSeekOrLoad(at: Date())
         diagnostics.noteSeek()
-        if let ap = aetherPlayer {
+        await performSeek(to: time, exact: exact)
+        stallTracker.noteSeekOrLoad(at: Date())
+        if revealsControls { showControlsTemporarily() }
+    }
+
+    private func performSeek(to time: TimeInterval, exact: Bool = false) async {
+        if WatchTogetherCoordinator.shared.seek(to: time, from: self) {
+            // Back to back skips add up from this target until the relay's seek has begun.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        } else if let ap = aetherPlayer {
             await ap.seek(to: time, exact: exact)
         } else {
             await player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
         }
-        stallTracker.noteSeekOrLoad(at: Date())
-        if revealsControls { showControlsTemporarily() }
     }
 
     func seekRelative(by seconds: TimeInterval) async {
@@ -4166,11 +4260,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         seekGeneration += 1
         let generation = seekGeneration
         stallTracker.noteSeekOrLoad(at: Date())
-        if let ap = aetherPlayer {
-            await ap.seek(to: targetTime)
-        } else {
-            await player?.seek(to: CMTime(seconds: targetTime, preferredTimescale: 600))
-        }
+        await performSeek(to: targetTime)
         stallTracker.noteSeekOrLoad(at: Date())
         // Only the newest seek clears it; an older one returning late must not
         // drop the base a newer one is still building on.
@@ -5699,6 +5789,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// At the credits boundary (or one countdown from the end): enter the Up Next flow.
     private func triggerPostVideoTransition() {
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            Task { await markCurrentAsWatched() }
+            return
+        }
         let generation = itemGeneration, stops = stopCount, timeline = plexTimelineGeneration
         Task {
             guard generation == itemGeneration, stops == stopCount, timeline == plexTimelineGeneration else { return }
@@ -5714,6 +5808,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard !isSwappingItem else { return }
         if isPlayingCinemaExtra {
             await advanceCinemaExtras()
+            return
+        }
+        // The host decides what follows: the room's next title replaces this player.
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            isParkedAtEnd = true
+            await markCurrentAsWatched()
             return
         }
         let generation = itemGeneration, stops = stopCount, timeline = plexTimelineGeneration
@@ -6487,6 +6587,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// `queueIndex` is a playlist jump; nil moves a playlist on by one.
     func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
         guard let next = nextEpisode else { return }
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            showCompatibilityNotice(String(localized: "Only the host can change what's playing."))
+            return
+        }
         // A provider swap awaits its provider first, so a second call (the
         // countdown and a Play Now press) must not start another one.
         guard !isSwappingItem else { return }

@@ -40,10 +40,12 @@ enum ProviderPlayer {
 
     /// Play `item` from its own provider. A show or a season resolves to the
     /// episode Play means first, the same way the Plex path does. `playQueue`
-    /// is the playlist `item` starts.
+    /// is the playlist `item` starts. `configure` sees the view model before it
+    /// presents (Watch Together).
     @MainActor
     static func play(_ item: MediaItem, fromBeginning: Bool, sourceID: String? = nil,
                      playQueue: PlayQueue<PlaylistEntry>? = nil, explicitStartOffset: TimeInterval? = nil,
+                     configure: ((UniversalPlayerViewModel) -> Void)? = nil,
                      from presenter: UIViewController, onDismiss: (() -> Void)?,
                      onFailedToStart: (() -> Void)? = nil) {
         guard let provider = MediaProviderRegistry.shared.provider(for: item.ref.providerID) else {
@@ -75,6 +77,7 @@ enum ProviderPlayer {
                         startOffset: explicitStartOffset ?? plexStartOffset(metadata, fromBeginning: fromBeginning),
                         playQueue: playQueue,
                         loadingArtImage: art, loadingThumbImage: thumb, preferredMediaID: sourceID)
+                    configure?(viewModel)
                     PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
                 } catch {
                     presentError(MediaProviderError.mapping(error), from: presenter)
@@ -95,6 +98,7 @@ enum ProviderPlayer {
                     loadingArtImage: art,
                     loadingThumbImage: thumb,
                     preferredMediaID: sourceID)
+                configure?(viewModel)
                 PlayerPresenter.present(viewModel: viewModel, from: presenter, onDismiss: onDismiss)
             } catch {
                 presentError(error, from: presenter)

@@ -1,6 +1,27 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ joined" : {},
+    "%@ left" : {},
+    "%@ paused" : {},
+    "%@ pressed play" : {},
+    "%@ skipped" : {},
+    "Buffering" : {},
+    "Copy" : {},
+    "Couldn't Join" : {},
+    "Couldn't join that room." : {},
+    "Couldn't reach Watch Together. Check your connection and try again." : {},
+    "Couldn't start a room." : {},
+    "Different Version" : {},
+    "Doesn't have this title" : {},
+    "Enter the code from the person hosting." : {},
+    "Get a code to share. Playback pauses here until someone presses play." : {},
+    "Host • %@" : {},
+    "Join" : {},
+    "Join Watch Together…" : {},
+    "Join a Room" : {},
+    "Leave Room" : {},
+    "Loading" : {},
     "Map" : {
       "localizations" : {
         "de" : {
@@ -17,6 +38,9 @@
         }
       }
     },
+    "No room has that code. Rooms end when everyone leaves." : {},
+    "None of your servers have %@." : {},
+    "Not in Your Library" : {},
     "On This Day" : {
       "localizations" : {
         "de" : {
@@ -33,6 +57,7 @@
         }
       }
     },
+    "Only the host can control playback." : {},
     "Photos from %@" : {
       "localizations" : {
         "de" : {
@@ -49,6 +74,12 @@
         }
       }
     },
+    "Play Anyway" : {},
+    "Ready" : {},
+    "Reconnecting to Watch Together…" : {},
+    "Room Code" : {},
+    "Room codes have 6 letters and numbers." : {},
+    "Sit This One Out" : {},
     "Slideshow" : {
       "localizations" : {
         "de" : {
@@ -81,6 +112,10 @@
         }
       }
     },
+    "Start a Room" : {},
+    "Starting…" : {},
+    "Stay" : {},
+    "That room is full or locked." : {},
     "Unfavorite" : {
       "localizations" : {
         "de" : {
@@ -145,6 +180,10 @@
         }
       }
     },
+    "Watch Together" : {},
+    "Watch Together ended" : {},
+    "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
+    "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},
     "Z to A" : {
       "localizations" : {
         "de" : {

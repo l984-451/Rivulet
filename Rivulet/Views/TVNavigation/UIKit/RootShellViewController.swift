@@ -117,7 +117,7 @@ final class RootShellViewController: UIViewController {
         sidebar.onTabSelected = { [weak self] tab in
             guard let self else { return }
             // The profile row opens the switcher; it has no content to mount.
-            if tab == .account { self.onTabChange?(tab); return }
+            if tab == .account || tab == .watchTogether { self.onTabChange?(tab); return }
             // Now Playing presents over everything; the tab stays where it is.
             if tab == .nowPlaying {
                 self.collapseSidebar()

@@ -29,6 +29,10 @@ struct IOSAccountView: View {
                     serversSection
                 }
 
+                if plex.isSignedIn {
+                    IOSWatchTogetherJoinSection()
+                }
+
                 Section("Settings") {
                     NavigationLink {
                         IOSHomeSettingsView()

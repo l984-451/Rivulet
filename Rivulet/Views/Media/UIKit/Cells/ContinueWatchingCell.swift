@@ -326,7 +326,7 @@ private final class ContinueWatchingTitleLogoView: UIView {
         isUserInteractionEnabled = false
         backgroundColor = .clear
 
-        // Fallback title: 30pt bold, white, soft drop shadow.
+        // Fallback title: 24pt bold, white, soft drop shadow.
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = Self.titleFont
         titleLabel.textColor = .white
@@ -402,7 +402,7 @@ private final class ContinueWatchingTitleLogoView: UIView {
     }()
     private static var preparing: [String: Task<(Prepared, keep: Bool), Never>] = [:]
 
-    private static let titleFont = UIFont.systemFont(ofSize: 30, weight: .bold)
+    private static let titleFont = UIFont.systemFont(ofSize: 24, weight: .bold)
 
     private static func textSize(_ title: String) -> CGSize {
         let size = (title as NSString).size(withAttributes: [.font: titleFont])

@@ -87,8 +87,8 @@ enum TopShelfFeed {
         if let serverURL, let token {
             let store = PlexDataStore.shared
             let metadata = store.librariesPinnedToHome
-                .flatMap { store.libraryHubs[$0.key] ?? [] }
-                .filter { $0.promoted == true && !HomeRowSettings.isHidden($0.hubIdentifier) }
+                .flatMap { store.homeHubs(forLibraryKey: $0.key) }
+                .filter { !HomeRowSettings.isHidden($0.hubIdentifier) }
                 .filter { ($0.hubIdentifier ?? "").lowercased().contains("recentlyadded") }
                 .flatMap { $0.Metadata ?? [] }
             plex = TopShelfMapper.recentlyAddedItems(from: metadata, serverURL: serverURL, token: token, limit: limit * 2)

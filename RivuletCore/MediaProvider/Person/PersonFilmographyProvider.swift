@@ -1,91 +1,27 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Builds a PersonDetail: filmography from the server-wide `?actor=` filter, Known For from
-// Plex Discover minus titles on the server, biography from Discover else TMDB.
+// Builds a PersonDetail: filmography from the person's own server (`MediaProvider.filmography`),
+// Known For from Plex Discover minus titles on the server, biography from Discover, else the
+// server, else TMDB.
 
 import Foundation
 
+// MARK: - Default server filmography
 
-// MARK: - Default server filmography (server-wide ?actor= lookup)
-
-/// Actor hub entries from `/hubs/search`: `id` is the actor tag id.
-private nonisolated struct PlexActorSearchContainer: Codable, Sendable {
-    let MediaContainer: Inner
-    struct Inner: Codable, Sendable { let Hub: [Hub]? }
-    struct Hub: Codable, Sendable {
-        let type: String
-        let Directory: [Actor]?
-    }
-    // Optional so a non-actor hub's Directory shape can't fail the decode.
-    struct Actor: Codable, Sendable {
-        let id: Int?
-        let tag: String?
-    }
+/// The server a person's titles come from: their own, else (a TMDB person) the selected Plex
+/// server, else the first other server.
+@MainActor
+func personServer(for person: MediaPerson) -> (any MediaProvider)? {
+    let registry = MediaProviderRegistry.shared
+    if let id = person.providerID { return registry.provider(for: id) }
+    return registry.plexProvider ?? registry.secondaryProviders.first
 }
 
-/// The actor's titles across the whole server. Actor tag ids are server-wide
-/// (the same id in every section), so `/library/all?type=&actor=` covers every
-/// library in one call per kind. Returns [] on any failure.
+/// The person's titles on their server. Returns [] on any failure.
 private let _defaultServerFilmography: @Sendable (_ person: MediaPerson) async -> [FilmographyEntry] = { person in
-    let (serverURL, token, providerID): (String?, String?, String) = await MainActor.run {
-        let url = PlexAuthManager.shared.selectedServerURL
-        let tok = PlexAuthManager.shared.selectedServerToken
-        let pid = MediaProviderRegistry.shared.plexProvider?.id ?? url.map { "plex:\($0)" } ?? "plex:unknown"
-        return (url, tok, pid)
-    }
-    guard let serverURL, let token else { return [] }
-    let headers = await PlexNetworkManager.shared.plexHeaders(authToken: token)
-
-    var actorId = person.originActorId
-    if actorId == nil, person.originFilter == "actor" {
-        actorId = await searchActorId(serverURL: serverURL, name: person.name, headers: headers)
-    }
-    guard let actorId else { return [] }
-
-    // Plex type 1 = movie, 2 = show.
-    async let movies = libraryItems(serverURL: serverURL, type: 1, filter: person.originFilter, actorId: actorId,
-                                    providerID: providerID, token: token, headers: headers)
-    async let shows = libraryItems(serverURL: serverURL, type: 2, filter: person.originFilter, actorId: actorId,
-                                   providerID: providerID, token: token, headers: headers)
-    return await movies + shows
-}
-
-/// Case/diacritic-insensitive name key.
-private func normalizedActorName(_ s: String) -> String {
-    s.folding(options: .diacriticInsensitive, locale: .current)
-        .lowercased()
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
-/// Resolve an actor tag id by name through server search, for cast that
-/// arrives without a Plex `filter` id.
-private func searchActorId(serverURL: String, name: String, headers: [String: String]) async -> String? {
-    guard var components = URLComponents(string: "\(serverURL)/hubs/search") else { return nil }
-    components.queryItems = [URLQueryItem(name: "query", value: name), URLQueryItem(name: "limit", value: "10")]
-    guard let url = components.url else { return nil }
-    let container: PlexActorSearchContainer? = try? await PlexNetworkManager.shared.request(url, headers: headers)
-    let target = normalizedActorName(name)
-    return container?.MediaContainer.Hub?
-        .filter { $0.type == "actor" }
-        .flatMap { $0.Directory ?? [] }
-        .first { $0.tag.map(normalizedActorName) == target }?
-        .id.map(String.init)
-}
-
-/// Every title of one Plex type featuring the actor, across all libraries.
-private func libraryItems(serverURL: String, type: Int, filter: String, actorId: String, providerID: String, token: String, headers: [String: String]) async -> [FilmographyEntry] {
-    guard var components = URLComponents(string: "\(serverURL)/library/all") else { return [] }
-    components.queryItems = [URLQueryItem(name: "type", value: String(type)),
-                             URLQueryItem(name: filter, value: actorId),
-                             URLQueryItem(name: "includeGuids", value: "1")]
-    guard let url = components.url else { return [] }
-    let container: PlexMediaContainerWrapper? = try? await PlexNetworkManager.shared.request(url, headers: headers)
-    let metadatas = container?.MediaContainer.Metadata ?? []
-    return metadatas.map { meta in
-        FilmographyEntry(item: PlexMediaMapper.item(meta, providerID: providerID, serverURL: serverURL, authToken: token),
-                         isOnServer: true, guid: meta.guid, tmdbId: meta.tmdbId)
-    }
+    guard let provider = await personServer(for: person) else { return [] }
+    return (try? await provider.filmography(of: person)) ?? []
 }
 
 // MARK: - Plex Discover (bio + Known For)
@@ -151,12 +87,16 @@ private let _defaultKnownFor: @Sendable (MediaPerson) async -> [FilmographyEntry
 
 // MARK: - Default biography lookup
 
-/// Discover person summary, else TMDB. The portrait stays the Plex role thumb
-/// (see TMDBClient.actorBiography). Returns nil if the actor can't be resolved.
+/// Discover person summary, else the server's, else TMDB. The portrait stays the server's
+/// (see TMDBClient.actorBiography). Returns nil if the person can't be resolved.
 private let _defaultBiography: @Sendable (MediaPerson) async -> String? = { person in
     if let tagKey = person.tagKey,
        let summary = await discoverItems("/library/people/\(tagKey)").first?.summary,
        !summary.isEmpty {
+        return summary
+    }
+    if let provider = await personServer(for: person),
+       let summary = await provider.biography(of: person), !summary.isEmpty {
         return summary
     }
     guard let titleTmdbId = person.titleTmdbId else { return nil }

@@ -416,6 +416,8 @@ actor PlexLiveTVProvider: LiveTVProvider {
         let channelId = String(parts[2])
 
         let tune: PlexLiveTVTuneResult
+        let endTune = LiveResolveTiming.begin?("tune")
+        defer { endTune?() }
         do {
             // Unstructured, so a caller that leaves (Back, a channel switch)
             // doesn't hang up on PMS mid-tune. PMS finishes the tune anyway and
@@ -453,6 +455,9 @@ actor PlexLiveTVProvider: LiveTVProvider {
         // flow every working third-party client ships).
         var directPlayKey: String?
         var decisionOutcome = "decision_unavailable"
+        endTune?()
+        let endDecision = LiveResolveTiming.begin?("decision")
+        defer { endDecision?() }
         do {
             let decision = try await networkManager.requestLiveTranscodeDecision(
                 serverURL: serverURL,

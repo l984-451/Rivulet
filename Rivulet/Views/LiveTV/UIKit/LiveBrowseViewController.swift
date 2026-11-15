@@ -632,7 +632,19 @@ final class LiveBrowseViewController: UIViewController {
     }
 }
 
-extension LiveBrowseViewController: MenuBackHandling {
+extension LiveBrowseViewController: MenuBackHandling, SidebarTabReselecting {
+    func reselectSidebarTab() {
+        ScrollToTopTransition.perform(in: collectionView) {
+            scrollShelvesToTop()
+            pendingMiniPlayerFocus = !miniPlayer.isHidden
+            pendingTopRowFocus = !pendingMiniPlayerFocus
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+            pendingMiniPlayerFocus = false
+            pendingTopRowFocus = false
+        }
+    }
+
     /// As in the guide: Menu focuses the corner player, or the top row when
     /// there is none, and returns the page to its top. From the corner player
     /// or the top row it declines, so the sidebar opens.

@@ -11,7 +11,7 @@ struct IOSPlexPlaylistRoute: Hashable {
 struct IOSPlexPlaylistsView: View {
     let providerID: String
     var showsAccount = false
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
     @State private var editing = IOSPlaylistEditState()
     @State private var pendingStart: IOSPlaylistStart?
@@ -79,7 +79,7 @@ struct IOSPlexPlaylistsView: View {
 
 private struct IOSPlexPlaylistRow: View {
     let playlist: MediaPlaylist
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     @ScaledMetric(relativeTo: .body) private var artWidth: CGFloat = 120
 
@@ -115,7 +115,7 @@ private extension MediaPlaylist {
 /// removes rows, the menu renames or deletes. A smart list is the server's rules.
 struct IOSPlexPlaylistView: View {
     let route: IOSPlexPlaylistRoute
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [PlaylistEntry] = []
@@ -362,7 +362,7 @@ extension View {
 private struct IOSPlaylistEditAlerts: ViewModifier {
     @Binding var state: IOSPlaylistEditState
     let onDeleted: () -> Void
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
 
     func body(content: Content) -> some View {
         content

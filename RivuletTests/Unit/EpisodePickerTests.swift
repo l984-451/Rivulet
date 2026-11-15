@@ -149,6 +149,26 @@ final class EpisodePickerTests: XCTestCase {
         XCTAssertEqual(EpisodePicker.playTitle(for: started, on: .show), "Resume")
     }
 
+    // MARK: - episodeDescription
+
+    func testDescriptionNamesTheEpisodeWhenThePillDoes() {
+        let ep = episode("e5", season: 7, number: 5)
+        let d = EpisodePicker.episodeDescription(for: ep, overview: "Plot.", on: .show)
+        XCTAssertEqual(d?.prefix, "S7, E5 \u{00B7} Episode 5:")
+        XCTAssertEqual(d?.body, "Plot.")
+        let resume = episode("e5", season: 7, number: 5, offset: 300)
+        XCTAssertNotNil(EpisodePicker.episodeDescription(for: resume, overview: "Plot.", on: .season))
+    }
+
+    func testDescriptionKeepsSynopsisForPlainPills() {
+        XCTAssertNil(EpisodePicker.episodeDescription(for: episode("e1", number: 1), overview: "x", on: .show))
+        XCTAssertNil(EpisodePicker.episodeDescription(
+            for: episode("e3", number: 3, played: true), overview: "x", on: .show))
+        XCTAssertNil(EpisodePicker.episodeDescription(for: episode("e3", number: 3), overview: "x", on: .episode))
+        XCTAssertNil(EpisodePicker.episodeDescription(for: episode("e3", number: 3), overview: "", on: .show))
+        XCTAssertNil(EpisodePicker.episodeDescription(for: episode("e3", number: 3), overview: nil, on: .show))
+    }
+
     /// An item's own page (movie or episode) never names the episode.
     func testOwnPageWording() {
         XCTAssertEqual(EpisodePicker.playTitle(for: episode("e3", number: 3), on: .episode), "Play")

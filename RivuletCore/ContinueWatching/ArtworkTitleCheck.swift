@@ -39,13 +39,15 @@ nonisolated enum ArtworkTitleCheck {
 
     /// One answer per still and title. Not the logo: its URL is not always known
     /// when a card first draws, and a Plex still's URL changes with the artwork.
+    /// The suffix is the detector's version: bump it when the rules change, so old "no title" answers are checked again.
     static func key(still: URL, title: String) -> String {
-        "\(still.absoluteString)#\(title)"
+        "\(still.absoluteString)#\(title)#v2"
     }
 
     /// Forgets every answer (Settings, Clear All Cache).
     static func clearDisk() {
         answers.removeAllObjects()
+        HeroTextlessBackdrop.clear()
         guard let directory else { return }
         for file in (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
             try? FileManager.default.removeItem(at: file)
@@ -88,8 +90,11 @@ nonisolated enum ArtworkTitleCheck {
     /// Whether the still already shows the title, as the logo or as text. Call off the main thread.
     static func stillShowsTitle(_ still: CGImage, logo: CGImage?, title: String) -> Bool {
         if let logo, stillContainsLogo(still, logo: logo) { return true }
-        return textShowsTitle(recognizedLines(in: still), title: title)
+        // Vision reads stylised lettering differently at each size, so ask at three and stop at the first yes.
+        return readingWidths.contains { textShowsTitle(recognizedLines(in: still, width: $0), title: title) }
     }
+
+    static let readingWidths = [512, 768, 1536]
 
     // MARK: - Logo
 
@@ -194,10 +199,15 @@ nonisolated enum ArtworkTitleCheck {
         bestLogoScore(still, logo: logo) < logoMatchThreshold
     }
 
+    /// A thin, widely spaced wordmark leaves no usable template at the small size, so it gets a second pass at twice the resolution.
+    static func bestLogoScore(_ still: CGImage, logo: CGImage) -> Float {
+        let score = bestLogoScore(still, logo: logo, coarseWidth: 160, fineWidth: 384)
+        return score < 9 ? score : bestLogoScore(still, logo: logo, coarseWidth: 320, fineWidth: 640)
+    }
+
     /// Searches every size from 12% to 80% of the still's width on a small copy,
     /// then refines the best few spots on a larger one.
-    static func bestLogoScore(_ still: CGImage, logo: CGImage) -> Float {
-        let coarseWidth = 160, fineWidth = 384
+    private static func bestLogoScore(_ still: CGImage, logo: CGImage, coarseWidth: Int, fineWidth: Int) -> Float {
         guard let coarse = Pixels(still, width: coarseWidth), let fine = Pixels(still, width: fineWidth) else { return 9 }
         var spots: [(score: Float, fraction: CGFloat, x: Int, y: Int)] = []
         var fraction: CGFloat = 0.12
@@ -240,11 +250,11 @@ nonisolated enum ArtworkTitleCheck {
         let height: CGFloat
     }
 
-    static func recognizedLines(in still: CGImage) -> [RecognizedLine] {
-        let height = Int((768 * CGFloat(still.height) / CGFloat(max(1, still.width))).rounded())
-        guard height > 0, let context = bitmap(width: 768, height: height) else { return [] }
+    static func recognizedLines(in still: CGImage, width: Int = 768) -> [RecognizedLine] {
+        let height = Int((CGFloat(width) * CGFloat(still.height) / CGFloat(max(1, still.width))).rounded())
+        guard height > 0, let context = bitmap(width: width, height: height) else { return [] }
         context.interpolationQuality = .medium
-        context.draw(still, in: CGRect(x: 0, y: 0, width: 768, height: height))
+        context.draw(still, in: CGRect(x: 0, y: 0, width: width, height: height))
         guard let copy = context.makeImage() else { return [] }
         let request = VNRecognizeTextRequest()
         request.usesLanguageCorrection = false
@@ -268,18 +278,37 @@ nonisolated enum ArtworkTitleCheck {
             .unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init))
     }
 
-    /// Whether the title can be read in the still's large text, allowing a misread
-    /// letter in four (logos are stylised). A short title must fill a line on its own.
-    static func textShowsTitle(_ lines: [RecognizedLine], title: String) -> Bool {
-        let target = Array(compact(title))
-        let large = lines.filter { $0.height >= 0.03 }
-        guard !target.isEmpty else { return false }
-        if target.count <= 3 {
-            return large.contains { $0.height >= 0.1 && Array(compact($0.text)) == target }
+    /// The spellings of a title that artwork commonly shows: the full title, without a
+    /// leading article ("Matrix" for "The Matrix"), and its part before a colon or dash
+    /// ("Avengers" for "Avengers: Infinity War"). A short part is too generic to count.
+    static func titleForms(_ title: String) -> [[Character]] {
+        func stripped(_ text: String) -> String {
+            let lowered = text.trimmingCharacters(in: .whitespaces).lowercased()
+            for article in ["the ", "a ", "an "] where lowered.hasPrefix(article) { return String(lowered.dropFirst(article.count)) }
+            return lowered
         }
+        let main = title.components(separatedBy: CharacterSet(charactersIn: ":\u{2013}\u{2014}")).first ?? title
+        var forms: [[Character]] = []
+        for text in [title, stripped(title), main, stripped(main)] {
+            let form = Array(compact(text))
+            if form.count >= (text == title ? 1 : 6), !forms.contains(form) { forms.append(form) }
+        }
+        return forms
+    }
+
+    /// Whether the title can be read in the still's large text, allowing a misread
+    /// letter in four (logos are stylised). A short title must fill a line on its own,
+    /// and a four-letter one must read exactly.
+    static func textShowsTitle(_ lines: [RecognizedLine], title: String) -> Bool {
+        let large = lines.filter { $0.height >= 0.03 }
         // Lines in reading order, so a title split over two lines still reads through.
         let text = Array(large.map { compact($0.text) }.joined())
-        return substringDistance(target, in: text) <= target.count / 4
+        return titleForms(title).contains { target in
+            if target.count <= 3 {
+                return large.contains { $0.height >= 0.1 && Array(compact($0.text)) == target }
+            }
+            return substringDistance(target, in: text) <= (target.count <= 4 ? 0 : target.count / 4)
+        }
     }
 
     /// Fewest edits turning `pattern` into some substring of `text`.

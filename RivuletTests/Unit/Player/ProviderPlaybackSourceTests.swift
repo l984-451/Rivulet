@@ -101,7 +101,7 @@ final class ProviderPlaybackSourceTests: XCTestCase {
         guard case .provider = vm.source else { return XCTFail("expected .provider") }
 
         vm.reportPlaybackState(.playing)
-        vm.reportPlaybackProgress(time: 30, force: true)
+        vm.reportPlaybackProgress(time: 30)
         await vm.reportFinalProgress(time: 95, duration: 100)
 
         XCTAssertEqual(recorder.events, ["start", "progress(30.0)", "stopped(95.0)"])

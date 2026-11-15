@@ -8,10 +8,14 @@ struct IOSAetherSubtitleOverlay: View {
     let cues: [AetherPlayer.SubtitleCue]
     let nativeCues: [AetherPlayer.SubtitleCue]
     let style: CaptionStyle
-    let landscapeOSDTop: CGFloat?
+    /// The chrome's bottom bar top while it shows; captions lift above it
+    /// wherever the picture reaches it (landscape, a filled window, a short one).
+    let osdTop: CGFloat?
     let videoSize: CGSize
     /// Aspect fill crops the picture to the screen, so captions lay out against the screen.
     var fillsScreen = false
+    /// The global Height setting (#461), live from the menu.
+    @AppStorage(CaptionHeight.key) private var heightUnits = 0
 
     fileprivate enum Metrics {
         /// AVPlayerViewController's caption line pitch over the video height, per
@@ -52,14 +56,12 @@ struct IOSAetherSubtitleOverlay: View {
             let pointSize = Metrics.pointSize(
                 videoHeight: captionSizingHeight(in: proxy.size),
                 reported: style.fontScale,
-                font: style.font(ofSize: 100)
+                font: style.uiFont(ofSize: 100)
             )
             let picture = pictureRect(in: proxy.size)
-            let osdBoundary = landscapeCaptionMaxY(
-                in: picture,
-                container: proxy.size
-            )
+            let osdBoundary = captionMaxY(in: picture)
             let defaultBand = defaultBandRect(
+                container: proxy.size,
                 in: picture,
                 osdBoundary: osdBoundary
             )
@@ -150,7 +152,7 @@ struct IOSAetherSubtitleOverlay: View {
             .background(
                 style.edge == .uniform
                     ? Color.clear
-                    : Color(uiColor: style.boxColor).opacity(style.boxOpacity),
+                    : Color(cgColor: style.boxColor).opacity(style.boxOpacity),
                 in: RoundedRectangle(cornerRadius: pointSize * 0.25)
             )
             .modifier(IOSCaptionEdgeModifier(style: style.edge, pointSize: pointSize))
@@ -160,16 +162,20 @@ struct IOSAetherSubtitleOverlay: View {
         _ body: AetherPlayer.SubtitleCue.Body,
         pointSize: CGFloat
     ) -> Text {
-        let userColor = Color(uiColor: style.foreground).opacity(style.foregroundOpacity)
+        let userColor = Color(cgColor: style.foreground).opacity(style.foregroundOpacity)
         switch body {
         case .text(let string):
             return Text(string)
-                .font(Font(style.font(ofSize: pointSize)))
+                .font(Font(style.uiFont(ofSize: pointSize)))
                 .foregroundColor(userColor)
         case .styledText(let runs):
             return runs.reduce(Text("")) { result, run in
                 let runColor = style.allowsContentColor ? run.color : nil
-                var text = Text(run.text)
+                var base = AttributedString(run.text)
+                if style.allowsContentBackground, let background = run.backgroundColor {
+                    base.backgroundColor = background
+                }
+                var text = Text(base)
                     .font(Font(font(for: run, baseSize: pointSize)))
                     .foregroundColor(
                         runColor.map {
@@ -203,7 +209,7 @@ struct IOSAetherSubtitleOverlay: View {
            let named = UIFont(name: name, size: size) {
             font = named
         } else {
-            font = style.font(ofSize: size)
+            font = style.uiFont(ofSize: size)
         }
 
         guard style.allowsContentFont else { return font }
@@ -268,31 +274,32 @@ struct IOSAetherSubtitleOverlay: View {
         return CGRect(origin: CGPoint(x: originX, y: originY), size: frame.size)
     }
 
+    /// The Height setting moves the band against the screen, so it can reach a letterbox bar.
     private func defaultBandRect(
+        container: CGSize,
         in picture: CGRect,
         osdBoundary: CGFloat?
     ) -> CGRect {
         let sideInset = picture.width * Metrics.sideSafeFraction
         let restingMaxY = picture.maxY
             - picture.height * Metrics.unpositionedBottomFraction
-        let maxY = min(restingMaxY, osdBoundary ?? restingMaxY)
+        let maxY = CaptionHeight.bandBottom(resting: restingMaxY, units: heightUnits,
+                                            containerHeight: container.height, cap: osdBoundary)
         return CGRect(
             x: picture.minX + sideInset,
-            y: picture.minY,
+            y: 0,
             width: max(0, picture.width - sideInset * 2),
-            height: max(0, maxY - picture.minY)
+            height: max(0, maxY)
         )
     }
 
-    private func landscapeCaptionMaxY(
-        in picture: CGRect,
-        container: CGSize
-    ) -> CGFloat? {
-        guard container.width > container.height, let landscapeOSDTop else { return nil }
-        return min(
-            picture.maxY,
-            landscapeOSDTop - picture.height * Metrics.unpositionedBottomFraction
-        )
+    /// Where the bottom bar pushes captions up to. Geometric, not by
+    /// orientation: a letterboxed picture that ends above the bar is left alone,
+    /// so this is a no-op in portrait on a phone and lifts the band in any
+    /// window the picture fills.
+    private func captionMaxY(in picture: CGRect) -> CGFloat? {
+        guard let osdTop else { return nil }
+        return min(picture.maxY, osdTop - picture.height * Metrics.unpositionedBottomFraction)
     }
 }
 

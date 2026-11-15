@@ -54,6 +54,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var lastResortPlayer: AVPlayer?
     private var lastResortLayer: AVPlayerLayer?
 
+    /// Touch-surface double tap zooms the picture to fill the screen (#589).
+    private var fillsScreen = false
+
     /// Escalating recovery for playback failures (a Plex session can die
     /// server-side after load): 0 = primary, 1 = fresh URL + engine demux,
     /// 2 = fresh URL + bare AVPlayer.
@@ -230,6 +233,32 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Paused and moving through the rewind window: where Play will resume,
     /// on the engine's session axis. nil when not scrubbing.
     private var scrubTarget: Double?
+    /// Skips while playing stack here and land as one seek once the presses
+    /// settle: AVPlayer cancelling its segment loads for every superseded
+    /// seek is what takes a live item down under a held button. Re-attached
+    /// to each session's player.
+    private let windowSeeker = LiveWindowSeekController()
+
+    // MARK: Touch scrub (the remote's touch surface on the focused timeline)
+    //
+    // A horizontal drag moves a preview through the rewind window; lifting is
+    // not a choice on the remote, so the position is held for Select to
+    // confirm, a click moves it by a step, and Back or a few idle seconds
+    // drop it. Playback never moves until it is confirmed.
+    private let timelinePan = LiveTimelineScrubPan()
+    private var touchScrub = LiveTimelineScrub()
+    /// Seconds behind live the drag is showing, while it is up or held.
+    private var touchScrubBehind: Double?
+    private var touchScrubActive = false
+    /// Lifted, waiting for Select.
+    private var touchScrubPending = false
+    private var touchScrubConfirmTask: Task<Void, Never>?
+    /// A click right after a swipe is often the swipe's own end: ignore it.
+    private var touchScrubEndedAt: Date?
+    /// How long a lifted scrub waits for Select before it is dropped.
+    private static let touchScrubConfirmTimeout: Duration = .seconds(5)
+    /// The preview the next fetch is for; see `requestScrubThumbnail`.
+    private var thumbnailWanted: Double?
     /// The engine's frame at `scrubTarget`, decoded from what it already holds.
     private var scrubThumbnail: UIImage?
     private var scrubThumbnailTask: Task<Void, Never>?
@@ -272,7 +301,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var scoresPane: LiveScoresPaneView?
 
     /// The rail's panes, for Down reopening the last one used.
-    enum LivePane { case info, scores, channels }
+    enum LivePane { case info, scores, channels, details }
     private var lastPane = LivePane.info
 
     /// Down's pane: the last one used while it is still offered, else Info.
@@ -339,6 +368,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         mountSubtitleOverlay()
         observeCaptionAppearance()
         setupChrome()
+        setupZoomGesture()
 
         inputCoordinator.target = self
         NowPlayingService.shared.attachLive(inputCoordinator: inputCoordinator)
@@ -387,6 +417,19 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             aetherPlayer = aether
             aether.bind(view: engineSurfaceView)
         }
+        aether.fillsScreen = fillsScreen
+        windowSeeker.attach(LiveWindowSeekController.Player(
+            window: { [weak aether] in
+                guard let shift = aether?.liveTimeshift, let range = shift.seekableRange else { return nil }
+                return LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: shift.edgeTime)
+            },
+            position: { [weak aether] in aether?.liveTimeshift.playhead ?? 0 },
+            seek: { [weak aether] in await aether?.seekLive(to: $0) },
+            seekToLiveEdge: { [weak aether] in await aether?.seekToLiveEdge() },
+            play: { [weak aether] in aether?.play() },
+            isUserPaused: { [weak self] in self?.isUserPaused ?? false }
+        ))
+        windowSeeker.onChange = { [weak self] in self?.stagedSeekChanged() }
         checkStreamChoices()
         bindAetherSubtitles(aether)
         captionsOnMute = CaptionsOnMuteLogic()
@@ -499,7 +542,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             joinTelemetry = LiveJoinTelemetry()
             let resolved: URL?
             do {
-                resolved = try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+                resolved = try await LiveResolveTiming.$begin.withValue(joinTelemetry?.phaseHook) {
+                    try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+                }
             } catch {
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
                 finishJoinTelemetry { $0.failed(reason: "resolve_failed") }
@@ -556,6 +601,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         super.viewDidAppear(animated)
         // Multiview's full-screen hand-off left a cover behind this screen.
         LiveHandoffCover.hide(in: view.window)
+        if let window = view.window { timelinePan.attach(to: window) }
     }
 
     // Safety net: a dismissal the guard below misses must not leave Music stood down.
@@ -567,6 +613,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         guard isBeingDismissed || isMovingFromParent else { return }
+        timelinePan.detach()
         cancelRetune()
         teardownPlaybackSession()
         autoHideTimer?.invalidate()
@@ -684,6 +731,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         resetNativeLegibleState()
         subtitleModel.update(cues: [])
         aether.unbind(view: engineSurfaceView)
+        // The next surface (a multiview tile) fits its picture.
+        aether.fillsScreen = false
 
         let handoff = LiveTVSessionHandoff(channel: channel, player: aether,
                                            keepalive: liveKeepalive, isNativeHLSRoute: isNativeHLSRoute)
@@ -708,6 +757,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private func teardownPlaybackSession(keepingPlayer: Bool = false) {
         endScrub()
+        resetTouchScrub()
+        // The fetch belongs to the outgoing player.
+        scrubThumbnailTask?.cancel()
+        scrubThumbnailTask = nil
+        thumbnailWanted = nil
+        scrubThumbnail = nil
+        windowSeeker.reset()
         streamLoadTask?.cancel()
         streamLoadTask = nil
         busyCheckTask?.cancel()
@@ -759,6 +815,24 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     // MARK: - Chrome (glass rail + panels)
+
+    private func setupZoomGesture() {
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleZoomDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        doubleTap.allowedPressTypes = []
+        view.addGestureRecognizer(doubleTap)
+    }
+
+    @objc private func handleZoomDoubleTap() {
+        // A double click lands as two taps too; it belongs to the presses.
+        guard CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt > 0.6,
+              scrubTarget == nil, descriptionOverlay == nil else { return }
+        fillsScreen.toggle()
+        aetherPlayer?.fillsScreen = fillsScreen
+        lastResortLayer?.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
+        syncSubtitleOverlay()
+    }
 
     private func setupChrome() {
         // Focus catcher: 1pt, transparent, always present.
@@ -822,11 +896,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             scrubberProxy.bottomAnchor.constraint(equalTo: progressBar.topAnchor, constant: 56),
         ])
         railView.scrubberFocusProxy = scrubberProxy
-        scrubberProxy.onSkip = { [weak self] forward in
-            self?.skip(by: InputConfig.tapSeekDelta(forward: forward))
-        }
+        scrubberProxy.onSkip = { [weak self] forward in self?.timelineArrow(forward: forward) }
         scrubberProxy.onShuttle = scrubberProxy.onSkip
-        scrubberProxy.onSelect = { [weak self] in self?.togglePlayPause() }
+        scrubberProxy.onSelect = { [weak self] in self?.timelineSelected() }
+        timelinePan.isEnabled = { [weak self] in
+            guard let self, self.scrubberProxy.isFocused, self.activePanel == nil,
+                  self.lastResortPlayer == nil else { return false }
+            return self.aetherPlayer?.liveTimeshift.seekableRange != nil
+        }
+        timelinePan.began = { [weak self] in self?.touchScrubBegan() }
+        timelinePan.changed = { [weak self] translation, speed in self?.touchScrubChanged(translation, speed: speed) }
+        timelinePan.ended = { [weak self] committed in self?.touchScrubEnded(committed: committed) }
 
         // Where the picture sits relative to live. Right-aligned just above the
         // track, which keeps it below the rail's button row.
@@ -854,12 +934,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         railView.onInfo = { [weak self] in self?.presentInfoPanel() }
         railView.onUpNext = { [weak self] in self?.presentChannelListPanel() }
         railView.onScores = { [weak self] in self?.presentScoresPanel() }
+        railView.onDetails = { [weak self] in self?.presentDetailsPanel() }
+        railView.setDetailsAvailable(true)
         // Moving across the pills while a pane is open switches its tab.
         railView.onPillFocused = { [weak self] pill in
             guard let self, self.activePanel?.isPane == true, pill !== self.openPanePill else { return }
             if pill === self.railView.infoButton { self.presentInfoPanel() }
             if pill === self.railView.scoresButton { self.presentScoresPanel() }
             if pill === self.railView.upNextButton { self.presentChannelListPanel() }
+            if pill === self.railView.detailsButton { self.presentDetailsPanel() }
         }
         railView.onGoLive = { [weak self] in self?.goLive() }
         railView.onRecord = { [weak self] in self?.presentRecordPanel() }
@@ -890,6 +973,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// window, and the engine's current audio track. Timeshift-aware: a viewer
     /// behind live is watching the past, so the programme, the bar and the
     /// clock label describe the picture on screen, not the wall clock.
+    /// The rewind-window timeline: the programme on air now, plus the earlier
+    /// programmes the window reaches into.
+    private func windowTimelineLayout(now: Date, windowSeconds: Double, behind: Double) -> LiveTimelineLayout? {
+        let store = LiveTVDataStore.shared
+        let onAir = store.getCurrentProgram(for: channel)
+        let earlier = onAir.map {
+            store.getPrograms(for: channel,
+                              startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
+                              endDate: $0.startTime)
+        } ?? []
+        return LiveTimelineLayout(now: now, program: onAir, earlierPrograms: earlier,
+                                  seekWindowSeconds: windowSeconds, behindLiveSeconds: behind)
+    }
+
     private func updateRailContent() {
         let store = LiveTVDataStore.shared
         let shift = aetherPlayer?.liveTimeshift ?? AetherPlayer.LiveTimeshift.idle
@@ -898,8 +995,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let now = Date()
         let onScreenAt = now.addingTimeInterval(-behind)
         // Scrubbing: the clock time Play would resume at, and the programme
-        // airing then, which is what the bar and title describe.
-        let scrubAt = scrubTarget.map { now.addingTimeInterval(-(shift.edgeTime - $0)) }
+        // airing then, which is what the bar and title describe. Skips still
+        // settling show the same way, at where they will land.
+        let scrubAt = previewTarget(in: shift).map { now.addingTimeInterval(-(shift.edgeTime - $0)) }
         let current = store.program(for: channel, at: scrubAt ?? onScreenAt) ?? store.getCurrentProgram(for: channel)
 
         let eyebrow = [channel.channelNumber.map(String.init), channel.name]
@@ -916,8 +1014,27 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
         // Programme progress bar: the show's air window, the playhead at the
         // picture on screen, and (when timeshifted) the buffered stretch up to
-        // now. Hidden when there's no guide data to anchor to.
-        if let current, current.endTime > current.startTime {
+        // now. With a rewind window reaching past the programme's start, the
+        // bar reaches back over it (at most four hours), cut at the earlier
+        // programmes it covers, with the reachable part filled. Hidden with
+        // neither guide data nor a window to measure.
+        if let range = shift.seekableRange,
+           let layout = windowTimelineLayout(now: now, windowSeconds: shift.edgeTime - range.lowerBound,
+                                             behind: behind) {
+            let span = layout.end.timeIntervalSince(layout.start)
+            func date(_ fraction: Double) -> Date { layout.start.addingTimeInterval(span * fraction) }
+            progressBar.isHidden = false
+            progressBar.updateLiveTimeline(
+                startTime: layout.start,
+                currentTime: onScreenAt,
+                endTime: layout.end,
+                liveEdgeTime: isBehindLive ? now : nil,
+                scrubTime: scrubAt,
+                scrubThumbnail: scrubAt == nil ? nil : scrubThumbnail,
+                seekableStart: layout.seekableStart.map(date),
+                sectionBoundaries: layout.boundaries.map(date)
+            )
+        } else if let current, current.endTime > current.startTime {
             progressBar.isHidden = false
             progressBar.updateLiveTimeline(
                 startTime: current.startTime,
@@ -1116,6 +1233,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if let next = context.nextFocusedView {
             progressBar.setFocusDimmed(next !== scrubberProxy && next.isDescendant(of: railView), coordinator: coordinator)
         }
+        if context.previouslyFocusedView === scrubberProxy, context.nextFocusedView !== scrubberProxy,
+           touchScrubBehind != nil || touchScrubActive {
+            resetTouchScrub()
+            updateRailContent()
+        }
         if activePanel?.isPane == true {
             restartAutoHide()
         } else if railVisible, activePanel == nil,
@@ -1172,6 +1294,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         switch pill {
         case railView.scoresButton: lastPane = .scores
         case railView.upNextButton: lastPane = .channels
+        case railView.detailsButton: lastPane = .details
         default: lastPane = .info
         }
         panel.onDismiss = { [weak self, weak panel] in
@@ -1617,7 +1740,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// One legible-output attributed string: its styled runs plus the
     /// placement the cue asked for.
-    private struct StyledLine: Equatable {
+    struct StyledLine: Equatable {
         let runs: [AetherSubtitleCue.StyledRun]
         var placement: AetherSubtitleCue.TextPlacement?
     }
@@ -1625,10 +1748,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Converts a legible-output attributed string into styled runs, the only
     /// source of styling on the remote-HLS path since the engine never sees the
     /// rendition. Whitespace-only strings return nil; edges are trimmed.
-    private static func styledLine(from attr: NSAttributedString) -> StyledLine? {
+    static func styledLine(from attr: NSAttributedString) -> StyledLine? {
         guard !attr.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let colorKey = NSAttributedString.Key(kCMTextMarkupAttribute_ForegroundColorARGB as String)
+        let backgroundKey = NSAttributedString.Key(kCMTextMarkupAttribute_CharacterBackgroundColorARGB as String)
         let boldKey = NSAttributedString.Key(kCMTextMarkupAttribute_BoldStyle as String)
         let italicKey = NSAttributedString.Key(kCMTextMarkupAttribute_ItalicStyle as String)
         let underlineKey = NSAttributedString.Key(kCMTextMarkupAttribute_UnderlineStyle as String)
@@ -1646,6 +1770,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                                 blue: CGFloat(argb[3].doubleValue),
                                 alpha: CGFloat(argb[0].doubleValue))
             }
+            var backgroundColor: UIColor?
+            if let argb = attrs[backgroundKey] as? [NSNumber], argb.count == 4 {
+                backgroundColor = UIColor(red: CGFloat(argb[1].doubleValue),
+                                          green: CGFloat(argb[2].doubleValue),
+                                          blue: CGFloat(argb[3].doubleValue),
+                                          alpha: CGFloat(argb[0].doubleValue))
+            }
             // Relative size is a PERCENTAGE of the default cue size; the
             // renderer wants ASS play-resolution points, so convert through
             // the same nominal 16pt the engine's synthesised lines use.
@@ -1657,6 +1788,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             runs.append(AetherSubtitleCue.StyledRun(
                 text: text,
                 color: color,
+                backgroundColor: backgroundColor,
                 isBold: (attrs[boldKey] as? NSNumber)?.boolValue ?? false,
                 isItalic: (attrs[italicKey] as? NSNumber)?.boolValue ?? false,
                 isUnderlined: (attrs[underlineKey] as? NSNumber)?.boolValue ?? false,
@@ -1911,6 +2043,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         presentPane(content: pane, pill: railView.scoresButton)
     }
 
+    /// Source facts plus the engine's live stats. No stream URL: IPTV ones embed credentials.
+    private func presentDetailsPanel() {
+        var source = [PlayerDetailsPaneView.Row(label: String(localized: "Channel"), value: [channel.channelNumber.map { "\($0)" }, channel.name].compactMap { $0 }.joined(separator: " "))]
+        source.append(.init(label: String(localized: "Provider"), value: channel.sourceType.displayName))
+        let route = lastResortPlayer != nil ? "AVPlayer" : isNativeHLSRoute ? "HLS" : "AetherEngine"
+        source.append(.init(label: String(localized: "Route"), value: route))
+        let stats: (() -> AetherAdvancedStats?)? = aetherPlayer.map { player in { player.advancedStats() } }
+        let pane = PlayerDetailsPaneView(
+            media: [.init(title: String(localized: "SOURCE"), rows: source)], statsProvider: stats)
+        presentPane(content: pane, pill: railView.detailsButton)
+    }
+
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -2038,6 +2182,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             completion?()
             return
         }
+        if touchScrubBehind != nil || touchScrubActive {
+            // Back out of the drag: playback never moved.
+            resetTouchScrub()
+            updateRailContent()
+            armDismissEchoBlock()
+            completion?()
+            return
+        }
         if scrubTarget != nil {
             // Back out of the scrub, still paused where the picture is.
             endScrub()
@@ -2102,15 +2254,18 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             var available: Set<LivePane> = [.info]
             if matchedGame != nil { available.insert(.scores) }
             if !LiveTVDataStore.shared.channels.isEmpty { available.insert(.channels) }
+            available.insert(.details)
             let pane = Self.paneForDown(last: lastPane, available: available)
             let pills: [LivePane: PlayerInfoPillButton] = [
-                .info: railView.infoButton, .scores: railView.scoresButton, .channels: railView.upNextButton]
+                .info: railView.infoButton, .scores: railView.scoresButton, .channels: railView.upNextButton,
+                .details: railView.detailsButton]
             if let pill = pills[pane] { railView.setFocusLanding(pill) }
             showRail()
             switch pane {
             case .info: presentInfoPanel()
             case .scores: presentScoresPanel()
             case .channels: presentChannelListPanel()
+            case .details: presentDetailsPanel()
             }
         }
     }
@@ -2118,6 +2273,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func pausePlayback() {
         guard !isUserPaused else { return }
         endScrub()
+        windowSeeker.cancelPending()
         isUserPaused = true
         if let lastResortPlayer {
             lastResortPlayer.pause()
@@ -2147,6 +2303,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if let lastResortPlayer {
             lastResortPlayer.play()
         } else {
+            // Direct HLS: a long pause can outlast the oldest segments it sat
+            // on, and the engine's own resume clamp cannot see that window.
+            windowSeeker.clampResumeIntoWindow()
             aetherPlayer?.play()
         }
         flashTimeline()
@@ -2168,18 +2327,133 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             moveScrub(by: seconds, on: aether)
             return
         }
-        if let aether = aetherPlayer, lastResortPlayer == nil {
-            Task { @MainActor [weak self] in
-                await aether.seekLive(by: seconds)
-                self?.updateRailContent()
-            }
+        if aetherPlayer != nil, lastResortPlayer == nil {
+            windowSeeker.step(by: seconds)
         }
         flashTimeline()
+    }
+
+    /// Where stacked skips will land, while they settle (nil otherwise).
+    private var stagedSkipTarget: Double? {
+        if case .position(let target) = windowSeeker.pendingRequest { return target }
+        return nil
+    }
+
+    /// The bar follows the staged skip at once, with a frame from where it
+    /// lands, rather than the playhead still on its way there.
+    private func stagedSeekChanged() {
+        requestScrubThumbnail()
+        updateRailContent()
+    }
+
+    /// Where the bar previews, on the session axis: a paused scrub, a touch
+    /// drag, or skips still settling, in that order. nil when none is up.
+    private func previewTarget(in shift: AetherPlayer.LiveTimeshift) -> Double? {
+        if let scrubTarget { return scrubTarget }
+        if let touchScrubBehind { return shift.edgeTime - touchScrubBehind }
+        return stagedSkipTarget
+    }
+
+    // MARK: - Touch scrub
+
+    private func touchScrubBegan() {
+        guard let aether = aetherPlayer else { return }
+        let shift = aether.liveTimeshift
+        touchScrubActive = true
+        touchScrubConfirmTask?.cancel()
+        touchScrubConfirmTask = nil
+        // A swipe after a lift carries on from the pending position.
+        touchScrub.begin(behindLive: touchScrubBehind ?? (shift.edgeTime - shift.playhead))
+    }
+
+    private func touchScrubChanged(_ translation: CGPoint, speed: Double) {
+        guard touchScrubActive, let shift = aetherPlayer?.liveTimeshift,
+              let range = shift.seekableRange else { return }
+        touchScrub.change(translationX: Double(translation.x), translationY: Double(translation.y),
+                          speed: speed, windowSeconds: shift.edgeTime - range.lowerBound)
+        // Undecided or vertical leaves any pending position where it is.
+        guard let behind = touchScrub.behindLive else { return }
+        touchScrubBehind = behind
+        restartAutoHide()
+        requestScrubThumbnail()
+        updateRailContent()
+    }
+
+    private func touchScrubEnded(committed: Bool) {
+        touchScrubActive = false
+        let landing = committed ? touchScrub.end() : nil
+        if !committed { touchScrub.cancel() }
+        if landing != nil || touchScrubBehind != nil { touchScrubEndedAt = Date() }
+        if let landing {
+            touchScrubBehind = landing
+            touchScrubPending = true
+            awaitTouchScrubConfirmation()
+        } else if touchScrubPending {
+            awaitTouchScrubConfirmation()
+        } else {
+            touchScrubBehind = nil
+        }
+        requestScrubThumbnail()
+        updateRailContent()
+    }
+
+    private func awaitTouchScrubConfirmation() {
+        touchScrubConfirmTask?.cancel()
+        touchScrubConfirmTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.touchScrubConfirmTimeout)
+            guard let self, !Task.isCancelled, self.touchScrubPending else { return }
+            self.resetTouchScrub()
+            self.updateRailContent()
+        }
+    }
+
+    private func resetTouchScrub() {
+        touchScrubConfirmTask?.cancel()
+        touchScrubConfirmTask = nil
+        timelinePan.interrupt()
+        touchScrub.cancel()
+        touchScrubActive = false
+        touchScrubPending = false
+        touchScrubBehind = nil
+        requestScrubThumbnail()
+    }
+
+    /// Select on the timeline: confirms a drag (held, or still under the
+    /// finger), otherwise plays or pauses.
+    private func timelineSelected() {
+        let landing = touchScrubActive ? (touchScrub.end() ?? touchScrubBehind)
+            : touchScrubPending ? touchScrubBehind : nil
+        guard let landing else {
+            togglePlayPause()
+            return
+        }
+        resetTouchScrub()
+        touchScrubEndedAt = Date()
+        windowSeeker.seek(behindLive: landing)
+        flashTimeline()
+    }
+
+    /// Left/Right on the timeline. A held drag moves by a step, as VOD's skip
+    /// does mid-scrub; a click just after a swipe is the swipe's own end.
+    private func timelineArrow(forward: Bool) {
+        guard !touchScrubActive else { return }
+        if let ended = touchScrubEndedAt, Date().timeIntervalSince(ended) < 0.5 { return }
+        if touchScrubPending, let pending = touchScrubBehind,
+           let shift = aetherPlayer?.liveTimeshift, let range = shift.seekableRange {
+            let step = LiveWindowSeekController.step
+            touchScrubBehind = min(max(pending + (forward ? -step : step), 0), shift.edgeTime - range.lowerBound)
+            awaitTouchScrubConfirmation()
+            requestScrubThumbnail()
+            updateRailContent()
+            return
+        }
+        skip(by: InputConfig.tapSeekDelta(forward: forward))
     }
 
     private func goLive() {
         guard let aether = aetherPlayer else { return }
         endScrub()
+        windowSeeker.cancelPending()
         if isUserPaused { resumePlayback() }
         Task { @MainActor [weak self] in
             await aether.seekToLiveEdge()
@@ -2192,25 +2466,41 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         guard let range = shift.seekableRange else { return }
         let target = min(max((scrubTarget ?? shift.playhead) + seconds, range.lowerBound), shift.edgeTime)
         scrubTarget = target
-        scrubThumbnailTask?.cancel()
-        scrubThumbnailTask = Task { @MainActor [weak self] in
-            // Let a run of presses settle before decoding a frame.
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled else { return }
-            let frame = await aether.liveThumbnail(atSessionSeconds: target, maxWidth: 576)
-            guard let self, !Task.isCancelled, self.scrubTarget == target else { return }
-            self.scrubThumbnail = frame.map { UIImage(cgImage: $0) }
-            self.updateRailContent()
-        }
+        requestScrubThumbnail()
         flashTimeline()
         updateRailContent()
     }
 
+    /// Fetches the frame for wherever the preview is now. A fetch in flight
+    /// runs to completion, and the next one starts from wherever the preview
+    /// has moved to by then.
+    private func requestScrubThumbnail() {
+        guard let shift = aetherPlayer?.liveTimeshift, let target = previewTarget(in: shift) else {
+            // The preview is gone: the fetch in flight finishes, unshown.
+            thumbnailWanted = nil
+            scrubThumbnail = nil
+            return
+        }
+        thumbnailWanted = target
+        guard scrubThumbnailTask == nil, let aether = aetherPlayer else { return }
+        scrubThumbnailTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled, let target = self.thumbnailWanted {
+                self.thumbnailWanted = nil
+                let frame = await aether.liveThumbnail(atSessionSeconds: target, maxWidth: 576)
+                guard !Task.isCancelled else { return }
+                if let frame, self.previewTarget(in: aether.liveTimeshift) != nil {
+                    self.scrubThumbnail = UIImage(cgImage: frame)
+                    self.updateRailContent()
+                }
+            }
+            self?.scrubThumbnailTask = nil
+        }
+    }
+
     private func endScrub() {
         scrubTarget = nil
-        scrubThumbnail = nil
-        scrubThumbnailTask?.cancel()
-        scrubThumbnailTask = nil
+        // Any fetch in flight finishes unshown (see `requestScrubThumbnail`).
+        requestScrubThumbnail()
     }
 
     /// Next or previous channel in guide order, wrapping at the ends.
@@ -2347,7 +2637,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 let avPlayer = AVPlayer(url: freshURL)
                 let layer = AVPlayerLayer(player: avPlayer)
                 layer.frame = view.bounds
-                layer.videoGravity = .resizeAspect
+                layer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
                 view.layer.insertSublayer(layer, at: 0)
                 lastResortPlayer = avPlayer
                 lastResortLayer = layer
@@ -2425,6 +2715,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Broadcast is usually 16:9, but a 4:3 or 2.39:1 channel gets its
         // captions on the picture rather than in the pillar/letterbox.
         overlay.videoSize = aetherPlayer?.videoSize ?? .zero
+        overlay.fillsScreen = fillsScreen
         overlay.heightUnits = subtitleHeightUnits
         let pane = activePanel?.isPane == true
         if overlay.paneOpen != pane {

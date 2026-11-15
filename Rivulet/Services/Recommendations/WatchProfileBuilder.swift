@@ -70,14 +70,22 @@ enum WatchProfileBuilder {
     /// TMDB features are merged when available; absence is fine.
     static func build(from items: [PlexMetadata]) async -> FeatureProfile {
         var profile = FeatureProfile()
-        for item in items {
-            let features = await buildFeatures(for: item)
+        let allFeatures = await buildFeatures(for: items)
+        for (item, features) in zip(items, allFeatures) {
             let weight = recencyWeight(lastViewedAt: item.lastViewedAt)
                 * rewatchBoost(viewCount: item.viewCount)
                 * ratingMultiplier(userRating: item.userRating)
             profile.add(features: features, weight: weight)
         }
         return profile
+    }
+
+    /// Features for each item, in input order. TMDB lookups run six at a time.
+    static func buildFeatures(for items: [PlexMetadata]) async -> [TMDBItemFeatures] {
+        let found = await BoundedFanOut.map(Array(items.enumerated()), width: 6) { index, item in
+            (index, await buildFeatures(for: item))
+        }
+        return found.sorted { $0.0 < $1.0 }.map(\.1)
     }
 
     static func buildFeatures(for item: PlexMetadata) async -> TMDBItemFeatures {

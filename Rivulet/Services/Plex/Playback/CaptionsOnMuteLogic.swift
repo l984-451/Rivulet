@@ -56,10 +56,8 @@ struct CaptionsOnMuteLogic {
         let ordered = full.filter { ContentFilterSources.isTextSubtitle(codec: $0.codec) }
             + full.filter { !ContentFilterSources.isTextSubtitle(codec: $0.codec) }
         for language in [preferredLanguage, audioLanguage] {
-            let key = TrackLanguage.normalize(language)
-            guard !key.isEmpty else { continue }
             if let match = ordered.first(where: {
-                TrackLanguage.normalize($0.languageCode) == key || TrackLanguage.normalize($0.language) == key
+                TrackLanguage.matches($0.languageCode, language) || TrackLanguage.matches($0.language, language)
             }) { return match }
         }
         return ordered.first

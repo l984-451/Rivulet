@@ -6,7 +6,7 @@ import SwiftUI
 /// Account > Live TV: sources, favorites, suggestions and the default layout.
 struct IOSLiveTVSettingsView: View {
     @ObservedObject private var store = LiveTVDataStore.shared
-    @AppStorage(IOSLiveLayout.storageKey) private var layoutRaw = IOSLiveLayout.browse.rawValue
+    @AppStorage(LiveLayout.storageKey) private var layoutRaw = LiveLayout.browse.rawValue
     @AppStorage(LiveTVDataStore.suggestionsKey) private var suggestions = true
     @State private var showingAddSource = false
     @State private var askingToErase = false
@@ -37,7 +37,7 @@ struct IOSLiveTVSettingsView: View {
                     LabeledContent("Favorites", value: store.favoriteIds.isEmpty ? "" : "\(store.favoriteIds.count)")
                 }
                 Picker("Default Layout", selection: $layoutRaw) {
-                    ForEach(IOSLiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
+                    ForEach(LiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
                 }
             }
 

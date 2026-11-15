@@ -227,7 +227,7 @@ final class EmbyPlaybackProviderTests: XCTestCase {
             server.respond(path, method: "POST", status: 204)
         }
         let reporter = provider().progressReporter(for: ref("874"), sourceID: "mediasource_874", playSessionID: "psid")
-        await reporter.start(position: 0)
+        try await reporter.start(position: 0)
         await reporter.progress(position: 600)
         await reporter.paused(at: 700)
         await reporter.stopped(at: 1200)
@@ -251,7 +251,7 @@ final class EmbyPlaybackProviderTests: XCTestCase {
 
     func test_reports_withoutAPlaySession_areDropped() async throws {
         let reporter = provider().progressReporter(for: ref("874"), sourceID: nil, playSessionID: nil)
-        await reporter.start(position: 0)
+        try await reporter.start(position: 0)
         await reporter.stopped(at: 10)
         XCTAssertTrue(server.requests.isEmpty)
     }
@@ -266,7 +266,7 @@ final class EmbyPlaybackProviderTests: XCTestCase {
             for: ref("857"), sourceID: nil, startTime: 0, maxBitrate: nil, audioStreamIndex: nil, subtitleStreamIndex: nil)
         let psid = try XCTUnwrap(info.playSessionID)
         let reporter = emby.progressReporter(for: ref("857"), sourceID: info.source.id, playSessionID: psid)
-        await reporter.start(position: 0)
+        try await reporter.start(position: 0)
         await reporter.stopped(at: 30)
 
         XCTAssertEqual(bodies("POST", "/Sessions/Playing").first?["PlayMethod"] as? String, "Transcode")
@@ -282,7 +282,7 @@ final class EmbyPlaybackProviderTests: XCTestCase {
         let emby = provider()
         _ = try await emby.transcodeStream(
             for: ref("857"), sourceID: nil, startTime: 0, maxBitrate: nil, audioStreamIndex: nil, subtitleStreamIndex: nil)
-        await emby.progressReporter(for: ref("857"), sourceID: nil, playSessionID: "another").start(position: 0)
+        try await emby.progressReporter(for: ref("857"), sourceID: nil, playSessionID: "another").start(position: 0)
         XCTAssertEqual(bodies("POST", "/Sessions/Playing").first?["PlayMethod"] as? String, "DirectPlay")
     }
 

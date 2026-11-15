@@ -118,13 +118,15 @@ extension EmbyMediaMapper {
             base: baseURL, "Videos/\(itemID)/\(sourceID)/Subtitles/\(index)/0/Stream.\(format)",
             token.map { [URLQueryItem(name: "api_key", value: $0)] } ?? []
         ) : nil
+        let label = external ? SidecarSubtitleLabel.make(
+            language: s.language, title: s.title, path: s.path, fallbackNumber: index) : nil
         return SubtitleTrack(
             id: "\(index)",
             index: index,
             codec: external ? format : (s.codec?.lowercased() ?? "unknown"),
             language: language(s.language),
-            title: s.title ?? s.displayTitle,
-            extendedTitle: s.displayTitle,
+            title: label ?? s.title ?? s.displayTitle,
+            extendedTitle: label ?? s.displayTitle,
             isDefault: s.isDefault ?? false,
             isForced: s.isForced ?? false,
             isHearingImpaired: s.isHearingImpaired ?? false,

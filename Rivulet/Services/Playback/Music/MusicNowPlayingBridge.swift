@@ -234,17 +234,16 @@ final class MusicNowPlayingBridge {
         let key = url.absoluteString
         if cachedArtworkThumb == key, cachedArtwork != nil { return }
         artworkTask = Task { @MainActor in
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                guard let image = UIImage(data: data) else { return }
-                let mpArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                self.cachedArtwork = mpArtwork
-                self.cachedArtworkThumb = key
-                if var info = MPNowPlayingInfoCenter.default().nowPlayingInfo {
-                    info[MPMediaItemPropertyArtwork] = mpArtwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-                }
-            } catch {}
+            // The shared cache: its TLS trust works on raw-IP servers and Now Playing reuses the bytes.
+            guard let image = await ImageCacheManager.shared.image(for: url, quality: .thumb),
+                  !Task.isCancelled else { return }
+            let mpArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.cachedArtwork = mpArtwork
+            self.cachedArtworkThumb = key
+            if var info = MPNowPlayingInfoCenter.default().nowPlayingInfo {
+                info[MPMediaItemPropertyArtwork] = mpArtwork
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            }
         }
     }
 }

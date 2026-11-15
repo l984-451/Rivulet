@@ -69,6 +69,12 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     var libraryList: [MediaLibrary] = []
     var librariesError: Error?
 
+    var favoritesSupported = false
+    var supportsFavorites: Bool { favoritesSupported }
+    /// What `favorites(in:limit:)` answers, by library id.
+    var favoritesByLibrary: [String: [MediaItem]] = [:]
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] { favoritesByLibrary[library.id] ?? [] }
+
     var supportsPlaylists = false
     var playlistList: [MediaPlaylist] = []
     /// Awaited before `videoPlaylists()` answers, so a test can hold a refresh open.
@@ -143,7 +149,10 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     var hubsError: Error?
     /// Libraries whose `hubs(in:)` throws, the others answering.
     var failingHubLibraries: Set<String> = []
+    /// Awaited before `hubs(in:)` answers, so a test can hold library fetches open.
+    var hubsGate: (@Sendable () async throws -> Void)?
     func hubs(in library: MediaLibrary) async throws -> [MediaHub] {
+        try await hubsGate?()
         if let hubsError { throw hubsError }
         if failingHubLibraries.contains(library.id) { throw MediaProviderError.unreachable }
         return hubsByLibrary[library.id] ?? []

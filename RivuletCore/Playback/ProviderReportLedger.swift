@@ -40,7 +40,15 @@ final class ProviderReportLedger {
         entry.position = time
         entry.stopped = state == "stopped"
         entries[key] = entry
-        if needsStart { await entry.reporter.start(position: time) }
+        if needsStart {
+            do {
+                try await entry.reporter.start(position: time)
+            } catch {
+                entries[key]?.started = false
+                if state != "stopped" { return }
+            }
+        }
+        guard entries[key]?.retired == false else { return }
         switch state {
         case "paused": await entry.reporter.paused(at: time)
         case "stopped": await entry.reporter.stopped(at: time)
@@ -53,18 +61,22 @@ final class ProviderReportLedger {
         guard entries[key] == nil else { return }
         let entry = Entry(reporter: make(), started: true, position: position)
         entries[key] = entry
-        await entry.reporter.start(position: position)
+        do {
+            try await entry.reporter.start(position: position)
+        } catch {
+            entries[key]?.started = false
+        }
     }
 
-    /// Ends a session the player has replaced (a reload, the next item), at the last position it
-    /// reported so the resume point stays put. One that already ended sends nothing, and none reopens.
-    func stop(_ key: String, make: () -> any ProgressReporter, fallback: TimeInterval) async {
+    /// Retires a session at its explicit final position, or its last report when replacing a stream.
+    /// One that already ended sends nothing, and none reopens.
+    func stop(_ key: String, make: () -> any ProgressReporter, fallback: TimeInterval, finalPosition: TimeInterval? = nil) async {
         var entry = entries[key] ?? Entry(reporter: make())
         guard !entry.retired else { return }
         let alreadyEnded = entry.stopped
         entry.retired = true
         entries[key] = entry
         guard !alreadyEnded else { return }
-        await entry.reporter.stopped(at: entry.position > 0 ? entry.position : fallback)
+        await entry.reporter.stopped(at: finalPosition ?? (entry.position > 0 ? entry.position : fallback))
     }
 }

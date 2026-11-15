@@ -5,11 +5,10 @@ import CloudKit
 import Combine
 import CryptoKit
 import Foundation
-import UIKit
 
 /// iCloud sync for both apps. Preferences ride `NSUbiquitousKeyValueStore` through `PreferenceMirror`;
 /// `UserDefaults` stays the source of truth. Accounts and Live TV sources ride one encrypted CloudKit
-/// record through `AccountSyncCoordinator`. The per-device switch is `SyncCatalog.enabledKey`, on by default.
+/// record through `AccountSyncCoordinator`. The per-device switch is `SyncCatalog.enabledKey`, off by default.
 @MainActor
 final class CloudSync: ObservableObject {
     static let shared = CloudSync()
@@ -43,8 +42,8 @@ final class CloudSync: ObservableObject {
     private lazy var vault = AccountVault()
     private lazy var coordinator = AccountSyncCoordinator(vault: vault, kinds: Self.accountKinds)
 
-    /// On unless this device turned it off.
-    var isEnabled: Bool { defaults.object(forKey: SyncCatalog.enabledKey) as? Bool ?? true }
+    /// Off until this device turns it on.
+    var isEnabled: Bool { defaults.bool(forKey: SyncCatalog.enabledKey) }
 
     func setEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: SyncCatalog.enabledKey)
@@ -63,7 +62,7 @@ final class CloudSync: ObservableObject {
         center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.scheduleReconcile() }
         }
-        center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+        center.addObserver(forName: HostPlatform.willEnterForeground, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in self?.foregrounded() }
         }
         center.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in

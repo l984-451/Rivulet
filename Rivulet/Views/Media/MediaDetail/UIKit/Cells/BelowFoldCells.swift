@@ -45,6 +45,24 @@ final class EpisodeCollectionCell: UICollectionViewCell {
         episodeView.configure(episode: episode, showSeasonPrefix: showSeasonPrefix)
     }
 
+    func configure(searchResult item: MediaItem) {
+        isSearchTile = true
+        episodeView.configure(searchResult: item)
+    }
+
+    /// Search's row focuses this cell as one target; the detail rail focuses the card's parts.
+    private var isSearchTile = false
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        guard isSearchTile else { return }
+        episodeView.setWholeCardFocused(context.nextFocusedView === self, coordinator: coordinator)
+    }
+
+    /// Search's row tile: the rail's card with its description, as tall as the rail's.
+    static let searchTile = MediaRowMetrics.Tile(
+        art: CGSize(width: EpisodeCell.cardWidth, height: EpisodeCell.thumbHeight + 190), growth: .zero)
+
     /// Trailers render with the SAME episode card so the two rows match exactly.
     func configure(trailer: BelowFoldTrailer) {
         episodeView.configure(trailer: trailer)
@@ -59,6 +77,13 @@ final class EpisodeCollectionCell: UICollectionViewCell {
         onFocusKind = nil
         episodeView.resetFocusVisual()
     }
+}
+
+/// The carousel morph flies the thumbnail alone, not the description under it.
+extension EpisodeCollectionCell: PreviewSourceTile {
+    var previewArtworkView: UIView { episodeView.artworkView }
+    var previewCornerRadius: CGFloat { 16 }
+    var previewArtworkLoaded: Bool { episodeView.artworkLoaded }
 }
 
 // MARK: - Season pill
@@ -250,6 +275,10 @@ final class CastCollectionCell: UICollectionViewCell {
 
     func configure(person: MediaPerson, fallbackSubtitle: String?) {
         castView.configure(person: person, fallbackSubtitle: fallbackSubtitle)
+    }
+
+    func configure(name: String, subtitle: String?, imageURL: URL?) {
+        castView.configure(name: name, subtitle: subtitle, imageURL: imageURL)
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {

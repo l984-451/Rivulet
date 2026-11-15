@@ -23,12 +23,15 @@ struct MediaItemDetail: Sendable {
     let writers: [MediaPerson]
     let chapters: [MediaChapter]
     let mediaSources: [MediaSource]
+    /// Plex: a server file URL. Jellyfin and Emby: the first YouTube link in `RemoteTrailers`.
     let trailerURL: URL?
     let contentRating: String?
     var regionOfOrigin: String? = nil   // e.g. "United Kingdom" (Plex Country), if present
     /// Review scores in display order (`MediaRating.ordered`). The ratings
     /// worker's Metacritic / Letterboxd scores are merged in after load.
     var ratings: [MediaRating] = []
+    /// Critic excerpts. Plex only: Jellyfin and Emby carry just a `CriticRating` score.
+    var reviews: [CriticReview] = []
 
     // Wave 1 additions for the detail view
     let nextEpisode: MediaItem?      // shows only — Plex `OnDeck`, Jellyfin `/Shows/NextUp`
@@ -46,6 +49,12 @@ struct MediaItemDetail: Sendable {
 
     /// External ids keyed lowercase: "tmdb", "imdb", "tvdb".
     var externalIDs: [String: String] = [:]
+
+    /// The YouTube trailer the Trailers & Extras row offers, only when the title has no trailer of its own.
+    var youTubeTrailerID: String? {
+        guard !extras.contains(where: \.isTrailer) else { return nil }
+        return trailerURL.flatMap(YouTubeTrailer.videoID(from:))
+    }
 
     struct Extra: Sendable, Identifiable, Hashable {
         let id: String

@@ -20,7 +20,7 @@ final class SeasonPillView: UIControl {
     /// leaves that unwired it falls back to re-affirming the season in the rail.
     var onSelected: (() -> Void)?
 
-    /// Set by the host: true only while `detailsFocusTarget == .pills`.
+    /// The host enables the selected pill for entry, then all pills while navigating the row.
     var focusEnabled = false
     override var canBecomeFocused: Bool { focusEnabled }
 

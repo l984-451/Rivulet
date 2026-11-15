@@ -13,12 +13,10 @@ import UIKit
 
 @MainActor
 final class PhotoLibraryViewController: UIViewController {
-    private let libraryTitle: String
     private let source: PhotoListing.Source
     private var stack: [PhotoGridViewController] = []
 
-    init(title: String, source: @escaping PhotoListing.Source) {
-        self.libraryTitle = title
+    init(source: @escaping PhotoListing.Source) {
         self.source = source
         super.init(nibName: nil, bundle: nil)
     }
@@ -29,7 +27,8 @@ final class PhotoLibraryViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        push(folder: nil, title: libraryTitle)
+        // The root has no title: the shell's pill already names the library.
+        push(folder: nil, title: nil)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -44,9 +43,24 @@ final class PhotoLibraryViewController: UIViewController {
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] { stack.last.map { [$0] } ?? [] }
 
-    private func push(folder: MediaItemRef?, title: String) {
-        let grid = PhotoGridViewController(title: title, listing: PhotoListing(folder: folder, source: source))
+    private func openMap() {
+        guard let (provider, library) = source() else { return }
+        present(PhotoMapViewController(provider: provider, library: library), animated: true)
+    }
+
+    /// `memory` is one of the root's memories, opened as a flat grid with no albums.
+    private func push(folder: MediaItemRef?, title: String?, memory: PhotoMemory? = nil) {
+        let narrowing = memory?.query ?? .default
+        // Every level of a library opens on the Sort and Show it was last left on.
+        let listing = PhotoListing(folder: folder, query: narrowing, savedQuery: {
+            PhotoPreferences.query(for: $0, narrowedBy: narrowing)
+        }, source: memory?.source(over: source) ?? source)
+        let grid = PhotoGridViewController(title: title, listing: listing)
         grid.onOpenFolder = { [weak self] in self?.push(folder: $0.ref, title: $0.title) }
+        if folder == nil, memory == nil {
+            grid.onOpenMemory = { [weak self] in self?.push(folder: nil, title: $0.title, memory: $0) }
+            grid.onOpenMap = { [weak self] in self?.openMap() }
+        }
         addChild(grid)
         grid.view.frame = view.bounds
         grid.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -70,6 +84,7 @@ extension PhotoLibraryViewController: MenuBackHandling {
               focused.isDescendant(of: view) else { return false }
         stack.removeLast()
         stack.last?.view.isHidden = false
+        stack.last?.syncSavedQuery()
         top.view.isHidden = true
         setNeedsFocusUpdate()
         updateFocusIfNeeded()

@@ -15,13 +15,13 @@ nonisolated enum SyncCatalog {
     static let exactKeys: Set<String> = [
         // Home and Library
         "showHomeHero", "homeHeroContent", "showLibraryHero", "showLibraryRecentRows",
-        "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab",
+        "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab", "showFavoritesTab",
         // Playback
-        "autoplayLimit", "autoplayCountdown", "showPostVideoUpNext", "promptResumeOrRestart",
+        "autoplayLimit", "autoplayCountdown", "atTheCredits", "promptResumeOrRestart",
         "continueWatchingInstantResume", "skipPreviewCarousel", "useIntroDB", "cinemaTrailersCount",
         "detailRatingSource", "generatedSubtitlesFallback", "playerShowsClockTimes",
-        "showSkipIntro", "showSkipRecap", "showSkipCredits", "showSkipAds",
-        "autoSkipIntro", "autoSkipRecap", "autoSkipCredits", "autoSkipAds",
+        "showSkipIntro", "showSkipRecap", "showSkipAds",
+        "autoSkipIntro", "autoSkipRecap", "autoSkipAds",
         SkipLengthKeys.forward, SkipLengthKeys.back,
         // Content filter (not its list source URL, which can embed access)
         "contentFilter.enabled", "contentFilter.profanityStrength", "contentFilter.customWords",
@@ -31,12 +31,15 @@ nonisolated enum SyncCatalog {
         "liveTVHiddenPlexServers", "liveTVHideJellyfin", "liveTVHideEmby",
         // Servers the user turned off, by machine id
         "plexDisabledServers",
+        // Photos
+        "photoSlideInterval", "photoSlideTransition", "photoSlidePlaysClips",
     ]
 
     /// Keys stored once per Plex Home profile (`_user_<id>`) or non-Plex server (`_provider_<id>`).
     static let profileFamilies: [String] = [
-        "hiddenHomeRowIdentifiers", "homeCollectionPins", "libraryCollectionPins",
-        "hiddenLibraryKeys", "libraryOrder", "libraryOrderAllServers", "librarySortOptions", "libraryViewMode",
+        "hiddenHomeRowIdentifiers", "homeRowOrder", "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins",
+        "homeHeroSources", "showHomeFavoriteMovies", "showHomeFavoriteShows", "showHomeFavoriteChannels", "libraryCollectionPins",
+        "hiddenLibraryKeys", "hiddenSidebarLibraries", "libraryOrder", "libraryOrderAllServers", "librarySortOptions", "libraryViewMode", "libraryUnwatchedOnly",
         "trackIntent.subtitle", "trackIntent.audio",
     ]
 
@@ -44,10 +47,10 @@ nonisolated enum SyncCatalog {
     static let secretWords = ["token", "pin", "password", "secret", "url", "server", "address", "user", "email", "name"]
 
     /// Allowlisted names that hit a secret word and are reviewed to be harmless:
-    /// collection pins, "skip intro" (skIPINtro), machine ids of servers the user switched off,
+    /// collection and playlist pins, "skip intro" (skIPINtro), machine ids of servers the user switched off,
     /// and the library order across all servers.
     static let reviewedSecretWordKeys: Set<String> = [
-        "homeCollectionPins", "libraryCollectionPins", "showSkipIntro", "autoSkipIntro",
+        "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins", "libraryCollectionPins", "showSkipIntro", "autoSkipIntro",
         "liveTVHiddenPlexServers", "plexDisabledServers", "libraryOrderAllServers",
     ]
 
@@ -55,7 +58,7 @@ nonisolated enum SyncCatalog {
         if exactKeys.contains(key) { return true }
         if profileFamilies.contains(where: { key.hasPrefix($0 + "_user_") || key.hasPrefix($0 + "_provider_") })
             || profileFamilies.contains(key) { return true }
-        if key.hasPrefix("mediaLibrarySort.") { return key.count > "mediaLibrarySort.".count }
+        for prefix in ["mediaLibrarySort.", "photoLibraryQuery."] where key.hasPrefix(prefix) { return key.count > prefix.count }
         // contentFilter.<category>.enabled
         if key.hasPrefix("contentFilter."), key.hasSuffix(".enabled") {
             let middle = key.dropFirst("contentFilter.".count).dropLast(".enabled".count)

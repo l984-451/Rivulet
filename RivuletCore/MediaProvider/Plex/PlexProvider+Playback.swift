@@ -121,6 +121,7 @@ extension PlexProvider {
             "X-Plex-Token": token,
             "X-Plex-Client-Identifier": PlexAPI.clientIdentifier,
             "X-Plex-Platform": PlexAPI.platform,
+            "X-Plex-Device-Name": PlexAPI.playerTitle,
             "X-Plex-Product": PlexAPI.productName,
             "User-Agent": "\(PlexAPI.productName)/\(PlexAPI.platform)",
             "X-Playback-Session-Id": UUID().uuidString

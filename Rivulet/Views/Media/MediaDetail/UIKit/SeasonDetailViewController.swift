@@ -19,6 +19,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private var provider: MediaProvider? { MediaProviderRegistry.shared.provider(for: season.ref.providerID) }
 
     private let background = UIImageView()
+    private let themeVideo = ThemeVideoBackdropView()
     private let poster = UIImageView()
     private var collectionView: FocusScrollControlledCollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
@@ -79,11 +80,12 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         background.contentMode = .scaleAspectFill
         background.clipsToBounds = true
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        for layer in [background, blur] as [UIView] {
+        for layer in [background, themeVideo, blur] as [UIView] {
             layer.frame = view.bounds
             layer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             view.addSubview(layer)
         }
+        themeVideo.configure(item: season.ref, host: self)
 
         poster.translatesAutoresizingMaskIntoConstraints = false
         poster.contentMode = .scaleAspectFill
@@ -123,8 +125,18 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         // Playback and the menus' watched actions post this once the server has the change.
         NotificationCenter.default.publisher(for: .plexDataNeedsRefresh)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.load() }
+            .sink { [weak self] _ in self?.load(refresh: true) }
             .store(in: &refreshObservers)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        themeVideo.setActive(true)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        themeVideo.setActive(false)
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -139,9 +151,22 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     // viewDidAppear is dropped, because focus is still on the presenter then.
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
+        var up = context.nextFocusedView
+        while let v = up, !(v is SeasonEpisodeCell) { up = v.superview }
+        if let cell = up as? SeasonEpisodeCell, let ip = collectionView.indexPath(for: cell),
+           let id = dataSource.itemIdentifier(for: ip) { focusedEpisodeID = id }
         // Once only, after the episodes were there to land on: a later refresh must not pull focus back.
         if !episodes.isEmpty, context.nextFocusedView?.isDescendant(of: view) == true { pendingFocusEpisodeID = nil }
     }
+
+    /// The next surviving id after `id` in `ids`, else the nearest one before it.
+    static func neighbourID(of id: String, in ids: [String], surviving: Set<String>) -> String? {
+        guard let at = ids.firstIndex(of: id) else { return nil }
+        return ids[(at + 1)...].first(where: surviving.contains) ?? ids[..<at].last(where: surviving.contains)
+    }
+
+    /// The episode whose card holds focus now, or last held it while the page was up.
+    private var focusedEpisodeID: String?
 
     /// Scrolls the pending episode's row to the centre, where focus will keep it, so its cell
     /// exists for `preferredFocusEnvironments`; then asks for focus.
@@ -283,7 +308,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
 
     // MARK: - Data
 
-    private func applySnapshot() {
+    private func applySnapshot(animated: Bool = false, completion: (() -> Void)? = nil) {
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([0, 1])
         snapshot.appendItems([Self.headerID], toSection: 0)
@@ -297,35 +322,54 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         // self-sizing header re-measures.
         let existing = Set(dataSource.snapshot().itemIdentifiers)
         snapshot.reconfigureItems(([Self.headerID] + ids).filter(existing.contains))
-        dataSource.apply(snapshot, animatingDifferences: false)
+        dataSource.apply(snapshot, animatingDifferences: animated, completion: completion)
     }
 
-    private func load() {
+    /// A refresh only changes watch state, so it refetches the episodes and keeps the loaded detail.
+    private func load(refresh: Bool = false) {
         guard let provider else { return }
         loadToken &+= 1
         let token = loadToken
         let ref = season.ref
         let showRef = season.parentRef
+        let skipDetail = refresh && seasonDetail != nil
+        let skipShow = refresh && showDetail != nil
         Task { [weak self] in
-            let children = (try? await provider.children(of: ref)) ?? []
-            let detail = try? await provider.fullDetail(for: ref)
-            var show: MediaItemDetail?
-            if let showRef { show = try? await provider.fullDetail(for: showRef) }
+            async let childrenFetch = try? await provider.children(of: ref)
+            async let detailFetch: MediaItemDetail? = skipDetail ? nil : (try? await provider.fullDetail(for: ref))
+            async let showFetch: MediaItemDetail? = showRef == nil || skipShow ? nil : (try? await provider.fullDetail(for: showRef!))
+            let children = await childrenFetch ?? []
+            let detail = await detailFetch
+            let show = await showFetch
             guard let self, self.loadToken == token else { return }
             if let show { self.showDetail = show; self.showTitle = show.item.title }
             if let detail {
                 self.seasonDetail = detail; self.season = detail.item
                 let split = BelowFoldContentLoader.extraTiles(
                     from: detail.extras,
-                    fallbackArt: detail.item.artwork.backdrop ?? detail.item.parentArtwork?.backdrop ?? detail.item.artwork.thumbnail)
+                    fallbackArt: detail.item.artwork.backdrop ?? detail.item.parentArtwork?.backdrop ?? detail.item.artwork.thumbnail,
+                    youTubeVideoID: detail.youTubeTrailerID, providerID: detail.item.ref.providerID)
                 self.extrasShelf.configure(split.trailers + split.extras)
             }
+            // A deleted episode animates out; focus moves to the one after it, else the one before.
+            let before = self.episodes.map(\.ref.itemID)
             self.episodes = EpisodePicker.inPlaybackOrder(children)
+            let remaining = Set(self.episodes.map(\.ref.itemID))
+            let removed = !before.isEmpty && !remaining.isSuperset(of: before)
+            if removed, let focused = self.focusedEpisodeID, !remaining.contains(focused) {
+                self.pendingFocusEpisodeID = Self.neighbourID(of: focused, in: before, surviving: remaining)
+            }
             self.episodesByID = Dictionary(self.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
             if !self.episodes.isEmpty { self.isWatched = self.episodes.allSatisfy(\.isWatched) }
             self.applyText()
-            self.applySnapshot()
-            if self.pendingFocusEpisodeID != nil { self.focusPendingEpisode() }
+            if removed {
+                self.applySnapshot(animated: true) { [weak self] in
+                    if self?.pendingFocusEpisodeID != nil { self?.focusPendingEpisode() }
+                }
+            } else {
+                self.applySnapshot()
+                if self.pendingFocusEpisodeID != nil { self.focusPendingEpisode() }
+            }
             self.loadLogo()
             if self.ageRating == nil, let showRef { self.loadAgeRating(showRef) }
         }

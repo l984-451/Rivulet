@@ -19,6 +19,8 @@ enum SubtitleAdjustments {
 
     /// One stepper press worth of delay, in seconds.
     static let delayStep: Double = 0.1
+    /// Largest delay either way. The engine keeps image subtitles this far behind and ahead.
+    static let maxDelay: Double = 15
 
     private static let delayMapKey = "subtitleDelayByMedia"
 
@@ -26,7 +28,7 @@ enum SubtitleAdjustments {
     /// 0 when never adjusted.
     static func delay(forKey key: String) -> Double {
         let map = UserDefaults.standard.dictionary(forKey: delayMapKey) as? [String: Double]
-        return map?[key] ?? 0
+        return min(max(map?[key] ?? 0, -maxDelay), maxDelay)
     }
 
     /// Persists `value` for `key`. A value of 0 removes the entry so the map
@@ -42,9 +44,9 @@ enum SubtitleAdjustments {
     }
 
     /// Rounds a raw delay to one decimal so repeated ±0.1 steps can't drift
-    /// into binary-fraction noise (0.30000000000000004).
+    /// into binary-fraction noise (0.30000000000000004), within ±maxDelay.
     static func roundedDelay(_ value: Double) -> Double {
-        (value * 10).rounded() / 10
+        min(max((value * 10).rounded() / 10, -maxDelay), maxDelay)
     }
 
     /// "0.0s", "+0.3s", "-1.2s" — the stepper's centre label.
@@ -55,18 +57,11 @@ enum SubtitleAdjustments {
 
     // MARK: - Height (global)
 
-    /// Points moved per stepper press.
-    static let heightUnitPt: CGFloat = 10
-    /// Stepper range: far enough down to reach the screen edge under a wide film's
-    /// letterbox bar, and up to the top of the screen.
-    static let heightUnitRange = -30...80
-
-    private static let heightKey = "subtitleHeightUnits"
-
     /// Height offset in UNITS (positive = subtitles sit higher). 0 is AVPlayer's position.
+    /// The rule is `CaptionHeight`, shared with iOS and Mac.
     static var heightUnits: Int {
-        get { clampUnits(UserDefaults.standard.integer(forKey: heightKey)) }
-        set { UserDefaults.standard.set(clampUnits(newValue), forKey: heightKey) }
+        get { CaptionHeight.units }
+        set { CaptionHeight.units = newValue }
     }
 
     // MARK: - Rail clearance
@@ -94,16 +89,8 @@ enum SubtitleAdjustments {
     static let controlsFloor: CGFloat = railTopFromScreenBottom + railMargin
 
     /// "0", "+3", "-2" — the stepper's centre label.
-    static func formattedHeight(_ units: Int) -> String {
-        units == 0 ? "0" : String(format: "%+d", units)
-    }
+    static func formattedHeight(_ units: Int) -> String { CaptionHeight.formatted(units) }
 
     /// Extra bottom padding for the default caption band, from the stored units.
-    static func heightOffset(forUnits units: Int) -> CGFloat {
-        CGFloat(clampUnits(units)) * heightUnitPt
-    }
-
-    private static func clampUnits(_ units: Int) -> Int {
-        min(max(units, heightUnitRange.lowerBound), heightUnitRange.upperBound)
-    }
+    static func heightOffset(forUnits units: Int) -> CGFloat { CaptionHeight.offset(forUnits: units) }
 }

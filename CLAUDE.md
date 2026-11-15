@@ -35,15 +35,15 @@ The video player is **AetherPlayer** — an adapter around AetherEngine (FFmpeg 
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.57.0), with none of its optional package traits enabled. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.66.1), with one optional package trait, `DolbyVisionFelCurves` (P7 FEL curve fold), set in `project.pbxproj`; the other four stay off in every committed build. `Scripts/enthusiast-build.py --fel --height-audio` turns on `DualLayerDolbyVision` + `DolbyVisionStillReshaping` and `TrueHDObjectAudio` + `DTSXObjectAudio` for a self-built copy (#609); the app finds them through `AetherEngine.OptionalComponent` (`AetherPlayer.buildsFEL` / `buildsHeightAudio`) and only then shows the Dolby Vision FEL and Height Speakers rows. `restore-package-traits.py` fails CI if any of the four is committed. A bump must keep it: CI's `Scripts/restore-package-traits.py` puts it back after `use-profiles`. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
 ## Project Structure
 
-Five code roots. `RivuletCore/` is a buildable folder compiled into BOTH app
+Six code roots. `RivuletCore/` is a buildable folder compiled into ALL THREE app
 targets (not a module: `internal` spans each target); `Rivulet/` is the tvOS
-app, `RivuletiOS/` the iOS app, `TopShelfExtension/` the tvOS Top Shelf, and
+app, `RivuletiOS/` the iOS app, `RivuletMac/` the native macOS app, `TopShelfExtension/` the tvOS Top Shelf, and
 `AssetPackExtension/` the tvOS Background Assets downloader that fetches the
 speech model as an Apple-hosted asset pack (`SpeechModelStore`; Debug builds,
 which can't reach Apple hosting, fall back to Hugging Face into Caches; repack
@@ -51,7 +51,8 @@ with `Scripts/speech-model-pack.json`). See "Platform Boundary" below for what
 goes where.
 
 ```
-RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkManager,
+RivuletCore/            # Shared tvOS + iOS + macOS. Client/ (PlexSession, BrowseStore,
+│                       #   PlayerBackend/ProviderBackend, ClientHost), Platform/HostPlatform. The ONE Plex client (PlexNetworkManager,
 │                       #   PlexAuthManager, PlexUserProfileManager), Models/Plex,
 │                       #   TMDB, WatchProgressPolicy, IPTV parsers,
 │                       #   Security (attest, keychain), Sentry startup, Secrets,
@@ -65,15 +66,19 @@ RivuletCore/            # Shared tvOS + iOS. The ONE Plex client (PlexNetworkMan
 │                       #   MusicProvider, registries; Plex/, Jellyfin/ and Emby/ implement
 │                       #   it, see "Media providers"), Models/Media, Models/Music,
 │                       #   Models/Photos (the agnostic item types).
+│                       #   Home/ (Home row visibility and order, playlist pins,
+│                       #   hero sources, favorites and playlist rows).
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
-│                       #   navigation contract, IOSBrowseStore: every server's
-│                       #   content), Plex/ (IOSPlexSession: Plex sign-in and
-│                       #   playback; Home/Library/Detail views; no endpoint code), Search/, Settings/, LiveTV/ (views
+│                       #   navigation contract), Plex/ (Home/Library/Detail
+│                       #   views; no endpoint code), Search/, Settings/, LiveTV/ (views
 │                       #   over the shared LiveTVDataStore), Player/ (iOS
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
-│                       #   records + offline progress live in RivuletCore/Downloads).
+│                       #   records + offline progress live in RivuletCore/Downloads),
+│                       #   Photos/ (photo library grid and viewer over PhotoListingModel).
+RivuletMac/             # Native macOS app (SwiftUI + AppKit). See "Mac app" and
+│                       #   RivuletMac/README-MAC.md (navigation contract, file map).
 Rivulet/                # The tvOS app — everything below.
 ├── Models/
 │   ├── Shared/         # RivuletLink (the one rivulet:// definition) and TopShelfItem,
@@ -145,10 +150,10 @@ app supports**: Plex, Jellyfin and Emby on both apps (IPTV where it applies). A 
 message, and a standing exception is listed below. A gap nobody wrote down is a bug.
 
 Standing exceptions:
-- Photos are tvOS only.
 - Downloads are iOS only.
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
-- The detail page offers no Delete on either app: it would be left showing what it deleted.
+- Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
+- The pause screen is tvOS only: iOS and the Mac app keep their controls up while paused, as the system player does.
 
 ## Platform Boundary (tvOS / iOS)
 
@@ -216,12 +221,11 @@ The Plex stack is already across: `PlexNetworkManager`, `PlexAuthManager`,
 So is the Live TV stack: `LiveTVDataStore`, `PlexLiveTVProvider` + the timeline
 keepalive, `IPTVProvider`, `DispatcharrService`, `LiveTVSourceConnector` (the
 verify-then-add behind both apps' add-source forms) and `LiveShelves` (What's On
-rows). **There is exactly one Plex client.** `RivuletiOS/Plex/` holds
-`IOSPlexSession` (Plex sign-in, profile, server choice and the Plex playback
-path) and the SwiftUI views; iOS content for every server comes from
-`RivuletiOS/Shell/IOSBrowseStore` over `MediaProviderRegistry` and the shared
-`HomeFeed`. No endpoint code in the iOS folder. Never add a second decoder for a Plex
-endpoint to the iOS folder; a bug fixed in the shared client must be the fix
+rows). **There is exactly one Plex client.** `RivuletCore/Client/` holds
+`PlexSession` (Plex sign-in, profile, server choice and the Plex playback
+path) and `BrowseStore` (every server's content over `MediaProviderRegistry`
+and the shared `HomeFeed`), used by both iOS and Mac. No endpoint code in the
+iOS or Mac folders. Never add a second decoder for a Plex endpoint to an app folder; a bug fixed in the shared client must be the fix
 for both apps.
 
 ### Host injection instead of platform conditionals
@@ -236,7 +240,7 @@ references to per-platform types:
 - `PlexAuthManager.onAuthenticated` / `.onSignedOut` and
   `PlexUserProfileManager.onProfileChanged` / `.onInitialProfileSelected` are
   closures the host sets at launch (tvOS → `PlexDataStore`, iOS →
-  `IOSPlexSession`). The managers own identity; content stores are per
+  `PlexSession`). The managers own identity; content stores are per
   platform. `onAuthenticated` is awaited on purpose — it prefetches the
   libraries the tvOS sidebar needs on its first build.
 - `SentryStartup.start(platform:)` takes the platform from the caller for the
@@ -246,6 +250,42 @@ RivuletCore is compiled into each app target, not built as a module, so
 `internal` visibility spans the whole target and no `public` is needed. That
 also means an extension on a shared type inside `RivuletiOS/` is not a
 retroactive conformance.
+
+### Mac app (native, `RivuletMac/`)
+
+Scheme `Rivulet Mac`, macOS 26+, SwiftUI + AppKit, sandboxed. Same parity rule
+as the other apps (no Downloads). It reads the same `RivuletCore/Client`
+stores as iOS; only `RivuletMac/Player/AetherPlayer.swift` imports AetherEngine
+(a third adapter, so a mapping fix lands in three files until it moves to core).
+Captions have no libass layer: LibassBuild ships no macOS slice.
+
+- **Host differences come through `HostPlatform`** (`RivuletCore/Platform/`):
+  foreground notification, appearance, video-preview policy and app icon,
+  installed by `UIKitHostPlatform.swift` on tvOS/iOS and `AppKitHostPlatform.swift`
+  on Mac. Shared code returns `CGImage`/`CGColor`/`CTFont`, never `UIImage`.
+- **`SentryStartup.start(platform:configure:)`**: options that exist only on
+  UIKit platforms go in the host's `configure` closure.
+- **A focused/scene value must never be a fresh closure per body pass.** It
+  republishes, re-renders the root and loops the window toolbar at 100% CPU
+  (seen on sidebar toggle). Publish a stable reference box (`MacPageRefresh`,
+  `MacShellBox` in `Shell/MacNavigation.swift`).
+
+```bash
+xcodebuild -project Rivulet.xcodeproj -scheme "Rivulet Mac" \
+  -destination 'platform=macOS,arch=arm64' build CODE_SIGNING_ALLOWED=NO
+```
+
+### iOS app on Mac (Designed for iPad)
+
+The iOS app also runs on Apple silicon Macs as **Designed for iPad**, not Mac Catalyst:
+the FFmpeg, LibDovi and LibTrueHD xcframeworks under AetherEngine ship no
+`maccatalyst` slice and the engine is upstream-only, so Catalyst cannot link
+(`SUPPORTS_MACCATALYST = NO`). The Mac runs the iphoneos binary; the only
+runtime signal is `ProcessInfo.isiOSAppOnMac`, read in `RivuletiOSApp.init` to
+inject `PlexAPI.platform`/`deviceName` and Sentry's `macOS` platform. Build with
+`-destination 'platform=macOS,arch=arm64,name=My Mac'` (the `variant=` form
+can't take Xcode 27's comma); a local build only launches in the App Store
+wrapper layout, so `generic/platform=iOS` is the usual compile check.
 
 ### The player split
 
@@ -372,11 +412,15 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   the open sidebar's Right-to-close (#440). The
   player's info panes don't need it: a `UIFocusGuide` between the pills and
   the pane carries Up and Down.
-- **Right past the hero's Next button pages, as the TV app's does** (#440).
-  `HeroButtonRowView` takes the Right the engine declines from Next in
-  `pressesBegan`, plus a gated swipe; focus stays on Next. Not an invisible
-  focus stop past the row: paging rebuilt the row under it, focus stranded on
-  the stop and every arrow key went dead. Left from Play stays the sidebar.
+- **The hero pages both ways, as the TV app's does** (#440, #518).
+  `HeroButtonRowView` takes the Right the engine declines from Next and the
+  Left from Play in `pressesBegan`, plus gated swipes on the same predicates;
+  focus stays put. Not an invisible focus stop past the row: paging rebuilt the
+  row under it, focus stranded on the stop and every arrow key went dead. The
+  gesture that lands on Play or Next never pages, and one swipe is one page: a
+  gesture counter (`MenuPressInterceptor.remoteGestures`) holds the rest of it.
+  Left from Play pages back until the first item, where it opens the sidebar;
+  Up and Menu reach the sidebar from any page (#500).
 - **A focusless surface that hands some touches to another recognizer passes
   `swipeGate`.** The focusless binding claims its swipes unconditionally
   unless `swipeGate` is given; then each swipe asks it in
@@ -580,10 +624,12 @@ most servers and fails on the ones reached by raw IP (#314, #337).
 
 #### Routing policy (VOD)
 1. `ContentRouter.plan(...)` returns `PlaybackPlan { primary, fallbacks }`. Route cases: `.aether`, `.hls`.
-2. `.aether` — whenever a direct-play URL is available (AetherEngine handles demux + remux + HDR internally; software-decodes AV1 / VP9 / MPEG-2 / VC-1 / MPEG-4p2). DV P7 becomes 8.1 on a DV panel (see "HDR / DV").
+2. `.aether` — whenever a direct-play URL is available (AetherEngine handles demux + remux + HDR internally; software-decodes AV1 / VP9 / MPEG-2 / VC-1 / MPEG-4p2). DV P7 becomes 8.1 on a DV panel, FEL with its enhancement layer folded into the curves (see "HDR / DV").
 3. `.hls` — server-side transcode; primary when no direct-play URL exists, and the fallback after an Aether startup failure. `requiresVideoTranscode` codecs force a video transcode (not just remux) on this route.
 
 #### Live TV
+The guide fills 24 hours ahead at launch and the full 8 days once a Live TV screen has appeared
+in the session (`LiveTVDataStore.fillHorizonHours`, raised by `elevatePreloadPriority`).
 Two layouts: What's On (`LiveBrowseViewController`, the default) and the Guide (`GuideLayoutView`). Both play through `LiveTVAetherPlayerViewController` on the VOD glass rail. Multiview (`LiveMultiviewViewController`) runs **AetherPlayer** per slot (`MultiStreamViewModel` instantiates `AetherPlayer()`, each tile binds the engine surface), up to 4 concurrent slots. HDHomeRun delivers a direct stream; DVB tuners require a Plex transcode URL with full client-profile parameters (see Plex Live TV section below).
 **Xtream Codes** (`RivuletCore/IPTV/XtreamService.swift`) is live channels only, never VOD or series: account check on `player_api.php` with no `action`, channels from `get_live_streams` + `get_live_categories` (not `get.php`), guide from one bulk `xmltv.php`, streams `/live/<user>/<pass>/<id>.ts`. Panels mix ints and strings for the same field, so replies are walked by hand; never put a reply body in a log or error, `player_api.php` echoes the password. Never loop `get_short_epg` across channels: it gets users rate-banned.
 iOS reads the same `LiveTVDataStore` and saved sources and adds sources through the same `LiveTVSourceConnector`. Dispatcharr API keys and M3U playlist/guide URLs (which often embed credentials) live in the Keychain (`liveTVSourceToken_`, `liveTVSourceM3U_`, `liveTVSourceEPG_` + source id); the saved source JSON keeps one only if the Keychain write fails. An M3U source id is a hash of its URL (`m3uSourceId`), never the URL itself; older URL-keyed sources are re-keyed on launch with their saved channel ids renamed.
@@ -676,7 +722,8 @@ functions over those signals in the same file (`cost`, `chooseSlot`, `choose`,
   floor (`restingPlacement`), and stays there while it reads (`goodEnoughCost`);
   it moves only when another spot reads clearly better (`moveMargin`), so a row
   keeps one look. `trailingCost` keeps it off the trailing edge unless needed.
-  The same hold applies to Top Shelf and the pause screen through `chooseSlot`.
+  The same hold applies to Top Shelf through `chooseSlot`. The pause screen
+  (`PauseScreenView`) does not read its artwork: its logo has a fixed place.
 - **Top Shelf logo**: `TopShelfImageCompositor.placement` runs the same `choose`
   over its own candidate rects.
 - **The Home hero does not read its artwork.** Its scrim is the Apple TV app's,
@@ -728,12 +775,33 @@ Two rules that look wrong until you know them:
   lives at the render sites on purpose. Folding it into the 90% ceiling changes
   every tile.
 
+**When a player reports is `PlaybackTimeline`** (`RivuletCore/Playback/`), used by all
+three apps for every server: it opens with `playing`, reports each 10 s, repeats `paused`,
+and goes quiet once stopped or ended by the server, until the next item. Players feed it
+transport changes and ticks and supply the send; do not put a timing rule in a player.
+
 **Changing watch state must repaint.** `.plexDataNeedsRefresh` is the live
 channel; all three UIKit surfaces observe it. Post it after the server call.
 The old optimistic path (`PlexDataStore.updateItemWatchStatus`,
 `.episodeWatchedStatusChanged`) is deleted; don't revive it, and don't
 reintroduce optimistic Continue Watching mutation from a shelf (reverted in
 `90bfd2b` for focus reasons).
+
+**The server counts a finished play itself.** PMS marks a title watched, clears its
+resume point and adds a play once a timeline passes its played threshold or first
+credits marker (measured on 1.43; a position under about a minute is never stored).
+A scrobble on top counts the play again: one viewing of an episode read as 3 plays.
+So each player asks first (`PlexNetworkManager.serverCountedPlay`, with the view count
+from when playback began) and scrobbles only when the server has not. After a scrobble,
+a `playing` report below the server's completion point brings the resume point back,
+which is why leaving at or after the credits mark also marks watched (`watchedMark`).
+
+Home answers the notification with Continue Watching and the promoted rows
+(`PlexDataStore.refreshAfterWatchStateChange`). The global `/hubs` (about 500 KB,
+over a second on the server) is fetched once a session for the hero's fallback, and
+each library's own hubs are refreshed by that library's page. A library or
+drill-in page that is off screen defers its refresh to `viewDidAppear`
+(`needsWatchStateRefresh`).
 
 ### Content margin and tile grid
 
@@ -789,7 +857,7 @@ which never names a backend.
   per-profile list and tokens from `/resources`, shared with iOS), shown beside
   Jellyfin by `ServerDataStore`. iOS keys the same servers on
   `PlexMetadata.serverID` / `PlexLibrary.serverID` / `PlexHub.serverID` (nil is
-  the selected server) and resolves each through `IOSPlexSession.configuration(serverID:)`.
+  the selected server) and resolves each through `PlexSession.configuration(serverID:)`.
   `MediaItemRef.isPlex` means the SELECTED server only, so an extra server's
   item takes the provider path; never test `hasPrefix("plex:")` to mean
   "the Plex server".
@@ -828,13 +896,17 @@ A photo library (Plex section type `photo`, Jellyfin `photos`, or `homevideos` h
 one photo) is a library like any other: listed in the sidebar and in Settings > Sidebar Libraries, opened by
 `PhotoLibraryViewController` (`Views/Photos/UIKit/`), a stack of `PhotoGridViewController` grids
 with a focusless full-screen `PhotoViewerViewController` (paging and slideshow, both remote
-transports through `DirectionalInputBinding`). tvOS only.
+transports through `DirectionalInputBinding`). Photos are on tvOS, iOS and Mac; the names here are
+tvOS's, and the other two are SwiftUI in `RivuletiOS/Photos/` and `RivuletMac/Photos/` over the shared
+`RivuletCore/Photos/` listing.
 
 - **Photos are `PhotoItem`, never `MediaItem`.** That is what keeps them out of Home rows,
   Search, the detail page, Continue Watching and Top Shelf. Do not map one into a `MediaItem`.
-- **One seam: `PhotoProvider.photoPage(in:folder:page:)`**, adopted by extension on the Plex and
-  Jellyfin providers. Every server assumption lives in `PlexPhotoProvider.swift` and
-  `JellyfinPhotoProvider.swift`.
+- **One seam: `PhotoProvider.photoPage(in:folder:query:page:)`**, adopted by extension on the Plex,
+  Jellyfin and Emby providers. Every server assumption lives in `PlexPhotoProvider.swift`,
+  `JellyfinPhotoProvider.swift` and `EmbyPhotoProvider.swift`.
+- **On iOS and Mac, `BrowseStore.libraries` never holds photo libraries (`photoLibraries` does),**
+  which is what keeps photos off Home.
 - **`visibleSidebarLibraries` lists photo libraries; `visibleMediaLibraries` does not.** The
   second feeds Home rows, hub fetches and prefetch, so widening it puts photo sections on Home.
 - **Never request the original file.** Thumbnails ask the photo transcoder for a 520 px cover,
@@ -876,6 +948,13 @@ transports through `DirectionalInputBinding`). tvOS only.
   - Server limits: HEIC is not indexed (0 of 4), `isFolder` is not an `/Items` parameter, and
     the legacy `X-Emby-Token` header answers 401 (the client sends `Authorization: MediaBrowser`).
 
+### Folders
+
+A video library can be browsed as it sits on disk, on all three apps. `MediaLibrary.offersFolders(on:)`
+decides where (any Plex movie or TV library, and every library that `browsesByFolder`); `FolderListing`
+in `RivuletCore/Folders/` is the one listing. A library with no metadata opens on Folders but always keeps
+its title grid and sort one pick away: folders-only (the 10-19 design) hid sorting from large libraries.
+
 ### iCloud sync
 
 Both apps sync through `RivuletCore/Sync/`. Design, measurements and the one-time
@@ -895,7 +974,7 @@ owner steps (developer portal, CloudKit schema deploy, profiles) are in
 - **Sign-out asks "this device only" or "all devices" when the account is shared**
   (`CloudSync.isSynced(accountID:)`); a token that was ever shared is revoked only
   by "all devices". A tombstone makes the other devices sign out without revoking.
-- **One per-device switch, `iCloudSyncEnabled`, on by default**, never itself synced.
+- **One per-device switch, `iCloudSyncEnabled`, off by default**, never itself synced.
   Order at launch: the Live TV store (it re-keys old M3U ids) and the provider registry
   populate first, then `CloudSync.shared.start()`.
 - **Adoption reaches the UI through the existing paths**: Plex through
@@ -962,8 +1041,14 @@ let next = episodes.first(where: { $0.index == currentEpisodeIndex + 1 })
 
 Release notes live ONLY in the `changelogs` array in
 `Rivulet/Views/Components/WhatsNewView.swift` (root `CHANGELOG.md` is a stub).
-iOS has its own, `IOSChangelog.entries` in `RivuletiOS/Settings/IOSWhatsNew.swift`,
-keyed the same way from the `ios-vX.Y.Z-<build>` tag (sheet at launch, Account → Changelog).
+iOS has its own, `IOSChangelog.entries` in `RivuletiOS/Settings/IOSWhatsNew.swift`
+(sheet at launch, Account → Changelog), and Mac `MacChangelog.entries` in
+`RivuletMac/Settings/MacWhatsNew.swift` (sheet at launch, Help → What's New, Settings → General).
+**All three platforms ship together from one `vX.Y.Z-<build>` tag, with one version and
+build number** (since `1.3.0 (125)`; before that iOS used `ios-v*` tags and Mac `mac-v*`).
+A release gets an entry under the same key in all three lists, each with only the lines
+that apply to that app. `MARKETING_VERSION` is set by hand on every app and extension
+target (10 places, not the test target) and must match across them.
 Entries are keyed by build-qualified version (`"1.0.3 (65)"`), newest first.
 Settings → About → Changelog renders the full history; the fresh-launch
 "What's New" shows only the current build's entry.
@@ -1065,6 +1150,11 @@ updates as the user moves focus between rows.
 ### Image Loading
 
 UIKit surfaces load remote images through `ImageCacheManager` (Music: `MusicChrome.loadArtwork`).
+`.thumb`, the default tier, asks the server for a copy fitted inside 900 px (`ArtworkSizing` in
+RivuletCore: the Plex photo transcoder at quality 95, `MaxWidth`/`MaxHeight` on Jellyfin and Emby)
+and falls back to the file itself when the server will not size it. `.full` and `.logo` download
+the file. So a `.thumb` load does not warm a later `.full` read of the same artwork: call
+`warmOriginal` for that. Measured on PMS 1.43: 39 posters were 37.9 MB as files and 8.7 MB sized.
 The remaining SwiftUI views use `CachedAsyncImage`:
 ```swift
 CachedAsyncImage(url: imageURL) { phase in
@@ -1133,7 +1223,7 @@ xcodebuild test -scheme Rivulet -destination 'platform=tvOS Simulator,name=Apple
 
 Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature — Parsers, Playback, Player, Preferences, Services, Siri, etc.), with shared fixtures/mocks in `RivuletTests/Fixtures/`, `RivuletTests/Helpers/`, `RivuletTests/Mocks/`. A few sit at the `RivuletTests/` root (`PlexDeviceDecodingTests.swift`).
 
-**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (`v*` → tvOS, `ios-v*` → iOS), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
+**Building requires full Xcode** (not just Command Line Tools) since it's tvOS. There is still no CI test run — run tests locally. CI is split across two systems: `codemagic.yaml` archives and publishes to TestFlight on tag push (one `vX.Y.Z-<build>` tag starts the tvOS, iOS and macOS workflows; tvOS and iOS IPAs attach to one GitHub release as `Rivulet.ipa` and `Rivulet-iOS.ipa`), and `.github/workflows/` holds five workflows — the SwiftLint gate, two Claude review/mention bots, and two build checks that exist to guard the platform boundary: `build-ios.yml` compiles the `Rivulet iOS` scheme on PRs/pushes touching `RivuletCore/**`, `RivuletiOS/**`, or the project file (otherwise nothing compiles iOS between release tags), and `build-tvos-core.yml` compiles the tvOS scheme when shared code changes from the iOS side. Both are build-only; signing and archives stay on Codemagic.
 
 **One Xcode everywhere: `codemagic.yaml`'s `xcode:` pin.** Both build checks read it, and it must equal the Xcode you build with locally (27.2 today). When you upgrade local Xcode, bump the pin in the same commit (and the checks' `runs-on` image on a major). The type checker is the reason: a newer compiler accepts expressions an older one gives up on ("unable to type-check this expression in reasonable time"), so a mismatch passes every local build and breaks CI after the push. It happened twice before the pin (`e602163`, the favorites sort in `LiveTVDataStore`).
 
@@ -1255,7 +1345,7 @@ VOD is served by AetherPlayer (`aether` route, the default) or AVPlayer (`hls` r
 
 ### HDR / DV
 - Aether drives `AVDisplayManager.preferredDisplayCriteria` itself (host `DisplayCriteriaManager` stands down on the aether route).
-- DV is engine-owned; the RPU stays in the samples and Apple's decoder applies it. P5 is a `dvh1` sample entry with `dvcC` and `CODECS="dvh1.05.LL"`. P8.1 / P8.4 are `hvc1` + `dvvC` with `SUPPLEMENTAL-CODECS="dvh1.08.LL/db1p"` (`/db4h` for 8.4), and the HDMI criteria request `dvh1`. The supplemental only rides the master playlist, which is served once the panel is in HDR, so real DV needs a DV TV plus Match Dynamic Range (or HDR/DV output locked). P7 is converted live to single-layer 8.1 (libdovi, EL dropped) on a DV panel. Without DV on the TV, P7 plays the HDR10 base. P8.2 plays its SDR base. Without DV on the TV, 8.x plays its base layer. Rivulet sets neither `dolbyVisionHandling` nor `forceDolbyVisionOnNonDVDisplay`, so the engine defaults apply. P5 has no engine stills, so its scrub previews come from the server's thumbnails when it has them. Routing lives in the engine's `CodecRoutePolicy.swift`.
+- DV is engine-owned; the RPU stays in the samples and Apple's decoder applies it. P5 is a `dvh1` sample entry with `dvcC` and `CODECS="dvh1.05.LL"`. P8.1 / P8.4 are `hvc1` + `dvvC` with `SUPPLEMENTAL-CODECS="dvh1.08.LL/db1p"` (`/db4h` for 8.4), and the HDMI criteria request `dvh1`. The supplemental only rides the master playlist, which is served once the panel is in HDR, so real DV needs a DV TV plus Match Dynamic Range (or HDR/DV output locked). P7 is converted live to single-layer 8.1 (libdovi) on a DV panel. For FEL the `DolbyVisionFelCurves` trait keeps the stream's own mapping and folds the EL's luma residual into each scene's luma curve, so Apple's decoder applies most of the EL (fine detail and grain are lost); there is no load option and no setting. Not the `DualLayerDolbyVision` composer, which stays off. Without DV on the TV, P7 plays the HDR10 base. P8.2 plays its SDR base. Without DV on the TV, 8.x plays its base layer. Rivulet sets neither `dolbyVisionHandling` nor `forceDolbyVisionOnNonDVDisplay`, so the engine defaults apply. P5 has no engine stills, so its scrub previews come from the server's thumbnails when it has them. Routing lives in the engine's `CodecRoutePolicy.swift`.
 
 ## Plex Discover API
 
@@ -1272,6 +1362,21 @@ The Plex Discover API uses three different hosts:
 | Mutations | Resolve external GUID → discover `ratingKey` via matches endpoint first, then PUT actions |
 
 ## Plex server API gotchas
+
+**`getFullMetadata`, `getChildren` and `getAllLeaves` share a read for 10 seconds**
+(`RecentReads` in `PlexNetworkManager`), because a detail page asks for one title from
+several places at once and Play asks again. Every write in `PlexNetworkManager` calls
+`forgetRecentReads()` on its way out; so do `PlexProgressReporter`, the tvOS
+`.plexDataNeedsRefresh` observer in `PlexDataStore`, and `BrowseStore.watchStateDidChange`.
+A new write endpoint, or a write that goes around the manager, must call it too, or the
+page that repaints after the write shows the old state.
+
+**Search through `/hubs/search`, never the legacy `/search`.** Measured on PMS 1.43.5:
+`/search` caps each type at 15, so "christmas" returned 15 home videos and no film from
+the Movies library. `/hubs/search` caps per hub (`limit`), scores each result, and adds
+actor, director, genre and collection hubs (`PlexHubSearch`). An item with `reason=actor`
+or `director` matched a person, not its title, and episodes of a matching show come back
+too, so the title rows filter both.
 
 **Hub items are not full metadata.** `/hubs/continueWatching` sends the `Guid`
 array only with `includeGuids=1` (which `continueWatchingURL` sends), and only three `Role` entries. Anything keyed on external
@@ -1332,6 +1437,16 @@ Channels without a direct stream URL go through a three-step, server-authoritati
 canonical form working Plex clients ship; do not "fix" it back to raw commas.
 
 ## Sentry Error Patterns
+
+**Reports go to self-hosted GlitchTip on Unraid.** The Sentry SDK and
+`SentryBridge` are unchanged; only the DSN (Codemagic env group `rivulet`) and the
+dSYM upload URL point at `errors.gurleystudios.com`, which is public only for ingest
+and CI's dSYM upload. Ingest needs an attested pass in the DSN path (`IngestPass`, from
+insights-api `/v1/ingest-pass`): a device that can't attest never starts Sentry. Aspen
+reports new issues and spikes (`glitchtip-watch.py` on Tower). Query it with the REST API (`/api/0/projects/rivulet/rivulet/issues/`,
+token in `~/.config/rivulet/glitchtip-token`, LAN `http://192.168.1.140:8766`).
+A tvOS **simulator** build defines `DEBUG` even in Release, so Sentry never runs
+there unless `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is overridden on the command line.
 
 | Error | Likely Cause |
 |-------|-------------|

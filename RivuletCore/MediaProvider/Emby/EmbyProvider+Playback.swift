@@ -139,6 +139,7 @@ struct EmbyProgressReporter: ProgressReporter {
     let playSessionID: String?
     /// Set for an hls transcode: the device its encode runs under, so `stopped` can end it.
     let transcodeDeviceID: String?
+    var reportTimeout = PlaybackReportTimeout.duration
 
     private func report(_ position: TimeInterval, paused: Bool) -> EmbyPlaybackReport? {
         guard let playSessionID else { return nil }
@@ -154,8 +155,9 @@ struct EmbyProgressReporter: ProgressReporter {
         try? await client.post(path, body: body)
     }
 
-    func start(position: TimeInterval) async {
-        await send("Sessions/Playing", position, paused: false)
+    func start(position: TimeInterval) async throws {
+        guard let body = report(position, paused: false) else { return }
+        try await client.post("Sessions/Playing", body: body)
     }
 
     func progress(position: TimeInterval) async {
@@ -167,13 +169,19 @@ struct EmbyProgressReporter: ProgressReporter {
     }
 
     func stopped(at position: TimeInterval) async {
-        await send("Sessions/Playing/Stopped", position, paused: false)
+        if let body = report(position, paused: false) {
+            await PlaybackReportTimeout.cleanup(for: reportTimeout) {
+                try await client.post("Sessions/Playing/Stopped", body: body)
+            }
+        }
         // The server reaps an idle encode after minutes; this frees it now. Both parameters are
         // needed: with either missing it answers 204 and stops nothing.
         guard let transcodeDeviceID, let playSessionID else { return }
-        try? await client.delete("Videos/ActiveEncodings", query: [
-            URLQueryItem(name: "DeviceId", value: transcodeDeviceID),
-            URLQueryItem(name: "PlaySessionId", value: playSessionID)
-        ])
+        await PlaybackReportTimeout.cleanup {
+            try await client.delete("Videos/ActiveEncodings", query: [
+                URLQueryItem(name: "DeviceId", value: transcodeDeviceID),
+                URLQueryItem(name: "PlaySessionId", value: playSessionID)
+            ])
+        }
     }
 }

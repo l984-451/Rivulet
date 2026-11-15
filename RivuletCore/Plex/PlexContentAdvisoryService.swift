@@ -56,6 +56,7 @@ struct PlexContentAdvisoryService: Sendable {
         req.setValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         req.setValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         req.setValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        req.setValue(PlexAPI.playerTitle, forHTTPHeaderField: "X-Plex-Device-Name")
         let (data, _) = try await URLSession.shared.data(for: req)
         return data
     }

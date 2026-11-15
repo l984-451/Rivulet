@@ -39,6 +39,71 @@ final class PlaybackDiagnostics {
     private var streamQuality: String?
     private var streamLocation: String?
 
+    // MARK: - Persistent history
+
+    /// This session's row in `PlaybackHistory`, which outlives the launch.
+    private var historyID: String?
+    private var sessionStart = Date()
+    private var hasStarted = false
+
+    private func record(_ change: @escaping @Sendable (inout PlaybackSessionRecord) -> Void) {
+        guard let historyID else { return }
+        PlaybackHistory.shared.update(historyID, change)
+    }
+
+    /// First frame of playback: start latency is measured from `setMedia`.
+    func noteStarted() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        let ms = Int(Date().timeIntervalSince(sessionStart) * 1000)
+        record { $0.startLatencyMs = ms }
+    }
+
+    func noteStall(seconds: TimeInterval) {
+        record { $0.stallCount += 1; $0.stallSeconds += seconds }
+    }
+
+    func noteSeek() { record { $0.seekCount += 1 } }
+
+    func noteError(_ text: String) {
+        let line = SensitiveDataRedactor.redact(String(text.prefix(160)))
+        record { if $0.errors.count < 6 { $0.errors.append(line) } }
+    }
+
+    /// Closes the row once; later calls (stop after ended) keep the first outcome.
+    func noteEnd(_ end: PlaybackSessionRecord.End, position: TimeInterval) {
+        let at = Int(position)
+        record {
+            guard $0.end == .running else { return }
+            $0.end = end
+            $0.endedAt = Date()
+            $0.lastPositionSec = at
+        }
+    }
+
+    private func beginHistory(_ metadata: PlexMetadata, route: String) {
+        if historyID != nil { noteEnd(.nextItem, position: 0) }
+        let media = metadata.Media?.first
+        let streams = media?.Part?.first?.Stream ?? []
+        let video = streams.first { $0.isVideo }
+        let audio = streams.first { $0.isAudio }
+        var record = PlaybackSessionRecord()
+        record.route = route.lowercased()
+        record.delivery = record.route == "hls" ? "transcode" : "direct_play"
+        record.mediaType = metadata.type ?? "unknown"
+        record.container = media?.container ?? "unknown"
+        record.videoCodec = video?.codec ?? "unknown"
+        record.resolution = media?.videoResolution ?? "unknown"
+        record.hdr = metadata.hasDolbyVision ? "dolby_vision p\(video?.DOVIProfile ?? -1)"
+            : (video?.isHDR ?? false) ? "hdr" : "sdr"
+        record.bitrateClass = PlaybackSessionRecord.bitrateClass(kbps: video?.bitrate)
+        record.audio = "\(audio?.codec ?? "?") \(audio?.channels ?? 0)ch"
+        historyID = record.id
+        sessionStart = Date()
+        hasStarted = false
+        PlaybackHistory.shared.begin(record)
+    }
+
     // MARK: - Media fingerprint
 
     /// Records what is playing and how it is encoded. Called once per session,
@@ -90,6 +155,7 @@ final class PlaybackDiagnostics {
                            "video_bitrate_kbps", "video_framerate", "hdr_format", "dv_profile", "audio_codec",
                            "audio_channels", "subtitle_stream_count", "stream_quality", "stream_location", "is_relay"]
             .map { "\($0)=\(media[$0].map { "\($0)" } ?? "?")" }.joined(separator: " ")
+        beginHistory(metadata, route: route)
         DiagLog.notice(.playback, "Session \(route) offset=\(Int(startOffset ?? 0)) \(fingerprint)")
         step("session_start", detail: route)
     }
@@ -130,7 +196,23 @@ final class PlaybackDiagnostics {
             "underlying": (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)
                 .map { "\($0.domain) code=\($0.code): \($0.localizedDescription)" } ?? "none"
         ]
+        noteError("\(route)/\(kind.rawValue): \(error.localizedDescription)")
+        if route.lowercased() != "hls" { self.record { $0.fellBackTo = "hls" } }
         step("primary_failed", detail: "\(route)/\(kind.rawValue): \(error.localizedDescription)")
+
+        // The origin answered 404 or 503: the server's file or load, not ours. A log, not an error.
+        if engineKind == "sourceRefused" || engineKind == "sourceRateLimited" {
+            SentryBridge.log(.warn, "Primary route refused by origin", attributes: [
+                "component": "playback",
+                "playback_event": "primary_route_failed",
+                "failed_route": route,
+                "failure_kind": kind.rawValue,
+                "engine_failure_kind": engineKind ?? "none",
+                "engine_underlying_code": engineUnderlying?.code.map(String.init) ?? "none",
+                "is_relay": isRelay,
+            ])
+            return
+        }
 
         SentryBridge.capture(error: error) { scope in
             scope.setLevel(.warning)
@@ -194,6 +276,7 @@ final class PlaybackDiagnostics {
 
     /// Capture a playback error with the entire causal chain attached.
     func capture(_ error: Error, event: String, extraTags: [String: String] = [:]) {
+        noteError("\(event): \(error.localizedDescription)")
         SentryBridge.capture(error: error) { scope in
             scope.setTag(value: "playback", key: "component")
             scope.setTag(value: event, key: "playback_event")

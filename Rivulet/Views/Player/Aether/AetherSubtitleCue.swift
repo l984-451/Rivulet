@@ -45,6 +45,8 @@ struct AetherSubtitleCue: Identifiable {
     struct StyledRun: Hashable {
         var text: String
         var color: UIColor?
+        /// Per-run background the content asked for (WebVTT `::cue` background).
+        var backgroundColor: UIColor?
         var isBold: Bool = false
         var isItalic: Bool = false
         var isUnderlined: Bool = false

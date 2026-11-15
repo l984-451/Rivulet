@@ -15,6 +15,7 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
+        RELEASE_ASSET: "Rivulet.ipa"
       # Keep this the Xcode you build with locally; the GitHub build checks
       # read it. Older compilers time out type-checking code newer ones accept.
       xcode: 27.2
@@ -129,7 +130,7 @@ workflows:
             --config Release \
             --archive-flags="-destination 'generic/platform=tvOS' -onlyUsePackageVersionsFromResolvedFile"
 
-      - name: Upload dSYMs to Sentry
+      - name: Upload dSYMs to GlitchTip
         ignore_failure: true
         script: |
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
@@ -137,14 +138,16 @@ workflows:
             exit 0
           fi
           which sentry-cli >/dev/null 2>&1 || brew install getsentry/tools/sentry-cli
-          sentry-cli debug-files upload \
+          sentry-cli --url "${SENTRY_URL:-https://errors.gurleystudios.com}" debug-files upload \
             --auth-token "$SENTRY_AUTH_TOKEN" \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
             --include-sources \
             "$CM_BUILD_DIR/build/ios/xcarchive"
 
-      - name: Publish IPA to GitHub Releases
+      # Shared with the iOS workflow: one release per tag, one asset per platform.
+      - &publish_github_release
+        name: Publish IPA to GitHub Releases
         script: |
           if [ -z "${CM_TAG:-}" ]; then
             echo "Not a tag build, skipping GitHub release."
@@ -159,12 +162,16 @@ workflows:
             echo "No IPA found, skipping GitHub release."
             exit 0
           fi
+          ASSET="$CM_BUILD_DIR/build/$RELEASE_ASSET"
+          cp "$IPA" "$ASSET"
+          # Whichever platform finishes first creates the release; the other uploads to it.
           GH_TOKEN="$GITHUB_TOKEN" gh release create "$CM_TAG" \
             --repo "$CM_REPO_SLUG" \
             --title "Rivulet $CM_TAG" \
             --generate-notes \
-            "$IPA" \
-          || GH_TOKEN="$GITHUB_TOKEN" gh release upload "$CM_TAG" "$IPA" \
+            --latest \
+            "$ASSET" \
+          || GH_TOKEN="$GITHUB_TOKEN" gh release upload "$CM_TAG" "$ASSET" \
             --repo "$CM_REPO_SLUG" --clobber
 
     artifacts:
@@ -195,16 +202,15 @@ workflows:
         XCODE_PROJECT: "Rivulet.xcodeproj"
         BUNDLE_ID: "com.gstudios.rivulet"
         APP_STORE_APPLE_ID: 6756892857
+        RELEASE_ASSET: "Rivulet-iOS.ipa"
       xcode: 27.2
 
-    # Separate tag prefix from tvOS. The two platforms share one App Store
-    # Connect record but ship independently, and a single `v*` tag firing both
-    # workflows would archive an iOS build for every tvOS release.
+    # One vX.Y.Z-<build> tag releases tvOS, iOS and macOS together.
     triggering:
       events:
         - tag
       tag_patterns:
-        - pattern: 'ios-v*'
+        - pattern: 'v*'
           include: true
       cancel_previous_builds: true
 
@@ -260,9 +266,7 @@ workflows:
 
       - name: Set build number from the tag
         script: |
-          # Tag shape is ios-vX.Y.Z-<build>, matching the tvOS rule that the tag
-          # is the source of truth. Build numbers are tracked per platform in
-          # App Store Connect, so iOS and tvOS may reuse the same number.
+          # The shared vX.Y.Z-<build> tag is the source of truth, as on tvOS.
           if [ -n "${CM_TAG:-}" ]; then
             NEXT="${CM_TAG##*-}"
           else
@@ -270,7 +274,7 @@ workflows:
           fi
           case "$NEXT" in
             ''|*[!0-9]*)
-              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected ios-vX.Y.Z-<build>)."
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected vX.Y.Z-<build>)."
               exit 1
               ;;
           esac
@@ -292,7 +296,7 @@ workflows:
 
       # Without this the in-app frames on iOS crash and app-hang events resolve
       # as <unknown>, which is what made RIVULET-41 unreadable on tvOS.
-      - name: Upload dSYMs to Sentry
+      - name: Upload dSYMs to GlitchTip
         ignore_failure: true
         script: |
           if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
@@ -300,16 +304,207 @@ workflows:
             exit 0
           fi
           which sentry-cli >/dev/null 2>&1 || brew install getsentry/tools/sentry-cli
-          sentry-cli debug-files upload \
+          sentry-cli --url "${SENTRY_URL:-https://errors.gurleystudios.com}" debug-files upload \
             --auth-token "$SENTRY_AUTH_TOKEN" \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
             --include-sources \
             "$CM_BUILD_DIR/build/ios/xcarchive"
 
+      - *publish_github_release
+
     artifacts:
       - build/ios/ipa/*.ipa
       - $CM_BUILD_DIR/build/ios/xcarchive/*.dSYMs/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Rivulet External Plex Forum
+
+  rivulet-macos-testflight:
+    name: Rivulet macOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+
+    integrations:
+      app_store_connect: codemagic
+
+    environment:
+      groups:
+        - rivulet
+      vars:
+        XCODE_SCHEME: "Rivulet Mac"
+        XCODE_PROJECT: "Rivulet.xcodeproj"
+        BUNDLE_ID: "com.gstudios.rivulet"
+        APP_STORE_APPLE_ID: 6756892857
+        ARCHIVE_PATH: "build/macos/Rivulet.xcarchive"
+      xcode: 27.2
+
+    # Same App Store record, bundle id and release tag as tvOS and iOS.
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Initialize keychain
+        script: keychain initialize
+
+      - name: Provide the distribution certificate private key
+        script: |
+          if [ -n "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            printf '%s' "$CERTIFICATE_PRIVATE_KEY" > "$CM_BUILD_DIR/cert_key.pem"
+            echo "Using persistent CERTIFICATE_PRIVATE_KEY."
+          else
+            echo "WARNING: CERTIFICATE_PRIVATE_KEY is not set, generating an"
+            echo "ephemeral key. This mints NEW certificates every build and"
+            echo "will hit Apple's cert cap. Set CERTIFICATE_PRIVATE_KEY."
+            openssl genrsa -out "$CM_BUILD_DIR/cert_key.pem" 2048
+          fi
+
+      # The app signs with the Apple Distribution certificate the other
+      # platforms use; the .pkg needs a Mac Installer Distribution one too.
+      - name: Fetch or create signing files (Mac App Store)
+        script: |
+          set -e
+          # --platform IOS finds the shared App ID (IOS or UNIVERSAL); MAC_OS
+          # would miss it and try to create a duplicate.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type MAC_APP_STORE \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --create
+          count_p12() {
+            ls "$HOME/Library/Developer/Xcode/UserData/Certificates/"*.p12 \
+               "$HOME/Library/MobileDevice/Certificates/"*.p12 2>/dev/null | wc -l
+          }
+          BEFORE=$(count_p12)
+          app-store-connect certificates list \
+            --type MAC_INSTALLER_DISTRIBUTION \
+            --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+            --save
+          if [ "$(count_p12)" -eq "$BEFORE" ]; then
+            echo "No Mac Installer Distribution certificate for this key, creating one."
+            app-store-connect certificates create \
+              --type MAC_INSTALLER_DISTRIBUTION \
+              --certificate-key @file:"$CM_BUILD_DIR/cert_key.pem" \
+              --save
+          fi
+
+      - name: Add certificates to keychain
+        script: |
+          # The default ACL allows only codesign and productsign; exportArchive
+          # signs the .pkg with productbuild, which would need a keychain prompt.
+          keychain add-certificates --allow-all-applications
+          rm -f "$CM_BUILD_DIR/cert_key.pem"
+
+      - name: Apply fetched signing profiles to Xcode project
+        script: xcode-project use-profiles
+
+      - name: Restore package traits dropped by use-profiles
+        script: python3 Scripts/restore-package-traits.py
+
+      - name: Generate Secrets.swift from env
+        script: |
+          mkdir -p RivuletCore/Config
+          cat > RivuletCore/Config/Secrets.swift <<EOS
+          import Foundation
+
+          enum Secrets {
+              static let sentryDSN = "${SENTRY_DSN:-}"
+          }
+          EOS
+          echo "Wrote RivuletCore/Config/Secrets.swift (dsn set: $([ -n "${SENTRY_DSN:-}" ] && echo yes || echo no))"
+
+      - name: Set build number from the tag
+        script: |
+          # The shared vX.Y.Z-<build> tag is the source of truth, as on tvOS.
+          if [ -n "${CM_TAG:-}" ]; then
+            NEXT="${CM_TAG##*-}"
+          else
+            NEXT=$PROJECT_BUILD_NUMBER
+          fi
+          case "$NEXT" in
+            ''|*[!0-9]*)
+              echo "Cannot read a build number from tag '${CM_TAG:-}' (expected vX.Y.Z-<build>)."
+              exit 1
+              ;;
+          esac
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" --platform MAC_OS 2>/dev/null || echo "")
+          if [ -n "$LATEST" ] && [ "$NEXT" -le "$LATEST" ]; then
+            echo "Tag asks for build $NEXT but macOS TestFlight is already at $LATEST. Tag a higher build."
+            exit 1
+          fi
+          echo "Setting CURRENT_PROJECT_VERSION=$NEXT (tag ${CM_TAG:-none}, TestFlight latest ${LATEST:-unknown})"
+          agvtool new-version -all "$NEXT"
+
+      - name: Archive (macOS Release)
+        script: |
+          set -o pipefail
+          mkdir -p /tmp/xcodebuild_logs
+          xcodebuild archive \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$CM_BUILD_DIR/$ARCHIVE_PATH" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            2>&1 | tee /tmp/xcodebuild_logs/archive.log | grep -E "error:|\*\* ARCHIVE" || true
+          test -d "$CM_BUILD_DIR/$ARCHIVE_PATH/Products/Applications/Rivulet.app"
+
+      # build-ipa can't be used: it fails when the export holds a .pkg, not an .ipa.
+      - name: Export signed installer package
+        script: |
+          set -e
+          INSTALLER=$(security find-identity -v | awk '/Installer/ {print $2; exit}')
+          if [ -z "$INSTALLER" ]; then
+            echo "No Mac Installer Distribution identity in the keychain."
+            exit 1
+          fi
+          OPTIONS="$HOME/export_options.plist"
+          # use-profiles can write method=ad-hoc, which exportArchive rejects for a Mac app.
+          /usr/libexec/PlistBuddy -c "Delete :method" "$OPTIONS" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$OPTIONS"
+          /usr/libexec/PlistBuddy -c "Delete :installerSigningCertificate" "$OPTIONS" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $INSTALLER" "$OPTIONS"
+          echo "Export options:"; plutil -p "$OPTIONS"
+          if ! xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/$ARCHIVE_PATH" \
+            -exportOptionsPlist "$OPTIONS" \
+            -exportPath "$CM_BUILD_DIR/build/macos/pkg"; then
+            # The real productbuild error is only in the distribution logs.
+            for log in "${TMPDIR:-/tmp}"/*.xcdistributionlogs/IDEDistribution*.log; do
+              echo "=== $log"; tail -n 80 "$log"
+            done
+            exit 70
+          fi
+          ls "$CM_BUILD_DIR"/build/macos/pkg/*.pkg
+
+      - name: Upload dSYMs to GlitchTip
+        ignore_failure: true
+        script: |
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "No SENTRY_AUTH_TOKEN set, skipping dSYM upload."
+            exit 0
+          fi
+          which sentry-cli >/dev/null 2>&1 || brew install getsentry/tools/sentry-cli
+          sentry-cli --url "${SENTRY_URL:-https://errors.gurleystudios.com}" debug-files upload \
+            --auth-token "$SENTRY_AUTH_TOKEN" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            --include-sources \
+            "$CM_BUILD_DIR/$ARCHIVE_PATH"
+
+    artifacts:
+      - build/macos/pkg/*.pkg
+      - build/macos/Rivulet.xcarchive/dSYMs/**/*
       - /tmp/xcodebuild_logs/*.log
 
     publishing:

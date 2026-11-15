@@ -10,10 +10,14 @@ final class AutoplayLimitTests: XCTestCase {
         XCTAssertTrue(AutoplayLimit.off.allowsAutoplay(afterEpisodesInARow: 50))
     }
 
-    /// Three Episodes: the first plays from the remote, two more by autoplay, then Up Next waits.
-    func test_three_stopsAfterTheThirdEpisode() {
-        XCTAssertTrue(AutoplayLimit.three.allowsAutoplay(afterEpisodesInARow: 1))
-        XCTAssertTrue(AutoplayLimit.three.allowsAutoplay(afterEpisodesInARow: 2))
-        XCTAssertFalse(AutoplayLimit.three.allowsAutoplay(afterEpisodesInARow: 3))
+    /// One more: the episode you picked, one by autoplay, then Up Next waits.
+    func test_one_playsOneMoreEpisode() {
+        XCTAssertTrue(AutoplayLimit.one.allowsAutoplay(afterEpisodesInARow: 1))
+        XCTAssertFalse(AutoplayLimit.one.allowsAutoplay(afterEpisodesInARow: 2))
+    }
+
+    func test_three_playsThreeMoreEpisodes() {
+        XCTAssertTrue(AutoplayLimit.three.allowsAutoplay(afterEpisodesInARow: 3))
+        XCTAssertFalse(AutoplayLimit.three.allowsAutoplay(afterEpisodesInARow: 4))
     }
 }

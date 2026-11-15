@@ -190,18 +190,29 @@ final class ServerDataStore: ObservableObject {
         var browsable = fetched.filter { Self.browsableKinds.contains($0.kind) }
         // Music plays through the selected server only (MusicProviderRegistry).
         if provider.kind == .plex { browsable.removeAll { $0.kind == .music } }
-        var recent: [CachedHomeHub] = []
-        for library in browsable where Self.recentlyAddedKinds.contains(library.kind) {
-            let id = Self.rowID(provider.id, "\(library.id).recentlyAdded")
+        let recentLibraries = browsable.filter { Self.recentlyAddedKinds.contains($0.kind) }
+        // Four at a time; results arrive in completion order, so each carries its index.
+        let fetchedRecent = await BoundedFanOut.map(Array(recentLibraries.enumerated())) { index, library in
             do {
-                if let hub = try await provider.recentlyAddedHub(in: library) {
+                return (index, Result<MediaHub?, Error>.success(try await provider.recentlyAddedHub(in: library)))
+            } catch {
+                return (index, .failure(error))
+            }
+        }
+        var recent: [CachedHomeHub] = []
+        for (index, outcome) in fetchedRecent.sorted(by: { $0.0 < $1.0 }) {
+            let library = recentLibraries[index]
+            switch outcome {
+            case .success(let hub):
+                if let hub {
                     var row = Self.row(hub)
                     row.libraryKey = library.settingsKey
                     recent.append(row)
                 }
-            } catch {
+            case .failure(let error):
                 DiagLog.error(.servers, "\(provider.kind) recently added failed: \(DiagLog.describe(error))")
                 // This library's fetch failed: keep its row.
+                let id = Self.rowID(provider.id, "\(library.id).recentlyAdded")
                 if let previous = previous.rows.first(where: { $0.id == id }) { recent.append(previous) }
             }
         }
@@ -243,10 +254,18 @@ final class ServerDataStore: ObservableObject {
         guard !titles.isEmpty else { return }
         for provider in due {
             guard var slice = slices[provider.id] else { continue }
-            for library in slice.libraries where Self.homeRowKinds.contains(library.kind) {
+            let libraries = slice.libraries.filter { Self.homeRowKinds.contains($0.kind) }.map { ($0.settingsKey, $0) }
+            let found = await BoundedFanOut.map(libraries) { key, library in
                 do {
-                    slice.trending[library.settingsKey] = try await provider.trending(in: library, from: titles, limit: 10)
+                    return (key, Result<[MediaItem], Error>.success(try await provider.trending(in: library, from: titles, limit: 10)))
                 } catch {
+                    return (key, .failure(error))
+                }
+            }
+            for (key, outcome) in found {
+                switch outcome {
+                case .success(let items): slice.trending[key] = items
+                case .failure(let error):
                     DiagLog.error(.servers, "\(provider.kind) trending failed: \(DiagLog.describe(error))")
                 }
             }

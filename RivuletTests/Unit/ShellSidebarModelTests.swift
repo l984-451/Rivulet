@@ -15,6 +15,26 @@ final class ShellSidebarModelTests: XCTestCase {
             profileName: "Bain")
     }
 
+    func test_favorites_showWithAnyMediaServer_andLeadBesideTheWatchlist() {
+        func tabs(showFavorites: Bool, hasServer: Bool) -> [SidebarTab] {
+            ShellSidebarModel.sections(
+                libraries: [], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: true, showFavorites: showFavorites,
+                profileName: "Bain", hasMediaServer: hasServer)
+                .flatMap(\.items).map(\.tab)
+        }
+        XCTAssertEqual(tabs(showFavorites: true, hasServer: true),
+                       [.account, .search, .home, .watchlist, .favorites, .settings])
+        XCTAssertFalse(tabs(showFavorites: false, hasServer: true).contains(.favorites))
+        XCTAssertFalse(tabs(showFavorites: true, hasServer: false).contains(.favorites))
+    }
+
+    func test_favorites_areOffUnlessAskedFor() {
+        let rows = ShellSidebarModel.arrangeableRows(
+            libraries: [], liveTVSources: [], combineLiveTV: true, showDiscover: false, showWatchlist: false)
+        XCTAssertFalse(rows.contains { $0.key == SidebarArrangement.favorites })
+    }
+
     private func tabs(hasServer: Bool, liveTV: Bool, libraries: [PlexLibrary] = [],
                       playlistServers: [PlaylistServer] = []) -> [SidebarTab] {
         let source = LiveTVDataStore.LiveTVSourceInfo(
@@ -26,6 +46,22 @@ final class ShellSidebarModelTests: XCTestCase {
             profileName: "Account", hasMediaServer: hasServer,
             playlistServers: playlistServers)
             .flatMap(\.items).map(\.tab)
+    }
+
+    func test_profileName_prefersPlexProfileThenPlexAccount() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: "Kids", plexUser: "bain", otherServerUsers: ["jf"]), "Kids")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: "bain", otherServerUsers: ["jf"]), "bain")
+    }
+
+    func test_profileName_withoutPlex_namesTheOtherServersUser() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: [nil, "emby-user"]), "emby-user")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: ["jf", "emby-user"]), "jf")
+    }
+
+    func test_profileName_skipsEmptyNames_andFallsBackToAccount() {
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: "", plexUser: nil, otherServerUsers: ["", "emby-user"]), "emby-user")
+        XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: nil, otherServerUsers: [nil, nil]),
+                       String(localized: "Account"))
     }
 
     private let movies = PlexLibrary(
@@ -200,6 +236,29 @@ final class ShellSidebarModelTests: XCTestCase {
         XCTAssertEqual(header(true)?.canSwitchProfile, true)
         XCTAssertEqual(header(false)?.canSwitchProfile, false)
         XCTAssertEqual(sections([])[0].items.first?.canSwitchProfile, false)
+    }
+
+    func test_nowPlaying_joinsTheProfileSlot_withoutAddingARowOrASection() {
+        func build(_ playing: SidebarNowPlaying?) -> [ShellSidebarSection] {
+            ShellSidebarModel.sections(
+                libraries: [], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: false,
+                profileName: "Bain", nowPlaying: playing)
+        }
+        let track = SidebarNowPlaying(title: "Nightcall", artist: "Kavinsky", isPlaying: true)
+        let with = build(track)
+        let without = build(nil)
+
+        XCTAssertEqual(with[0].items.map(\.tab), [.account, .nowPlaying])
+        XCTAssertEqual(with[0].items[1].title, "Nightcall \u{00B7} Kavinsky")
+        XCTAssertEqual(with[0].items[1].nowPlaying, track)
+        XCTAssertEqual(Array(with.dropFirst()), Array(without.dropFirst()))
+        XCTAssertEqual(without[0].items.map(\.tab), [.account])
+    }
+
+    func test_nowPlaying_lineWithoutArtist_isTheTitle() {
+        XCTAssertEqual(SidebarNowPlaying(title: "Intro", artist: nil, isPlaying: false).line, "Intro")
+        XCTAssertEqual(SidebarNowPlaying(title: "Intro", artist: "", isPlaying: false).line, "Intro")
     }
 
     func test_firstName() {

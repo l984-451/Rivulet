@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Per-slide hero content: logo or serif title, metadata row and a one-line tagline. The 0.22s logo
+// Per-slide hero content: logo or title, metadata row and a one-line tagline. The 0.22s logo
 // crossfade keeps time with `HeroOverlayView.displayedIndex` and the backdrop.
 
 import UIKit
@@ -15,6 +15,8 @@ final class HeroSlideView: UIView {
     private let fallbackTitleLabel = UILabel()
     private let metadataLabel = UILabel()
     private let ratingBadge = HeroRatingBadgeView()
+    /// The rating badge's text while it shows (tests).
+    var ratingBadgeText: String? { ratingBadge.isHidden ? nil : ratingBadge.text }
     private let metadataRow = UIStackView()
     private let taglineLabel = UILabel()
     private let stack = UIStackView()
@@ -50,13 +52,8 @@ final class HeroSlideView: UIView {
         logoImageView.translatesAutoresizingMaskIntoConstraints = false
         logoImageView.setContentHuggingPriority(.required, for: .horizontal)
 
-        // Fallback title: 72pt heavy serif, two lines max.
-        let baseFont = UIFont.systemFont(ofSize: 72, weight: .heavy)
-        if let serifDescriptor = baseFont.fontDescriptor.withDesign(.serif) {
-            fallbackTitleLabel.font = UIFont(descriptor: serifDescriptor, size: 72)
-        } else {
-            fallbackTitleLabel.font = baseFont
-        }
+        // Fallback title: 72pt bold, the detail page's face, two lines max.
+        fallbackTitleLabel.font = .systemFont(ofSize: 72, weight: .bold)
         fallbackTitleLabel.textColor = .white
         fallbackTitleLabel.numberOfLines = 2
         fallbackTitleLabel.shadowColor = UIColor.black.withAlphaComponent(0.5)
@@ -143,7 +140,7 @@ final class HeroSlideView: UIView {
 
         // Metadata row
         metadataLabel.text = metaLine(for: item)
-        if let rating = item.contentRating, !rating.isEmpty {
+        if let rating = item.displayContentRating, !rating.isEmpty {
             ratingBadge.text = rating
             ratingBadge.isHidden = false
         } else {

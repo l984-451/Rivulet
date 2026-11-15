@@ -47,6 +47,7 @@ struct IOSPlexEpisodeCell: View {
             .overlay {
                 if actions.preparingID == episode.ref.actionKey { ProgressView().tint(.white) }
             }
+            .tileHover(cornerRadius: 10)
     }
 
     private var heading: some View {
@@ -98,7 +99,7 @@ struct IOSPlexEpisodeCell: View {
 struct IOSPlexCastRow: View {
     let item: MediaItem
     let detail: MediaItemDetail?
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
 
     private struct Person: Identifiable {
@@ -106,15 +107,23 @@ struct IOSPlexCastRow: View {
         let name: String
         let role: String?
         let image: URL?
+        let source: MediaPerson
     }
 
     private var people: [Person] {
         guard let detail else { return [] }
-        let cast = detail.cast.prefix(20).map { (name: $0.name, role: $0.role, image: $0.imageURL) }
-        let directors = detail.directors.map { (name: $0.name, role: Optional("Director"), image: $0.imageURL) }
+        let cast = detail.cast.prefix(20).map { (name: $0.name, role: $0.role, image: $0.imageURL, source: $0) }
+        let directors = detail.directors.map { (name: $0.name, role: Optional("Director"), image: $0.imageURL, source: $0) }
         return (cast + directors).filter { !$0.name.isEmpty }.enumerated().map {
-            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image)
+            Person(id: $0.offset, name: $0.element.name, role: $0.element.role, image: $0.element.image, source: $0.element.source)
         }
+    }
+
+    /// The person on this title's server, so their page reads the right one.
+    private func owned(_ person: MediaPerson) -> MediaPerson {
+        var person = person
+        person.providerID = person.providerID ?? item.ref.providerID
+        return person
     }
 
     var body: some View {
@@ -124,22 +133,25 @@ struct IOSPlexCastRow: View {
                 IOSPlexShelfHeader(title: String(localized: "Cast & Crew"))
             } tile: { person, width in
                 let pixels = Int((width * displayScale).rounded(.up))
-                VStack(spacing: 6) {
-                    IOSPlexImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
-                        .overlay {
-                            if person.image == nil {
-                                Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
+                NavigationLink(value: owned(person.source)) {
+                    VStack(spacing: 6) {
+                        IOSPlexImage(url: browse.imageURL(person.image, providerID: item.ref.providerID, width: pixels, height: pixels))
+                            .overlay {
+                                if person.image == nil {
+                                    Image(systemName: "person.fill").font(.title).foregroundStyle(.secondary)
+                                }
                             }
+                            .frame(width: width, height: width)
+                            .clipShape(Circle())
+                        Text(person.name).font(.caption.weight(.semibold)).lineLimit(1)
+                        if let role = person.role {
+                            Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
-                        .frame(width: width, height: width)
-                        .clipShape(Circle())
-                    Text(person.name).font(.caption.weight(.semibold)).lineLimit(1)
-                    if let role = person.role {
-                        Text(role).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
+                    .frame(width: width)
+                    .accessibilityElement(children: .combine)
                 }
-                .frame(width: width)
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.plain)
             }
         }
     }
@@ -149,11 +161,41 @@ struct IOSPlexCastRow: View {
 struct IOSPlexExtrasRow: View {
     let detail: MediaItemDetail?
     @Environment(\.plexActions) private var actions
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.openURL) private var openURL
+    /// The YouTube trailer awaiting its confirm.
+    @State private var youTubeID: String?
 
     private var extras: [MediaItemDetail.Extra] {
-        (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && ($0.providerID.hasPrefix("plex:") ? Int($0.id) != nil : true) }
+        var rows = (detail?.orderedExtras ?? []).filter { IOSPlaybackGate.canPlay(MediaItemRef(providerID: $0.providerID, itemID: $0.id)) && ($0.providerID.hasPrefix("plex:") ? Int($0.id) != nil : true) }
+        // A title with no trailer of its own gets its YouTube one (Jellyfin, Emby), on the title's artwork.
+        if let detail, let id = detail.youTubeTrailerID {
+            let art = detail.item.artwork
+            rows.insert(MediaItemDetail.Extra(
+                id: Self.youTubePrefix + id, title: ExtraSubtype.trailer.displayName,
+                thumbnailURL: art.thumbnail ?? art.backdrop ?? art.poster, duration: nil, playbackKey: nil,
+                providerID: detail.item.ref.providerID, subtype: .trailer), at: 0)
+        }
+        return rows
+    }
+
+    private static let youTubePrefix = "youtube:"
+
+    private func tapped(_ extra: MediaItemDetail.Extra) {
+        if extra.id.hasPrefix(Self.youTubePrefix) {
+            youTubeID = String(extra.id.dropFirst(Self.youTubePrefix.count))
+        } else {
+            actions.playExtra(extra)
+        }
+    }
+
+    /// The YouTube app, else the trailer on the web.
+    private func openYouTube(_ videoID: String) {
+        guard let app = YouTubeTrailer.appURL(videoID: videoID) else { return }
+        openURL(app) { opened in
+            if !opened, let web = YouTubeTrailer.webURL(videoID: videoID) { openURL(web) }
+        }
     }
 
     var body: some View {
@@ -162,7 +204,7 @@ struct IOSPlexExtrasRow: View {
             IOSShelfRow(kind: .landscape, items: extras) {
                 IOSPlexShelfHeader(title: String(localized: "Extras"))
             } tile: { extra, width in
-                Button { actions.playExtra(extra) } label: {
+                Button { tapped(extra) } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         IOSPlexImage(url: browse.imageURL(extra.thumbnailURL, providerID: extra.providerID,
                                                           width: Int(width * displayScale), height: Int(width * displayScale * 9 / 16)))
@@ -171,6 +213,7 @@ struct IOSPlexExtrasRow: View {
                             .overlay {
                                 if actions.preparingID == extra.id { ProgressView().tint(.white) }
                             }
+                            .tileHover(cornerRadius: 10)
                         Text(extra.title).font(.footnote.weight(.semibold)).lineLimit(1)
                         if let runtime = extra.runtimeText {
                             Text(runtime).font(.caption).foregroundStyle(.secondary)
@@ -180,12 +223,20 @@ struct IOSPlexExtrasRow: View {
                 }
                 .buttonStyle(.plain)
             }
+            .confirmationDialog(String(localized: "Open in YouTube"), isPresented: Binding(
+                get: { youTubeID != nil }, set: { if !$0 { youTubeID = nil } }), titleVisibility: .visible) {
+                Button(String(localized: "Open in YouTube")) { youTubeID.map(openYouTube) }
+                Button(String(localized: "Cancel"), role: .cancel) {}
+            } message: {
+                Text("This trailer plays in the YouTube app.")
+            }
         }
     }
 }
 
 private extension MediaItemDetail.Extra {
     var runtimeText: String? {
+        if id.hasPrefix("youtube:") { return "YouTube" }
         guard let duration, duration > 0 else { return nil }
         let minutes = Int(duration / 60)
         return minutes >= 60 ? String(localized: "\(minutes / 60)h \(minutes % 60)m") : String(localized: "\(minutes)m")
@@ -229,6 +280,36 @@ struct IOSPlexInformationSection: View {
     }
 
     var body: some View {
+        if let ratings = detail?.ratings, !ratings.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Ratings").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 24) {
+                        ForEach(ratings, id: \.source) { rating in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: rating.badgeText + (rating.scale ?? "")).font(.title3.weight(.semibold))
+                                Text(verbatim: rating.name).font(.subheadline).foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding(.bottom, 16)
+        }
+        if let reviews = detail?.reviews, !reviews.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Critic Reviews").font(.title3.bold()).accessibilityAddTraits(.isHeader)
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(reviews, id: \.self) { IOSReviewCard(review: $0) }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding(.bottom, 16)
+        }
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Information").font(.title3.bold()).accessibilityAddTraits(.isHeader)
@@ -251,5 +332,29 @@ struct IOSPlexInformationSection: View {
                 .onGeometryChange(for: Bool.self) { $0.duoFoldDividesMiddle() } action: { crossesFold = $0 }
             }
         }
+    }
+}
+
+/// One critic excerpt in the inline reviews row (server text, shown verbatim).
+private struct IOSReviewCard: View {
+    let review: CriticReview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if let verdict = review.verdict {
+                    Image(systemName: verdict.symbol)
+                        .foregroundStyle(verdict == .fresh ? Color.green : Color.red)
+                        .accessibilityLabel(verdict.label)
+                }
+                if let byline = review.byline {
+                    Text(verbatim: byline).font(.subheadline.weight(.semibold)).lineLimit(1)
+                }
+            }
+            Text(verbatim: review.excerpt).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+        }
+        .frame(width: 280, alignment: .topLeading)
+        .padding(14)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 }

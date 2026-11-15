@@ -29,7 +29,8 @@ extension SettingsContent {
                 SettingsRowItem(id: "jellyfinRefresh", title: "Refresh",
                                 kind: .action(destructive: false, handler: { vc in
                     let page = vc as? SettingsPageViewController
-                    ServerDataStore.shared.reload()
+                    // Every surface repaints from the server, favorites rows included (ServerDataStore reloads on it).
+                    NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
                     page?.reloadRows()
                     Task { @MainActor [weak page] in
                         for await loading in ServerDataStore.shared.$isLoading.values where !loading { break }

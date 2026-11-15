@@ -193,10 +193,10 @@ final class EmbyProviderTests: XCTestCase {
         XCTAssertEqual(members.map(\.title), ["12 Years a Slave", "28 Years Later"])
     }
 
-    func test_allEpisodes_keepSeasonZeroFirst() async throws {
+    func test_allEpisodes_putSeasonZeroLast() async throws {
         server.respond("/Shows/13/Episodes", body: EmbyTestJSON.merged([EmbyBrowseFixtures.specialsEpisodes, EmbyBrowseFixtures.episodesAbbott]))
         let episodes = try await provider().allEpisodes(of: ref("13"))
-        XCTAssertEqual(episodes.map(\.seasonNumber), [0, 1, 1, 1])
+        XCTAssertEqual(episodes.map(\.seasonNumber), [1, 1, 1, 0])
         XCTAssertNil(query(try XCTUnwrap(server.requests.first))["SeasonId"])
     }
 
@@ -265,7 +265,7 @@ final class EmbyProviderTests: XCTestCase {
         server.respond("\(items)/166", body: EmbyBrowseFixtures.movieDetail)
         let detail = try await provider().fullDetail(for: ref("166"))
         XCTAssertEqual(detail.item.title, "01 Sample Clip")
-        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Fields"], "ChildCount,RecursiveItemCount,Collections")
+        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Fields"], "ChildCount,RecursiveItemCount,Collections,RemoteTrailers")
         XCTAssertEqual(detail.chapters.count, 4)
         XCTAssertEqual(paths(), ["\(items)/166"], "no trailers counted, so no extras request")
     }
@@ -380,11 +380,23 @@ final class EmbyProviderTests: XCTestCase {
         server.respond("\(items)/Latest", body: EmbyBrowseFixtures.latestGrouped)
         let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
         let hubs = try await p.hubs(in: library)
-        XCTAssertEqual(hubs.map(\.id), ["3.recentlyAdded"])
+        XCTAssertEqual(hubs.map(\.id), ["3.recentlyAdded"], "no Resume answer costs only that row")
         XCTAssertEqual(hubs.first?.items.count, 6)
         let one = try await p.recentlyAddedHub(in: library)
         XCTAssertEqual(one?.id, "3.recentlyAdded")
-        XCTAssertEqual(query(try XCTUnwrap(server.requests.first))["Limit"], "24")
+        let latest = try XCTUnwrap(server.requests.first { $0.url!.path == "\(items)/Latest" })
+        XCTAssertEqual(query(latest)["Limit"], "24")
+    }
+
+    func test_libraryHubs_putsTheLibrarysResumeRowFirst() async throws {
+        server.respond("\(items)/Resume", body: EmbyBrowseFixtures.resume)
+        server.respond("\(items)/Latest", body: EmbyBrowseFixtures.latestGrouped)
+        let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
+        let hubs = try await provider().hubs(in: library)
+        XCTAssertEqual(hubs.map(\.id), ["3.continueWatching", "3.recentlyAdded"])
+        let resume = try XCTUnwrap(server.requests.first { $0.url!.path == "\(items)/Resume" })
+        XCTAssertEqual(query(resume)["ParentId"], "3")
+        XCTAssertEqual(query(resume)["MediaTypes"], "Video")
     }
 
     func test_recentlyAddedHub_emptyLibraryHasNoHub() async throws {
@@ -431,6 +443,22 @@ final class EmbyProviderTests: XCTestCase {
         let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
         let rows = try await provider().trending(in: library, from: [trendingItem(999001, .movie)], limit: 0)
         XCTAssertEqual(rows, [])
+    }
+
+    // MARK: - Favorites
+
+    func test_favorites_askForTheLibrarysFavoritesByName() async throws {
+        server.respond(items, body: EmbyBrowseFixtures.moviesPage)
+        let library = MediaLibrary(id: "3", providerID: "emby:srv", title: "Movies", kind: .movies)
+        let p = provider()
+        XCTAssertTrue(p.supportsFavorites)
+        _ = try await p.favorites(in: library, limit: 25)
+        let q = query(try XCTUnwrap(server.requests.first))
+        XCTAssertEqual(q["Filters"], "IsFavorite")
+        XCTAssertEqual(q["ParentId"], "3")
+        XCTAssertEqual(q["Recursive"], "true")
+        XCTAssertEqual(q["SortBy"], "SortName")
+        XCTAssertEqual(q["Limit"], "25")
     }
 
     // MARK: - Collections

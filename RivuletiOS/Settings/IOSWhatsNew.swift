@@ -4,10 +4,72 @@
 import SwiftUI
 
 /// The iOS release notes. Keyed "<CFBundleShortVersionString> (<CFBundleVersion>)", newest
-/// first; CI takes the build number from the `ios-vX.Y.Z-<build>` tag, so the key must match it.
+/// first; CI takes the build number from the shared `vX.Y.Z-<build>` tag, so the key must match it.
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.1 (128)", [
+            "Home can show your favorite Live TV channels",
+            "Library sorting matches Apple TV, New Episodes included",
+            "Libraries remember the Unwatched filter",
+            "The Home hero follows the rows you show on Home",
+            "Delete shows up again on a remote connection",
+            "Plex's dashboard, Tautulli and webhooks show which device is playing",
+            "Fixed finding some Plex servers",
+            "Updated AetherEngine to 7.66.1",
+        ]),
+        ("1.3.0 (127)", [
+            "Updated AetherEngine to 7.62.1",
+            "Fixed watch progress reporting through credits, reloads and episode changes",
+            "Photos fixes",
+            "French: fixed the Play and Continue Watching labels",
+        ]),
+        ("1.3.0 (126)", [
+            "Video libraries can be browsed by folder",
+            "Season tiles show the show's poster and open the show",
+            "Faster playback",
+            "Artwork stays on your device between launches",
+            "Finishing a title adds one play in Plex, not two or three",
+            "French is available, and German covers more of the app. @JoschaP",
+            "Norwegian Bokmål tracks now match a Norwegian preference. @danieldjupvik",
+            "What's New shows every build you missed",
+        ]),
+        ("1.3.0 (125)", [
+            "Photos, with favorites, slideshows, photo info, a map and a memories row",
+            "Improved search to find more matches, genres, and people",
+            "Cast and crew on a title open their page, with their movies and shows",
+            "Subtitle search in the player. Jellyfin and Emby should work (please test)",
+            "Plex home profiles now see their own watchlist",
+            "Hide libraries from Home in Settings > Library",
+            "Direct Play buffers as far ahead as storage allows",
+            "Added delete option in more long press menus",
+        ]),
+        ("1.0.7 (87)", [
+            "On a Dolby Vision display, Profile 7 FEL keeps most of its enhancement layer",
+            "Play from several Plex servers at once",
+            "Filter libraries by genre, decade or unwatched. @DennisR-git",
+            "A title's page shows its ratings and Rotten Tomatoes critic reviews",
+            "Move subtitles up or down, even into the black bars",
+            "Movies split into several files play straight through",
+            "A show's page includes the extras for the season you pick",
+            "A new At the Credits setting chooses what shows when credits start",
+            "Jellyfin trickplay previews show while you scrub",
+            "Updated AetherEngine to 7.61.0",
+            "Other small changes and fixes",
+        ]),
+        ("1.0.7 (85)", [
+            "Jellyfin and Emby: sign in, browse, play, download and watch Live TV",
+            "Libraries open on a Recommended page with a hero",
+            "Arrange Home rows, add favorites and playlists, and mix hero sources",
+            "Mark favorites on any server, with an optional Favorites page",
+            "Runs on Apple silicon Macs, with iPad keyboard and pointer support",
+            "Theme videos play behind Jellyfin and Emby titles",
+            "Scrubbing shows previews, including on downloads",
+            "Rivulet is now available in German and Greek",
+            "Shuffle libraries and shows, and delete from long-press menus",
+            "Updated AetherEngine to 7.57.0",
+            "Other small changes and fixes",
+        ]),
         ("1.0.7 (84)", [
             "Continue Watching no longer adds a title to artwork that already shows one",
             "Live TV guides now show film release years and mark new airings from Plex",
@@ -87,21 +149,24 @@ enum IOSChangelog {
 
 /// Shown once after an update whose build has notes.
 struct IOSWhatsNewSheet: View {
-    let version: String
+    /// Every build since the last one seen, newest first.
+    let versions: [String]
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("What's New")
-                            .font(.largeTitle.bold())
-                        Text("Version \(version)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    Text("What's New")
+                        .font(.largeTitle.bold())
+                    ForEach(versions, id: \.self) { version in
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Version \(version)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
+                        }
                     }
-                    IOSChangelogLines(lines: IOSChangelog.lines(for: version) ?? [])
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -117,6 +182,8 @@ struct IOSWhatsNewSheet: View {
             .padding(.horizontal, 28)
             .padding(.vertical, 20)
         }
+        // On iPad a sheet is a page otherwise, with the notes at the top and Continue far below.
+        .presentationSizing(.form)
     }
 }
 

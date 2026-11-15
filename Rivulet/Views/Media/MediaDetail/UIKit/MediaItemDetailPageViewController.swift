@@ -31,6 +31,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let onPlay: (MediaItem, String?) -> Void
 
     private let backdrop = UIImageView()
+    private let themeVideo = ThemeVideoBackdropView()
     private let scrim = ScrimGradientView()
     private let textColumn = UIStackView()
 
@@ -41,7 +42,9 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let heroContent = UIView()
     private let belowFold = UIView()
     private let belowFoldTitle = UILabel()
-    private let infoColumns = InfoColumnsView()
+    private let infoColumns = InfoColumnsView(style: .footer)
+    private var detail: MediaItemDetail?
+    private var directionalInput: DirectionalInputBinding?
     /// 0 hero, 1 below-fold from the top, 2 scrolled on to the info columns (only with extras).
     private var scrollStage = 0
     private let extrasShelf = ExtrasShelfView(leading: PreviewCarouselGeometry.expandedChromeInset)
@@ -58,6 +61,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let dateLabel = UILabel()
     private let badgeRow = UIStackView()
     private var playButton: FocusableActionButton?
+    private weak var lastFocusedHeroButton: FocusableActionButton?
     /// The Play pill's own label, held so a post-playback refresh can flip
     /// Play ↔ Resume without rebuilding (and re-focusing) the action row.
     private weak var playTitleLabel: UILabel?
@@ -96,6 +100,10 @@ final class MediaItemDetailPageViewController: UIViewController {
         backdrop.contentMode = .scaleAspectFill
         backdrop.clipsToBounds = true
         view.addSubview(backdrop)
+        themeVideo.frame = backdrop.bounds
+        themeVideo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        backdrop.addSubview(themeVideo)
+        themeVideo.configure(item: item.ref, host: self)
 
         // Transparent scroll view (driven by Down/Up, not the focus engine).
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -155,6 +163,14 @@ final class MediaItemDetailPageViewController: UIViewController {
         menuTap.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         view.addGestureRecognizer(menuTap)
 
+        directionalInput = DirectionalInputBinding(
+            gatedSwipesOn: view, directions: [.up, .down],
+            shouldHandle: { [weak self] in self?.nextScrollStage(for: $0) != nil },
+            onSwipe: { [weak self] direction in
+                guard let self, let stage = self.nextScrollStage(for: direction) else { return }
+                self.setScrollStage(stage)
+            })
+
         loadBackdrop()
         loadDetail()
 
@@ -171,59 +187,83 @@ final class MediaItemDetailPageViewController: UIViewController {
     // MARK: - Down/Up page scroll
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        // A press the version picker declines bubbles here; it must not scroll the page.
-        guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         for press in presses {
-            switch press.type {
-            case .downArrow where scrollStage == 0:
-                setScrollStage(1); return
-            case .downArrow where scrollStage == 1 && hasExtras:
-                setScrollStage(2); return
-            case .upArrow where scrollStage > 0:
-                setScrollStage(scrollStage - 1); return
-            default: break
+            if let direction = DirectionalInputBinding.Direction.allCases.first(where: { $0.pressType == press.type }),
+               let stage = nextScrollStage(for: direction) {
+                setScrollStage(stage)
+                return
             }
         }
         super.pressesBegan(presses, with: event)
     }
 
+    private func nextScrollStage(for direction: DirectionalInputBinding.Direction) -> Int? {
+        guard presentedViewController == nil else { return nil }
+        switch direction {
+        case .down where scrollStage == 0: return 1
+        case .down where scrollStage == 1 && hasExtras: return 2
+        case .up where scrollStage > 0: return scrollStage - 1
+        default: return nil
+        }
+    }
+
     private func setScrollStage(_ stage: Int) {
-        let wasHero = scrollStage == 0
         scrollStage = stage
         view.layoutIfNeeded()
         let maxY = max(0, scrollView.contentSize.height - scrollView.bounds.height)
         // Stage 1 aligns the below-fold's TOP with the screen top (one viewport),
         // making the light-top / dark-bottom split fill the screen.
-        let target = stage == 0 ? 0 : (stage == 1 ? min(view.bounds.height, maxY) : maxY)
+        let target: CGFloat
+        switch stage {
+        case 0: target = 0
+        case 1: target = min(view.bounds.height, maxY)
+        default: target = maxY
+        }
         // The extras row is a focus stop only once the page is scrolled to it.
         if hasExtras { extrasShelf.alpha = stage > 0 ? 1 : 0 }
+        // The hero keeps focus until the detail gives the info columns cards to land on.
+        heroContent.isUserInteractionEnabled = stage == 0 || detail == nil
+        extrasShelf.isUserInteractionEnabled = stage == 1 && hasExtras
+        infoColumns.isUserInteractionEnabled = stage == (hasExtras ? 2 : 1)
         UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut]) {
             self.scrollView.contentOffset = CGPoint(x: 0, y: target)
         }
-        if hasExtras, wasHero != (stage == 0) {
-            setNeedsFocusUpdate()
-            updateFocusIfNeeded()
-        }
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
-        if scrollStage > 0, hasExtras, let card = extrasShelf.firstCard { return [card] }
+        if scrollStage == 1, hasExtras, let card = extrasShelf.firstCard { return [card] }
+        if scrollStage > 0 { return [infoColumns] }
+        if let lastFocusedHeroButton, lastFocusedHeroButton.isDescendant(of: heroContent) {
+            return [lastFocusedHeroButton]
+        }
         if let playButton { return [playButton] }
         return super.preferredFocusEnvironments
     }
 
-    /// Up and Down leave the extras row by scrolling the page, never by focusing the hero above it.
-    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        if scrollStage > 0, extrasShelf.contains(context.previouslyFocusedView),
-           context.nextFocusedView?.isDescendant(of: view) == true,
-           !extrasShelf.contains(context.nextFocusedView) { return false }
-        return super.shouldUpdateFocus(in: context)
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        rememberHeroFocus(context.nextFocusedView)
+    }
+
+    func rememberHeroFocus(_ focusedView: UIView?) {
+        if let button = focusedView as? FocusableActionButton,
+           button.isDescendant(of: heroContent) {
+            lastFocusedHeroButton = button
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        themeVideo.setActive(true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        themeVideo.setActive(false)
     }
 
     @objc private func dismissSelf() { dismiss(animated: true) }
@@ -254,7 +294,7 @@ final class MediaItemDetailPageViewController: UIViewController {
         // 3. Genre · rating.
         genreRatingRow.axis = .horizontal
         genreRatingRow.alignment = .center
-        genreRatingRow.spacing = 6
+        genreRatingRow.spacing = 12
         style(genreLabel, size: 25, weight: .medium, alpha: 1)
         genreRatingRow.addArrangedSubview(genreLabel)
         if let rating = item.contentRating, !rating.isEmpty {
@@ -324,6 +364,19 @@ final class MediaItemDetailPageViewController: UIViewController {
         belowFold.addSubview(belowFoldTitle)
 
         infoColumns.translatesAutoresizingMaskIntoConstraints = false
+        infoColumns.isUserInteractionEnabled = false
+        infoColumns.onSelect = { [weak self] in
+            guard let self, var detail = self.detail, self.presentedViewController == nil else { return }
+            Task { [weak self] in
+                // The Worker's scores, as the show and season pages add them.
+                let extra = await RatingsClient.shared.ratings(for: detail, within: 1)
+                if !extra.isEmpty { detail.ratings = MediaRating.ordered(detail.ratings + extra) }
+                guard let self, self.presentedViewController == nil else { return }
+                self.present(InfoPopupViewController(content: InfoPopupContent.fullInfo(detail: detail),
+                                                    width: InfoPopupViewController.infoWidth, height: 900,
+                                                    scrollable: true), animated: true)
+            }
+        }
         belowFold.addSubview(infoColumns)
 
         // Hidden until the detail says there are extras.
@@ -497,16 +550,19 @@ final class MediaItemDetailPageViewController: UIViewController {
             guard let self, let provider = self.provider else { return }
             // For an episode or a season, the show supplies the series title AND
             // the genres (their own detail usually has no genres).
+            let itemRef = self.item.ref
+            let showRef = self.showRef
+            async let showFetch: MediaItemDetail? = showRef == nil ? nil : (try? await provider.fullDetail(for: showRef!))
+            async let detailFetch = try? await provider.fullDetail(for: itemRef)
             var showGenres: [String] = []
-            if let showRef = self.showRef,
-               let showDetail = try? await provider.fullDetail(for: showRef) {
+            if let showDetail = await showFetch {
                 showGenres = showDetail.genres
                 await MainActor.run {
                     self.show = showDetail.item
                     if (self.showTitleLabel.text ?? "").isEmpty { self.setShowTitle(showDetail.item.title) }
                 }
             }
-            guard let detail = try? await provider.fullDetail(for: self.item.ref) else {
+            guard let detail = await detailFetch else {
                 if !showGenres.isEmpty { await MainActor.run { self.setGenres(showGenres) } }
                 return
             }
@@ -521,24 +577,16 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     private func applyDetail(_ detail: MediaItemDetail, fallbackGenres: [String]) {
+        self.detail = detail
         // The seed can be stale on open; `detail` is a fresh read, so reuse it.
         applyWatchState(from: detail.item)
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)
         infoColumns.configure(detail: detail)
         showExtras(detail)
-        // Capability badges: file quality (4K/DV/Atmos/…) + SDH/AD. Strip any
-        // parenthetical channel-layout noise ("5.1(side)" → "5.1").
-        let source = detail.primarySource
-        var badges = source?.qualityBadges() ?? []
-        if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
-        if source?.audioTracks.contains(where: {
-            ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri")
-        }) ?? false { badges.append("AD") }
+        if scrollStage > 0 { setScrollStage(scrollStage) }
         badgeRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for raw in badges {
-            let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { badgeRow.addArrangedSubview(Self.badge(text)) }
+        for text in detail.primarySource?.detailBadges ?? [] {
+            badgeRow.addArrangedSubview(Self.badge(text, filled: MediaSource.filledBadges.contains(text)))
         }
         addVersionsButton(detail)
     }
@@ -546,9 +594,11 @@ final class MediaItemDetailPageViewController: UIViewController {
     /// The Extras row between the title and the info columns, only when the episode has some.
     private func showExtras(_ detail: MediaItemDetail) {
         let split = BelowFoldContentLoader.extraTiles(
-            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster)
+            from: detail.extras, fallbackArt: item.artwork.thumbnail ?? item.artwork.backdrop ?? item.artwork.poster,
+            youTubeVideoID: detail.youTubeTrailerID, providerID: item.ref.providerID)
         let tiles = split.trailers + split.extras
         guard !tiles.isEmpty, !hasExtras else { return }
+        if scrollStage > 0 { scrollStage = 2 }
         hasExtras = true
         extrasShelf.configure(tiles)
         extrasShelf.isHidden = false
@@ -694,16 +744,18 @@ final class MediaItemDetailPageViewController: UIViewController {
     }
 
     /// Small bordered capsule badge (rating, DV, Atmos, SDH, …).
-    private static func badge(_ text: String = "") -> UILabel {
+    private static func badge(_ text: String = "", filled: Bool = false) -> UILabel {
         let l = PaddedLabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.text = text
         l.font = .systemFont(ofSize: 15, weight: .bold)
         l.textAlignment = .center
-        l.textColor = UIColor.white.withAlphaComponent(0.75)
+        l.textColor = filled ? .black : UIColor.white.withAlphaComponent(0.75)
         l.layer.borderColor = UIColor.white.withAlphaComponent(0.5).cgColor
-        l.layer.borderWidth = 1
-        l.layer.cornerRadius = 4
+        l.layer.borderWidth = filled ? 0 : 1
+        l.layer.cornerRadius = 5
+        l.backgroundColor = filled ? UIColor.white.withAlphaComponent(0.75) : .clear
+        l.clipsToBounds = true
         l.layer.cornerCurve = .continuous
         // Apple caps a badge at 22pt total height.
         l.heightAnchor.constraint(equalToConstant: 22).isActive = true

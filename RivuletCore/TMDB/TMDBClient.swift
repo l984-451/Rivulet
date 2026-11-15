@@ -130,7 +130,33 @@ final class TMDBClient: @unchecked Sendable {
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
+    /// Memory layer and shared in-flight requests; only successes are kept.
+    private actor Memo {
+        struct Key: Hashable { let tmdbId: Int; let type: TMDBMediaType }
+        private var memory: [Key: TMDBItemFeatures] = [:]
+        private var inflight: [Key: Task<TMDBItemFeatures?, Never>] = [:]
+
+        func features(for key: Key, load: @escaping @Sendable () async -> TMDBItemFeatures?) async -> TMDBItemFeatures? {
+            if let hit = memory[key] { return hit }
+            if let running = inflight[key] { return await running.value }
+            let task = Task { await load() }
+            inflight[key] = task
+            let result = await task.value
+            inflight[key] = nil
+            if let result { memory[key] = result }
+            return result
+        }
+    }
+
+    private let memo = Memo()
+
     func fetchFeatures(tmdbId: Int, type: TMDBMediaType) async -> TMDBItemFeatures? {
+        await memo.features(for: .init(tmdbId: tmdbId, type: type)) { [self] in
+            await loadFeatures(tmdbId: tmdbId, type: type)
+        }
+    }
+
+    private func loadFeatures(tmdbId: Int, type: TMDBMediaType) async -> TMDBItemFeatures? {
         if let cached = loadCachedFeatures(tmdbId: tmdbId, type: type) {
             return cached
         }

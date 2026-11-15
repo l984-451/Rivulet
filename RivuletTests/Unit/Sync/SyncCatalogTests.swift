@@ -9,7 +9,7 @@ final class SyncCatalogTests: XCTestCase {
     func test_tastePreferencesSync() {
         for key in ["showHomeHero", "autoplayLimit", "autoSkipIntro", "skipForwardSeconds", "skipBackSeconds",
                     "liveTVFavoriteChannelIds", "liveTVLayout", "contentFilter.enabled", "contentFilter.customWords",
-                    "plexDisabledServers", "useIntroDB"] {
+                    "plexDisabledServers", "useIntroDB", "showFavoritesTab"] {
             XCTAssertTrue(SyncCatalog.isSynced(key), key)
         }
     }
@@ -20,8 +20,23 @@ final class SyncCatalogTests: XCTestCase {
         XCTAssertTrue(SyncCatalog.isSynced("libraryOrder_provider_jellyfin:abc_u1"))
         XCTAssertTrue(SyncCatalog.isSynced("trackIntent.subtitle_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("homeCollectionPins_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homeRowOrder_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homePlaylistPins_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("showHomeFavoriteMovies_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("showHomeFavoriteShows_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homeHeroSources_user_7"))
+        XCTAssertTrue(SyncCatalog.isSynced("homeHeroSources"), "a profile-less device")
+        XCTAssertTrue(SyncCatalog.isSynced("heroPlaylistPins_user_7"))
         XCTAssertTrue(SyncCatalog.isSynced("mediaLibrarySort.plex:1"))
         XCTAssertTrue(SyncCatalog.isSynced("contentFilter.violence.enabled"))
+    }
+
+    func test_photoPreferencesSync() {
+        for key in ["photoSlideInterval", "photoSlideTransition", "photoSlidePlaysClips"] {
+            XCTAssertTrue(SyncCatalog.isSynced(key), key)
+        }
+        XCTAssertTrue(SyncCatalog.isSynced("photoLibraryQuery.plex:abc.27"))
+        XCTAssertFalse(SyncCatalog.isSynced("photoLibraryQuery."))
     }
 
     func test_familyPrefixDoesNotLeakToSimilarKeys() {

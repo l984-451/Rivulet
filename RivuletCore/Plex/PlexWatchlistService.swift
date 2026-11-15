@@ -19,10 +19,9 @@ final class PlexWatchlistService: ObservableObject {
     static let shared = PlexWatchlistService(
         api: PlexWatchlistAPI(),
         cache: FileWatchlistCache(),
-        // Watchlist lives on metadata.provider.plex.tv (the account-wide
-        // Discover API), so it requires the owner's authToken — NOT the
-        // server-specific selectedServerToken. It is the account's list, so
-        // another Home profile gets no token and no Watchlist.
+        // Watchlist lives on the Discover API and needs the profile's own plex.tv
+        // token, NOT the server-specific selectedServerToken. A profile with no
+        // token of its own gets no Watchlist, never the owner's.
         tokenProvider: { PlexAuthManager.shared.accountContentToken }
     )
 
@@ -107,6 +106,12 @@ final class PlexWatchlistService: ObservableObject {
             watchlistLog.info("fetchWatchlist success: \(items.count) items")
         } catch {
             lastFetchError = error
+            // plex.tv refuses this profile (managed users may have no Discover): back off, show nothing.
+            if let http = error as? PlexWatchlistHTTPError, http.statusCode == 401 || http.statusCode == 403 {
+                watchlistItems = []
+                watchlistGUIDs = []
+                lastFetched = Date()
+            }
             watchlistLog.error("fetchWatchlist failed: \(error.localizedDescription, privacy: .public)")
         }
     }

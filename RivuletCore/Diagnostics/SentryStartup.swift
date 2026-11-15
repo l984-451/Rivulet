@@ -15,10 +15,12 @@ import Sentry
 public enum SentryStartup {
     /// Which app sent the event (both report into one project). Passed in by the
     /// caller: no `#if os` here, and `UIDevice.systemName` splits iPads across
-    /// "iOS" and "iPadOS".
+    /// "iOS" and "iPadOS". `macOS` is the iOS app running on a Mac (Designed for
+    /// iPad), so Mac-only runtime failures can be told apart from iPad ones.
     public enum Platform: String {
         case tvOS
         case iOS
+        case macOS
     }
 
     /// MUST be main-actor isolated: `SentrySDK.start` builds the SDK's
@@ -26,9 +28,28 @@ public enum SentryStartup {
     /// installs swizzling plus session / app-hang tracking. Called off the main
     /// actor it trips the Main Thread Checker on every launch.
     @MainActor
-    public static func start(platform: Platform) {
+    /// `configure` sets options that only exist on the caller's platform.
+    /// Starts at once on a stored ingest pass (so last launch's crash goes out), or after fetching one.
+    public static func start(platform: Platform, configure: @escaping (Options) -> Void = { _ in }) {
+        if let pass = IngestPass.cached() {
+            start(platform: platform, pass: pass, configure: configure)
+            if IngestPass.cached(margin: IngestPass.refreshMargin) == nil {
+                // ponytail: the new pass serves the next launch; a process alive past the old one's expiry goes quiet.
+                Task { _ = await IngestPass.fetch() }
+            }
+        } else {
+            Task {
+                guard let pass = await IngestPass.fetch() else { return }
+                start(platform: platform, pass: pass, configure: configure)
+            }
+        }
+    }
+
+    @MainActor
+    private static func start(platform: Platform, pass: String, configure: @escaping (Options) -> Void) {
+        guard let dsn = IngestPass.dsn(Secrets.sentryDSN, pass: pass) else { return }
         SentrySDK.start { options in
-            options.dsn = Secrets.sentryDSN
+            options.dsn = dsn
             options.debug = false
             // Initial scope, so startup events carry the tag. It tags without
             // splitting grouping: a shared-code crash stays one issue.
@@ -68,12 +89,14 @@ public enum SentryStartup {
             // <unknown> in-app frames mean missing dSYMs for that build.
             options.enableAppHangTracking = true
             options.appHangTimeoutInterval = 2
-            // Also report non-fully-blocking hangs (partial main-thread
-            // stalls), not just fully-blocked ones. Defaults true in 9.x;
-            // set explicitly so a future SDK default flip can't silence them.
-            options.enableReportNonFullyBlockingAppHangs = true
+            configure(options)
 
             options.beforeSend = { event in
+                // Two non-fatal hangs per launch; "Fatal App Hang" (watchdog kills) always goes.
+                if event.exceptions?.first?.type?.hasPrefix("App Hang") == true,
+                   !SentryBridge.admit("app-hang", limit: 2) {
+                    return nil
+                }
                 // Drop cancelled URL request errors — these are normal when
                 // navigating away. "CancellationError" is listed explicitly:
                 // Swift's structured-concurrency error stringifies as

@@ -15,6 +15,8 @@ import Foundation
 enum SidebarArrangement {
     static let discover = "#discover"
     static let watchlist = "#watchlist"
+    /// Favorite movies and shows from every server.
+    static let favorites = "#favorites"
     /// Live TV with its sources combined.
     static let liveTV = "#livetv"
     /// Where libraries go while the order holds none (a fresh install). Never shown.
@@ -42,7 +44,7 @@ enum SidebarArrangement {
 
     /// Today's fixed layout as an order, for a profile that has never stored one.
     static func seed(libraryOrder: [String], discoverAbove: Bool, liveTVAbove: Bool) -> [String] {
-        (discoverAbove ? [discover] : []) + [watchlist]
+        (discoverAbove ? [discover] : []) + [watchlist, favorites]
             + (liveTVAbove ? [liveTV] : []) + [librariesAnchor]
             + libraryOrder.filter { !isAppRow($0) }
             + (liveTVAbove ? [] : [liveTV]) + (discoverAbove ? [] : [discover])
@@ -68,6 +70,10 @@ enum SidebarArrangement {
                 ?? order.firstIndex(of: librariesAnchor)
         } else if isLiveTV(key) {
             kin = order.lastIndex(where: isLiveTV)
+        } else if key == favorites {
+            // Beside the watchlist, its account-level sibling, in an order stored before Favorites existed.
+            kin = order.firstIndex(of: watchlist) ?? order.firstIndex(of: discover)
+                ?? order.firstIndex(of: librariesAnchor).map { $0 - 1 }
         } else {
             kin = nil
         }

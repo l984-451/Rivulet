@@ -76,6 +76,15 @@ enum EpisodePicker {
         return (season, nextEpisode(after: current, in: season, nextSeasonEpisodes: nextSeasonEpisodes))
     }
 
+    /// `resolvePlayTarget` for a show whose detail, seasons and episodes are already loaded.
+    static func showPlayTarget(
+        nextEpisode: MediaItem?, seasons: [MediaItem], episodes: [MediaItem]
+    ) -> MediaItem? {
+        if let nextEpisode { return nextEpisode }
+        guard let firstSeason = seasons.first else { return nil }
+        return firstUnplayed(in: episodes.filter { $0.parentRef == firstSeason.ref })
+    }
+
     /// The Play button's title for `target` (what Play starts) on a page of
     /// kind `page`. A show or season page names the episode; an item's own
     /// page does not.
@@ -88,6 +97,25 @@ enum EpisodePicker {
             season: onParent ? target.seasonNumber : nil,
             episode: onParent ? target.episodeNumber : nil,
             isFirstEpisode: onParent && first)
+    }
+
+    /// The description a show or season page swaps in while the Play pill names an
+    /// episode ("Resume S#, E#" / "Play S#, E#"): bold `prefix`, then `body`. Nil keeps
+    /// the page's own synopsis (plain Play, Play First Episode, Play Again, no overview).
+    static func episodeDescription(
+        for target: MediaItem, overview: String?, on page: MediaKind
+    ) -> (prefix: String, body: String)? {
+        guard page == .show || page == .season, target.kind == .episode,
+              let s = target.seasonNumber, let e = target.episodeNumber,
+              let body = [overview, target.overview].compactMap({ $0 }).first(where: { !$0.isEmpty })
+        else { return nil }
+        let first = e == 1 && (page == .season || s == 1)
+        guard target.isInProgress || (!target.isWatched && !first) else { return nil }
+        let title = target.title.trimmingCharacters(in: .whitespaces)
+        let prefix = title.isEmpty
+            ? String(localized: "S\(s), E\(e):")
+            : String(localized: "S\(s), E\(e) · \(title):")
+        return (prefix, body)
     }
 
     /// Apple's wording, our rule: a resume point (`WatchProgressPolicy`) says

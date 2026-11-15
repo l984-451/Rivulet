@@ -422,7 +422,8 @@ enum PlexMediaMapper {
                 originActorId: role.originActorId,
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let directors = (meta.Director ?? []).map {
@@ -436,7 +437,8 @@ enum PlexMediaMapper {
                 originFilter: "director",
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let writers = (meta.Writer ?? []).map {
@@ -450,7 +452,8 @@ enum PlexMediaMapper {
                 originFilter: "writer",
                 titleTmdbId: titleTmdbId,
                 titleIsMovie: titleIsMovie,
-                backdropURL: titleBackdropURL
+                backdropURL: titleBackdropURL,
+                providerID: providerID
             )
         }
         let chapters = (meta.Chapter ?? []).map { ch in
@@ -510,6 +513,7 @@ enum PlexMediaMapper {
             contentRating: meta.displayContentRating,
             regionOfOrigin: meta.Country?.first?.tag,
             ratings: Self.ratings(meta),
+            reviews: Self.reviews(meta),
             nextEpisode: nextEpisode,
             collections: collections,
             extras: extras,
@@ -538,6 +542,20 @@ enum PlexMediaMapper {
             MediaRating(meta.rating, source: source(meta.ratingImage, audience: false)),
             MediaRating(meta.audienceRating, source: source(meta.audienceRatingImage, audience: true)),
         ])
+    }
+
+    /// Critic excerpts from `includeReviews=1`; entries with no text are dropped.
+    static func reviews(_ meta: PlexMetadata) -> [CriticReview] {
+        (meta.Review ?? []).compactMap { entry in
+            let text = entry.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else { return nil }
+            let verdict: CriticReview.Verdict? = switch entry.image?.split(separator: ".").last {
+            case "fresh": .fresh
+            case "rotten": .rotten
+            default: nil
+            }
+            return CriticReview(critic: entry.tag, outlet: entry.source, verdict: verdict, excerpt: text)
+        }
     }
 
     /// `Guid` ids ("tmdb://603", "imdb://tt0133093", "tvdb://169") keyed

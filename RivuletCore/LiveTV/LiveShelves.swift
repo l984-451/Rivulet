@@ -43,12 +43,14 @@ struct LiveCardItem: Hashable, Identifiable {
                      program: program, recording: nil)
     }
 
-    /// An upcoming card's start: the time alone today, with the weekday after.
+    /// An upcoming card's start: the time alone today, with the weekday after. Formatted in
+    /// `calendar`'s zone, the one that decided "today".
     static func startLabel(_ program: UnifiedProgram, now: Date = Date(), calendar: Calendar = .current) -> String {
         let start = program.eventStart
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
         return calendar.isDate(start, inSameDayAs: now)
-            ? start.formatted(.dateTime.hour().minute())
-            : start.formatted(.dateTime.weekday().hour().minute())
+            ? start.formatted(style.hour().minute())
+            : start.formatted(style.weekday().hour().minute())
     }
 
     static func upcoming(_ program: UnifiedProgram, on channel: UnifiedChannel, section: String = "soon") -> LiveCardItem {
@@ -84,14 +86,15 @@ extension Array where Element == LiveCardItem {
 
 extension LiveTVDataStore {
     /// The What's On rows for a source (nil: every source). Rows may be empty.
-    func whatsOnShelves(sourceIdFilter: String?, now: Date = Date()) -> [LiveShelf] {
+    /// `favoritesOnly`: the Favorites row alone, for Home, without the rows it does not show.
+    func whatsOnShelves(sourceIdFilter: String?, now: Date = Date(), favoritesOnly: Bool = false) -> [LiveShelf] {
         LiveShelves.build(LiveShelves.Input(
             channels: channels, epg: epg, recentChannelIds: recentChannelIds, favoriteIds: favoriteIds,
             unfavoritedIds: unfavoritedIds, eventSlotIds: eventSlotIds, viewings: viewings,
             suggestionsEnabled: suggestionsEnabled,
             scheduledRecordings: scheduledRecordings,
             sourceNames: Dictionary(sources.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })),
-            sourceIdFilter: sourceIdFilter, now: now)
+            sourceIdFilter: sourceIdFilter, now: now, favoritesOnly: favoritesOnly)
     }
 }
 
@@ -111,7 +114,7 @@ enum LiveShelves {
         var sourceNames: [String: String] = [:]
     }
 
-    static func build(_ input: Input, sourceIdFilter: String?, now: Date) -> [LiveShelf] {
+    static func build(_ input: Input, sourceIdFilter: String?, now: Date, favoritesOnly: Bool = false) -> [LiveShelf] {
         let epg = input.epg
         // Each row asks again for the same channel; scan its guide once per build.
         var currentMemo: [String: UnifiedProgram?] = [:]
@@ -172,7 +175,7 @@ enum LiveShelves {
 
         // Like what this viewer watches at this hour, from what is on now.
         // Recently Watched already covers going back, so its channels are left out.
-        if input.suggestionsEnabled {
+        if input.suggestionsEnabled, !favoritesOnly {
             let recentIds = Set(input.recentChannelIds)
             let candidates = airing.filter { !recentIds.contains($0.id) }.map { channel in
                 let program = current(channel)
@@ -203,6 +206,7 @@ enum LiveShelves {
         if !favourites.isEmpty {
             shelves.append(LiveShelf(id: "favorites", title: String(localized: "Favorites"), items: favourites))
         }
+        if favoritesOnly { return shelves.filter { $0.id == "favorites" } }
 
         if !airing.isEmpty {
             shelves.append(LiveShelf(id: "now", title: String(localized: "On Now"), items: onNow(Array(airing.prefix(150)), section: "now")))
@@ -263,9 +267,10 @@ enum LiveShelves {
         let groups = Dictionary(grouping: channels) {
             $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
-        let groupTitles = groups.keys.filter {
-            !$0.isEmpty && !sourceTitles.contains($0) && groups[$0]?.count != channels.count
-        }.sorted()
+        let sourceOrder = input.sourceNames.sorted { $0.value < $1.value }.map(\.key)
+        let groupTitles = LiveGroupOrder.titles(in: channels, sourceOrder: sourceOrder).filter {
+            !sourceTitles.contains($0) && groups[$0]?.count != channels.count
+        }
         for title in groupTitles.prefix(16) {
             let id = "group|\(title)"
             let list = Array((groups[title] ?? []).prefix(60))

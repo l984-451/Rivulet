@@ -24,6 +24,18 @@ final class FolderRoutingTests: XCTestCase {
         XCTAssertFalse(plex("photo", agent: "com.plexapp.agents.none").browsesByFolder)
     }
 
+    @MainActor func test_offersFolders_plexVideoLibrariesAndFolderOnlyLibraries() {
+        let plexProvider = PlexProvider(machineIdentifier: "t", displayName: "T", serverURL: "http://plex.test", authToken: "t")
+        let jellyfinProvider = JellyfinProvider(serverID: "srv", displayName: "NAS", userID: "u",
+                                                client: JellyfinClient(baseURL: JellyfinFixtures.baseURL, token: "tok"))
+        XCTAssertTrue(plex("movie", agent: "tv.plex.agents.movie").offersFolders(on: plexProvider))
+        XCTAssertTrue(plex("movie", agent: "tv.plex.agents.none").offersFolders(on: plexProvider))
+        XCTAssertFalse(plex("artist", agent: "tv.plex.agents.music").offersFolders(on: plexProvider))
+        XCTAssertTrue(jellyfin(nil)!.offersFolders(on: jellyfinProvider), "mixed")
+        XCTAssertFalse(jellyfin("movies")!.offersFolders(on: jellyfinProvider))
+        XCTAssertFalse(plex("movie", agent: "tv.plex.agents.none").offersFolders(on: nil), "no provider")
+    }
+
     func test_jellyfinMixed_browsesByFolder() {
         let library = jellyfin(nil)
         XCTAssertEqual(library?.kind, .mixed)

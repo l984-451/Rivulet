@@ -12,7 +12,7 @@
 	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.gstudios.rivulet</string>
+		<string>iCloud.com.gstudios.rivulet.sync</string>
 	</array>
 </dict>
 </plist>

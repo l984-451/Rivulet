@@ -75,6 +75,22 @@ final class LiveShelvesTests: XCTestCase {
         XCTAssertEqual(game.program?.title, "Team A at Team B")
     }
 
+    /// Home's Favorite Channels row (#623): the Favorites shelf alone, with the same cards as What's On's.
+    func test_favoritesOnly() {
+        let channels = [channel("news", group: "Local", number: 1), channel("film", group: "Local", number: 2)]
+        let epg = ["news": [program("news", "News", from: -60, to: 600)],
+                   "film": [program("film", "A Film", from: -60, to: 600)]]
+        let input = LiveShelves.Input(channels: channels, epg: epg, recentChannelIds: ["film"],
+                                      favoriteIds: ["film", "news"], suggestionsEnabled: true)
+        let all = LiveShelves.build(input, sourceIdFilter: nil, now: now)
+        let home = LiveShelves.build(input, sourceIdFilter: nil, now: now, favoritesOnly: true)
+        XCTAssertEqual(home.map(\.id), ["favorites"])
+        XCTAssertEqual(home.first?.items, all.first { $0.id == "favorites" }?.items)
+        XCTAssertEqual(home.first?.items.map(\.id), ["favorites|film", "favorites|news"])
+        XCTAssertTrue(LiveShelves.build(LiveShelves.Input(channels: channels, epg: epg), sourceIdFilter: nil,
+                                        now: now, favoritesOnly: true).isEmpty)
+    }
+
     func test_offAirEventSlot() {
         // Known event slots between games: "sun" has its next game in the guide, "dead" has nothing loaded.
         let channels = [channel("sun", group: "NFL", number: 1), channel("dead", group: "NFL", number: 2),
@@ -124,5 +140,15 @@ final class LiveShelvesTests: XCTestCase {
             suggestionsEnabled: false), sourceIdFilter: "p", now: now)
         XCTAssertEqual(shelves.map(\.id), ["now"])
         XCTAssertEqual(shelves.first?.items.map(\.id), ["now|x"])
+    }
+
+    func test_groupShelves_followSourceOrder() {
+        let channels = [UnifiedChannel(id: "z", sourceType: .genericM3U, sourceId: "s", name: "z", groupTitle: "Zulu", groupRank: 0),
+                        UnifiedChannel(id: "a", sourceType: .genericM3U, sourceId: "s", name: "a", groupTitle: "Alpha", groupRank: 1),
+                        UnifiedChannel(id: "m", sourceType: .genericM3U, sourceId: "s", name: "m", groupTitle: "Mid", groupRank: 2)]
+        let shelves = LiveShelves.build(LiveShelves.Input(channels: channels, epg: [:], recentChannelIds: [],
+                                                          favoriteIds: [], suggestionsEnabled: false,
+                                                          scheduledRecordings: []), sourceIdFilter: nil, now: Date())
+        XCTAssertEqual(shelves.map(\.id).filter { $0.hasPrefix("group|") }, ["group|Zulu", "group|Alpha", "group|Mid"])
     }
 }

@@ -6,7 +6,7 @@ import SwiftUI
 /// See All for one Home or detail row, paged through the hub's own key.
 struct IOSPlexHubGridView: View {
     let route: IOSPlexHubRoute
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @State private var items: [MediaItem]
     @State private var total: Int?
     @State private var isLoading = false

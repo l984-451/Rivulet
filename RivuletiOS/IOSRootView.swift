@@ -5,14 +5,15 @@ import SwiftUI
 
 /// Tab bar on iPhone, sidebar on iPad (with each video library listed under Library).
 struct IOSRootView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var plex: PlexSession
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
     @StateObject private var playback = IOSPlaybackController()
     @State private var showingAccount = false
     @State private var showingWhatsNew = false
+    @State private var whatsNewVersions: [String] = []
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @State private var choosingProfile = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
@@ -22,6 +23,9 @@ struct IOSRootView: View {
     @State private var librarySelection: IOSLibrarySelection?
     @State private var libraryColumn = NavigationSplitViewColumn.sidebar
     @State private var libraryPath = NavigationPath()
+    /// Each sidebar library tab's pushed pages, by tab value, so they can follow the
+    /// library into the Library tab when the window narrows and the tab goes away.
+    @State private var sidebarPaths: [String: NavigationPath] = [:]
     @Namespace private var homeZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
@@ -44,21 +48,22 @@ struct IOSRootView: View {
             TabSection("Library") {
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
-                        tabStack(sidebarZoom) { IOSDownloadsView(showsAccount: true) }
+                        sidebarStack("downloads") { IOSDownloadsView(showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
-                ForEach(showsSidebarLibraries ? videoLibraries : []) { library in
-                    Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.icon,
+                // Not by `id`: that is the server's own section number, so two servers collide and UIKit's sidebar throws.
+                ForEach(showsSidebarLibraries ? videoLibraries : [], id: \.self) { library in
+                    Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.iosIcon,
                         value: libraryTab(library)) {
-                        tabStack(sidebarZoom) { IOSPlexLibraryView(library: library, showsAccount: true) }
+                        sidebarStack(libraryTab(library)) { IOSLibraryPage(library: library, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
                 ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { providerID in
                     Tab(browse.labels.title(String(localized: "Playlists"), providerID: providerID), systemImage: "list.and.film",
-                        value: "playlists:\(providerID)") {
-                        tabStack(sidebarZoom) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
+                        value: playlistsTab(providerID)) {
+                        sidebarStack(playlistsTab(providerID)) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
@@ -75,8 +80,8 @@ struct IOSRootView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
-        .sheet(isPresented: $showingAccount) { IOSAccountView() }
-        .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(version: IOSChangelog.currentVersion) }
+        .sheet(isPresented: $showingAccount) { IOSAccountView().iosSessionObjects(plex) }
+        .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(versions: whatsNewVersions) }
         .sheet(isPresented: $choosingProfile) { IOSProfilePickerSheet() }
         // Content is withheld until a profile is entered: ask who is watching,
         // and nothing of the locked profile's keeps playing.
@@ -116,15 +121,26 @@ struct IOSRootView: View {
                 break
             }
         }
-        .onChange(of: sizeClass) { dropOrphanedLibraryTab() }
+        // Stage Manager and Split View resize the window: at compact width the sidebar's
+        // library tabs vanish, and the one in use folds into the Library tab. Back at
+        // regular width the Library tab's library returns to its sidebar tab.
+        .onChange(of: showsSidebarLibraries) { _, sidebar in
+            if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
+        }
         .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
             libraryPath = NavigationPath()
+            sidebarPaths = [:]
         }
         .onChange(of: browse.libraries) { _, libraries in
             if !libraries.isEmpty, !browse.isLoadingOtherServers { dropOrphanedLibraryTab() }
-            if case .library(let library) = librarySelection, !libraries.contains(library) { librarySelection = nil }
+            dropMissingLibrarySelection()
+        }
+        .onChange(of: browse.photoLibraries) { dropMissingLibrarySelection() }
+        .onChange(of: browse.hiddenSidebarLibraries) {
+            dropOrphanedLibraryTab()
+            dropMissingLibrarySelection()
         }
         .onChange(of: browse.isLoadingOtherServers) { _, loading in
             if !loading, !browse.libraries.isEmpty { dropOrphanedLibraryTab() }
@@ -132,12 +148,70 @@ struct IOSRootView: View {
         .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
     }
 
-    /// A sidebar library tab vanishes at compact width or on a server without that library.
+    /// A library gone from the server or hidden in Settings leaves the selection.
+    private func dropMissingLibrarySelection() {
+        if case .library(let library) = librarySelection, !browse.shownLibraries.contains(library) {
+            librarySelection = nil
+            libraryPath = NavigationPath()
+        }
+    }
+
+    /// A sidebar library tab vanishes on a server without that library.
     private func dropOrphanedLibraryTab() {
-        guard selectedTab.hasPrefix("library:") || selectedTab.hasPrefix("playlists:") || selectedTab == "downloads" else { return }
-        let live = showsSidebarLibraries
-            ? videoLibraries.map(libraryTab) + playlistServers.map { "playlists:\($0)" } + ["downloads"] : []
-        if !live.contains(selectedTab) { selectedTab = "library" }
+        guard Self.isSidebarTab(selectedTab), !sidebarTabs.contains(selectedTab) else { return }
+        selectedTab = "library"
+    }
+
+    /// The window narrowed: the sidebar tab's library, and the pages pushed over it,
+    /// carry on in the Library tab's detail column.
+    private func foldSidebarTab() {
+        guard Self.isSidebarTab(selectedTab) else { return }
+        guard let selection = librarySelection(forTab: selectedTab) else {
+            selectedTab = "library"
+            return
+        }
+        librarySelection = selection
+        libraryColumn = .detail
+        libraryPath = sidebarPaths.removeValue(forKey: selectedTab) ?? NavigationPath()
+        selectedTab = "library"
+    }
+
+    /// The window widened: the Library tab's library, and the pages pushed over it,
+    /// carry on in that library's sidebar tab.
+    private func unfoldLibraryTab() {
+        guard selectedTab == "library", let selection = librarySelection else { return }
+        let tab = tab(for: selection)
+        guard sidebarTabs.contains(tab) else { return }
+        sidebarPaths[tab] = libraryPath
+        libraryColumn = .sidebar
+        libraryPath = NavigationPath()
+        selectedTab = tab
+    }
+
+    private static func isSidebarTab(_ tab: String) -> Bool {
+        tab.hasPrefix("library:") || tab.hasPrefix("playlists:") || tab == "downloads"
+    }
+
+    private func tab(for selection: IOSLibrarySelection) -> String {
+        switch selection {
+        case .downloads: "downloads"
+        case .favorites: "favorites"  // not a sidebar tab: stays under Library
+        case .library(let library): libraryTab(library)
+        case .playlists(let providerID): playlistsTab(providerID)
+        }
+    }
+
+    private func librarySelection(forTab tab: String) -> IOSLibrarySelection? {
+        if tab == "downloads" { return .downloads }
+        if let library = videoLibraries.first(where: { libraryTab($0) == tab }) { return .library(library) }
+        if let id = playlistServers.first(where: { playlistsTab($0) == tab }) { return .playlists(providerID: id) }
+        return nil
+    }
+
+    /// Every sidebar library tab while they show, libraries first.
+    private var sidebarTabs: [String] {
+        guard showsSidebarLibraries else { return [] }
+        return videoLibraries.map(libraryTab) + playlistServers.map(playlistsTab) + ["downloads"]
     }
 
     /// iPad only: a Plus/Max/Air iPhone is regular width in landscape, and tabs added
@@ -152,20 +226,22 @@ struct IOSRootView: View {
         return browse.providerOrder.filter { browse.playlists[$0] != nil }
     }
 
-    /// Movie and TV libraries only: iOS has no music player. Each server's together, the selected first.
+    /// Movie, TV and photo libraries: iOS has no music player. Each server's together, the selected first.
     private var videoLibraries: [MediaLibrary] {
-        browse.libraries.sidebarOrder(servers: browse.providerOrder)
+        browse.shownLibraries.sidebarOrder(servers: browse.providerOrder)
     }
 
     private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }
+    private func playlistsTab(_ providerID: String) -> String { "playlists:\(providerID)" }
 
     /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
     /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
     private func showWhatsNewIfUpdated() {
         let current = IOSChangelog.currentVersion
         guard plex.isConfigured, current != lastSeenBuild else { return }
+        whatsNewVersions = WhatsNewRange.versions(IOSChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
-        showingWhatsNew = IOSChangelog.lines(for: current) != nil
+        showingWhatsNew = !whatsNewVersions.isEmpty
     }
 
     #if DEBUG
@@ -180,7 +256,7 @@ struct IOSRootView: View {
             libraryColumn = .detail
             return
         }
-        guard let item = try? await SearchResults.search(title, providers: browse.searchProviders).first(where: { $0.title == title }) else { return }
+        guard let item = try? await SearchResults.search(title, providers: browse.searchProviders).titles.first(where: { $0.title == title }) else { return }
         selectedTab = "library"
         libraryColumn = .detail
         // iPad's split view picks a library on appear and clears the path when it does, so pick first.
@@ -212,10 +288,22 @@ struct IOSRootView: View {
         .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, namespace)
     }
+
+    /// A sidebar library tab's stack, its pages kept in `sidebarPaths` under the tab's value.
+    private func sidebarStack<Content: View>(_ tab: String, @ViewBuilder content: () -> Content) -> some View {
+        NavigationStack(path: Binding(
+            get: { sidebarPaths[tab] ?? NavigationPath() },
+            set: { sidebarPaths[tab] = $0 }
+        )) {
+            content().iosPlexDestinations()
+        }
+        .id(browse.sessionGeneration)
+        .environment(\.plexZoomNamespace, sidebarZoom)
+    }
 }
 
 #Preview {
-    let session = IOSPlexSession()
+    let session = PlexSession()
     IOSRootView()
         .environmentObject(session)
         .environmentObject(session.browse)

@@ -112,6 +112,7 @@ final class EpisodeCell: UIView {
     private let watchedGlyph = WatchedGlyphView()
 
     private let descriptionBlock = EpisodeDescriptionView()
+    private let descriptionFocusGuide = UIFocusGuide()
     /// Episode mode (two focus stops: thumb + description). False for trailers
     /// (single thumb stop, with the old whole-card frosted-panel focus look).
     private var splitFocus = false
@@ -120,6 +121,8 @@ final class EpisodeCell: UIView {
     /// Liquid-glass focus highlight behind the metadata (ATV+ uses glass, not a
     /// white outline). Effect is nil until focused.
     private let descriptionGlass = UIVisualEffectView(effect: nil)
+    private var glassLeading: NSLayoutConstraint!
+    private var glassTrailing: NSLayoutConstraint!
     private let episodeLabel = UILabel()
     private let titleLabel = UILabel()
     private let summaryLabel = UILabel()
@@ -236,6 +239,16 @@ final class EpisodeCell: UIView {
         }
         addSubview(descriptionBlock)
 
+        addLayoutGuide(descriptionFocusGuide)
+        descriptionFocusGuide.preferredFocusEnvironments = [thumbnailCard]
+        descriptionFocusGuide.isEnabled = false
+        NSLayoutConstraint.activate([
+            descriptionFocusGuide.topAnchor.constraint(equalTo: descriptionBlock.topAnchor),
+            descriptionFocusGuide.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor),
+            descriptionFocusGuide.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor),
+            descriptionFocusGuide.bottomAnchor.constraint(equalTo: descriptionBlock.bottomAnchor),
+        ])
+
         // Glass highlight behind the metadata (added before the labels so it sits
         // behind them). Pinned to fill the description block; rounded + clipped.
         descriptionGlass.translatesAutoresizingMaskIntoConstraints = false
@@ -244,10 +257,12 @@ final class EpisodeCell: UIView {
         descriptionGlass.layer.cornerRadius = Self.cornerRadius
         descriptionGlass.layer.cornerCurve = .continuous
         descriptionBlock.addSubview(descriptionGlass)
+        glassLeading = descriptionGlass.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor)
+        glassTrailing = descriptionGlass.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor)
         NSLayoutConstraint.activate([
             descriptionGlass.topAnchor.constraint(equalTo: descriptionBlock.topAnchor),
-            descriptionGlass.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor),
-            descriptionGlass.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor),
+            glassLeading,
+            glassTrailing,
             descriptionGlass.bottomAnchor.constraint(equalTo: descriptionBlock.bottomAnchor),
         ])
 
@@ -398,6 +413,7 @@ final class EpisodeCell: UIView {
         subtypeIcon.isHidden = true
         splitFocus = true
         descriptionBlock.isFocusEligible = false
+        descriptionFocusGuide.isEnabled = layout == .stacked
         episodeLabel.text = Self.episodeLabel(for: episode, showSeasonPrefix: showSeasonPrefix).uppercased()
         titleLabel.text = episode.title.isEmpty ? String(localized: "Episode") : episode.title
         summaryLabel.text = episode.overview
@@ -435,11 +451,49 @@ final class EpisodeCell: UIView {
             }
         }
 
-        // Thumbnail (async)
+        loadThumbnail(episode.artwork.thumbnail ?? episode.artwork.poster)
+    }
+
+    /// Search's tile: the rail's card as one focus stop, its label naming the season and the
+    /// footer the show, since no show page surrounds it. A season shows the show's backdrop.
+    func configure(searchResult item: MediaItem) {
+        configure(episode: item)
+        splitFocus = false
+        descriptionFocusGuide.isEnabled = false
+        let show = item.seriesTitle
+        if item.kind == .season {
+            episodeLabel.text = show?.uppercased()
+            loadThumbnail(item.parentArtwork?.backdrop ?? item.artwork.backdrop ?? item.artwork.thumbnail
+                          ?? item.artwork.poster)
+        } else if let season = item.seasonNumber, let episode = item.episodeNumber {
+            episodeLabel.text = (season == 0
+                ? String(localized: "Specials · Episode \(episode)")
+                : String(localized: "Season \(season) · Episode \(episode)")).uppercased()
+        }
+        let footer = [item.kind == .episode ? show : nil, Self.displayDate(for: item)].compactMap { $0 }
+        dateLabel.text = footer.joined(separator: " · ")
+        dateLabel.isHidden = footer.isEmpty
+    }
+
+    /// Search's row focuses the whole cell, not the thumb, so the cell drives the focused look.
+    /// The panel widens with the thumb's focus growth, so the two read as one card.
+    func setWholeCardFocused(_ focused: Bool, coordinator: UIFocusAnimationCoordinator) {
+        thumbFocused = focused
+        updateDescriptionGlass(coordinator)
+        let reserve = focused ? MediaRowMetrics.focusGrowth / 2 : 0
+        glassLeading.constant = -reserve
+        glassTrailing.constant = reserve
+        coordinator.addCoordinatedAnimations({ self.descriptionBlock.layoutIfNeeded() }, completion: nil)
+    }
+
+    /// The thumbnail's artwork and its focus-free corner radius, for the carousel's entry morph.
+    var artworkView: UIView { thumbnailCard.contentView }
+    var artworkLoaded: Bool { thumbnailImageView.image != nil }
+
+    private func loadThumbnail(_ url: URL?) {
         imageToken &+= 1
         let token = imageToken
         // A memory hit paints in this pass (no pop after the rail's fade).
-        let url = episode.artwork.thumbnail ?? episode.artwork.poster
         thumbnailImageView.image = url.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
         if let url, thumbnailImageView.image == nil {
             Task { [weak self] in
@@ -458,6 +512,7 @@ final class EpisodeCell: UIView {
         splitFocus = false
         setTrailerLayout(true)
         descriptionBlock.isFocusEligible = false
+        descriptionFocusGuide.isEnabled = false
         episodeLabel.text = nil
         episodeLabel.isHidden = true
         trailerTitleLabel.text = trailer.title
@@ -546,6 +601,7 @@ final class EpisodeCell: UIView {
         guard splitFocus else { descriptionBlock.isFocusEligible = false; return }
         let stayingInside = next.map { $0.isDescendant(of: self) } ?? false
         descriptionBlock.isFocusEligible = thumbFocused || descFocused || stayingInside
+        descriptionFocusGuide.isEnabled = layout == .stacked && !descriptionBlock.isFocusEligible
     }
 
     private func notifyFocusKind() {
@@ -565,9 +621,12 @@ final class EpisodeCell: UIView {
 
     /// Clear focus visuals + state on reuse.
     func resetFocusVisual() {
+        glassLeading.constant = 0
+        glassTrailing.constant = 0
         thumbFocused = false
         descFocused = false
         descriptionBlock.isFocusEligible = false
+        descriptionFocusGuide.isEnabled = splitFocus && layout == .stacked
         descriptionGlass.backgroundColor = .clear
         descriptionGlass.effect = nil
     }

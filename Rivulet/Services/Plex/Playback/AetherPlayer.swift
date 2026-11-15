@@ -139,10 +139,15 @@ final class AetherPlayer: PlayerProtocol {
     /// the torn-down session stays parked (clock intact, so the paused UI
     /// shows the true position) and play() performs the reload. Holds the
     /// background timestamp so the teardown-drain wait still applies.
-    private var pendingReloadSince: Date?
+    @Published private(set) var pendingReloadSince: Date?
 
     /// True while the engine is torn down awaiting Play: no video frame exists.
     var isParkedForReload: Bool { pendingReloadSince != nil }
+
+    /// `isParkedForReload` as it changes, for the pause screen's "no frame" state.
+    var isParkedForReloadPublisher: AnyPublisher<Bool, Never> {
+        $pendingReloadSince.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+    }
 
     /// One file of a stacked title.
     struct PartFile {
@@ -182,12 +187,17 @@ final class AetherPlayer: PlayerProtocol {
         // The engine otherwise uses system trust alone, so a server the API
         // session accepts would browse and never play (#337).
         EngineTLS.serverTrustEvaluator = { PlexCertificateDelegate.trustsServer($0) }
+        // Image subtitles are kept only as far as the delay stepper reaches.
+        engine.maximumSubtitleOffsetSeconds = SubtitleAdjustments.maxDelay
         wireUpPublishers()
         observeAppLifecycle()
     }
 
     private func wireUpPublishers() {
-        engine.$state
+        PlaybackTransportState.publisher(state: engine.$state.map(\.transportState).eraseToAnyPublisher(),
+                                         phase: engine.$playbackPhase.map(\.transportPhase).eraseToAnyPublisher(),
+                                         nativeReady: PlaybackTransportState.nativeReadiness(engine.$currentAVPlayer.eraseToAnyPublisher()))
+            .map(\.engineState)
             // Read `errorInfo` on the PUBLISHING turn, not after the hop.
             // AetherEngine assigns it immediately before `state` and clears it
             // when state leaves `.error`, so it is exact here and merely
@@ -197,7 +207,9 @@ final class AetherPlayer: PlayerProtocol {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] aetherState, errorInfo in
                 guard let self else { return }
-                self.engineIsPlaying = (aetherState == .playing)
+                self.engineIsPlaying = (self.engine.state == .playing)
+                // A load of another file (a stacked part, a version) drops the engine's speed; put it back.
+                if aetherState == .playing, self._playbackRate != 1 { self.engine.setRate(self._playbackRate) }
                 // Recompute BEFORE publishing the state so the view model's
                 // ".playing while still buffering" reconciliation sees the
                 // combined flag the moment a seek lands.
@@ -382,6 +394,8 @@ final class AetherPlayer: PlayerProtocol {
         videoSizeCancellable = nil
         guard let player else {
             videoItemCancellable = nil
+            seekableCancellable = nil
+            itemSeekableWindow = nil
             videoSize = .zero
             return
         }
@@ -392,8 +406,20 @@ final class AetherPlayer: PlayerProtocol {
                 guard let self else { return }
                 guard let item else {
                     self.videoSizeCancellable = nil
+                    self.seekableCancellable = nil
+                    self.itemSeekableWindow = nil
                     return
                 }
+                self.seekableCancellable = item
+                    .publisher(for: \.seekableTimeRanges)
+                    .map { ranges in
+                        LiveSeekableWindow(ranges: ranges.map {
+                            let range = $0.timeRangeValue
+                            return (start: range.start.seconds, duration: range.duration.seconds)
+                        })
+                    }
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] window in self?.itemSeekableWindow = window }
                 self.videoSizeCancellable = item
                     .publisher(for: \.presentationSize)
                     // A zero size is the pre-ready placeholder; publishing it
@@ -654,6 +680,7 @@ final class AetherPlayer: PlayerProtocol {
     // MARK: - PlayerProtocol state
 
     var isPlaying: Bool { engine.state == .playing }
+    var playbackState: UniversalPlaybackState { stateSubject.value }
     var currentTime: TimeInterval { engine.currentTime + partStart }
     var duration: TimeInterval { stack?.duration ?? engine.duration }
 
@@ -759,10 +786,14 @@ final class AetherPlayer: PlayerProtocol {
     var dolbyVisionPlayback: DolbyVisionPlayback? {
         DolbyVisionPlayback(sourceProfile: engine.sourceDVProfile,
                             convertedTo81: engine.dolbyVisionConversion == .profile7ToProfile81,
+                            onSoftwareRoute: isOnSoftwareRoute,
                             presentsDolbyVision: engine.videoFormat == .dolbyVision,
                             presentsHDR: engine.videoFormat != .sdr,
                             panelSupportsDolbyVision: AetherEngine.displayCapabilities.supportsDolbyVision)
     }
+    /// FEL or MEL for the current Profile 7 load, probed after it starts; nil otherwise.
+    private(set) var dolbyVisionEnhancementLayer: DolbyVisionLayerType?
+    private var enhancementLayerURL: URL?
     var sourceVideoCodecName: String? { engine.sourceVideoCodecName }
     /// "720p → 1080p (ML)" while the upscale stage runs; nil when it never started.
     var upscaleSummary: String? {
@@ -989,8 +1020,19 @@ final class AetherPlayer: PlayerProtocol {
         return text.contains(".m3u8") || text.contains("format=hls")
     }
 
+    /// Speaker layout ("7.1.4"…) object audio renders into; absent = off.
+    static let heightSpeakersKey = "heightSpeakers"
+
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
+
+    /// Profile 7 FEL composition; absent = on.
+    static let dolbyVisionFELKey = "dolbyVisionFEL"
+
+    /// Engine traits only a self-built app carries (#609, Scripts/enthusiast-build.py).
+    static let buildsFEL = AetherEngine.OptionalComponent.dualLayerDolbyVision.isBuiltIn
+    static let buildsHeightAudio = AetherEngine.OptionalComponent.trueHDObjectAudio.isBuiltIn
+        || AetherEngine.OptionalComponent.dtsxObjectAudio.isBuiltIn
 
     /// DVB teletext caption page, applied to BOTH live and VOD loads. A
     /// `liveTeletextPage` UserDefaults key overrides everything (0 = force
@@ -1136,9 +1178,21 @@ final class AetherPlayer: PlayerProtocol {
             // way whichever surface plays it (VOD recordings/rips included).
             teletextPage: Self.regionTeletextPage()
         )
+        // Settings → Playback → Height Speakers: TrueHD Atmos and DTS:X keep their heights as a
+        // rendered bed (lossless PCM, APAC on AirPlay) instead of 7.1 without them.
+        if Self.buildsHeightAudio,
+           let layout = SpatialSpeakerLayout(rawValue: UserDefaults.standard.string(forKey: Self.heightSpeakersKey) ?? "") {
+            options.objectAudioRendering = .render(layout)
+        }
+        // Profile 7 FEL composes both layers (#345). The engine doesn't check the panel,
+        // so keep the native route where the TV can't show Dolby Vision.
+        let felOn = UserDefaults.standard.object(forKey: Self.dolbyVisionFELKey) as? Bool ?? true
+        options.preferDualLayerDolbyVision = Self.buildsFEL && felOn && AetherEngine.displayCapabilities.supportsDolbyVision
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
+        // Read ahead as far as the engine's disk budget allows; live sizes its own window.
+        if !isLive { options.forwardBufferSegments = .max }
         // New content, so the previous item's aspect ratio describes nothing.
         // Reset HERE rather than when `currentItem` goes nil: the engine also
         // swaps its player for SAME-content reasons (audio track switch,
@@ -1148,6 +1202,8 @@ final class AetherPlayer: PlayerProtocol {
         // against the old episode's picture rect until `presentationSize`
         // arrives.
         videoSize = .zero
+        dolbyVisionEnhancementLayer = nil
+        enhancementLayerURL = url
         // New file: the previous track's script and fonts describe nothing,
         // even when the next episode repeats the same header and track id.
         assFonts = []
@@ -1167,11 +1223,27 @@ final class AetherPlayer: PlayerProtocol {
             errorSubject.send(pe)
             throw pe
         }
+        if engine.sourceDVProfile == 7 { probeEnhancementLayer(url: url, headers: headers ?? [:]) }
         assFonts = engine.fontAttachments.map { LibassRenderer.Font(name: $0.filename, data: $0.data) }
         // The track may have been published during the load with no fonts;
         // republish so the renderer is built with them.
         assTrack = nil
         refreshASSTrack()
+    }
+
+    /// Reads the stream head once more for the RPU's el_type, off the start path.
+    private func probeEnhancementLayer(url: URL, headers: [String: String]) {
+        Task { [weak self] in
+            let layer = await Task.detached(priority: .utility) { () -> DolbyVisionLayerType? in
+                switch try? AetherEngine.probeDolbyVisionEnhancementLayer(url: url, options: LoadOptions(httpHeaders: headers)) {
+                case .fel: .full
+                case .mel: .minimal
+                default: nil
+                }
+            }.value
+            guard let self, self.enhancementLayerURL == url else { return }
+            self.dolbyVisionEnhancementLayer = layer
+        }
     }
 
     /// The engine's active subtitle track when it is ASS/SSA.
@@ -1259,6 +1331,8 @@ final class AetherPlayer: PlayerProtocol {
         partIndex = 0
         finishAVCapture()
         dropFrameExtractor()
+        seekableCancellable = nil
+        itemSeekableWindow = nil
         engine.stop(resetDisplayCriteria: resetDisplayCriteria)
     }
 
@@ -1309,6 +1383,13 @@ final class AetherPlayer: PlayerProtocol {
     func bind(surface: UIView) {
         guard let view = surface as? AetherPlayerView else { return }
         engine.bind(view: view)
+    }
+
+    /// Fill the screen, cropping the picture, instead of fitting it (#589).
+    /// The engine keeps it across its internal host swaps.
+    var fillsScreen: Bool {
+        get { engine.videoGravity == .resizeAspectFill }
+        set { engine.videoGravity = newValue ? .resizeAspectFill : .resizeAspect }
     }
 
     func unbind(surface: UIView) {
@@ -1407,8 +1488,28 @@ final class AetherPlayer: PlayerProtocol {
 
     /// A snapshot of the live window. Cheap: these are the clock's own
     /// published values, which the engine keeps current even while paused.
+    ///
+    /// Direct HLS is the exception: there the engine publishes an unbounded
+    /// `0...edge` (AVPlayer clamps seeks itself), which would offer media the
+    /// origin evicted long ago. The window comes from the AVPlayer item, on the
+    /// same axis (the engine applies no playlist shift on that route), and one
+    /// no deeper than the playlist's live holdback is no window at all.
     var liveTimeshift: LiveTimeshift {
         let clock = engine.clock
+        if engine.isLive, engine.videoRoute == .remoteBypass {
+            guard let window = remoteLiveWindow, window.isSeekable else {
+                return LiveTimeshift(seekableRange: nil, edgeTime: clock.liveEdgeTime, playhead: clock.currentTime,
+                                     behindLiveSeconds: 0, isAtLiveEdge: true)
+            }
+            let playhead = clock.currentTime
+            return LiveTimeshift(
+                seekableRange: window.lowerBound...window.upperBound,
+                edgeTime: window.upperBound,
+                playhead: playhead,
+                behindLiveSeconds: max(0, window.upperBound - playhead),
+                isAtLiveEdge: window.isAtLiveEdge(playhead)
+            )
+        }
         return LiveTimeshift(
             seekableRange: clock.seekableLiveRange,
             edgeTime: clock.liveEdgeTime,
@@ -1433,7 +1534,10 @@ final class AetherPlayer: PlayerProtocol {
     func seekLive(to sessionSeconds: Double) async -> Bool {
         let shift = liveTimeshift
         guard let range = shift.seekableRange else { return false }
-        let target = min(max(sessionSeconds, range.lowerBound), shift.edgeTime)
+        // On direct HLS, clear of the oldest segment: the next playlist refresh
+        // may evict it before the seek lands.
+        let floor = remoteLiveWindow.map { $0.seekTarget($0.lowerBound) } ?? range.lowerBound
+        let target = min(max(sessionSeconds, floor), shift.edgeTime)
         if shift.edgeTime - target < 1 {
             await engine.seekToLiveEdge()
         } else {
@@ -1452,6 +1556,15 @@ final class AetherPlayer: PlayerProtocol {
     /// remote-HLS bypass, or across a channel change.
     func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
         await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// The AVPlayer item's seekable window, mirrored by KVO: the getter is a
+    /// sync XPC round trip to mediaserverd and this is read on every scrub tick.
+    private var itemSeekableWindow: LiveSeekableWindow?
+    private var seekableCancellable: AnyCancellable?
+
+    private var remoteLiveWindow: LiveSeekableWindow? {
+        engine.videoRoute == .remoteBypass ? itemSeekableWindow : nil
     }
 
     /// True once the current load has its first frame on screen (an audio-only
@@ -1677,5 +1790,44 @@ struct AetherAdvancedStats {
             && serverBytesSentLifetime == nil && serverRequestCount == nil
             && demuxerBytesFetched == nil && audioBridgeLiveBytes == nil
             && rssMb == nil
+    }
+}
+
+private extension PlaybackState {
+    var transportState: PlaybackTransportState.State {
+        switch self {
+        case .idle: .idle
+        case .loading: .loading
+        case .playing: .playing
+        case .paused: .paused
+        case .seeking: .seeking
+        case .ended: .ended
+        case .error(let message): .error(message)
+        }
+    }
+}
+
+private extension PlaybackTransportState.State {
+    var engineState: PlaybackState {
+        switch self {
+        case .idle: .idle
+        case .loading: .loading
+        case .playing: .playing
+        case .paused: .paused
+        case .seeking: .seeking
+        case .ended: .ended
+        case .error(let message): .error(message)
+        }
+    }
+}
+
+private extension PlaybackPhase {
+    var transportPhase: PlaybackTransportState.Phase {
+        switch self {
+        case .playing: .playing
+        case .paused: .paused
+        case .rebuffering: .rebuffering
+        default: .loading
+        }
     }
 }

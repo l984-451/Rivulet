@@ -39,7 +39,7 @@ final class PlexProviderPlaybackTests: XCTestCase {
             calls.append("subtitle(\(partId),\(subtitleStreamID))")
         }
         override func reportProgress(serverURL: String, authToken: String, ratingKey: String, timeMs: Int,
-                                     state: String, duration: Int?, sessionIdentifier: String?) async throws -> String? {
+                                     state: String, duration: Int?, sessionIdentifier: String?, reportingTimeout: Duration?) async throws -> String? {
             timeline.append((ratingKey, timeMs, state, duration, sessionIdentifier))
             return nil
         }
@@ -160,7 +160,7 @@ final class PlexProviderPlaybackTests: XCTestCase {
         let info = try await provider.resolveStream(for: ref, sourceID: "12", maxBitrate: nil)
         let session = try XCTUnwrap(info.playSessionID)
         let reporter = provider.progressReporter(for: ref, sourceID: "12", playSessionID: session)
-        await reporter.start(position: 0)
+        try await reporter.start(position: 0)
         await reporter.progress(position: 30)
         await reporter.stopped(at: 60)
         XCTAssertTrue(network.calls.contains("open(100,1,\(session))"))
@@ -177,7 +177,7 @@ final class PlexProviderPlaybackTests: XCTestCase {
         let info = try await provider.transcodeStream(for: ref, sourceID: "11", startTime: 0, maxBitrate: 4_000_000)
         let session = try XCTUnwrap(info.playSessionID)
         let reporter = provider.progressReporter(for: ref, sourceID: "11", playSessionID: session)
-        await reporter.start(position: 0)
+        try await reporter.start(position: 0)
         XCTAssertFalse(network.calls.contains { $0.hasPrefix("decision(") },
                        "the player's preflight sends the decision, and a second one is wasted")
         await reporter.stopped(at: 10)

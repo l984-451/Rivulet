@@ -243,6 +243,43 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertEqual(rail.map(\.row.id), ["plex-cw", "plex-movies", "pin", "plex-tv"])
     }
 
+    /// Favorites follow their library's rows; a hidden library's are dropped;
+    /// pinned playlists come after every library row.
+    func test_homeRail_personalRows_favoritesWithTheirLibrary_playlistsLast() {
+        func lib(_ id: String, _ key: String?) -> CachedHomeHub {
+            var hub = row(id)
+            hub.libraryKey = key
+            return hub
+        }
+        let rail = PlexHomeViewController.homeRail(
+            plex: [row("plex-cw", cw: true), lib("angel-movies", "1"), lib("angel-tv", "2")],
+            otherServers: [lib("test-movies", "jellyfin:test/m")],
+            personal: [lib("fav-movies", "1"), lib("fav-hidden", "3"), lib("fav-test", "jellyfin:test/m"),
+                       row("playlist")],
+            libraryOrder: ["1", "jellyfin:test/m", "2"])
+        XCTAssertEqual(rail.map(\.row.id),
+                       ["plex-cw", "angel-movies", "fav-movies", "test-movies", "fav-test", "angel-tv", "playlist"])
+    }
+
+    /// A favorites or playlist row takes its kind from its items' server, Emby's included.
+    func test_homeRail_personalRows_takeTheirItemsServerKind() {
+        func personal(_ id: String, providerID: String) -> CachedHomeHub {
+            let base = JellyfinFixtures.mediaItem(id, kind: .movie)
+            let item = MediaItem(ref: MediaItemRef(providerID: providerID, itemID: id), kind: .movie, title: id,
+                                 sortTitle: nil, overview: nil, year: nil, runtime: nil, parentRef: nil,
+                                 grandparentRef: nil, episodeNumber: nil, seasonNumber: nil, childProgress: nil,
+                                 userState: base.userState, artwork: base.artwork,
+                                 parentArtwork: nil, grandparentArtwork: nil)
+            return CachedHomeHub(id: id, title: id, isContinueWatching: false, hubKey: nil,
+                                 hubIdentifier: id, totalSize: nil, items: [item])
+        }
+        let rail = PlexHomeViewController.homeRail(
+            plex: [], otherServers: [],
+            personal: [personal("emby", providerID: "emby:srv"), personal("jf", providerID: "jellyfin:srv"),
+                       personal("plex", providerID: "plex:angel")])
+        XCTAssertEqual(rail.map(\.kind), [.emby, .jellyfin, .plex])
+    }
+
     func test_homeRail_jellyfinOnly() {
         let rail = PlexHomeViewController.homeRail(plex: [], otherServers: [row("jf-cw", cw: true), row("jf-movies")])
         XCTAssertEqual(rail.map(\.row.id), ["jf-cw", "jf-movies"])
@@ -263,8 +300,10 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     func test_sourceBadge_onlyWhileBothServersAreSignedIn() {
         let jellyfin = MediaItemRef(providerID: "jellyfin:srv", itemID: "1")
         XCTAssertEqual(PlexHomeViewController.sourceBadge(for: jellyfin, labelsServers: true), "Jellyfin")
+        // The host app's own Plex sign-in, if the simulator has one, names the Plex server.
+        let plexName = MediaProviderRegistry.shared.plexProvider?.displayName ?? "Plex"
         XCTAssertEqual(PlexHomeViewController.sourceBadge(for: MediaItemRef(providerID: "plex:abc", itemID: "1"),
-                                                          labelsServers: true), "Plex")
+                                                          labelsServers: true), plexName)
         XCTAssertNil(PlexHomeViewController.sourceBadge(for: jellyfin, labelsServers: false))
     }
 
@@ -330,14 +369,14 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
     }
 
     func test_searchError_onlyWhenNothingCameBack() {
-        let down: Result<[PlexMetadata], Error> = .failure(URLError(.timedOut))
-        let found: Result<[MediaItem], Error> = .success([JellyfinFixtures.mediaItem("m1")])
-        let none: Result<[MediaItem], Error> = .success([])
+        let down: Result<Bool, Error> = .failure(URLError(.timedOut))
+        let found: Result<Bool, Error> = .success(true)
+        let none: Result<Bool, Error> = .success(false)
         XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: found),
                      "one server down must not hide the other's results")
         XCTAssertNotNil(PlexHomeViewController.searchErrorMessage(plex: down, otherServers: none),
                         "'No results' would be a lie while a server is down")
-        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success([]), otherServers: none))
+        XCTAssertNil(PlexHomeViewController.searchErrorMessage(plex: .success(false), otherServers: none))
     }
 
     // MARK: - Home hero

@@ -39,7 +39,25 @@ nonisolated struct JFUserWithPolicy: Decodable, Sendable {
         let enableContentDeletion: Bool?
         let enableContentDownloading: Bool?
         let enableLiveTvManagement: Bool?
+        let enableSubtitleManagement: Bool?
     }
+}
+
+/// `Libraries/AvailableOptions`: the subtitle providers (OpenSubtitles) the server has installed.
+nonisolated struct JFLibraryAvailableOptions: Decodable, Sendable {
+    let subtitleFetchers: [Fetcher]?
+    nonisolated struct Fetcher: Decodable, Sendable { let name: String? }
+}
+
+/// `Items/{id}/RemoteSearch/Subtitles/{language}`.
+nonisolated struct JFRemoteSubtitle: Decodable, Sendable {
+    let id: String?
+    let name: String?
+    let providerName: String?
+    let format: String?
+    let threeLetterISOLanguageName: String?
+    let forced: Bool?
+    let hearingImpaired: Bool?
 }
 
 /// `/MediaSegments/{id}`: `type` is Intro, Outro, Recap, Commercial, Preview or Unknown.
@@ -51,6 +69,11 @@ nonisolated struct JFMediaSegment: Decodable, Sendable {
 
 nonisolated struct JFMediaSegments: Decodable, Sendable {
     let items: [JFMediaSegment]?
+}
+
+/// `Items/Filters`: the values a library listing can be narrowed by. Only the years are read.
+nonisolated struct JFFilters: Decodable, Sendable {
+    let years: [Int]?
 }
 
 nonisolated struct JFQueryResult: Decodable, Sendable {
@@ -120,6 +143,27 @@ nonisolated struct JFItem: Decodable, Sendable {
     let localTrailerCount: Int?
     let specialFeatureCount: Int?
     let extraType: String?          // on a trailer or special feature: Trailer, Featurette, BehindTheScenes, ...
+    /// Internet trailers (YouTube links from TMDB); detail calls return them.
+    let remoteTrailers: [JFRemoteTrailer]?
+
+    // Photos: EXIF and GPS on lists; Path, Width and Height only when asked for.
+    let cameraMake: String?
+    let cameraModel: String?
+    let exposureTime: Double?       // seconds
+    let focalLength: Double?
+    let isoSpeedRating: Int?
+    let aperture: Double?           // APEX
+    let latitude: Double?
+    let longitude: Double?
+    let width: Int?
+    let height: Int?
+    let path: String?
+}
+
+/// One entry of `RemoteTrailers`: a link, usually YouTube, and its name.
+nonisolated struct JFRemoteTrailer: Decodable, Sendable {
+    let url: String?
+    let name: String?
 }
 
 nonisolated struct JFUserData: Decodable, Sendable {
@@ -196,6 +240,7 @@ nonisolated struct JFMediaStream: Decodable, Sendable {
     let isHearingImpaired: Bool?
     let isExternal: Bool?
     let isTextSubtitleStream: Bool?
+    let path: String?
     let isInterlaced: Bool?
     let width: Int?
     let height: Int?
@@ -263,6 +308,8 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
     nonisolated struct DirectPlay: Encodable, Sendable {
         let type: String
         var container: String?
+        var videoCodec: String?
+        var audioCodec: String?
     }
     nonisolated struct Subtitle: Encodable, Sendable {
         let format: String
@@ -319,6 +366,23 @@ nonisolated struct JFPlaybackInfoRequest: Encodable, Sendable {
 }
 
 extension JFPlaybackInfoRequest {
+    /// A backdrop clip: direct play on AVPlayer or nothing. No transcode, subtitles or resume.
+    static func themeVideo(userId: String) -> Self {
+        let bitrate = 20_000_000
+        return Self(
+            userId: userId, mediaSourceId: nil, maxStreamingBitrate: bitrate, startTimeTicks: 0,
+            audioStreamIndex: nil, subtitleStreamIndex: -1,
+            enableDirectPlay: true, enableDirectStream: true, enableTranscoding: false,
+            deviceProfile: Profile(
+                maxStreamingBitrate: bitrate,
+                directPlayProfiles: [DirectPlay(type: "Video", container: "mp4,m4v,mov",
+                                               videoCodec: "h264,hevc", audioCodec: "aac,ac3,eac3,alac,mp3")],
+                transcodingProfiles: [],
+                subtitleProfiles: []
+            )
+        )
+    }
+
     /// Music through AVPlayer: these containers play direct, anything else
     /// (ogg, opus, wma) comes back as an AAC HLS transcode.
     static func audio(userId: String) -> Self {

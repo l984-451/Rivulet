@@ -40,8 +40,8 @@ final class MusicLibrarySidebarView: UIView, UICollectionViewDelegate {
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.backgroundColor = .clear
         collectionView.contentInsetAdjustmentBehavior = .never
-        // The first row's capsule starts at y 60: 7pt into its 80pt row.
-        collectionView.contentInset = UIEdgeInsets(top: MusicMetrics.top - 7, left: 0, bottom: 60, right: 0)
+        // The first row's capsule starts 7pt into its 80pt row, below the shell's collapsed pill.
+        collectionView.contentInset = UIEdgeInsets(top: max(MusicMetrics.top, ShellPillMetrics.contentClearance) - 7, left: 0, bottom: 60, right: 0)
         // Entry from the grid resolves through the collection, which aims at the selected row.
         collectionView.remembersLastFocusedIndexPath = true
         collectionView.delegate = self

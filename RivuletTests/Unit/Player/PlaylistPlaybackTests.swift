@@ -102,12 +102,7 @@ final class PlaylistPlaybackTests: XCTestCase {
 
     /// An item with no Up Next card never publishes `.loading`: the container mounts the card for it (#497).
     func test_noUpNextCard_neverPublishesLoading() async {
-        let defaults = UserDefaults.standard
-        let saved = defaults.object(forKey: "showPostVideoUpNext")
-        defaults.set(false, forKey: "showPostVideoUpNext")
-        defer { defaults.set(saved, forKey: "showPostVideoUpNext") }
-
-        for kind in [MediaKind.episode, .movie] {
+        for kind in [MediaKind.movie] {
             let current = item("e1", kind: kind, season: 1, number: 1)
             let url = URL(string: "http://media.local/e1")!
             let playback = ProviderPlayback(

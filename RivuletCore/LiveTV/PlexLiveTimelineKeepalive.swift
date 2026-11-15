@@ -189,6 +189,7 @@ final class PlexLiveTimelineKeepalive {
         request.setValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.setValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         request.setValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        request.setValue(PlexAPI.playerTitle, forHTTPHeaderField: "X-Plex-Device-Name")
         return request
     }
 

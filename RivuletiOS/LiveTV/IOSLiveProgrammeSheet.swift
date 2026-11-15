@@ -7,10 +7,10 @@ import SwiftUI
 /// `onWatch` nil hides Watch (the player's own Info). The presenter plays
 /// once the sheet is gone, since a cover cannot present over a closing sheet.
 struct IOSLiveProgrammeSheet: View {
-    let selection: IOSLiveProgrammeSelection
+    let selection: LiveProgrammeSelection
     let onWatch: ((UnifiedChannel) -> Void)?
     @ObservedObject private var store = LiveTVDataStore.shared
-    @StateObject private var recorder = IOSLiveRecorder()
+    @StateObject private var recorder = LiveRecorder()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var wideArt: URL?

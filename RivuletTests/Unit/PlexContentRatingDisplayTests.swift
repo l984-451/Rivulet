@@ -19,6 +19,19 @@ final class PlexContentRatingDisplayTests: XCTestCase {
         XCTAssertEqual(PlexMetadata.displayContentRating("uk/"), "uk/")
     }
 
+    /// The Plex hero shows the display form too, not Plex's raw "de/12" (#467).
+    @MainActor
+    func test_plexHero_showsTheDisplayRating() {
+        var meta = PlexMetadata()
+        meta.ratingKey = "1"
+        meta.type = "movie"
+        meta.title = "Charge"
+        meta.contentRating = "de/12"
+        let hero = HeroSlideView()
+        hero.configure(item: meta, serverURL: "http://s", authToken: "t", animated: false)
+        XCTAssertEqual(hero.ratingBadgeText, "ab 12 Jahren")
+    }
+
     func testGermanAgesReadAsTheTVAppShowsThem() {
         XCTAssertEqual(PlexMetadata.displayContentRating("de/16"), "ab 16 Jahren")
         XCTAssertEqual(PlexMetadata.displayContentRating("de/FSK"), "FSK")

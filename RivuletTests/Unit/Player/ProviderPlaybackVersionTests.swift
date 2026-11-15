@@ -134,6 +134,16 @@ final class ProviderPrepareStartTests: XCTestCase {
         XCTAssertEqual(provider.resolveStartTimes, [600], "the capped stream starts where the viewer left off")
     }
 
+    func test_cappedStream_explicitStartOffsetOverridesResumeIncludingZero() async throws {
+        for offset in [83.25, 0] {
+            let provider = stub(viewOffset: 600)
+            _ = try await ProviderPlayback.prepare(
+                item: JellyfinFixtures.mediaItem("m1"), provider: provider,
+                quality: .step(step2), explicitStartOffset: offset)
+            XCTAssertEqual(provider.resolveStartTimes, [offset])
+        }
+    }
+
     func test_cappedStream_fromTheBeginningStartsAtZero() async throws {
         let provider = stub(viewOffset: 600)
         _ = try await ProviderPlayback.prepare(item: JellyfinFixtures.mediaItem("m1"), provider: provider,

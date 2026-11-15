@@ -76,13 +76,13 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     }
 
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
-        try await items(in: library, sort: sort, unwatchedOnly: false, page: page)
+        try await items(in: library, sort: sort, filter: .none, page: page)
     }
 
-    func items(in library: MediaLibrary, sort: SortOption, unwatchedOnly: Bool, page: Page) async throws -> PagedResult<MediaItem> {
+    func items(in library: MediaLibrary, sort: SortOption, filter: LibraryFilter, page: Page) async throws -> PagedResult<MediaItem> {
         try await plexCall {
             let result = try await libraryMetadataPage(
-                sectionID: library.id, sort: plexSortString(for: sort), unwatchedOnly: unwatchedOnly,
+                sectionID: library.id, sort: plexSortString(for: sort), filter: filter,
                 start: page.offset, size: page.limit, followCollections: includesCollections
             )
             let mapped = result.items.map {
@@ -98,13 +98,27 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// One page of a section's raw items; `sort` is a Plex sort key. iOS's library grid reads these too.
     /// `followCollections` applies the library's Collections setting, which only a title sort honors.
     func libraryMetadataPage(
-        sectionID: String, sort: String?, unwatchedOnly: Bool, start: Int, size: Int, followCollections: Bool
+        sectionID: String, sort: String?, filter: LibraryFilter, start: Int, size: Int, followCollections: Bool
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         try await networkManager.getLibraryItemsWithTotal(
             serverURL: serverURL, authToken: authToken, sectionId: sectionID, start: start, size: size, sort: sort,
-            followCollectionMode: followCollections,
-            filters: unwatchedOnly ? [URLQueryItem(name: "unwatched", value: "1")] : []
+            followCollectionMode: followCollections, filters: Self.filterQuery(filter)
         )
+    }
+
+    /// `/all`'s `unwatched`, `genre` (tag id) and `decade` (first year) parameters.
+    nonisolated static func filterQuery(_ filter: LibraryFilter) -> [URLQueryItem] {
+        var query: [URLQueryItem] = []
+        if filter.unwatchedOnly { query.append(URLQueryItem(name: "unwatched", value: "1")) }
+        if let genre = filter.genre { query.append(URLQueryItem(name: "genre", value: genre.id)) }
+        if let decade = filter.decade { query.append(URLQueryItem(name: "decade", value: "\(decade)")) }
+        return query
+    }
+
+    func filterOptions(in library: MediaLibrary) async throws -> LibraryFilterOptions {
+        try await plexCall {
+            try await networkManager.getLibraryFilterOptions(serverURL: serverURL, authToken: authToken, sectionId: library.id)
+        }
     }
 
     /// `/all` sorted `random`; `libraryItemsURL` sends Start with Size, without which Plex ignores Size.
@@ -154,9 +168,11 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             let kids = try await networkManager.getChildren(
                 serverURL: serverURL, authToken: authToken, ratingKey: itemRef.itemID
             )
-            return kids.map {
+            let items = kids.map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
             }
+            // A show's seasons: Specials after the last season (#534).
+            return SeasonOrder.specialsLast(items) { $0.kind == .season ? $0.seasonNumber : nil }
         }
     }
 
@@ -324,10 +340,12 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             let episodes = try await networkManager.getAllLeaves(
                 serverURL: serverURL, authToken: authToken, ratingKey: showRef.itemID
             )
-            return episodes.map {
+            let items = episodes.map {
                 PlexMediaMapper.item($0, providerID: id,
                                     serverURL: serverURL, authToken: authToken)
             }
+            // The flat rail follows the pills: the Specials episodes come last (#534).
+            return SeasonOrder.specialsLast(items, seasonNumber: \.seasonNumber)
         }
     }
 
@@ -389,6 +407,16 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
             return plexHubs.map {
                 PlexMediaMapper.hub($0, providerID: id,
                                    serverURL: serverURL, authToken: authToken)
+            }
+        }
+    }
+
+    func promotedHubs(in libraries: [MediaLibrary]) async throws -> [String: [MediaHub]] {
+        try await plexCall {
+            try await networkManager.getPromotedHubs(
+                serverURL: serverURL, authToken: authToken, sectionIDs: libraries.map(\.id)
+            ).mapValues { hubs in
+                hubs.map { PlexMediaMapper.hub($0, providerID: id, serverURL: serverURL, authToken: authToken) }
             }
         }
     }
@@ -475,6 +503,36 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
         return await logoResolver.logo(
             serverURL: serverURL, token: authToken, network: networkManager, sourceKey: key,
             direct: item.kind == .episode || item.kind == .season ? nil : item.artwork.logo)
+    }
+
+    /// Plex has no favorite flag: a rating above three stars is one, as
+    /// `PlexUserRating.isFavorite` and Music's favorites filter have it.
+    var supportsFavorites: Bool { true }
+
+    func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] {
+        try await plexCall {
+            let threshold = Int(PlexUserRating.favoriteStarThreshold * PlexUserRating.starScale)
+            let result = try await networkManager.getLibraryItemsWithTotal(
+                serverURL: serverURL, authToken: authToken,
+                sectionId: library.id,
+                size: limit,
+                sort: "titleSort",
+                // ">>=" is Plex's "greater than", as in Music's favorites filter.
+                filters: [URLQueryItem(name: "userRating>>", value: "\(threshold)")]
+            )
+            return result.items.map {
+                PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
+            }
+        }
+    }
+
+    /// Five stars, or no rating, as `PlexMusicProvider.setFavorite` does.
+    func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
+        try await plexCall {
+            try await networkManager.setRating(
+                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID,
+                rating: favorite ? Int(5 * PlexUserRating.starScale) : nil)
+        }
     }
 
     // MARK: - Playback
@@ -577,9 +635,12 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     private let deletionAllowed = OSAllocatedUnfairLock<Bool?>(initialState: nil)
 
     /// Owner only, and only with the server's "Allow media deletion" on.
+    /// A read the server never answered is not kept, so it is asked again (#561).
     func canDeleteMedia() async -> Bool {
         if let known = deletionAllowed.withLock({ $0 }) { return known }
-        let answer = await networkManager.canDeleteMedia(serverURL: serverURL, authToken: authToken)
+        guard let answer = await networkManager.canDeleteMedia(serverURL: serverURL, authToken: authToken) else {
+            return false
+        }
         deletionAllowed.withLock { $0 = answer }
         return answer
     }

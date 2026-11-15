@@ -3,40 +3,12 @@
 
 import SwiftUI
 
-/// Account > Home.
-struct IOSHomeSettingsView: View {
-    /// Same keys as the tvOS Home > Hero setting.
-    @AppStorage("showHomeHero") private var showHero = true
-    @AppStorage(heroContentKey) private var heroContent = "trending"
-
-    static let heroContentKey = "homeHeroContent"
-    private static let heroChoices = [("off", String(localized: "Off")), ("trending", String(localized: "Trending")),
-                                      ("continueWatching", String(localized: "Continue Watching")),
-                                      ("recentlyAdded", String(localized: "Recently Added")), ("watchlist", String(localized: "Watchlist"))]
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Hero", selection: Binding(
-                    get: { showHero ? heroContent : "off" },
-                    set: { choice in
-                        showHero = choice != "off"
-                        if choice != "off" { heroContent = choice }
-                    }
-                )) {
-                    ForEach(Self.heroChoices, id: \.0) { Text($0.1).tag($0.0) }
-                }
-            } footer: {
-                Text("What the top of Home features. Trending shows what's popular this week that's in your library. A list with nothing in it shows Trending.")
-            }
-        }
-        .navigationTitle("Home")
-    }
-}
-
 /// Account > Library.
 struct IOSLibrarySettingsView: View {
+    @EnvironmentObject private var browse: BrowseStore
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
+    /// The tvOS sidebar's key, so sync and a shared profile agree.
+    @AppStorage("showFavoritesTab") private var showFavorites = false
 
     static let showPlaylistsKey = "iosShowPlaylists"
 
@@ -47,6 +19,28 @@ struct IOSLibrarySettingsView: View {
             } footer: {
                 Text("Lists each server's video playlists under Library.")
             }
+            if browse.offersFavorites {
+                Section {
+                    Toggle("Favorites", isOn: $showFavorites)
+                } footer: {
+                    Text("Lists your favorite movies and shows from every server under Library.")
+                }
+            }
+            let libraries = (browse.libraries + browse.photoLibraries).sidebarOrder(servers: browse.providerOrder)
+            if !libraries.isEmpty {
+                Section {
+                    ForEach(libraries) { library in
+                        Toggle(isOn: Binding(get: { browse.isSidebarLibraryShown(library) },
+                                             set: { browse.setSidebarLibrary(library, shown: $0) })) {
+                            Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                        }
+                    }
+                } header: {
+                    Text("Libraries")
+                } footer: {
+                    Text("Hidden libraries stay on the server and are left out of Library and Home.")
+                }
+            }
         }
         .navigationTitle("Library")
     }
@@ -56,14 +50,13 @@ struct IOSLibrarySettingsView: View {
 struct IOSPlaybackSettingsView: View {
     @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
-    /// Observed so the skip pickers redraw; read and written through `MarkerSkipMode`.
+    /// Observed so the skip pickers redraw (and Credits); read and written through `MarkerSkipMode`.
     @AppStorage("autoSkipIntro") private var autoSkipIntro = false
     @AppStorage("autoSkipRecap") private var autoSkipRecap = false
-    @AppStorage("autoSkipCredits") private var autoSkipCredits = false
+    @AppStorage(CreditsBehavior.storageKey) private var atTheCredits = ""
     @AppStorage("autoSkipAds") private var autoSkipAds = false
     @AppStorage("showSkipIntro") private var showSkipIntro = true
     @AppStorage("showSkipRecap") private var showSkipRecap = true
-    @AppStorage("showSkipCredits") private var showSkipCredits = true
     @AppStorage("showSkipAds") private var showSkipAds = true
     @AppStorage("useIntroDB") private var useIntroDB = false
     /// Same keys as the tvOS Home and Away Streaming Quality settings.
@@ -102,12 +95,21 @@ struct IOSPlaybackSettingsView: View {
             Section {
                 skipPicker("Intros", marker: "intro")
                 skipPicker("Recaps", marker: "recap")
-                skipPicker("Credits", marker: "credits")
                 skipPicker("Commercials", marker: "commercial")
             } header: {
                 Text("Skip Markers")
             } footer: {
-                Text("Button shows a skip button, Automatic skips on its own, and Off shows nothing.")
+                Text("Manual shows a skip button, Automatic skips on its own, and Off shows nothing.")
+            }
+
+            Section {
+                Picker("Credits", selection: Binding(
+                    get: { CreditsBehavior.current() }, set: { CreditsBehavior.set($0) }
+                )) {
+                    ForEach(CreditsBehavior.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+            } footer: {
+                Text("Up Next opens the next episode card when the credits start. Skip Button shows only Skip Credits, then Up Next opens at the end. Off waits for the end. Countdown decides autoplay.")
             }
 
             Section {

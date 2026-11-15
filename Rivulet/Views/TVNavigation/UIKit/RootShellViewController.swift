@@ -78,6 +78,7 @@ final class RootShellViewController: UIViewController {
     private var contentVCs: [SidebarTab: UIViewController] = [:]
     private let sidebar = ShellSidebarViewController()
     private let edgeCatcher = EdgeCatcherView()
+    private let topEdgeGuide = UIFocusGuide()
     private var belowTop = false
     /// The edge catcher stays out of the focus system until the mounted content
     /// has held focus, or a focus search on not-yet-focusable content parks on
@@ -90,6 +91,10 @@ final class RootShellViewController: UIViewController {
     /// The retry budget ran out with nothing focusable on the page. The catcher
     /// is re-armed as an escape hatch so Left and Menu still have a target.
     private var contentFocusGaveUp = false
+    /// Remote gesture that closed the sidebar, so its tail cannot move focus sideways.
+    private var sidebarExitGesture: Int?
+    /// Remote gesture that last moved focus within content, so an Up run stops short of the sidebar.
+    private var contentMoveGesture: Int?
 
     // MARK: Lifecycle
 
@@ -113,14 +118,31 @@ final class RootShellViewController: UIViewController {
             guard let self else { return }
             // The profile row opens the switcher; it has no content to mount.
             if tab == .account { self.onTabChange?(tab); return }
+            // Now Playing presents over everything; the tab stays where it is.
+            if tab == .nowPlaying {
+                self.collapseSidebar()
+                MusicQueue.shared.showNowPlaying = true
+                return
+            }
+            let reselectedPage = tab == self.currentTab
+                ? self.contentVCs[tab].flatMap { SidebarReselection.target(in: $0.view) } : nil
+            if reselectedPage != nil {
+                self.belowTop = false
+                self.updateChromeVisibility()
+            }
             // Mount before collapsing: `collapseSidebar` resolves focus at once
             // and the SwiftUI round trip is async, so focus would land in the
             // outgoing tab first. The round trip's `applySelection` then no-ops.
             self.applySelection(tab)
             self.onTabChange?(tab)
             self.collapseSidebar()
+            reselectedPage?.reselectSidebarTab()
         }
-        sidebar.onCollapseRequested = { [weak self] in self?.collapseSidebar() }
+        sidebar.onCollapseRequested = { [weak self] in
+            guard let self else { return }
+            self.sidebarExitGesture = MenuPressInterceptor.remoteGestures.count
+            self.collapseSidebar()
+        }
 
         // Full-height strip at the leading edge: a Left press from any content
         // (hero Play, a shelf's first tile) lands here and opens the sidebar.
@@ -128,6 +150,17 @@ final class RootShellViewController: UIViewController {
         edgeCatcher.autoresizingMask = [.flexibleHeight]
         edgeCatcher.isHidden = true
         view.addSubview(edgeCatcher)
+
+        // Up from the top of a page lands on the edge catcher, the touch and press twin of Left.
+        view.addLayoutGuide(topEdgeGuide)
+        topEdgeGuide.preferredFocusEnvironments = [edgeCatcher]
+        NSLayoutConstraint.activate([
+            topEdgeGuide.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topEdgeGuide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topEdgeGuide.topAnchor.constraint(equalTo: view.topAnchor),
+            topEdgeGuide.heightAnchor.constraint(equalToConstant: 2)
+        ])
+        updateChromeVisibility()
 
         MenuPressInterceptor.register(self)
         NotificationCenter.default.addObserver(
@@ -238,6 +271,7 @@ final class RootShellViewController: UIViewController {
 
     private func expandSidebar(aimAt tab: SidebarTab? = nil) {
         guard !sidebar.isExpanded, !interactionBlocked else { return }
+        sidebarExitGesture = nil
         sidebar.setExpanded(true, animated: true, aimAt: tab)
         updateChromeVisibility()
         setNeedsFocusUpdate()
@@ -264,6 +298,8 @@ final class RootShellViewController: UIViewController {
         // `UIFocusDebugger` names it as the occluder of every item beneath it.
         sidebar.view.isUserInteractionEnabled = sidebar.isExpanded
         edgeCatcher.isHidden = interactionBlocked || !(contentHasHadFocus || contentFocusGaveUp)
+        topEdgeGuide.isEnabled = !edgeCatcher.isHidden && !sidebar.isExpanded && !belowTop
+            && !pillSuppressed && !profilePanelOpen
     }
 
     @objc private func handleBelowTopChanged(_ note: Notification) {
@@ -323,6 +359,34 @@ final class RootShellViewController: UIViewController {
         return backing.isDescendant(of: view) && !backing.isDescendant(of: sidebar.view)
     }
 
+    /// A surface that handles Up itself at its top (the guide's grid) keeps the top-edge guide off.
+    private func ownsUp(_ item: UIFocusEnvironment?) -> Bool {
+        var current = backingView(of: item)
+        while let view = current {
+            if view is KeepsUpAtTop { return true }
+            current = view.superview
+        }
+        return false
+    }
+
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        let gesture = MenuPressInterceptor.remoteGestures.count
+        // The closing swipe can keep moving focus after touch-up. Let it land in
+        // content, but require a fresh gesture before moving horizontally again.
+        if !sidebar.isExpanded, sidebarExitGesture == gesture,
+           context.focusHeading.contains(.left) || context.focusHeading.contains(.right),
+           isInsideContent(context.previouslyFocusedItem), isInsideContent(context.nextFocusedItem) {
+            return false
+        }
+        // Opening upward takes a fresh press or swipe, so a held Up or a long
+        // swipe up a page (or the fast-scroll hand-off) never overshoots into it.
+        if (context.nextFocusedItem as? UIView) === edgeCatcher, context.focusHeading.contains(.up),
+           contentMoveGesture == gesture || ownsUp(context.previouslyFocusedItem) {
+            return false
+        }
+        return super.shouldUpdateFocus(in: context)
+    }
+
     override func didUpdateFocus(in context: UIFocusUpdateContext,
                                  with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
@@ -343,6 +407,9 @@ final class RootShellViewController: UIViewController {
             setNeedsFocusUpdate()
             updateFocusIfNeeded()
             return
+        }
+        if isInsideContent(context.previouslyFocusedItem), isInsideContent(next) {
+            contentMoveGesture = MenuPressInterceptor.remoteGestures.count
         }
         if !contentHasHadFocus, isInsideContent(next) {
             contentHasHadFocus = true

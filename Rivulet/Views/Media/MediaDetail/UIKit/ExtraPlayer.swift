@@ -51,6 +51,10 @@ enum ExtraPlayer {
     /// 404s under `/library/metadata` (#255); it plays directly through a synthetic PlexMetadata.
     /// `server` defaults to the one the extra's own provider lives on.
     static func play(_ trailer: BelowFoldTrailer, server: PlexServerAddress? = nil, from presenter: UIViewController) {
+        if let videoID = trailer.youTubeVideoID {
+            confirmYouTube(videoID, from: presenter)
+            return
+        }
         let key = trailer.playbackKey ?? trailer.id
         // Off Plex an extra is a library item of its own provider.
         if let provider = MediaProviderRegistry.shared.provider(for: trailer.providerID), provider.kind != .plex {
@@ -87,6 +91,24 @@ enum ExtraPlayer {
             present(playItem: syntheticMetadata(forPartKey: path, trailer: trailer),
                     serverURL: serverURL, token: token, resumeOffset: nil, mediaID: nil, from: presenter)
         }
+    }
+
+    /// A Jellyfin or Emby internet trailer plays in the YouTube app, after a confirm.
+    private static func confirmYouTube(_ videoID: String, from presenter: UIViewController) {
+        presenter.present(ConfirmationPopupViewController(
+            title: String(localized: "Open in YouTube"),
+            message: String(localized: "This trailer plays in the YouTube app."),
+            confirmTitle: String(localized: "Open in YouTube"),
+            onConfirm: {
+                guard let url = YouTubeTrailer.appURL(videoID: videoID) else { return }
+                UIApplication.shared.open(url) { opened in
+                    guard !opened else { return }
+                    presenter.present(ConfirmationPopupViewController(
+                        title: String(localized: "YouTube Isn't Installed"),
+                        message: String(localized: "Install YouTube from the App Store to watch this trailer."),
+                        confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                }
+            }), animated: true)
     }
 
     private static func playProviderExtra(_ ref: MediaItemRef, provider: any MediaProvider, from presenter: UIViewController) {

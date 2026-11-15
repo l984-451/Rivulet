@@ -25,15 +25,15 @@ private enum IOSLiveWhatsOnFeed {
 /// What's On: the tvOS rows as Home-style rails of 16:9 cards.
 struct IOSLiveWhatsOnView<Header: View>: View {
     let onWatch: (UnifiedChannel) -> Void
-    let onDetails: (IOSLiveProgrammeSelection) -> Void
+    let onDetails: (LiveProgrammeSelection) -> Void
     @ViewBuilder let header: () -> Header
-    @EnvironmentObject private var recorder: IOSLiveRecorder
+    @EnvironmentObject private var recorder: LiveRecorder
     @ObservedObject private var store = LiveTVDataStore.shared
     @State private var shelves: [LiveShelf] = []
     @State private var now = Date()
 
     init(onWatch: @escaping (UnifiedChannel) -> Void,
-         onDetails: @escaping (IOSLiveProgrammeSelection) -> Void,
+         onDetails: @escaping (LiveProgrammeSelection) -> Void,
          @ViewBuilder header: @escaping () -> Header) {
         self.onWatch = onWatch
         self.onDetails = onDetails
@@ -91,12 +91,12 @@ struct IOSLiveWhatsOnView<Header: View>: View {
                     if item.kind == .channel {
                         onWatch(channel)
                     } else {
-                        onDetails(IOSLiveProgrammeSelection(channel: channel, program: item.program))
+                        onDetails(LiveProgrammeSelection(channel: channel, program: item.program))
                     }
                 } label: { tile }
                 .buttonStyle(.plain)
                 .contextMenu {
-                    IOSLiveMenuContent(sections: IOSLiveMenu.sections(
+                    IOSLiveMenuContent(sections: LiveMenu.sections(
                         channel: channel, program: item.program, recorder: recorder,
                         watch: onWatch, details: onDetails
                     ))
@@ -119,6 +119,7 @@ struct IOSLiveCard: View {
             IOSLiveCardArt(item: item, now: now)
                 .frame(width: width, height: width * 9 / 16)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .tileHover(cornerRadius: 12)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.footnote.weight(.semibold))
@@ -315,5 +316,59 @@ private struct IOSLiveCardPreview: View {
             .padding(.bottom, 14)
         }
         .frame(width: 340)
+    }
+}
+
+/// Home's Favorite Channels row (#623): What's On's Favorites cards, and nothing while there are none.
+struct IOSFavoriteChannelsRow: View {
+    @EnvironmentObject private var playback: IOSPlaybackController
+    @ObservedObject private var store = LiveTVDataStore.shared
+    @StateObject private var recorder = LiveRecorder()
+    @State private var selection: LiveProgrammeSelection?
+    @State private var pendingPlay: UnifiedChannel?
+
+    var body: some View {
+        if !store.homeFavoriteCards.isEmpty {
+            TimelineView(.everyMinute) { context in
+                IOSShelfRow(kind: .landscape, items: store.homeFavoriteCards) {
+                    IOSPlexShelfHeader(title: FavoriteChannelsRow.title)
+                } tile: { item, width in
+                    card(item, width: width, now: context.date)
+                }
+            }
+            .sheet(item: $selection, onDismiss: playPending) { selection in
+                IOSLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
+            }
+            .liveRecorder(recorder)
+            .environmentObject(recorder)
+        }
+    }
+
+    @ViewBuilder
+    private func card(_ item: LiveCardItem, width: CGFloat, now: Date) -> some View {
+        if let channel = item.channel {
+            Button {
+                if item.kind == .channel {
+                    playback.playLive(channel)
+                } else {
+                    selection = LiveProgrammeSelection(channel: channel, program: item.program)
+                }
+            } label: { IOSLiveCard(item: item, now: now, width: width) }
+            .buttonStyle(.plain)
+            .contextMenu {
+                IOSLiveMenuContent(sections: LiveMenu.sections(
+                    channel: channel, program: item.program, recorder: recorder,
+                    watch: { playback.playLive($0) }, details: { selection = $0 }
+                ))
+            } preview: {
+                IOSLiveCardPreview(item: item, now: now)
+            }
+        }
+    }
+
+    private func playPending() {
+        guard let channel = pendingPlay else { return }
+        pendingPlay = nil
+        playback.playLive(channel)
     }
 }

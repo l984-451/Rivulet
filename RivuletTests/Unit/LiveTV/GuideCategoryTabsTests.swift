@@ -18,6 +18,10 @@ final class GuideCategoryTabsTests: XCTestCase {
                                       hasFavorites: true),
             ["Favorites", "Locals", "News", "HD"])
         XCTAssertEqual(GuideLayoutView.tabTitles(groups: ["HD"], sourceNames: [], hasFavorites: false), ["HD"])
+        // Groups keep the order given (the source's), not the alphabet (#568).
+        XCTAssertEqual(
+            GuideLayoutView.tabTitles(groups: ["Sports", "Movies", "Kids", "Sports"], sourceNames: ["Zed"], hasFavorites: true),
+            ["Favorites", "Zed", "Sports", "Movies", "Kids"])
         // An M3U group called Favorites keeps its pinned tab.
         XCTAssertEqual(GuideLayoutView.tabTitles(groups: ["Favorites", "A"], sourceNames: [], hasFavorites: false),
                        ["Favorites", "A"])

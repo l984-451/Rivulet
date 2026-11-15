@@ -8,6 +8,18 @@
             "state" : "translated",
             "value" : "Weiter ansehen"
           }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Συνέχεια παρακολούθησης"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuer à regarder"
+          }
         }
       }
     },
@@ -17,6 +29,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zuletzt hinzugefügt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προστέθηκαν πρόσφατα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouts récents"
           }
         }
       }

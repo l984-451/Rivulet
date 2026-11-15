@@ -116,6 +116,9 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
     /// falls to the end, ordered by channel number as usual.
     let favouriteRank: Int?
 
+    /// Position of `groupTitle` in its source's own category order.
+    let groupRank: Int?
+
     init(
         id: String,
         sourceType: LiveTVSourceType,
@@ -130,7 +133,8 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
         isHD: Bool = false,
         httpHeaders: [String: String]? = nil,
         isFavourite: Bool = false,
-        favouriteRank: Int? = nil
+        favouriteRank: Int? = nil,
+        groupRank: Int? = nil
     ) {
         self.id = id
         self.sourceType = sourceType
@@ -146,6 +150,7 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
         self.httpHeaders = httpHeaders
         self.isFavourite = isFavourite
         self.favouriteRank = favouriteRank
+        self.groupRank = groupRank
     }
 
     /// Create a unique identifier combining source and channel
@@ -174,7 +179,17 @@ nonisolated struct UnifiedChannel: Identifiable, Hashable, Sendable {
             isHD: isHD,
             httpHeaders: httpHeaders,
             isFavourite: isFavourite,
-            favouriteRank: favouriteRank
+            favouriteRank: favouriteRank,
+            groupRank: groupRank
+        )
+    }
+
+    func withGroupRank(_ rank: Int?) -> UnifiedChannel {
+        UnifiedChannel(
+            id: id, sourceType: sourceType, sourceId: sourceId, channelNumber: channelNumber,
+            name: name, callSign: callSign, logoURL: logoURL, streamURL: streamURL, tvgId: tvgId,
+            groupTitle: groupTitle, isHD: isHD, httpHeaders: httpHeaders,
+            isFavourite: isFavourite, favouriteRank: favouriteRank, groupRank: rank
         )
     }
 }
@@ -253,11 +268,11 @@ nonisolated struct UnifiedProgram: Identifiable, Hashable, Sendable {
 
     /// A live airing, as opposed to a replay: the source flagged it, or the
     /// guide marked the title ("Live: SportsCenter").
-    var isLiveAiring: Bool { isLive || title.contains(Self.liveMarker) }
+    var isLiveAiring: Bool { isLive || title.prefixMatch(of: Self.liveMarker) != nil }
 
     /// A stand-in that fills a channel until its event starts at `endTime`
     /// ("UPCOMING: Jets @ Bears", EPG & Sports Editor's pregame block).
-    var isPregameBlock: Bool { title.contains(Self.upcomingMarker) }
+    var isPregameBlock: Bool { title.prefixMatch(of: Self.upcomingMarker) != nil }
 
     /// When the thing this programme is about starts: a pregame block's event
     /// starts as the block ends.
@@ -265,8 +280,9 @@ nonisolated struct UnifiedProgram: Identifiable, Hashable, Sendable {
 
     /// An event slot with nothing in it ("No game scheduled" on an empty NFL
     /// slot), as opposed to a programme.
-    var isEmptySlot: Bool { title.contains(Self.emptySlot) }
+    var isEmptySlot: Bool { title.prefixMatch(of: Self.emptySlot) != nil }
 
+    // Anchored with ^, so prefixMatch tries once instead of at every position.
     private static let liveMarker = /^\s*(?:\[live\]|\(live\)|live\s*[:|]|live\s+[-–]\s)\s*/.ignoresCase()
     private static let upcomingMarker = /^\s*upcoming\s*[:|]\s*/.ignoresCase()
     private static let emptySlot = /^\s*(?:no (?:game|event|match)e?s?(?: scheduled)?|off[- ]?air)\s*$/.ignoresCase()
@@ -440,7 +456,8 @@ extension M3UParser.ParsedChannel {
             tvgId: tvgId,
             groupTitle: groupTitle,
             isHD: isHD,
-            httpHeaders: httpHeaders.isEmpty ? nil : httpHeaders
+            httpHeaders: httpHeaders.isEmpty ? nil : httpHeaders,
+            groupRank: groupRank
         )
     }
 }

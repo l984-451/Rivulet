@@ -6,7 +6,7 @@
 
 import UIKit
 
-final class LibraryAlphabetBarView: UIView {
+final class LibraryAlphabetBarView: UIView, KeepsUpAtTop {
     /// Index (into the letters passed to `setLetters`) of the letter that
     /// just took focus.
     var onLetterFocused: ((Int) -> Void)?

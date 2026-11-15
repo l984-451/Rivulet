@@ -9,7 +9,8 @@
 //
 
 import Foundation
-import UIKit
+import CoreGraphics
+import ImageIO
 
 /// Service for fetching video preview thumbnails from Plex
 @MainActor
@@ -24,7 +25,7 @@ final class PlexThumbnailService {
     private init() {}
 
     /// Get thumbnail for a specific time in the video
-    func getThumbnail(partId: Int, time: TimeInterval, serverURL: String, authToken: String) async -> UIImage? {
+    func getThumbnail(partId: Int, time: TimeInterval, serverURL: String, authToken: String) async -> CGImage? {
         // Skip if we already know this part has no BIF
         if unavailableParts.contains(partId) {
             return nil
@@ -369,8 +370,9 @@ nonisolated struct BIFData: Sendable {
     }
 
     /// Get thumbnail for a specific time
-    func thumbnail(at time: TimeInterval) -> UIImage? {
-        guard let index = frameIndex(at: time) else { return nil }
-        return UIImage(data: frames[index].imageData)
+    func thumbnail(at time: TimeInterval) -> CGImage? {
+        guard let index = frameIndex(at: time),
+              let source = CGImageSourceCreateWithData(frames[index].imageData as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 }

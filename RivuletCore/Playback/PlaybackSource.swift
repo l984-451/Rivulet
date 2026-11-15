@@ -17,7 +17,7 @@ import Foundation
 struct ProviderPlayback: Sendable {
     let provider: any MediaProvider
     let item: MediaItem
-    let detail: MediaItemDetail
+    var detail: MediaItemDetail
     var stream: StreamInfo
     var extras: PlaybackExtras
     /// True when `prepare` left the extras to the caller, who applies them as they arrive.

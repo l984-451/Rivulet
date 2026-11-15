@@ -13,7 +13,7 @@ import UIKit
 import Combine
 
 @MainActor
-final class FolderListViewController: UIViewController, UICollectionViewDelegate {
+final class FolderListViewController: UIViewController, UICollectionViewDelegate, SidebarTabReselecting {
     private nonisolated enum Item: Hashable, Sendable {
         case entry(MediaItemRef)
         case failure
@@ -216,6 +216,11 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
         showPreview(entry)
     }
 
+    func reselectSidebarTab() {
+        focusedRef = listing.entries.first?.id
+        SidebarReselection.returnToTop(in: collectionView, focusing: IndexPath(item: 0, section: 0))
+    }
+
     /// Scrolls back to the first row and focuses it. False when it already holds focus.
     func returnToTop() -> Bool {
         guard let first = listing.entries.first, focusedRef != first.id else { return false }
@@ -338,24 +343,10 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
 
     /// Opens the viewer on `photo`, paging through the folder's photos.
     private func openPhoto(_ photo: PhotoItem) {
-        let source = listing.source
-        let photos = PhotoListing(folder: listing.folder) {
-            guard let (provider, library) = source(), let photoProvider = provider as? any PhotoProvider else { return nil }
-            return (photoProvider, library)
-        }
         Task { [weak self] in
-            await photos.loadFirst()?.value
-            guard let self, presentedViewController == nil else { return }
-            if let index = photos.media.firstIndex(where: { $0.ref == photo.ref }) {
-                present(PhotoViewerViewController(listing: photos, index: index), animated: true)
-                return
-            }
-            // Not in the photo listing: show just this photo rather than the wrong one.
-            guard let (_, library) = source() else { return }
-            let single = PhotoListing(folder: nil) { (SinglePhotoProvider(photo: photo), library) }
-            await single.loadFirst()?.value
-            guard presentedViewController == nil, !single.media.isEmpty else { return }
-            present(PhotoViewerViewController(listing: single, index: 0), animated: true)
+            guard let self, let (photos, index) = await listing.photos(openingAt: photo),
+                  presentedViewController == nil else { return }
+            present(PhotoViewerViewController(listing: photos, index: index), animated: true)
         }
     }
 
@@ -396,15 +387,6 @@ final class FolderListViewController: UIViewController, UICollectionViewDelegate
             try? await change()
             NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil)
         }
-    }
-}
-
-/// A listing of one photo, for a photo the folder's photo listing does not hold.
-private struct SinglePhotoProvider: PhotoProvider {
-    let photo: PhotoItem
-
-    func photoPage(in library: MediaLibrary, folder: MediaItemRef?, page: Page) async throws -> PhotoPage {
-        PhotoPage(folders: [], media: [photo], nextPage: nil)
     }
 }
 

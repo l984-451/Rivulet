@@ -204,9 +204,52 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(source(range: .dolbyVision(profile: 8), hdr10Plus: false).qualityBadges(), ["4K", "DV"])
     }
 
-    @MainActor
-    func test_carouselBadges_keepRangeAndDropPlainCodecs() {
-        XCTAssertEqual(MediaDetailChromeView.calmBadges(source(range: .dolbyVision(profile: 8), hdr10Plus: true)), ["4K", "DV", "HDR10+"])
-        XCTAssertEqual(MediaDetailChromeView.calmBadges(nil), [])
+    func test_detailBadges_keepRangeAndDropPlainCodecs() {
+        XCTAssertEqual(source(range: .dolbyVision(profile: 8), hdr10Plus: true).detailBadges, ["4K", "DV", "HDR10+"])
+    }
+
+    /// CC, SDH and AD follow the picture and sound badges, as in the Apple TV app's row.
+    func test_detailBadges_accessibilityLast() {
+        func sub(_ codec: String, sdh: Bool) -> SubtitleTrack {
+            SubtitleTrack(id: codec, index: 0, codec: codec, language: "en", title: nil, extendedTitle: nil,
+                          isDefault: false, isForced: false, isHearingImpaired: sdh, isEmbedded: true,
+                          externalURL: nil, isSelected: false)
+        }
+        let described = AudioTrack(
+            id: "a2", index: 1, codec: "aac", profile: nil, channels: 2, channelLayout: "stereo",
+            language: "en", title: "English Descriptive Audio", extendedTitle: nil,
+            bitrate: nil, samplingRate: 48_000, isDefault: false, isForced: false, isSelected: false
+        )
+        let base = source(range: .hdr10, hdr10Plus: false)
+        let full = MediaSource(
+            id: base.id, container: base.container, duration: base.duration, bitrate: nil, fileSize: nil,
+            fileName: nil, videoResolution: base.videoResolution, videoTracks: base.videoTracks,
+            audioTracks: [described], subtitleTracks: [sub("eia_608", sdh: false), sub("srt", sdh: true)],
+            streamKind: .directPlay, streamURL: nil
+        )
+        XCTAssertEqual(full.detailBadges, ["4K", "HDR", "CC", "SDH", "AD"])
+    }
+
+    /// 720p and 1080p read "HD"; below that gets no definition badge, as in the Apple TV app.
+    func test_detailBadges_hdOnly() {
+        func source(height: Int, label: String?) -> MediaSource {
+            let video = VideoTrack(
+                id: "v1", codec: "h264", profile: nil, level: nil,
+                width: nil, height: height, frameRate: 24,
+                bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive"
+            )
+            return MediaSource(
+                id: "1", container: "mkv", duration: 7200,
+                bitrate: nil, fileSize: nil, fileName: nil, videoResolution: label,
+                videoTracks: [video], audioTracks: [], subtitleTracks: [],
+                streamKind: .directPlay, streamURL: nil
+            )
+        }
+        XCTAssertEqual(source(height: 1080, label: "1080").detailBadges, ["HD"])
+        // Emby and Jellyfin send no label: the pixel height decides.
+        XCTAssertEqual(source(height: 800, label: nil).detailBadges, ["HD"])
+        XCTAssertEqual(source(height: 720, label: "720").detailBadges, ["HD"])
+        XCTAssertEqual(source(height: 576, label: "576").detailBadges, [])
+        XCTAssertEqual(source(height: 480, label: "sd").detailBadges, [])
     }
 }

@@ -117,7 +117,7 @@ final class SettingsLeftPanelView: UIView {
     /// Pages that show a page-level instruction under the icon.
     private func hint(for page: SettingsPage) -> String? {
         switch page {
-        case .libraries, .liveTVFavorites: return String(localized: "Long press to re-arrange items")
+        case .libraries, .liveTVFavorites, .homeRows: return String(localized: "Long press to re-arrange items")
         default:         return nil
         }
     }

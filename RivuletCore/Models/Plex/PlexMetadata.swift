@@ -86,6 +86,15 @@ nonisolated struct PlexRatingEntry: Codable, Hashable, Sendable {
     var type: String?
 }
 
+/// One critic `Review` (only sent with `includeReviews=1`): `tag` is the critic,
+/// `source` the outlet, `image` "rottentomatoes://image.review.fresh" or ".rotten".
+nonisolated struct PlexReviewEntry: Codable, Hashable, Sendable {
+    var tag: String?
+    var source: String?
+    var image: String?
+    var text: String?
+}
+
 /// A show's external IDs (any may be nil), used to resolve a TMDB id when Plex
 /// didn't hand us a `tmdb://` guid directly.
 nonisolated struct ShowExternalIDs: Sendable, Equatable {
@@ -325,6 +334,7 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var audienceRatingImage: String?
     /// Every source's score, on full metadata only (absent on hub items).
     var Rating: [PlexRatingEntry]?
+    var Review: [PlexReviewEntry]?
 
     // MARK: - Artwork
     var thumb: String?
@@ -382,6 +392,7 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
 
     // MARK: - Media Files
     var Media: [PlexMedia]?
+    var Geolocation: PlexGeolocation? = nil
 
     // MARK: - Cast & Crew
     var Role: [PlexRole]?

@@ -1,50 +1,63 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Settings > About > Send Diagnostics: a snapshot of app state plus recent log lines,
-// sent as one Sentry event. The user quotes the short code; search `diag_code:<code>`.
+// Settings > About > Send Diagnostics: a snapshot of app state, settings, the persisted log
+// (this launch and the last) and recent playback sessions, uploaded to our server, which returns
+// the short code the user quotes. A failed send is kept and tried again with the next one.
 // Counts, kinds and flags only: no titles, server names or addresses.
 
 import AVFoundation
 import AVKit
 import Foundation
 import OSLog
-import Sentry
 import UIKit
 
 @MainActor
 enum DiagnosticsReport {
     private(set) static var isSending = false
 
-    /// Sends the report and returns its code, or nil when Sentry is not running.
-    static func send(window: UIWindow?, onStart: () -> Void) async -> String? {
+    enum Outcome {
+        case server(code: String)
+        case failed
+    }
+
+    /// Uploads the report to our server for its code. If that fails the report is kept on disk
+    /// for the next send.
+    static func send(window: UIWindow?, onStart: () -> Void) async -> Outcome {
         isSending = true
         defer { isSending = false }
         onStart()
+        _ = NetworkPathMonitor.shared  // starts the monitor if nothing has yet, so the path is known below
         // Let the row's spinner draw before the snapshot's main-thread work.
         try? await Task.sleep(for: .milliseconds(50))
 
-        let sections = collect(window: window)
-        let logLines = await Task.detached(priority: .userInitiated) { recentLogLines() }.value
-
-        let event = Event(level: .info)
-        event.message = SentryMessage(formatted: "User diagnostics")
-        event.fingerprint = ["rivulet-diagnostics"]
-        let code = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))
-        let shown = "\(code.prefix(4))-\(code.suffix(4))"
-        event.tags = ["diag_code": shown]
-        event.context = sections.compactMapValues { $0 as? [String: Any] }
-
-        var full = sections
-        full["log"] = logLines
+        var full = collect(window: window)
         full["settings"] = settingsSnapshot()
+        full["current_state"] = currentState(window: window)
+        let history = await Task.detached(priority: .userInitiated) { () -> [String: Any] in
+            var sections = DiagnosticsHistory.sections()
+            sections["log"] = recentLogLines()
+            return sections
+        }.value
+        full.merge(history) { _, new in new }
         let redacted = SentryEventRedaction.redactAny(full)
-        var attachments: [Attachment] = []
-        if JSONSerialization.isValidJSONObject(redacted),
-           let data = try? JSONSerialization.data(withJSONObject: redacted, options: [.prettyPrinted, .sortedKeys]) {
-            attachments.append(Attachment(data: data, filename: "diagnostics.json", contentType: "application/json"))
-        }
-        return SentryBridge.capture(event: event, attachments: attachments) == nil ? nil : shown
+        guard JSONSerialization.isValidJSONObject(redacted),
+              let data = try? JSONSerialization.data(withJSONObject: redacted, options: [.sortedKeys])
+        else { return .failed }
+
+        if case .success(let code) = await DiagnosticsUploader.send(json: data) { return .server(code: code) }
+        return .failed
+    }
+
+    /// What the app was doing at send time: the frontmost screen's type and the player's state.
+    private static func currentState(window: UIWindow?) -> [String: Any] {
+        var top = window?.rootViewController
+        while let next = top?.presentedViewController { top = next }
+        var state = DiagnosticsHistory.processState()
+        state["frontmost_screen"] = top.map { String(describing: type(of: $0)) } ?? "none"
+        state["player_open"] = top.map { String(describing: type(of: $0)).contains("Player") } ?? false
+        state["os_available_memory_mb"] = Int(os_proc_available_memory() / 1_048_576)
+        return state
     }
 
     // MARK: - Sections
@@ -56,8 +69,10 @@ enum DiagnosticsReport {
             "rivulet_device": device(window: window),
             "plex": plex(),
             "plex_profile": profile(),
+            "streaming": streaming(),
             "home": home(),
             "other_servers": otherServers(),
+            "library_browse": libraryBrowse(),
             "live_tv": liveTV(),
             "top_shelf": topShelf(),
         ]
@@ -66,6 +81,7 @@ enum DiagnosticsReport {
     private static func app() -> [String: Any] {
         let info = Bundle.main.infoDictionary ?? [:]
         return [
+            "platform": "tvOS",
             "version": info["CFBundleShortVersionString"] as? String ?? "?",
             "build": info["CFBundleVersion"] as? String ?? "?",
             "locale": Locale.current.identifier,
@@ -93,6 +109,7 @@ enum DiagnosticsReport {
             "free_disk_mb": freeDisk / 1_048_576,
             "thermal_state": process.thermalState.rawValue,
             "system_uptime_min": Int(process.systemUptime / 60),
+            "network": NetworkPathMonitor.shared.interfaceKind,
             "screen": "\(Int(screen.nativeBounds.width))x\(Int(screen.nativeBounds.height)) @\(screen.maximumFramesPerSecond)Hz",
             "hdr_eligible": AVPlayer.eligibleForHDRPlayback,
             "hdr_modes": AVPlayer.availableHDRModes.rawValue,
@@ -123,6 +140,20 @@ enum DiagnosticsReport {
         }
         if let url = auth.selectedServerURL {
             result["connection"] = connectionKind(url, server: auth.selectedServer)
+        }
+        return result
+    }
+
+    /// The quality settings in effect, defaults included (the settings dump only holds changed keys),
+    /// and which one the selected Plex server gets.
+    private static func streaming() -> [String: Any] {
+        var result: [String: Any] = [
+            "home_quality": StreamingQuality.setting(home: true).rawValue,
+            "away_quality": StreamingQuality.setting(home: false).rawValue,
+            "network_counts_as_away": NetworkPathMonitor.shared.isAwayPath,
+        ]
+        if let url = PlexAuthManager.shared.selectedServerURL {
+            result["plex_uses"] = StreamingQuality.isHome(serverURL: url) ? "home" : "away"
         }
         return result
     }
@@ -189,6 +220,24 @@ enum DiagnosticsReport {
             "libraries": store.libraries.count,
             "home_rows": store.homeRows.count,
         ]
+    }
+
+    /// Each library's saved sort, view and Unwatched choice for this profile, by kind (no names).
+    private static func libraryBrowse() -> [[String: Any]] {
+        let settings = LibrarySettingsManager.shared
+        let plex = PlexDataStore.shared.libraries.map { ($0.key, "plex", $0.type) }
+        let others = ServerDataStore.shared.libraries.map {
+            ($0.settingsKey, String($0.providerID.prefix { $0 != ":" }), String(describing: $0.kind))
+        }
+        return (plex + others).map { key, server, kind in
+            [
+                "server": server,
+                "kind": kind,
+                "sort": settings.librarySortOptions[key]?.rawValue ?? "default",
+                "view": settings.savedViewMode(key)?.rawValue ?? "default",
+                "unwatched_only": settings.unwatchedOnly(key),
+            ]
+        }
     }
 
     private static func liveTV() -> [String: Any] {

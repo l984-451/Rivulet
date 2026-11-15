@@ -22,6 +22,7 @@ extension ProviderPlayback {
     static func prepare(item: MediaItem, provider: any MediaProvider,
                         version: VersionChoice = .best, quality: StreamingQuality? = nil,
                         throughput: (kbps: Int, at: Date)? = nil, fromBeginning: Bool = false,
+                        explicitStartOffset: TimeInterval? = nil,
                         awaitingExtras: Bool = true) async throws -> ProviderPlayback {
         let detail: MediaItemDetail
         var stream: StreamInfo
@@ -41,7 +42,8 @@ extension ProviderPlayback {
         var settled = decided.quality
         if decided.quality.plan != .original || decided.sourceID != stream.source.id {
             do {
-                let start = startOffset(detailOffset: detail.item.userState.viewOffset, fromBeginning: fromBeginning)
+                let start = explicitStartOffset
+                    ?? startOffset(detailOffset: detail.item.userState.viewOffset, fromBeginning: fromBeginning)
                 stream = try await provider.resolveStream(for: item.ref, sourceID: decided.sourceID,
                                                           maxBitrate: decided.quality.plan.step.map { $0.kbps * 1000 },
                                                           startTime: start ?? 0)

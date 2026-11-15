@@ -110,4 +110,20 @@ final class PlexDeviceDecodingTests: XCTestCase {
         XCTAssertEqual(devices[0].device, "NAS")
         XCTAssertNil(devices[1].device)
     }
+
+    // #619: a server that is also a player lists more than one role.
+    func testIsServerReadsCommaList() throws {
+        func device(_ provides: String) throws -> PlexDevice {
+            let json = """
+            {"name":"S","product":"Plex Media Server","productVersion":"1","clientIdentifier":"s",
+             "createdAt":"","lastSeenAt":"","provides":"\(provides)"}
+            """
+            return try JSONDecoder().decode(PlexDevice.self, from: Data(json.utf8))
+        }
+        XCTAssertTrue(try device("server").isServer)
+        XCTAssertTrue(try device("server,client,player,pubsub-player").isServer)
+        XCTAssertTrue(try device("client, server").isServer)
+        XCTAssertFalse(try device("client,player,pubsub-player").isServer)
+        XCTAssertFalse(try device("").isServer)
+    }
 }

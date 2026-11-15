@@ -177,12 +177,12 @@ final class JellyfinProviderTests: XCTestCase {
         XCTAssertTrue(kill.url!.query!.contains("playSessionId=ps3"))
     }
 
-    func test_progressReporter_sendsTicksAndIDs() async {
+    func test_progressReporter_sendsTicksAndIDs() async throws {
         server.respond("/Sessions/Playing", status: 204)
         server.respond("/Sessions/Playing/Progress", status: 204)
         server.respond("/Sessions/Playing/Stopped", status: 204)
         let reporter = provider().progressReporter(for: ref, sourceID: "src-4k", playSessionID: "psid-1")
-        await reporter.start(position: 412)
+        try await reporter.start(position: 412)
         await reporter.paused(at: 61.5)
         await reporter.stopped(at: 62)
         XCTAssertEqual(server.requests.map { $0.url!.path },
@@ -209,6 +209,33 @@ final class JellyfinProviderTests: XCTestCase {
         server.respond("/Shows/show1/Seasons", body: #"{"Items":[],"TotalRecordCount":0}"#)
         _ = try await provider().children(of: MediaItemRef(providerID: "jellyfin:srv", itemID: "show1"))
         XCTAssertEqual(server.requests.last?.url?.path, "/Shows/show1/Seasons")
+    }
+
+    /// Jellyfin lists Specials (season 0) first; they go after the last season (#534).
+    func test_children_ofSeries_listsSpecialsLast() async throws {
+        server.respond("/Items/show1", body: #"{"Id":"show1","Type":"Series"}"#)
+        server.respond("/Shows/show1/Seasons", body: #"""
+            {"Items":[
+              {"Id":"s0","Name":"Specials","Type":"Season","SeriesId":"show1","IndexNumber":0},
+              {"Id":"s1","Name":"Season 1","Type":"Season","SeriesId":"show1","IndexNumber":1},
+              {"Id":"s2","Name":"Season 2","Type":"Season","SeriesId":"show1","IndexNumber":2}],
+             "TotalRecordCount":3}
+            """#)
+        let seasons = try await provider().children(of: MediaItemRef(providerID: "jellyfin:srv", itemID: "show1"))
+        XCTAssertEqual(seasons.map(\.ref.itemID), ["s1", "s2", "s0"])
+    }
+
+    /// The show's flat episode list follows the pills: the specials come last.
+    func test_allEpisodes_listsSpecialsLast() async throws {
+        server.respond("/Shows/show1/Episodes", body: #"""
+            {"Items":[
+              {"Id":"sp1","Name":"OVA","Type":"Episode","SeriesId":"show1","SeasonId":"s0","IndexNumber":1,"ParentIndexNumber":0},
+              {"Id":"e1","Name":"Pilot","Type":"Episode","SeriesId":"show1","SeasonId":"s1","IndexNumber":1,"ParentIndexNumber":1},
+              {"Id":"e2","Name":"Two","Type":"Episode","SeriesId":"show1","SeasonId":"s1","IndexNumber":2,"ParentIndexNumber":1}],
+             "TotalRecordCount":3}
+            """#)
+        let episodes = try await provider().allEpisodes(of: MediaItemRef(providerID: "jellyfin:srv", itemID: "show1"))
+        XCTAssertEqual(episodes.map(\.ref.itemID), ["e1", "e2", "sp1"])
     }
 
     func test_items_pagesAndFiltersByLibraryKind() async throws {
@@ -254,6 +281,20 @@ final class JellyfinProviderTests: XCTestCase {
 
         XCTAssertEqual(items.map(\.ref.itemID), ["m-new", "show"])
         XCTAssertFalse(server.requests.contains { $0.url?.query?.contains("lib-music") == true })
+    }
+
+    func test_favorites_askForTheLibrarysFavoritesByName() async throws {
+        server.respond("/Items", body: #"{"Items":[],"TotalRecordCount":0}"#)
+        let library = MediaLibrary(id: "lib-m", providerID: "jellyfin:srv", title: "Movies", kind: .movies)
+        let p = provider()
+        XCTAssertTrue(p.supportsFavorites)
+        _ = try await p.favorites(in: library, limit: 25)
+        let query = URLComponents(url: try XCTUnwrap(server.requests.first?.url), resolvingAgainstBaseURL: false)?
+            .queryItems?.reduce(into: [String: String]()) { $0[$1.name.lowercased()] = $1.value } ?? [:]
+        XCTAssertEqual(query["filters"], "IsFavorite")
+        XCTAssertEqual(query["parentid"], "lib-m")
+        XCTAssertEqual(query["sortby"], "SortName")
+        XCTAssertEqual(query["limit"], "25")
     }
 
     func test_fullDetail_series_fetchesNextUp() async throws {

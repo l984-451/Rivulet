@@ -12,9 +12,19 @@ actor IOSArtworkCache {
     /// NSCache is thread-safe; read synchronously so a recreated tile shows
     /// its art on the first frame instead of flashing a placeholder.
     nonisolated(unsafe) private let images = NSCache<NSURL, UIImage>()
-    private var downloads: [URL: Task<UIImage?, Never>] = [:]
+    /// One shared fetch per URL, cancelled once every caller waiting on it is cancelled.
+    private struct Download {
+        let id: UUID
+        let task: Task<UIImage?, Never>
+        var waiters: Int
+    }
+    private var downloads: [URL: Download] = [:]
     /// Trusts the self-signed certificates a raw-IP or plex.direct server presents, as the API client does.
-    private static let session = URLSession(configuration: .default, delegate: PlexCertificateDelegate(), delegateQueue: nil)
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.urlCache = ArtworkRequest.makeCache()
+        return URLSession(configuration: config, delegate: PlexCertificateDelegate(), delegateQueue: nil)
+    }()
 
     private init() {
         images.countLimit = 400
@@ -27,13 +37,17 @@ actor IOSArtworkCache {
 
     func image(for url: URL) async -> UIImage? {
         if let cached = images.object(forKey: url as NSURL) { return cached }
-        if let existing = downloads[url] { return await existing.value }
+        if var existing = downloads[url] {
+            existing.waiters += 1
+            downloads[url] = existing
+            return await wait(for: existing, url: url)
+        }
 
         let task = Task.detached(priority: .userInitiated) { () -> UIImage? in
             // A downloaded poster reads straight from disk.
             let fetched = url.isFileURL
                 ? (try? Data(contentsOf: url)).map { ($0, URLResponse()) }
-                : try? await Self.session.data(from: url)
+                : try? await Self.session.data(for: ArtworkRequest.request(for: url))
             guard let (data, response) = fetched,
                   ((response as? HTTPURLResponse)?.statusCode ?? 200) < 400 else {
                 return nil
@@ -45,15 +59,34 @@ actor IOSArtworkCache {
             }
             return image?.preparingForDisplay() ?? image
         }
-        downloads[url] = task
-        let image = await task.value
-        downloads[url] = nil
+        let download = Download(id: UUID(), task: task, waiters: 1)
+        downloads[url] = download
+        return await wait(for: download, url: url)
+    }
 
+    private func wait(for download: Download, url: URL) async -> UIImage? {
+        let image = await withTaskCancellationHandler {
+            await download.task.value
+        } onCancel: {
+            Task { await self.dropWaiter(for: url, id: download.id) }
+        }
+        if downloads[url]?.id == download.id { downloads[url] = nil }
         if let image {
             let pixels = image.cgImage.map { $0.width * $0.height }
                 ?? Int(image.size.width * image.size.height)
             images.setObject(image, forKey: url as NSURL, cost: pixels * 4)
         }
         return image
+    }
+
+    private func dropWaiter(for url: URL, id: UUID) {
+        guard var download = downloads[url], download.id == id else { return }
+        download.waiters -= 1
+        if download.waiters > 0 {
+            downloads[url] = download
+        } else {
+            downloads[url] = nil
+            download.task.cancel()
+        }
     }
 }

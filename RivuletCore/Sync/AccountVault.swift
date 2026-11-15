@@ -17,7 +17,7 @@ final class AccountVault: AccountVaulting {
     private static let recordType = "Accounts"
     private static let recordID = CKRecord.ID(recordName: "accounts-v1")
     /// Built on first use: a build without the CloudKit entitlement raises when a container is made.
-    private lazy var container = CKContainer(identifier: "iCloud." + (Bundle.main.bundleIdentifier ?? "com.gstudios.rivulet"))
+    private lazy var container = CKContainer(identifier: "iCloud.com.gstudios.rivulet.sync")
     private var database: CKDatabase { container.privateCloudDatabase }
 
     /// Reads the record, or refuses: a payload this build cannot read, or a newer version, must never be replaced.

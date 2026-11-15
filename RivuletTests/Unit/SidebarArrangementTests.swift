@@ -22,9 +22,24 @@ final class SidebarArrangementTests: XCTestCase {
 
     func test_seed_keepsTodaysLayout() {
         XCTAssertEqual(A.seed(libraryOrder: ["1", "2"], discoverAbove: true, liveTVAbove: false),
-                       [A.discover, A.watchlist, A.librariesAnchor, "1", "2", A.liveTV])
+                       [A.discover, A.watchlist, A.favorites, A.librariesAnchor, "1", "2", A.liveTV])
         XCTAssertEqual(A.seed(libraryOrder: ["1"], discoverAbove: false, liveTVAbove: true),
-                       [A.watchlist, A.liveTV, A.librariesAnchor, "1", A.discover])
+                       [A.watchlist, A.favorites, A.liveTV, A.librariesAnchor, "1", A.discover])
+    }
+
+    func test_favorites_joinAnOrderStoredBeforeThem_besideTheWatchlist() {
+        let old = [A.discover, A.watchlist, A.librariesAnchor, "1", A.liveTV]
+        XCTAssertEqual(A.insert(A.favorites, into: old),
+                       [A.discover, A.watchlist, A.favorites, A.librariesAnchor, "1", A.liveTV])
+        // The watchlist moved below the libraries: Favorites follow it there.
+        let moved = [A.discover, A.librariesAnchor, "1", A.watchlist, A.liveTV]
+        XCTAssertEqual(A.insert(A.favorites, into: moved),
+                       [A.discover, A.librariesAnchor, "1", A.watchlist, A.favorites, A.liveTV])
+        // No watchlist row stored: after Discover, else above the libraries.
+        XCTAssertEqual(A.insert(A.favorites, into: [A.discover, A.librariesAnchor, "1"]),
+                       [A.discover, A.favorites, A.librariesAnchor, "1"])
+        XCTAssertEqual(A.insert(A.favorites, into: [A.librariesAnchor, "1"]),
+                       [A.favorites, A.librariesAnchor, "1"])
     }
 
     func test_newRows_goNextToTheirKin() {

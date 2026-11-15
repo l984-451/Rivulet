@@ -170,6 +170,12 @@ final class TvheadendServiceTests: XCTestCase {
         XCTAssertEqual(events.first { $0.eventId == 111 }?.seriesLink, "crid://example.test/series1")
     }
 
+    func test_events_dropRelativeImageURLs() {
+        let grid: [String: Any] = ["entries": [["eventId": 1, "channelUuid": "c", "start": 100, "stop": 200,
+                                                "title": "T", "image": "imagecache/5"]]]
+        XCTAssertNil(TvheadendService.events(from: grid).first?.imageURL)
+    }
+
     func test_eventsURL_asksOnlyTheWindow() throws {
         let url = service().eventsURL(from: window.from, to: window.to)
         let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)

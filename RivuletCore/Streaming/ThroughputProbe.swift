@@ -15,11 +15,15 @@ nonisolated enum ThroughputProbe {
     }
 
     /// Off the caller's actor: the byte loop runs for up to two seconds.
-    @concurrent static func measure(url: URL, headers: [String: String] = [:], session: URLSession = .shared) async -> Int? {
+    /// `bytes` opens the request; a Plex caller passes its trusting session (raw-IP servers fail TLS on `.shared`).
+    @concurrent static func measure(
+        url: URL, headers: [String: String] = [:],
+        bytes open: @Sendable (URLRequest) async throws -> (URLSession.AsyncBytes, URLResponse) = { try await URLSession.shared.bytes(for: $0) }
+    ) async -> Int? {
         var request = URLRequest(url: url, timeoutInterval: 5)
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         request.setValue("bytes=0-\(byteLimit - 1)", forHTTPHeaderField: "Range")
-        guard let (bytes, response) = try? await session.bytes(for: request),
+        guard let (bytes, response) = try? await open(request),
               let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else {
             return nil
         }

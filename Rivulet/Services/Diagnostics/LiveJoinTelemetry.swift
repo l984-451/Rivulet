@@ -25,9 +25,29 @@ final class LiveJoinTelemetry {
     /// paths, so every terminal call funnels through this flag.
     private var isFinished = false
 
+    /// Every child span, so the transaction's tags can be copied onto them.
+    private let spanLock = NSLock()
+    private var allSpans: [any Span] = []
+
+    /// Starts `tune` / `decision` child spans under `resolve`; install with
+    /// `LiveResolveTiming.$begin.withValue` around the resolve call.
+    var phaseHook: (@Sendable (String) -> (@Sendable () -> Void))? {
+        guard let parent = resolveSpan else { return nil }
+        return { [weak self] name in
+            let span = parent.startChild(operation: name)
+            self?.track(span)
+            return { if !span.isFinished { span.finish() } }   // ended early and again in defer
+        }
+    }
+
+    private func track(_ span: any Span) {
+        spanLock.lock(); allSpans.append(span); spanLock.unlock()
+    }
+
     init() {
         transaction = SentryBridge.startTransaction(name: "live.join", operation: "live.join")
         resolveSpan = transaction?.startChild(operation: "resolve")
+        if let resolveSpan { track(resolveSpan) }
     }
 
     /// The Plex tune + decision handshake finished (or passed straight through
@@ -43,6 +63,7 @@ final class LiveJoinTelemetry {
         transaction?.setTag(value: Self.sourceKind(for: url), key: "live.source")
         transaction?.setTag(value: Self.scanKind(for: url), key: "live.scan")
         loadSpan = transaction?.startChild(operation: "engine_load")
+        if let loadSpan { track(loadSpan) }
     }
 
     /// Categorises the stream source by URL SHAPE only. Never returns any part
@@ -77,6 +98,7 @@ final class LiveJoinTelemetry {
         loadSpan?.finish()
         loadSpan = nil
         firstFrameSpan = transaction?.startChild(operation: "first_frame")
+        if let firstFrameSpan { track(firstFrameSpan) }
     }
 
     /// First frame on screen after the load. The join is complete. The codec is
@@ -115,6 +137,11 @@ final class LiveJoinTelemetry {
         // Bucketed as a tag as well as timed as a transaction, so the split is
         // still filterable from the Issues side without a Performance query.
         transaction?.setTag(value: Self.bucket(elapsed), key: "live.join_bucket")
+        // Child spans carry the transaction's tags so they filter by route.
+        if let tags = transaction?.tags {
+            spanLock.lock(); let spans = allSpans; spanLock.unlock()
+            for span in spans { for (key, value) in tags { span.setTag(value: value, key: key) } }
+        }
         transaction?.finish(status: status)
     }
 

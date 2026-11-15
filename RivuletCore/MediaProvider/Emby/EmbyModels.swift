@@ -65,7 +65,25 @@ nonisolated struct EmbyUser: Decodable, Sendable {
         let enableContentDeletionFromFolders: [EmbyID]?
         let enableContentDownloading: Bool?
         let enableLiveTvAccess: Bool?
+        let enableSubtitleDownloading: Bool?
     }
+}
+
+/// `Libraries/AvailableOptions`: the subtitle providers (Open Subtitles) the server has.
+nonisolated struct EmbyLibraryAvailableOptions: Decodable, Sendable {
+    let subtitleFetchers: [Fetcher]?
+    nonisolated struct Fetcher: Decodable, Sendable { let name: String? }
+}
+
+/// `Items/{id}/RemoteSearch/Subtitles/{language}`.
+nonisolated struct EmbyRemoteSubtitle: Decodable, Sendable {
+    let id: String?
+    let name: String?
+    let providerName: String?
+    let format: String?
+    let threeLetterISOLanguageName: String?
+    let isForced: Bool?
+    let isHearingImpaired: Bool?
 }
 
 // MARK: - Items
@@ -73,6 +91,15 @@ nonisolated struct EmbyUser: Decodable, Sendable {
 nonisolated struct EmbyQueryResult: Decodable, Sendable {
     let items: [EmbyItem]?
     let totalRecordCount: Int?
+}
+
+/// `Genres` and `Years` rows: a genre has an `Id`; a year is `{"Name":"1991"}` alone.
+nonisolated struct EmbyNamedResult: Decodable, Sendable {
+    struct Row: Decodable, Sendable {
+        let id: EmbyID?
+        let name: String?
+    }
+    let items: [Row]?
 }
 
 /// `Items/Prefixes` rows: `{"Name":"#"}` with no counts.
@@ -113,6 +140,8 @@ nonisolated struct EmbyItem: Decodable, Sendable {
     let container: String?
     let localTrailerCount: Int?
     let specialFeatureCount: Int?
+    /// Internet trailers (YouTube links from TMDB), asked for by `detailFields`.
+    let remoteTrailers: [EmbyRemoteTrailer]?
 
     let seriesId: EmbyID?
     let seriesName: String?
@@ -146,6 +175,11 @@ nonisolated struct EmbyItem: Decodable, Sendable {
     let primaryImageTag: String?
 
     let mediaSources: [EmbyMediaSource]?
+
+    /// Photos: only when asked for in `Fields`.
+    let width: Int?
+    let height: Int?
+    let path: String?
 
     /// Provider ids come with mixed key case on one server (`Imdb` on a movie, `IMDB` on a series).
     func providerID(_ name: String) -> String? {
@@ -303,6 +337,8 @@ nonisolated struct EmbyPlaybackInfoRequest: Encodable, Sendable {
     nonisolated struct DirectPlay: Encodable, Sendable {
         let type: String
         var container: String?
+        var videoCodec: String?
+        var audioCodec: String?
     }
     nonisolated struct Transcoding: Encodable, Sendable {
         let container: String
@@ -361,6 +397,23 @@ nonisolated struct EmbyPlaybackInfoRequest: Encodable, Sendable {
 }
 
 extension EmbyPlaybackInfoRequest {
+    /// A backdrop clip: direct play on AVPlayer or nothing. No transcode, subtitles or resume.
+    static func themeVideo(userId: String) -> Self {
+        let bitrate = 20_000_000
+        return Self(
+            userId: userId, mediaSourceId: nil, maxStreamingBitrate: bitrate, startTimeTicks: 0,
+            audioStreamIndex: nil, subtitleStreamIndex: -1,
+            enableDirectPlay: true, enableDirectStream: true, enableTranscoding: false, allowVideoStreamCopy: nil,
+            deviceProfile: Profile(
+                maxStreamingBitrate: bitrate,
+                directPlayProfiles: [DirectPlay(type: "Video", container: "mp4,m4v,mov",
+                                               videoCodec: "h264,hevc", audioCodec: "aac,ac3,eac3,alac,mp3")],
+                transcodingProfiles: [],
+                subtitleProfiles: []
+            )
+        )
+    }
+
     /// Music through AVPlayer. Without a profile the reply has no URL at all. These containers play
     /// direct; anything else (ogg, opus, wma) comes back as an AAC HLS transcode, the only transcode
     /// form that seeks (the HTTP one is a raw ADTS stream).
@@ -461,4 +514,10 @@ nonisolated enum EmbyTicks {
         let value = (seconds * perSecond).rounded()
         return value.isFinite && abs(value) < Double(Int64.max) ? Int64(value) : 0
     }
+}
+
+/// One entry of `RemoteTrailers`: a link, usually YouTube, and its name.
+nonisolated struct EmbyRemoteTrailer: Decodable, Sendable {
+    let url: String?
+    let name: String?
 }

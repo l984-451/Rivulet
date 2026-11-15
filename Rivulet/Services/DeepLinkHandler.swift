@@ -15,7 +15,12 @@ import Combine
 final class DeepLinkHandler: ObservableObject {
     static let shared = DeepLinkHandler()
 
-    @Published var pendingPlayback: PlexMetadata?
+    struct PlaybackRequest: Equatable {
+        let metadata: PlexMetadata
+        let startOffset: TimeInterval?
+    }
+
+    @Published var pendingPlayback: PlaybackRequest?
     @Published var pendingDetail: PlexMetadata?
     /// A link to another server's item (a non-Plex server, another Plex server), resolved through its provider.
     @Published var pendingProviderLink: ProviderLink?
@@ -23,6 +28,7 @@ final class DeepLinkHandler: ObservableObject {
     struct ProviderLink: Equatable {
         let action: RivuletLink.Action
         let item: MediaItem
+        let startOffset: TimeInterval?
     }
 
     /// The link waiting for the app to be ready. A newer link replaces it.
@@ -109,7 +115,7 @@ final class DeepLinkHandler: ObservableObject {
             return
         }
         switch link.action {
-        case .play: pendingPlayback = metadata
+        case .play: pendingPlayback = PlaybackRequest(metadata: metadata, startOffset: link.startOffset)
         case .detail: pendingDetail = metadata
         }
     }
@@ -125,7 +131,7 @@ final class DeepLinkHandler: ObservableObject {
             if heldLink == nil { heldLink = link }
             return
         }
-        pendingProviderLink = ProviderLink(action: link.action, item: item)
+        pendingProviderLink = ProviderLink(action: link.action, item: item, startOffset: link.startOffset)
     }
 
     /// The server a link names when it is not the selected Plex server (another

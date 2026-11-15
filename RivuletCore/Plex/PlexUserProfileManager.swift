@@ -237,7 +237,7 @@ class PlexUserProfileManager: ObservableObject {
 
             let wasWithheld = PlexAuthManager.shared.isContentWithheld
             let contentOwnerChanged = PlexAuthManager.shared.enterProfile(
-                user, serverToken: serverAccessToken, usedPin: pin != nil)
+                user, serverToken: serverAccessToken, plexToken: userPlexToken, usedPin: pin != nil)
 
             // Update selected user
             let previousUser = selectedUser

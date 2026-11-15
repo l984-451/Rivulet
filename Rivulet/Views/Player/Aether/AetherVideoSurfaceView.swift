@@ -15,6 +15,7 @@ import AetherEngine
 
 struct AetherVideoSurfaceView: UIViewRepresentable {
     let player: AetherPlayer
+    var fillsScreen = false
 
     @MainActor
     final class Coordinator {
@@ -26,11 +27,13 @@ struct AetherVideoSurfaceView: UIViewRepresentable {
     func makeUIView(context: Context) -> AetherPlayerView {
         let view = AetherPlayerView()
         player.bind(view: view)
+        player.fillsScreen = fillsScreen
         context.coordinator.boundPlayer = player
         return view
     }
 
     func updateUIView(_ uiView: AetherPlayerView, context: Context) {
+        if player.fillsScreen != fillsScreen { player.fillsScreen = fillsScreen }
         guard context.coordinator.boundPlayer !== player else { return }
         context.coordinator.boundPlayer?.unbind(view: uiView)
         player.bind(view: uiView)

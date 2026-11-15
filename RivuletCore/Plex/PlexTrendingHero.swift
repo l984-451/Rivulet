@@ -62,6 +62,7 @@ enum PlexTrendingHero {
         request.setValue(PlexAPI.clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
         request.setValue(PlexAPI.productName, forHTTPHeaderField: "X-Plex-Product")
         request.setValue(PlexAPI.platform, forHTTPHeaderField: "X-Plex-Platform")
+        request.setValue(PlexAPI.playerTitle, forHTTPHeaderField: "X-Plex-Device-Name")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }

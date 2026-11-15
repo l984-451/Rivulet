@@ -18,6 +18,7 @@ actor CacheManager {
     private let onDeckCacheFile = "ondeck_cache.json"
     private let recentlyAddedPrefix = "recently_added_"
     private let hubsCacheFile = "hubs_cache.json"
+    /// Older builds kept a timestamp file nothing read. Still listed so a clear removes it.
     private let cacheInfoFile = "cache_info.json"
     /// UserDefaults: the Home user whose token wrote these files (0 is the account).
     private let cacheOwnerKey = "plexCacheUserID"
@@ -26,8 +27,6 @@ actor CacheManager {
 
     // MARK: - In-Memory Cache
 
-    private var cachedTimestamps: [String: Date] = [:]
-    private var timestampsLoaded = false
     private let memoryCache = NSCache<NSString, NSData>()
 
     // MARK: - Cache Directory
@@ -54,56 +53,6 @@ actor CacheManager {
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
     }
 
-    // MARK: - Timestamp Management
-
-    private func loadTimestampsFromDisk() -> [String: Date] {
-        guard let cacheDir = cacheDirectory else { return [:] }
-        let fileURL = cacheDir.appendingPathComponent(cacheInfoFile)
-        guard let data = try? Data(contentsOf: fileURL),
-              let timestamps = try? JSONDecoder().decode([String: Date].self, from: data) else {
-            return [:]
-        }
-        return timestamps
-    }
-
-    private func writeTimestampsToDisk(_ timestamps: [String: Date]) {
-        guard let cacheDir = cacheDirectory else { return }
-        let fileURL = cacheDir.appendingPathComponent(cacheInfoFile)
-        if timestamps.isEmpty {
-            try? FileManager.default.removeItem(at: fileURL)
-            return
-        }
-        if let data = try? JSONEncoder().encode(timestamps) {
-            try? data.write(to: fileURL, options: .atomic)
-        }
-    }
-
-    private func ensureTimestampsLoaded() {
-        guard !timestampsLoaded else { return }
-        cachedTimestamps = loadTimestampsFromDisk()
-        timestampsLoaded = true
-    }
-
-    private func setCacheTimestamp(for key: String) {
-        ensureTimestampsLoaded()
-        cachedTimestamps[key] = Date()
-        writeTimestampsToDisk(cachedTimestamps)
-    }
-
-    private func removeTimestamp(for key: String) {
-        ensureTimestampsLoaded()
-        cachedTimestamps.removeValue(forKey: key)
-        writeTimestampsToDisk(cachedTimestamps)
-    }
-
-    private func resetTimestamps() {
-        cachedTimestamps = [:]
-        timestampsLoaded = true
-        guard let cacheDir = cacheDirectory else { return }
-        let fileURL = cacheDir.appendingPathComponent(cacheInfoFile)
-        try? FileManager.default.removeItem(at: fileURL)
-    }
-
     // MARK: - Generic Cache Operations
 
     /// Drops every file written with another Home profile's token, so one
@@ -123,7 +72,6 @@ actor CacheManager {
         do {
             try data.write(to: fileURL, options: .atomic)
             memoryCache.setObject(data as NSData, forKey: fileName as NSString)
-            setCacheTimestamp(for: fileName)
         } catch {
             print("CacheManager: Failed to write cache file \(fileName): \(error.localizedDescription)")
         }
@@ -355,7 +303,6 @@ actor CacheManager {
         }
 
         memoryCache.removeAllObjects()
-        resetTimestamps()
     }
 
     func clearLibraryCache() {
@@ -363,7 +310,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(librariesCacheFile)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: librariesCacheFile as NSString)
-        removeTimestamp(for: librariesCacheFile)
     }
 
     func clearOnDeckCache() {
@@ -371,7 +317,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(onDeckCacheFile)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: onDeckCacheFile as NSString)
-        removeTimestamp(for: onDeckCacheFile)
     }
 
     func clearHubsCache() {
@@ -379,7 +324,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(hubsCacheFile)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: hubsCacheFile as NSString)
-        removeTimestamp(for: hubsCacheFile)
     }
 
     func clearLibraryHubsCache() {
@@ -392,7 +336,6 @@ actor CacheManager {
                 if fileName.hasPrefix(libraryHubsCacheBase) {
                     try? FileManager.default.removeItem(at: file)
                     memoryCache.removeObject(forKey: fileName as NSString)
-                    removeTimestamp(for: fileName)
                 }
             }
         }
@@ -403,7 +346,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(homeItemsCacheFile)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: homeItemsCacheFile as NSString)
-        removeTimestamp(for: homeItemsCacheFile)
     }
 
     func clearHomeHeroItemsCache() {
@@ -411,7 +353,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(homeHeroItemsCacheFile)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: homeHeroItemsCacheFile as NSString)
-        removeTimestamp(for: homeHeroItemsCacheFile)
     }
 
     func clearLibraryItemsCache() {
@@ -422,7 +363,6 @@ actor CacheManager {
                 if fileName.hasPrefix(libraryItemsCachePrefix) {
                     try? FileManager.default.removeItem(at: file)
                     memoryCache.removeObject(forKey: fileName as NSString)
-                    removeTimestamp(for: fileName)
                 }
             }
         }
@@ -434,7 +374,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(fileName)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: fileName as NSString)
-        removeTimestamp(for: fileName)
     }
 
     func clearShowsCache(forLibrary libraryKey: String) {
@@ -443,7 +382,6 @@ actor CacheManager {
         let fileURL = cacheDir.appendingPathComponent(fileName)
         try? FileManager.default.removeItem(at: fileURL)
         memoryCache.removeObject(forKey: fileName as NSString)
-        removeTimestamp(for: fileName)
     }
 
     // MARK: - Cache Size

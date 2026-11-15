@@ -17,6 +17,8 @@ import Sentry
 @main
 struct RivuletApp: App {
     init() {
+        HostPlatform.installUIKit()
+        PlexAPI.setPlayerTitle(UIDevice.current.name)
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")
         // Other servers' library settings belong to their own users, so they load with the sign-in.
@@ -38,6 +40,7 @@ struct RivuletApp: App {
         // before any read. An explicit user choice still wins.
         UserDefaults.standard.register(defaults: ["showHomeHero": true])
         SkipLengthKeys.migrateLegacyKeys()
+        OpenSourceLicenses.linksLibTrueHD = AetherPlayer.buildsHeightAudio
         // Every surface is dark artwork, so menus, popups and alerts stay dark in Light mode
         // too; Settings alone follows the system. On the window: SwiftUI's preferredColorScheme
         // never reached UIKit's presented popups.
@@ -150,7 +153,10 @@ struct RivuletApp: App {
     /// start call is hoisted — the 3s deferral that keeps launch logs clean stays.
     @MainActor
     private static func startSentry() {
-        SentryStartup.start(platform: .tvOS)
+        SentryStartup.start(platform: .tvOS) { options in
+            // Partial stalls were a third of all hang events and never led to a fix.
+            options.enableReportNonFullyBlockingAppHangs = false
+        }
 
         // Seed the App Hang triage scope so the very first hang event after
         // launch already carries a screen tag. Updated thereafter via

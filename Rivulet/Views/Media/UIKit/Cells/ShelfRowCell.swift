@@ -16,6 +16,9 @@ final class ShelfRowCell: UICollectionViewCell {
         case poster
         case music   // 1:1 square (same width as poster)
         case live    // Live TV Browse card (16:9, four across)
+        case homeLive // the same card on Home, at Home's margin
+        case person  // cast or crew circle (CastCollectionCell), poster width
+        case episode // Search's episode card (EpisodeCollectionCell), the detail page's rail
 
         /// The cell: the lockup's frame, not its resting artwork.
         var tileWidth: CGFloat { tile?.frame.width ?? MediaRowMetrics.liveWidth }
@@ -27,7 +30,9 @@ final class ShelfRowCell: UICollectionViewCell {
             case .continueWatching: return MediaRowMetrics.continueWatching
             case .poster:           return MediaRowMetrics.poster
             case .music:            return MediaRowMetrics.music
-            case .live:             return nil
+            case .person:           return MediaRowMetrics.person
+            case .episode:          return EpisodeCollectionCell.searchTile
+            case .live, .homeLive:  return nil
             }
         }
         /// Spacing between cell frames.
@@ -35,13 +40,14 @@ final class ShelfRowCell: UICollectionViewCell {
         var fullCount: Int {
             switch self {
             case .continueWatching: return MediaRowMetrics.cwFullCount
-            case .poster, .music:   return MediaRowMetrics.posterFullCount
-            case .live:             return MediaRowMetrics.liveFullCount
+            case .episode:          return 4
+            case .poster, .music, .person: return MediaRowMetrics.posterFullCount
+            case .live, .homeLive:  return MediaRowMetrics.liveFullCount
             }
         }
         var pitch: CGFloat { tileWidth + gap }
         /// Inset of the first cell frame: it rests the artwork on the margin.
-        var leading: CGFloat { tile?.leading ?? MediaRowMetrics.liveLeading }
+        var leading: CGFloat { tile?.leading ?? margin }
         /// The row's margin, where its header and its artwork rest.
         var margin: CGFloat { self == .live ? MediaRowMetrics.liveLeading : MediaRowMetrics.rowLeading }
     }
@@ -123,12 +129,19 @@ final class ShelfRowCell: UICollectionViewCell {
     /// True while the preview carousel covers this row: its tiles fly as the
     /// cards, so the real ones stay hidden. `willDisplay` covers reused cells.
     var tilesHiddenForPreview = false {
-        didSet { rowCollectionView.visibleCells.forEach(applyPreviewHiding) }
+        didSet {
+            for cell in rowCollectionView.visibleCells {
+                applyPreviewHiding(to: cell, item: rowCollectionView.indexPath(for: cell)?.item)
+            }
+        }
     }
+    /// Set before `tilesHiddenForPreview`: only this tile hides (Skip Preview flies one tile).
+    var previewHiddenItem: Int?
 
     /// `contentView`, so the cell stays laid out and focusable.
-    private func applyPreviewHiding(to cell: UICollectionViewCell) {
+    private func applyPreviewHiding(to cell: UICollectionViewCell, item: Int?) {
         cell.contentView.isHidden = tilesHiddenForPreview && !(cell is PosterSkeletonCell)
+            && (previewHiddenItem == nil || item == previewHiddenItem)
     }
 
     /// Item index to route focus to on the next focus update (preview-dismiss
@@ -205,6 +218,8 @@ final class ShelfRowCell: UICollectionViewCell {
         rowCollectionView.register(WatchlistPosterCell.self, forCellWithReuseIdentifier: WatchlistPosterCell.reuseID)
         rowCollectionView.register(PosterSkeletonCell.self, forCellWithReuseIdentifier: PosterSkeletonCell.reuseID)
         rowCollectionView.register(LiveCardCell.self, forCellWithReuseIdentifier: LiveCardCell.reuseID)
+        rowCollectionView.register(CastCollectionCell.self, forCellWithReuseIdentifier: CastCollectionCell.reuseID)
+        rowCollectionView.register(EpisodeCollectionCell.self, forCellWithReuseIdentifier: EpisodeCollectionCell.reuseID)
 
         contentView.addSubview(headerLabel)
         contentView.addSubview(rowCollectionView)
@@ -253,6 +268,7 @@ final class ShelfRowCell: UICollectionViewCell {
         // different row would restore focus to an unrelated tile index.
         lastFocusedItemIndex = nil
         hasBoundContent = false
+        previewHiddenItem = nil
         tilesHiddenForPreview = false
         // A deferred reload belongs to the row this cell WAS showing.
         deferredApply = nil
@@ -570,7 +586,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
             switch tileKind {
             case .continueWatching: layout = .continueWatching
             case .music: layout = .music
-            case .poster, .live: layout = .poster
+            case .poster, .live, .homeLive, .person, .episode: layout = .poster
             }
             cell.configure(layout: layout)
             return cell
@@ -587,7 +603,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView,
                         willDisplay cell: UICollectionViewCell,
                         forItemAt indexPath: IndexPath) {
-        applyPreviewHiding(to: cell)
+        applyPreviewHiding(to: cell, item: indexPath.item)
         onWillDisplayItem?(indexPath.item)
     }
 

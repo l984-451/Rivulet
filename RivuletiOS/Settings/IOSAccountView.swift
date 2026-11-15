@@ -5,7 +5,7 @@ import SwiftUI
 
 /// The Account sheet behind every tab's avatar: profile, server, settings pages, About.
 struct IOSAccountView: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @ObservedObject private var sync = CloudSync.shared
     @Environment(\.dismiss) private var dismiss
@@ -44,6 +44,11 @@ struct IOSAccountView: View {
                         IOSPlaybackSettingsView()
                     } label: {
                         Label("Playback", systemImage: "play.rectangle")
+                    }
+                    NavigationLink {
+                        IOSPhotoSettingsView()
+                    } label: {
+                        Label("Photos", systemImage: "photo.on.rectangle")
                     }
                     NavigationLink {
                         IOSDownloadSettingsView()
@@ -112,7 +117,7 @@ struct IOSAccountView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet() }
+        .sheet(isPresented: $showingSignIn) { IOSPlexConnectionSheet().iosSessionObjects(plex) }
     }
 
     @ViewBuilder
@@ -145,9 +150,9 @@ struct IOSAccountView: View {
                     IOSServerPicker()
                 } label: {
                     LabeledContent {
-                        Text(plex.selectedServerName ?? "")
+                        Text(plex.serversSummary ?? "")
                     } label: {
-                        Label("Server", systemImage: "server.rack")
+                        Label("Servers", systemImage: "server.rack")
                     }
                 }
             }
@@ -189,20 +194,23 @@ struct IOSAccountView: View {
     }
 }
 
-/// Every server on the account, current one checked. Picking another connects to it.
+/// Every server on the account; the ones checked show their content. A click turns one on or off.
 private struct IOSServerPicker: View {
-    @EnvironmentObject private var plex: IOSPlexSession
+    @EnvironmentObject private var plex: PlexSession
     @State private var servers: [PlexDevice]?
     @State private var loadError: String?
     @State private var connectingID: String?
-    @State private var failedServer: String?
+    @State private var notice: ServerNotice?
+    /// Bumped after a toggle so the checkmarks re-read.
+    @State private var revision = 0
 
     var body: some View {
         List(servers ?? []) { server in
-            Button { connect(to: server) } label: {
+            Button { toggle(server) } label: {
+                let _ = revision
                 IOSServerRow(
                     server: server,
-                    isCurrent: connectingID == nil && plex.isCurrentServer(server),
+                    isCurrent: connectingID == nil && plex.isServerEnabled(server),
                     isConnecting: connectingID == server.id
                 )
             }
@@ -215,13 +223,13 @@ private struct IOSServerPicker: View {
                 ProgressView()
             }
         }
-        .navigationTitle("Server")
+        .navigationTitle("Servers")
         .task { await load() }
         .refreshable { await load() }
-        .alert("Couldn’t Connect", isPresented: Binding(get: { failedServer != nil }, set: { if !$0 { failedServer = nil } })) {
+        .alert(notice?.title ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("\(failedServer ?? String(localized: "The server")) isn’t reachable right now.")
+            Text(notice?.message ?? "")
         }
     }
 
@@ -235,12 +243,16 @@ private struct IOSServerPicker: View {
         }
     }
 
-    private func connect(to server: PlexDevice) {
-        guard !plex.isCurrentServer(server) else { return }
+    private func toggle(_ server: PlexDevice) {
         connectingID = server.id
         Task {
-            if !(await plex.switchServer(to: server)) { failedServer = server.name }
+            switch await plex.toggleServer(server, among: servers ?? []) {
+            case .changed: break
+            case .onlyServer: notice = .onlyServer
+            case .unreachable: notice = .unreachable(server.name)
+            }
             connectingID = nil
+            revision += 1
         }
     }
 }

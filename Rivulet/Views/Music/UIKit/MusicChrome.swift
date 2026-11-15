@@ -318,6 +318,11 @@ final class MusicPlaybackBarsView: UIView {
         didSet { if isPlaying != oldValue { animate() } }
     }
 
+    /// White by default; the sidebar darkens them on its white focus capsule.
+    var barColor: UIColor = .white {
+        didSet { bars.forEach { $0.backgroundColor = barColor.cgColor } }
+    }
+
     init(peak: CGFloat = 24, standsOnBaseline: Bool = false) {
         self.peak = peak
         self.standsOnBaseline = standsOnBaseline

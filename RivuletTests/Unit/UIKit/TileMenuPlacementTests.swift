@@ -45,4 +45,11 @@ final class TileMenuPlacementTests: XCTestCase {
         XCTAssertEqual(p.frame.midX, screen.midX)
         XCTAssertEqual(p.frame.midY, screen.midY)
     }
+
+    func test_panelTallerThanSafeArea_isCutToIt() {
+        let tile = CGRect(x: 80, y: 600, width: 260, height: 390)
+        let p = TileMenuPlacement.place(panel: CGSize(width: 440, height: 1200), beside: tile, in: screen)
+        XCTAssertEqual(p.frame.minY, 50)
+        XCTAssertEqual(p.frame.maxY, screen.maxY - 50)
+    }
 }

@@ -20,6 +20,7 @@ enum SidebarTab: Hashable {
     case home
     case discover
     case watchlist
+    case favorites
     case library(key: String)
     /// A library on a non-Plex server. Ids, not the library value, so a
     /// renamed library keeps its tab (and its cached page) across reloads.
@@ -28,6 +29,8 @@ enum SidebarTab: Hashable {
     case playlists(providerID: String)
     case liveTV(sourceId: String?)
     case settings
+    /// The profile slot's pill: Select opens Now Playing, never a tab.
+    case nowPlaying
 }
 
 // MARK: - Nested Navigation State

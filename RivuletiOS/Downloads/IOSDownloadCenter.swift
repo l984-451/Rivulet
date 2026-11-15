@@ -148,13 +148,13 @@ final class IOSDownloadCenter: ObservableObject {
     }
 
     /// A Plex `item`'s download on `serverID`, or on the current server, as a playback request.
-    func localPlayback(for item: PlexMetadata, serverID: String? = nil) -> IOSPlexPlaybackRequest? {
+    func localPlayback(for item: PlexMetadata, serverID: String? = nil) -> PlexPlaybackRequest? {
         guard let key = item.ratingKey, let record = record(forRatingKey: key, serverID: serverID) else { return nil }
         return localPlayback(record: record, server: (item.viewOffset, item.lastViewedAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }))
     }
 
     /// A Jellyfin or Emby `item`'s download, or a Plex item's, as a playback request.
-    func localPlayback(for item: MediaItem) -> IOSPlexPlaybackRequest? {
+    func localPlayback(for item: MediaItem) -> PlexPlaybackRequest? {
         guard let record = record(for: item.ref) else { return nil }
         let offset = item.userState.viewOffset > 0 ? Int(item.userState.viewOffset * 1000) : nil
         return localPlayback(record: record, server: (offset, item.userState.lastViewedAt))
@@ -162,7 +162,7 @@ final class IOSDownloadCenter: ObservableObject {
 
     /// A finished download as a playback request: local file, no headers, stored markers.
     /// The server's resume point wins unless an unsent offline one is newer.
-    func localPlayback(record: DownloadRecord, server: (offsetMs: Int?, lastViewedAt: Date?)? = nil) -> IOSPlexPlaybackRequest? {
+    func localPlayback(record: DownloadRecord, server: (offsetMs: Int?, lastViewedAt: Date?)? = nil) -> PlexPlaybackRequest? {
         guard record.state == .completed, let name = record.fileName else { return nil }
         let url = Self.directory.appending(path: name)
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -191,7 +191,7 @@ final class IOSDownloadCenter: ObservableObject {
         let machineID = DownloadIdentity.plexMachineID(of: record.providerID)
         let session = !record.isPlex ? nil : (machineID == nil || machineID == currentServerID ? config() : otherServerConfig(machineID))
 
-        var request = IOSPlexPlaybackRequest(
+        var request = PlexPlaybackRequest(
             item: meta,
             url: url,
             headers: [:],
@@ -218,7 +218,7 @@ final class IOSDownloadCenter: ObservableObject {
     }
 
     /// Keeps a download's resume point current so an offline play resumes where the last one stopped.
-    func noteProgress(for request: IOSPlexPlaybackRequest, offsetMs: Int, watched: Bool, persist: Bool) {
+    func noteProgress(for request: PlexPlaybackRequest, offsetMs: Int, watched: Bool, persist: Bool) {
         guard let key = request.item.ratingKey, let providerID = request.downloadProviderID,
               let id = record(providerID: providerID, itemID: key)?.id,
               let index = records.firstIndex(where: { $0.id == id }) else { return }

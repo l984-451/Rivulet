@@ -12,8 +12,10 @@ import UIKit
 import Foundation
 import ImageIO
 
-/// Decode size for a cached image; the disk keeps the original bytes. tvOS renders at 1080p
+/// Decode size for a cached image; the disk keeps the bytes as downloaded. tvOS renders at 1080p
 /// and upscales to 4K, so 3840 px (2x the screen width) is the ceiling; `thumb` is 2x a ~444 pt poster.
+/// `thumb` also asks the server for a copy at that size (`ArtworkSizing`), so a tile never downloads
+/// the original file.
 enum ImageQuality: Sendable {
     /// Small UI: poster rows, continue-watching, cast, episode stills, logos, blurred backdrops.
     case thumb
@@ -30,6 +32,12 @@ enum ImageQuality: Sendable {
         }
     }
 
+    /// The URL this tier downloads: the server's sized copy for `thumb`, the file itself otherwise.
+    nonisolated fileprivate func requestURL(for url: URL) -> URL {
+        if case .thumb = self { return ArtworkSizing.fitted(url, maxPixel: Int(maxPixelSize)) }
+        return url
+    }
+
     nonisolated fileprivate var keySuffix: String {
         switch self {
         case .thumb: return "t"
@@ -41,7 +49,8 @@ enum ImageQuality: Sendable {
 
 /// Cache entry metadata for tracking access times and TTL
 struct ImageCacheEntry: Codable {
-    let url: String
+    /// Older builds wrote the request URL here. Nothing reads it, and it was half the file.
+    var url: String?
     let cachedAt: Date
     var lastAccessedAt: Date
     let fileSize: Int64
@@ -133,7 +142,7 @@ actor ImageCacheManager: NSObject {
     /// Check memory cache only (for instant display without loading state).
     /// Synchronous from any thread.
     nonisolated func cachedImage(for url: URL, quality: ImageQuality = .thumb) -> UIImage? {
-        memoryCache.object(forKey: memoryKey(diskKey: cacheKey(for: url), quality: quality))
+        memoryCache.object(forKey: memoryKey(diskKey: cacheKey(for: quality.requestURL(for: url)), quality: quality))
     }
 
     /// Disk cache key (per URL). The on-disk file is the original downloaded bytes,
@@ -161,6 +170,18 @@ actor ImageCacheManager: NSObject {
     /// Get an image at the requested `quality`, decoded off the main thread.
     /// Stale-while-revalidate: returns cached immediately, refreshes in background if stale.
     func image(for url: URL, quality: ImageQuality = .thumb, forceRefresh: Bool = false) async -> UIImage? {
+        let sized = quality.requestURL(for: url)
+        if let image = await loadImage(for: sized, quality: quality, forceRefresh: forceRefresh) { return image }
+        // The server would not size it: use the file itself, and stop asking for this one.
+        guard sized != url, !Task.isCancelled,
+              let image = await loadImage(for: url, quality: quality, forceRefresh: forceRefresh) else { return nil }
+        markMissing(sized)
+        memoryCache.setObject(image, forKey: memoryKey(diskKey: cacheKey(for: sized), quality: quality),
+                              cost: Self.byteCost(image))
+        return image
+    }
+
+    private func loadImage(for url: URL, quality: ImageQuality, forceRefresh: Bool) async -> UIImage? {
         let diskKey = cacheKey(for: url)
         let memKey = memoryKey(diskKey: diskKey, quality: quality)
 
@@ -203,9 +224,8 @@ actor ImageCacheManager: NSObject {
         await image(for: url, quality: .full, forceRefresh: forceRefresh)
     }
 
-    /// Prefetch images in background (limited concurrency).
-    /// Defaults to `.thumb`: this warms the on-disk original bytes (the expensive part is
-    /// the network), so a later `.full` read decodes straight from disk without re-downloading.
+    /// Prefetch images in background (limited concurrency), decoded at `quality`.
+    /// For a later `.full` read of the same artwork use `warmOriginal`: `.thumb` downloads a sized copy.
     func prefetch(urls: [URL], quality: ImageQuality = .thumb) {
         Task.detached(priority: .utility) { [weak self] in
             // Limit to 30 URLs, 8 concurrent for faster prefetch
@@ -224,6 +244,13 @@ actor ImageCacheManager: NSObject {
                 }
             }
         }
+    }
+
+    /// Downloads the original bytes to disk without decoding, for a `.full` read that follows.
+    func warmOriginal(_ url: URL) async {
+        let key = cacheKey(for: url)
+        if let dir = cacheDirectory, FileManager.default.fileExists(atPath: dir.appendingPathComponent(key).path) { return }
+        _ = await fetchOriginalData(url: url, key: key)
     }
 
     /// Clear all cached images
@@ -435,7 +462,7 @@ actor ImageCacheManager: NSObject {
 
             // Update metadata
             let entry = ImageCacheEntry(
-                url: SensitiveDataRedactor.redact(url.absoluteString),  // written to Caches; no token on disk
+                url: nil,
                 cachedAt: Date(),
                 lastAccessedAt: Date(),
                 fileSize: Int64(data.count)
@@ -538,13 +565,9 @@ actor ImageCacheManager: NSObject {
         cacheMetadata = decoded.merging(cacheMetadata) { _, new in new }
         metadataLoaded = true
 
-        // One-time scrub of tokens older builds wrote into the metadata file.
-        let tokenized = decoded.filter { $0.value.url.contains("Token=") && !$0.value.url.contains("Token=[redacted]") }
-        guard !tokenized.isEmpty else { return }
-        for (key, entry) in tokenized {
-            cacheMetadata[key] = ImageCacheEntry(url: SensitiveDataRedactor.redact(entry.url), cachedAt: entry.cachedAt,
-                                                 lastAccessedAt: entry.lastAccessedAt, fileSize: entry.fileSize)
-        }
+        // One-time drop of the URLs older builds wrote into the metadata file.
+        guard decoded.contains(where: { $0.value.url != nil }) else { return }
+        for key in cacheMetadata.keys { cacheMetadata[key]?.url = nil }
         saveMetadata()
     }
 

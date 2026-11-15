@@ -15,6 +15,7 @@ enum MarkerSkipMode: String, CaseIterable {
     }
 
     static func current(for markerType: String, defaults: UserDefaults = .standard) -> MarkerSkipMode {
+        if markerType == "credits" { return CreditsBehavior.current(defaults: defaults).showsSkipPill ? .manual : .off }
         guard let suffix = keySuffix(markerType) else { return .manual }
         if defaults.object(forKey: "showSkip" + suffix) as? Bool == false { return .off }
         return defaults.bool(forKey: "autoSkip" + suffix) ? .automatic : .manual
@@ -30,7 +31,6 @@ enum MarkerSkipMode: String, CaseIterable {
         switch markerType {
         case "intro": return "Intro"
         case "recap": return "Recap"
-        case "credits": return "Credits"
         case "commercial": return "Ads"
         default: return nil
         }

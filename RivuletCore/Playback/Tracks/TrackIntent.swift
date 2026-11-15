@@ -123,7 +123,7 @@ enum TrackLanguage {
         case "hi", "hin", "hindi": return "hin"
         case "nl", "nld", "dut", "dutch": return "nld"
         case "sv", "swe", "swedish": return "swe"
-        case "no", "nor", "norwegian": return "nor"
+        case "no", "nor", "nb", "nob", "norwegian", "norwegian bokmål": return "nor"
         case "da", "dan", "danish": return "dan"
         case "fi", "fin", "finnish": return "fin"
         case "pl", "pol", "polish": return "pol"

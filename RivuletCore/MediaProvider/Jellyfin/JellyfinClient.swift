@@ -23,13 +23,20 @@ nonisolated final class JellyfinClient: Sendable {
     let authorization: String
     private let transport: Transport
 
+    /// One shared session with the 30 s request timeout the Plex client uses.
+    static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        return URLSession(configuration: config)
+    }()
+
     /// MainActor because the device identity (`PlexAPI`) is MainActor state.
     /// The header is built once here; every request after that is nonisolated.
     @MainActor
     init(
         baseURL: URL,
         token: String?,
-        transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
+        transport: @escaping Transport = { try await JellyfinClient.defaultSession.data(for: $0) }
     ) {
         self.baseURL = baseURL
         self.token = token
@@ -75,6 +82,16 @@ nonisolated final class JellyfinClient: Sendable {
 
     func get<T: Decodable & Sendable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
         try await send("GET", path, query: query, body: nil)
+    }
+
+    /// The raw body of a 2xx GET (an image sheet); nil on any failure.
+    @concurrent
+    func bytes(_ path: String, _ query: [URLQueryItem] = []) async -> Data? {
+        var request = URLRequest(url: url(path, query))
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await transport(request),
+              let status = (response as? HTTPURLResponse)?.statusCode, (200...299).contains(status) else { return nil }
+        return data
     }
 
     func post<T: Decodable & Sendable>(_ path: String, body: (any Encodable & Sendable)? = nil) async throws -> T {

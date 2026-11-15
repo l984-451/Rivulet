@@ -42,7 +42,7 @@ final class HeroOverlayCell: UICollectionViewCell {
         let serverURL: String
         let authToken: String
         let initialIndex: Int
-        let onIndexChanged: (Int, PlexMetadata) -> Void
+        let onIndexChanged: (Int, PlexMetadata, HeroPageDirection) -> Void
         let onInfo: (PlexMetadata) -> Void
         let onPlay: (PlexMetadata) -> Void
         let onFocusEntered: (() -> Void)?
@@ -52,7 +52,7 @@ final class HeroOverlayCell: UICollectionViewCell {
     struct MediaItemConfiguration {
         let items: [MediaItem]
         let initialIndex: Int
-        let onIndexChanged: (Int, MediaItem) -> Void
+        let onIndexChanged: (Int, MediaItem, HeroPageDirection) -> Void
         let onPlay: (MediaItem) -> Void
         let onInfo: (MediaItem) -> Void
         var onToggleWatchlist: ((MediaItem) -> Void)? = nil

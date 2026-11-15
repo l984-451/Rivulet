@@ -44,7 +44,7 @@ struct IOSPlexAmbientBackdrop: View {
 /// (full width, 16:9), so the hero's page is already in the cache.
 private struct IOSPlexItemAmbient: View {
     let item: MediaItem
-    @EnvironmentObject private var browse: IOSBrowseStore
+    @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {

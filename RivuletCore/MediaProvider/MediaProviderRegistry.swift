@@ -27,6 +27,20 @@ final class MediaProviderRegistry {
         Array(providers.values)
     }
 
+    /// Each season swapped for its show, read in parallel: a tile opens the show, never the season.
+    /// A show that can't be read leaves its season in place.
+    func showsForSeasons(_ items: [MediaItem]) async -> [MediaItem] {
+        await withTaskGroup(of: (Int, MediaItem?).self) { group in
+            for (index, item) in items.enumerated() where item.kind == .season {
+                guard let showRef = item.parentRef, let provider = provider(for: showRef.providerID) else { continue }
+                group.addTask { (index, try? await provider.fullDetail(for: showRef).item) }
+            }
+            var shows = items
+            for await (index, show) in group { if let show { shows[index] = show } }
+            return shows
+        }
+    }
+
     /// The kind of the server a provider id names: the registered provider's,
     /// else what the id says (a server signed out under tiles still on screen).
     func kind(of providerID: String) -> MediaProviderKind? {

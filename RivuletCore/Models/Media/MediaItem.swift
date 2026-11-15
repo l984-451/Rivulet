@@ -145,6 +145,20 @@ extension MediaItem {
 
     var isGridPlaceholder: Bool { ref.itemID.isEmpty }
 
+    /// A season's show, from what the season knows of it; a detail page reads the rest by ref.
+    /// Nil for anything else. A tile opens the show, never the season.
+    var seasonShow: MediaItem? {
+        guard kind == .season, let showRef = parentRef else { return nil }
+        return MediaItem(
+            ref: showRef, kind: .show, title: seriesTitle ?? title, sortTitle: nil, overview: nil, year: nil,
+            runtime: nil, parentRef: nil, grandparentRef: nil, episodeNumber: nil, seasonNumber: nil,
+            childProgress: nil,
+            userState: MediaUserState(isPlayed: false, viewOffset: 0, isFavorite: false, lastViewedAt: nil),
+            artwork: MediaArtwork(poster: parentArtwork?.poster, backdrop: artwork.backdrop,
+                                  thumbnail: parentArtwork?.poster, logo: parentArtwork?.logo),
+            parentArtwork: nil, grandparentArtwork: nil, libraryID: libraryID)
+    }
+
     /// An episode's or season's show as `ContinueWatchingRow` keys it, "<providerID>|<show id>".
     var showKey: String? {
         let show: MediaItemRef? = switch kind {
@@ -196,6 +210,22 @@ extension MediaItem {
             externalIDs: externalIDs,
             libraryID: libraryID
         )
+    }
+}
+
+extension MediaItem {
+    private static let standaloneEditions: Set<String> = [
+        "extended", "theatrical", "ultimate", "unrated", "uncut", "remastered", "imax", "anniversary", "redux",
+    ]
+
+    /// An edition name for a poster badge: "Extended Edition" reads "Extended". Names where the
+    /// last word carries meaning ("Director's Cut", "Final Cut") stay whole. Nil when empty.
+    static func shortEdition(_ edition: String?) -> String? {
+        guard let edition = edition?.trimmingCharacters(in: .whitespaces), !edition.isEmpty else { return nil }
+        let words = edition.split(separator: " ")
+        guard words.count == 2, ["edition", "cut", "version"].contains(words[1].lowercased()),
+              standaloneEditions.contains(words[0].lowercased()) else { return edition }
+        return String(words[0])
     }
 }
 

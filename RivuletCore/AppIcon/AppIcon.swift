@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Bain Gurley
 
-import UIKit
+import Foundation
 
 /// The home screen icons. The system remembers the chosen one, so nothing is stored here.
 @MainActor
@@ -30,11 +30,11 @@ enum AppIcon: String, CaseIterable, Identifiable {
     }
 
     static var current: AppIcon {
-        allCases.first { $0.assetName == UIApplication.shared.alternateIconName } ?? .standard
+        allCases.first { $0.assetName == HostPlatform.alternateIconName() } ?? .standard
     }
 
     func apply() {
-        guard UIApplication.shared.alternateIconName != assetName else { return }
-        UIApplication.shared.setAlternateIconName(assetName)
+        guard HostPlatform.alternateIconName() != assetName else { return }
+        HostPlatform.setAlternateIconName(assetName)
     }
 }

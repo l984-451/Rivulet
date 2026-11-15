@@ -29,10 +29,54 @@ final class DeepLinkHandlerDetailTests: XCTestCase {
         }
     }
 
+    func testExplicitStartOffsetSurvivesHeldLinkDelivery() async {
+        for startOffset in [83.25, 0] {
+            let handler = makeHandler { key, _ in self.metadata(key) }
+            let link = RivuletLink(.play, ratingKey: "9", startOffset: startOffset)
+            XCTAssertNil(handler.handle(link))
+            XCTAssertEqual(handler.heldLink, link)
+
+            handler.isShellReady = true
+            for _ in 0..<100 where handler.pendingPlayback == nil { await Task.yield() }
+            XCTAssertEqual(handler.pendingPlayback?.metadata.ratingKey, "9")
+            XCTAssertEqual(handler.pendingPlayback?.startOffset, startOffset)
+            XCTAssertNil(handler.heldLink)
+        }
+    }
+
+    func testPlexOffsetParsesMillisecondsAndRetainsGeneratedValue() throws {
+        let generated = try XCTUnwrap(RivuletLink(.play, ratingKey: "1", startOffset: 83.25).url)
+        let generatedItems = URLComponents(url: generated, resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(generatedItems?.first(where: { $0.name == "offset" })?.value, "83250")
+        XCTAssertEqual(RivuletLink(url: generated)?.startOffset, 83.25)
+        XCTAssertEqual(RivuletLink(url: URL(string: "rivulet://play?ratingKey=1&offset=823000")!)?.startOffset, 823)
+        XCTAssertEqual(RivuletLink(url: URL(string: "rivulet://play?ratingKey=1&offset=0")!)?.startOffset, 0)
+        XCTAssertNil(RivuletLink(url: URL(string: "rivulet://play?ratingKey=1")!)?.startOffset)
+    }
+
     func testBuiltURLShape() {
         XCTAssertEqual(RivuletLink(.detail, ratingKey: "12345").url?.absoluteString,
                        "rivulet://detail?ratingKey=12345")
         XCTAssertEqual(RivuletLink(.play, ratingKey: "1").url?.absoluteString, "rivulet://play?ratingKey=1")
+    }
+
+    func testInvalidPlexOffsetsKeepTheLinkAndDropTheOffset() {
+        for value in ["", "-1", "1.5", "nan", "inf", "9223372036854775808", "not-a-number"] {
+            let link = RivuletLink(url: URL(string: "rivulet://play?ratingKey=1&offset=\(value)")!)
+            XCTAssertEqual(link?.ratingKey, "1", value)
+            XCTAssertNil(link?.startOffset, value)
+        }
+        XCTAssertNil(RivuletLink(.play, ratingKey: "1", startOffset: .infinity).startOffset)
+        XCTAssertEqual(RivuletLink(.play, ratingKey: "1", startOffset: 1e300).url?.absoluteString,
+                       "rivulet://play?ratingKey=1")
+    }
+
+    func testOffsetOnlyAppliesToPlayLinks() {
+        let detailURL = URL(string: "rivulet://detail?ratingKey=1&offset=83250")!
+        XCTAssertNil(RivuletLink(url: detailURL)?.startOffset)
+        XCTAssertNil(RivuletLink(.detail, ratingKey: "1", startOffset: 83.25).startOffset)
+        XCTAssertEqual(RivuletLink(url: URL(string: "rivulet://detail?ratingKey=1&offset=not-a-number")!)?.action,
+                       .detail)
     }
 
     func testPathFormMatchesQueryForm() throws {
@@ -147,7 +191,8 @@ final class DeepLinkHandlerDetailTests: XCTestCase {
 
         token = "t"
         await handler.deliverHeldLink()?.value
-        XCTAssertEqual(handler.pendingPlayback?.ratingKey, "9")
+        XCTAssertEqual(handler.pendingPlayback?.metadata.ratingKey, "9")
+        XCTAssertNil(handler.pendingPlayback?.startOffset, "omitted offset keeps the metadata resume point")
     }
 
     func testNewerLinkReplacesHeldOne() async {
@@ -232,7 +277,7 @@ final class DeepLinkHandlerDetailTests: XCTestCase {
         handler.isShellReady = true
         await handler.handle(RivuletLink(.play, ratingKey: "4"))?.value
         XCTAssertEqual(reconnects, 1)
-        XCTAssertEqual(handler.pendingPlayback?.ratingKey, "4")
+        XCTAssertEqual(handler.pendingPlayback?.metadata.ratingKey, "4")
     }
 
     func testFetchThatKeepsFailingDropsTheLink() async {

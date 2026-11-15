@@ -18,6 +18,16 @@ enum SystemMediaAccessibility {
         MACaptionAppearanceGetDisplayType(.user) == .alwaysOn
     }
 
+    /// The same setting by name, for a diagnostics report.
+    nonisolated static var captionDisplayName: String {
+        switch MACaptionAppearanceGetDisplayType(.user) {
+        case .forcedOnly: "forced only"
+        case .automatic: "automatic"
+        case .alwaysOn: "always on"
+        @unknown default: "unknown"
+        }
+    }
+
     /// Accessibility > Audio Descriptions.
     nonisolated static var prefersAudioDescription: Bool {
         let preferred = MAAudibleMediaCopyPreferredCharacteristics().takeRetainedValue() as? [String] ?? []

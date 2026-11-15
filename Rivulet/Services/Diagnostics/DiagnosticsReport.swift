@@ -70,6 +70,7 @@ enum DiagnosticsReport {
             "plex": plex(),
             "plex_profile": profile(),
             "streaming": streaming(),
+            "captions": captions(),
             "home": home(),
             "other_servers": otherServers(),
             "library_browse": libraryBrowse(),
@@ -156,6 +157,18 @@ enum DiagnosticsReport {
             result["plex_uses"] = StreamingQuality.isHome(serverURL: url) ? "home" : "away"
         }
         return result
+    }
+
+    /// What decides when subtitles show: the saved choice, the skip lengths, and the system's
+    /// own caption settings, which the settings snapshot cannot see.
+    private static func captions() -> [String: Any] {
+        [
+            "subtitle_choice": TrackIntentStore.subtitleIntent.map { String(describing: $0) } ?? "none saved",
+            "skip_forward_seconds": Int(InputConfig.tapSeekSeconds),
+            "skip_back_seconds": Int(InputConfig.tapSeekBackSeconds),
+            "system_show_on_skip_back": UniversalPlayerViewModel.systemShowsSubtitlesOnSkipBack(),
+            "system_caption_display": SystemMediaAccessibility.captionDisplayName,
+        ]
     }
 
     /// Which of the server's connections is in use, described without the address.

@@ -263,6 +263,8 @@ final class NowPlayingService: ObservableObject {
             if type == .audible {
                 if let id { viewModel?.selectAudioTrack(id: id) }
             } else {
+                // The system asked (Control Center, Siri), not the player's menu.
+                DiagLog.notice(.playback, "[captions] system language-option command")
                 viewModel?.selectSubtitleTrack(id: id)
             }
         }

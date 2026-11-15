@@ -1080,9 +1080,15 @@ class PlayerContainerViewController: UIViewController {
     @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
         // Kept in sync with `panCanDriveScrub`, which stops the recognizer from
         // beginning (and thus stealing the gesture) in these same states.
-        guard panCanDriveScrub else { return }
         // A touch that turned into a ring jog belongs to the jog from then on.
-        guard !RemoteInputHandler.isRingJogging else { return }
+        // A scrub that stalls mid-touch says why once, when the touch ends (#632).
+        guard panCanDriveScrub, !RemoteInputHandler.isRingJogging else {
+            if gesture.state == .ended {
+                DiagLog.notice(.playback, "[scrub] swipe ended blocked: "
+                    + (RemoteInputHandler.isRingJogging ? "ring jog" : focusIsOnTransportButton ? "focus is on a control" : "player state"))
+            }
+            return
+        }
 
         // Swipe-to-scrub works whether playing or paused.
 
@@ -1091,6 +1097,7 @@ class PlayerContainerViewController: UIViewController {
 
         switch gesture.state {
         case .began:
+            DiagLog.notice(.playback, "[scrub] swipe started a scrub")
             inputCoordinator.handle(action: .scrubRelative(seconds: 0), source: .irPress)
 
         case .changed:
@@ -1847,7 +1854,7 @@ class PlayerContainerViewController: UIViewController {
                 badges: badges))
             card.onFromBeginning = { [weak self, weak vm] in
                 self?.activeRailPanel?.dismissPanel()
-                vm?.endReplayWindow()
+                vm?.endReplayWindow(reason: "from beginning")
                 Task {
                     await vm?.seek(to: 0)
                     vm?.resume()
@@ -1875,7 +1882,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
-                        vm?.endReplayWindow()
+                        vm?.endReplayWindow(reason: "chapter pick")
                         Task { await vm?.seek(to: start, exact: true) }
                     })
             }
@@ -2514,15 +2521,30 @@ extension PlayerContainerViewController: UIGestureRecognizerDelegate {
               pan === panGestureRecognizer
         else { return true }
 
-        guard panCanDriveScrub else { return false }
+        let velocity = pan.velocity(in: view)
+        guard panCanDriveScrub else {
+            return refuseScrub(focusIsOnTransportButton ? "focus is on a control" : "player state", velocity)
+        }
 
         // Never while the clickpad is down: a click jolts the touch into a fake swipe.
-        guard !RemoteInputHandler.isClickpadDown, !RemoteInputHandler.isRingJogging else { return false }
+        guard !RemoteInputHandler.isClickpadDown else { return refuseScrub("clickpad down", velocity) }
+        guard !RemoteInputHandler.isRingJogging else { return refuseScrub("ring jog", velocity) }
 
         // Decide on velocity: translation is still near zero at this point.
         // A 2:1 horizontal bias leaves diagonal drift to the focus engine.
-        let velocity = pan.velocity(in: view)
-        guard velocity != .zero else { return false }
-        return abs(velocity.x) > abs(velocity.y) * 2
+        guard velocity != .zero else { return refuseScrub("no velocity yet", velocity) }
+        guard abs(velocity.x) > abs(velocity.y) * 2 else {
+            return refuseScrub("not 2:1 sideways, v=\(Int(velocity.x)),\(Int(velocity.y))", velocity)
+        }
+        return true
+    }
+
+    /// A sideways swipe that did not start a scrub leaves a line for Send Diagnostics (#632).
+    /// Vertical swipes are the focus engine's and say nothing.
+    private func refuseScrub(_ why: String, _ velocity: CGPoint) -> Bool {
+        if abs(velocity.x) >= abs(velocity.y) {
+            DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: \(why)")
+        }
+        return false
     }
 }

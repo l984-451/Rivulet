@@ -60,10 +60,7 @@ nonisolated enum RoundedPoster {
 
     static func render(_ source: CGImage, shape: Shape) -> UIImage {
         let size = shape.size, radius = shape.radius
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = shape.scale
-        format.opaque = false
-        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+        return UIGraphicsImageRenderer(size: size, format: .layeredArtwork(scale: shape.scale)).image { context in
             UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: radius).addClip()
             let srcW = CGFloat(source.width), srcH = CGFloat(source.height)
             let fill = max(size.width / srcW, size.height / srcH)
@@ -78,5 +75,17 @@ nonisolated enum RoundedPoster {
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         cache.setObject(image, forKey: key, cost: cost)
         return image
+    }
+}
+
+extension UIGraphicsImageRendererFormat {
+    /// For artwork drawn with transparency that a focus-layered view shows (TVPosterView,
+    /// `adjustsImageWhenAncestorFocused`). Standard range always: a wide-colour display's default is
+    /// 16-bit float, and UIKit's shadow check reads past the end of such an image (SIGSEGV in vImage).
+    nonisolated static func layeredArtwork(scale: CGFloat? = nil) -> UIGraphicsImageRendererFormat {
+        let format = UIGraphicsImageRendererFormat()
+        if let scale { format.scale = scale }
+        format.preferredRange = .standard
+        return format
     }
 }

@@ -36,4 +36,19 @@ final class RoundedPosterTests: XCTestCase {
         XCTAssertEqual(alpha(image, x: 4 * 2, y: 4 * 2), 0, "corner is ~20 pt, not the system's")
         XCTAssertEqual(alpha(image, x: 40 * 2, y: 40 * 2), 255)
     }
+
+    /// A poster with transparency must be 8 bits a channel. A wide-colour Apple TV renders 16-bit
+    /// float by default, and TVPosterView's shadow check reads past the end of such an image
+    /// (SIGSEGV in vImage, 1.3.1). The simulator's default is 8-bit, so this pins the format.
+    func test_layeredArtwork_isStandardRange() {
+        XCTAssertEqual(UIGraphicsImageRendererFormat.layeredArtwork(scale: 2).preferredRange, .standard)
+        XCTAssertEqual(UIGraphicsImageRendererFormat.layeredArtwork().scale, UIGraphicsImageRendererFormat.preferred().scale)
+
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 60, height: 90)).image { _ in }.cgImage!
+        let shape = RoundedPoster.Shape(tile: MediaRowMetrics.poster, scale: 2)
+        for image in [RoundedPoster.render(source, shape: shape), PosterCell.blankArtwork, MusicChrome.placeholder()] {
+            XCTAssertEqual(image.cgImage?.bitsPerComponent, 8)
+            XCTAssertEqual(image.cgImage?.bitsPerPixel, 32)
+        }
+    }
 }

@@ -80,9 +80,7 @@ final class PosterCell: UICollectionViewCell {
     private static let blankMusicArtwork = blank(for: MediaRowMetrics.music)
 
     static func blank(for tile: MediaRowMetrics.Tile) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        return UIGraphicsImageRenderer(size: tile.art, format: format).image { _ in }
+        UIGraphicsImageRenderer(size: tile.art, format: .layeredArtwork(scale: 1)).image { _ in }
     }
 
     private var tileBlankArtwork: UIImage { tile.art == MediaRowMetrics.music.art ? Self.blankMusicArtwork : Self.blankArtwork }

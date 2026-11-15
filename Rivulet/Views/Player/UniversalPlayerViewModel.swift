@@ -2287,6 +2287,14 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
+            if !transcodeReady, activeStreamPlan.step != nil, !PlexRelay.isRelayURL(serverURL) {
+                // Quality chose this transcode, so the file is still there when the server refuses it (RIVULET-B).
+                diagnostics.step("transcode_refused_playing_original")
+                chapterImages.cancel()
+                activeStreamPlan = .original
+                try await reloadOriginal(at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
+                return
+            }
             if !transcodeReady {
                 // HLS as the PRIMARY route (no direct-play URL existed), not a
                 // fallback. Tagged separately from `fallback_preflight_failed`

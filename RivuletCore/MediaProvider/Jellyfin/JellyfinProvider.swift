@@ -674,6 +674,8 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             )
         )
         let sources = response.mediaSources ?? []
+        // No sources and an ErrorCode: the server said no (not allowed, stream limit).
+        if sources.isEmpty, let refusal = ServerRefusal(playbackErrorCode: response.errorCode) { throw refusal }
         let ranked = sources.map {
             JellyfinMediaMapper.mediaSource($0, itemID: itemRef.itemID, playSessionID: response.playSessionId,
                                             baseURL: baseURL, token: token)

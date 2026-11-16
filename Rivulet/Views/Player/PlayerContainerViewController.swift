@@ -907,6 +907,12 @@ class PlayerContainerViewController: UIViewController {
             return
         }
 
+        // The error overlay is all that is up: Menu closes it, as its Dismiss button does.
+        if vm.playbackState.isFailed {
+            dismissPlayer()
+            return
+        }
+
         // Up Next folds into its pill. The block matters: the system's own dismiss for this
         // press lands after the page is gone, finds nothing to close, and exits the player.
         if vm.postVideoState != .hidden {

@@ -107,14 +107,15 @@ extension PlexSession {
 
     /// Opens the server's play session before the player asks for media: the transcode's,
     /// or a direct-play one so the dashboard shows its bandwidth (#423).
-    func openPlaySession(_ request: PlexPlaybackRequest) async {
+    func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? {
         if request.transcodeSessionID != nil {
-            await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
+            return await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)?.refusal
         } else if let session = request.directPlaySessionID, let key = request.item.ratingKey {
             await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
                                                 ratingKey: key, mediaIndex: request.mediaIndex,
                                                 sessionIdentifier: session)
         }
+        return nil
     }
 
     /// Sets the part's audio or subtitle stream, which a new transcode session reads.

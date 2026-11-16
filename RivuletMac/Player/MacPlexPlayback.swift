@@ -23,6 +23,9 @@ final class MacPlexPlayback: ObservableObject {
     @Published private(set) var queue: PlayQueue<PlexMetadata>?
     /// The server's reason when it ended this play session (dashboard Stop, paused too long; #403).
     @Published private(set) var serverStopReason: String?
+    /// The server's refusal from its last decision (Plex Pass needed, no way to convert): shown when it
+    /// blocks the stream, or when the load fails after it.
+    @Published private(set) var serverRefusal: ServerRefusal?
 
     private let plex: any PlayerBackend
     private var skippedMarkerIDs: Set<String> = []
@@ -208,9 +211,20 @@ final class MacPlexPlayback: ObservableObject {
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
             return
         }
-        await plex.openPlaySession(loadingRequest)
+        let refusal = await plex.openPlaySession(loadingRequest)
         guard canLoad, playbackReports.session === session else {
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
+            return
+        }
+        // The server says no, so a transcode would only fail: a quality step plays the file instead,
+        // and the refusal is kept only when shown, so its card never covers the file taking over.
+        if let refusal, refusal.blocksTranscode, fallBackToOriginal(at: loadingRequest.startTime) {
+            serverRefusal = nil
+            return
+        }
+        serverRefusal = refusal
+        if refusal?.blocksTranscode == true {
+            player.stop()
             return
         }
         try? await loadPlayer(player, loadingRequest, keepingTransport)
@@ -325,6 +339,18 @@ final class MacPlexPlayback: ObservableObject {
             : 8000
         reload(quality: request.quality, plan: .transcode(QualityDecision.highestStep(atMost: kbps)),
                at: request.startTime ?? 0)
+    }
+
+    /// A transcode quality chose (Auto's step, the menu) that fails, at start or mid-play, gives way to the file
+    /// at the playhead, and Auto steps down no more for this item, as on tvOS. A relay has no file route.
+    @discardableResult
+    private func fallBackToOriginal(at time: TimeInterval? = nil) -> Bool {
+        guard !request.isLocal, !request.isStacked, !didFallBack,
+              QualityDecision.playsOriginalAfterTranscodeFailure(plan: request.plan, isRelay: PlexRelay.isRelayURL(request.serverURL))
+        else { return false }
+        stallTracker.stopStepping()
+        reload(quality: request.quality, plan: .original, at: time)
+        return true
     }
 
     // MARK: - Tracks
@@ -655,7 +681,12 @@ final class MacPlexPlayback: ObservableObject {
             }
         case .failed:
             timeline.transportChanged(.other)
-            if isPlayingCinemaExtra { advanceCinemaExtras() } else { fallBackToTranscode() }
+            if isPlayingCinemaExtra {
+                advanceCinemaExtras()
+            } else {
+                fallBackToTranscode()
+                fallBackToOriginal(at: playbackStart.streamHasPlayed ? nil : request.startTime)
+            }
         default:
             timeline.transportChanged(.other)
         }
@@ -904,6 +935,7 @@ final class MacPlexPlayback: ObservableObject {
             upNextDismissed = false
             skippedMarkerIDs = []
             serverStopReason = nil
+            serverRefusal = nil
             onItemChange?()
             lookUpNextEpisode()
             WatchTogetherClient.shared.itemChanged(self)

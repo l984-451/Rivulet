@@ -123,7 +123,7 @@ struct NativePlaybackLoadingTests {
         func markWatched(_ request: PlexPlaybackRequest) async {}
         func nextEpisode(after episode: PlexMetadata, in request: PlexPlaybackRequest) async -> PlexMetadata? { nil }
         func stopTranscode(_ request: PlexPlaybackRequest) async { if let id = request.transcodeSessionID { stoppedSessions.append(id) } }
-        func openPlaySession(_ request: PlexPlaybackRequest) async { await open(request) }
+        func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? { await open(request); return nil }
         func selectStream(_ picks: TrackPicks, in request: PlexPlaybackRequest) async { await select(request) }
         func artworkURL(for item: PlexMetadata, kind: PlexSession.ArtworkKind, width: Int, height: Int) -> URL? { nil }
         func imageURL(path: String?, width: Int, height: Int, serverID: String?) -> URL? { nil }

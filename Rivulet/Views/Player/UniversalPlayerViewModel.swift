@@ -614,6 +614,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var rivuletFallbackHeaders: [String: String] = [:]
     /// One-shot direct-play -> HLS fallback guards (prevents loops).
     private var hasAttemptedRivuletHLSFallback = false
+    /// Why the server will not stream this item, from its decision or its answers to the HLS start.
+    private var serverRefusal: ServerRefusal?
+    /// HTTP status the direct-play URL gave when Aether could not open it; 404 means the file is gone.
+    private var directPlayProbeStatus: Int?
     /// One-shot: the enriched HLS asset failed and we rebuilt on the plain URL.
     private var hasRetriedWithoutEnrichment = false
     private var isAttemptingRivuletHLSFallback = false
@@ -1695,19 +1699,28 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                             print("[Player] AVPlayerItem failed with cancellation — ignoring")
                             break
                         }
+                        // A transcode quality chose is the server's to fail: the file plays instead (logged, not captured).
+                        var playsOriginal = false
+                        if case .hls = self.activeRoute { playsOriginal = self.canPlayOriginalAfterTranscodeFailure }
                         // Recorded even when the HLS fallback rescues it.
                         let itemError = item.error ?? PlayerError.loadFailed(message)
-                        self.diagnostics.recordPrimaryFailure(
-                            itemError,
-                            kind: self.classifyDirectPlayFailure(PlayerError.loadFailed(message)),
-                            route: self.activeRoute?.description.lowercased() ?? "unknown"
-                        )
+                        if !playsOriginal {
+                            self.diagnostics.recordPrimaryFailure(
+                                itemError,
+                                kind: self.classifyDirectPlayFailure(PlayerError.loadFailed(message)),
+                                route: self.activeRoute?.description.lowercased() ?? "unknown"
+                            )
+                        }
                         // The enriched asset is a custom scheme nothing else
                         // can load, so its failure is total. The plain URL
                         // behind it already passed preflight, so rebuild on it
                         // and keep the session instead of spending the one-shot
                         // HLS fallback (or ending playback) over track labels.
                         if self.retryWithoutEnrichment() { break }
+                        if playsOriginal {
+                            self.recoverFromTranscodeItemFailure(message)
+                            break
+                        }
                         if self.shouldAttemptRivuletFallbackOnItemFailure() {
                             let failureKind = self.classifyDirectPlayFailure(PlayerError.loadFailed(message))
                             let resumeTime = self.currentTime
@@ -1927,6 +1940,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         errorMessage = nil
         playbackState = .loading
         hasAttemptedRivuletHLSFallback = false
+        directPlayProbeStatus = nil
         hasRetriedWithoutEnrichment = false
         isAttemptingRivuletHLSFallback = false
 
@@ -1999,6 +2013,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             return
         }
         hasAttemptedRivuletHLSFallback = false
+        directPlayProbeStatus = nil
         hasRetriedWithoutEnrichment = false
         isAttemptingRivuletHLSFallback = false
 
@@ -2060,12 +2075,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             guard stops == stopCount, generation == itemGeneration,
                   !isCancellationError(error), !Task.isCancelled else { return }
             let technicalError = error.localizedDescription
-            if let playerError = error as? PlayerError {
-                errorMessage = playerError.userFacingDescription
-            } else {
-                errorMessage = String(localized: "Something went wrong during playback. Please try again.")
-            }
-            playbackState = .failed(.loadFailed(technicalError))
+            // The same error the overlay shows, so a server's reason reaches the user as written.
+            let playerError: PlayerError = (error as? PlayerError)
+                ?? ServerRefusal(error: error).map { .serverRefused($0.message) }
+                ?? .loadFailed(technicalError)
+            errorMessage = playerError.userFacingDescription
+            playbackState = .failed(playerError)
 
             // Route through PlaybackDiagnostics so this carries the media
             // fingerprint, the startup timeline, and any earlier primary-route
@@ -2146,7 +2161,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 return .runtimeFatal
             case .invalidURL:
                 return .demuxInit
-            case .unknown, .serverTerminated:
+            case .unknown, .serverTerminated, .serverRefused:
                 return .unknown
             case .engineFailure(let kind, _):
                 // The engine already classified this. Everything below is the
@@ -2287,12 +2302,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
-            if !transcodeReady, activeStreamPlan.step != nil, !PlexRelay.isRelayURL(serverURL) {
-                // Quality chose this transcode, so the file is still there when the server refuses it (RIVULET-B).
-                diagnostics.step("transcode_refused_playing_original")
+            if !transcodeReady, canPlayOriginalAfterTranscodeFailure {
                 chapterImages.cancel()
-                activeStreamPlan = .original
-                try await reloadOriginal(at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
+                try await playOriginalAfterTranscodeFailure(
+                    reason: "start", at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
                 return
             }
             if !transcodeReady {
@@ -2300,7 +2313,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // fallback. Tagged separately from `fallback_preflight_failed`
                 // so the two don't grind together in one Sentry issue: this one
                 // means the server is slow, that one means Aether ALSO broke.
-                let error = PlayerError.loadFailed("HLS transcode session failed to start")
+                let error = hlsStartFailure()
                 diagnostics.step("hls_primary_preflight_failed")
                 diagnostics.capture(error, event: "primary_preflight_failed", extraTags: [
                     "player_type": "avplayer"
@@ -3219,7 +3232,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             // that sent us here, plus what the server said on all 8 preflight
             // polls. Reported as `fallback_preflight_failed` — the user got
             // NOTHING, both routes died.
-            let error = PlayerError.loadFailed("HLS transcode session failed to start")
+            let error = hlsStartFailure()
             diagnostics.step("hls_fallback_preflight_failed")
             diagnostics.capture(error, event: "fallback_preflight_failed", extraTags: [
                 "fallback_reason": reason,
@@ -3564,14 +3577,70 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             diagnostics.step("quality_reload_unsupported", detail: "reason=\(reason)")
         } catch {
             if isCancellationError(error) || Task.isCancelled { return }
-            errorMessage = (error as? PlayerError)?.userFacingDescription
-                ?? PlayerError.loadFailed(error.localizedDescription).userFacingDescription
-            updatePlaybackState(.failed(.loadFailed(error.localizedDescription)))
-            diagnostics.capture(error, event: "quality_reload_failed", extraTags: [
-                "quality_reload_reason": reason,
-                "player_type": toOriginal ? "aether" : "avplayer"
-            ])
+            if !toOriginal, canPlayOriginalAfterTranscodeFailure {
+                do {
+                    try await playOriginalAfterTranscodeFailure(reason: reason, at: resumeTime, tracks: tracks)
+                    guard !Task.isCancelled else { return }
+                    if resume {
+                        activePlayer_play()
+                    } else {
+                        activePlayer_pause()
+                        updatePlaybackState(.paused)
+                    }
+                    return
+                } catch {
+                    if isCancellationError(error) || Task.isCancelled { return }
+                    failPlayback(error, event: "quality_reload_failed", reason: reason, player: "aether")
+                    return
+                }
+            }
+            failPlayback(error, event: "quality_reload_failed", reason: reason, player: toOriginal ? "aether" : "avplayer")
         }
+    }
+
+    /// A quality-chosen transcode (Auto's step, the menu) that fails, at start or mid-play, gives way to the
+    /// file at the playhead and Auto stops stepping down for this item. A relay has no file route.
+    private var canPlayOriginalAfterTranscodeFailure: Bool {
+        QualityDecision.playsOriginalAfterTranscodeFailure(plan: activeStreamPlan, isRelay: PlexRelay.isRelayURL(serverURL))
+    }
+
+    private func playOriginalAfterTranscodeFailure(reason: String, at time: TimeInterval, tracks: TrackPicks) async throws {
+        diagnostics.step("transcode_failed_playing_original", detail: reason)
+        SentryBridge.log(.warn, "Quality transcode failed, playing the original", attributes: [
+            "component": "playback", "reason": reason,
+        ])
+        stallTracker.stopStepping()
+        activeStreamPlan = .original
+        try await reloadOriginal(at: time, tracks: tracks)
+    }
+
+    /// The HLS item failed while playing; the file takes over at the playhead.
+    private func recoverFromTranscodeItemFailure(_ message: String) {
+        let time = playheadForReload
+        let tracks = currentPlexTrackIDs()
+        updatePlaybackState(.loading)
+        enqueueStreamWork { vm in
+            do {
+                try await vm.playOriginalAfterTranscodeFailure(reason: "item_failed", at: time, tracks: tracks)
+                vm.activePlayer_play()
+            } catch {
+                if isCancellationError(error) || Task.isCancelled { return }
+                vm.failPlayback(PlayerError.loadFailed(message), event: "quality_reload_failed",
+                                reason: "item_failed", player: "aether")
+            }
+        }
+    }
+
+    private func failPlayback(_ error: Error, event: String, reason: String, player: String) {
+        let playerError: PlayerError = (error as? PlayerError)
+            ?? ServerRefusal(error: error).map { .serverRefused($0.message) }
+            ?? .loadFailed(error.localizedDescription)
+        errorMessage = playerError.userFacingDescription
+        updatePlaybackState(.failed(playerError))
+        diagnostics.capture(error, event: event, extraTags: [
+            "quality_reload_reason": reason,
+            "player_type": player
+        ])
     }
 
     /// The AVPlayer item's own clock; the periodic observer behind `currentTime` lags a fresh seek.
@@ -3603,7 +3672,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         beginHLSSwitch(to: hls)
         guard await waitForHLSTranscodeReady(url: hls.url, headers: hls.headers) else {
-            throw PlayerError.loadFailed("HLS transcode session failed to start")
+            throw hlsStartFailure()
         }
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         try await finishHLSSwitch(to: hls, resumeTime: time)
@@ -3641,6 +3710,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         rivuletFallbackURL = nil
         rivuletFallbackHeaders = [:]
         hasAttemptedRivuletHLSFallback = false
+        directPlayProbeStatus = nil
         // Engine ids differ from Plex ids, so the picks re-apply once the engine lists its tracks.
         initialAudioTrackId = tracks.audio
         switch tracks.subtitle {
@@ -3772,6 +3842,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 return
             }
 
+            self.directPlayProbeStatus = http.statusCode
             let classification = StreamBodyClassifier.classify(data)
             let summary = StreamBodyClassifier.describe(
                 status: http.statusCode,
@@ -3813,9 +3884,16 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func waitForHLSTranscodeReady(url: URL, headers: [String: String]) async -> Bool {
         await prepareHLSRelay(for: url)
         let url = avPlayerURL(url)
-        if let verdict = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
-            diagnostics.step("transcode_decision", detail: verdict)
+        serverRefusal = nil
+        if let decision = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
+            diagnostics.step("transcode_decision", detail: decision.verdict)
+            if let refusal = decision.refusal {
+                serverRefusal = refusal
+                // The server says no, so polling for a transcode only waits.
+                if refusal.blocksTranscode { return false }
+            }
         }
+        var lastStatus: Int?
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
@@ -3827,11 +3905,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // Try up to 8 times with delays to give Plex time to start the transcode
         for attempt in 1...8 {
+            lastStatus = nil
             do {
 
                 let (data, response) = try await URLSession.shared.data(for: request)
 
                 if let httpResponse = response as? HTTPURLResponse {
+                    lastStatus = httpResponse.statusCode
 
                     if httpResponse.statusCode == 200 && data.count > 0 {
                         if let content = String(data: data, encoding: .utf8) {
@@ -3893,7 +3973,20 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         }
 
         DiagLog.error(.playback, "HLS transcode failed to start after 8 attempts")
+        // The server answered with an error each time: it refused, which is not the same as slow.
+        if serverRefusal == nil, let lastStatus, lastStatus >= 400 {
+            serverRefusal = ServerRefusal(reason: .transcodeRefused)
+        }
         return false
+    }
+
+    /// Why an HLS start failed: the server's reason when it gave one, else the generic wait failure.
+    private func hlsStartFailure() -> PlayerError {
+        var refusal = serverRefusal
+        if refusal == nil || refusal?.reason == .transcodeRefused, directPlayProbeStatus == 404 {
+            refusal = ServerRefusal(reason: .fileMissing)
+        }
+        return refusal.map { .serverRefused($0.message) } ?? .loadFailed("HLS transcode session failed to start")
     }
 
     /// The first variant playlist a master names, resolved against `baseURL`.

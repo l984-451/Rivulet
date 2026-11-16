@@ -17,6 +17,7 @@ nonisolated struct StallTracker: Sendable {
 
     private var stalls: [Date] = []
     private var quietUntil: Date = .distantPast
+    private var steppingStopped = false
 
     mutating func noteSeekOrLoad(at date: Date) {
         quietUntil = date.addingTimeInterval(Self.grace)
@@ -27,8 +28,14 @@ nonisolated struct StallTracker: Sendable {
         stalls.removeAll()
     }
 
+    /// A step's transcode failed and the file plays instead: Auto steps down no more for this item.
+    mutating func stopStepping() {
+        steppingStopped = true
+        stalls.removeAll()
+    }
+
     mutating func bufferingStarted(at date: Date) -> StallVerdict {
-        guard date >= quietUntil else { return .ignored }
+        guard date >= quietUntil, !steppingStopped else { return .ignored }
         stalls = stalls.filter { date.timeIntervalSince($0) < Self.window } + [date]
         guard stalls.count >= 2 else { return .counted }
         stalls.removeAll()

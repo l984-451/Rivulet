@@ -4678,7 +4678,51 @@
       }
     },
     "Loudness Leveling" : {},
+    "Playing away from home needs a Plex Pass or Remote Watch Pass." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für die Wiedergabe außer Haus brauchst du einen Plex Pass oder Remote Watch Pass."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναπαραγωγή εκτός σπιτιού απαιτεί Plex Pass ή Remote Watch Pass."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La lecture hors de chez vous nécessite un Plex Pass ou un Remote Watch Pass."
+          }
+        }
+      }
+    },
     "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
+    "Server Can't Play This" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vom Server nicht abspielbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να το αναπαράγει"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lecture refusée par le serveur"
+          }
+        }
+      }
+    },
     "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -14670,6 +14714,160 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex HTTP %lld"
+          }
+        }
+      }
+    },
+    "The server can't find this video's file. It may have been moved or deleted." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server findet die Datei dieses Videos nicht. Sie wurde vielleicht verschoben oder gelöscht."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν βρίσκει το αρχείο αυτού του βίντεο. Ίσως μετακινήθηκε ή διαγράφηκε."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne trouve pas le fichier de cette vidéo. Il a peut-être été déplacé ou supprimé."
+          }
+        }
+      }
+    },
+    "The server can't play or convert this video for this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video für dieses Gerät weder abspielen noch umwandeln."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει ή να μετατρέψει αυτό το βίντεο για αυτή τη συσκευή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut ni lire ni convertir cette vidéo pour cet appareil."
+          }
+        }
+      }
+    },
+    "The server can't play this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video nicht abspielen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut pas lire cette vidéo."
+          }
+        }
+      }
+    },
+    "The server can't play this video: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video nicht abspielen: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει αυτό το βίντεο: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut pas lire cette vidéo : %@"
+          }
+        }
+      }
+    },
+    "The server doesn't let this account play this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server erlaubt diesem Konto nicht, dieses Video abzuspielen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν επιτρέπει σε αυτόν τον λογαριασμό να αναπαράγει αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur n’autorise pas ce compte à lire cette vidéo."
+          }
+        }
+      }
+    },
+    "The server is at its stream limit. Try again in a moment." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat sein Stream-Limit erreicht. Versuche es gleich noch einmal."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής έφτασε στο όριο ροών του. Δοκίμασε ξανά σε λίγο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur a atteint sa limite de flux. Réessayez dans un instant."
+          }
+        }
+      }
+    },
+    "The server wouldn't start a stream for this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat keinen Stream für dieses Video gestartet."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν ξεκίνησε ροή για αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur n’a pas voulu lancer de flux pour cette vidéo."
           }
         }
       }

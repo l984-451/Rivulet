@@ -151,11 +151,12 @@ final class ProviderBackend: PlayerBackend {
         return nil
     }
 
-    func openPlaySession(_ request: PlexPlaybackRequest) async {
-        guard let playback = request.providerPlayback else { return }
+    func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? {
+        guard let playback = request.providerPlayback else { return nil }
         try? await PlaybackReportTimeout.run(for: reportTimeout) { @MainActor in
             await self.ledger.open(self.reportKey(request), make: { self.reporter(for: playback) }, position: request.startTime ?? 0)
         }
+        return nil
     }
 
     /// Ends a replaced stream's session, direct play or transcode, at the last position it reported,

@@ -930,6 +930,8 @@ struct UniversalPlayerView: View {
             return "exclamationmark.triangle.fill"
         case .serverTerminated:
             return "stop.circle.fill"
+        case .serverRefused:
+            return "exclamationmark.icloud.fill"
         case .engineFailure(let kind, _):
             // Reuse the one engine-kind taxonomy instead of opening a third
             // switch over the same strings. "Is this a network thing or a
@@ -967,6 +969,8 @@ struct UniversalPlayerView: View {
             return String(localized: "Playback Error")
         case .serverTerminated:
             return String(localized: "Playback Stopped")
+        case .serverRefused:
+            return String(localized: "Server Can't Play This")
         case .engineFailure(let kind, _):
             switch DirectPlayFailureKind(engineKind: kind) {
             case .network: return String(localized: "Connection Problem")

@@ -68,4 +68,11 @@ final class QualityDecisionTests: XCTestCase {
         let media = try JSONDecoder().decode(PlexMedia.self, from: Data(json.utf8))
         XCTAssertEqual(media.sourceKbps, 10000)   // 9 GB over 2 h = 10 Mbps
     }
+
+    /// Start failures and mid-play failures share this one rule: quality chose the transcode, so the file is the way out.
+    func test_failedTranscode_playsOriginalOnlyWhenQualityChoseItAndNotOnRelay() {
+        XCTAssertTrue(QualityDecision.playsOriginalAfterTranscodeFailure(plan: .transcode(s4), isRelay: false))
+        XCTAssertFalse(QualityDecision.playsOriginalAfterTranscodeFailure(plan: .transcode(s4), isRelay: true))
+        XCTAssertFalse(QualityDecision.playsOriginalAfterTranscodeFailure(plan: .original, isRelay: false))
+    }
 }

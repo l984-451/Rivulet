@@ -2145,9 +2145,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// Opens a transcode session with a `/decision` request carrying the same parameters.
     /// PMS can answer `start.m3u8` with 400 (measured on 1.43.4) or start a session that never
     /// muxes until a decision has run, so call this before the first playlist fetch.
-    /// Returns the server's verdict for the diagnostics, nil when it gave none.
+    /// Returns the server's verdict and any refusal, nil when it gave none.
     @discardableResult
-    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> String? {
+    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> PlexTranscodeDecision? {
         let startPath = "/video/:/transcode/universal/start.m3u8"
         guard var components = URLComponents(url: hlsURL, resolvingAgainstBaseURL: false),
               components.path.hasSuffix(startPath) else { return nil }
@@ -2164,7 +2164,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
                 print("[Plex] Transcode decision returned HTTP \(status)")
             }
-            return Self.transcodeVerdict(in: data)
+            return Self.transcodeDecision(in: data)
         } catch {
             print("[Plex] Decision request failed: \(error.localizedDescription)")
             return nil
@@ -2173,12 +2173,21 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     /// A decision body's codes and PMS's own sentence: "general=2000 transcode=4005: Cannot convert this item. …".
     nonisolated static func transcodeVerdict(in data: Data) -> String? {
+        transcodeDecision(in: data)?.verdict
+    }
+
+    nonisolated static func transcodeDecision(in data: Data) -> PlexTranscodeDecision? {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let container = body["MediaContainer"] as? [String: Any],
               let general = container["generalDecisionCode"] else { return nil }
         let transcode = container["transcodeDecisionCode"].map { "\($0)" } ?? "none"
         let text = container["transcodeDecisionText"] ?? container["generalDecisionText"] ?? ""
-        return "general=\(general) transcode=\(transcode): \(text)"
+        return PlexTranscodeDecision(
+            verdict: "general=\(general) transcode=\(transcode): \(text)",
+            refusal: ServerRefusal.decision(
+                general: general as? Int, generalText: container["generalDecisionText"] as? String,
+                transcode: container["transcodeDecisionCode"] as? Int,
+                transcodeText: container["transcodeDecisionText"] as? String))
     }
 
     /// The selected text subtitle of a `start.m3u8` transcode as one ASS document.
@@ -3453,6 +3462,13 @@ nonisolated struct PlexLiveTVTuneResult: Sendable {
     /// channel needs the deinterlacing path; nil must be treated as "assume
     /// interlaced", since combing is far worse than a decode we didn't need.
     let videoScanType: String?
+}
+
+/// The server's answer to a transcode decision request.
+nonisolated struct PlexTranscodeDecision: Sendable {
+    let verdict: String
+    /// Set when the server says no (decision 2xxx); nil when it would play it.
+    let refusal: ServerRefusal?
 }
 
 /// Universal-transcoder verdict for a tuned live session.

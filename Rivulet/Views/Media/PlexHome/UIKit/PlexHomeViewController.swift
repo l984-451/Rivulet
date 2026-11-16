@@ -4971,9 +4971,9 @@ final class PlexHomeViewController: UIViewController {
     /// ten, the way a Plex library's hub-backed hero falls back to its
     /// recent items.
     static func heroItems(from rows: CachedHomeRail) -> [MediaItem] {
-        Array(rows.filter { !$0.isContinueWatching }
+        Array(HomeHero.deduplicated(rows.filter { !$0.isContinueWatching }
             .flatMap(\.items)
-            .filter(isHeroCandidate)
+            .filter(isHeroCandidate))
             .prefix(10))
     }
 
@@ -4986,8 +4986,9 @@ final class PlexHomeViewController: UIViewController {
     /// The other servers' Home hero: their trending titles, one library at a
     /// time, when enough have a backdrop; their newest additions otherwise.
     static func heroItems(trending: [[MediaItem]], rows: CachedHomeRail) -> [MediaItem] {
-        let picks = Array(roundRobin(trending)
-            .filter { ($0.grandparentArtwork?.backdrop ?? $0.artwork.backdrop) != nil }
+        // One slide per title across libraries, before the cap so a twin library does not halve the slides (#649).
+        let picks = Array(HomeHero.deduplicated(roundRobin(trending)
+            .filter { ($0.grandparentArtwork?.backdrop ?? $0.artwork.backdrop) != nil })
             .prefix(10))
         return picks.count >= heroTMDBMinMatches ? picks : heroItems(from: rows)
     }
@@ -5007,7 +5008,7 @@ final class PlexHomeViewController: UIViewController {
     /// Both servers' hero slides, alternating, so neither server's picks
     /// sink under the other's.
     static func mixedHeroItems(plex: [MediaItem], otherServers: [MediaItem], cap: Int) -> [MediaItem] {
-        Array(interleave(plex, otherServers).prefix(cap))
+        Array(HomeHero.deduplicated(interleave(plex, otherServers)).prefix(cap))
     }
 
     private var homeHeroSource: HomeHeroSource {

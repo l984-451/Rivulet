@@ -59,7 +59,7 @@ final class EpisodeCollectionCell: UICollectionViewCell {
         episodeView.setWholeCardFocused(context.nextFocusedView === self, coordinator: coordinator)
     }
 
-    /// Search's row tile: the rail's card with its description, as tall as the rail's.
+    /// Search's row tile: the rail's card with its description under the thumb.
     static let searchTile = MediaRowMetrics.Tile(
         art: CGSize(width: EpisodeCell.cardWidth, height: EpisodeCell.thumbHeight + 190), growth: .zero)
 
@@ -354,8 +354,7 @@ final class SeasonDividerCell: UICollectionViewCell {
         chip.textAlignment = .center
         contentView.addSubview(chip)
         NSLayoutConstraint.activate([
-            // Centered on the thumb band (the cell spans the full card height,
-            // text zone included, so the marker aligns with the artwork).
+            // Centered on the thumb band, so the marker aligns with the artwork.
             chip.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             chip.centerYAnchor.constraint(equalTo: contentView.topAnchor, constant: EpisodeCell.thumbHeight / 2),
             topLine.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),

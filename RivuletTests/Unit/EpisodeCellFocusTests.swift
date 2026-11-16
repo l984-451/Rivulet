@@ -5,25 +5,26 @@ import UIKit
 @MainActor
 struct EpisodeCellFocusTests {
     @Test(arguments: [EpisodeCell.Layout.stacked, .sideBySide])
-    func thumbnailGuideFollowsCardMode(layout: EpisodeCell.Layout) throws {
+    func episodeIsOneFocusStop(layout: EpisodeCell.Layout) throws {
         let cell = EpisodeCell(layout: layout)
         let episode = JellyfinFixtures.mediaItem("episode", kind: .episode)
-        cell.configure(episode: episode)
-        let guide = try #require(cell.layoutGuides.compactMap { $0 as? UIFocusGuide }.first)
-        #expect(guide.isEnabled == (layout == .stacked))
-        #expect(guide.preferredFocusEnvironments.first === cell.preferredFocusEnvironments.first)
+        let description = try #require(cell.subviews.compactMap { $0 as? EpisodeDescriptionView }.first)
+        #expect(cell.preferredFocusEnvironments.first is EpisodeThumbCardView)
 
-        cell.configure(searchResult: episode)
-        #expect(guide.isEnabled == false)
+        // The title rides inside the artwork, so the description is neither shown nor a stop.
+        cell.configure(episode: episode)
+        #expect(description.isHidden && !description.canBecomeFocused)
         cell.resetFocusVisual()
-        #expect(guide.isEnabled == false)
+        #expect(!description.canBecomeFocused)
+
+        // Search's tile keeps its description under the thumb.
+        cell.configure(searchResult: episode)
+        #expect(!description.isHidden)
 
         cell.configure(episode: episode)
-        #expect(guide.isEnabled == (layout == .stacked))
+        #expect(description.isHidden && !description.canBecomeFocused)
         cell.configure(trailer: BelowFoldTrailer(
             id: "trailer", title: "Trailer", artworkURL: nil, durationFormatted: nil, providerID: "stub"))
-        #expect(guide.isEnabled == false)
-        cell.resetFocusVisual()
-        #expect(guide.isEnabled == false)
+        #expect(description.isHidden && !description.canBecomeFocused)
     }
 }

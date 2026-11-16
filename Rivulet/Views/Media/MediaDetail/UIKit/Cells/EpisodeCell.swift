@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-//  An episode (or trailer) card: thumbnail with duration, progress and watched overlays
-//  over a description block. An episode has two focus stops: the thumb plays, the description opens details.
+//  An episode (or trailer) card: thumbnail with duration, progress and watched overlays.
+//  On a show or season page an episode is one focus stop that plays, with "E3 · Title" over a
+//  scrim inside the artwork; Search's tile keeps the description block under the thumb.
 
 import UIKit
 import TVUIKit
@@ -97,6 +98,10 @@ final class EpisodeCell: UIView {
     private var thumbHeightConstraint: NSLayoutConstraint!
     private let trailerScrim = TrailerScrimView()
     private let trailerTitleLabel = UILabel()
+    /// A show or season page episode's "E3 · Title", inside the artwork over `trailerScrim`.
+    private let overlayTitleLabel = UILabel()
+    private var overlayLeadingPlain: NSLayoutConstraint!
+    private var overlayLeadingAfterGlyph: NSLayoutConstraint!
 
     private let durationBadge = UIView()
     private let durationIcon = UIImageView()
@@ -112,7 +117,6 @@ final class EpisodeCell: UIView {
     private let watchedGlyph = WatchedGlyphView()
 
     private let descriptionBlock = EpisodeDescriptionView()
-    private let descriptionFocusGuide = UIFocusGuide()
     /// Episode mode (two focus stops: thumb + description). False for trailers
     /// (single thumb stop, with the old whole-card frosted-panel focus look).
     private var splitFocus = false
@@ -180,6 +184,13 @@ final class EpisodeCell: UIView {
         trailerTitleLabel.textColor = .white
         trailerTitleLabel.isHidden = true
         thumbnailCard.contentView.addSubview(trailerTitleLabel)
+        // The episode's in-card title, set like the trailer's.
+        overlayTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        overlayTitleLabel.font = .systemFont(ofSize: 22, weight: .semibold)
+        overlayTitleLabel.textColor = .white
+        overlayTitleLabel.numberOfLines = 1
+        overlayTitleLabel.lineBreakMode = .byTruncatingTail
+        overlayTitleLabel.isHidden = true
 
         // Duration badge (bottom-leading)
         durationBadge.translatesAutoresizingMaskIntoConstraints = false
@@ -214,6 +225,7 @@ final class EpisodeCell: UIView {
         // Watched tag (top-trailing)
         watchedGlyph.isHidden = true
         thumbnailCard.contentView.addSubview(watchedGlyph)
+        thumbnailCard.contentView.addSubview(overlayTitleLabel)
 
         // Subtype icon (top-leading) — shown on trailer/extra tiles only.
         subtypeIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -238,16 +250,6 @@ final class EpisodeCell: UIView {
             self.notifyFocusKind()
         }
         addSubview(descriptionBlock)
-
-        addLayoutGuide(descriptionFocusGuide)
-        descriptionFocusGuide.preferredFocusEnvironments = [thumbnailCard]
-        descriptionFocusGuide.isEnabled = false
-        NSLayoutConstraint.activate([
-            descriptionFocusGuide.topAnchor.constraint(equalTo: descriptionBlock.topAnchor),
-            descriptionFocusGuide.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor),
-            descriptionFocusGuide.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor),
-            descriptionFocusGuide.bottomAnchor.constraint(equalTo: descriptionBlock.bottomAnchor),
-        ])
 
         // Glass highlight behind the metadata (added before the labels so it sits
         // behind them). Pinned to fill the description block; rounded + clipped.
@@ -304,6 +306,11 @@ final class EpisodeCell: UIView {
         footerRow.addArrangedSubview(ratingBadge)
 
         progressFillWidth = progressFill.widthAnchor.constraint(equalToConstant: 0)
+        // The title shares the watched glyph's row, after it when it shows.
+        overlayLeadingPlain = overlayTitleLabel.leadingAnchor.constraint(
+            equalTo: thumbnailCard.contentView.leadingAnchor, constant: 12)
+        overlayLeadingAfterGlyph = overlayTitleLabel.leadingAnchor.constraint(
+            equalTo: watchedGlyph.trailingAnchor, constant: 8)
         thumbHeightConstraint = thumbnailCard.heightAnchor.constraint(equalToConstant: Self.thumbHeight)
 
         let episodeLeading = episodeLabel.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: 20)
@@ -383,6 +390,11 @@ final class EpisodeCell: UIView {
             subtypeIcon.widthAnchor.constraint(equalToConstant: 22),
             subtypeIcon.heightAnchor.constraint(equalToConstant: 22),
 
+            overlayLeadingPlain,
+            overlayTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: thumbnailCard.contentView.trailingAnchor,
+                                                        constant: -12),
+            overlayTitleLabel.centerYAnchor.constraint(equalTo: watchedGlyph.centerYAnchor),
+
             descriptionBlock.trailingAnchor.constraint(equalTo: trailingAnchor),
             // Block HUGS its content (top-aligned): short descriptions sit right
             // under the title instead of vertical-centering in a fixed box.
@@ -407,13 +419,25 @@ final class EpisodeCell: UIView {
 
     // MARK: - Configure
 
+    /// A show or season page's episode: the thumbnail with "E3 · Title" inside it, one
+    /// focus stop whose Select plays (`onPlay`).
     func configure(episode: MediaItem, showSeasonPrefix: Bool = false) {
+        configureEpisode(episode, showSeasonPrefix: showSeasonPrefix, titleInArtwork: true)
+    }
+
+    private func configureEpisode(_ episode: MediaItem, showSeasonPrefix: Bool, titleInArtwork: Bool) {
         // The description starts unfocusable; see applyReachability.
         setTrailerLayout(false)
         subtypeIcon.isHidden = true
-        splitFocus = true
+        // The in-card title replaces the description: no second stop.
+        splitFocus = !titleInArtwork
         descriptionBlock.isFocusEligible = false
-        descriptionFocusGuide.isEnabled = layout == .stacked
+        descriptionBlock.isAlwaysFocusable = !titleInArtwork && layout == .sideBySide
+        descriptionBlock.isHidden = titleInArtwork
+        trailerScrim.isHidden = !titleInArtwork
+        overlayTitleLabel.isHidden = !titleInArtwork
+        overlayTitleLabel.text = titleInArtwork ? Self.overlayTitle(for: episode) : nil
+        thumbnailCard.accessibilityLabel = overlayTitleLabel.text
         episodeLabel.text = Self.episodeLabel(for: episode, showSeasonPrefix: showSeasonPrefix).uppercased()
         titleLabel.text = episode.title.isEmpty ? String(localized: "Episode") : episode.title
         summaryLabel.text = episode.overview
@@ -428,13 +452,21 @@ final class EpisodeCell: UIView {
         let showGlyph = episode.isWatched && !inProgress
 
         watchedGlyph.isHidden = !showGlyph
+        // Deactivate before activating, so the two leadings never hold together.
+        if showGlyph {
+            overlayLeadingPlain.isActive = false
+            overlayLeadingAfterGlyph.isActive = true
+        } else {
+            overlayLeadingAfterGlyph.isActive = false
+            overlayLeadingPlain.isActive = true
+        }
 
         if showGlyph {
             durationBadge.isHidden = true
             progressTrack.isHidden = true
         } else {
-            // Runtime badge (when we have a duration).
-            if let duration = episode.durationFormatted {
+            // Runtime badge (when we have a duration); the in-card title takes its spot.
+            if !titleInArtwork, let duration = episode.durationFormatted {
                 durationLabel.text = duration
                 durationBadge.isHidden = false
             } else {
@@ -457,9 +489,8 @@ final class EpisodeCell: UIView {
     /// Search's tile: the rail's card as one focus stop, its label naming the season and the
     /// footer the show, since no show page surrounds it. A season shows the show's backdrop.
     func configure(searchResult item: MediaItem) {
-        configure(episode: item)
+        configureEpisode(item, showSeasonPrefix: false, titleInArtwork: false)
         splitFocus = false
-        descriptionFocusGuide.isEnabled = false
         let show = item.seriesTitle
         if item.kind == .season {
             episodeLabel.text = show?.uppercased()
@@ -512,7 +543,6 @@ final class EpisodeCell: UIView {
         splitFocus = false
         setTrailerLayout(true)
         descriptionBlock.isFocusEligible = false
-        descriptionFocusGuide.isEnabled = false
         episodeLabel.text = nil
         episodeLabel.isHidden = true
         trailerTitleLabel.text = trailer.title
@@ -559,6 +589,9 @@ final class EpisodeCell: UIView {
         trailerScrim.isHidden = !trailer
         trailerTitleLabel.isHidden = !trailer
         descriptionBlock.isHidden = trailer
+        // The episode's in-card title; configureEpisode shows it again.
+        overlayTitleLabel.isHidden = true
+        thumbnailCard.accessibilityLabel = nil
     }
 
     // MARK: - Focus visuals
@@ -601,7 +634,6 @@ final class EpisodeCell: UIView {
         guard splitFocus else { descriptionBlock.isFocusEligible = false; return }
         let stayingInside = next.map { $0.isDescendant(of: self) } ?? false
         descriptionBlock.isFocusEligible = thumbFocused || descFocused || stayingInside
-        descriptionFocusGuide.isEnabled = layout == .stacked && !descriptionBlock.isFocusEligible
     }
 
     private func notifyFocusKind() {
@@ -626,7 +658,6 @@ final class EpisodeCell: UIView {
         thumbFocused = false
         descFocused = false
         descriptionBlock.isFocusEligible = false
-        descriptionFocusGuide.isEnabled = splitFocus && layout == .stacked
         descriptionGlass.backgroundColor = .clear
         descriptionGlass.effect = nil
     }
@@ -638,6 +669,16 @@ final class EpisodeCell: UIView {
         // larger between-season gap), not "S01E01".
         if let n = episode.episodeNumber { return String(localized: "Episode \(n)") }
         return episode.episodeString ?? String(localized: "Episode")
+    }
+
+    /// The in-card title: "E3 · The Long Night".
+    private static func overlayTitle(for episode: MediaItem) -> String {
+        let title = episode.title
+        guard let n = episode.episodeNumber else {
+            return title.isEmpty ? (episode.episodeString ?? String(localized: "Episode")) : title
+        }
+        if title.isEmpty { return String(localized: "Episode \(n)") }
+        return String(localized: "E\(n) · \(title)")
     }
 
     private static func displayDate(for episode: MediaItem) -> String? {

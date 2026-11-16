@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-//  A season's own page: its poster blurred behind and large on the right, its episodes in a vertical list of the show page's episode cards laid side by side. Plays through the item's
+//  A season's own page: its poster blurred behind and large on the right, its episodes in a vertical list of the show page's episode cards. Plays through the item's
 //  provider, so every entry point opens the same page. Menu returns.
 
 import Combine
@@ -303,7 +303,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         }
     }
 
-    /// The cells are not focus stops; the header's buttons and each card's thumb and text are.
+    /// The cells are not focus stops; the header's buttons and each card's thumb are.
     func collectionView(_ collectionView: UICollectionView, canFocusItemAt indexPath: IndexPath) -> Bool { false }
 
     // MARK: - Data
@@ -505,7 +505,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     }
 }
 
-/// One episode row: the show page's card with its description beside the thumb.
+/// One episode row: the show page's card, its title inside the thumbnail and one focus stop that plays.
 private final class SeasonEpisodeCell: UICollectionViewCell {
     static let reuseID = "SeasonEpisodeCell"
     let episodeView = EpisodeCell(layout: .sideBySide)

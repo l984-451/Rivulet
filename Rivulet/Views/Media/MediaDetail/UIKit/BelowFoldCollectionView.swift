@@ -54,8 +54,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private static let episodeWidth: CGFloat = EpisodeCell.cardWidth
     /// Spacing between episode cards (and season dividers).
     static let episodeGap: CGFloat = MediaRowMetrics.tileGap
-    /// The thumb frame plus the text block below it.
-    private static let episodeHeight: CGFloat = EpisodeCell.thumbHeight + 190
+    /// The thumb frame alone: an episode's title rides inside its artwork.
+    private static let episodeHeight: CGFloat = EpisodeCell.thumbHeight
     private static let trailerWidth: CGFloat = EpisodeCell.cardWidth
     // The trailer frame: 410 x 278 artwork plus the focus reserve, title inside.
     private static let trailerHeight: CGFloat = EpisodeCell.trailerThumbHeight
@@ -209,7 +209,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .episodes:
                 return self.episodesRailSection(
                     topInset: isPrimary ? peek : 0,
-                    sectionBottomInset: 36
+                    // The row ends at the card, as the trailer row's does, so it takes
+                    // that row's gap to the next header.
+                    sectionBottomInset: 91.5
                 )
             case .trailers:
                 return self.shelfSection(
@@ -401,7 +403,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     cell.onFocused = { [weak self] focused in
                         if focused { self?.pendingInitialFocus = nil; self?.onEpisodeFocused?(ep) }
                     }
-                    // Two focus stops: thumb = play, description = detail page.
+                    // One focus stop, the card: Select plays, and the episode menu's
+                    // More Info opens the episode page.
                     cell.onPlay = { [weak self] in self?.onPlayEpisode?(ep) }
                     cell.onShowDetails = { [weak self] in self?.onShowEpisodeDetails?(ep) }
                     cell.onLongPress = { [weak self] frame in self?.onEpisodeMenu?(ep, frame) }

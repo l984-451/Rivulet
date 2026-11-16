@@ -85,7 +85,7 @@ final class PosterCell: UICollectionViewCell {
 
     private var tileBlankArtwork: UIImage { tile.art == MediaRowMetrics.music.art ? Self.blankMusicArtwork : Self.blankArtwork }
 
-    /// The poster corner, drawn into the artwork (`RoundedPoster`).
+    /// The poster and overlay corner.
     private let cornerRadius = RoundedPoster.cornerRadius
     /// The tile the cell shows; the host view is TVUIKit's focused size (`hostSize`).
     private var tile = MediaRowMetrics.poster
@@ -114,13 +114,13 @@ final class PosterCell: UICollectionViewCell {
         posterView.translatesAutoresizingMaskIntoConstraints = false
         posterView.image = Self.blankArtwork
         contentView.addSubview(posterView)
+        RoundedPoster.configureImageView(posterView.imageView)
 
         // Overlay container clipped to the same rounded rect as the poster.
         overlayContainer.translatesAutoresizingMaskIntoConstraints = false
         overlayContainer.isUserInteractionEnabled = false
         overlayContainer.clipsToBounds = true
-        overlayContainer.layer.cornerRadius = cornerRadius
-        overlayContainer.layer.cornerCurve = .continuous
+        RoundedPoster.configureViewCorners(overlayContainer)
         contentView.addSubview(overlayContainer)
 
         // Placeholder (backmost): covers TVPosterView's bare gray while artwork loads.

@@ -4518,6 +4518,7 @@
         }
       }
     },
+    "Choose how music plays." : {},
     "Choose how slideshows in your photo libraries play." : {
       "localizations" : {
         "de" : {
@@ -4632,6 +4633,8 @@
         }
       }
     },
+    "Loudness Leveling" : {},
+    "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
     "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {

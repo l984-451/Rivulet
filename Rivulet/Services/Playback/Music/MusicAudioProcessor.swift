@@ -5,7 +5,7 @@
 //  MusicAudioProcessor.swift
 //  Rivulet
 //
-//  Audio processing helpers: ReplayGain and the crossfade setting.
+//  The crossfade and loudness leveling settings.
 //
 
 import Foundation
@@ -37,8 +37,15 @@ enum CrossfadeDuration: Int, CaseIterable, CustomStringConvertible, Sendable {
 
 // MARK: - Audio Processor
 
-/// Static helpers for the crossfade setting and gain adjustment.
+/// Static helpers for the music settings.
 enum MusicAudioProcessor {
+
+    /// Settings > Music > Loudness Leveling, off by default.
+    static let loudnessLevelingKey = "musicLoudnessLeveling"
+
+    static var levelsLoudness: Bool {
+        SettingsStore.bool(loudnessLevelingKey, default: false)
+    }
 
     /// AppStorage key for crossfade duration setting
     static let crossfadeKey = "music_crossfade_duration"
@@ -47,26 +54,5 @@ enum MusicAudioProcessor {
     static var crossfadeDuration: CrossfadeDuration {
         let rawValue = UserDefaults.standard.integer(forKey: crossfadeKey)
         return CrossfadeDuration(rawValue: rawValue) ?? .off
-    }
-
-    // MARK: - ReplayGain
-
-    /// Adjusts volume based on codec characteristics embedded in the track.
-    /// Returns a normalized volume value between 0.0 and 1.0.
-    ///
-    /// For now, uses a conservative loudness normalization based on codec
-    /// characteristics — lossless content tends to have wider dynamic range
-    /// and may need slight volume reduction. Returns 1.0 if no adjustment needed.
-    static func adjustedVolume(for track: MusicTrack) -> Float {
-        let codec = (track.audioCodec ?? "").lowercased()
-        let isLossless = ["flac", "alac", "wav", "pcm", "aiff"].contains(codec)
-
-        if isLossless {
-            // Slight volume reduction for lossless to prevent clipping
-            // when content has high dynamic range
-            return 0.95
-        }
-
-        return 1.0
     }
 }

@@ -434,11 +434,7 @@ enum SettingsContent {
         [
             SettingsRowItem(id: "cat_appearance", title: "Appearance", kind: .navigation(.appearance)),
             SettingsRowItem(id: "cat_playback",   title: "Playback",   kind: .navigation(.playback)),
-            // Music settings withdrawn until the audio features behind them
-            // exist — all three rows were no-ops (see the `music` builder).
-            // Music BROWSING is unaffected: the sidebar still shows the
-            // Music library for every visible Plex music library.
-//            SettingsRowItem(id: "cat_music",      title: "Music",      kind: .navigation(.music)),
+            SettingsRowItem(id: "cat_music",      title: "Music",      kind: .navigation(.music)),
             SettingsRowItem(id: "cat_liveTV",     title: "Live TV",    kind: .navigation(.liveTV)),
             SettingsRowItem(id: "cat_photos",     title: "Photos",     kind: .navigation(.photos)),
             SettingsRowItem(id: "cat_servers",    title: "Servers",    kind: .navigation(.servers)),
@@ -837,11 +833,10 @@ enum SettingsContent {
 
     // MARK: Music
 
-    /// Withdrawn: loudness, crossfade and quality-badge keys had no reader.
-    /// Add a row back only with its reader. `MusicAudioProcessor` reads
-    /// crossfade under a different key and type than the old row wrote.
+    /// Add a row only with its reader: crossfade and quality badges have none.
     private static var music: [SettingsRowItem] {
-        []
+        [toggle(MusicAudioProcessor.loudnessLevelingKey, "Loudness Leveling",
+                key: MusicAudioProcessor.loudnessLevelingKey, default: false)]
     }
 
     // MARK: Servers

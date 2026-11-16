@@ -42,6 +42,17 @@ final class PlexStreamDecodingTests: XCTestCase {
         XCTAssertLessThan(stream.id, 0)
     }
 
+    /// PMS 1.43 sends a track's ReplayGain as a string; a number or junk must not fail the stream.
+    func testDecodesAudioGainLeniently() throws {
+        func gain(_ value: String) throws -> Double? {
+            let json = #"{"id":962367,"streamType":2,"codec":"mp3","gain":\#(value)}"#
+            return try JSONDecoder().decode(PlexStream.self, from: Data(json.utf8)).gain?.value
+        }
+        XCTAssertEqual(try gain(#""-10.86""#), -10.86)
+        XCTAssertEqual(try gain("2.5"), 2.5)
+        XCTAssertNil(try gain(#""n/a""#))
+    }
+
     /// A synthesized id for an embedded subtitle must not collide with an
     /// embedded stream of a different type, so ForEach / Identifiable stays
     /// well-defined when multiple embedded streams appear in one part.

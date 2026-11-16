@@ -611,10 +611,11 @@ class PlexAuthManager: ObservableObject {
         return String(text[range].dropFirst("machineIdentifier=\"".count).dropLast())
     }
 
-    /// One breadcrumb per failed connection probe (mirrored as a log), so the
-    /// per-candidate failure trail is visible (GitHub #224).
+    /// One breadcrumb per failed connection probe, so an event carries the
+    /// per-candidate failure trail (GitHub #224). Debug, so it is not mirrored as a
+    /// log: losing candidates is normal, and a total failure is logged on its own.
     private static func addConnectionTestBreadcrumb(urlString: String, outcome: String) {
-        let breadcrumb = Breadcrumb(level: .warning, category: "plex_auth")
+        let breadcrumb = Breadcrumb(level: .debug, category: "plex_auth")
         breadcrumb.message = "Connection probe failed"
         breadcrumb.data = [
             "host": URL(string: urlString)?.host ?? "invalid-url",

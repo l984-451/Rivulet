@@ -1568,6 +1568,11 @@ final class AetherPlayer: PlayerProtocol {
         await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
     }
 
+    /// Closes the rewind window's still decoders when a scrub ends; their cached stills stay.
+    func releaseScrubDecoders() {
+        Task { await engine.releaseScrubPreviewDecoders() }
+    }
+
     /// The AVPlayer item's seekable window, mirrored by KVO: the getter is a
     /// sync XPC round trip to mediaserverd and this is read on every scrub tick.
     private var itemSeekableWindow: LiveSeekableWindow?

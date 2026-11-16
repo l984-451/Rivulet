@@ -2479,6 +2479,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             // The preview is gone: the fetch in flight finishes, unshown.
             thumbnailWanted = nil
             scrubThumbnail = nil
+            aetherPlayer?.releaseScrubDecoders()
             return
         }
         thumbnailWanted = target

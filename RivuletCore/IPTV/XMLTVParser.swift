@@ -213,10 +213,17 @@ private nonisolated final class XMLTVInternalParser: NSObject, XMLParserDelegate
         parser.delegate = self
 
         if !parser.parse() {
-            if let error = parseError {
-                throw error
+            // Error 5 is a feed that ends at an element boundary (cut off, or junk after </tv>):
+            // everything before it parsed, so keep it instead of losing the whole guide.
+            let endedEarly = (parseError as NSError?).map {
+                $0.domain == XMLParser.errorDomain && $0.code == XMLParser.ErrorCode.prematureDocumentEndError.rawValue
+            } ?? false
+            if !endedEarly {
+                if let error = parseError {
+                    throw error
+                }
+                throw XMLTVParseError.parseFailed
             }
-            throw XMLTVParseError.parseFailed
         }
 
         return XMLTVParser.ParseResult(channels: channels, programs: programs.mapValues(Self.closingOpenEnded))

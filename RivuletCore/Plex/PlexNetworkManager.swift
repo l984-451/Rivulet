@@ -204,6 +204,18 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         } catch {
             DiagLog.error(.network, "\(method) \(endpoint) decode failed (\(data.count) B): \(String(String(describing: error).prefix(300)))")
 
+            // A 2xx web page (a reverse proxy's Plex Web, a captive portal) is not our decode bug.
+            let head = String(decoding: data.prefix(64), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if head.hasPrefix("<!doctype html") || head.hasPrefix("<html") {
+                SentryBridge.log(.warn, "Plex request returned HTML", attributes: [
+                    "component": "plex_network",
+                    "error_type": "html_body",
+                    "endpoint": endpoint,
+                    "method": method,
+                ])
+                throw error
+            }
+
             // Capture JSON decode errors to Sentry
             SentryBridge.capture(error: error) { scope in
                 scope.setTag(value: "plex_network", key: "component")

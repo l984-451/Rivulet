@@ -2843,6 +2843,8 @@ final class PlexHomeViewController: UIViewController {
         // guess collapsed the field on the way down and never restored it.
         if case .search = mode {
             setContentScrollView(collectionView, for: .top)
+            // The grid keyboard sits beside this page; a shelf scrolled past its edge must not draw behind it.
+            view.clipsToBounds = true
         }
         // No hero: 48pt of room above the first row.
         updateContentTopInset()

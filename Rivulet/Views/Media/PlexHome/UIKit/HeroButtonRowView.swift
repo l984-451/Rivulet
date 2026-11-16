@@ -333,6 +333,16 @@ final class HeroPillButton: UIControl {
     static let circleFocusScale: CGFloat = 76.0 / 66.0
     /// Resting edge for every hero button. The TV app's is faint: the glass carries the shape.
     static let restingStroke = UIColor.white.withAlphaComponent(0.08)
+    /// Resting glass for every hero button: the clear (more see-through) glass with a dark
+    /// tint, so the buttons stay as dark as the regular glass while showing more of the art.
+    static func restingGlass() -> UIGlassEffect {
+        let glass = UIGlassEffect(style: .clear)
+        glass.tintColor = UIColor.black.withAlphaComponent(0.3)
+        return glass
+    }
+    /// The glass is faded to show less blur; a plain dark fill under it keeps the buttons dark.
+    static let restingGlassAlpha: CGFloat = 0.5
+    static let restingFill = UIColor.black.withAlphaComponent(0.3)
 
     var title: String = "" {
         didSet { titleLabel.text = title }
@@ -347,7 +357,7 @@ final class HeroPillButton: UIControl {
     private let background = UIView()
     /// Real Liquid Glass material, the second background under the solid
     /// fill (it shows through when unfocused, fades out on focus).
-    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let materialBackground = UIVisualEffectView(effect: HeroPillButton.restingGlass())
     private let strokeLayer = CAShapeLayer()
     private let contentStack = UIStackView()
     private let iconView = UIImageView()
@@ -363,8 +373,8 @@ final class HeroPillButton: UIControl {
         background.translatesAutoresizingMaskIntoConstraints = false
         background.layer.cornerRadius = cornerRadius
         background.layer.cornerCurve = .continuous
-        // Glass only at rest, as on the circles: a white wash read lighter than the TV app's.
-        background.backgroundColor = .clear
+        // Dark fill under faded glass, as on the circles.
+        background.backgroundColor = Self.restingFill
         background.isUserInteractionEnabled = false
         addSubview(background)
 
@@ -374,6 +384,7 @@ final class HeroPillButton: UIControl {
         materialBackground.clipsToBounds = true
         materialBackground.isUserInteractionEnabled = false
         addSubview(materialBackground)
+        materialBackground.alpha = Self.restingGlassAlpha
 
         strokeLayer.fillColor = UIColor.clear.cgColor
         strokeLayer.strokeColor = Self.restingStroke.cgColor
@@ -457,8 +468,8 @@ final class HeroPillButton: UIControl {
                        initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
             self.transform = focused
                 ? CGAffineTransform(scaleX: HeroPillButton.focusScale, y: HeroPillButton.focusScale) : .identity
-            self.background.backgroundColor = focused ? .white : .clear
-            self.materialBackground.alpha = focused ? 0 : 1
+            self.background.backgroundColor = focused ? .white : HeroPillButton.restingFill
+            self.materialBackground.alpha = focused ? 0 : HeroPillButton.restingGlassAlpha
             self.strokeLayer.opacity = focused ? 0 : 1
             self.titleLabel.textColor = focused ? .black : .white
             self.iconView.tintColor = focused ? .black : .white
@@ -502,7 +513,7 @@ final class HeroPillButton: UIControl {
 final class HeroCircleButton: UIControl {
 
     private let background = UIView()
-    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let materialBackground = UIVisualEffectView(effect: HeroPillButton.restingGlass())
     private let strokeLayer = CAShapeLayer()
     private let iconView = UIImageView()
     private lazy var iconWidth = iconView.widthAnchor.constraint(equalToConstant: 24)
@@ -521,7 +532,7 @@ final class HeroCircleButton: UIControl {
         background.translatesAutoresizingMaskIntoConstraints = false
         background.layer.cornerRadius = cornerRadius
         background.layer.cornerCurve = .continuous
-        background.backgroundColor = .clear
+        background.backgroundColor = restingPlatter ? HeroPillButton.restingFill : .clear
         background.isUserInteractionEnabled = false
         addSubview(background)
 
@@ -536,7 +547,7 @@ final class HeroCircleButton: UIControl {
         strokeLayer.strokeColor = HeroPillButton.restingStroke.cgColor
         strokeLayer.lineWidth = 0.5
         layer.addSublayer(strokeLayer)
-        materialBackground.alpha = restingPlatter ? 1 : 0
+        materialBackground.alpha = restingPlatter ? HeroPillButton.restingGlassAlpha : 0
         strokeLayer.opacity = restingPlatter ? 1 : 0
 
         iconView.tintColor = .white
@@ -602,8 +613,8 @@ final class HeroCircleButton: UIControl {
                        initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
             let grow = HeroPillButton.circleFocusScale
             self.transform = focused ? CGAffineTransform(scaleX: grow, y: grow) : .identity
-            self.background.backgroundColor = focused ? .white : .clear
-            self.materialBackground.alpha = focused || !self.restingPlatter ? 0 : 1
+            self.background.backgroundColor = focused ? .white : (self.restingPlatter ? HeroPillButton.restingFill : .clear)
+            self.materialBackground.alpha = focused || !self.restingPlatter ? 0 : HeroPillButton.restingGlassAlpha
             self.strokeLayer.opacity = focused || !self.restingPlatter ? 0 : 1
             self.iconView.tintColor = focused ? .black : .white
         }

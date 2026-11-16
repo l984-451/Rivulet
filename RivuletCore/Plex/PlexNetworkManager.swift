@@ -166,9 +166,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
             // 404 is an item the server deleted or rematched, 421 a connection
             // address now answered by another server (RIVULET-2): server state,
-            // so a log. Other 4xx can mean we sent a bad request, so capture.
+            // so a log, as is a guid lookup every caller tolerates failing. Other 4xx can mean we
+            // sent a bad request, so capture.
             let status = httpResponse.statusCode
-            if status == 404 || status == 421 {
+            if status == 404 || status == 421 || Self.isGuidLookup(url) {
                 SentryBridge.log(.warn, "Plex request returned \(status)", attributes: [
                     "component": "plex_network",
                     "error_type": "http",
@@ -729,6 +730,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             headers: plexHeaders(authToken: authToken)
         )
         return container.MediaContainer.Metadata?.first
+    }
+
+    /// `/library/all?guid=`: a best-effort lookup. One server answering 400 is its state, not a bug.
+    nonisolated static func isGuidLookup(_ url: URL) -> Bool {
+        url.path == "/library/all"
+            && URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "guid" } == true
     }
 
     /// Every owned library item among `guids` (plex:// guids; the server indexes no external ones),

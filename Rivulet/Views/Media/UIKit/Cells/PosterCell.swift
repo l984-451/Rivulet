@@ -3,8 +3,6 @@
 
 // Poster hub cell wrapping `TVPosterView` for native focus motion.
 // Caption stays nil: a set caption reserves bottom space even while hidden and crops 2:3 posters.
-// Overlays sit in a sibling `overlayContainer` that copies the poster's mask and focus scale,
-// because subviews added to `posterView.imageView` do not render.
 
 import UIKit
 import TVUIKit
@@ -15,7 +13,6 @@ final class PosterCell: UICollectionViewCell {
 
     private let posterView = TVPosterView()
 
-    /// Hosts the overlays; its transform follows the poster's focus zoom in `didUpdateFocus`.
     private let overlayContainer = UIView()
 
     private let watchedBadge = PosterWatchedBadge()
@@ -121,7 +118,8 @@ final class PosterCell: UICollectionViewCell {
         overlayContainer.isUserInteractionEnabled = false
         overlayContainer.clipsToBounds = true
         RoundedPoster.configureViewCorners(overlayContainer)
-        contentView.addSubview(overlayContainer)
+        let overlayHost = posterView.imageView.overlayContentView
+        overlayHost.addSubview(overlayContainer)
 
         // Placeholder (backmost): covers TVPosterView's bare gray while artwork loads.
         placeholderPanel.translatesAutoresizingMaskIntoConstraints = false
@@ -190,13 +188,10 @@ final class PosterCell: UICollectionViewCell {
             posterWidthConstraint,
             posterHeightConstraint,
 
-            // Pin to TVPosterView's IMAGE surface, not its outer frame: the
-            // frame reserves room for focus growth, so the resting picture is
-            // smaller and an overlay on the outer frame hangs off it.
-            overlayContainer.topAnchor.constraint(equalTo: posterView.imageView.topAnchor),
-            overlayContainer.bottomAnchor.constraint(equalTo: posterView.imageView.bottomAnchor),
-            overlayContainer.leadingAnchor.constraint(equalTo: posterView.imageView.leadingAnchor),
-            overlayContainer.trailingAnchor.constraint(equalTo: posterView.imageView.trailingAnchor),
+            overlayContainer.topAnchor.constraint(equalTo: overlayHost.topAnchor),
+            overlayContainer.bottomAnchor.constraint(equalTo: overlayHost.bottomAnchor),
+            overlayContainer.leadingAnchor.constraint(equalTo: overlayHost.leadingAnchor),
+            overlayContainer.trailingAnchor.constraint(equalTo: overlayHost.trailingAnchor),
 
             // Same slot as ContinueWatchingCell's status row.
             progressInfoBar.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor,
@@ -239,22 +234,14 @@ final class PosterCell: UICollectionViewCell {
 
     // MARK: - Focus zoom sync
 
-    /// The overlay doesn't follow the poster's focus growth, so mirror the tile's
-    /// here; the host's own growth is trimmed to the tile's by `focusScale`.
     override func didUpdateFocus(in context: UIFocusUpdateContext,
                                  with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         let nowFocused = context.nextFocusedView === self
                       || context.nextFocusedView?.isDescendant(of: self) == true
-        let artSize = posterView.imageView.bounds.size
-        let longSide = max(artSize.width, artSize.height)
-        let scale = longSide > 0 ? 1 + tile.growth.height / longSide : 1.1
         coordinator.addCoordinatedAnimations({
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
-            self.overlayContainer.transform = nowFocused
-                ? CGAffineTransform(scaleX: scale, y: scale)
-                : .identity
         }, completion: { [weak self] in
             guard let self, !nowFocused else { return }
             // TVPosterView's own unfocus sometimes leaves the poster enlarged; enforce the end state.
@@ -267,10 +254,12 @@ final class PosterCell: UICollectionViewCell {
     /// since the completion can fire after focus has returned.
     func resetStaleFocusAppearance() {
         guard !isFocused else { return }
+        let overlayHost = posterView.imageView.overlayContentView
         func clear(_ v: UIView) {
             if !v.transform.isIdentity { v.transform = .identity }
             if !CATransform3DIsIdentity(v.layer.transform) { v.layer.transform = CATransform3DIdentity }
             v.motionEffects.forEach { v.removeMotionEffect($0) }
+            guard v !== overlayHost else { return }
             v.subviews.forEach(clear)
         }
         clear(posterView)

@@ -240,6 +240,10 @@ enum SettingsDescriptorStore {
             icon: "ear",
             description: "Subtitles that also describe sounds and name who is speaking."
         ),
+        "subtitleBrightness": SettingDescriptor(
+            icon: "sun.min",
+            description: "Dims subtitles without making them see-through, for when white text is too bright. Works on styled (ASS) and picture (PGS) subtitles too. The caption box is unchanged."
+        ),
         "generatedSubtitles": SettingDescriptor(
             icon: "captions.bubble",
             description: "English only for now. With Subtitles set to Always, a title with no subtitles in your language gets them written from its dialogue. Downloads 230 MB."

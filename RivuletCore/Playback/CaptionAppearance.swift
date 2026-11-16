@@ -84,6 +84,15 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
     /// Text edge (shadow/raised/etc.) style.
     var edge: Edge
 
+    /// Subtitle Brightness (0.4...1). `foreground` is already dimmed by it; a
+    /// renderer applies it to content colours (`dimmed`), picture cues and libass.
+    var textBrightness: Double = 1
+
+    /// A content colour at the Subtitle Brightness, alpha kept.
+    func dimmed(_ color: CGColor) -> CGColor {
+        SubtitleAppearance.dim(color, by: textBrightness)
+    }
+
     enum Edge: Equatable {
         case none
         case dropShadow
@@ -142,6 +151,7 @@ struct CaptionStyle: Equatable, @unchecked Sendable {
             && lhs.allowsContentFontSize == rhs.allowsContentFontSize
             && lhs.allowsContentFont == rhs.allowsContentFont
             && lhs.edge == rhs.edge
+            && lhs.textBrightness == rhs.textBrightness
             && descriptorsEqual(lhs.fontDescriptor, rhs.fontDescriptor)
     }
 
@@ -221,6 +231,8 @@ enum CaptionAppearance {
         let fontDescriptor = MACaptionAppearanceCopyFontDescriptorForStyle(.user, &behavior, .default)
             .takeRetainedValue()
         let allowsContentFont = contentMayOverride()
+        // Subtitle Brightness dims the text colour, never the box.
+        let brightness = SubtitleAppearance.brightness
 
         // Edge style
         let maEdge = MACaptionAppearanceGetTextEdgeStyle(.user, &behavior)
@@ -234,7 +246,7 @@ enum CaptionAppearance {
         }
 
         return CaptionStyle(
-            foreground: foreground,
+            foreground: SubtitleAppearance.dim(foreground, by: brightness),
             allowsContentColor: allowsContentColor,
             foregroundOpacity: foregroundOpacity,
             backgroundColor: bgCG,
@@ -248,14 +260,16 @@ enum CaptionAppearance {
             allowsContentFontSize: allowsContentFontSize,
             fontDescriptor: fontDescriptor,
             allowsContentFont: allowsContentFont,
-            edge: edge
+            edge: edge,
+            textBrightness: brightness
         )
     }
 
-    /// Posted by the system whenever the user changes caption appearance settings.
+    /// Posted by the system whenever the user changes caption appearance settings,
+    /// and by `SubtitleAppearance` when one of its settings changes.
     ///
     /// Bridged from `kMACaptionAppearanceSettingsChangedNotification`.
-    static let changedNotification = Notification.Name(
+    nonisolated static let changedNotification = Notification.Name(
         kMACaptionAppearanceSettingsChangedNotification as String
     )
 }

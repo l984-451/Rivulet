@@ -75,6 +75,10 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
     /// "unchanged".
     private var lastRenderedMs: Int64?
     private var needsRender = true
+    /// Subtitle Brightness, applied while compositing. A change forces the
+    /// next render out even when libass reports no change.
+    private var brightness = 1.0
+    private var restyled = false
 
     /// One library per renderer, so a track's memory fonts are never shared
     /// with another track (libass guards none of its state with locks).
@@ -129,6 +133,16 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
                 }
             }
             needsRender = true
+        }
+    }
+
+    /// Subtitle Brightness (0.4...1) for the composited pixels.
+    func setBrightness(_ value: Double) {
+        queue.async { [self] in
+            guard value != brightness else { return }
+            brightness = value
+            needsRender = true
+            restyled = true
         }
     }
 
@@ -206,7 +220,8 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
         var change: Int32 = 0
         renderCalls += 1
         let images = ass_render_frame(renderer, track, ms, &change)
-        guard change != 0 || force else { return .unchanged }
+        guard change != 0 || force || restyled else { return .unchanged }
+        restyled = false
 
         var bitmaps: [ASSCompositor.Bitmap] = []
         var node = images
@@ -220,7 +235,7 @@ nonisolated final class LibassRenderer: @unchecked Sendable {
             }
             node = image.next
         }
-        let regions = ASSCompositor.composite(bitmaps).map { Frame.Region(image: $0.image, rect: $0.rect) }
+        let regions = ASSCompositor.composite(bitmaps, brightness: brightness).map { Frame.Region(image: $0.image, rect: $0.rect) }
         return .changed(regions.isEmpty ? nil : Frame(regions: regions))
     }
 }

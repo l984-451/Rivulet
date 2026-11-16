@@ -35,10 +35,13 @@ nonisolated enum ASSCompositor {
     static let regionGap: CGFloat = 32
 
     /// Each region's image and rect in frame pixels; empty when nothing is visible.
-    static func composite(_ bitmaps: [Bitmap]) -> [(image: CGImage, rect: CGRect)] {
+    /// `brightness` (Subtitle Brightness, 0.4...1) scales each mask's RGB before
+    /// blending. Source-over is linear in colour, so this is exactly the composited
+    /// pixels' RGB times `brightness` with alpha unchanged, at no per-pixel cost.
+    static func composite(_ bitmaps: [Bitmap], brightness: Double = 1) -> [(image: CGImage, rect: CGRect)] {
         let visible = bitmaps.filter { $0.width > 0 && $0.height > 0 && ($0.color & 0xFF) != 0xFF }
         return regions(visible.map(\.rect)).compactMap { region in
-            blend(region.members.map { visible[$0] }, in: region.rect)
+            blend(region.members.map { visible[$0] }, in: region.rect, brightness: brightness)
         }
     }
 
@@ -81,7 +84,7 @@ nonisolated enum ASSCompositor {
 
     private static func area(_ rect: CGRect) -> CGFloat { rect.width * rect.height }
 
-    private static func blend(_ bitmaps: [Bitmap], in rect: CGRect) -> (image: CGImage, rect: CGRect)? {
+    private static func blend(_ bitmaps: [Bitmap], in rect: CGRect, brightness: Double) -> (image: CGImage, rect: CGRect)? {
         let minX = Int(rect.minX), minY = Int(rect.minY)
         let width = Int(rect.width), height = Int(rect.height)
         let size = width * height * 4
@@ -91,10 +94,11 @@ nonisolated enum ASSCompositor {
 
         // ponytail: scalar blend; move to vImage or Accelerate if a dense sign frame is over budget on device.
         for b in bitmaps {
-            let red = b.color >> 24
-            let green = (b.color >> 16) & 0xFF
-            let blue = (b.color >> 8) & 0xFF
-            let opacity = 255 - (b.color & 0xFF)
+            let color = SubtitleAppearance.dimASSColor(b.color, by: brightness)
+            let red = color >> 24
+            let green = (color >> 16) & 0xFF
+            let blue = (color >> 8) & 0xFF
+            let opacity = 255 - (color & 0xFF)
             for row in 0..<b.height {
                 let src = b.pixels + row * b.stride
                 var o = ((b.y - minY + row) * width + (b.x - minX)) * 4

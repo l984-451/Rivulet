@@ -561,6 +561,13 @@ enum SettingsContent {
                             kind: .toggle(get: { TrackIntentStore.subtitleSDH },
                                           set: { TrackIntentStore.setSubtitles(sdh: $0) }),
                             isEnabled: subtitlesOn),
+            // Dims plain, libass and picture captions alike.
+            SettingsRowItem(id: "subtitleBrightness", title: "Subtitle Brightness",
+                            kind: .cycle(value: { SubtitleAppearance.brightnessLabel(SubtitleAppearance.brightness) },
+                                         next: {
+                                             SubtitleAppearance.brightness =
+                                                 SubtitleAppearance.nextBrightness(after: SubtitleAppearance.brightness)
+                                         })),
             // Turning it on fetches the speech model that writes them; the value shows its download.
             SettingsRowItem(id: "generatedSubtitles", title: "Generated Subtitles (English)", kind: .selectable(
                 isSelected: { false },

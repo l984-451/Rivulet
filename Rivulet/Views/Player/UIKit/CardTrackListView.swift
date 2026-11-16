@@ -116,9 +116,12 @@ final class CardTrackListView: UIView, RailPanelMenuHandling {
             }
         }
         let value = tracks.first { $0.id == (selectedTrackId ?? onTrackId) }?.subtitleMenuTitle
+        // Brightness after the other steppers: it writes the Settings key and restyles the
+        // captions while the video plays.
         return CardTrackListView(header: String(localized: "Subtitles"), rows: rows, actions: actions,
                                  choices: [CardChoiceConfig.captionStyle()].compactMap { $0 },
-                                 steppers: steppers, languageRows: languageRows, languageValue: value,
+                                 steppers: steppers + [CardStepperConfig.subtitleBrightness()],
+                                 languageRows: languageRows, languageValue: value,
                                  onSelect: onSelect)
     }
 
@@ -562,6 +565,19 @@ struct CardStepperConfig {
         self.title = String(localized: title)
         self.value = value
         self.onStep = onStep
+    }
+
+    /// Subtitle Brightness in the player, 100% to 40% in 10% steps (Right brighter). Writes the
+    /// Settings key, and the caption-change notification restyles the overlay live.
+    static func subtitleBrightness() -> CardStepperConfig {
+        CardStepperConfig(
+            title: "Brightness",
+            value: { SubtitleAppearance.brightnessLabel(SubtitleAppearance.brightness) },
+            onStep: { step in
+                let next = SubtitleAppearance.steppedBrightness(SubtitleAppearance.brightness, by: step)
+                guard abs(next - SubtitleAppearance.brightness) > 0.001 else { return }
+                SubtitleAppearance.brightness = next
+            })
     }
 }
 

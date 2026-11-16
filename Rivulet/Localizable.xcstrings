@@ -3901,6 +3901,7 @@
         }
       }
     },
+    "Brightness" : {},
     "Buffer" : {
       "localizations" : {
         "de" : {
@@ -6675,6 +6676,7 @@
         }
       }
     },
+    "Dims subtitles without making them see-through, for when white text is too bright. Works on styled (ASS) and picture (PGS) subtitles too. The caption box is unchanged." : {},
     "Direct Play" : {
       "localizations" : {
         "de" : {
@@ -20064,6 +20066,7 @@
         }
       }
     },
+    "Subtitle Brightness" : {},
     "Subtitle Language" : {
       "localizations" : {
         "de" : {

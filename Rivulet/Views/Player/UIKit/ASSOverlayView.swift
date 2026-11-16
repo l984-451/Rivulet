@@ -35,6 +35,16 @@ final class ASSOverlayView: UIView {
         didSet { if linePosition != oldValue { configureRenderer() } }
     }
 
+    /// Subtitle Brightness (0.4...1). Dims every libass colour's RGB, alpha
+    /// kept; a change re-renders the queued frames.
+    var brightness: Double = 1 {
+        didSet {
+            guard brightness != oldValue, let renderer else { return }
+            renderer.setBrightness(brightness)
+            resetSchedule(blank: false)
+        }
+    }
+
     /// The video's own size, for libass's aspect and blur scale.
     var storageSize: CGSize = .zero {
         didSet { if storageSize != oldValue { configureRenderer() } }
@@ -95,6 +105,7 @@ final class ASSOverlayView: UIView {
 
     private func rebuildRenderer() {
         renderer = track.flatMap { LibassRenderer(header: $0.header, fonts: $0.fonts) }
+        renderer?.setBrightness(brightness)
         fedIDs.removeAll()
         fedKeys.removeAll()
         configuration = []

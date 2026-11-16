@@ -225,6 +225,7 @@ final class CaptionOverlayView: UIView {
         self.heightUnits = heightUnits
         self.assView = ASSOverlayView(model: model)
         super.init(frame: .zero)
+        assView.brightness = style.textBrightness
 
         backgroundColor = .clear
         isUserInteractionEnabled = false
@@ -249,6 +250,7 @@ final class CaptionOverlayView: UIView {
     }
 
     private func syncASS() {
+        assView.brightness = style.textBrightness
         assView.track = libassAllowed && !isHidden ? assTrack : nil
     }
 
@@ -283,7 +285,10 @@ final class CaptionOverlayView: UIView {
         for cue in isHidden ? [] : cues {
             switch cue.body {
             case .image(let cgImage, let position):
-                let iv = UIImageView(image: UIImage(cgImage: cgImage))
+                // Subtitle Brightness dims picture subtitles (PGS, VobSub) too.
+                let shown = style.textBrightness < 1
+                    ? (SubtitleAppearance.dimmedImage(cgImage, by: style.textBrightness) ?? cgImage) : cgImage
+                let iv = UIImageView(image: UIImage(cgImage: shown))
                 iv.contentMode = .scaleToFill
                 iv.layer.magnificationFilter = .trilinear
                 addSubview(iv)
@@ -814,7 +819,9 @@ private final class CaptionBoxView: UIView {
                     .paragraphStyle: paragraph
                 ]
                 // A run's own colour only wins where the system allows it.
-                let contentColor = style.allowsContentColor ? run.color : nil
+                // Dimmed by Subtitle Brightness like `style.foreground`, alpha untouched.
+                let contentColor = style.allowsContentColor
+                    ? run.color.map { UIColor(cgColor: style.dimmed($0.cgColor)) } : nil
                 attributes[.foregroundColor] =
                     contentColor.map { scaled($0).withAlphaComponent(style.foregroundOpacity) } ?? userColor
                 if style.allowsContentBackground, let background = run.backgroundColor {

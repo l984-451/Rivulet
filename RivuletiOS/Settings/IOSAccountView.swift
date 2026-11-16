@@ -76,7 +76,8 @@ struct IOSAccountView: View {
                 }
 
                 // Sources and server choice are the owner's, not a restricted profile's.
-                if !profiles.isRestrictedProfile {
+                // A build signed without iCloud (a free Apple ID) cannot sync.
+                if !profiles.isRestrictedProfile && SyncCatalog.cloudAvailable {
                     Section {
                         Toggle("iCloud Sync", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
                     } footer: {

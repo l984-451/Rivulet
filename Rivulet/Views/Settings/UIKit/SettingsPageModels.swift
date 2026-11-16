@@ -448,6 +448,8 @@ enum SettingsContent {
                                          next: { CloudSync.shared.setEnabled(!CloudSync.shared.isEnabled) })),
             SettingsRowItem(id: "cat_about",      title: "About",      kind: .navigation(.about))
         ]
+        // A build signed without iCloud (a free Apple ID) cannot sync.
+        .filter { SyncCatalog.cloudAvailable || $0.id != "iCloudSync" }
     }
 
     private static var iCloudSyncValue: String {

@@ -67,6 +67,19 @@ class PlayerContainerViewController: UIViewController {
     private var insightsTriviaCache: TitleTrivia?
     private var suppressedTriviaIDsCache: Set<String> = []
     private var panGestureRecognizer: UIPanGestureRecognizer?
+    // The swipe-to-scrub pan's per-touch state (see `handlePanGesture`).
+    /// The axis this touch locked to, from its cumulative translation.
+    private var swipeAxisLock = SwipeScrubAxisLock()
+    /// This touch locked horizontal and entered scrub mode.
+    private var swipeScrubEntered = false
+    /// The pan's cumulative x at the last scrub update, for incremental deltas.
+    private var swipeScrubLastX: CGFloat = 0
+    /// This touch already belongs to something else (a gated Up/Down swipe acted
+    /// on it, or the clickpad went down during it), so it never enters or drives
+    /// a scrub. One action per gesture.
+    private var swipeTouchSpent = false
+    /// When the pan began on this touch, to spot a click made during it.
+    private var swipeTouchBeganAt: CFTimeInterval = .infinity
     private var touchSurfaceTapGesture: UITapGestureRecognizer?
 
     /// Opaque black plate that covers the whole player while it fades out on
@@ -736,14 +749,23 @@ class PlayerContainerViewController: UIViewController {
 
         // Up/Down's touch twin (the iPhone Remote sends no arrow presses).
         // Not while the clickpad is down: a click jolts the touch into a fake swipe.
+        // Nor in a ring jog, or in a touch that has become a swipe-scrub: the scrub
+        // pan recognizes alongside these swipes, so a scrub that curves up would
+        // otherwise snap a chapter (or, down, cancel) in the same gesture. A swipe
+        // that acts here spends the touch, so the pan never turns it into a scrub.
         contentSwipeBinding = DirectionalInputBinding(
             gatedSwipesOn: anchor,
             directions: [.up, .down],
             shouldHandle: { [weak self] direction in
-                guard let self, !RemoteInputHandler.isClickpadDown else { return false }
+                guard let self, !RemoteInputHandler.isClickpadDown,
+                      !RemoteInputHandler.isRingJogging, !self.swipeScrubEntered else { return false }
                 return self.contentOwnsPress(direction == .up ? .upArrow : .downArrow)
             },
-            onSwipe: { [weak self] direction in self?.handleContentVertical(up: direction == .up) }
+            onSwipe: { [weak self] direction in
+                guard let self else { return }
+                self.swipeTouchSpent = true
+                self.handleContentVertical(up: direction == .up)
+            }
         )
 
         contentPressDetector.onTap = { [weak self] forward in
@@ -988,22 +1010,28 @@ class PlayerContainerViewController: UIViewController {
         let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handlePanGesture(_:)))
         // Only recognize indirect touches (Siri Remote touchpad, not direct screen touches)
         panRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-        // A pan that begins cancels the focus engine's move, so the delegate
-        // lets it begin only on a clearly horizontal, actionable swipe.
+        // Observe and lock, as Live TV's `LiveTimelineScrubPan`: the pan never
+        // cancels touches and recognizes alongside every other recognizer (see the
+        // delegate), so the focus engine's move and the content anchor's Up/Down
+        // swipes always run. It acts only once the touch locks horizontal
+        // (`SwipeScrubAxisLock`); the delegate still gates where it may begin.
+        panRecognizer.cancelsTouchesInView = false
         panRecognizer.delegate = self
         view.addGestureRecognizer(panRecognizer)
         panGestureRecognizer = panRecognizer
     }
 
-    /// True when a touch-surface swipe should drive the scrubber. Mirrors the
-    /// bail conditions in `handlePanGesture`, since beginning steals the gesture
-    /// from the focus engine. Only focus on a transport button blocks it.
+    /// True when a touch-surface swipe may drive the scrubber. Checked where the
+    /// pan begins, when a touch locks horizontal, and on every scrub update after
+    /// that. Only focus on a transport button (or in Insights over the pause
+    /// screen) blocks it.
     private var panCanDriveScrub: Bool {
         guard let vm = viewModel else { return false }
         return !vm.playbackState.isFailed
             && vm.postVideoState == .hidden
             && descriptionOverlay == nil
             && !focusIsOnTransportButton
+            && pauseInsights == nil
     }
 
     /// Focus is parked on a transport button rather than the scrubber. While
@@ -1020,8 +1048,8 @@ class PlayerContainerViewController: UIViewController {
     /// Bare-tap on the Siri Remote touch surface (no force/click). Fires
     /// only on `.indirect` touches — the touchpad — and not on `.select`
     /// presses (those are the click and are routed to play/pause via the
-    /// micro-gamepad buttonA handler). Coexists with the pan recognizer:
-    /// if the user starts moving, pan takes over and tap doesn't fire.
+    /// micro-gamepad buttonA handler). Coexists with the scrub pan, which only
+    /// observes: a touch that moves fails the tap by its own movement tolerance.
     private func setupTouchSurfaceTapGesture() {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceTap))
         tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
@@ -1077,48 +1105,103 @@ class PlayerContainerViewController: UIViewController {
 
     private static let clockTimesKey = "playerShowsClockTimes"
 
+    /// The pan begins on any touch its delegate allows and does nothing until
+    /// `SwipeScrubAxisLock` decides the touch from its cumulative translation.
+    /// Horizontal enters scrub mode, if a scrub may still start from where focus
+    /// is then (the focus engine or a gated swipe may have moved it meanwhile);
+    /// vertical leaves the touch to the focus engine and the gated Up/Down swipes;
+    /// a touch that ends undecided does nothing. A touch one of those swipes acted
+    /// on, or one the clickpad went down during, is spent: it never enters or
+    /// drives a scrub.
     @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
-        // Kept in sync with `panCanDriveScrub`, which stops the recognizer from
-        // beginning (and thus stealing the gesture) in these same states.
-        // A touch that turned into a ring jog belongs to the jog from then on.
-        // A scrub that stalls mid-touch says why once, when the touch ends (#632).
-        guard panCanDriveScrub, !RemoteInputHandler.isRingJogging else {
-            if gesture.state == .ended {
-                DiagLog.notice(.playback, "[scrub] swipe ended blocked: "
-                    + (RemoteInputHandler.isRingJogging ? "ring jog" : focusIsOnTransportButton ? "focus is on a control" : "player state"))
-            }
-            return
-        }
-
         // Swipe-to-scrub works whether playing or paused.
 
         let translation = gesture.translation(in: view)
         let velocity = gesture.velocity(in: view)
 
         switch gesture.state {
-        case .began:
+        case .began, .changed:
+            if gesture.state == .began {
+                swipeAxisLock.reset()
+                swipeScrubEntered = false
+                swipeTouchSpent = false
+                swipeTouchBeganAt = CACurrentMediaTime()
+            }
+            // A touch that turned into a ring jog belongs to the jog from then on.
+            guard !RemoteInputHandler.isRingJogging else { return }
+            // The begin gate's clickpad rule, held for the whole touch, since the
+            // axis is decided long after the pan began (a click jolts the touch
+            // into a fake swipe). A scrub already entered stops following it.
+            if swipeTouchClicked { swipeTouchSpent = true }
+            guard !swipeTouchSpent else { return }
+            guard swipeAxisLock.axis == .undecided else {
+                // Locked earlier in this touch: only a scrub it entered carries on,
+                // and only while `panCanDriveScrub` still holds.
+                guard swipeScrubEntered, panCanDriveScrub else { return }
+                // About 1 second per 2 points of horizontal travel; right = forward.
+                let seekDelta = (translation.x - swipeScrubLastX) * 0.5
+                swipeScrubLastX = translation.x
+                inputCoordinator.handle(action: .scrubRelative(seconds: seekDelta), source: .irPress)
+                return
+            }
+            let axis = swipeAxisLock.update(
+                translationX: Double(translation.x), translationY: Double(translation.y))
+            // Undecided or vertical: the focus engine's and the gated swipes'.
+            guard axis == .horizontal else { return }
+            guard panCanDriveScrub else {
+                DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: "
+                    + (focusIsOnTransportButton ? "focus is on a control" : "player state"))
+                return
+            }
+            swipeScrubEntered = true
+            swipeScrubLastX = translation.x
             DiagLog.notice(.playback, "[scrub] swipe started a scrub")
-            inputCoordinator.handle(action: .scrubRelative(seconds: 0), source: .irPress)
-
-        case .changed:
-            // Proportional scrubbing: horizontal translation maps to seek time
-            // Sensitivity: ~1 second per 2 points of horizontal movement
-            // Positive translation.x = swipe right = forward
-            let seekDelta = translation.x * 0.5
-            inputCoordinator.handle(action: .scrubRelative(seconds: seekDelta), source: .irPress)
-            gesture.setTranslation(.zero, in: view)
+            // The travel that decided the lock counts too.
+            inputCoordinator.handle(action: .scrubRelative(seconds: translation.x * 0.5), source: .irPress)
 
         case .ended, .cancelled:
-            // If significant horizontal velocity, apply a final "flick" adjustment
-            if abs(velocity.x) > 500 {
-                let flickSeekDelta = velocity.x * 0.02  // Small multiplier for flick
-                inputCoordinator.handle(action: .scrubRelative(seconds: flickSeekDelta), source: .irPress)
+            if swipeScrubEntered {
+                if let blocked = swipeScrubBlockedReason {
+                    // A scrub that stalls mid-touch says why once, when the touch ends (#632).
+                    if gesture.state == .ended {
+                        DiagLog.notice(.playback, "[scrub] swipe ended blocked: \(blocked)")
+                    }
+                } else if abs(velocity.x) > 500 {
+                    // A significant horizontal velocity adds a final "flick".
+                    inputCoordinator.handle(action: .scrubRelative(seconds: velocity.x * 0.02), source: .irPress)
+                }
+                // Don't auto-commit: play/select confirms the position.
+            } else if gesture.state == .ended, swipeAxisLock.axis != .horizontal,
+                      abs(translation.x) >= abs(translation.y) {
+                // A sideways touch that never became a scrub says why (#632).
+                // Vertical ones are the focus engine's and say nothing.
+                DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: "
+                    + (swipeScrubBlockedReason ?? "not 2:1 sideways past 24 pt")
+                    + ", t=\(Int(translation.x)),\(Int(translation.y))")
             }
-            // Don't auto-commit - wait for user to press play/select to confirm position
+            swipeScrubEntered = false
 
         default:
-            break
+            swipeScrubEntered = false
         }
+    }
+
+    /// The clickpad is down, or clicked down since the pan began on this touch.
+    /// The timestamp (stamped one async hop late) catches a click quicker than
+    /// the pan's samples; a stamp landing just after `.began` only errs toward
+    /// leaving the touch alone.
+    private var swipeTouchClicked: Bool {
+        RemoteInputHandler.isClickpadDown || RemoteInputHandler.lastClickpadDownAt >= swipeTouchBeganAt
+    }
+
+    /// Why this touch cannot drive a scrub now, or nil if it can, for the
+    /// diagnostics lines (#632).
+    private var swipeScrubBlockedReason: String? {
+        if RemoteInputHandler.isRingJogging { return "ring jog" }
+        if swipeTouchClicked { return "clickpad down" }
+        if swipeTouchSpent { return "an Up or Down swipe took it" }
+        if !panCanDriveScrub { return focusIsOnTransportButton ? "focus is on a control" : "player state" }
+        return nil
     }
 
     private func dismissPlayer() {
@@ -2514,13 +2597,18 @@ final class SideScrimView: UIView {
 
 extension PlayerContainerViewController: UIGestureRecognizerDelegate {
 
-    /// Only let the swipe-to-scrub pan claim a clearly horizontal gesture it will
-    /// act on. Refusing here, not in the action, leaves vertical swipes to the engine.
+    /// Only lets the swipe-to-scrub pan begin where a scrub could start. Which way
+    /// the touch goes is decided later, from its cumulative travel, in
+    /// `handlePanGesture`: one velocity sample here let an Up swipe whose first
+    /// samples leaned sideways start a scrub.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
               pan === panGestureRecognizer
         else { return true }
 
+        // Insights over the pause screen: sideways swipes move between its cards,
+        // so refusing them there leaves no diagnostics line.
+        guard pauseInsights == nil else { return false }
         let velocity = pan.velocity(in: view)
         guard panCanDriveScrub else {
             return refuseScrub(focusIsOnTransportButton ? "focus is on a control" : "player state", velocity)
@@ -2529,14 +2617,18 @@ extension PlayerContainerViewController: UIGestureRecognizerDelegate {
         // Never while the clickpad is down: a click jolts the touch into a fake swipe.
         guard !RemoteInputHandler.isClickpadDown else { return refuseScrub("clickpad down", velocity) }
         guard !RemoteInputHandler.isRingJogging else { return refuseScrub("ring jog", velocity) }
-
-        // Decide on velocity: translation is still near zero at this point.
-        // A 2:1 horizontal bias leaves diagonal drift to the focus engine.
-        guard velocity != .zero else { return refuseScrub("no velocity yet", velocity) }
-        guard abs(velocity.x) > abs(velocity.y) * 2 else {
-            return refuseScrub("not 2:1 sideways, v=\(Int(velocity.x)),\(Int(velocity.y))", velocity)
-        }
         return true
+    }
+
+    /// The swipe-to-scrub pan recognizes alongside everything (the focus engine's
+    /// touch handling, the content anchor's gated swipes, the touch-surface taps),
+    /// as Live TV's `LiveTimelineScrubPan` does, so beginning never takes a swipe
+    /// away from them.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        gestureRecognizer === panGestureRecognizer || otherGestureRecognizer === panGestureRecognizer
     }
 
     /// A sideways swipe that did not start a scrub leaves a line for Send Diagnostics (#632).

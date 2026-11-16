@@ -147,6 +147,12 @@ extension PlexPlaybackRequest {
         !isLocal && providerPlayback == nil && (item.Media?.first?.Part?.count ?? 0) > 1
     }
 
+    /// `checkFiles=1` marked the playing version's file gone. A hint for the failure message only:
+    /// a wrong flag must never stop a file that plays.
+    var playingFileIsMissing: Bool {
+        !isLocal && providerPlayback == nil && item.Media?.first?.isMissing == true
+    }
+
     /// Every file of a stacked title, nil for one file or when a file has no length.
     var stackedParts: StackedParts<StackedPartFile>? {
         guard isStacked, plan == .original, let parts = item.Media?.first?.Part else { return nil }

@@ -125,7 +125,7 @@ struct MacPlayerView: View {
     private var isPlaying: Bool { player.state == .playing }
 
     private var isBusy: Bool {
-        session.serverStopReason == nil && session.serverRefusal?.blocksTranscode != true && (player.state == .idle || player.state == .loading
+        session.isFallingBack || session.serverStopReason == nil && session.serverRefusal?.blocksTranscode != true && (player.state == .idle || player.state == .loading
             || player.isBuffering || (player.isStarting && player.state == .playing))
     }
 
@@ -136,8 +136,10 @@ struct MacPlayerView: View {
             return MacPlayerFailure(message: reason, canRetry: false, title: String(localized: "Playback Stopped"),
                                     systemImage: "stop.circle.fill")
         }
+        if session.isFallingBack { return nil }
         let failed: String? = if case .failed(let message) = player.state { message } else { nil }
-        if let refusal = session.serverRefusal, refusal.blocksTranscode || failed != nil {
+        if let refusal = ServerRefusal.shown(decision: session.serverRefusal, fileIsMissing: session.request.playingFileIsMissing,
+                                             failed: failed != nil) {
             return MacPlayerFailure(message: refusal.message, canRetry: false, title: String(localized: "Server Can't Play This"),
                                     systemImage: "exclamationmark.icloud.fill")
         }

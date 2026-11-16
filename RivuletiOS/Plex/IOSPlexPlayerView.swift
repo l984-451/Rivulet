@@ -24,6 +24,10 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     /// The server's refusal from its last decision (Plex Pass needed, no way to convert): shown when it
     /// blocks the stream, or when the load fails after it.
     @Published private(set) var serverRefusal: ServerRefusal?
+    /// A fallback reload is under way: the failure that started it is not shown over it.
+    @Published private(set) var isFallingBack = false
+    /// The last position the stream played at, which a failure may have zeroed on the engine.
+    private var lastPlayhead: TimeInterval = 0
 
     private let plex: any PlayerBackend
     private var skippedMarkerIDs: Set<String> = []
@@ -135,6 +139,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         playbackStart.beginLoad(startsItem: startsItem)
         if startsItem {
             reportPosition = PlaybackReportPosition(startTime: request.startTime ?? 0)
+            lastPlayhead = 0
             subtitlesPickedOff = false
             needsStartingTracks = !isTranscoding
             // Plex reads the part's selection when a transcode session starts.
@@ -208,9 +213,11 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         quality: StreamingQuality,
         plan: StreamPlan? = nil,
         at time: TimeInterval? = nil,
-        streams: TrackPicks? = nil
+        streams: TrackPicks? = nil,
+        isFallback: Bool = false
     ) {
         reloadTask?.cancel()
+        if isFallback { isFallingBack = true }
         longStallTask?.cancel()
         let previous = request
         let time = time ?? player.pendingSeekTarget ?? player.currentTime
@@ -219,6 +226,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         let picks = streams ?? (previous.plan == .original && !player.audioTracks.isEmpty ? enginePicksAsPlexIDs() : nil)
         reloadTask = Task { [weak self] in
             guard let self else { return }
+            defer { if isFallback { isFallingBack = false } }
             guard let next = try? await plex.preparePlayback(replacing: previous, while: { self.canLoad }, operation: {
                 try await plex.reloadedPlayback(of: previous, quality: quality, plan: plan, at: time, streams: picks)
             }) else { return }
@@ -279,26 +287,34 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         reload(quality: .auto, plan: .transcode(step))
     }
 
-    /// A direct-play file that never starts gets one retry as a transcode, as on tvOS.
+    /// Where a failed stream resumes: the last playhead it reached, or the start it never left.
+    private var resumeAfterFailure: TimeInterval? {
+        playbackStart.streamHasPlayed ? (lastPlayhead > 0 ? lastPlayhead : nil) : request.startTime ?? 0
+    }
+
+    /// The file failing, at start or after it played, gets one retry as a transcode, as on tvOS.
     private func fallBackToTranscode() {
-        guard !playbackStart.streamHasPlayed, !didFallBack, request.plan == .original, !request.isLocal, !request.isStacked else { return }
+        guard RouteFallback.transcodesAfterOriginalFailure(
+            plan: request.plan, hasSwitched: didFallBack, isLocal: request.isLocal, isStacked: request.isStacked) else { return }
         didFallBack = true
         let kbps = request.quality == .auto
             ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000
             : 8000
         reload(quality: request.quality, plan: .transcode(QualityDecision.highestStep(atMost: kbps)),
-               at: request.startTime ?? 0)
+               at: resumeAfterFailure, isFallback: true)
     }
 
     /// A transcode quality chose (Auto's step, the menu) that fails, at start or mid-play, gives way to the file
     /// at the playhead, and Auto steps down no more for this item, as on tvOS. A relay has no file route.
     @discardableResult
     private func fallBackToOriginal(at time: TimeInterval? = nil) -> Bool {
-        guard !request.isLocal, !request.isStacked, !didFallBack,
-              QualityDecision.playsOriginalAfterTranscodeFailure(plan: request.plan, isRelay: PlexRelay.isRelayURL(request.serverURL))
+        guard !request.isLocal, !request.isStacked,
+              RouteFallback.playsOriginalAfterTranscodeFailure(
+                plan: request.plan, hasSwitched: didFallBack, isRelay: PlexRelay.isRelayURL(request.serverURL))
         else { return false }
+        didFallBack = true
         stallTracker.stopStepping()
-        reload(quality: request.quality, plan: .original, at: time)
+        reload(quality: request.quality, plan: .original, at: time, isFallback: true)
         return true
     }
 
@@ -625,7 +641,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
         case .failed:
             timeline.transportChanged(.other)
             fallBackToTranscode()
-            fallBackToOriginal(at: playbackStart.streamHasPlayed ? nil : request.startTime)
+            fallBackToOriginal(at: resumeAfterFailure)
         default:
             timeline.transportChanged(.other)
         }
@@ -639,6 +655,7 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
 
     private func tick(_ time: TimeInterval) {
         guard playbackStart.streamHasPlayed else { return }
+        if time > 0, player.state == .playing { lastPlayhead = time }
         // A load's clock reads 0 until it starts; an intro at 0 must not fire mid-reload.
         if !player.isStarting { evaluateAutoSkip(at: time) }
         guard player.state == .playing, !player.isStalled else { return }
@@ -855,7 +872,7 @@ private struct IOSPlexPlayerScreen: View {
             title: item.displayTitle,
             subtitle: item.subtitle,
             isPlaying: player.state == .playing,
-            isBusy: session.serverStopReason == nil && session.serverRefusal?.blocksTranscode != true && (player.state == .idle || player.state == .loading
+            isBusy: session.isFallingBack || session.serverStopReason == nil && session.serverRefusal?.blocksTranscode != true && (player.state == .idle || player.state == .loading
                 || player.isBuffering || (player.isStarting && player.state == .playing)),
             timeline: .vod(
                 position: player.pendingSeekTarget ?? player.currentTime,
@@ -980,8 +997,10 @@ private struct IOSPlexPlayerScreen: View {
         if let reason = session.serverStopReason {
             return IOSPlayerFailure(message: reason, canRetry: false, title: String(localized: "Playback Stopped"), systemImage: "stop.circle.fill")
         }
+        if session.isFallingBack { return nil }
         let failed: String? = if case .failed(let message) = player.state { message } else { nil }
-        if let refusal = session.serverRefusal, refusal.blocksTranscode || failed != nil {
+        if let refusal = ServerRefusal.shown(decision: session.serverRefusal, fileIsMissing: session.request.playingFileIsMissing,
+                                             failed: failed != nil) {
             return IOSPlayerFailure(message: refusal.message, canRetry: false, title: String(localized: "Server Can't Play This"),
                                     systemImage: "exclamationmark.icloud.fill")
         }

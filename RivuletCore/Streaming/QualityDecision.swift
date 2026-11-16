@@ -57,12 +57,6 @@ nonisolated enum QualityDecision {
         return QualityStep.ladder.first { $0.kbps < ceiling }
     }
 
-    /// Whether a transcode that failed, at start or mid-play, gives way to the file: quality chose it
-    /// (a step), and a relay offers no file route.
-    static func playsOriginalAfterTranscodeFailure(plan: StreamPlan, isRelay: Bool) -> Bool {
-        plan.step != nil && !isRelay
-    }
-
     private static func autoPlan(sourceKbps: Int?, measuredKbps: Int?) -> StreamPlan {
         guard let sourceKbps else { return .original }
         guard let measuredKbps else {

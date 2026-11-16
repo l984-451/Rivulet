@@ -66,6 +66,14 @@ nonisolated struct ServerRefusal: Error, Equatable, Sendable {
         }
     }
 
+    /// What to tell the user when a load is blocked or has failed: a blocking decision first, then the file being
+    /// gone (a hint from `checkFiles`, used only after a failure), then any other decision error.
+    static func shown(decision: ServerRefusal?, fileIsMissing: Bool, failed: Bool) -> ServerRefusal? {
+        if let decision, decision.blocksTranscode { return decision }
+        guard failed else { return nil }
+        return fileIsMissing ? ServerRefusal(reason: .fileMissing) : decision
+    }
+
     /// A provider error that is the server's answer, not a fault.
     init?(error: Error) {
         switch error {

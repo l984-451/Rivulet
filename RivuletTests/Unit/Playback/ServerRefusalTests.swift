@@ -58,4 +58,16 @@ final class ServerRefusalTests: XCTestCase {
         XCTAssertTrue(PlaybackDiagnostics.isServerRefusal(MediaProviderError.transcodeRequired))
         XCTAssertFalse(PlaybackDiagnostics.isServerRefusal(PlayerError.loadFailed("x")))
     }
+
+    func test_shown_prefersABlockingDecision_thenTheMissingFile_onlyAfterAFailure() {
+        let blocking = ServerRefusal(reason: .plexPassRequired)
+        let soft = ServerRefusal(reason: .other("x"))
+        XCTAssertEqual(ServerRefusal.shown(decision: blocking, fileIsMissing: true, failed: false), blocking)
+        XCTAssertEqual(ServerRefusal.shown(decision: nil, fileIsMissing: true, failed: true)?.reason, .fileMissing)
+        XCTAssertEqual(ServerRefusal.shown(decision: soft, fileIsMissing: true, failed: true)?.reason, .fileMissing)
+        XCTAssertEqual(ServerRefusal.shown(decision: soft, fileIsMissing: false, failed: true), soft)
+        // A flag alone never stops a file that plays: nothing is shown without a failure.
+        XCTAssertNil(ServerRefusal.shown(decision: nil, fileIsMissing: true, failed: false))
+        XCTAssertNil(ServerRefusal.shown(decision: soft, fileIsMissing: false, failed: false))
+    }
 }

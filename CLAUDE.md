@@ -478,15 +478,18 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   went to the shell's edge catcher, Select and Menu did nothing. A view that
   overlays a focus surface must be exactly its own footprint, and anything
   larger (the letter indicator) must be `isHidden` before a focus request.
-- **Held Up/Down can hand focus to tvOS's fast-scroll index bar.** Home and
-  Library leave vertical scrolling enabled for UIKit. Preserve Left, Select
-  and Menu recovery from the index bar; hiding the index does not establish
-  that it cannot take focus. Verify held-arrow scrolling and visible tile
-  focus after release on a device, including with uncached posters.
-  Earlier custom-scroll captures showed that the index-bar hand-off bypassed
-  `shouldUpdateFocus`, and refusing repeat moves escalated focus to the sidebar.
-  These are device observations, not API guarantees for every OS version.
-  Do not restore a manual offset driver alongside UIKit's native scrolling.
+- **Vertical focus scrolling is UIKit's own** on Home, Library, Search,
+  Person, Season and the detail's lower rows (#631). The page picks where a
+  row rests in `scrollViewWillEndDragging`; `NativeFocusScrollCoordinator`
+  scrolls there itself when UIKit doesn't move. Do not bring back
+  `isScrollEnabled = false` with a display-link driver: UIKit then never
+  prepares the next row in idle time, and every row entry hitched on device.
+- **A held Up/Down hands focus to tvOS's fast-scroll index bar**, even under
+  `indexDisplayMode = .alwaysHidden`, and the hand-off bypasses
+  `shouldUpdateFocus`. With native scrolling the bar scrolls the page itself.
+  Left, Select and Menu bring focus back to a tile (`landFocusOnCenterTile`).
+  Do not refuse the engine's repeat moves instead: after about 1.5 s it
+  escalates past the collection to the sidebar.
 
 ### Context Menus (long-press)
 

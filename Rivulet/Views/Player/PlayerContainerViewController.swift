@@ -80,6 +80,12 @@ class PlayerContainerViewController: UIViewController {
     private var swipeTouchSpent = false
     /// When the pan began on this touch, to spot a click made during it.
     private var swipeTouchBeganAt: CFTimeInterval = .infinity
+    /// This scrub's counts for its diagnostics line: the horizontal travel that
+    /// drove it (points, |dx| summed, the lock travel included), its peak
+    /// |velocity.x| (points/sec) and the seconds it sent.
+    private var swipeScrubTravel: Double = 0
+    private var swipeScrubPeakSpeed: Double = 0
+    private var swipeScrubNetSeconds: Double = 0
     private var touchSurfaceTapGesture: UITapGestureRecognizer?
 
     /// Opaque black plate that covers the whole player while it fades out on
@@ -1138,9 +1144,15 @@ class PlayerContainerViewController: UIViewController {
                 // Locked earlier in this touch: only a scrub it entered carries on,
                 // and only while `panCanDriveScrub` still holds.
                 guard swipeScrubEntered, panCanDriveScrub else { return }
-                // About 1 second per 2 points of horizontal travel; right = forward.
-                let seekDelta = (translation.x - swipeScrubLastX) * 0.5
+                // The playhead follows the finger through `SwipeScrubTransfer`:
+                // seconds per point scaled to the runtime, with a modest gain only
+                // for a fast swipe. Right = forward.
+                let dx = Double(translation.x - swipeScrubLastX)
+                let speed = abs(Double(velocity.x))
                 swipeScrubLastX = translation.x
+                let seekDelta = SwipeScrubTransfer.seconds(
+                    forTravel: dx, speed: speed, duration: viewModel?.duration ?? 0)
+                noteSwipeScrubSample(travel: dx, speed: speed, seconds: seekDelta)
                 inputCoordinator.handle(action: .scrubRelative(seconds: seekDelta), source: .irPress)
                 return
             }
@@ -1155,22 +1167,25 @@ class PlayerContainerViewController: UIViewController {
             }
             swipeScrubEntered = true
             swipeScrubLastX = translation.x
+            swipeScrubTravel = 0
+            swipeScrubPeakSpeed = 0
+            swipeScrubNetSeconds = 0
             DiagLog.notice(.playback, "[scrub] swipe started a scrub")
-            // The travel that decided the lock counts too.
-            inputCoordinator.handle(action: .scrubRelative(seconds: translation.x * 0.5), source: .irPress)
+            // The travel that decided the lock counts in full, at the base rate
+            // (no fast-swipe gain).
+            let lockTravel = Double(translation.x)
+            let lockSeconds = SwipeScrubTransfer.baseSeconds(
+                forTravel: lockTravel, duration: viewModel?.duration ?? 0)
+            noteSwipeScrubSample(travel: lockTravel, speed: abs(Double(velocity.x)), seconds: lockSeconds)
+            inputCoordinator.handle(action: .scrubRelative(seconds: lockSeconds), source: .irPress)
 
         case .ended, .cancelled:
             if swipeScrubEntered {
-                if let blocked = swipeScrubBlockedReason {
-                    // A scrub that stalls mid-touch says why once, when the touch ends (#632).
-                    if gesture.state == .ended {
-                        DiagLog.notice(.playback, "[scrub] swipe ended blocked: \(blocked)")
-                    }
-                } else if abs(velocity.x) > 500 {
-                    // A significant horizontal velocity adds a final "flick".
-                    inputCoordinator.handle(action: .scrubRelative(seconds: velocity.x * 0.02), source: .irPress)
-                }
-                // Don't auto-commit: play/select confirms the position.
+                // No post-lift flick: the playhead stays where the finger stopped,
+                // and play/select confirms it. Travel reported only in the lift
+                // sample is not applied either, since it may be lift jitter.
+                let liftTravel = gesture.state == .ended ? Double(translation.x - swipeScrubLastX) : 0
+                logSwipeScrubEnd(blocked: swipeScrubBlockedReason, liftTravel: liftTravel)
             } else if gesture.state == .ended, swipeAxisLock.axis != .horizontal,
                       abs(translation.x) >= abs(translation.y) {
                 // A sideways touch that never became a scrub says why (#632).
@@ -1192,6 +1207,27 @@ class PlayerContainerViewController: UIViewController {
     /// leaving the touch alone.
     private var swipeTouchClicked: Bool {
         RemoteInputHandler.isClickpadDown || RemoteInputHandler.lastClickpadDownAt >= swipeTouchBeganAt
+    }
+
+    /// Adds one sent scrub update to this scrub's diagnostics counts.
+    private func noteSwipeScrubSample(travel: Double, speed: Double, seconds: Double) {
+        if travel.isFinite { swipeScrubTravel += abs(travel) }
+        if speed.isFinite { swipeScrubPeakSpeed = max(swipeScrubPeakSpeed, speed) }
+        if seconds.isFinite { swipeScrubNetSeconds += seconds }
+    }
+
+    /// One line per swipe-scrub when its touch ends, counts only (no title or
+    /// ids), for tuning `SwipeScrubTransfer`: travel, peak speed, the seconds it
+    /// sent (before the playhead's clamp to the title's ends), the runtime, and
+    /// the travel in the lift sample, which is not applied. A scrub that stalled
+    /// mid-touch also says why (#632).
+    private func logSwipeScrubEnd(blocked: String?, liftTravel: Double) {
+        let runtimeMinutes = (viewModel?.duration ?? 0) / 60
+        let counts = String(
+            format: "travel=%.0fpt peak=%.0fpt/s net=%+.1fs runtime=%.0fmin lift=%+.0fpt",
+            swipeScrubTravel, swipeScrubPeakSpeed, swipeScrubNetSeconds,
+            runtimeMinutes.isFinite ? runtimeMinutes : 0, liftTravel.isFinite ? liftTravel : 0)
+        DiagLog.notice(.playback, "[scrub] swipe ended" + (blocked.map { " blocked: \($0);" } ?? ":") + " " + counts)
     }
 
     /// Why this touch cannot drive a scrub now, or nil if it can, for the

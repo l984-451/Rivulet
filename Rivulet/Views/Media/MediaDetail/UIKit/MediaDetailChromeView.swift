@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //  The detail chrome: logo, genre row, description, quality row, and the action
-//  and cast row. Shared by `PreviewCardView` and the home hero's `HeroButtonRowView`.
+//  row. Shared by `PreviewCardView` and the home hero's `HeroButtonRowView`.
 //  It lays out to whatever width its host gives it; the host owns the vignette and the cascade.
 
 import UIKit
@@ -25,7 +25,6 @@ final class MediaDetailChromeView: UIView {
     private static let episodeDescriptionMaxWidth: CGFloat = 860
     private static let captionFont = UIFont.systemFont(ofSize: 25, weight: .medium)
     private static let descriptionFont = UIFont.systemFont(ofSize: 23, weight: .medium)
-    private static let rolesLabelAlpha: CGFloat = 0.6
 
     // MARK: - Public surface
 
@@ -88,7 +87,7 @@ final class MediaDetailChromeView: UIView {
     private var loadToken: UInt64 = 0
 
     /// Cached detail, populated by `loadDetail()` when it lands. Used to
-    /// repopulate genre + quality rows + cast label with richer fields.
+    /// repopulate genre + quality rows with richer fields.
     private var detail: MediaItemDetail?
 
     /// The episode the Play pill names, shown in place of a show's synopsis.
@@ -103,7 +102,7 @@ final class MediaDetailChromeView: UIView {
     // MARK: - Subviews
 
     /// Outer vertical stack — bottom-leading aligned by the host. Contains
-    /// the metadata block + the action+cast row.
+    /// the metadata block + the action row.
     private let chromeStack: UIStackView = {
         let s = UIStackView()
         s.translatesAutoresizingMaskIntoConstraints = false
@@ -184,9 +183,9 @@ final class MediaDetailChromeView: UIView {
         return s
     }()
 
-    /// Action buttons left, cast label right. A plain view, since a stack view flashes
+    /// The action buttons, leading. A plain view, since a stack view flashes
     /// the buttons stretched wide on the first layout pass.
-    private let actionAndCastRow: UIView = {
+    private let actionRow: UIView = {
         let v = UIView()
         v.translatesAutoresizingMaskIntoConstraints = false
         v.isUserInteractionEnabled = false
@@ -201,19 +200,6 @@ final class MediaDetailChromeView: UIView {
         s.alignment = .center
         s.spacing = HeroPillButton.rowGap
         return s
-    }()
-
-    /// "Starring …" in a 410pt box on the trailing margin, left-aligned, its
-    /// bottom on the buttons' bottom. The names are brighter than the label.
-    private let castLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = MediaDetailChromeView.captionFont
-        l.textColor = .white
-        l.numberOfLines = 3
-        l.textAlignment = .natural
-        l.lineBreakMode = .byTruncatingTail
-        return l
     }()
 
     // MARK: - Init
@@ -245,11 +231,9 @@ final class MediaDetailChromeView: UIView {
 
         // Apple's rhythm: 18 between the text rows, 32 above the buttons.
         chromeStack.setCustomSpacing(32, after: metadataBlock)
-        chromeStack.addArrangedSubview(actionAndCastRow)
+        chromeStack.addArrangedSubview(actionRow)
 
-        // The two children compete only over the gap, so neither stretches past its content.
-        actionAndCastRow.addSubview(actionButtonsStack)
-        actionAndCastRow.addSubview(castLabel)
+        actionRow.addSubview(actionButtonsStack)
 
         // Hugging is .required so the stack never stretches beyond the sum
         // of its buttons.
@@ -259,9 +243,6 @@ final class MediaDetailChromeView: UIView {
         let descMaxWidth = descriptionLabel.widthAnchor.constraint(
             lessThanOrEqualToConstant: Self.descriptionMaxWidth)
         descriptionMaxWidth = descMaxWidth
-
-        let castWidth = castLabel.widthAnchor.constraint(equalToConstant: 410)
-        castWidth.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
             // Chrome stack fills self.
@@ -300,30 +281,19 @@ final class MediaDetailChromeView: UIView {
             // 860 pt cap; height follows content.
             metadataBlock.widthAnchor.constraint(lessThanOrEqualToConstant: Self.episodeDescriptionMaxWidth),
 
-            // The action+cast row spans the full chrome width (the stack is
-            // .leading now, so this must be explicit) — buttons leading, cast
-            // trailing.
-            actionAndCastRow.widthAnchor.constraint(equalTo: chromeStack.widthAnchor),
+            // The action row spans the full chrome width (the stack is
+            // .leading now, so this must be explicit), buttons leading.
+            actionRow.widthAnchor.constraint(equalTo: chromeStack.widthAnchor),
 
             // Action buttons pin to leading + centerY of the row.
-            actionButtonsStack.leadingAnchor.constraint(equalTo: actionAndCastRow.leadingAnchor),
-            actionButtonsStack.centerYAnchor.constraint(equalTo: actionAndCastRow.centerYAnchor),
-            actionButtonsStack.topAnchor.constraint(greaterThanOrEqualTo: actionAndCastRow.topAnchor),
-            actionButtonsStack.bottomAnchor.constraint(lessThanOrEqualTo: actionAndCastRow.bottomAnchor),
+            actionButtonsStack.leadingAnchor.constraint(equalTo: actionRow.leadingAnchor),
+            actionButtonsStack.centerYAnchor.constraint(equalTo: actionRow.centerYAnchor),
+            actionButtonsStack.topAnchor.constraint(greaterThanOrEqualTo: actionRow.topAnchor),
+            actionButtonsStack.bottomAnchor.constraint(lessThanOrEqualTo: actionRow.bottomAnchor),
 
             // Row height derives from the action buttons stack
             // (54pt circle/pill height).
-            actionAndCastRow.heightAnchor.constraint(greaterThanOrEqualTo: actionButtonsStack.heightAnchor),
-
-            // Cast box: 410pt on the trailing margin, bottom on the buttons'
-            // bottom. It may grow upward past the row; nothing sits there.
-            castLabel.trailingAnchor.constraint(equalTo: actionAndCastRow.trailingAnchor),
-            castLabel.bottomAnchor.constraint(equalTo: actionButtonsStack.bottomAnchor),
-            castWidth,
-
-            // Min 10pt gap between buttons and cast box: a very long button
-            // row narrows the box, the buttons keep their widths.
-            castLabel.leadingAnchor.constraint(greaterThanOrEqualTo: actionButtonsStack.trailingAnchor, constant: 10)
+            actionRow.heightAnchor.constraint(greaterThanOrEqualTo: actionButtonsStack.heightAnchor)
         ])
 
         applyMode()
@@ -334,10 +304,10 @@ final class MediaDetailChromeView: UIView {
     private func applyMode() {
         switch mode {
         case .carouselStable:
-            actionAndCastRow.isUserInteractionEnabled = false
+            actionRow.isUserInteractionEnabled = false
             isUserInteractionEnabled = false
         case .expandedDetail:
-            actionAndCastRow.isUserInteractionEnabled = true
+            actionRow.isUserInteractionEnabled = true
             isUserInteractionEnabled = true
         }
     }
@@ -345,7 +315,7 @@ final class MediaDetailChromeView: UIView {
     /// Toggles button focusability without changing mode, so Up from the below-fold
     /// cannot escape into the faded chrome.
     func setActionRowFocusable(_ on: Bool) {
-        actionAndCastRow.isUserInteractionEnabled = on
+        actionRow.isUserInteractionEnabled = on
     }
 
     // MARK: - Reset (host calls during cell reuse)
@@ -372,7 +342,6 @@ final class MediaDetailChromeView: UIView {
         qualityRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
         actionButtonsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         playButton = nil
-        castLabel.text = nil
     }
 
     /// See `logoAspectConstraint`.
@@ -517,7 +486,7 @@ final class MediaDetailChromeView: UIView {
             }
         }
 
-        // Detail fetch — populates richer genre / rating / quality / cast.
+        // Detail fetch — populates richer genre / rating / quality.
         loadDetail(for: item, token: token)
     }
 
@@ -596,22 +565,13 @@ final class MediaDetailChromeView: UIView {
         return nil
     }
 
-    /// Re-render the chrome rows + description + cast with newly-loaded
+    /// Re-render the chrome rows + description with newly-loaded
     /// detail fields. Called only when the fetch lands and the load
     /// token still matches.
     private func applyDetail(item: MediaItem, detail: MediaItemDetail) {
         rebuildGenreRow(item: item, detail: detail)
         rebuildQualityRow(item: item, detail: detail)
         renderDescription(item: item, detail: detail)
-        let topCast = detail.cast.prefix(3).map { $0.name }
-        if !topCast.isEmpty {
-            let attr = NSMutableAttributedString(string: String(localized: "Starring "), attributes: [
-                .foregroundColor: UIColor.white.withAlphaComponent(Self.rolesLabelAlpha)])
-            attr.append(NSAttributedString(string: topCast.joined(separator: ", ")))
-            castLabel.attributedText = attr
-        } else {
-            castLabel.attributedText = nil
-        }
         addVersionsButton(detail)
     }
 

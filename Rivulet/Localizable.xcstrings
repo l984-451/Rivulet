@@ -19666,28 +19666,6 @@
         }
       }
     },
-    "Starring " : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mit "
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Πρωταγωνιστούν "
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Avec "
-          }
-        }
-      }
-    },
     "Start Watching" : {
       "localizations" : {
         "de" : {

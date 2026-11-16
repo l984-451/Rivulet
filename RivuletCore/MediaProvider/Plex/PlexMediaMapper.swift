@@ -465,7 +465,8 @@ enum PlexMediaMapper {
                 thumbnailURL: personURL(ch.thumb)
             )
         }
-        let mediaSources: [MediaSource] = (meta.Media ?? []).flatMap { media in
+        let versions = (meta.Media ?? []).filter { !$0.isMissing }
+        let mediaSources: [MediaSource] = (versions.isEmpty ? meta.Media ?? [] : versions).flatMap { media in
             (media.Part ?? []).map { part in
                 mediaSource(media, part, serverURL: serverURL, authToken: authToken)
             }

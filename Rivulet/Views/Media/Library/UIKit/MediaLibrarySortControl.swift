@@ -2,8 +2,9 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 //  The library grid's header: title and item count on the left, Shuffle and the Sort
-//  and View (Titles, Collections, Folders) menu buttons on the right. Only the buttons take focus,
-//  and Up and Down reach them only from beneath.
+//  and View (Titles, Collections, Folders) menu buttons on the right. Only the buttons take focus.
+//  Up reaches them from any column of the grid below; Down reaches them only from a row above
+//  whose column overlaps them; Left and Right never enter them from outside.
 
 import UIKit
 
@@ -382,10 +383,25 @@ final class MediaLibrarySortControl: UICollectionViewCell {
 
     override var canBecomeFocused: Bool { false }
 
-    /// Reachable from inside the header, or from a view whose column overlaps the buttons.
+    /// From outside, only Up and Down enter the buttons. `buttonsReachable` cannot see a move's
+    /// direction, so without this a Left or Right off the end of the grid's first row could jump
+    /// diagonally up into them.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if let next = context.nextFocusedView, next.isDescendant(of: self),
+           context.previouslyFocusedView?.isDescendant(of: self) != true,
+           context.focusHeading == .left || context.focusHeading == .right {
+            return false
+        }
+        return super.shouldUpdateFocus(in: context)
+    }
+
+    /// Reachable from inside the header, from anywhere in the grid below (the buttons are the only
+    /// way to Shuffle, Sort and View, so no column is cut off from them), or from a view above
+    /// whose column overlaps the buttons.
     private func buttonsReachable() -> Bool {
         guard let window, let focused = UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView else { return true }
         if focused.isDescendant(of: self) { return true }
+        if focused.convert(focused.bounds, to: window).minY >= convert(bounds, to: window).maxY - 1 { return true }
         let left = [shuffleButton, sortButton, viewButton].filter { !$0.isHidden }.map { $0.convert($0.bounds, to: window).minX }.min()
         guard let left else { return false }
         return focused.convert(focused.bounds, to: window).maxX > left

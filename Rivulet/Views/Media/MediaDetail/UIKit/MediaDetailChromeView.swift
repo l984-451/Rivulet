@@ -989,6 +989,19 @@ final class MediaDetailChromeView: UIView {
                 ])
                 ratingStack = UIStackView(arrangedSubviews: [glyph, label])
                 ratingStack.spacing = 2
+            } else if rating.source == .imdb {
+                // The badge stands in for the source name at full opacity, so its yellow
+                // reads true over any backdrop; the score keeps the row's alpha.
+                let badge = UIImageView(image: imdbBadge)
+                badge.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    badge.widthAnchor.constraint(equalToConstant: imdbBadge.size.width),
+                    badge.heightAnchor.constraint(equalToConstant: imdbBadge.size.height)
+                ])
+                ratingStack = UIStackView(arrangedSubviews: [badge, label])
+                ratingStack.spacing = 6
+                ratingStack.isAccessibilityElement = true
+                ratingStack.accessibilityLabel = String(localized: "IMDb rating \(rating.badgeText)")
             } else {
                 ratingStack = UIStackView(arrangedSubviews: [makeCaptionLabel(rating.name, alpha: alpha), label])
                 ratingStack.spacing = 6
@@ -1025,6 +1038,26 @@ final class MediaDetailChromeView: UIView {
             glyph.draw(at: CGPoint(x: (20 - size.width) / 2, y: (20 - size.height) / 2), withAttributes: [.font: font])
         }
     }
+
+    /// IMDb's yellow badge, drawn in code: "IMDb" in black heavy condensed type on a #F5C518
+    /// rounded rectangle. Its height is the caption font's cap height x 1.25, which lands on the
+    /// row's 22pt badge height, with the word's caps centred on it.
+    private static let imdbBadge: UIImage = {
+        let height = (captionFont.capHeight * 1.25).rounded()
+        let textFont = UIFont.systemFont(ofSize: (height * 0.66).rounded(), weight: .black, width: .condensed)
+        let text = "IMDb" as NSString
+        let attributes: [NSAttributedString.Key: Any] = [.font: textFont, .foregroundColor: UIColor.black]
+        let textWidth = text.size(withAttributes: attributes).width
+        let size = CGSize(width: (textWidth + height * 0.5).rounded(.up), height: height)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            UIColor(red: 0xF5 / 255.0, green: 0xC5 / 255.0, blue: 0x18 / 255.0, alpha: 1).setFill()
+            UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: height * 0.18).fill()
+            // The baseline that puts the top of the caps at (height - capHeight) / 2.
+            let baseline = (height + textFont.capHeight) / 2
+            text.draw(at: CGPoint(x: (size.width - textWidth) / 2, y: baseline - textFont.ascender),
+                      withAttributes: attributes)
+        }
+    }()
 
     // MARK: - Factories
 

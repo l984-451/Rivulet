@@ -10263,6 +10263,7 @@
         }
       }
     },
+    "IMDb rating %@" : {},
     "IMDb users" : {
       "localizations" : {
         "de" : {

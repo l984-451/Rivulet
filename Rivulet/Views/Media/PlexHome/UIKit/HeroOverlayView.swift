@@ -33,7 +33,6 @@ final class HeroOverlayView: UIView {
     var onIndexChanged: ((Int, PlexMetadata, HeroPageDirection) -> Void)?
     var onInfo: ((PlexMetadata) -> Void)?
     var onPlay: ((PlexMetadata) -> Void)?
-    var onFocusEntered: (() -> Void)?
     /// False while something covers Home (a player, a preview): the timer
     /// then waits for the next interval instead of paging unseen.
     var autoAdvanceGate: (() -> Bool)?
@@ -230,10 +229,6 @@ final class HeroOverlayView: UIView {
                                  with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         let nextInside = context.nextFocusedView?.isDescendant(of: self) == true
-        let prevInside = context.previouslyFocusedView?.isDescendant(of: self) == true
-        if nextInside, !prevInside {
-            onFocusEntered?()
-        }
         if nextInside || nextInside != focusInHero {
             focusInHero = nextInside
             updateAutoAdvanceTimer()

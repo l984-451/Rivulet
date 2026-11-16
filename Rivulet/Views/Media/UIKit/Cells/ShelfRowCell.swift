@@ -122,7 +122,6 @@ final class ShelfRowCell: UICollectionViewCell {
     }()
     private var headerLeadingConstraint: NSLayoutConstraint!
     private var headerHeightConstraint: NSLayoutConstraint!
-    private var rowWidthConstraint: NSLayoutConstraint!
 
     /// True while the preview carousel covers this row: its tiles fly as the
     /// cards, so the real ones stay hidden. `willDisplay` covers reused cells.
@@ -223,14 +222,6 @@ final class ShelfRowCell: UICollectionViewCell {
         contentView.addSubview(rowCollectionView)
         headerLeadingConstraint = headerLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: MediaRowMetrics.rowLeading)
         headerHeightConstraint = headerLabel.heightAnchor.constraint(equalToConstant: 0)
-        // Width is constraint-driven (not a trailing pin): when screen-aligned
-        // the inner collection must reach the screen's RIGHT edge even if the
-        // host cell is narrower than the screen, otherwise the peeking tile's
-        // frame falls outside the collection's bounds and its cell is never
-        // realized ("pops into place" instead of sliding in). Defaults to the
-        // cell width (home behavior); updated in layoutSubviews.
-        rowWidthConstraint = rowCollectionView.widthAnchor.constraint(equalToConstant: MediaRowMetrics.posterWidth)
-        rowWidthConstraint.priority = .required
         NSLayoutConstraint.activate([
             headerLabel.topAnchor.constraint(equalTo: contentView.topAnchor),
             headerLeadingConstraint,
@@ -240,17 +231,8 @@ final class ShelfRowCell: UICollectionViewCell {
             rowCollectionView.topAnchor.constraint(equalTo: headerLabel.bottomAnchor),
             rowCollectionView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             rowCollectionView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            rowWidthConstraint,
+            rowCollectionView.widthAnchor.constraint(equalTo: contentView.widthAnchor),
         ])
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // The inner collection spans the cell.
-        let targetWidth = bounds.width
-        if abs(rowWidthConstraint.constant - targetWidth) > 0.5 {
-            rowWidthConstraint.constant = targetWidth
-        }
     }
 
     @available(*, unavailable)

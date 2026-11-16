@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-//  A collection that drives its own vertical focus scroll; the engine's drifts. With
-//  `isScrollEnabled = false`, the top section pins at `topBand` and every other row
-//  centres, clamped to the content, as on Home and Apple's detail page.
+// Native focus scrolling with app-owned row destinations and focus restoration.
+// Hosts forward the outer scroll view's target and completion delegate callbacks.
 
 import UIKit
 
 final class FocusScrollControlledCollectionView: UICollectionView {
     /// Screen-y the TOP section's row top is pinned to (under the logo + pills).
     var topBand: CGFloat = 230
-    /// Duration of the controlled vertical scroll. Defaults to the shared
-    /// `FocusScrollMotion.settleDuration` so the home and detail surfaces stay
-    /// in sync; still overridable per instance.
-    var scrollDuration: TimeInterval = FocusScrollMotion.settleDuration
     /// Fires on every focus change — the newly-focused index path, or nil when
     /// focus leaves the collection. Used to track which episode/season is current.
     var onFocusedIndexPath: ((IndexPath?) -> Void)?
@@ -37,6 +32,8 @@ final class FocusScrollControlledCollectionView: UICollectionView {
     /// redirect Left/Right from a description to the adjacent episode's thumb.
     private(set) var focusedEpisodeIndexPath: IndexPath?
 
+    private lazy var nativeScroll = NativeFocusScrollCoordinator(scrollView: self)
+
     /// The last focused cell, kept across a modal. Nothing else remembers it here (both
     /// system restores are off on purpose), and it survives focus leaving the collection.
     private(set) var lastFocusedIndexPath: IndexPath?
@@ -53,11 +50,9 @@ final class FocusScrollControlledCollectionView: UICollectionView {
               let cell = enclosingCell(of: nextView) else {
             focusedCellIsTopSection = false   // focus left the collection (pills/hero)
             focusedEpisodeIndexPath = nil
+            nativeScroll.focusChanged(to: nil, target: nil)
             return
         }
-        let frame = cell.convert(cell.bounds, to: self)   // content coordinates
-        let minY = -adjustedContentInset.top
-        let maxY = max(minY, contentSize.height - bounds.height + adjustedContentInset.bottom)
         // A shelf row's focused tile belongs to its nested collection, so resolve the cell this one owns.
         let cellIndexPath = indexPath(for: cell) ?? ownedCell(containing: nextView)?.indexPath
         let isTop = topSectionIndex != nil && cellIndexPath?.section == topSectionIndex
@@ -65,45 +60,36 @@ final class FocusScrollControlledCollectionView: UICollectionView {
         focusedEpisodeIndexPath = isTop ? cellIndexPath : nil
         // The one place the path is resolved for every row shape.
         if let cellIndexPath { lastFocusedIndexPath = cellIndexPath }
-        let targetY = isTop ? (frame.minY - topBand) : (frame.midY - bounds.height / 2)
-        let clamped = max(minY, min(targetY, maxY))
-        animateOffset(to: clamped)
+        nativeScroll.focusChanged(to: nextView, target: restingOffset(for: nextView))
     }
 
-    // MARK: - Per-frame scroll driver
-
-    // UIView.animate jumps the model offset at once, so a row ending off-screen loses its
-    // cells before it slides out. Advancing the real offset per frame recycles gradually.
-    private var scrollLink: CADisplayLink?
-    private var scrollStartY: CGFloat = 0
-    private var scrollTargetY: CGFloat = 0
-    private var scrollStartTime: CFTimeInterval = 0
-
-    private func animateOffset(to targetY: CGFloat) {
-        scrollLink?.invalidate()
-        if abs(targetY - contentOffset.y) < 0.5 {
-            contentOffset = CGPoint(x: 0, y: targetY)
-            scrollLink = nil
-            return
-        }
-        scrollStartY = contentOffset.y          // continue from the current position
-        scrollTargetY = targetY
-        scrollStartTime = CACurrentMediaTime()
-        let link = CADisplayLink(target: self, selector: #selector(stepScroll))
-        link.add(to: .main, forMode: .common)
-        scrollLink = link
+    private func restingOffset(for view: UIView) -> CGPoint? {
+        guard view.isDescendant(of: self), let cell = enclosingCell(of: view) else { return nil }
+        let frame = cell.convert(cell.bounds, to: self)
+        let path = indexPath(for: cell) ?? ownedCell(containing: view)?.indexPath
+        let isTop = topSectionIndex != nil && path?.section == topSectionIndex
+        let minY = -adjustedContentInset.top
+        let maxY = max(minY, contentSize.height - bounds.height + adjustedContentInset.bottom)
+        let targetY = isTop ? frame.minY - topBand : frame.midY - bounds.height / 2
+        return CGPoint(x: 0, y: max(minY, min(targetY, maxY)))
     }
 
-    @objc private func stepScroll(_ link: CADisplayLink) {
-        let elapsed = CACurrentMediaTime() - scrollStartTime
-        let t = scrollDuration > 0 ? min(1, elapsed / scrollDuration) : 1
-        let e = FocusScrollMotion.ease(t)   // shared focus-scroll curve (cubic ease-out)
-        contentOffset = CGPoint(x: 0, y: scrollStartY + (scrollTargetY - scrollStartY) * CGFloat(e))
-        if t >= 1 {
-            link.invalidate()
-            scrollLink = nil
-            contentOffset = CGPoint(x: 0, y: scrollTargetY)
-        }
+    func focusScrollTarget(proposed: CGPoint) -> CGPoint {
+        let focused = UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView
+        return nativeScroll.targetContentOffset(proposed: proposed, preferred: focused.flatMap(restingOffset))
+    }
+
+    func finishFocusScroll() { nativeScroll.didEndScrolling() }
+
+    func endFocusDragging(willDecelerate: Bool) { nativeScroll.didEndDragging(willDecelerate: willDecelerate) }
+
+    func cancelFocusScroll() { nativeScroll.cancel() }
+
+    func settleFocusScroll() { nativeScroll.settle() }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { nativeScroll.cancel() }
     }
 
     /// Walk up from a focused view to its enclosing collection-view cell (or nil

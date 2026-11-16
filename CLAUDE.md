@@ -478,16 +478,18 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   went to the shell's edge catcher, Select and Menu did nothing. A view that
   overlays a focus surface must be exactly its own footprint, and anything
   larger (the letter indicator) must be `isHidden` before a focus request.
-- **A held Up/Down hands focus to tvOS's fast-scroll index bar after ~1.5s.**
-  The engine moves row by row, then focuses `_UIFocusFastScrollingIndexBarView`
-  (a hidden subview of the collection, the "dots") and stops issuing focus
-  moves. That hand-off bypasses `shouldUpdateFocus` and happens even under
-  `indexDisplayMode = .alwaysHidden`; on this self-scrolling collection the
-  system bar scrolls nothing, so focus just vanishes. `PlexHomeViewController`
-  treats the hand-off as the fast-mode signal and drives the offset itself
-  while the arrow stays down (`heldArrow`, `stepFastScroll`), landing on the
-  centre tile on release. Do not refuse the engine's repeat moves instead:
-  after the same ~1.5s it escalates past the collection to the sidebar.
+- **Vertical focus scrolling is UIKit's own** on Home, Library, Search,
+  Person, Season and the detail's lower rows (#631). The page picks where a
+  row rests in `scrollViewWillEndDragging`; `NativeFocusScrollCoordinator`
+  scrolls there itself when UIKit doesn't move. Do not bring back
+  `isScrollEnabled = false` with a display-link driver: UIKit then never
+  prepares the next row in idle time, and every row entry hitched on device.
+- **A held Up/Down hands focus to tvOS's fast-scroll index bar**, even under
+  `indexDisplayMode = .alwaysHidden`, and the hand-off bypasses
+  `shouldUpdateFocus`. With native scrolling the bar scrolls the page itself.
+  Left, Select and Menu bring focus back to a tile (`landFocusOnCenterTile`).
+  Do not refuse the engine's repeat moves instead: after about 1.5 s it
+  escalates past the collection to the sidebar.
 
 ### Context Menus (long-press)
 

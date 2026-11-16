@@ -45,7 +45,6 @@ final class HeroOverlayCell: UICollectionViewCell {
         let onIndexChanged: (Int, PlexMetadata, HeroPageDirection) -> Void
         let onInfo: (PlexMetadata) -> Void
         let onPlay: (PlexMetadata) -> Void
-        let onFocusEntered: (() -> Void)?
     }
 
     /// MediaItem configuration, used by MediaLibraryViewController when `config.showHero` is set.
@@ -64,7 +63,6 @@ final class HeroOverlayCell: UICollectionViewCell {
         overlay.onIndexChanged = config.onIndexChanged
         overlay.onInfo = config.onInfo
         overlay.onPlay = config.onPlay
-        overlay.onFocusEntered = config.onFocusEntered
         overlay.configure(
             items: config.items,
             serverURL: config.serverURL,

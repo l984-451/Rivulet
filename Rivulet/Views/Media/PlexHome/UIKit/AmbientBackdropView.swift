@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// The page's ambient color wash: one artwork stretched under the home's frosted material, plus a
-// vignette that keeps the lower half dark. It follows the hero with a slow 0.6s crossfade, since a
-// hard cut reads as the whole background flickering.
+// The page's ambient color wash: one artwork stretched full screen (frosted over on Settings and
+// Photos), plus a vignette that keeps the lower half dark. It follows the hero with a slow 0.6s
+// crossfade, since a hard cut reads as the whole background flickering.
 
 import UIKit
 

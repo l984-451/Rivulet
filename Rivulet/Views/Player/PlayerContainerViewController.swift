@@ -101,6 +101,8 @@ class PlayerContainerViewController: UIViewController {
     private var contentAnchor: ContentFocusAnchorView?
     /// Touch twin for the content state's Up/Down (see `setupContentAnchor`).
     private var contentSwipeBinding: DirectionalInputBinding?
+    /// Touch twin for the floating skip pill's Up/Down (see `skipPillVertical`).
+    private var skipPillSwipeBinding: DirectionalInputBinding?
     /// Tap-vs-hold for a content-state Left/Right press, the same detector the
     /// scrubber proxy uses, so both focus regimes behave identically.
     private let contentPressDetector = DirectionalPressDetector()
@@ -229,15 +231,36 @@ class PlayerContainerViewController: UIViewController {
                     Task { await vm.skipActiveMarker() }
                 }
             }
-            // Up/Down while the pill owns focus (chrome hidden) surfaces the
-            // controls; while the chrome is up, let the engine move focus back
-            // to the rail on Down (return false → not consumed).
-            pill.onDirectionalPress = { [weak self] _ in
-                guard let vm = self?.viewModel else { return false }
+            // Up/Down while the pill owns focus (chrome hidden) bring the controls
+            // up with focus in them (`skipPillVertical`); while the chrome is up,
+            // let the engine move focus back to the rail on Down (return false →
+            // not consumed).
+            pill.onDirectionalPress = { [weak self] type in
+                guard let self, let vm = self.viewModel else { return false }
                 if vm.showControls { return false }
-                vm.showControlsTemporarily()
+                self.skipPillVertical(up: type == .upArrow)
                 return true
             }
+            // The touch twin of that press: gated swipes on the pill, on the press's
+            // own predicate (the floating pill, chrome hidden, where the engine has
+            // nowhere to move). A recognized swipe also stops the engine carrying
+            // the rest of the touch on from the new landing. Not in a touch that
+            // became a swipe-scrub, nor while the clickpad is down (a click jolts
+            // the touch into a fake swipe) or the touch is a ring jog.
+            skipPillSwipeBinding = DirectionalInputBinding(
+                gatedSwipesOn: pill,
+                directions: [.up, .down],
+                shouldHandle: { [weak self, weak pill] _ in
+                    guard let self, let vm = self.viewModel, pill?.isFocused == true else { return false }
+                    return !vm.showControls && !self.swipeScrubEntered
+                        && !RemoteInputHandler.isClickpadDown && !RemoteInputHandler.isRingJogging
+                },
+                onSwipe: { [weak self] direction in
+                    guard let self else { return }
+                    self.swipeTouchSpent = true
+                    self.skipPillVertical(up: direction == .up)
+                }
+            )
 
             [chromeScrim, dim, railView, bar, proxy, pill].forEach {
                 view.addSubview($0)
@@ -842,6 +865,21 @@ class PlayerContainerViewController: UIViewController {
         updateFocusIfNeeded()
     }
 
+    /// Up/Down from the floating skip pill (chrome hidden), as a press or as its
+    /// gated swipes, land focus in the controls in one move. Up lands on the
+    /// first tool button, as Up from the content does. Down brings the controls
+    /// up on the scrubber, the landing Select from the content uses, so a second
+    /// Down reaches the pills.
+    private func skipPillVertical(up: Bool) {
+        guard let vm = viewModel else { return }
+        if up {
+            handleContentVertical(up: true)
+            return
+        }
+        vm.showControlsTemporarily()
+        focusScrubber()
+    }
+
     /// Select acts on its release, like the tap gesture it replaces: acting on
     /// the down can move focus mid-press (hiding the chrome hands focus to the
     /// skip pill when a marker is up), and the release would then land on
@@ -900,6 +938,13 @@ class PlayerContainerViewController: UIViewController {
                 vm.showControlsTemporarily()
             }
         }
+        focusScrubber()
+    }
+
+    /// Puts focus on the scrubber with the controls up, starting the controls
+    /// focus mode, for Select from the content and Down from the skip pill.
+    private func focusScrubber() {
+        guard let vm = viewModel else { return }
         // The chrome sink runs a pass later; the proxy must be focusable now.
         applyChromeVisibility()
         guard scrubberProxy?.isFocusEnabled == true else { return }

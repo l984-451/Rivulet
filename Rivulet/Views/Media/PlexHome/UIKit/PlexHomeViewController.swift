@@ -4360,7 +4360,8 @@ final class PlexHomeViewController: UIViewController {
             playFocusedTile()
             return
         }
-        super.pressesBegan(presses, with: event)
+        let rest = pressesForSuper(presses)
+        if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -4369,7 +4370,8 @@ final class PlexHomeViewController: UIViewController {
             isHandlingPlayPausePress = false
             return
         }
-        super.pressesEnded(presses, with: event)
+        let rest = pressesForSuper(presses)
+        if !rest.isEmpty { super.pressesEnded(rest, with: event) }
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -4378,7 +4380,26 @@ final class PlexHomeViewController: UIViewController {
             isHandlingPlayPausePress = false
             return
         }
-        super.pressesCancelled(presses, with: event)
+        let rest = pressesForSuper(presses)
+        if !rest.isEmpty { super.pressesCancelled(rest, with: event) }
+    }
+
+    override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let rest = pressesForSuper(presses)
+        if !rest.isEmpty { super.pressesChanged(rest, with: event) }
+    }
+
+    /// On Home and library pages, arrows end here: nothing above them may rely on an arrow press.
+    /// Focus moves on them through the focus engine's own recognizer before any responder sees the
+    /// press, the sidebar opens through focus (the shell's edge catcher) and Menu goes through
+    /// MenuPressInterceptor, so forwarding them only walked about 25 responders (three SwiftUI
+    /// hosts) per press. Other modes forward everything (Search's container reads Up and Down).
+    private func pressesForSuper(_ presses: Set<UIPress>) -> Set<UIPress> {
+        switch mode {
+        case .home, .library: break
+        default: return presses
+        }
+        return presses.filter { ![.upArrow, .downArrow, .leftArrow, .rightArrow].contains($0.type) }
     }
 
     /// Resolve whatever currently holds focus to a playable MediaItem and play

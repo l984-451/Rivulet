@@ -96,6 +96,19 @@ final class PreviewCarouselViewController: UIViewController {
     /// Paused animator whose `fractionComplete` is the blur intensity; built on first arm.
     private var blurAnimator: UIViewPropertyAnimator?
 
+    /// Translucent chevron under the collapsed card, hinting that Down opens the full-screen
+    /// detail. Shown only in `.carouselStable` at rest (see `shouldShowPullDownHint`).
+    private let pullDownHint = PreviewPullDownHintView()
+    /// The visibility the hint is at or fading to.
+    private var pullDownHintTargetVisible = false
+    /// Where the current indirect touch began, while the hint is up; nil otherwise.
+    private var pullDownDragStartY: CGFloat?
+    /// Downward finger travel over which the hint fades out completely.
+    private static let pullDownHintFadeDistance: CGFloat = 160
+    /// Centre of the hint above the screen bottom: the middle of the 75 pt gap between the
+    /// chrome's bottom (shelfPeek above the bottom) and the 40 pt below-fold peek.
+    private static let pullDownHintBottomOffset: CGFloat = PreviewCarouselGeometry.carouselChromeShelfPeek - 37.5
+
     deinit {
         // A property animator released while .active throws. `blurAnimator` stays
         // paused (.active) for the VC's life, so stop it or dismiss aborts the app.
@@ -335,6 +348,17 @@ final class PreviewCarouselViewController: UIViewController {
         // Let the below-fold peek's expand morph ride the morph animator.
         morphController.detailContainer = expandedDetail
 
+        // The pull-down hint, above the card and its below-fold peek, below the morph
+        // snapshot. Hidden until the carousel settles; never shown expanded.
+        pullDownHint.translatesAutoresizingMaskIntoConstraints = false
+        pullDownHint.alpha = 0
+        pullDownHint.isHidden = true
+        view.addSubview(pullDownHint)
+        NSLayoutConstraint.activate([
+            pullDownHint.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pullDownHint.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: -Self.pullDownHintBottomOffset)
+        ])
+
         // Morph snapshot sits on top until entry settles.
         morphSnapshot.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(morphSnapshot)
@@ -566,6 +590,95 @@ final class PreviewCarouselViewController: UIViewController {
             expandedDetail.item = items[selectedIndex]
         }
         expandedDetail.setCurrent(true, animated: animated)
+        // The pull-down hint arrives with the centred card's chrome.
+        updatePullDownHint(animated: animated)
+    }
+
+    // MARK: - Pull-down hint
+
+    /// Only on the settled, collapsed card: never in a standalone or Skip Preview open,
+    /// never expanded, never mid-page (two cards slide under it there).
+    private var shouldShowPullDownHint: Bool {
+        !standaloneDetail && !opensExpanded && !isExpanded
+            && state.phase == .carouselStable && pagingAnimation == nil
+    }
+
+    /// Fades the hint to what `shouldShowPullDownHint` says; a no-op when already there.
+    private func updatePullDownHint(animated: Bool) {
+        let visible = shouldShowPullDownHint
+        guard visible != pullDownHintTargetVisible else { return }
+        pullDownHintTargetVisible = visible
+        pullDownDragStartY = nil
+        if visible {
+            pullDownHint.isHidden = false
+            pullDownHint.startMotion()
+            // Always fades in (never pops), even when the chrome itself appears without animation.
+            // Just behind the chrome's 0.5 s cascade, so it reads as part of the card settling.
+            UIView.animate(withDuration: 0.5, delay: 0.3, options: [.beginFromCurrentState, .curveEaseOut]) {
+                self.pullDownHint.alpha = 1
+            }
+        } else {
+            guard animated else {
+                pullDownHint.alpha = 0
+                finishHidingPullDownHint()
+                return
+            }
+            // Shorter than the 0.25 s expand morph: gone before the full-screen chrome takes focus.
+            UIView.animate(withDuration: 0.18, delay: 0, options: [.beginFromCurrentState, .curveEaseIn],
+                           animations: { self.pullDownHint.alpha = 0 },
+                           completion: { [weak self] _ in self?.finishHidingPullDownHint() })
+        }
+    }
+
+    /// Hidden, not just transparent, and its animations stopped, unless a show overtook the fade.
+    private func finishHidingPullDownHint() {
+        guard !pullDownHintTargetVisible else { return }
+        pullDownHint.isHidden = true
+        pullDownHint.stopMotion()
+    }
+
+    // The hint follows the finger: a downward drag on the touch surface fades it before the
+    // Down swipe commits. Indirect touches reach this VC through the focused anchor.
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard pullDownHintTargetVisible, presentedViewController == nil,
+              let touch = touches.first, touch.type == .indirect else { return }
+        pullDownDragStartY = touch.location(in: view).y
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard pullDownHintTargetVisible, let startY = pullDownDragStartY,
+              let touch = touches.first else { return }
+        let travel = touch.location(in: view).y - startY
+        let progress = min(1, max(0, travel / Self.pullDownHintFadeDistance))
+        // Drop an in-flight fade-in so the drag owns the alpha (the bounce is on a sublayer).
+        pullDownHint.layer.removeAllAnimations()
+        pullDownHint.alpha = 1 - progress
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        endPullDownDrag()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        endPullDownDrag()
+    }
+
+    /// A drag that did not expand: the hint comes back. Deferred a turn, since a recognized
+    /// Down swipe cancels these touches and its action (the expand, which hides the hint) runs alongside.
+    private func endPullDownDrag() {
+        guard pullDownDragStartY != nil else { return }
+        pullDownDragStartY = nil
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.pullDownHintTargetVisible, self.pullDownDragStartY == nil else { return }
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+                self.pullDownHint.alpha = 1
+            }
+        }
     }
 
     // MARK: - Geometry helpers
@@ -1185,6 +1298,8 @@ final class PreviewCarouselViewController: UIViewController {
             next.p1y = min(1, max(next.p1y, slope * 0.40))
         }
         pagingAnimation = next
+        // No hint while the cards slide; it returns with the new card's chrome.
+        updatePullDownHint(animated: true)
 
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tickPagingAnimation))
@@ -1229,6 +1344,8 @@ final class PreviewCarouselViewController: UIViewController {
                 state.finishPaging()
                 // Left before its held reveal fired: reveal it now.
                 if outgoingCell?.isCurrent == false { updateCurrentCellChrome(animated: true) }
+                // The chrome stayed (or was revealed above), so the hint comes back.
+                updatePullDownHint(animated: true)
                 return
             }
             // Hand the fade back: both are at 0 by now, and the new centre
@@ -1318,6 +1435,8 @@ final class PreviewCarouselViewController: UIViewController {
 
         state.beginExpand()
         isExpanded = true
+        // The hint fades out as the card starts growing.
+        updatePullDownHint(animated: true)
 
         let cell = collectionView.cellForItem(at: IndexPath(item: selectedIndex, section: 0)) as? PreviewCardView
         // Finish the chrome cascade first, so a paged-to card's metadata is not
@@ -1334,6 +1453,8 @@ final class PreviewCarouselViewController: UIViewController {
             // Reveal the real focus-driven below-fold (post-morph, §6).
             self.expandedDetail.revealBelowFoldCollection()
             self.setNeedsFocusUpdate()
+            // A Menu mid-expand reverses this morph back to the card, and the hint returns.
+            self.updatePullDownHint(animated: true)
         }
     }
 
@@ -1429,6 +1550,8 @@ final class PreviewCarouselViewController: UIViewController {
             self.syncCards()
             // After the morph, so a focus animation never overlaps its curve.
             self.setNeedsFocusUpdate()
+            // Back on the collapsed card, so the hint returns.
+            self.updatePullDownHint(animated: true)
         }
     }
 
@@ -1440,6 +1563,8 @@ final class PreviewCarouselViewController: UIViewController {
         guard pagingAnimation == nil, !morphController.isAnimating else { return }
         backdropPlane.stopThemeVideo()
         state.beginExit()
+        // The hint leaves with the card.
+        updatePullDownHint(animated: true)
         onPrepareDismiss(dismissSourceTarget)
         // Fly only when the centred card has a tile on screen to land on.
         if !entrySnapshots.isEmpty {

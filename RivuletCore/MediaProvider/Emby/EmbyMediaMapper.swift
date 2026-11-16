@@ -19,7 +19,9 @@ enum EmbyMediaMapper {
     /// Library views Rivulet can render. Box set and playlist views are dropped: collections
     /// and playlists have their own surfaces. A view with no `CollectionType` is mixed.
     /// Types never seen on a real server (books, games, live TV, channels) are skipped.
-    static func library(_ view: EmbyItem, providerID: String, homeVideos: HomeVideosContent = .videos) -> MediaLibrary? {
+    /// `homeExcludes` is the user's `LatestItemsExcludes`: libraries kept off Home.
+    static func library(_ view: EmbyItem, providerID: String, homeVideos: HomeVideosContent = .videos,
+                        homeExcludes: Set<String> = []) -> MediaLibrary? {
         let kind: MediaLibrary.LibraryKind
         switch view.collectionType {
         case "movies": kind = .movies
@@ -32,6 +34,7 @@ enum EmbyMediaMapper {
         }
         var library = MediaLibrary(id: view.id.value, providerID: providerID, title: view.name, kind: kind)
         library.browsesByFolder = kind == .mixed
+        library.isPinnedToHome = !homeExcludes.contains(view.id.value)
         return library
     }
 

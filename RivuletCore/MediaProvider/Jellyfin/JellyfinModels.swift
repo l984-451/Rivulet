@@ -31,9 +31,13 @@ nonisolated struct JFUser: Decodable, Sendable {
     let name: String?
 }
 
-/// `Users/Me`, read for the deletion and recording rights in its policy.
+/// `Users/Me`, read for the deletion and recording rights in its policy and the libraries kept off Home.
 nonisolated struct JFUserWithPolicy: Decodable, Sendable {
     let policy: Policy?
+    let configuration: Configuration?
+    nonisolated struct Configuration: Decodable, Sendable {
+        let latestItemsExcludes: [String]?
+    }
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?
         let enableContentDeletion: Bool?

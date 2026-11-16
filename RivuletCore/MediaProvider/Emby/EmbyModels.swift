@@ -58,6 +58,11 @@ nonisolated struct EmbyUser: Decodable, Sendable {
     let id: EmbyID?
     let name: String?
     let policy: Policy?
+    let configuration: Configuration?
+
+    nonisolated struct Configuration: Decodable, Sendable {
+        let latestItemsExcludes: [EmbyID]?
+    }
 
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?

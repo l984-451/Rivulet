@@ -57,7 +57,10 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
     // MARK: - Browse
 
     func libraries() async throws -> [MediaLibrary] {
+        async let me: JFUserWithPolicy? = try? client.get("Users/Me")
         let result: JFQueryResult = try await client.get("UserViews")
+        // A failed read keeps every library on Home.
+        let excludes = Set(await me?.configuration?.latestItemsExcludes ?? [])
         var libraries: [MediaLibrary] = []
         for view in result.items ?? [] {
             // One count per "homevideos" view decides photo browser or video page.
@@ -65,7 +68,7 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             if view.collectionType == "homevideos", let viewID = view.id {
                 content = try await self.homeVideosContent(libraryID: viewID)
             }
-            if let library = JellyfinMediaMapper.library(view, providerID: id, homeVideos: content) {
+            if let library = JellyfinMediaMapper.library(view, providerID: id, homeVideos: content, homeExcludes: excludes) {
                 libraries.append(library)
             }
         }

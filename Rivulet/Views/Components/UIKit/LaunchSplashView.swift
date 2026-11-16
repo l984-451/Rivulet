@@ -5,7 +5,7 @@ import UIKit
 
 /// The launch splash: the app icon's river R on its starry sky. The R pours in
 /// along its curve, a light runs down it while Home loads, and it zooms away
-/// into Home once Home is ready.
+/// into Home once Home is ready (fades, if Home beat the pour).
 ///
 /// Core Animation only, no display link and no SwiftUI animation: the splash is
 /// up while launch keeps the main thread busiest, and these animations run in
@@ -22,6 +22,8 @@ final class LaunchSplashView: UIView {
         static let bloomBreath: CFTimeInterval = 2.6
         /// Home is ready when the exit starts, so it is short.
         static let exit: CFTimeInterval = 0.25
+        /// A pour still running when Home is ready completes in this long, then fades.
+        static let pourHurry: CFTimeInterval = 0.1
     }
 
     private enum Layout {
@@ -246,13 +248,25 @@ final class LaunchSplashView: UIView {
     // MARK: - Exit
 
     /// Plays the exit, then calls `completion`. Home is ready by now, so the exit
-    /// never waits on the entrance: a pour still running just zooms away with the rest.
+    /// never waits on the entrance: an R still pouring finishes in `pourHurry` and fades (#659).
     func finish(completion: @escaping () -> Void) {
         guard !isFinishing else { return }
         isFinishing = true
+        // The pour's group is removed once it has played.
+        let pouring = !reduceMotion && reveal.animation(forKey: "pour") != nil
         CATransaction.begin()
         CATransaction.setCompletionBlock(completion)
-        if !reduceMotion {
+        let fadeOut = fade(from: 1, to: 0, duration: Timing.exit)
+        if pouring {
+            let hurry = CABasicAnimation(keyPath: "locations")
+            hurry.fromValue = reveal.presentation()?.locations
+                ?? [NSNumber(value: Double(-Layout.revealFeather)), 0]
+            hurry.toValue = reveal.locations
+            hurry.duration = Timing.pourHurry
+            hurry.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            reveal.add(hurry, forKey: "pour")
+            fadeOut.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) + Timing.pourHurry
+        } else if !reduceMotion {
             let zoom = CABasicAnimation(keyPath: "transform.scale")
             zoom.fromValue = 1
             zoom.toValue = Layout.exitScale
@@ -262,7 +276,7 @@ final class LaunchSplashView: UIView {
             zoom.timingFunction = CAMediaTimingFunction(name: .easeIn)
             logo.add(zoom, forKey: "exit")
         }
-        layer.add(fade(from: 1, to: 0, duration: Timing.exit), forKey: "exit")
+        layer.add(fadeOut, forKey: "exit")
         layer.opacity = 0
         CATransaction.commit()
     }

@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 // The hero's four buttons: Play, Watchlist, Info, Next.
-// Unfocused: UIGlassEffect, faint 0.5pt stroke. Focused: solid white, 10 pt growth.
+// Unfocused: dark glass, faint stroke. Focused: solid white, 10 pt growth.
 // Pressed: -5% scale. Springs: focus (0.25, 0.8), press (0.15, 0.9).
 
 import UIKit
@@ -105,9 +105,9 @@ final class HeroButtonRowView: UIView {
         playButton.title = String(localized: "Play")
         playButton.iconImage = UIImage(systemName: "play.fill")
         watchlistButton.setImage(UIImage(systemName: "plus"), for: .normal)
-        // The TV app draws Info and Next heavier and larger than the other symbols.
-        infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal, pointSize: 36, weight: .bold)
-        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal, pointSize: 36, weight: .bold)
+        // Measured from the TV app: Info bold, the chevron 15 x 26 at rest.
+        infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal, pointSize: 30, weight: .bold)
+        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal, pointSize: 28)
 
         playButton.accessibilityLabel = String(localized: "Play")
         watchlistButton.accessibilityLabel = String(localized: "Toggle Watchlist")
@@ -325,14 +325,14 @@ final class HeroPillButton: UIControl {
     static let iconGap: CGFloat = 14
     static let rowGap: CGFloat = 24
     static let titleFont = UIFont.systemFont(ofSize: 29, weight: .semibold)
-    /// The TV app's play glyph is about half again the old 22 pt.
-    static let iconSize: CGFloat = 33
+    /// The TV app's play glyph, about 23 x 26 at rest (measured on device).
+    static let iconSize: CGFloat = 30
     /// Apple grows a focused button by 10 pt of width; on the pill that is 1.045.
     static let focusScale: CGFloat = (pillWidth + 10) / pillWidth
     /// Circles grow 66 -> 76 on focus (measured on device, tvOS 27).
     static let circleFocusScale: CGFloat = 76.0 / 66.0
-    /// Resting edge for every hero button. The TV app's is faint: the glass carries the shape.
-    static let restingStroke = UIColor.white.withAlphaComponent(0.08)
+    /// Resting edge for every hero button: 1 pt at 0.12 white on the circles (measured on device).
+    static let restingStroke = UIColor.white.withAlphaComponent(0.12)
     /// Resting glass for every hero button: the clear (more see-through) glass with a dark
     /// tint, so the buttons stay as dark as the regular glass while showing more of the art.
     static func restingGlass() -> UIGlassEffect {
@@ -545,7 +545,7 @@ final class HeroCircleButton: UIControl {
 
         strokeLayer.fillColor = UIColor.clear.cgColor
         strokeLayer.strokeColor = HeroPillButton.restingStroke.cgColor
-        strokeLayer.lineWidth = 0.5
+        strokeLayer.lineWidth = 1
         layer.addSublayer(strokeLayer)
         materialBackground.alpha = restingPlatter ? HeroPillButton.restingGlassAlpha : 0
         strokeLayer.opacity = restingPlatter ? 1 : 0

@@ -73,4 +73,48 @@ struct HeroBackwardPagingTests {
         }
         #expect(pages == 0)
     }
+
+    @Test func swipeThatKeepsGoingPassesPlayOnce() {
+        let row = HeroButtonRowView()
+        row.canRetreat = true
+
+        // A swipe that stops on Play asks for nothing more; a later gesture is a fresh one.
+        row.noteArrival(gesture: 1, fromRow: true)
+        #expect(row.passesPlay(gesture: 2) == false)
+
+        // The same gesture asking for another Left carries past Play, once.
+        row.noteArrival(gesture: 3, fromRow: true)
+        #expect(row.passesPlay(gesture: 3))
+        #expect(row.passesPlay(gesture: 3) == false)
+        #expect(row.consumeBackwardPaging(from: row.playButton, heading: .left, gesture: 3))
+    }
+
+    @Test func swipeDoesNotPassPlayOnTheFirstItem() {
+        let row = HeroButtonRowView()
+        row.noteArrival(gesture: 1, fromRow: true)
+        #expect(row.passesPlay(gesture: 1) == false)
+    }
+
+    @Test func swipeUpFromTheShelvesDoesNotPassPlay() {
+        let row = HeroButtonRowView()
+        row.canRetreat = true
+        row.noteArrival(gesture: 1, fromRow: false)
+        #expect(row.passesPlay(gesture: 1) == false)
+    }
+
+    @Test func swipeThatKeepsGoingPassesNextOnce() {
+        let row = HeroButtonRowView()
+        row.canAdvance = true
+
+        row.noteArrival(gesture: 1, fromRow: true)
+        #expect(row.passesNext(gesture: 2) == false)
+
+        row.noteArrival(gesture: 3, fromRow: true)
+        #expect(row.passesNext(gesture: 3))
+        #expect(row.passesNext(gesture: 3) == false)
+
+        row.canAdvance = false
+        row.noteArrival(gesture: 4, fromRow: true)
+        #expect(row.passesNext(gesture: 4) == false)
+    }
 }

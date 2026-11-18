@@ -416,9 +416,16 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   `HeroButtonRowView` takes the Right the engine declines from Next and the
   Left from Play in `pressesBegan`, plus gated swipes on the same predicates;
   focus stays put. Not an invisible focus stop past the row: paging rebuilt the
-  row under it, focus stranded on the stop and every arrow key went dead. The
-  gesture that lands on Play or Next never pages, and one swipe is one page: a
-  gesture counter (`MenuPressInterceptor.remoteGestures`) holds the rest of it.
+  row under it, focus stranded on the stop and every arrow key went dead. A
+  click or short swipe that lands on Play or Next never pages, and one swipe is
+  one page: a gesture counter (`MenuPressInterceptor.remoteGestures`) holds the
+  rest of it. The exception is the TV app's long swipe: a swipe that walked along
+  the row onto Play and keeps going asks the engine for another Left, and that
+  request pages back (`passesPlay`). Right from Next mirrors it (`passesNext`):
+  a 2 pt focusable view past Next (focusable only while Next is focused) gives
+  the engine a Right to ask for, and every move into it is refused, so focus
+  never lands there. A `UIFocusGuide` there was never asked (measured on
+  device). Next is a bare chevron until focused.
   Left from Play pages back until the first item, where it opens the sidebar;
   Up and Menu reach the sidebar from any page (#500).
 - **A focusless surface that hands some touches to another recognizer passes

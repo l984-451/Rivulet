@@ -11,6 +11,8 @@ struct MacHomeHero: View {
     let items: [MediaItem]
     /// Width of the page the hero sits in.
     let width: CGFloat
+    /// Side safe-area insets the artwork runs under: the floating sidebar's.
+    var bleed = EdgeInsets()
     @Binding var selection: MediaItemRef?
     @State private var hovering = false
     @State private var inView = true
@@ -23,6 +25,12 @@ struct MacHomeHero: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var height: CGFloat { min(max(width * 0.42, 300), 520) }
+    private var pageWidth: CGFloat { Self.pageWidth(width, bleed: bleed) }
+
+    /// One artwork page: the page width plus the side insets it bleeds under, as on iOS.
+    static func pageWidth(_ width: CGFloat, bleed: EdgeInsets) -> CGFloat {
+        width + bleed.leading + bleed.trailing
+    }
     private var index: Int { items.firstIndex { $0.ref == selection } ?? 0 }
     private var current: MediaItem? { items[safe: index] }
 
@@ -37,10 +45,9 @@ struct MacHomeHero: View {
                                    startPoint: .top, endPoint: .bottom)
                         .allowsHitTesting(false)
                 }
-                .frame(width: width, height: height)
-                .clipped()
-                .contentShape(Rectangle())
-                .onTapGesture { open(.detail(current)) }
+                // Full bleed under the sidebar, as on iOS: inset by it, the pager's position and
+                // its paging step disagreed and a swipe stuttered from page to page.
+                .ignoresSafeArea(edges: .horizontal)
                 // Fades out at the bottom into the page's ambient wash.
                 .mask {
                     LinearGradient(stops: [.init(color: .white, location: 0.8), .init(color: .clear, location: 1)],
@@ -55,7 +62,6 @@ struct MacHomeHero: View {
             }
             .frame(width: width, height: height)
             .environment(\.colorScheme, .dark)
-            .macContextMenu(current)
             .onHover { hovering = $0 }
             .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
             // Keyed on the shown page, so any move restarts the wait and a refresh that drops it re-seats.
@@ -86,20 +92,28 @@ struct MacHomeHero: View {
                 // Eager: a lazy stack blanked the outgoing page mid-scroll on iOS.
                 HStack(spacing: 0) {
                     ForEach(items) { item in
-                        MacItemArtwork(item: item, kind: .backdrop, width: width, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
-                            .frame(width: width, height: height)
+                        // Pages take the pager's own width, so they always match its paging step.
+                        MacItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .visualEffect { content, proxy in
                                 content.offset(x: -proxy.frame(in: .scrollView(axis: .horizontal)).minX * Self.parallax)
                             }
-                            .frame(width: width, height: height)
+                            .containerRelativeFrame(.horizontal)
+                            .frame(height: height)
                             .clipped()
+                            // Click and right-click live on the pages, inside the scroll view: a gesture
+                            // around the pager hid it from hit testing, so a trackpad swipe never reached it.
+                            .contentShape(Rectangle())
+                            .onTapGesture { open(.detail(item)) }
+                            .macContextMenu(item)
                             .id(item.id)
                     }
                 }
                 .scrollTargetLayout()
+                .background { MacHeroSwipeLimit().allowsHitTesting(false) }
             }
-            .scrollTargetBehavior(.paging)
+            .scrollTargetBehavior(MacHeroPaging())
             .scrollIndicators(.never)
             .scrollPosition(id: $selection)
             .onScrollPhaseChange { _, phase in isPaging = phase != .idle }
@@ -124,11 +138,13 @@ struct MacHomeHero: View {
     }
 
     private func arrow(_ symbol: String, label: LocalizedStringKey, step: Int) -> some View {
+        // The bubble is part of the label, so a click anywhere on it pages, not only on the glyph.
         Button { page(by: step) } label: {
             Image(systemName: symbol).font(.title3.bold()).frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: .circle)
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .background(.ultraThinMaterial, in: .circle)
         .accessibilityLabel(label)
     }
 
@@ -158,6 +174,68 @@ struct MacHomeHero: View {
         .opacity(0)
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
+    }
+}
+
+/// One page per swipe, as on iPad. System paging on the Mac settles on the page nearest where the
+/// fingers left it, so a long swipe ran through several pages and a short one sprang back.
+private struct MacHeroPaging: ScrollTargetBehavior {
+    /// How far the fingers must carry the page to turn it. The Mac reports no swipe velocity here,
+    /// so a short flick and a slow nudge look alike.
+    static let turnDistance: CGFloat = 50
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let width = context.containerSize.width
+        guard width > 0 else { return }
+        let start = (context.originalTarget.rect.minX / width).rounded()
+        let travel = target.rect.minX - context.originalTarget.rect.minX
+        let step: CGFloat = abs(travel) < Self.turnDistance ? 0 : (travel > 0 ? 1 : -1)
+        let lastPage = max(0, (context.contentSize.width / width).rounded() - 1)
+        target.rect.origin.x = min(max(start + step, 0), lastPage) * width
+    }
+}
+
+/// Stops a trackpad swipe a page from where it began, so the pager cannot be dragged through
+/// several pages before `MacHeroPaging` settles it. Sits inside the pager to find its scroll view.
+private struct MacHeroSwipeLimit: NSViewRepresentable {
+    func makeNSView(context: Context) -> LimitView { LimitView() }
+    func updateNSView(_ view: LimitView, context: Context) {}
+
+    final class LimitView: NSView {
+        private var monitor: Any?
+        /// The pager's offset when a swipe on it began.
+        private var startX: CGFloat?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                self?.filter(event) ?? event
+            }
+        }
+
+        private func filter(_ event: NSEvent) -> NSEvent? {
+            guard let pager = enclosingScrollView, event.window === window else { return event }
+            let x = pager.contentView.bounds.origin.x
+            switch event.phase {
+            case .began:
+                startX = pager.bounds.contains(pager.convert(event.locationInWindow, from: nil)) ? x : nil
+            case .changed:
+                // The page moves against the delta: past a page, drop what would pull it further.
+                if let startX, abs(x - startX) >= pager.contentView.bounds.width, (x - startX) * event.scrollingDeltaX < 0 {
+                    return nil
+                }
+            case .ended, .cancelled:
+                startX = nil
+            default:
+                break
+            }
+            return event
+        }
     }
 }
 

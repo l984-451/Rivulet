@@ -69,14 +69,17 @@ struct MacHeroFeed: View {
     @Environment(\.displayScale) private var displayScale
     @State private var selection: MediaItemRef?
     @State private var width: CGFloat = 1200
+    /// The sidebar's side inset, which the hero's artwork runs under.
+    @State private var bleed = EdgeInsets()
 
     private var shown: MediaItem? { heroItems.first { $0.ref == selection } ?? heroItems.first }
+    private var heroPageWidth: CGFloat { MacHomeHero.pageWidth(width, bleed: bleed) }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 if !heroItems.isEmpty {
-                    MacHomeHero(items: heroItems, width: width, selection: $selection)
+                    MacHomeHero(items: heroItems, width: width, bleed: bleed, selection: $selection)
                 }
                 ForEach(banners) { MacServerFailureBanner(failure: $0) }
                 ForEach(rows) { hub in
@@ -90,10 +93,14 @@ struct MacHeroFeed: View {
             .padding(.bottom, 28)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .background { if let shown { MacAmbientBackdrop(item: shown, width: width) } }
-        .task(id: heroItems.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(Int(width / 120))"]) {
+        .onGeometryChange(for: EdgeInsets.self) {
+            EdgeInsets(top: 0, leading: $0.safeAreaInsets.leading, bottom: 0, trailing: $0.safeAreaInsets.trailing)
+        } action: { bleed = $0 }
+        // Hero page width, so the wash and the prefetch share the hero's cache entry.
+        .background { if let shown { MacAmbientBackdrop(item: shown, width: heroPageWidth) } }
+        .task(id: heroItems.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(Int(heroPageWidth / 120))"]) {
             await browse.prefetchArtwork(heroItems.map {
-                ($0, MacItemArtwork.url(browse, item: $0, kind: .backdrop, width: width, aspectRatio: 16 / 9, scale: displayScale))
+                ($0, MacItemArtwork.url(browse, item: $0, kind: .backdrop, width: heroPageWidth, aspectRatio: 16 / 9, scale: displayScale))
             })
         }
     }

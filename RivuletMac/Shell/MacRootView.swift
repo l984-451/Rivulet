@@ -7,6 +7,8 @@ import SwiftUI
 /// The window: a sidebar of Home, Search, Live TV, Favorites, then each server's libraries and
 /// playlists, over a detail column with one NavigationStack per sidebar row.
 struct MacRootView: View {
+    /// The launch splash has left; What's New waits for it.
+    let splashGone: Bool
     @EnvironmentObject private var plex: PlexSession
     @EnvironmentObject private var browse: BrowseStore
     @EnvironmentObject private var playback: MacPlaybackController
@@ -22,6 +24,7 @@ struct MacRootView: View {
     @State private var showingAccount = false
     @State private var shellBox = MacShellBox()
     @FocusedValue(\.macPageRefresh) private var pageRefresh: MacPageRefresh?
+    @Environment(\.macLaunchHeroReady) private var launchHeroReady
     @State private var showingWhatsNew = false
     @State private var whatsNewVersions: [String] = []
     @State private var choosingProfile = false
@@ -61,6 +64,13 @@ struct MacRootView: View {
         .task {
             HostPlatform.applySavedIcon()
             showWhatsNewIfUpdated()
+        }
+        // Only Home's hero is worth waiting for; on any other row the splash has none.
+        .onChange(of: current == .home, initial: true) { _, home in
+            if !home { launchHeroReady() }
+        }
+        .onChange(of: splashGone) { _, gone in
+            if gone { showWhatsNewIfUpdated() }
         }
         .task {
             await plex.verifyConnection()
@@ -338,9 +348,10 @@ struct MacRootView: View {
     }
 
     /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
+    /// It waits for the launch splash to leave.
     private func showWhatsNewIfUpdated() {
         let current = MacChangelog.currentVersion
-        guard plex.isConfigured, current != lastSeenBuild else { return }
+        guard splashGone, plex.isConfigured, current != lastSeenBuild else { return }
         whatsNewVersions = WhatsNewRange.versions(MacChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
         showingWhatsNew = !whatsNewVersions.isEmpty

@@ -14,6 +14,8 @@ struct IOSPlexHomeHero: View {
     /// Side safe-area insets the artwork runs under, such as iPhone Duo's side bars.
     var bleed = EdgeInsets()
     @Binding var selection: MediaItemRef?
+    /// A page's artwork is on screen.
+    var onPageShown: ((MediaItemRef) -> Void)?
     /// iPhone Duo's fold runs down the middle, so the dots sit at the leading margin.
     @State private var dotsLeading = false
     /// Video plays only while the hero is on screen and its page is at rest.
@@ -105,6 +107,7 @@ struct IOSPlexHomeHero: View {
                     ForEach(items) { item in
                         // Pages take the pager's own width, so they always match its paging step.
                         IOSItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
+                            .environment(\.onArtworkShown, onPageShown.map { report in { report(item.id) } })
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .visualEffect { content, proxy in

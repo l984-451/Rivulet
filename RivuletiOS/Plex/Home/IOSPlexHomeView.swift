@@ -11,13 +11,12 @@ struct IOSPlexHomeView: View {
     @EnvironmentObject private var browse: BrowseStore
     @State private var trending: [MediaItem] = []
     @State private var watchlist: [MediaItem] = []
+    /// The hero's own lists have been fetched once, so an empty hero means none.
+    @State private var heroFetched = false
+    @Environment(\.launchHeroReady) private var launchHeroReady
 
     /// The hero's settings are `HeroSources`, as on tvOS; `browse.homeSettingsRevision` redraws on a change.
     private var showHero: Bool { HeroSources.isEnabled }
-
-    private var hasContent: Bool {
-        browse.continueWatchingHub != nil || !browse.shelves.isEmpty || (!browse.failures.isEmpty && !browse.libraries.isEmpty)
-    }
 
     var body: some View {
         // No eligible items means no hero, so keep the title and safe area.
@@ -25,9 +24,10 @@ struct IOSPlexHomeView: View {
         Group {
             if !browse.hasServers {
                 IOSPlexConnectView()
-            } else if hasContent {
+            } else if browse.hasHomeContent {
                 IOSPlexHeroFeed(rows: browse.homeRows, heroItems: hero ? heroItems : [],
-                                banners: browse.failedServers) { await browse.refresh() }
+                                banners: browse.failedServers, refresh: { await browse.refresh() },
+                                heroSettled: heroFetched)
             } else {
                 ScrollView {
                     placeholder.containerRelativeFrame([.horizontal, .vertical])
@@ -39,11 +39,19 @@ struct IOSPlexHomeView: View {
         .toolbar {
             IOSAccountToolbarItem()
         }
-        .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)
-                   + browse.hiddenSidebarLibraries.sorted()) {
+        .task(id: [String(showHero), String(browse.hasHomeContent)] + HeroSources.sources.map(\.rawValue)
+                   + browse.shelves.map(\.id) + browse.hiddenSidebarLibraries.sorted()) {
             guard showHero else { return }
+            // Trending is matched against Home's rows, so a fetch before they arrive settles nothing.
+            let withRows = browse.hasHomeContent
             trending = await browse.trendingHeroItems()
             if HeroSources.isOn(.watchlist) { watchlist = await browse.watchlistHeroItems() }
+            if withRows, !Task.isCancelled { heroFetched = true }
+        }
+        // Home settled with no hero to show: the launch splash has nothing to wait for.
+        .onChange(of: showHero && heroFetched && browse.hasHomeContent && !browse.isLoadingContent && heroItems.isEmpty,
+                  initial: true) { _, none in
+            if none { launchHeroReady() }
         }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
             guard showHero, HeroSources.isOn(.watchlist) else { return }

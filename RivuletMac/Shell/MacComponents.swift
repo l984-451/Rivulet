@@ -15,6 +15,7 @@ import SwiftUI
 struct MacImage: View {
     let url: URL?
     @State private var image: NSImage?
+    @Environment(\.onArtworkShown) private var onArtworkShown
 
     init(url: URL?) {
         self.url = url
@@ -35,12 +36,19 @@ struct MacImage: View {
                 guard let url else { return }
                 if let cached = MacArtworkCache.shared.cachedImage(for: url) {
                     image = cached
+                    onArtworkShown?()
                     return
                 }
                 guard let loaded = await MacArtworkCache.shared.image(for: url), !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+                // Shown once its fade-in has finished, not when it starts.
+                withAnimation(.easeOut(duration: 0.2)) { image = loaded } completion: { onArtworkShown?() }
             }
     }
+}
+
+extension EnvironmentValues {
+    /// Called when a `MacImage` below has its artwork on screen (the launch splash waits on the hero's).
+    @Entry var onArtworkShown: (() -> Void)?
 }
 
 /// A MediaItem's artwork, resized by its server to the pixel size the tile draws at.

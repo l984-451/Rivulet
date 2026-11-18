@@ -30,6 +30,8 @@ final class BrowseStore: ObservableObject {
     /// Bumped when a Home or hero setting changes, so Home redraws from `UserDefaults`.
     @Published var homeSettingsRevision = 0
     @Published private(set) var isLoadingContent = false
+    /// A refresh has run to its end at least once, whatever it found.
+    @Published private(set) var hasRefreshed = false
     /// Other servers still to answer; a tab on one of their libraries waits for this.
     @Published private(set) var isLoadingOtherServers = false
     @Published private(set) var contentError: String?
@@ -135,7 +137,12 @@ final class BrowseStore: ObservableObject {
             resetForNewSession()
         }
         isLoadingContent = true
-        defer { if generation == refreshGeneration { isLoadingContent = false } }
+        defer {
+            if generation == refreshGeneration {
+                isLoadingContent = false
+                hasRefreshed = true
+            }
+        }
         isLoadingOtherServers = !secondary.isEmpty
         do {
             // The selected server's failure is the page's; another server's only drops its rows.
@@ -270,6 +277,11 @@ final class BrowseStore: ObservableObject {
     }
 
     static let continueWatchingID = "continueWatching"
+
+    /// Home has rows to draw, or another server's libraries beside a failed server's banner.
+    var hasHomeContent: Bool {
+        continueWatchingHub != nil || !shelves.isEmpty || (!failures.isEmpty && !libraries.isEmpty)
+    }
 
     // MARK: - Playlists
 

@@ -261,6 +261,7 @@ final class AetherPlayer: PlayerProtocol {
                 // Convert here: each cue's type is inferred as
                 // AetherEngine.SubtitleCue (it cannot be named explicitly),
                 // and the body cases are pattern-matched without naming them.
+                let isDVB = self?.activeSubtitleIsDVB ?? false
                 self?.subtitleCues = cues.map { cue in
                     let body: AetherSubtitleCue.Body
                     switch cue.body {
@@ -294,6 +295,10 @@ final class AetherPlayer: PlayerProtocol {
                             )
                         })
                     case .image(let image):
+                        if isDVB {
+                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize,
+                                                         video: self?.videoSize ?? .zero)
+                        }
                         body = .image(cgImage: image.cgImage, position: image.position)
                     }
                     // Placement the source asked for (ASS \an / \pos), nil for
@@ -312,6 +317,8 @@ final class AetherPlayer: PlayerProtocol {
                 }
             }
             .store(in: &cancellables)
+
+        observeReleaseFixChecks()
 
         engine.$isSubtitleActive
             .receive(on: DispatchQueue.main)
@@ -1851,5 +1858,27 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
+    }
+}
+
+// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
+
+extension AetherPlayer {
+    var activeSubtitleIsDVB: Bool {
+        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
+    }
+
+    func observeReleaseFixChecks() {
+        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
+        engine.$audioShapingState
+            .removeDuplicates()
+            .filter { $0 != .off }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
+                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 }

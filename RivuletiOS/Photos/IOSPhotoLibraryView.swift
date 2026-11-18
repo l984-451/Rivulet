@@ -9,7 +9,8 @@ struct IOSPhotoLibraryView: View {
     var folder: PhotoItem?
     /// One of the root's memories, opened as a flat grid with no albums.
     var memory: PhotoMemory?
-    var showsAccount = false
+    /// An iPad sidebar tab's own page: it shows the avatar, and its library title menu names it.
+    var isSidebarTab = false
     /// Played once the viewer has finished dismissing.
     @State private var pendingClip: PhotoItem?
     @StateObject private var model: PhotoListingModel
@@ -31,11 +32,11 @@ struct IOSPhotoLibraryView: View {
         var running = false
     }
 
-    init(library: MediaLibrary, folder: PhotoItem? = nil, memory: PhotoMemory? = nil, showsAccount: Bool = false) {
+    init(library: MediaLibrary, folder: PhotoItem? = nil, memory: PhotoMemory? = nil, isSidebarTab: Bool = false) {
         self.library = library
         self.folder = folder
         self.memory = memory
-        self.showsAccount = showsAccount
+        self.isSidebarTab = isSidebarTab
         let query = PhotoPreferences.query(for: library, narrowedBy: memory?.query ?? .default)
         _query = State(initialValue: query)
         let source = PhotoListing.source(for: library)
@@ -72,6 +73,8 @@ struct IOSPhotoLibraryView: View {
         .overlay { status }
         .navigationTitle(folder?.title ?? memory?.title ?? library.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: isSidebarTab ? .title : nil)
+        .iosLibraryTitleMenu(isSidebarTab: isSidebarTab)
         .refreshable { await model.listing.loadFirst()?.value }
         .task {
             if model.folders.isEmpty, model.media.isEmpty, !model.isLoading { model.listing.loadFirst() }
@@ -101,7 +104,7 @@ struct IOSPhotoLibraryView: View {
                 // Photos already in hand (On This Day) have no order or filter to change.
                 if model.listing.source()?.provider.photoSorts.isEmpty != true { optionsMenu }
             }
-            if showsAccount { IOSAccountToolbarItem() }
+            if isSidebarTab { IOSAccountToolbarItem() }
         }
         .fullScreenCover(item: $viewing, onDismiss: {
             if let clip = pendingClip, let playable = clip.playable { pendingClip = nil; actions.play(playable) }
@@ -280,13 +283,13 @@ struct IOSPhotoTile: View {
 /// A library's page: the photo grid for a photo library, else the video library view.
 struct IOSLibraryPage: View {
     let library: MediaLibrary
-    var showsAccount = false
+    var isSidebarTab = false
 
     var body: some View {
         if library.kind == .photos {
-            IOSPhotoLibraryView(library: library, showsAccount: showsAccount)
+            IOSPhotoLibraryView(library: library, isSidebarTab: isSidebarTab)
         } else {
-            IOSPlexLibraryView(library: library, showsAccount: showsAccount)
+            IOSPlexLibraryView(library: library, isSidebarTab: isSidebarTab)
         }
     }
 }

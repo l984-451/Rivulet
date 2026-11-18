@@ -148,8 +148,9 @@ struct IOSPlexLibrariesView: View {
 /// Folders (as on disk). The page is remembered per library.
 struct IOSPlexLibraryView: View {
     let library: MediaLibrary
-    /// Only a tab root shows the avatar; a library pushed from the Library list does not.
-    var showsAccount = false
+    /// An iPad sidebar tab's own page: it shows the avatar, and its library title menu names it.
+    /// A library pushed from the Library list has neither.
+    var isSidebarTab = false
     @EnvironmentObject private var browse: BrowseStore
     @AppStorage private var pageRaw: String
     /// Same key as the tvOS library hero setting.
@@ -168,11 +169,17 @@ struct IOSPlexLibraryView: View {
         }
     }
 
-    init(library: MediaLibrary, showsAccount: Bool = false) {
+    init(library: MediaLibrary, isSidebarTab: Bool = false) {
         self.library = library
-        self.showsAccount = showsAccount
+        self.isSidebarTab = isSidebarTab
         let initial: Page = library.browsesByFolder ? .folders : .recommended
         _pageRaw = AppStorage(wrappedValue: initial.rawValue, "iosLibraryPage.\(library.settingKey)")
+    }
+
+    private var pagePicker: some View {
+        Picker("Page", selection: $pageRaw) {
+            ForEach(pages, id: \.self) { Text($0.title).tag($0.rawValue) }
+        }
     }
 
     private var pages: [Page] {
@@ -190,24 +197,26 @@ struct IOSPlexLibraryView: View {
             case .folders: IOSFolderListView(library: library)
             }
         }
-        .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID))
+        .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID),
+                           isSidebarTab: isSidebarTab)
+        // On an iPad sidebar tab the pages join the library title menu: a pill beside it
+        // doesn't fit next to the tab bar, and on the trailing side it crowds out Sort and Filter.
+        .iosLibraryTitleMenu(isSidebarTab: isSidebarTab, overArtwork: !heroItems.isEmpty) { pagePicker }
         .toolbar {
             // A pill beside Back naming the page; it opens the other.
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Picker("Page", selection: $pageRaw) {
-                        ForEach(pages, id: \.self) { Text($0.title).tag($0.rawValue) }
+            if !isSidebarTab {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu { pagePicker } label: {
+                        HStack(spacing: 4) {
+                            Text(page.title)
+                            Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                        }
+                        .fontWeight(.semibold)
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(page.title)
-                        Image(systemName: "chevron.down").font(.caption.weight(.semibold))
-                    }
-                    .fontWeight(.semibold)
+                    .accessibilityLabel(Text("Page, \(page.title)"))
                 }
-                .accessibilityLabel(Text("Page, \(page.title)"))
             }
-            if showsAccount { IOSAccountToolbarItem() }
+            if isSidebarTab { IOSAccountToolbarItem() }
         }
     }
 }

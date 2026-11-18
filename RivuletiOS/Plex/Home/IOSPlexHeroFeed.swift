@@ -80,11 +80,10 @@ struct IOSPlexHeroFeed: View {
 }
 
 extension View {
-    /// With a hero the title goes and the bar turns clear over the artwork.
-    func iosPlexHeroChrome(hero: Bool, title: String) -> some View {
-        navigationTitle(hero ? "" : title)
-            .navigationBarTitleDisplayMode(hero ? .inline : .large)
-            .toolbar(removing: hero ? .title : nil)
+    /// With a hero the title goes and the bar turns clear over the artwork. An iPad sidebar
+    /// tab's page draws no title either: its library title menu names it.
+    func iosPlexHeroChrome(hero: Bool, title: String, isSidebarTab: Bool = false) -> some View {
+        iosLargeTitle(hero ? "" : title, shown: !hero && !isSidebarTab)
             .toolbarBackgroundVisibility(hero ? .hidden : .automatic, for: .navigationBar)
     }
 }

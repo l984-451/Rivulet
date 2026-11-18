@@ -6,7 +6,8 @@ import SwiftUI
 /// Every download of the current profile: Movies, then each show's seasons.
 /// Renders from local records only, so it works with no server at all.
 struct IOSDownloadsView: View {
-    var showsAccount = false
+    /// An iPad sidebar tab's own page: it shows the avatar, and its library title menu names it.
+    var isSidebarTab = false
     @EnvironmentObject private var downloads: IOSDownloadCenter
     @EnvironmentObject private var playback: IOSPlaybackController
     @Environment(\.plexActions) private var actions
@@ -60,10 +61,10 @@ struct IOSDownloadsView: View {
                 )
             }
         }
-        .navigationTitle("Downloads")
-        .navigationBarTitleDisplayMode(.large)
+        .iosLargeTitle(String(localized: "Downloads"), shown: !isSidebarTab)
+        .iosLibraryTitleMenu(isSidebarTab: isSidebarTab)
         .toolbar {
-            if showsAccount { IOSAccountToolbarItem() }
+            if isSidebarTab { IOSAccountToolbarItem() }
         }
     }
 

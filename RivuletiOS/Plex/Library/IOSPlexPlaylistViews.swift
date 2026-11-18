@@ -10,7 +10,8 @@ struct IOSPlexPlaylistRoute: Hashable {
 /// One server's video playlists.
 struct IOSPlexPlaylistsView: View {
     let providerID: String
-    var showsAccount = false
+    /// An iPad sidebar tab's own page: it shows the avatar, and its library title menu names it.
+    var isSidebarTab = false
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.plexActions) private var actions
     @State private var editing = IOSPlaylistEditState()
@@ -36,10 +37,10 @@ struct IOSPlexPlaylistsView: View {
             }
         }
         .refreshable { await browse.refreshPlaylists() }
-        .navigationTitle(browse.labels.title(String(localized: "Playlists"), providerID: providerID))
-        .navigationBarTitleDisplayMode(.large)
+        .iosLargeTitle(browse.labels.title(String(localized: "Playlists"), providerID: providerID), shown: !isSidebarTab)
+        .iosLibraryTitleMenu(isSidebarTab: isSidebarTab)
         .toolbar {
-            if showsAccount { IOSAccountToolbarItem() }
+            if isSidebarTab { IOSAccountToolbarItem() }
         }
         .playlistEditAlerts($editing)
         .playlistContinueDialog($pendingStart, actions: actions)

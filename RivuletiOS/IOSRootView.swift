@@ -12,6 +12,10 @@ struct IOSRootView: View {
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
     @ObservedObject private var playback = IOSPlaybackController.shared
     @State private var showingAccount = false
+    /// Account > Library on its own, from the library menu.
+    @State private var editingLibraries = false
+    /// Sidebar open, or the top tab bar: the library title menu lists the libraries only in the second.
+    @StateObject private var sidebar = IOSSidebarVisibility()
     @State private var showingWhatsNew = false
     @State private var whatsNewVersions: [String] = []
     @ObservedObject private var profiles = PlexUserProfileManager.shared
@@ -61,7 +65,7 @@ struct IOSRootView: View {
             TabSection("Library") {
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
-                        sidebarStack("downloads") { IOSDownloadsView(showsAccount: true) }
+                        sidebarStack("downloads") { IOSDownloadsView(isSidebarTab: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
@@ -69,14 +73,14 @@ struct IOSRootView: View {
                 ForEach(showsSidebarLibraries ? videoLibraries : [], id: \.self) { library in
                     Tab(browse.labels.title(library.title, providerID: library.providerID), systemImage: library.iosIcon,
                         value: libraryTab(library)) {
-                        sidebarStack(libraryTab(library)) { IOSLibraryPage(library: library, showsAccount: true) }
+                        sidebarStack(libraryTab(library)) { IOSLibraryPage(library: library, isSidebarTab: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
                 ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { providerID in
                     Tab(browse.labels.title(String(localized: "Playlists"), providerID: providerID), systemImage: "list.and.film",
                         value: playlistsTab(providerID)) {
-                        sidebarStack(playlistsTab(providerID)) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
+                        sidebarStack(playlistsTab(providerID)) { IOSPlexPlaylistsView(providerID: providerID, isSidebarTab: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
@@ -89,11 +93,20 @@ struct IOSRootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .background { IOSSidebarVisibilityProbe(visibility: sidebar) }
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }
         .environment(\.openDownloads, openDownloads)
         .sheet(isPresented: $showingAccount) { IOSAccountView().iosSessionObjects(plex) }
+        .sheet(isPresented: $editingLibraries) {
+            NavigationStack {
+                IOSLibrarySettingsView().toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button(role: .confirm) { editingLibraries = false } }
+                }
+            }
+            .iosSessionObjects(plex)
+        }
         .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(versions: whatsNewVersions) }
         .sheet(isPresented: $choosingProfile) { IOSProfilePickerSheet() }
         // Content is withheld until a profile is entered: ask who is watching,
@@ -262,6 +275,22 @@ struct IOSRootView: View {
         browse.shownLibraries.sidebarOrder(servers: browse.providerOrder)
     }
 
+    /// The sidebar's Library section in its order, for the title menu on the page of `current`.
+    private func libraryTabs(current: String) -> IOSLibraryTabs {
+        let libraries = videoLibraries.map {
+            IOSLibraryTabs.Entry(tab: libraryTab($0), title: browse.labels.title($0.title, providerID: $0.providerID))
+        }
+        let playlists = playlistServers.map {
+            IOSLibraryTabs.Entry(tab: playlistsTab($0), title: browse.labels.title(String(localized: "Playlists"), providerID: $0))
+        }
+        return IOSLibraryTabs(entries: [IOSLibraryTabs.Entry(tab: "downloads", title: String(localized: "Downloads"))]
+                                  + libraries + playlists,
+                              current: current,
+                              sidebarShowing: sidebar.isShowing,
+                              select: { selectedTab = $0 },
+                              edit: { editingLibraries = true })
+    }
+
     private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }
     private func playlistsTab(_ providerID: String) -> String { "playlists:\(providerID)" }
 
@@ -334,7 +363,10 @@ struct IOSRootView: View {
             get: { sidebarPaths[tab] ?? NavigationPath() },
             set: { sidebarPaths[tab] = $0 }
         )) {
-            content().iosPlexDestinations()
+            // Inside the destinations, so pages pushed over the tab's own don't inherit it.
+            content()
+                .environment(\.libraryTabs, libraryTabs(current: tab))
+                .iosPlexDestinations()
         }
         .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, sidebarZoom)

@@ -8841,6 +8841,8 @@
         }
       }
     },
+    "Edit Libraries…" : {},
+    "Library, %@" : {},
     "Page, %@" : {
       "localizations" : {
         "de" : {

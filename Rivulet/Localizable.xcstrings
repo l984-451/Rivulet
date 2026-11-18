@@ -15092,6 +15092,28 @@
         }
       }
     },
+    "Widescreen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Breitbild"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευρεία οθόνη"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écran large"
+          }
+        }
+      }
+    },
     "Your Plex server's tuners. Select to see details or remove it." : {
       "localizations" : {
         "de" : {

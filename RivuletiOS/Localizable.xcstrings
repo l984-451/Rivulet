@@ -541,6 +541,28 @@
         }
       }
     },
+    "Widescreen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Breitbild"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευρεία οθόνη"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écran large"
+          }
+        }
+      }
+    },
     "Z to A" : {
       "localizations" : {
         "de" : {

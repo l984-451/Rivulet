@@ -162,7 +162,7 @@ final class EmbyPlaybackMapperTests: XCTestCase {
         // The capture's AspectRatio is "320:173"; the label comes from the frame size either way.
         XCTAssertEqual(MediaSource(id: "1", container: nil, duration: 0, bitrate: nil, fileSize: nil, fileName: nil,
                                    videoResolution: nil, videoTracks: [track], audioTracks: [], subtitleTracks: [],
-                                   streamKind: .directPlay, streamURL: nil).aspectRatioLabel, "1.85:1")
+                                   streamKind: .directPlay, streamURL: nil).aspectRatioLabel, "Widescreen (1.85:1)")
     }
 
     func test_anamorphicStreamTakesTheServersAspectRatio_unverified() throws {

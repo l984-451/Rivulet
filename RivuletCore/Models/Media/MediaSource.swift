@@ -87,10 +87,23 @@ extension MediaSource {
         }
     }
 
-    /// The aspect ratio as cinema writes it: "2.39:1", "1.85:1", "1.78:1". Letterboxing inside the
-    /// frame can't be seen here, so a 16:9 encode of a scope film reads 1.78:1.
+    /// "CinemaScope (2.39:1)", or just "2.76:1" when the ratio has no common name. Letterboxing inside
+    /// the frame can't be seen here, so a 16:9 encode of a scope film reads 16:9.
     var aspectRatioLabel: String? {
-        videoTracks.first?.aspectRatio.map { String(format: "%.2f:1", $0) }
+        guard let ratio = videoTracks.first?.aspectRatio else { return nil }
+        let number = String(format: "%.2f:1", ratio)
+        return Self.aspectRatioName(ratio).map { "\($0) (\(number))" } ?? number
+    }
+
+    /// Bands wide enough for the few pixels an encode crops (1920x804, 1916x1080).
+    static func aspectRatioName(_ ratio: Double) -> String? {
+        switch ratio {
+        case 1.30..<1.39: "4:3"                                // 1.33 TV, 1.37 Academy
+        case 1.74..<1.81: "16:9"
+        case 1.82..<1.92: String(localized: "Widescreen")      // 1.85 flat, 1.90 digital IMAX
+        case 2.30..<2.56: "CinemaScope"                        // 2.35, 2.39, 2.40, and the early 2.55
+        default: nil
+        }
     }
 
     var rangeBadge: String? { rangeBadges.isEmpty ? nil : rangeBadges.joined(separator: " · ") }

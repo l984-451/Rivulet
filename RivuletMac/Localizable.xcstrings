@@ -578,6 +578,28 @@
     },
     "Watch Together" : {},
     "Watch Together ended" : {},
+    "Widescreen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Breitbild"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευρεία οθόνη"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écran large"
+          }
+        }
+      }
+    },
     "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
     "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},
     "Z to A" : {

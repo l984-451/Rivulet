@@ -270,19 +270,19 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
 
     /// Sizes from the test server's films, each with what Plex's `aspectRatio` called it.
     func test_aspectRatioLabel_fromFrameSize() {
-        XCTAssertEqual(source(width: 1920, height: 800).aspectRatioLabel, "2.40:1")    // Plex: 2.35
-        XCTAssertEqual(source(width: 1920, height: 804).aspectRatioLabel, "2.39:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 800).aspectRatioLabel, "CinemaScope (2.40:1)")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 804).aspectRatioLabel, "CinemaScope (2.39:1)")    // Plex: 2.35
         XCTAssertEqual(source(width: 1920, height: 696).aspectRatioLabel, "2.76:1")    // Plex: 2.35
-        XCTAssertEqual(source(width: 3840, height: 2076).aspectRatioLabel, "1.85:1")
-        XCTAssertEqual(source(width: 1920, height: 1080).aspectRatioLabel, "1.78:1")
-        XCTAssertEqual(source(width: 1440, height: 1080).aspectRatioLabel, "1.33:1")
+        XCTAssertEqual(source(width: 3840, height: 2076).aspectRatioLabel, "Widescreen (1.85:1)")
+        XCTAssertEqual(source(width: 1920, height: 1080).aspectRatioLabel, "16:9 (1.78:1)")
+        XCTAssertEqual(source(width: 1440, height: 1080).aspectRatioLabel, "4:3 (1.33:1)")
         XCTAssertNil(source(width: nil, height: 1080).aspectRatioLabel)
     }
 
     /// An anamorphic DVD rip is stored narrower than it plays.
     func test_aspectRatioLabel_correctsNonSquarePixels() {
         XCTAssertEqual(source(width: 544, height: 288, pixelAspect: "40:33").aspectRatioLabel, "2.29:1")
-        XCTAssertEqual(source(width: 720, height: 480, pixelAspect: "32:27").aspectRatioLabel, "1.78:1")
+        XCTAssertEqual(source(width: 720, height: 480, pixelAspect: "32:27").aspectRatioLabel, "16:9 (1.78:1)")
     }
 
     func test_ratio_readsServerSpellings() {
@@ -292,5 +292,14 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertNil(VideoTrack.ratio("0:1"))
         XCTAssertNil(VideoTrack.ratio("2.35"))
         XCTAssertNil(VideoTrack.ratio(nil))
+    }
+
+    /// Frame ratios seen on the test server, and the name each band gives them.
+    func test_aspectRatioName_bands() {
+        for r in [1.33, 1.35, 1.37] { XCTAssertEqual(MediaSource.aspectRatioName(r), "4:3", "\(r)") }
+        for r in [1.77, 1.78, 1.79] { XCTAssertEqual(MediaSource.aspectRatioName(r), "16:9", "\(r)") }
+        for r in [1.84, 1.85, 1.88, 1.90] { XCTAssertEqual(MediaSource.aspectRatioName(r), "Widescreen", "\(r)") }
+        for r in [2.33, 2.35, 2.39, 2.40, 2.42, 2.55] { XCTAssertEqual(MediaSource.aspectRatioName(r), "CinemaScope", "\(r)") }
+        for r in [1.5, 1.66, 2.0, 2.2, 2.76] { XCTAssertNil(MediaSource.aspectRatioName(r), "\(r)") }
     }
 }

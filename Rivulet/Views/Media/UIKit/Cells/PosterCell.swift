@@ -436,7 +436,9 @@ final class PosterCell: UICollectionViewCell {
                 await RoundedPoster.image(for: url, shape: shape)
             }
             await MainActor.run {
-                guard let self, self.currentURL == url else { return }
+                // A cancelled load was replaced or reset: its nil must not paint the failure card
+                // over a newer load of the same poster.
+                guard let self, !Task.isCancelled, self.currentURL == url else { return }
                 if let image {
                     self.posterView.image = image
                     self.hasArtwork = true

@@ -185,6 +185,20 @@ final class LiveCardCell: UICollectionViewCell {
     }
 
     func configure(_ item: LiveCardItem, now: Date = Date()) {
+        isPlaceholder = item.isPlaceholder
+        // The card's own background and nothing on it, the shape the real card takes.
+        titleLabel.isHidden = isPlaceholder
+        detailLabel.isHidden = isPlaceholder
+        gradient.isHidden = isPlaceholder
+        if isPlaceholder {
+            setPill(nil, color: .clear)
+            progressTrack.isHidden = true
+            load(art: nil)
+            load(logo: nil, asFallback: false)
+            load(field: nil)
+            measureTask?.cancel()
+            return
+        }
         let channel = item.channel
         let program = item.program
 
@@ -387,7 +401,8 @@ final class LiveCardCell: UICollectionViewCell {
 
     // MARK: Focus
 
-    override var canBecomeFocused: Bool { true }
+    private var isPlaceholder = false
+    override var canBecomeFocused: Bool { !isPlaceholder }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)

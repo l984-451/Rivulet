@@ -1,13 +1,13 @@
 {
-  "originHash" : "08c6e113bad74ce3aa53be88c6aa7294e48ca39bdc48b09cc0646f5f66e17236",
+  "originHash" : "a8ca039ecc46b63b39fccc3240467ab7ce0f3dcf1b3802e223f65c5457adcf2b",
   "pins" : [
     {
       "identity" : "aetherengine",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/superuser404notfound/AetherEngine",
       "state" : {
-        "revision" : "d46c27028db88457a86c04b2c8c4aa7ab41a5f32",
-        "version" : "7.66.1"
+        "revision" : "a7aaa8d1f1e47c1bb171b376cdd336ccc136f44e",
+        "version" : "7.69.0"
       }
     },
     {
@@ -43,6 +43,15 @@
       "state" : {
         "revision" : "caff700968700467c089a3f38c8b4180620518b5",
         "version" : "2.2.0"
+      }
+    },
+    {
+      "identity" : "openwatchparty",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/edde746/openwatchparty",
+      "state" : {
+        "revision" : "d2579d7c7e9fce1bf3844f04379d6bc009b219c0",
+        "version" : "1.1.0"
       }
     },
     {

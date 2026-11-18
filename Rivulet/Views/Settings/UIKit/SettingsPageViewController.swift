@@ -50,7 +50,7 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
         super.viewDidLoad()
         view.backgroundColor = .clear
 
-        rebuildRows()
+        rows = currentRows()
 
         // Row metrics measured off tvOS Settings at 4K: 80pt pitch, a 66.5pt
         // capsule, 13.5pt between capsules. 72 + 8 spacing gives the same 80pt
@@ -172,16 +172,15 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
         return rows[..<index].last(where: \.isHeader)?.id
     }
 
-    /// Rebuild the row models for this page from current manager/UserDefaults
-    /// state. Falls back to a single focusable placeholder for empty pages so
+    /// The row models for this page from current manager/UserDefaults state.
+    /// Falls back to a single focusable placeholder for empty pages so
     /// focus always has a target (never a focusless page).
-    private func rebuildRows() {
-        rows = SettingsContent.rows(for: page)
-        if rows.isEmpty {
-            rows = [SettingsRowItem(id: "placeholder_\(page)",
-                                    title: "\(page.title) — coming soon",
-                                    kind: .action(destructive: false, handler: { _ in }))]
-        }
+    private func currentRows() -> [SettingsRowItem] {
+        let rows = SettingsContent.rows(for: page)
+        guard rows.isEmpty else { return rows }
+        return [SettingsRowItem(id: "placeholder_\(page)",
+                                title: "\(page.title) — coming soon",
+                                kind: .action(destructive: false, handler: { _ in }))]
     }
 
     /// Re-apply the dimmed state of every visible row after a toggle, since one
@@ -217,18 +216,25 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
     func reloadRows() {
         let oldIDs = rows.map(\.id)
         let focusedID = focusedIndexPath.flatMap { oldIDs.indices.contains($0.item) ? oldIDs[$0.item] : nil }
-        rebuildRows()
-        let newIDs = rows.map(\.id)
-        guard let collectionView else { return }
+        let newRows = currentRows()
+        let newIDs = newRows.map(\.id)
+        guard let collectionView else {
+            rows = newRows
+            return
+        }
         // Rows that moved (Home Rows: a toggle sends its row across "Hidden
         // from Home") move as cells, so focus moves with the focused one. A
         // full reload left focus on the old index, which could be a header.
         guard oldIDs != newIDs, Set(oldIDs).count == oldIDs.count, Set(newIDs).count == newIDs.count else {
+            rows = newRows
             collectionView.reloadData()
             return
         }
         let path: (Int) -> IndexPath = { IndexPath(item: $0, section: 0) }
         collectionView.performBatchUpdates({
+            // Swapped inside the update: a list with a load pending reads its
+            // count first, and that count has to be the old one.
+            rows = newRows
             collectionView.deleteItems(at: oldIDs.indices.filter { !newIDs.contains(oldIDs[$0]) }.map(path))
             collectionView.insertItems(at: newIDs.indices.filter { !oldIDs.contains(newIDs[$0]) }.map(path))
             for (from, id) in oldIDs.enumerated() {

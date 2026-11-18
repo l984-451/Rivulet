@@ -85,6 +85,14 @@ enum SettingsDescriptorStore {
             icon: "video",
             description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. When off, slideshows skip them."
         ),
+        "cat_music": SettingDescriptor(
+            icon: "music.note",
+            description: "Choose how music plays."
+        ),
+        "musicLoudnessLeveling": SettingDescriptor(
+            icon: "speaker.wave.2",
+            description: "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none."
+        ),
         "cat_servers": SettingDescriptor(
             icon: "server.rack",
             description: "Manage your Plex, Jellyfin and Emby server connections and user profiles."

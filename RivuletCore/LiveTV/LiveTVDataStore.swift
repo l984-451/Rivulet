@@ -1485,7 +1485,7 @@ class LiveTVDataStore: ObservableObject {
         Self.activeRecording(for: program, in: scheduledRecordings)
     }
 
-    static func activeRecording(for program: UnifiedProgram,
+    nonisolated static func activeRecording(for program: UnifiedProgram,
                                 in recordings: [LiveTVScheduledRecording]) -> LiveTVScheduledRecording? {
         recordings.first { ($0.status == .scheduled || $0.status == .recording) && $0.covers(program) }
     }
@@ -1613,7 +1613,7 @@ class LiveTVDataStore: ObservableObject {
 
     /// Rivulet's favorites in the viewer's order, then any the source marks
     /// (Plex account favorites) in the source's order, less those removed here.
-    static func favorites(in channels: [UnifiedChannel], order: [String],
+    nonisolated static func favorites(in channels: [UnifiedChannel], order: [String],
                           unfavorited: Set<String> = []) -> [UnifiedChannel] {
         let position = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         // Typed key: the inline tuple comparison times out Xcode 26.3's type checker.

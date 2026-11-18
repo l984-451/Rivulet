@@ -1,0 +1,45 @@
+name: AetherEngine Pin Guard
+
+# AetherEngine bumps are maintainer-only. A PR from anyone else that moves the
+# pin or its traits gets one comment and a failing check. pull_request_target so
+# fork PRs can be commented on; PR code is read through the API, never checked out.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  guard:
+    if: github.event.pull_request.user.login != 'l984-451'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare the AetherEngine pin with the merge base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          raw() { gh api -H 'Accept: application/vnd.github.raw' "repos/$REPO/contents/$1?ref=$2"; }
+          # The package reference (version and traits) plus the resolved revision.
+          pin() {
+            raw Rivulet.xcodeproj/project.pbxproj "$1" \
+              | awk '/XCRemoteSwiftPackageReference "AetherEngine" \*\/ = \{/,/^\t\t\};$/'
+            raw Rivulet.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved "$1" \
+              | awk '/"identity" : "aetherengine"/,/^    }/'
+          }
+          mergebase=$(gh api "repos/$REPO/compare/$BASE...$HEAD" --jq .merge_base_commit.sha)
+          [ "$(pin "$mergebase")" = "$(pin "$HEAD")" ] && exit 0
+
+          marker='<!-- aether-pin-guard -->'
+          if ! gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[].body' | grep -qF "$marker"; then
+            gh pr comment "$PR" -R "$REPO" --body "$marker
+          Thanks for the PR. AetherEngine version bumps are handled by the maintainer, so this PR was closed automatically. If it has other changes, please open a new PR without the AetherEngine change in \`Package.resolved\` / \`project.pbxproj\`, and keep unrelated changes in separate PRs."
+          fi
+          gh pr close "$PR" -R "$REPO"
+          echo "::error::This PR changes the AetherEngine pin."
+          exit 1

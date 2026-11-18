@@ -210,9 +210,12 @@ enum ShellSidebarModel {
             let title = section.server == nil ? nil : section.keys.first.flatMap { byKey[$0]?.serverName }
             sections.append(ShellSidebarSection(title: title, items: items))
         }
-        sections.append(ShellSidebarSection(
-            title: nil,
-            items: [ShellSidebarItem(tab: .settings, title: String(localized: "Settings"), icon: "gearshape.fill")]))
+        var bottom: [ShellSidebarItem] = []
+        if hasMediaServer {
+            bottom.append(ShellSidebarItem(tab: .watchTogether, title: String(localized: "Watch Together"), icon: "person.2.fill"))
+        }
+        bottom.append(ShellSidebarItem(tab: .settings, title: String(localized: "Settings"), icon: "gearshape.fill"))
+        sections.append(ShellSidebarSection(title: nil, items: bottom))
         return sections
     }
 

@@ -54,4 +54,14 @@ final class ReplayWindowTests: XCTestCase {
         XCTAssertFalse(window.shouldRevert(currentTime: 96))
         XCTAssertTrue(window.shouldRevert(currentTime: 100.5))
     }
+
+    /// The diagnostics line names a track by what it is. A track's name can hold a release
+    /// or a person's name, so it never goes in.
+    func testSubtitleDescriptionForDiagnosticsLeavesTheNameOut() {
+        let track = MediaTrack(id: 5, name: "Signs by SomeGroup", languageCode: "eng", codec: "ass",
+                               isForced: true, isHearingImpaired: true, title: "Signs by SomeGroup", isExternal: true)
+        XCTAssertEqual(UniversalPlayerViewModel.describeSubtitle(track, id: 5), "#5 ass eng forced sdh sidecar")
+        XCTAssertEqual(UniversalPlayerViewModel.describeSubtitle(MediaTrack(id: 2, name: "x"), id: 2), "#2 ? und")
+        XCTAssertEqual(UniversalPlayerViewModel.describeSubtitle(nil, id: 9), "#9 (not in the list)")
+    }
 }

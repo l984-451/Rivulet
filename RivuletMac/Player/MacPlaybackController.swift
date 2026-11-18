@@ -169,19 +169,47 @@ final class MacPlaybackController: NSObject, ObservableObject {
 
     // MARK: - Transport (the Playback menu and the player's keys)
 
-    func togglePlayPause() { session?.player.togglePlayPause() }
+    func togglePlayPause() {
+        session?.player.state == .playing ? pause() : play()
+    }
+
+    /// A Watch Together room takes the press first; the player acts when the relay answers.
+    func play() {
+        guard let session else { return }
+        if let room = session as? MacPlexPlayback, WatchTogetherClient.shared.requestPlay(from: room) { return }
+        session.player.play()
+    }
+
+    func pause() {
+        guard let session else { return }
+        if let room = session as? MacPlexPlayback, WatchTogetherClient.shared.requestPause(from: room) { return }
+        session.player.pause()
+    }
+
+    func seek(to time: TimeInterval) {
+        guard let session else { return }
+        if let room = session as? MacPlexPlayback, WatchTogetherClient.shared.requestSeek(to: time, from: room) { return }
+        Task { await session.player.seek(to: time) }
+    }
 
     func skip(forward: Bool) {
         let defaults = UserDefaults.standard
         let seconds = forward
             ? Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
             : Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
+        skip(by: forward ? seconds : -seconds)
+    }
+
+    /// Inside a room a skip is a seek, so it reaches everyone.
+    func skip(by seconds: Double) {
         guard let session else { return }
         if let live = session as? MacLivePlayback {
-            live.skip(by: forward ? seconds : -seconds)
-        } else {
-            Task { await session.player.skip(by: forward ? seconds : -seconds) }
+            live.skip(by: seconds)
+            return
         }
+        if let room = session as? MacPlexPlayback,
+           WatchTogetherClient.shared.requestSeek(to: max(0, room.player.currentTime + seconds), from: room) { return }
+        Task { await session.player.skip(by: seconds) }
     }
 
     func adjustVolume(by delta: Float) {
@@ -274,7 +302,6 @@ final class MacPlaybackController: NSObject, ObservableObject {
 
     private func startNowPlaying() {
         guard let session else { return }
-        let player = session.player
         let defaults = UserDefaults.standard
         let back = Double(defaults.object(forKey: SkipLengthKeys.back) as? Int ?? 10)
         let forward = Double(defaults.object(forKey: SkipLengthKeys.forward) as? Int ?? 30)
@@ -282,10 +309,10 @@ final class MacPlaybackController: NSObject, ObservableObject {
         nowPlaying.start(
             item,
             commands: MacNowPlaying.Commands(
-                play: { [weak player] in player?.play() },
-                pause: { [weak player] in player?.pause() },
-                skip: { [weak player] seconds in Task { await player?.skip(by: seconds) } },
-                seek: item.isLive ? nil : { [weak player] time in Task { await player?.seek(to: time) } }
+                play: { [weak self] in self?.play() },
+                pause: { [weak self] in self?.pause() },
+                skip: { [weak self] seconds in self?.skip(by: seconds) },
+                seek: item.isLive ? nil : { [weak self] time in self?.seek(to: time) }
             ),
             skipBackward: back,
             skipForward: forward
@@ -361,7 +388,10 @@ private struct MacPlaybackHost: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onAppear { controller.plex = plex }
+            .onAppear {
+                controller.plex = plex
+                MacWatchTogether.install(controller: controller, plex: plex)
+            }
             .background(MacHostWindowReader { controller.hostWindow = $0 })
             // The page under the player stays alive; its keys and buttons must not act on it.
             .disabled(controller.isPresented && controller.session != nil)

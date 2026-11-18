@@ -237,52 +237,6 @@ final class TrackPreferenceTests: XCTestCase {
     // MARK: - Plex per-item selected stream vs stored intent
 
     /// The build-66 regression: an item whose Plex metadata carries a
-    /// `selected: true` regular English stream must NOT override a stored
-    /// ENG-forced intent. Forced and regular subs are different products;
-    /// the forced boundary holds against the per-item tier too.
-    func testPlexSelectedRegularStreamCannotOverrideForcedIntent() {
-        let selected = sub(1, lang: "eng", forced: false)
-        let intent = SubtitleIntent.track(
-            language: "eng", forced: true, hearingImpaired: false, codec: "srt"
-        )
-
-        XCTAssertFalse(
-            TrackIntentResolver.plexSelectedSubtitleMayOverride(selected, intent: intent)
-        )
-    }
-
-    /// A regular selected stream may override a regular stored intent —
-    /// the per-item pick is more specific than the global memory.
-    func testPlexSelectedRegularStreamMayOverrideRegularIntent() {
-        let selected = sub(1, lang: "spa", forced: false)
-        let intent = SubtitleIntent.track(
-            language: "eng", forced: false, hearingImpaired: false, codec: "srt"
-        )
-
-        XCTAssertTrue(
-            TrackIntentResolver.plexSelectedSubtitleMayOverride(selected, intent: intent)
-        )
-    }
-
-    /// Explicit global Off still yields to a deliberate per-item pick
-    /// (the pre-play picker's server-side persistence contract).
-    func testPlexSelectedStreamMayOverrideExplicitOff() {
-        let selected = sub(1, lang: "eng", forced: false)
-
-        XCTAssertTrue(
-            TrackIntentResolver.plexSelectedSubtitleMayOverride(selected, intent: .off)
-        )
-    }
-
-    /// No stored intent at all: the per-item selection stands.
-    func testPlexSelectedStreamMayOverrideNilIntent() {
-        let selected = sub(1, lang: "eng", forced: false)
-
-        XCTAssertTrue(
-            TrackIntentResolver.plexSelectedSubtitleMayOverride(selected, intent: nil)
-        )
-    }
-
     // MARK: - Audio resolution
 
     func testAudioReturnsNilForEmptyTracks() {
@@ -770,19 +724,21 @@ final class TrackPreferenceTests: XCTestCase {
         XCTAssertEqual(start.subtitle, .track(3))
     }
 
-    /// A deliberate Plex subtitle pick overrides a stored Off; nothing selected resolves to off.
-    func testStartingSelectionSubtitleOverrideAndOff() {
+    /// The saved subtitle choice decides, whatever stream the server marks selected (#636):
+    /// that mark comes from other apps and the account's own auto-select, never from a pick here.
+    func testStartingSelectionIgnoresTheServersSelectedSubtitle() {
+        let selectedSubtitle = #"""
+            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
+             {"id":3,"streamType":3,"index":3,"languageCode":"eng","codec":"srt","selected":true}]
+            """#
         TrackIntentStore.subtitleIntent = .off
-        let picked = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
-            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
-             {"id":3,"streamType":3,"index":3,"languageCode":"spa","selected":true}]
-            """#))
-        XCTAssertEqual(picked.subtitle, .track(3))
-        let off = TrackIntentResolver.startingPlexSelection(streams: streams(#"""
-            [{"id":1,"streamType":2,"index":1,"languageCode":"eng","default":true,"selected":true},
-             {"id":3,"streamType":3,"index":3,"languageCode":"spa"}]
-            """#))
-        XCTAssertEqual(off.subtitle, .off)
+        XCTAssertEqual(TrackIntentResolver.startingPlexSelection(streams: streams(selectedSubtitle)).subtitle, .off)
+        // Foreign Audio over English audio: no full subtitles, selected or not.
+        TrackIntentStore.subtitleIntent = .foreignAudio(language: "eng", hearingImpaired: false)
+        XCTAssertEqual(TrackIntentResolver.startingPlexSelection(streams: streams(selectedSubtitle)).subtitle, .off)
+        // Always, in English: the saved choice turns them on by itself.
+        TrackIntentStore.subtitleIntent = .track(language: "eng", forced: false, hearingImpaired: false, codec: nil)
+        XCTAssertEqual(TrackIntentResolver.startingPlexSelection(streams: streams(selectedSubtitle)).subtitle, .track(3))
     }
 
     /// A provider's shim numbers a stream 0 (a Jellyfin sidecar); the intent can pick it.

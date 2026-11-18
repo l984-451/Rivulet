@@ -95,7 +95,7 @@ enum MusicChrome {
         let glyph = UIImage(systemName: symbol,
                             withConfiguration: UIImage.SymbolConfiguration(pointSize: side * 0.34, weight: .regular))?
             .withTintColor(UIColor(white: 0.68, alpha: 1), renderingMode: .alwaysOriginal)
-        let image = UIGraphicsImageRenderer(size: size).image { context in
+        let image = UIGraphicsImageRenderer(size: size, format: .layeredArtwork()).image { context in
             UIColor(white: 0.35, alpha: 1).setFill()
             context.fill(CGRect(origin: .zero, size: size))
             if let glyph {

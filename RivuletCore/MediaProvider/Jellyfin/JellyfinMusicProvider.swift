@@ -315,6 +315,8 @@ final class JellyfinMusicProvider: MusicProvider, @unchecked Sendable {
     /// What AVPlayer plays direct; anything else (ogg, opus, wma) comes back as
     /// the server's AAC HLS transcode.
     func resolveStream(for trackRef: MediaItemRef) async throws -> StreamInfo {
+        // PlaybackInfo leaves out the item's NormalizationGain (set by the server's LUFS scan).
+        async let item = try? client.get("Items/\(trackRef.itemID)") as JFItem
         let response: JFPlaybackInfoResponse = try await client.post(
             "Items/\(trackRef.itemID)/PlaybackInfo", body: JFPlaybackInfoRequest.audio(userId: userID)
         )
@@ -330,7 +332,8 @@ final class JellyfinMusicProvider: MusicProvider, @unchecked Sendable {
             source, itemID: trackRef.itemID, playSessionID: response.playSessionId, baseURL: baseURL,
             token: client.token ?? "", transcodeURL: transcodeURL
         )
-        return StreamInfo(source: media, playSessionID: response.playSessionId, trackInfoAvailable: true)
+        return StreamInfo(source: media, playSessionID: response.playSessionId, trackInfoAvailable: true,
+                          normalizationGainDB: await item?.normalizationGain)
     }
 
     /// The same /Sessions/Playing reports the video player sends: the server

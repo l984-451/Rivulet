@@ -24,6 +24,10 @@ struct MacShellCommands: Commands {
                 Button("Switch Profile…") { account.box.switchProfile() }
             }
         }
+        CommandGroup(after: .newItem) {
+            Button("Join Watch Together…") { MacWatchTogether.askToJoin() }
+                .keyboardShortcut("j", modifiers: [.command, .shift])
+        }
         CommandMenu("Go") {
             Button("Back") { history?.box.back() }
                 .keyboardShortcut("[")

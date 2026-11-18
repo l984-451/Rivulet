@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Poster tile for the Watchlist hub row: 20pt corner drawn into the artwork (`RoundedPoster`), `TVPosterView` focus motion,
+// Poster tile for the Watchlist hub row: view-level corners and native `TVPosterView` focus motion,
 // and a film/tv symbol placeholder when there is no poster. Caption stays nil, as in `PosterCell`.
 
 import UIKit
@@ -42,6 +42,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
         posterView.translatesAutoresizingMaskIntoConstraints = false
         posterView.image = PosterCell.blankArtwork
         contentView.addSubview(posterView)
+        RoundedPoster.configureImageView(posterView.imageView)
 
         // Placeholder underlay (dark gradient + centred SF symbol). Visible
         // when posterURL is nil or the load fails. Sits behind the poster

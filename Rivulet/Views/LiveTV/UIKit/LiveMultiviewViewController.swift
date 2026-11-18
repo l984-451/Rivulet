@@ -73,6 +73,9 @@ final class LiveMultiviewViewController: UIViewController {
     private var focusOnAddedChannelId: String?
     /// A re-rank was held back while focus was in the row.
     private var addMoreNeedsRank = false
+    /// The rows being ranked off the main thread. A reload asked for meanwhile runs once it lands.
+    private var addMoreTask: Task<Void, Never>?
+    private var addMoreStale = false
     /// Channel id → whether Dispatcharr lists more than one stream for it (#369).
     /// Present while checking, so each channel is asked once.
     private var streamChoices: [String: Bool] = [:]
@@ -1114,19 +1117,56 @@ final class LiveMultiviewViewController: UIViewController {
             return
         }
         addMoreNeedsRank = false
+        if addMoreRows.isEmpty {
+            applyAddMoreRows([LiveShelf(id: "placeholder|0", title: String(localized: "Add More"),
+                                        items: LiveShelf.placeholders[0].items)])
+        }
+        guard addMoreTask == nil else {
+            addMoreStale = true
+            return
+        }
 
+        let store = LiveTVDataStore.shared
+        let channels = store.channels.filter { sourceIdFilter == nil || $0.sourceId == sourceIdFilter }
+        let input = AddMoreInput(playing: viewModel.streams.map(\.channel), channels: channels, epg: store.epg,
+                                 favoriteIds: Set(channels.filter(store.isFavorite).map(\.id)))
+        addMoreTask = Task { [weak self, sourceIdFilter] in
+            let recommended = await Self.recommended(input, now: Date())
+            let shelves = await store.whatsOnShelvesInBackground(sourceIdFilter: sourceIdFilter)
+            guard let self else { return }
+            addMoreTask = nil
+            // An empty ranking a newer one replaces keeps what shows.
+            if !(recommended.isEmpty && shelves.isEmpty && addMoreStale) {
+                applyAddMore(recommended: recommended, shelves: shelves)
+            }
+            if addMoreStale {
+                addMoreStale = false
+                reloadAddMore()
+            }
+        }
+    }
+
+    private func applyAddMore(recommended: [LiveCardItem], shelves: [LiveShelf]) {
+        // Focus may have gone into the rows while they were ranked.
+        if let focused = UIFocusSystem.focusSystem(for: addMoreCollection)?.focusedItem as? UIView,
+           focused.isDescendant(of: addMoreCollection) {
+            addMoreNeedsRank = true
+            return
+        }
+        let active = viewModel.activeChannelIds
         let notPlaying = { (item: LiveCardItem) in
             item.kind == .channel && !(item.channel.map { active.contains($0.id) } ?? true)
         }
         // Recordings and Starting Soon are not channels to add now.
-        let shelves = LiveBrowseViewController.buildShelves(sourceIdFilter: sourceIdFilter)
-            .filter { $0.id != "recordings" && $0.id != "soon" }
-        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Recommended"), items: recommended())]
-                    + shelves)
+        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Recommended"), items: recommended)]
+                    + shelves.filter { $0.id != "recordings" && $0.id != "soon" })
             .map { LiveBrowseViewController.Shelf(id: $0.id, title: $0.title,
                                                   items: $0.items.filter(notPlaying).uniquedById()) }
             .filter { !$0.items.isEmpty }
+        applyAddMoreRows(rows)
+    }
 
+    private func applyAddMoreRows(_ rows: [LiveShelf]) {
         let existing = Set(addMoreSource.snapshot().itemIdentifiers)
         addMoreRows = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         addMoreRow = min(addMoreRow, max(rows.count - 1, 0))
@@ -1143,25 +1183,35 @@ final class LiveMultiviewViewController: UIViewController {
         addMoreSource.apply(snapshot, animatingDifferences: false)
     }
 
+    /// What `recommended` ranks, read on the main thread.
+    private nonisolated struct AddMoreInput: Sendable {
+        let playing: [UnifiedChannel]
+        let channels: [UnifiedChannel]
+        let epg: [String: [UnifiedProgram]]
+        let favoriteIds: Set<String>
+    }
+
     /// Channels most like what is playing: the same kind of programme
     /// (another football game), then the same genre, then the same channel
     /// group, against whichever playing channel each is closest to;
     /// favourites lead within each, then number. Ranked against every tile,
     /// not the one with sound, so the row changes when a channel is added or
     /// removed and never when the sound moves.
-    private func recommended() -> [LiveCardItem] {
-        let store = LiveTVDataStore.shared
-        let references = viewModel.streams.map { channel -> (labels: Set<String>, genre: LiveGenre?, group: String?) in
-            let program = store.getCurrentProgram(for: channel.channel)
+    @concurrent private nonisolated static func recommended(_ input: AddMoreInput, now: Date) async -> [LiveCardItem] {
+        func current(_ channel: UnifiedChannel) -> UnifiedProgram? {
+            input.epg[channel.id]?.first { $0.startTime <= now && $0.endTime > now }
+        }
+        let references = input.playing.map { channel -> (labels: Set<String>, genre: LiveGenre?, group: String?) in
+            let program = current(channel)
             return (LiveGenre.specificLabels(of: program),
-                    LiveGenre.of(channel.channel, airing: program, guide: store.epg[channel.channel.id] ?? []),
-                    channel.channel.groupTitle)
+                    LiveGenre.of(channel, airing: program, guide: input.epg[channel.id] ?? []),
+                    channel.groupTitle)
         }
         func tier(_ channel: UnifiedChannel) -> Int {
             guard !references.isEmpty else { return 0 }
-            let program = store.getCurrentProgram(for: channel)
+            let program = current(channel)
             let labels = LiveGenre.specificLabels(of: program)
-            let genre = LiveGenre.of(channel, airing: program, guide: store.epg[channel.id] ?? [])
+            let genre = LiveGenre.of(channel, airing: program, guide: input.epg[channel.id] ?? [])
             return references.map { reference in
                 if !reference.labels.isDisjoint(with: labels) { return 0 }
                 if let referenceGenre = reference.genre, genre == referenceGenre { return 1 }
@@ -1169,18 +1219,17 @@ final class LiveMultiviewViewController: UIViewController {
                 return 3
             }.min() ?? 3
         }
-        return store.channels
-            .filter { sourceIdFilter == nil || $0.sourceId == sourceIdFilter }
+        return input.channels
             .map { (channel: $0, tier: tier($0)) }
             .sorted { a, b in
                 if a.tier != b.tier { return a.tier < b.tier }
-                let fa = store.isFavorite(a.channel)
-                let fb = store.isFavorite(b.channel)
+                let fa = input.favoriteIds.contains(a.channel.id)
+                let fb = input.favoriteIds.contains(b.channel.id)
                 if fa != fb { return fa }
                 return (a.channel.channelNumber ?? .max) < (b.channel.channelNumber ?? .max)
             }
             .prefix(80)
-            .map { LiveCardItem.channel($0.channel, program: store.getCurrentProgram(for: $0.channel), section: "add") }
+            .map { LiveCardItem.channel($0.channel, program: current($0.channel), section: "add") }
     }
 }
 

@@ -31,6 +31,8 @@ enum SidebarTab: Hashable {
     case settings
     /// The profile slot's pill: Select opens Now Playing, never a tab.
     case nowPlaying
+    /// Not a tab: opens the Watch Together code entry, as `.account` opens the profile panel.
+    case watchTogether
 }
 
 // MARK: - Nested Navigation State

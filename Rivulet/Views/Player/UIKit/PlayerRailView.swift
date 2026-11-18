@@ -52,6 +52,10 @@ final class PlayerRailView: UIView {
     let qualityButton = TransportControlButton(
         icon: UIImage(systemName: "dial.medium"), accessibilityLabel: String(localized: "Quality"),
         diameter: Metrics.toolDiameter)
+    /// VOD only, once a relay is configured: the room menu.
+    let watchTogetherButton = TransportControlButton(
+        icon: UIImage(systemName: "person.2"), accessibilityLabel: String(localized: "Watch Together"),
+        diameter: Metrics.toolDiameter)
     /// Live TV only: shown while the viewer is behind the live edge.
     let goLiveButton = TransportControlButton(
         icon: UIImage(systemName: "forward.end.fill"), accessibilityLabel: String(localized: "Go to Live"),
@@ -99,6 +103,7 @@ final class PlayerRailView: UIView {
     var onUpNext: (() -> Void)?
     var onFilter: (() -> Void)?
     var onQuality: (() -> Void)?
+    var onWatchTogether: (() -> Void)?
     var onGoLive: (() -> Void)?
     var onRecord: (() -> Void)?
     var onMultiview: (() -> Void)?
@@ -125,7 +130,8 @@ final class PlayerRailView: UIView {
         toolRow.alignment = .center
         skipPillSlot.isHidden = true
         skipPillSlot.isUserInteractionEnabled = false
-        [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, speedButton, filterButton, qualityButton].forEach {
+        [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, speedButton, filterButton, qualityButton,
+         watchTogetherButton].forEach {
             toolRow.addArrangedSubview($0)
         }
 
@@ -182,6 +188,7 @@ final class PlayerRailView: UIView {
         upNextButton.onPress = { [weak self] in self?.onUpNext?() }
         filterButton.onPress = { [weak self] in self?.onFilter?() }
         qualityButton.onPress = { [weak self] in self?.onQuality?() }
+        watchTogetherButton.onPress = { [weak self] in self?.onWatchTogether?() }
         goLiveButton.onPress = { [weak self] in self?.onGoLive?() }
         recordButton.onPress = { [weak self] in self?.onRecord?() }
         multiviewButton.onPress = { [weak self] in self?.onMultiview?() }
@@ -195,6 +202,7 @@ final class PlayerRailView: UIView {
         filterButton.isHidden = true
         qualityButton.isHidden = true
         speedButton.isHidden = true
+        watchTogetherButton.isHidden = true
         // Live TV only, and only in the states that give them meaning.
         goLiveButton.isHidden = true
         recordButton.isHidden = true
@@ -214,6 +222,15 @@ final class PlayerRailView: UIView {
     /// Show the Quality menu (VOD only; Live TV never does).
     func setQualityAvailable(_ available: Bool) {
         qualityButton.isHidden = !available
+    }
+
+    func setWatchTogetherAvailable(_ available: Bool) {
+        watchTogetherButton.isHidden = !available
+    }
+
+    /// Filled while this device is in a room.
+    func setWatchTogetherActive(_ active: Bool) {
+        watchTogetherButton.setIcon(UIImage(systemName: active ? "person.2.fill" : "person.2"))
     }
 
     /// Reflect whether the content filter is acting in the toggle glyph

@@ -1080,9 +1080,15 @@ class PlayerContainerViewController: UIViewController {
     @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
         // Kept in sync with `panCanDriveScrub`, which stops the recognizer from
         // beginning (and thus stealing the gesture) in these same states.
-        guard panCanDriveScrub else { return }
         // A touch that turned into a ring jog belongs to the jog from then on.
-        guard !RemoteInputHandler.isRingJogging else { return }
+        // A scrub that stalls mid-touch says why once, when the touch ends (#632).
+        guard panCanDriveScrub, !RemoteInputHandler.isRingJogging else {
+            if gesture.state == .ended {
+                DiagLog.notice(.playback, "[scrub] swipe ended blocked: "
+                    + (RemoteInputHandler.isRingJogging ? "ring jog" : focusIsOnTransportButton ? "focus is on a control" : "player state"))
+            }
+            return
+        }
 
         // Swipe-to-scrub works whether playing or paused.
 
@@ -1091,6 +1097,7 @@ class PlayerContainerViewController: UIViewController {
 
         switch gesture.state {
         case .began:
+            DiagLog.notice(.playback, "[scrub] swipe started a scrub")
             inputCoordinator.handle(action: .scrubRelative(seconds: 0), source: .irPress)
 
         case .changed:
@@ -1583,6 +1590,12 @@ class PlayerContainerViewController: UIViewController {
                 }),
                 width: CardTrackListView.menuWidth, from: rail.qualityButton)
         }
+        rail.setWatchTogetherAvailable(true)
+        rail.onWatchTogether = { [weak self] in self?.presentWatchTogetherMenu() }
+        WatchTogetherSession.shared.$code
+            .receive(on: DispatchQueue.main)
+            .sink { [weak rail] code in rail?.setWatchTogetherActive(code != nil) }
+            .store(in: &cancellables)
         vm.contentFilter.$isEnabled
             .combineLatest(vm.contentFilter.$isPaused, vm.$contentFilterNotice, vm.contentFilter.$hasSceneSkips)
             .receive(on: DispatchQueue.main)
@@ -1592,6 +1605,53 @@ class PlayerContainerViewController: UIViewController {
                 rail?.setFilterActive(!paused && (notice == nil || skips))
             }
             .store(in: &cancellables)
+    }
+
+    /// Outside a room, the one row that opens one. Inside, the code to share and who's here.
+    private func presentWatchTogetherMenu() {
+        guard let vm = viewModel, let rail else { return }
+        let session = WatchTogetherSession.shared
+        let leave = 1
+        var rows: [CardTrackListView.Row]
+        if let code = session.code {
+            rows = [.init(title: code, subtitle: String(localized: "Room Code"), trackId: 0, isSelected: false)]
+            rows += session.members.map {
+                .init(title: $0.name, subtitle: Self.memberStatus($0), trackId: 0, isSelected: false)
+            }
+            rows.append(.init(title: String(localized: "Leave Room"), subtitle: nil, trackId: leave, isSelected: false))
+        } else {
+            rows = [.init(title: String(localized: "Start a Room"), subtitle: String(localized: "Get a code to share"),
+                          trackId: 2, isSelected: false)]
+        }
+        presentRailPanel(
+            content: CardTrackListView(header: String(localized: "Watch Together"), rows: rows, onSelect: { [weak self, weak vm] choice in
+                self?.activeRailPanel?.dismissPanel()
+                guard let vm else { return }
+                if choice == leave {
+                    session.leave()
+                } else if choice == 2 {
+                    Task { @MainActor [weak self] in
+                        do {
+                            try await WatchTogetherCoordinator.shared.host(from: vm)
+                            self?.presentWatchTogetherMenu()
+                        } catch {
+                            vm.showWatchTogetherNotice(String(localized: "Couldn't start a room."))
+                        }
+                    }
+                }
+            }),
+            width: CardTrackListView.menuWidth, from: rail.watchTogetherButton)
+    }
+
+    private static func memberStatus(_ member: WatchTogetherSession.Member) -> String {
+        let status = switch member.status {
+        case .watching: String(localized: "Ready")
+        case .loading: String(localized: "Loading")
+        case .buffering: String(localized: "Buffering")
+        case .away: String(localized: "Away")
+        case .noCopy: String(localized: "Doesn't have this title")
+        }
+        return member.isHost ? String(localized: "Host • \(status)") : status
     }
 
     /// Whether the Insights panel has anything to show: a non-empty cast
@@ -1707,6 +1767,7 @@ class PlayerContainerViewController: UIViewController {
     func debugContentVertical(up: Bool) { handleContentVertical(up: up) }
 
     func debugPresentPane(_ name: String) {
+        if name == "watchTogether" { return presentWatchTogetherMenu() }
         guard let tab = PaneTab(rawValue: name) else { return }
         presentPane(tab)
         if let pill = pill(for: tab) { rail?.setFocusLanding(pill) }
@@ -1793,7 +1854,7 @@ class PlayerContainerViewController: UIViewController {
                 badges: badges))
             card.onFromBeginning = { [weak self, weak vm] in
                 self?.activeRailPanel?.dismissPanel()
-                vm?.endReplayWindow()
+                vm?.endReplayWindow(reason: "from beginning")
                 Task {
                     await vm?.seek(to: 0)
                     vm?.resume()
@@ -1821,7 +1882,7 @@ class PlayerContainerViewController: UIViewController {
                     isCurrent: watching,
                     onSelect: { [weak self, weak vm] in
                         self?.activeRailPanel?.dismissPanel()
-                        vm?.endReplayWindow()
+                        vm?.endReplayWindow(reason: "chapter pick")
                         Task { await vm?.seek(to: start, exact: true) }
                     })
             }
@@ -2460,15 +2521,30 @@ extension PlayerContainerViewController: UIGestureRecognizerDelegate {
               pan === panGestureRecognizer
         else { return true }
 
-        guard panCanDriveScrub else { return false }
+        let velocity = pan.velocity(in: view)
+        guard panCanDriveScrub else {
+            return refuseScrub(focusIsOnTransportButton ? "focus is on a control" : "player state", velocity)
+        }
 
         // Never while the clickpad is down: a click jolts the touch into a fake swipe.
-        guard !RemoteInputHandler.isClickpadDown, !RemoteInputHandler.isRingJogging else { return false }
+        guard !RemoteInputHandler.isClickpadDown else { return refuseScrub("clickpad down", velocity) }
+        guard !RemoteInputHandler.isRingJogging else { return refuseScrub("ring jog", velocity) }
 
         // Decide on velocity: translation is still near zero at this point.
         // A 2:1 horizontal bias leaves diagonal drift to the focus engine.
-        let velocity = pan.velocity(in: view)
-        guard velocity != .zero else { return false }
-        return abs(velocity.x) > abs(velocity.y) * 2
+        guard velocity != .zero else { return refuseScrub("no velocity yet", velocity) }
+        guard abs(velocity.x) > abs(velocity.y) * 2 else {
+            return refuseScrub("not 2:1 sideways, v=\(Int(velocity.x)),\(Int(velocity.y))", velocity)
+        }
+        return true
+    }
+
+    /// A sideways swipe that did not start a scrub leaves a line for Send Diagnostics (#632).
+    /// Vertical swipes are the focus engine's and say nothing.
+    private func refuseScrub(_ why: String, _ velocity: CGPoint) -> Bool {
+        if abs(velocity.x) >= abs(velocity.y) {
+            DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: \(why)")
+        }
+        return false
     }
 }

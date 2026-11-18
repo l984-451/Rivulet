@@ -290,7 +290,9 @@ final class PlexMusicProvider: MusicProvider, @unchecked Sendable {
             guard let source = sources.first else {
                 throw MediaProviderError.notFound
             }
-            return StreamInfo(source: source, playSessionID: nil, trackInfoAvailable: true)
+            let audio = meta.Media?.first?.Part?.first?.Stream?.first { $0.streamType == 2 }
+            return StreamInfo(source: source, playSessionID: nil, trackInfoAvailable: true,
+                              normalizationGainDB: audio?.gain?.value)
         }
     }
 

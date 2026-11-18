@@ -35,7 +35,7 @@ The video player is **AetherPlayer** — an adapter around AetherEngine (FFmpeg 
 - **Language**: Swift 6
 - **UI Framework**: UIKit for the primary surfaces (see above); SwiftUI for the rest
 - **Video Player**: AetherPlayer for VOD and Live TV; AVPlayer only for the `hls` route (server transcode, primary-when-no-direct-URL or Aether fallback). See `Docs/RIVULET_PLAYER.md`.
-- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.66.1), with one optional package trait, `DolbyVisionFelCurves` (P7 FEL curve fold), set in `project.pbxproj`; the other four stay off in every committed build. `Scripts/enthusiast-build.py --fel --height-audio` turns on `DualLayerDolbyVision` + `DolbyVisionStillReshaping` and `TrueHDObjectAudio` + `DTSXObjectAudio` for a self-built copy (#609); the app finds them through `AetherEngine.OptionalComponent` (`AetherPlayer.buildsFEL` / `buildsHeightAudio`) and only then shows the Dolby Vision FEL and Height Speakers rows. `restore-package-traits.py` fails CI if any of the four is committed. A bump must keep it: CI's `Scripts/restore-package-traits.py` puts it back after `use-profiles`. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
+- **AetherEngine**: consumed as an **upstream** SwiftPM dependency (`superuser404notfound/AetherEngine`), pinned `exactVersion` (7.69.0), with one optional package trait, `DolbyVisionFelCurves` (P7 FEL curve fold), set in `project.pbxproj`; the other four stay off in every committed build. `Scripts/enthusiast-build.py --fel --height-audio` turns on `DualLayerDolbyVision` + `DolbyVisionStillReshaping` and `TrueHDObjectAudio` + `DTSXObjectAudio` for a self-built copy (#609); the app finds them through `AetherEngine.OptionalComponent` (`AetherPlayer.buildsFEL` / `buildsHeightAudio`) and only then shows the Dolby Vision FEL and Height Speakers rows. `restore-package-traits.py` fails CI if any of the four is committed. A bump must keep it: CI's `Scripts/restore-package-traits.py` puts it back after `use-profiles`. **There is no fork** — engine fixes need an upstream release or a host-side workaround; do not propose editing engine sources. Bumping it has a procedure: use the `aether-update` skill. Every bump gets a changelog line. FFmpeg + libdovi arrive **only transitively through Aether**; there is no app-level FFmpeg layer and no direct FFmpegBuild dependency. Since FFmpegBuild 2.0.0 the FFmpeg libs ship as **embedded dynamic frameworks** in `Rivulet.app/Frameworks/` — their `MinimumOSVersion` (26.0) must stay >= `TVOS_DEPLOYMENT_TARGET` (26.0), so do not raise the deployment target.
 - **Design Guide**: See `Docs/DESIGN_GUIDE.md` for UI/UX patterns
 - **Repo is public**: keep commit messages short and plain; no internal detail.
 
@@ -478,16 +478,18 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   went to the shell's edge catcher, Select and Menu did nothing. A view that
   overlays a focus surface must be exactly its own footprint, and anything
   larger (the letter indicator) must be `isHidden` before a focus request.
-- **A held Up/Down hands focus to tvOS's fast-scroll index bar after ~1.5s.**
-  The engine moves row by row, then focuses `_UIFocusFastScrollingIndexBarView`
-  (a hidden subview of the collection, the "dots") and stops issuing focus
-  moves. That hand-off bypasses `shouldUpdateFocus` and happens even under
-  `indexDisplayMode = .alwaysHidden`; on this self-scrolling collection the
-  system bar scrolls nothing, so focus just vanishes. `PlexHomeViewController`
-  treats the hand-off as the fast-mode signal and drives the offset itself
-  while the arrow stays down (`heldArrow`, `stepFastScroll`), landing on the
-  centre tile on release. Do not refuse the engine's repeat moves instead:
-  after the same ~1.5s it escalates past the collection to the sidebar.
+- **Vertical focus scrolling is UIKit's own** on Home, Library, Search,
+  Person, Season and the detail's lower rows (#631). The page picks where a
+  row rests in `scrollViewWillEndDragging`; `NativeFocusScrollCoordinator`
+  scrolls there itself when UIKit doesn't move. Do not bring back
+  `isScrollEnabled = false` with a display-link driver: UIKit then never
+  prepares the next row in idle time, and every row entry hitched on device.
+- **A held Up/Down hands focus to tvOS's fast-scroll index bar**, even under
+  `indexDisplayMode = .alwaysHidden`, and the hand-off bypasses
+  `shouldUpdateFocus`. With native scrolling the bar scrolls the page itself.
+  Left, Select and Menu bring focus back to a tile (`landFocusOnCenterTile`).
+  Do not refuse the engine's repeat moves instead: after about 1.5 s it
+  escalates past the collection to the sidebar.
 
 ### Context Menus (long-press)
 
@@ -683,6 +685,44 @@ Rules that look wrong until you know them:
   every other term has an innocent host ("Scunthorpe", "cocktail", romanized names).
 - **The rail button pauses filtering for the current title only.** It shows only
   while filtering is on in Settings, and `reset()` clears the pause on every item.
+
+### Watch Together (#494)
+
+Everyone streams their own copy; a relay holds the shared timeline. Built on the
+[Open Watch Party](https://github.com/edde746/openwatchparty) Swift SDK (Apache-2.0,
+pinned `exactVersion`), the protocol Plezy moved to. Only the `WatchTogether` files
+import it. All three apps: `WatchTogetherSession`, `WatchTogetherPlayerAdapter` and
+`WatchTogetherResolver` (finds copies on every server, describes the playing title) are
+shared. `WatchTogetherClient` (RivuletCore) runs the room for iOS and Mac over
+`PlaybackStart`; `IOSWatchTogether` and `MacWatchTogether` add the player hooks, alerts and
+views. tvOS has its own `WatchTogetherCoordinator` over `UniversalPlayerViewModel`.
+Hosting is the player's Watch Together button on every app; joining is the sidebar row
+(tvOS), the Account sheet (iOS) and File > Join Watch Together (Mac).
+
+- **Rooms run on Open Watch Party's public relays** (`Relays.public()`, one shared
+  instance), so they are shared with every OWP app, Plezy included. The relays are free
+  only for OSI-licensed apps; Rivulet has the operator's written permission (2026-11).
+  Debug reads `RIVULET_OWP_RELAY` to point at a local `owp-relay` for tests.
+- **Presses go to the room, never the player.** `requestPlay` / `requestPause` /
+  `performSeek` hand them to the party, and the SDK drives the player through the
+  adapter's `sync*` calls when the relay answers. A new control that touches the player
+  directly splits this device from the room.
+- **Rooms start paused**, so everyone can load before anyone presses play. `pause()` is
+  sent once the relay confirms the media (`holdsNextMedia`): before that the room
+  answers `invalid_message`. Control is `.everyone`; the relay's default is host only.
+- **The trim holds drift under about 40 ms.** The SDK ignores anything under 350 ms, and
+  the engine starts about 310 ms late (simulator), so two devices could rest 700 ms
+  apart. `WatchTogetherPlayerAdapter.trimRate` nudges 2% in that gap and stands aside
+  for the SDK's own 4% nudge.
+- **The host decides what follows.** `blocksLocalAdvance` stops a guest's Up Next; a
+  guest parks on the last frame until the host's `setMedia` re-presents its player.
+- **A resolver has 30 s in total**, so servers are asked at once with 12 s each
+  (`within`). `/library/all?guid=` matches `plex://` guids across sections but NOT
+  `imdb://` or `tmdb://`, and rounds durations (6480000 for 6455934, PMS 1.43.5): take
+  durations from full metadata.
+- **Test with `owp-peer`** from the Open Watch Party repo against a local `owp-relay`:
+  `RIVULET_WT_HOST=1` or `RIVULET_WT_JOIN=<code>` log drift each second. Its `sleep` is
+  in milliseconds. Use a demo or test library: playback writes to the real server.
 
 ### Top Shelf and deep links
 
@@ -1251,6 +1291,7 @@ Most tests live in `RivuletTests/Unit/` (mirrors `Rivulet/` roughly by feature �
 | Music Now Playing | `Views/Music/UIKit/MusicNowPlayingViewController.swift` |
 | Music shared primitives | `Views/Music/UIKit/MusicChrome.swift` |
 | Music menus | `Views/Music/UIKit/MusicMenus.swift` |
+| Watch Together room and sync | `RivuletCore/WatchTogether/WatchTogetherSession.swift` |
 | Caption renderer | `Views/Player/UIKit/CaptionOverlayView.swift` |
 | libass layer (ASS/SSA) | `Views/Player/UIKit/ASSOverlayView.swift` |
 | Content filter sources | `Services/Plex/Playback/ContentFilter/ContentFilterSources.swift` |

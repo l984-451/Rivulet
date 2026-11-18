@@ -54,7 +54,7 @@ enum SeekIndicator: Equatable {
 }
 
 @MainActor
-final class UniversalPlayerViewModel: ObservableObject {
+final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Published State
 
@@ -291,11 +291,19 @@ final class UniversalPlayerViewModel: ObservableObject {
     @Published private(set) var audioTracks: [MediaTrack] = []
     @Published private(set) var subtitleTracks: [MediaTrack] = []
     @Published private(set) var currentAudioTrackId: Int?
-    @Published private(set) var currentSubtitleTrackId: Int?
+    @Published private(set) var currentSubtitleTrackId: Int? {
+        // Every change, whoever made it, for Send Diagnostics (#635).
+        didSet {
+            guard currentSubtitleTrackId != oldValue else { return }
+            noteCaptions("subtitles \(describeSubtitle(oldValue)) -> \(describeSubtitle(currentSubtitleTrackId))")
+        }
+    }
     /// Active skip-back subtitle window, if the user is currently
     /// inside one. Cleared (without reverting) by any user-initiated
     /// absolute seek, manual subtitle-track change, or stopPlayback.
     private var replayWindow: ReplayWindowLogic?
+    /// When the open window began and how many skips back it has seen, for its closing log line.
+    private var replayWindowOpened: (at: Date, skips: Int)?
     /// Subtitles turned on by tvOS's Show When Muted (aether route only).
     private var captionsOnMute = CaptionsOnMuteLogic()
     private lazy var systemCaptionsOnMute = SystemCaptionsOnMute { [weak self] in self?.updateCaptionsOnMute() }
@@ -1335,7 +1343,9 @@ final class UniversalPlayerViewModel: ObservableObject {
                 self.pausedDueToAppInactive = true
                 print("[Player] App entering background — pausing")
                 Task { @MainActor in
-                    self.pause()
+                    // Not `pause()`: going to the background is this device's business, not a room's.
+                    self.activePlayer_pause()
+                    self.showControlsTemporarily()
                 }
             }
         }
@@ -1799,6 +1809,9 @@ final class UniversalPlayerViewModel: ObservableObject {
             Task { await advanceCinemaExtras() }
             return
         }
+        #if DEBUG
+        if state == .playing { WatchTogetherCoordinator.shared.debugHostIfAsked(self) }
+        #endif
         recordStallTransition(from: playbackState, to: state)
         trackQualityStall(from: playbackState, to: state)
         playbackState = state
@@ -2274,6 +2287,14 @@ final class UniversalPlayerViewModel: ObservableObject {
             let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
+            if !transcodeReady, activeStreamPlan.step != nil, !PlexRelay.isRelayURL(serverURL) {
+                // Quality chose this transcode, so the file is still there when the server refuses it (RIVULET-B).
+                diagnostics.step("transcode_refused_playing_original")
+                chapterImages.cancel()
+                activeStreamPlan = .original
+                try await reloadOriginal(at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
+                return
+            }
             if !transcodeReady {
                 // HLS as the PRIMARY route (no direct-play URL existed), not a
                 // fallback. Tagged separately from `fallback_preflight_failed`
@@ -2741,6 +2762,7 @@ final class UniversalPlayerViewModel: ObservableObject {
                 }
                 // Track ids ARE engine indices on this route (see TrackMerge) —
                 // the engine's active index needs no translation.
+                if id != self.currentSubtitleTrackId { self.noteCaptions("the engine reports a subtitle track active; taking it") }
                 self.currentSubtitleTrackId = id
             }
             .store(in: &aetherCancellables)
@@ -3791,7 +3813,9 @@ final class UniversalPlayerViewModel: ObservableObject {
     private func waitForHLSTranscodeReady(url: URL, headers: [String: String]) async -> Bool {
         await prepareHLSRelay(for: url)
         let url = avPlayerURL(url)
-        await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers)
+        if let verdict = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
+            diagnostics.step("transcode_decision", detail: verdict)
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
@@ -3954,7 +3978,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         cancelAetherStallWatchdog()
         titleLogoResolveTask?.cancel()
         titleLogoResolveTask = nil
-        clearReplayWindow()
+        clearReplayWindow(reason: "playback stopped")
         contentFilter.reset()
         muteEdgeWork?.cancel()
         muteEdgeWork = nil
@@ -4011,7 +4035,7 @@ final class UniversalPlayerViewModel: ObservableObject {
     func togglePlayPause() {
         if isPlaying {
             hidePausedPoster()
-            activePlayer_pause()
+            requestPause()
             showControlsTemporarily()
         } else {
             resume()
@@ -4025,14 +4049,96 @@ final class UniversalPlayerViewModel: ObservableObject {
         if plexStopDelivery?.allowsReplay == true {
             reopenPlexTimeline(at: currentTime)
         }
-        activePlayer_play()
+        requestPlay()
         showControlsTemporarily()
     }
 
     /// Pause playback (used by remote commands)
     func pause() {
-        activePlayer_pause()
+        requestPause()
         showControlsTemporarily()
+    }
+
+    // MARK: - Watch Together
+
+    /// A room takes the press, and the SDK drives the player when the relay answers.
+    private func requestPlay() {
+        if !WatchTogetherCoordinator.shared.play(from: self) { activePlayer_play() }
+    }
+
+    private func requestPause() {
+        if !WatchTogetherCoordinator.shared.pause(from: self) { activePlayer_pause() }
+    }
+
+    /// Set while a guest sits on the last frame waiting for the host's next title.
+    private var isParkedAtEnd = false
+
+    var syncPosition: TimeInterval {
+        if let ap = aetherPlayer { return ap.precisePosition }
+        return player?.currentTime().seconds ?? currentTime
+    }
+
+    var syncDuration: TimeInterval { duration }
+    var syncIsBuffering: Bool { isBuffering }
+
+    var syncIntendsToPlay: Bool {
+        if let ap = aetherPlayer { return ap.intendsToPlay }
+        return (player?.rate ?? 0) > 0 || isBuffering
+    }
+
+    var syncHasFrame: Bool {
+        switch playbackState {
+        case .playing, .paused, .buffering, .ended: true
+        default: false
+        }
+    }
+
+    func syncPlay() {
+        hidePausedPoster()
+        activePlayer_play()
+    }
+
+    func syncPause() {
+        activePlayer_pause()
+    }
+
+    func syncSetRate(_ rate: Float) {
+        if let ap = aetherPlayer {
+            ap.playbackRate = rate
+        } else if let player {
+            player.defaultRate = rate
+            if player.rate > 0 { player.rate = rate }
+        }
+    }
+
+    func syncSeek(to time: TimeInterval) async -> TimeInterval? {
+        guard let ap = aetherPlayer else {
+            await player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
+            return player?.currentTime().seconds
+        }
+        let outcomes = ap.seekEvents.map { event -> WatchTogetherSeekOutcome in
+            switch event.outcome {
+            case .began: .began
+            case .landed(let rendered): .landed(rendered)
+            case .settledElsewhere: .gaveUp
+            }
+        }.eraseToAnyPublisher()
+        return await watchTogetherLanding(of: outcomes) { await ap.seek(to: time) }
+    }
+
+    #if DEBUG
+    var debugRate: Float { aetherPlayer?.playbackRate ?? player?.rate ?? 0 }
+    #endif
+
+    func showWatchTogetherNotice(_ notice: String) {
+        showCompatibilityNotice(notice)
+    }
+
+    /// Runs the normal ending for a guest that stopped waiting on a host.
+    func finishParkedPlayback() {
+        guard isParkedAtEnd else { return }
+        isParkedAtEnd = false
+        Task { await finishPlayback() }
     }
 
     // MARK: - Active Player Helpers
@@ -4135,13 +4241,20 @@ final class UniversalPlayerViewModel: ObservableObject {
         inFlightRelativeSeekTarget = nil
         stallTracker.noteSeekOrLoad(at: Date())
         diagnostics.noteSeek()
-        if let ap = aetherPlayer {
+        await performSeek(to: time, exact: exact)
+        stallTracker.noteSeekOrLoad(at: Date())
+        if revealsControls { showControlsTemporarily() }
+    }
+
+    private func performSeek(to time: TimeInterval, exact: Bool = false) async {
+        if WatchTogetherCoordinator.shared.seek(to: time, from: self) {
+            // Back to back skips add up from this target until the relay's seek has begun.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        } else if let ap = aetherPlayer {
             await ap.seek(to: time, exact: exact)
         } else {
             await player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
         }
-        stallTracker.noteSeekOrLoad(at: Date())
-        if revealsControls { showControlsTemporarily() }
     }
 
     func seekRelative(by seconds: TimeInterval) async {
@@ -4155,22 +4268,19 @@ final class UniversalPlayerViewModel: ObservableObject {
         reopenPlexTimeline(at: targetTime)
         // tvOS Show on Skip Back covers skips back of up to 30s in total.
         // A skip back at 0 moves nowhere: no tick could arm the window, so it would never close.
+        if seconds < 0 { replayWindowOpened?.skips += 1 }
         if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
            Self.systemShowsSubtitlesOnSkipBack() {
-            openCaptionWindow(until: base)
+            openCaptionWindow(until: base, landing: targetTime)
         } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {
             // Skipped forward past the point: done, even if no tick ever armed the window.
-            endReplayWindow()
+            endReplayWindow(reason: "skipped forward past it")
         }
         inFlightRelativeSeekTarget = targetTime
         seekGeneration += 1
         let generation = seekGeneration
         stallTracker.noteSeekOrLoad(at: Date())
-        if let ap = aetherPlayer {
-            await ap.seek(to: targetTime)
-        } else {
-            await player?.seek(to: CMTime(seconds: targetTime, preferredTimescale: 600))
-        }
+        await performSeek(to: targetTime)
         stallTracker.noteSeekOrLoad(at: Date())
         // Only the newest seek clears it; an older one returning late must not
         // drop the base a newer one is still building on.
@@ -4181,7 +4291,7 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// tvOS Settings > Video and Audio > Automatic Subtitles > Show on Skip Back (default on).
     /// No public API: AVKit reads it through this libAccessibility function. Off if absent.
-    private static let systemShowsSubtitlesOnSkipBack: () -> Bool = {
+    static let systemShowsSubtitlesOnSkipBack: () -> Bool = {
         guard let lib = dlopen("/usr/lib/libAccessibility.dylib", RTLD_LAZY),
               let sym = dlsym(lib, "_AXSAutomaticSubtitlesShowOnSkipBack") else { return { false } }
         let read = unsafeBitCast(sym, to: (@convention(c) () -> Int32).self)
@@ -4190,13 +4300,18 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Turns subtitles on until playback passes `point` (#329: also opened by
     /// a skip back when the system's Show on Skip Back is on). Extends an open window.
-    private func openCaptionWindow(until point: TimeInterval) {
+    private func openCaptionWindow(until point: TimeInterval, landing: TimeInterval) {
         if let window = replayWindow {
             replayWindow = window.extended(to: point)
         } else {
             replayWindow = ReplayWindowLogic(invokedAt: point, priorSubtitleTrackId: currentSubtitleTrackId)
-            if currentSubtitleTrackId == nil, let track = preferredReplaySubtitleTrack() {
-                selectSubtitleTrackWithoutSaving(id: track.id, reloadsTranscode: false)
+            replayWindowOpened = (Date(), 1)
+            let shows = currentSubtitleTrackId == nil ? preferredReplaySubtitleTrack() : nil
+            noteCaptions("skip-back window opened: back \(Int(point - landing))s from \(Int(point))s, subtitles were "
+                + "\(describeSubtitle(currentSubtitleTrackId)), "
+                + (shows.map { "showing \(describeSubtitle($0.id))" } ?? (currentSubtitleTrackId == nil ? "no track to show" : "left as they are")))
+            if let shows {
+                selectSubtitleTrackWithoutSaving(id: shows.id, reloadsTranscode: false)
             }
         }
     }
@@ -4227,18 +4342,51 @@ final class UniversalPlayerViewModel: ObservableObject {
         let window = existing.observing(currentTime: time)
         replayWindow = window
         guard window.shouldRevert(currentTime: time) else { return }
-        endReplayWindow()
+        endReplayWindow(reason: "playback passed the skip point")
     }
 
     /// Closes the replay window and turns off the subtitles it turned on (#595).
     /// For a seek that leaves the window; a manual pick uses `clearReplayWindow`.
-    func endReplayWindow() {
+    func endReplayWindow(reason: String = "seek left it") {
         guard let window = replayWindow else { return }
         replayWindow = nil
+        noteReplayWindowEnded(window, reason: reason, reverts: window.priorSubtitleTrackId == nil)
         if window.priorSubtitleTrackId == nil {
             selectSubtitleTrackWithoutSaving(id: nil, reloadsTranscode: false)
             updateCaptionsOnMute()
         }
+    }
+
+    /// One line for Send Diagnostics, and one fleet log per window: how it ended and how long it was open.
+    private func noteReplayWindowEnded(_ window: ReplayWindowLogic, reason: String, reverts: Bool) {
+        let opened = replayWindowOpened
+        replayWindowOpened = nil
+        let openSeconds = opened.map { Int(Date().timeIntervalSince($0.at)) } ?? -1
+        noteCaptions("skip-back window ended (\(reason)) after \(openSeconds)s, skips back: \(opened?.skips ?? 0), "
+            + "armed=\(window.armed), " + (reverts ? "subtitles go off" : "subtitles left as they are"))
+        SentryBridge.log(.info, "Skip-back captions ended", attributes: [
+            "reason": reason, "open_seconds": openSeconds, "skips": opened?.skips ?? 0,
+            "armed": window.armed, "reverts": reverts, "route": aetherPlayer != nil ? "aether" : "hls",
+        ])
+    }
+
+    /// A captions line in the diagnostics log. Track ids, codecs and languages only: never a title.
+    private func noteCaptions(_ message: String) {
+        DiagLog.notice(.playback, "[captions] \(message) @\(Int(currentTime))s")
+    }
+
+    private func describeSubtitle(_ id: Int?) -> String {
+        guard let id else { return "off" }
+        if id == Self.generatedSubtitleId { return "generated" }
+        return Self.describeSubtitle(subtitleTracks.first { $0.id == id }, id: id)
+    }
+
+    /// "#3 srt eng" or "#5 hdmv_pgs_subtitle eng forced": what a track is, without its name.
+    nonisolated static func describeSubtitle(_ track: MediaTrack?, id: Int) -> String {
+        guard let track else { return "#\(id) (not in the list)" }
+        return (["#\(id)", track.codec ?? "?", track.languageCode ?? "und"]
+            + (track.isForced ? ["forced"] : []) + (track.isHearingImpaired ? ["sdh"] : [])
+            + (track.isExternal ? ["sidecar"] : [])).joined(separator: " ")
     }
 
     /// Shows subtitles while tvOS's Show When Muted applies and puts the prior
@@ -4262,7 +4410,8 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// Clears any active replay window without reverting subtitles: a manual
     /// pick, teardown, or a new item whose tracks are not the window's.
-    private func clearReplayWindow() {
+    private func clearReplayWindow(reason: String) {
+        if let window = replayWindow { noteReplayWindowEnded(window, reason: reason, reverts: false) }
         replayWindow = nil
     }
 
@@ -4411,7 +4560,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         stopScrubTimer()
         stopWheelScrubbingTimer()
         if isScrubbing {
-            endReplayWindow()
+            endReplayWindow(reason: "scrub")
             await seek(to: scrubTime)
             isScrubbing = false
             scrubSpeed = 0
@@ -4642,7 +4791,8 @@ final class UniversalPlayerViewModel: ObservableObject {
     func selectSubtitleTrack(id: Int?) {
         // User picked a track manually: their choice wins over any active
         // replay window (no later revert-to-prior-track).
-        clearReplayWindow()
+        noteCaptions("subtitle pick: \(describeSubtitle(id))")
+        clearReplayWindow(reason: "subtitle pick")
         if aetherPlayer != nil, systemCaptionsOnMute.isActive { captionsOnMute.userPicked() }
 
         // Delegate the actual pipeline switch to the auto-selection helper,
@@ -4807,6 +4957,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // Re-read every call: the engine renumbers its tracks mid-session
             // (an audio switch rebuilds them), so its active index is authoritative.
             if silentSubtitleTrackId == nil, !showsGeneratedSubtitles, let active = ap.activeSubtitleTrackId {
+                if active != currentSubtitleTrackId { noteCaptions("track list rebuilt; taking the engine's active subtitle track") }
                 currentSubtitleTrackId = active
             }
             if let active = ap.activeAudioTrackId {
@@ -4901,6 +5052,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         case .off:
             initialSubtitleSelection = .auto
             subtitlesPickedOff = true
+            noteCaptions("at start: off was picked before playing")
             selectSubtitleTrackWithoutSaving(id: nil)
             return
         case .track(let id):
@@ -4908,6 +5060,7 @@ final class UniversalPlayerViewModel: ObservableObject {
             // exists) — resolve it positionally onto the merged list.
             initialSubtitleSelection = .auto
             if let track = subtitleTrackMatchingPlexStreamId(id) {
+                noteCaptions("at start: a track was picked before playing")
                 selectSubtitleTrackWithoutSaving(id: track.id)
                 return
             }
@@ -4917,21 +5070,6 @@ final class UniversalPlayerViewModel: ObservableObject {
 
         // Generated subtitles carry on to the next item; preferRealSubtitlesOverGenerated decides.
         guard !showsGeneratedSubtitles else { return }
-
-        // 2. Plex's per-item explicit selection. A `selected: true` stream
-        //    that's neither the default nor the forced one is a deliberate
-        //    user pick (here, or in Plex Web / mobile) — honor it over the
-        //    global intent.
-        let plexSubStreams = (metadata.Media?.first?.Part?.first?.Stream ?? []).filter { $0.isSubtitle }
-        if let selectedId = plexSubStreams.first(where: { $0.selected == true })?.id,
-           let track = subtitleTrackMatchingPlexStreamId(selectedId),
-           !track.isDefault, !track.isForced,
-           TrackIntentResolver.plexSelectedSubtitleMayOverride(
-               track, intent: TrackIntentStore.effectiveSubtitleIntent
-           ) {
-            selectSubtitleTrackWithoutSaving(id: track.id)
-            return
-        }
 
         applyGlobalSubtitleIntent()
     }
@@ -4943,14 +5081,13 @@ final class UniversalPlayerViewModel: ObservableObject {
     }
 
     private func applyGlobalSubtitleIntent() {
-        // 3. Global subtitle intent, read only: no match means off for this
+        // 2. Global subtitle intent, read only: no match means off for this
         //    title, and the stored intent is kept. Only a user pick writes it.
-        if let match = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
-                                                           in: subtitleTracks, audioLanguage: playingAudioLanguage) {
-            selectSubtitleTrackWithoutSaving(id: match.id)
-        } else {
-            selectSubtitleTrackWithoutSaving(id: nil)
-        }
+        let match = TrackIntentResolver.resolveSubtitle(intent: TrackIntentStore.effectiveSubtitleIntent,
+                                                        in: subtitleTracks, audioLanguage: playingAudioLanguage)
+        noteCaptions("saved choice \(TrackIntentStore.effectiveSubtitleIntent), audio \(playingAudioLanguage ?? "und"): "
+            + (match.map { describeSubtitle($0.id) } ?? "off"))
+        selectSubtitleTrackWithoutSaving(id: match?.id)
     }
 
     /// Select a subtitle track without persisting intent (auto-selection).
@@ -5479,7 +5616,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         }
 
         // A marker skip leaves the replay window like any absolute seek.
-        endReplayWindow()
+        endReplayWindow(reason: "marker skip")
 
         switch MarkerSkipPolicy.outcome(
             isCredits: marker.isCredits,
@@ -5699,6 +5836,10 @@ final class UniversalPlayerViewModel: ObservableObject {
 
     /// At the credits boundary (or one countdown from the end): enter the Up Next flow.
     private func triggerPostVideoTransition() {
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            Task { await markCurrentAsWatched() }
+            return
+        }
         let generation = itemGeneration, stops = stopCount, timeline = plexTimelineGeneration
         Task {
             guard generation == itemGeneration, stops == stopCount, timeline == plexTimelineGeneration else { return }
@@ -5714,6 +5855,12 @@ final class UniversalPlayerViewModel: ObservableObject {
         guard !isSwappingItem else { return }
         if isPlayingCinemaExtra {
             await advanceCinemaExtras()
+            return
+        }
+        // The host decides what follows: the room's next title replaces this player.
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            isParkedAtEnd = true
+            await markCurrentAsWatched()
             return
         }
         let generation = itemGeneration, stops = stopCount, timeline = plexTimelineGeneration
@@ -6487,6 +6634,10 @@ final class UniversalPlayerViewModel: ObservableObject {
     /// `queueIndex` is a playlist jump; nil moves a playlist on by one.
     func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
         guard let next = nextEpisode else { return }
+        if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
+            showCompatibilityNotice(String(localized: "Only the host can change what's playing."))
+            return
+        }
         // A provider swap awaits its provider first, so a second call (the
         // countdown and a Play Now press) must not start another one.
         guard !isSwappingItem else { return }
@@ -6650,7 +6801,7 @@ final class UniversalPlayerViewModel: ObservableObject {
         // dangerously coincidental) on episode N+1's, and would otherwise
         // silently revert subtitles mid-scene with no relationship to any
         // action the user took in the new episode.
-        clearReplayWindow()
+        clearReplayWindow(reason: "next item")
 
         // Reset auto-skip countdown state
         cancelSkipCountdownTimer()

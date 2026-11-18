@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
-// Poster artwork with the Apple TV app's 20 pt corner drawn into the image (#581).
-// TVPosterView ignores a corner radius set on it and clips to the system corner,
-// which is 20 pt on tvOS 27 but about 6 pt on tvOS 26; the Apple TV app is 20 pt on both.
+// Artwork preserves source transparency; corners are applied at the view level.
 
 import UIKit
 
@@ -19,7 +17,19 @@ nonisolated enum RoundedPoster {
 
     private static let queue = DispatchQueue(label: "rivulet.rounded-poster", qos: .userInitiated)
 
-    /// The rounded poster, without waiting: from this cache, or drawn here from the image
+    @MainActor
+    static func configureImageView(_ imageView: UIImageView) {
+        configureViewCorners(imageView)
+        imageView.masksFocusEffectToContents = false
+    }
+
+    @MainActor
+    static func configureViewCorners(_ view: UIView) {
+        view.cornerConfiguration = .uniformCorners(radius: .fixed(cornerRadius))
+        view.layer.cornerCurve = .continuous
+    }
+
+    /// Prepared artwork, without waiting: from this cache, or drawn here from the image
     /// cache's decoded copy. Nil when the source isn't decoded yet.
     static func cached(for url: URL, shape: Shape) -> UIImage? {
         let key = shape.key(url)
@@ -28,7 +38,7 @@ nonisolated enum RoundedPoster {
         return store(render(source, shape: shape), key)
     }
 
-    /// The rounded poster, loading the source through the image cache and drawing off the main thread.
+    /// Prepared artwork, loading the source through the image cache and drawing off the main thread.
     static func image(for url: URL, shape: Shape) async -> UIImage? {
         let key = shape.key(url)
         if let hit = cache.object(forKey: key) { return hit }
@@ -39,17 +49,14 @@ nonisolated enum RoundedPoster {
         return store(rendered, key)
     }
 
-    /// Image size, corner and scale for one tile.
+    /// Image size and scale for one tile.
     struct Shape: Sendable {
         let size: CGSize
-        let radius: CGFloat
         let scale: CGFloat
 
-        /// Fills the host size (the focused size TVPosterView scales the image to), so the
-        /// corner reads `cornerRadius` at rest and grows with the poster on focus.
+        /// Fills the host size that TVPosterView scales the image to on focus.
         @MainActor init(tile: MediaRowMetrics.Tile, scale: CGFloat) {
             size = tile.hostSize
-            radius = RoundedPoster.cornerRadius * tile.hostSize.width / tile.art.width
             self.scale = scale
         }
 
@@ -59,12 +66,10 @@ nonisolated enum RoundedPoster {
     }
 
     static func render(_ source: CGImage, shape: Shape) -> UIImage {
-        let size = shape.size, radius = shape.radius
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = shape.scale
+        let size = shape.size
+        let format = UIGraphicsImageRendererFormat.layeredArtwork(scale: shape.scale)
         format.opaque = false
-        return UIGraphicsImageRenderer(size: size, format: format).image { context in
-            UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: radius).addClip()
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
             let srcW = CGFloat(source.width), srcH = CGFloat(source.height)
             let fill = max(size.width / srcW, size.height / srcH)
             let drawSize = CGSize(width: srcW * fill, height: srcH * fill)
@@ -78,5 +83,17 @@ nonisolated enum RoundedPoster {
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         cache.setObject(image, forKey: key, cost: cost)
         return image
+    }
+}
+
+extension UIGraphicsImageRendererFormat {
+    /// For artwork drawn with transparency that a focus-layered view shows (TVPosterView,
+    /// `adjustsImageWhenAncestorFocused`). Standard range always: a wide-colour display's default is
+    /// 16-bit float, and UIKit's shadow check reads past the end of such an image (SIGSEGV in vImage).
+    nonisolated static func layeredArtwork(scale: CGFloat? = nil) -> UIGraphicsImageRendererFormat {
+        let format = UIGraphicsImageRendererFormat()
+        if let scale { format.scale = scale }
+        format.preferredRange = .standard
+        return format
     }
 }

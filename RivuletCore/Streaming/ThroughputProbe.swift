@@ -9,9 +9,10 @@ nonisolated enum ThroughputProbe {
     static let timeLimit: TimeInterval = 2
 
     /// Rate from bytes received after the first byte; nil when too little arrived to judge.
+    /// A read too quick to time counts as 50 ms: a fast link, rated at its floor.
     static func kbps(bytes: Int, seconds: TimeInterval) -> Int? {
-        guard bytes >= 64 * 1024, seconds > 0.05 else { return nil }
-        return Int(Double(bytes) * 8 / seconds / 1000)
+        guard bytes >= 64 * 1024 else { return nil }
+        return Int(Double(bytes) * 8 / max(seconds, 0.05) / 1000)
     }
 
     /// Off the caller's actor: the byte loop runs for up to two seconds.

@@ -155,6 +155,12 @@ struct TVSidebarView: View {
                     }
                     return  // Never store .account — selectedTab stays unchanged
                 }
+                if newTab == .watchTogether {
+                    if let top = Self.topPresentedViewController() {
+                        WatchTogetherCoordinator.shared.presentJoin(from: top)
+                    }
+                    return
+                }
                 selectedTab = newTab
             }
         )
@@ -690,7 +696,7 @@ struct TVSidebarView: View {
         // content's SwiftUI identity and rebuilds or orphans the UIKit home.
         Group {
             switch tab {
-            case .account:
+            case .account, .watchTogether:
                 Color.clear
             case .search:
                 // Unreachable: `contentViewController(for:)` mounts

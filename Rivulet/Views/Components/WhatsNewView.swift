@@ -155,6 +155,13 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.1 (129)", [
+            "New: Watch Together. Start or join a room and watch in sync with friends",
+            "Subtitles follow your Subtitles setting, not a track Plex has selected",
+            "Auto quality no longer drops to 720p on a very fast connection",
+            "Fixed a crash while browsing posters",
+            "Fixed a crash when reopening Settings > Servers > Plex",
+        ]),
         ("1.3.1 (128)", [
             "Home can show your favorite Live TV channels: Settings > Home > Rows",
             "Libraries remember the Unwatched filter",

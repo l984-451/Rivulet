@@ -159,10 +159,22 @@ final class JellyfinMusicProviderTests: XCTestCase {
         XCTAssertEqual(stream.source.streamKind, .directPlay)
         XCTAssertEqual(stream.source.streamURL?.path, "/Videos/t1/stream")
         XCTAssertTrue(stream.source.streamURL?.query?.contains("static=true") == true)
-        let profile = server.jsonBody(0)["DeviceProfile"] as? [String: Any]
+        XCTAssertNil(stream.normalizationGainDB, "no item answer, no gain")
+        // The item read runs beside PlaybackInfo, so either may be recorded first.
+        let info = try XCTUnwrap(server.requests.firstIndex { $0.url?.path.hasSuffix("PlaybackInfo") == true })
+        let profile = server.jsonBody(info)["DeviceProfile"] as? [String: Any]
         let direct = (profile?["DirectPlayProfiles"] as? [[String: Any]])?.first
         XCTAssertEqual(direct?["Type"] as? String, "Audio")
         XCTAssertTrue((direct?["Container"] as? String)?.contains("flac") == true)
+    }
+
+    func test_resolveStream_carriesTheItemsNormalizationGain() async throws {
+        server.respond("/Items/t3/PlaybackInfo", body: """
+        {"PlaySessionId":"ps","MediaSources":[{"Id":"t3","Container":"flac","SupportsDirectPlay":true}]}
+        """)
+        server.respond("/Items/t3", body: #"{"Id":"t3","Type":"Audio","NormalizationGain":-7.35}"#)
+        let stream = try await provider().resolveStream(for: ref("t3"))
+        XCTAssertEqual(stream.normalizationGainDB, -7.35)
     }
 
     func test_resolveStream_ogg_isTheServersHLSTranscode() async throws {

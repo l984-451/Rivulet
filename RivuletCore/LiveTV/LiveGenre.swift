@@ -15,8 +15,9 @@
 //
 
 import Foundation
+import os
 
-enum LiveGenre: String, CaseIterable {
+nonisolated enum LiveGenre: String, CaseIterable, Sendable {
     case sports = "Sports"
     case news = "News"
     case kids = "Kids"
@@ -69,10 +70,10 @@ enum LiveGenre: String, CaseIterable {
 
     /// What `text` (a guide category, or a channel's name) says, if anything.
     /// Remembered per string: a guide repeats a few hundred labels across
-    /// thousands of programmes, and What's On asks about all of them.
+    /// thousands of programmes, and What's On asks about all of them, off the main thread.
     static func from(_ text: String?) -> LiveGenre? {
         guard let text else { return nil }
-        if let known = memo[text] { return known.genre }
+        if let known = memo.withLock({ $0[text] }) { return known.genre }
         let words = text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         let genre = allCases.first { genre in
             genre.keywords.contains { keyword in
@@ -80,7 +81,7 @@ enum LiveGenre: String, CaseIterable {
             }
         }
         // ponytail: never evicted; bounded by the distinct labels and channel names seen.
-        memo[text] = Memo(genre: genre)
+        memo.withLock { $0[text] = Memo(genre: genre) }
         return genre
     }
 
@@ -92,7 +93,7 @@ enum LiveGenre: String, CaseIterable {
     }
 
     private struct Memo { let genre: LiveGenre? }
-    private static var memo: [String: Memo] = [:]
+    private static let memo = OSAllocatedUnfairLock(initialState: [String: Memo]())
 
     /// A channel's genre: what is on (`airing`, when given), else what it
     /// usually airs, else its name. Pass nil for a genre that holds still

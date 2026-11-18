@@ -19,4 +19,6 @@ struct StreamInfo: Sendable {
     let trackInfoAvailable: Bool
     /// Request headers the stream needs. Jellyfin and Emby carry auth in the URL and leave it empty.
     var headers: [String: String] = [:]
+    /// A music track's loudness correction to -18 LUFS, in dB, when the server measured one.
+    var normalizationGainDB: Double?
 }

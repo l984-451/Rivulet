@@ -60,7 +60,7 @@ enum OpenSourceLicenses {
         [
             Entry(
                 name: "AetherEngine",
-                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.66.1, commit d46c270) is available at \(aetherSourceURL).",
+                summary: "Video playback engine — the default player for on-demand titles. Dynamically linked and used under the GNU Lesser General Public License, version 3, with an Apple Store / DRM Exception. Copyright © 2026 Vincent Herbst. The complete corresponding source for the exact version linked by this app (tag 7.69.0, commit a7aaa8d) is available at \(aetherSourceURL).",
                 licenseText: aetherLGPLv3
             ),
             Entry(
@@ -117,6 +117,11 @@ enum OpenSourceLicenses {
                 name: "libunibreak",
                 summary: "Used by libass for line breaking. libunibreak 6.1, statically linked and used under the zlib License.",
                 licenseText: libunibreakZlib
+            ),
+            Entry(
+                name: "Open Watch Party",
+                summary: "Keeps players in sync for Watch Together. Open Watch Party SDK 1.1.0, used under the Apache License, Version 2.0. Source: https://github.com/edde746/openwatchparty",
+                licenseText: fluidAudioApache2
             ),
             Entry(
                 name: "FluidAudio",

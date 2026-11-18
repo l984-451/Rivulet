@@ -507,7 +507,8 @@ final class MusicQueue: ObservableObject {
                     playbackState = .idle
                     return
                 }
-                player.load(url: url, headers: [:], useEngine: MusicCodecPolicy.needsEngine(codec: track.audioCodec))
+                player.load(url: url, headers: [:], useEngine: MusicCodecPolicy.needsEngine(codec: track.audioCodec),
+                            gainDB: MusicAudioProcessor.levelsLoudness ? stream.normalizationGainDB : nil)
                 reporter = provider.progressReporter(for: track.ref, stream: stream)
                 if let reporter { Task { try? await reporter.start(position: 0) } }
 

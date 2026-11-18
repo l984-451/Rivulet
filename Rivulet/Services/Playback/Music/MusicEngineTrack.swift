@@ -26,8 +26,9 @@ final class MusicEngineTrack {
         set { engine?.volume = newValue }
     }
 
-    /// Starts the track. `onFailure` runs when the engine cannot open it.
-    func load(url: URL, headers: [String: String], onFailure: @escaping () -> Void) {
+    /// Starts the track at `gainDB` (lifts included, behind the engine's limiter). `onFailure`
+    /// runs when the engine cannot open it.
+    func load(url: URL, headers: [String: String], gainDB: Double?, onFailure: @escaping () -> Void) {
         stop()
         // The engine otherwise trusts the system alone, so a raw-IP Plex server would not play (#337).
         EngineTLS.serverTrustEvaluator = { PlexCertificateDelegate.trustsServer($0) }
@@ -69,6 +70,7 @@ final class MusicEngineTrack {
             do {
                 var options = LoadOptions(httpHeaders: headers, audioOnly: true)
                 options.preferredDecodePath = .software
+                options.normalizationGainDB = gainDB
                 _ = try await engine.load(url: url, options: options)
                 guard !Task.isCancelled else { return }
                 engine.play()

@@ -144,6 +144,9 @@ final class TileMenuPopupViewController: UIViewController {
     private let sourceFrame: CGRect?
     private var firstRow: MenuRowButton?
     private var panel: UIVisualEffectView!
+    /// Takes the panel's place, corner anchor and scale. UIKit re-hosts a glass view's layer, and
+    /// with those on the effect view the rows drew away from the panel on a 4K 1st gen (#486).
+    private let panelHolder = UIView()
     /// The dim the backdrop animates to.
     private let dimColor = UIColor.black.withAlphaComponent(0.55)
     private var isDismissing = false
@@ -245,18 +248,21 @@ final class TileMenuPopupViewController: UIViewController {
 
         let placement = TileMenuPlacement.place(panel: CGSize(width: panelWidth, height: panelHeight),
                                                 beside: sourceFrame, in: view.bounds)
-        panel.frame = placement.frame
-        view.addSubview(panel)
+        panelHolder.frame = placement.frame
+        panel.frame = panelHolder.bounds
+        panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        panelHolder.addSubview(panel)
+        view.addSubview(panelHolder)
 
         // The system menu grows out of the tile-side corner and shrinks back into it.
         let anchor = placement.anchor
-        let frame = panel.frame
-        panel.layer.anchorPoint = anchor
-        panel.layer.position = CGPoint(x: frame.minX + frame.width * anchor.x,
-                                       y: frame.minY + frame.height * anchor.y)
+        let frame = panelHolder.frame
+        panelHolder.layer.anchorPoint = anchor
+        panelHolder.layer.position = CGPoint(x: frame.minX + frame.width * anchor.x,
+                                             y: frame.minY + frame.height * anchor.y)
 
         // Entrance start state; animated in viewDidAppear.
-        panel.transform = CGAffineTransform(scaleX: 0.02, y: 0.02)
+        panelHolder.transform = CGAffineTransform(scaleX: 0.02, y: 0.02)
         panel.alpha = 0
 
         // Menu cancels (rows own Select via their own recognizers).
@@ -327,7 +333,7 @@ final class TileMenuPopupViewController: UIViewController {
         guard !isDismissing else { return }
         isDismissing = true
         let exit = UIViewPropertyAnimator(duration: 0.22, curve: .easeIn) {
-            self.panel.transform = CGAffineTransform(scaleX: 0.02, y: 0.02)
+            self.panelHolder.transform = CGAffineTransform(scaleX: 0.02, y: 0.02)
             self.panel.alpha = 0
             self.view.backgroundColor = .clear
         }
@@ -345,7 +351,7 @@ final class TileMenuPopupViewController: UIViewController {
         super.viewDidAppear(animated)
         // Grow out of the tile's corner (the anchor set in viewDidLoad).
         let entrance = UIViewPropertyAnimator(duration: 0.42, dampingRatio: 0.82) {
-            self.panel.transform = .identity
+            self.panelHolder.transform = .identity
             self.view.backgroundColor = self.dimColor
         }
         // The panel fades in faster than it grows, like the system menu.

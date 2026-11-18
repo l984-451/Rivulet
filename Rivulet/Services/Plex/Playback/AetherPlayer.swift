@@ -1290,6 +1290,16 @@ final class AetherPlayer: PlayerProtocol {
         return engine.presentationAxisMap.sourceSeconds(forItemSeconds: item.seconds)
     }
 
+    /// The playhead on the title's axis, read off the presentation clock: the
+    /// engine's tick is 10 Hz, too coarse for Watch Together. The tick wins when they
+    /// disagree (a seek or a reload is under way).
+    var precisePosition: TimeInterval {
+        let tick = currentTime
+        guard let source = sourceTime(atHostTime: CACurrentMediaTime()),
+              abs(source + partStart - tick) < 1 else { return tick }
+        return source + partStart
+    }
+
     /// Hand external metadata (title, artwork, description, genre) to the
     /// engine so AVPlayerViewController's info panel and the system Now
     /// Playing surface populate. Aether stashes these and applies them onto
@@ -1556,6 +1566,11 @@ final class AetherPlayer: PlayerProtocol {
     /// remote-HLS bypass, or across a channel change.
     func liveThumbnail(atSessionSeconds sessionSeconds: Double, maxWidth: Int = 320) async -> CGImage? {
         await engine.liveScrubThumbnail(atSessionSeconds: sessionSeconds, maxWidth: maxWidth)
+    }
+
+    /// Closes the rewind window's still decoders when a scrub ends; their cached stills stay.
+    func releaseScrubDecoders() {
+        Task { await engine.releaseScrubPreviewDecoders() }
     }
 
     /// The AVPlayer item's seekable window, mirrored by KVO: the getter is a

@@ -161,6 +161,7 @@
         }
       }
     },
+    "%@ joined" : {},
     "%@ left" : {
       "localizations" : {
         "de" : {
@@ -183,6 +184,9 @@
         }
       }
     },
+    "%@ paused" : {},
+    "%@ pressed play" : {},
+    "%@ skipped" : {},
     "%@ to %@" : {
       "localizations" : {
         "de" : {
@@ -3919,6 +3923,7 @@
         }
       }
     },
+    "Buffering" : {},
     "Building Personalized Recommendations" : {
       "localizations" : {
         "de" : {
@@ -4513,6 +4518,7 @@
         }
       }
     },
+    "Choose how music plays." : {},
     "Choose how slideshows in your photo libraries play." : {
       "localizations" : {
         "de" : {
@@ -4649,6 +4655,8 @@
         }
       }
     },
+    "Loudness Leveling" : {},
+    "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
     "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -5721,6 +5729,7 @@
         }
       }
     },
+    "Couldn't Join" : {},
     "Couldn't Load" : {
       "localizations" : {
         "de" : {
@@ -5875,6 +5884,7 @@
         }
       }
     },
+    "Couldn't join that room." : {},
     "Couldn't load the next episode." : {
       "localizations" : {
         "de" : {
@@ -5941,6 +5951,7 @@
         }
       }
     },
+    "Couldn't reach Watch Together. Check your connection and try again." : {},
     "Couldn't reach that server. Check the address and port." : {
       "localizations" : {
         "de" : {
@@ -6029,6 +6040,7 @@
         }
       }
     },
+    "Couldn't start a room." : {},
     "Couldn't switch streams." : {
       "localizations" : {
         "de" : {
@@ -6665,6 +6677,7 @@
         }
       }
     },
+    "Different Version" : {},
     "Dimensions" : {
       "localizations" : {
         "de" : {
@@ -7097,6 +7110,7 @@
         }
       }
     },
+    "Doesn't have this title" : {},
     "Dolby Vision, TV not confirmed" : {
       "localizations" : {
         "de" : {
@@ -7767,6 +7781,7 @@
         }
       }
     },
+    "Enter the code from the person hosting and select Continue." : {},
     "Enter the password for this %@ user. Leave it empty if the user has none." : {
       "localizations" : {
         "de" : {
@@ -9471,6 +9486,7 @@
         }
       }
     },
+    "Get a code to share" : {},
     "Go to Album" : {
       "localizations" : {
         "de" : {
@@ -10151,6 +10167,7 @@
         }
       }
     },
+    "Host • %@" : {},
     "How far a single Left press skips back during playback." : {
       "localizations" : {
         "de" : {
@@ -10787,6 +10804,7 @@
         }
       }
     },
+    "Join a Room" : {},
     "Jumped ahead %lld min. The pause ran past what the rewind buffer holds." : {
       "localizations" : {
         "de" : {
@@ -11007,6 +11025,7 @@
         }
       }
     },
+    "Leave Room" : {},
     "Letterboxd members" : {
       "localizations" : {
         "de" : {
@@ -12851,6 +12870,7 @@
         }
       }
     },
+    "No room has that code. Rooms end when everyone leaves." : {},
     "No stream URL available" : {
       "localizations" : {
         "de" : {
@@ -12895,6 +12915,7 @@
         }
       }
     },
+    "None of your servers have %@." : {},
     "Not Connected" : {
       "localizations" : {
         "de" : {
@@ -12961,6 +12982,7 @@
         }
       }
     },
+    "Not in Your Library" : {},
     "Not set" : {
       "localizations" : {
         "de" : {
@@ -13459,6 +13481,8 @@
         }
       }
     },
+    "Only the host can change what's playing." : {},
+    "Only the host can control playback." : {},
     "Open in YouTube" : {
       "localizations" : {
         "de" : {
@@ -14077,6 +14101,7 @@
         }
       }
     },
+    "Play Anyway" : {},
     "Play Clips in Slideshow" : {
       "localizations" : {
         "de" : {
@@ -15595,6 +15620,7 @@
         }
       }
     },
+    "Ready" : {},
     "Recap" : {
       "localizations" : {
         "de" : {
@@ -15815,6 +15841,7 @@
         }
       }
     },
+    "Reconnecting to Watch Together…" : {},
     "Record" : {
       "localizations" : {
         "de" : {
@@ -17101,6 +17128,8 @@
         }
       }
     },
+    "Room Code" : {},
+    "Room codes have 6 letters and numbers." : {},
     "Rotten" : {
       "localizations" : {
         "de" : {
@@ -19033,6 +19062,7 @@
         }
       }
     },
+    "Sit This One Out" : {},
     "Size" : {
       "localizations" : {
         "de" : {
@@ -19727,6 +19757,7 @@
         }
       }
     },
+    "Start a Room" : {},
     "Start from Beginning" : {
       "localizations" : {
         "de" : {
@@ -19793,6 +19824,7 @@
         }
       }
     },
+    "Stay" : {},
     "Step %lld of %lld   ·   %llds" : {
       "localizations" : {
         "de" : {
@@ -20691,6 +20723,7 @@
         }
       }
     },
+    "That room is full or locked." : {},
     "That server has no Dispatcharr sign-in. Clear the username and password." : {
       "localizations" : {
         "de" : {
@@ -23779,6 +23812,8 @@
         }
       }
     },
+    "Watch Together" : {},
+    "Watch Together ended" : {},
     "Watch from Beginning" : {
       "localizations" : {
         "de" : {
@@ -24899,6 +24934,8 @@
         }
       }
     },
+    "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
+    "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},
     "Your favorite was %@" : {
       "localizations" : {
         "de" : {

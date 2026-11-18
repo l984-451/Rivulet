@@ -1189,7 +1189,7 @@ extension ShellSidebarViewController: UICollectionViewDataSource, UICollectionVi
         if let rowMove, rowMove.swallowsNextSelect { rowMove.swallowsNextSelect = false; return }
         guard rowMove?.isMoving != true else { return }
         let tab = sections[indexPath.section].items[indexPath.item].tab
-        if tab != .account, tab != .nowPlaying { select(tab: tab) }
+        if tab != .account, tab != .nowPlaying, tab != .watchTogether { select(tab: tab) }
         if embedded { onTabSelected?(tab) }
     }
 

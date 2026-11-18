@@ -628,4 +628,12 @@ final class PlexNetworkManagerURLTests: XCTestCase {
         XCTAssertTrue(items.contains(URLQueryItem(name: "X-Plex-Container-Start", value: "0")))
         XCTAssertTrue(items.contains(URLQueryItem(name: "X-Plex-Container-Size", value: "50")))
     }
+
+    /// A refused transcode's decision body, as PMS 1.43.5 sent it.
+    func testTranscodeVerdictReadsTheServersReason() {
+        let refused = #"{"MediaContainer":{"size":0,"directPlayDecisionCode":3000,"directPlayDecisionText":"App cannot direct play this item. Direct play is disabled.","generalDecisionCode":2000,"generalDecisionText":"Neither direct play nor conversion is available.","transcodeDecisionCode":4005,"transcodeDecisionText":"Cannot convert this item. No conversion profile found for protocol hls."}}"#
+        XCTAssertEqual(PlexNetworkManager.transcodeVerdict(in: Data(refused.utf8)),
+                       "general=2000 transcode=4005: Cannot convert this item. No conversion profile found for protocol hls.")
+        XCTAssertNil(PlexNetworkManager.transcodeVerdict(in: Data("<html>400 Bad Request</html>".utf8)))
+    }
 }

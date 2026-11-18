@@ -52,4 +52,20 @@ final class TileMenuPlacementTests: XCTestCase {
         XCTAssertEqual(p.frame.minY, 50)
         XCTAssertEqual(p.frame.maxY, screen.maxY - 50)
     }
+
+    /// The glass view keeps the geometry UIKit expects; its holder carries the place and the scale (#486).
+    @MainActor
+    func test_effectView_carriesNoPlacementOfItsOwn() throws {
+        let action = TileMenuAction(verbatim: "Play", systemImage: "play.fill", handler: {})
+        let popup = TileMenuPopupViewController(sections: [[action]],
+                                                sourceFrame: CGRect(x: 64, y: 430, width: 354, height: 237))
+        popup.loadViewIfNeeded()
+        let holder = try XCTUnwrap(popup.view.subviews.first)
+        let glass = try XCTUnwrap(holder.subviews.first as? UIVisualEffectView)
+
+        XCTAssertEqual(glass.layer.anchorPoint, CGPoint(x: 0.5, y: 0.5))
+        XCTAssertEqual(glass.frame, holder.bounds)
+        XCTAssertTrue(glass.transform.isIdentity)
+        XCTAssertEqual(holder.layer.position, CGPoint(x: 434, y: 430), "grows from the corner beside the tile")
+    }
 }

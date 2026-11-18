@@ -725,6 +725,43 @@ final class AetherPlayer: ObservableObject {
         state == .playing ? pause() : play()
     }
 
+    /// A rate Watch Together sets for sync: not the user's speed, so the menu doesn't show it.
+    func setSyncRate(_ syncRate: Float) {
+        engine.setRate(syncRate)
+    }
+
+    /// Whether playback is wanted, buffering or not.
+    var intendsToPlay: Bool { userIntendsToPlay }
+
+    /// The playhead off the presentation clock: the engine's tick is too coarse for
+    /// Watch Together. The tick wins when they disagree (a seek or reload is under way).
+    var precisePosition: TimeInterval {
+        let tick = currentTime
+        let host = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1_000_000_000)
+        var source: Double?
+        if let timebase = engine.softwarePresentationTimebase {
+            let time = CMSyncConvertTime(host, from: CMClockGetHostTimeClock(), to: timebase)
+            source = time.isNumeric ? time.seconds : nil
+        } else if let timebase = engine.currentAVPlayerItem?.timebase {
+            let time = CMSyncConvertTime(host, from: CMClockGetHostTimeClock(), to: timebase)
+            source = time.isNumeric ? engine.presentationAxisMap.sourceSeconds(forItemSeconds: time.seconds) : nil
+        }
+        guard let source, abs(source - tick) < 1 else { return tick }
+        return source
+    }
+
+    /// Seeks and returns where the picture landed, or nil when it gave up.
+    func seekLanding(to time: TimeInterval) async -> TimeInterval? {
+        let outcomes = engine.seekEvents.receive(on: DispatchQueue.main).map { event -> WatchTogetherSeekOutcome in
+            switch event.outcome {
+            case .began: .began
+            case .landed(let rendered): .landed(rendered)
+            default: .gaveUp
+            }
+        }.eraseToAnyPublisher()
+        return await watchTogetherLanding(of: outcomes) { [engine] in await engine.seek(to: time) }
+    }
+
     func setRate(_ newRate: Float) {
         rate = newRate
         if state == .playing { engine.setRate(newRate) }

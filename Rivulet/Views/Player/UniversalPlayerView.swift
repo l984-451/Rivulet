@@ -773,6 +773,7 @@ struct UniversalPlayerView: View {
             if hasStartedPlayback { LiveTVDataStore.shared.endPlaybackGuideHold() }
             // Stop playback first, then detach from Now Playing
             // (audio session must remain active until player stops)
+            WatchTogetherCoordinator.shared.playerClosed(viewModel)
             viewModel.stopPlayback()
             NowPlayingService.shared.detach()
             Task { await viewModel.reportFinalProgress() }

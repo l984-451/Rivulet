@@ -76,7 +76,8 @@ RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
 │                       #   records + offline progress live in RivuletCore/Downloads),
-│                       #   Photos/ (photo library grid and viewer over PhotoListingModel).
+│                       #   Photos/ (photo library grid and viewer over PhotoListingModel),
+│                       #   CarPlay/ (the CarPlay video scene: templates over BrowseStore).
 RivuletMac/             # Native macOS app (SwiftUI + AppKit). See "Mac app" and
 │                       #   RivuletMac/README-MAC.md (navigation contract, file map).
 Rivulet/                # The tvOS app — everything below.
@@ -154,6 +155,7 @@ Standing exceptions:
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
 - Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
 - The pause screen is tvOS only: iOS and the Mac app keep their controls up while paused, as the system player does.
+- CarPlay and Apple HomeView are iPhone only, and video only: Apple allows one CarPlay category per app, so music is not offered there.
 
 ## Platform Boundary (tvOS / iOS)
 

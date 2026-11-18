@@ -289,7 +289,7 @@ private struct IOSPlexLibraryBrowseView: View {
 
     init(library: MediaLibrary) {
         self.library = library
-        _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, "iosLibrarySort.\(library.settingKey)")
+        _sortRaw = AppStorage(wrappedValue: LibrarySortOption.titleAsc.rawValue, LibrarySortOption.iosKey(library.settingKey))
         _filter = State(initialValue: .remembered(library.settingKey))
     }
 

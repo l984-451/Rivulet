@@ -109,7 +109,9 @@ extension PlexSession {
     /// or a direct-play one so the dashboard shows its bandwidth (#423).
     func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? {
         if request.transcodeSessionID != nil {
-            return await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)?.refusal
+            let decision = await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
+            if let decision { DiagLog.notice(.playback, "Transcode decision: \(decision.verdict)") }
+            return decision?.refusal
         } else if let session = request.directPlaySessionID, let key = request.item.ratingKey,
                   await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
                                                       ratingKey: key, mediaIndex: request.mediaIndex,

@@ -49,6 +49,7 @@ final class MacPlexPlayback: ObservableObject {
     private var switchingItem = false
     private var reloadTask: Task<Void, Never>?
     private var longStallTask: Task<Void, Never>?
+    private var transcodeStartWatch: Task<Void, Never>?
     private lazy var timeline: PlaybackTimeline = {
         let timeline = PlaybackTimeline(reports: playbackReports, position: { [weak self] in self?.player.currentTime ?? 0 }) { [weak self] state, time in
             guard let self, !self.isPlayingCinemaExtra else { return { nil } }
@@ -161,6 +162,7 @@ final class MacPlexPlayback: ObservableObject {
         nextTask?.cancel()
         reloadTask?.cancel()
         longStallTask?.cancel()
+        transcodeStartWatch?.cancel()
         timeline.transportChanged(.other)
         releaseThumbnails()
         let finish = finishItem(at: player.currentTime)
@@ -246,6 +248,22 @@ final class MacPlexPlayback: ObservableObject {
             return
         }
         if player.audioIsDropped { fallBackToTranscode() }
+        watchTranscodeStart(loadingRequest)
+    }
+
+    /// A Plex transcode still waiting after the deadline: log why and say so, as on tvOS (#677).
+    private func watchTranscodeStart(_ loading: PlexPlaybackRequest) {
+        transcodeStartWatch?.cancel()
+        guard loading.providerPlayback == nil, let sessionId = loading.transcodeSessionID else { return }
+        transcodeStartWatch = Task { [weak self] in
+            try? await Task.sleep(for: TranscodeStartWatch.deadline)
+            guard let self, !Task.isCancelled, request.transcodeSessionID == sessionId,
+                  !playbackStart.streamHasPlayed, player.state != .paused else { return }
+            let reported = await TranscodeStartWatch.report(
+                serverURL: loading.serverURL, authToken: loading.token, sessionId: sessionId, playerState: "state=\(player.state)")
+            guard !Task.isCancelled, request.transcodeSessionID == sessionId else { return }
+            notice = reported
+        }
     }
 
     func retry() {

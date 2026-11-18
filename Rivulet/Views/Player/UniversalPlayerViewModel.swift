@@ -599,6 +599,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var streamPreparationTask: Task<Void, Never>?
     /// Plex transcode session ID, extracted from HLS stream URL for cleanup on stop
     private var plexSessionId: String?
+    private var transcodeStartWatch: Task<Void, Never>?
+    /// The current AVPlayer item has played since it loaded.
+    private var avItemHasPlayed = false
     /// The Plex stream whose transcode subtitle feeds the caption overlay (hls route).
     private var transcodeSubtitleTrackId: Int?
     private var transcodeSubtitleTask: Task<Void, Never>?
@@ -1664,6 +1667,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     self.updatePlaybackState(.buffering)
                 case .playing:
                     print("[Player] AVPlayer: playing (rate=\(player.rate))")
+                    self.avItemHasPlayed = true
                     self.updatePlaybackState(.playing)
                 case .paused:
                     print("[Player] AVPlayer: paused (rate=\(player.rate))")
@@ -1796,6 +1800,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     /// Tear down AVPlayer observers.
     private func teardownAVPlayerObservers() {
+        transcodeStartWatch?.cancel()
         stopTranscodeSubtitleReader()
         rateObservation?.invalidate()
         rateObservation = nil
@@ -2894,6 +2899,26 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         setupAVPlayerObservers()
         updatePlaybackState(.loading)
+        watchTranscodeStart(of: item)
+    }
+
+    /// A Plex transcode that has not played by the deadline: log why and say so (#677).
+    private func watchTranscodeStart(of item: AVPlayerItem) {
+        transcodeStartWatch?.cancel()
+        avItemHasPlayed = false
+        guard case .plex = source, let sessionId = plexSessionId else { return }
+        let serverURL = serverURL, authToken = authToken
+        transcodeStartWatch = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: TranscodeStartWatch.deadline)
+            guard let self, !Task.isCancelled, let player = self.player, player.currentItem === item,
+                  !self.avItemHasPlayed, item.status != .failed, player.timeControlStatus != .paused else { return }
+            let loaded = item.loadedTimeRanges.first.map { String(format: "%.1f", $0.timeRangeValue.duration.seconds) } ?? "0"
+            let state = "status=\(item.status.rawValue) waiting=\(player.reasonForWaitingToPlay?.rawValue ?? "none") loaded=\(loaded)s"
+            let notice = await TranscodeStartWatch.report(
+                serverURL: serverURL, authToken: authToken, sessionId: sessionId, playerState: state)
+            guard !Task.isCancelled, self.player?.currentItem === item else { return }
+            self.showCompatibilityNotice(notice, for: 10)
+        }
     }
 
     // MARK: - AVPlayerItem Metadata

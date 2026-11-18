@@ -4745,6 +4745,28 @@
         }
       }
     },
+    "Still Waiting on the Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf den Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναμονή για τον διακομιστή"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente du serveur"
+          }
+        }
+      }
+    },
     "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -14868,6 +14890,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le serveur a atteint sa limite de flux. Réessayez dans un instant."
+          }
+        }
+      }
+    },
+    "The server is converting this at %@×, slower than it plays." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server wandelt dies mit %@× um, langsamer als die Wiedergabe."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής το μετατρέπει με %@×, πιο αργά από την αναπαραγωγή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur le convertit à %@×, plus lentement que la lecture."
+          }
+        }
+      }
+    },
+    "The server is converting this, but it is slow to arrive." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server wandelt dies um, aber es kommt nur langsam an."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής το μετατρέπει, αλλά φτάνει αργά."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur le convertit, mais il arrive lentement."
+          }
+        }
+      }
+    },
+    "The server stopped converting this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Umwandlung beendet."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής σταμάτησε τη μετατροπή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur a arrêté la conversion."
           }
         }
       }

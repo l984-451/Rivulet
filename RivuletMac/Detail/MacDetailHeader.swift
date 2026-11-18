@@ -77,6 +77,9 @@ struct MacDetailHeader: View {
                 if let rating = detail?.contentRating ?? item.contentRating, !rating.isEmpty {
                     Text(rating).macPill()
                 }
+                if let aspect = detail?.primarySource?.aspectRatioLabel {
+                    Text(aspect).macPill()
+                }
             }
             .font(.subheadline)
             .foregroundStyle(.white.opacity(0.8))

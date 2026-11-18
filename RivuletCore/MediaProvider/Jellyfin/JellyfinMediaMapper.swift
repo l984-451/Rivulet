@@ -203,7 +203,12 @@ enum JellyfinMediaMapper {
             videoRange: range,
             isDefault: s.isDefault ?? false,
             scanType: s.isInterlaced.map { $0 ? "interlaced" : "progressive" },
-            hasHDR10Plus: s.videoRangeType?.hasSuffix("HDR10Plus") == true
+            hasHDR10Plus: s.videoRangeType?.hasSuffix("HDR10Plus") == true,
+            // The server's AspectRatio snaps to a few named ratios, so the frame size decides
+            // unless the pixels aren't square.
+            aspectRatio: s.isAnamorphic == true
+                ? VideoTrack.ratio(s.aspectRatio)
+                : VideoTrack.aspectRatio(width: s.width, height: s.height)
         )
     }
 

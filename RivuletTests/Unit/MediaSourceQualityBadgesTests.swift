@@ -252,4 +252,60 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(source(height: 576, label: "576").detailBadges, [])
         XCTAssertEqual(source(height: 480, label: "sd").detailBadges, [])
     }
+
+    // MARK: - Aspect ratio (#672)
+
+    private func source(width: Int?, height: Int?, pixelAspect: String? = nil,
+                        audio: [AudioTrack] = [], subtitles: [SubtitleTrack] = []) -> MediaSource {
+        let video = VideoTrack(
+            id: "v1", codec: "hevc", profile: nil, level: nil, width: width, height: height, frameRate: 24,
+            bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive",
+            aspectRatio: VideoTrack.aspectRatio(width: width, height: height, pixelAspect: pixelAspect)
+        )
+        return MediaSource(
+            id: "1", container: "mkv", duration: 7200, bitrate: nil, fileSize: nil, fileName: nil,
+            videoResolution: nil, videoTracks: [video], audioTracks: audio, subtitleTracks: subtitles,
+            streamKind: .directPlay, streamURL: nil
+        )
+    }
+
+    /// Sizes from the test server's films, each with what Plex's `aspectRatio` called it.
+    func test_aspectRatioLabel_fromFrameSize() {
+        XCTAssertEqual(source(width: 1920, height: 800).aspectRatioLabel, "2.40:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 804).aspectRatioLabel, "2.39:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 696).aspectRatioLabel, "2.76:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 3840, height: 2076).aspectRatioLabel, "1.85:1")
+        XCTAssertEqual(source(width: 1920, height: 1080).aspectRatioLabel, "1.78:1")
+        XCTAssertEqual(source(width: 1440, height: 1080).aspectRatioLabel, "1.33:1")
+        XCTAssertNil(source(width: nil, height: 1080).aspectRatioLabel)
+    }
+
+    /// An anamorphic DVD rip is stored narrower than it plays.
+    func test_aspectRatioLabel_correctsNonSquarePixels() {
+        XCTAssertEqual(source(width: 544, height: 288, pixelAspect: "40:33").aspectRatioLabel, "2.29:1")
+        XCTAssertEqual(source(width: 720, height: 480, pixelAspect: "32:27").aspectRatioLabel, "1.78:1")
+    }
+
+    func test_ratio_readsServerSpellings() {
+        XCTAssertEqual(VideoTrack.ratio("16:9")!, 16.0 / 9, accuracy: 0.0001)
+        XCTAssertEqual(VideoTrack.ratio("2.40:1"), 2.4)
+        XCTAssertEqual(VideoTrack.ratio("80:29")!, 2.7586, accuracy: 0.0001)
+        XCTAssertNil(VideoTrack.ratio("0:1"))
+        XCTAssertNil(VideoTrack.ratio("2.35"))
+        XCTAssertNil(VideoTrack.ratio(nil))
+    }
+
+    /// The aspect ratio follows the picture and sound badges and comes before CC, SDH and AD.
+    func test_detailBadges_aspectRatioBeforeAccessibility() {
+        let atmos = AudioTrack(
+            id: "a1", index: 0, codec: "truehd", profile: "atmos", channels: 8, channelLayout: "7.1",
+            language: "en", title: nil, extendedTitle: nil,
+            bitrate: nil, samplingRate: 48_000, isDefault: true, isForced: false, isSelected: true
+        )
+        let sdh = SubtitleTrack(id: "s1", index: 0, codec: "srt", language: "en", title: nil, extendedTitle: nil,
+                                isDefault: false, isForced: false, isHearingImpaired: true, isEmbedded: true,
+                                externalURL: nil, isSelected: false)
+        XCTAssertEqual(source(width: 1920, height: 804, audio: [atmos], subtitles: [sdh]).detailBadges,
+                       ["HD", "Atmos", "2.39:1", "SDH"])
+    }
 }

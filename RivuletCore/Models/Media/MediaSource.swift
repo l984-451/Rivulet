@@ -57,12 +57,14 @@ extension MediaSource {
     }
 
     /// The detail pages' badge row in the Apple TV app's order: definition, range, object audio, then
-    /// CC, SDH and AD. Plain codecs are left to the Info popup.
+    /// CC, SDH and AD. Apple has no aspect ratio badge; ours goes before the accessibility ones (#672).
+    /// Plain codecs are left to the Info popup.
     var detailBadges: [String] {
         var badges = [definitionBadge].compactMap { $0 } + rangeBadges
         if let audio = audioBadge {
             if audio.hasSuffix("Atmos") { badges.append("Atmos") } else if audio.hasPrefix("DTS-X") { badges.append("DTS:X") }
         }
+        if let aspect = aspectRatioLabel { badges.append(aspect) }
         if subtitleTracks.contains(where: { ["eia_608", "eia_708"].contains($0.codec.lowercased()) }) { badges.append("CC") }
         if subtitleTracks.contains(where: \.isHearingImpaired) { badges.append("SDH") }
         if audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) {
@@ -88,6 +90,12 @@ extension MediaSource {
     }
 
     var rangeBadge: String? { rangeBadges.isEmpty ? nil : rangeBadges.joined(separator: " · ") }
+
+    /// The aspect ratio as cinema writes it: "2.39:1", "1.85:1", "1.78:1". Letterboxing inside the
+    /// frame can't be seen here, so a 16:9 encode of a scope film reads 1.78:1.
+    var aspectRatioLabel: String? {
+        videoTracks.first?.aspectRatio.map { String(format: "%.2f:1", $0) }
+    }
 
     var audioBadge: String? {
         (audioTracks.first(where: { $0.isDefault }) ?? audioTracks.first)?.qualityLabel

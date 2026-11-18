@@ -366,6 +366,9 @@ private struct IOSPlexDetailHeader: View {
                 if let rating = detail?.contentRating ?? item.contentRating, !rating.isEmpty {
                     Text(rating).plexPill()
                 }
+                if let aspect = detail?.primarySource?.aspectRatioLabel {
+                    Text(aspect).plexPill()
+                }
             }
             .font(.subheadline)
             .foregroundStyle(.white.opacity(0.8))

@@ -245,6 +245,8 @@ nonisolated struct JFMediaStream: Decodable, Sendable {
     let isInterlaced: Bool?
     let width: Int?
     let height: Int?
+    let aspectRatio: String?        // display aspect: "16:9", "2.40:1", or ffprobe's own ("80:29")
+    let isAnamorphic: Bool?
     let bitRate: Int?
     let channels: Int?
     let channelLayout: String?

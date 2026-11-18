@@ -42,10 +42,12 @@ final class CloudSync: ObservableObject {
     private lazy var vault = AccountVault()
     private lazy var coordinator = AccountSyncCoordinator(vault: vault, kinds: Self.accountKinds)
 
-    /// Off until this device turns it on.
-    var isEnabled: Bool { defaults.bool(forKey: SyncCatalog.enabledKey) }
+    /// Off until this device turns it on, and always off in a build without iCloud
+    /// (`SyncCatalog.cloudAvailable`), even if the switch was saved on.
+    var isEnabled: Bool { SyncCatalog.cloudAvailable && defaults.bool(forKey: SyncCatalog.enabledKey) }
 
     func setEnabled(_ enabled: Bool) {
+        guard SyncCatalog.cloudAvailable else { return }
         defaults.set(enabled, forKey: SyncCatalog.enabledKey)
         enabled ? activate() : deactivate()
     }

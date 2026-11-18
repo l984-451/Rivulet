@@ -176,7 +176,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var titleLogoResolveTask: Task<Void, Never>?
 
     @Published var shouldDismiss = false  // Used to request player dismissal on tvOS
-    @Published var compatibilityNotice: String?
+    @Published var compatibilityNotice: PlaybackNotice?
 
     // MARK: - Seek Indicator State
     /// Shows a brief indicator when user taps left/right to skip 10 seconds
@@ -621,6 +621,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// One-shot: the enriched HLS asset failed and we rebuilt on the plain URL.
     private var hasRetriedWithoutEnrichment = false
     private var isAttemptingRivuletHLSFallback = false
+    /// The play session's decision refused the file: the Aether load gives way to the transcode.
+    private var directPlayRefused = false
 
     // MARK: - Streaming Quality State
 
@@ -2129,7 +2131,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             useDolbyVision: metadata.hasDolbyVision,
             forceVideoTranscode: forceVideoTranscode,
             allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_fallback_build"),
-            step: activeStreamPlan.step,
+            step: activeStreamPlan.step ?? fallbackStep,
             clientRendersTextSubtitles: true,
             sessionIdentifier: plexPlaybackSessionIdentifier
         ) else {
@@ -2353,7 +2355,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     ap,
                     url: aetherURL,
                     headers: aetherHeaders,
-                    startTime: startTime
+                    startTime: startTime,
+                    yieldsToRefusal: planHasHLSFallback(plan) && !isStacked
                 )
                 guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else {
                     // Leave a reused player running only when a newer item owns it and playback has not stopped.
@@ -2374,6 +2377,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // second failure event. The deadline error is not a cancellation
                 // and must get past this guard to reach the fallback.
                 if stops != stopCount || generation != itemGeneration || isCancellationError(error) || Task.isCancelled { return }
+                // The server's own rule, not a fault: no failure to record or probe.
+                if error is DirectPlayRefusedError {
+                    try await attemptRivuletHLSFallback(
+                        resumeTime: startTime ?? 0, reason: "direct_play_refused", failureKind: .network)
+                    return
+                }
                 let kind = classifyDirectPlayFailure(error)
                 // Record the original Aether failure first, so a failed fallback
                 // cannot hide it (RIVULET-19).
@@ -2423,7 +2432,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         _ ap: AetherPlayer,
         url: URL,
         headers: [String: String],
-        startTime: TimeInterval?
+        startTime: TimeInterval?,
+        yieldsToRefusal: Bool
     ) async throws {
         let deadline = AetherLoadTimeoutPolicy.startupLoadDeadline
         let hints = aetherSubtitleLanguageHintsByStreamIndex()
@@ -2450,6 +2460,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // Reached only when the load is still in flight.
                 DiagLog.error(.playback, "Aether load exceeded \(Int(deadline))s deadline, falling back to HLS")
                 throw AetherLoadTimeoutPolicy.TimedOut(seconds: deadline)
+            }
+            if yieldsToRefusal {
+                // ponytail: polls the flag; a continuation would need its own cancellation handling.
+                group.addTask { @MainActor [weak self] in
+                    while self?.directPlayRefused == false {
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    throw DirectPlayRefusedError()
+                }
             }
 
             do {
@@ -3247,6 +3266,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         diagnostics.step("hls_fallback_preflight_ready")
 
         try await finishHLSSwitch(to: fallback, resumeTime: resumeTime)
+        if directPlayRefused { showDirectPlayRefusedNotice() }
     }
 
     /// First half of moving onto an HLS URL: stops the outgoing Plex transcode and any
@@ -4264,7 +4284,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     #endif
 
     func showWatchTogetherNotice(_ notice: String) {
-        showCompatibilityNotice(notice)
+        showCompatibilityNotice(PlaybackNotice(title: notice, symbol: "person.2.fill"))
     }
 
     /// Runs the normal ending for a guest that stopped waiting on a host.
@@ -4984,7 +5004,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let generation = itemGeneration
         var tracks = currentPlexTrackIDs()
         let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
-        showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
+        showCompatibilityNotice(PlaybackNotice(title: String(localized: "Downloading Subtitles…"), symbol: "captions.bubble"))
         do {
             try await searcher.download(result)
             let arrived: MediaTrack?
@@ -4996,7 +5016,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 arrived = nil
             }
             guard generation == itemGeneration else { return }
-            guard let arrived else { return showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive")) }
+            guard let arrived else {
+                return showCompatibilityNotice(PlaybackNotice(title: String(localized: "Subtitles Didn't Arrive"), symbol: "captions.bubble"))
+            }
             TrackIntentStore.subtitleIntent = .afterPick(
                 arrived, replacing: TrackIntentStore.effectiveSubtitleIntent, audioLanguage: playingAudioLanguage)
             tracks.subtitle = .track(arrived.id)
@@ -5007,7 +5029,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             }
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
-            showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
+            showCompatibilityNotice(PlaybackNotice(title: String(localized: "Couldn't Download Subtitles"), symbol: "captions.bubble"))
         }
     }
 
@@ -5340,10 +5362,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Compatibility Notice
 
-    private func showCompatibilityNotice(_ message: String) {
-        compatibilityNotice = message
+    private func showCompatibilityNotice(_ notice: PlaybackNotice, for seconds: TimeInterval = 5) {
+        compatibilityNotice = notice
         compatibilityNoticeTimer?.invalidate()
-        compatibilityNoticeTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+        compatibilityNoticeTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
             self?.compatibilityNotice = nil
         }
     }
@@ -6728,7 +6750,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let message = playQueue == nil ? String(localized: "Couldn't load the next episode.") : String(localized: "Couldn't load the next item.")
         nextEpisodeError = message
         cancelCountdown()
-        if postVideoState == .hidden { showCompatibilityNotice(message) }
+        if postVideoState == .hidden { showCompatibilityNotice(PlaybackNotice(title: message, symbol: "exclamationmark.circle")) }
     }
 
     /// Cancel countdown but stay on summary
@@ -6772,7 +6794,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
         guard let next = nextEpisode else { return }
         if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
-            showCompatibilityNotice(String(localized: "Only the host can change what's playing."))
+            showCompatibilityNotice(PlaybackNotice(title: String(localized: "Only the host can change what's playing."), symbol: "person.2.fill"))
             return
         }
         // A provider swap awaits its provider first, so a second call (the
@@ -7202,10 +7224,32 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func beginPlexPlaybackSession(ratingKey: String, mediaIndex: Int?, resetReporting: Bool = false) {
         let sessionIdentifier = plexPlaybackSessionIdentifier
         let reporter = plexProgressReporter, server = plexServer
-        playbackReports.enqueue {
-            await reporter.beginPlaybackSession(ratingKey: ratingKey, mediaIndex: mediaIndex,
-                                                 sessionIdentifier: sessionIdentifier, resetReporting: resetReporting, server: server)
+        let generation = itemGeneration
+        directPlayRefused = false
+        playbackReports.enqueue { [weak self] in
+            let refused = await reporter.beginPlaybackSession(
+                ratingKey: ratingKey, mediaIndex: mediaIndex,
+                sessionIdentifier: sessionIdentifier, resetReporting: resetReporting, server: server)
+            if refused { self?.serverRefusedDirectPlay(generation: generation) }
         }
+    }
+
+    /// The decision arrived saying no. A load still racing it gives way (`runAetherLoadWithDeadline`);
+    /// a fallback that already finished gets its notice now.
+    private func serverRefusedDirectPlay(generation: Int) {
+        guard generation == itemGeneration else { return }
+        directPlayRefused = true
+        diagnostics.step("direct_play_refused")
+        if hasAttemptedRivuletHLSFallback, !isAttemptingRivuletHLSFallback { showDirectPlayRefusedNotice() }
+    }
+
+    private func showDirectPlayRefusedNotice() {
+        showCompatibilityNotice(ServerRefusal.directPlayRefusedNotice(convertingTo: fallbackStep), for: 7)
+    }
+
+    /// What the transcode asks for when it stands in for the file, from the user's quality setting.
+    private var fallbackStep: QualityStep? {
+        QualityDecision.fallbackStep(setting: qualityChoice, measuredKbps: lastThroughput?.kbps)
     }
 
     /// The server stopped this stream (dashboard Stop, paused too long): stop and show its reason (#403).
@@ -7399,3 +7443,6 @@ extension Notification.Name {
     /// Posted when video playback stops (resumes hub polling)
     static let plexPlaybackStopped = Notification.Name("plexPlaybackStopped")
 }
+
+/// The server's decision refused the file while Aether was still opening it.
+private struct DirectPlayRefusedError: Error {}

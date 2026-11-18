@@ -809,19 +809,6 @@ struct UniversalPlayerView: View {
                     )
             }
 
-            // Compatibility Notice (e.g., DV fallback)
-            if let notice = viewModel.compatibilityNotice {
-                VStack {
-                    HStack {
-                        Spacer()
-                        compatibilityNoticeView(notice)
-                    }
-                    Spacer()
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(15)
-            }
-
             // Error State. zIndex above the controls overlay so the
             // SwiftUI focus engine sees the error buttons as topmost.
             // The focus container itself (.focusSection + .defaultFocus
@@ -882,27 +869,6 @@ struct UniversalPlayerView: View {
             )
             .ignoresSafeArea()
         }
-    }
-
-    // MARK: - Compatibility Notice
-
-    private func compatibilityNoticeView(_ message: String) -> some View {
-        Text(message)
-            .font(.callout)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
-            )
-            .padding(.trailing, 36)
-            .padding(.top, 24)
     }
 
     // MARK: - Error View

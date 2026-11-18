@@ -51,8 +51,9 @@ final class PlexProviderPlaybackTests: XCTestCase {
             return nil
         }
         override func openDirectPlaySession(serverURL: String, authToken: String, ratingKey: String,
-                                            mediaIndex: Int, sessionIdentifier: String) async {
+                                            mediaIndex: Int, sessionIdentifier: String) async -> Bool {
             calls.append("open(\(ratingKey),\(mediaIndex),\(sessionIdentifier))")
+            return false
         }
     }
 

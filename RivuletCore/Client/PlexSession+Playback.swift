@@ -110,10 +110,11 @@ extension PlexSession {
     func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? {
         if request.transcodeSessionID != nil {
             return await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)?.refusal
-        } else if let session = request.directPlaySessionID, let key = request.item.ratingKey {
-            await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
-                                                ratingKey: key, mediaIndex: request.mediaIndex,
-                                                sessionIdentifier: session)
+        } else if let session = request.directPlaySessionID, let key = request.item.ratingKey,
+                  await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
+                                                      ratingKey: key, mediaIndex: request.mediaIndex,
+                                                      sessionIdentifier: session) {
+            return ServerRefusal(reason: .directPlayRefused)
         }
         return nil
     }

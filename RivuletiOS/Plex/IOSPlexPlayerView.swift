@@ -26,6 +26,8 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     @Published private(set) var serverRefusal: ServerRefusal?
     /// A fallback reload is under way: the failure that started it is not shown over it.
     @Published private(set) var isFallingBack = false
+    /// A passing note for the player, such as why a transcode plays instead of the file.
+    @Published private(set) var notice: PlaybackNotice?
     /// The last position the stream played at, which a failure may have zeroed on the engine.
     private var lastPlayhead: TimeInterval = 0
 
@@ -170,13 +172,18 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
             return
         }
+        // The server won't send this file, so its transcode plays instead.
+        if refusal?.reason == .directPlayRefused, let step = fallBackToTranscode() {
+            notice = ServerRefusal.directPlayRefusedNotice(convertingTo: step)
+            return
+        }
         // The server says no, so a transcode would only fail: a quality step plays the file instead,
         // and the refusal is kept only when shown, so its card never covers the file taking over.
         if let refusal, refusal.blocksTranscode, fallBackToOriginal(at: loadingRequest.startTime) {
             serverRefusal = nil
             return
         }
-        serverRefusal = refusal
+        serverRefusal = refusal?.reason == .directPlayRefused ? nil : refusal
         if refusal?.blocksTranscode == true {
             player.stop()
             return
@@ -293,15 +300,16 @@ final class IOSPlexPlayback: ObservableObject, IOSPlaybackSession {
     }
 
     /// The file failing, at start or after it played, gets one retry as a transcode, as on tvOS.
-    private func fallBackToTranscode() {
+    /// The step follows the quality setting; Original takes the top step, since a plan always has one.
+    @discardableResult
+    private func fallBackToTranscode() -> QualityStep? {
         guard RouteFallback.transcodesAfterOriginalFailure(
-            plan: request.plan, hasSwitched: didFallBack, isLocal: request.isLocal, isStacked: request.isStacked) else { return }
+            plan: request.plan, hasSwitched: didFallBack, isLocal: request.isLocal, isStacked: request.isStacked) else { return nil }
         didFallBack = true
-        let kbps = request.quality == .auto
-            ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000
-            : 8000
-        reload(quality: request.quality, plan: .transcode(QualityDecision.highestStep(atMost: kbps)),
-               at: resumeAfterFailure, isFallback: true)
+        let step = QualityDecision.fallbackStep(setting: request.quality, measuredKbps: request.measuredKbps)
+            ?? QualityStep.ladder[0]
+        reload(quality: request.quality, plan: .transcode(step), at: resumeAfterFailure, isFallback: true)
+        return step
     }
 
     /// A transcode quality chose (Auto's step, the menu) that fails, at start or mid-play, gives way to the file
@@ -863,7 +871,8 @@ private struct IOSPlexPlayerScreen: View {
     @State private var showsChapters = false
     @State private var subtitleSearch: SubtitleSearchModel?
     @State private var showsWatchTogether = false
-    @State private var watchTogetherNotice: String?
+    /// A passing note: Watch Together's, or the session's own.
+    @State private var notice: PlaybackNotice?
     @ObservedObject private var room = WatchTogetherSession.shared
 
     var body: some View {
@@ -962,23 +971,32 @@ private struct IOSPlexPlayerScreen: View {
             IOSWatchTogetherPane(playback: session)
         }
         .overlay(alignment: .top) {
-            if let watchTogetherNotice {
-                Text(watchTogetherNotice)
-                    .font(.callout)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .glassEffect(.regular, in: .capsule)
-                    .padding(.top, 12)
+            if let notice {
+                HStack(spacing: 12) {
+                    Image(systemName: notice.symbol)
+                        .font(.title3.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(notice.title).font(.callout.weight(.semibold))
+                        if let detail = notice.detail {
+                            Text(detail).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 420, alignment: .leading)
+                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: notice)
         .task {
-            for await notice in room.notices.values {
-                watchTogetherNotice = notice
-                Task {
-                    try? await Task.sleep(for: .seconds(4))
-                    if watchTogetherNotice == notice { watchTogetherNotice = nil }
-                }
-            }
+            for await text in room.notices.values { show(PlaybackNotice(title: text, symbol: "person.2.fill")) }
+        }
+        .onChange(of: session.notice) { _, notice in
+            if let notice { show(notice, for: 7) }
         }
         .sheet(isPresented: $showsPlaylist) {
             if let queue = session.queue {
@@ -1030,6 +1048,15 @@ private struct IOSPlexPlayerScreen: View {
             )
         }
         return nil
+    }
+
+    /// Shows `text` until `seconds` pass or another note replaces it.
+    private func show(_ shown: PlaybackNotice, for seconds: Int = 4) {
+        notice = shown
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            if notice == shown { notice = nil }
+        }
     }
 }
 

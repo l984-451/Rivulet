@@ -29,7 +29,8 @@ struct MacPlayerView: View {
     @State private var subtitleSearch: SubtitleSearchModel?
     @State private var showsPlaylist = false
     @State private var showsWatchTogether = false
-    @State private var watchTogetherNotice: String?
+    /// A passing note: Watch Together's, or the session's own.
+    @State private var notice: PlaybackNotice?
     @ObservedObject private var room = WatchTogetherSession.shared
     @AppStorage(SkipLengthKeys.back) private var skipBackSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
@@ -96,23 +97,32 @@ struct MacPlayerView: View {
             captionStyle = CaptionAppearance.current()
         }
         .overlay(alignment: .top) {
-            if let watchTogetherNotice {
-                Text(watchTogetherNotice)
-                    .font(.callout)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .glassEffect(.regular, in: .capsule)
-                    .padding(.top, 12)
+            if let notice {
+                HStack(spacing: 12) {
+                    Image(systemName: notice.symbol)
+                        .font(.title3.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(notice.title).font(.callout.weight(.semibold))
+                        if let detail = notice.detail {
+                            Text(detail).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 420, alignment: .leading)
+                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.9), value: notice)
         .task {
-            for await notice in room.notices.values {
-                watchTogetherNotice = notice
-                Task {
-                    try? await Task.sleep(for: .seconds(4))
-                    if watchTogetherNotice == notice { watchTogetherNotice = nil }
-                }
-            }
+            for await text in room.notices.values { show(PlaybackNotice(title: text, symbol: "person.2.fill")) }
+        }
+        .onChange(of: session.notice) { _, notice in
+            if let notice { show(notice, for: 7) }
         }
         .sheet(item: $subtitleSearch) { model in
             MacSubtitleSearchPane(model: model)
@@ -517,6 +527,15 @@ struct MacPlayerView: View {
         let total = max(0, Int(seconds))
         if total >= 3600 { return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60) }
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// Shows `text` until `seconds` pass or another note replaces it.
+    private func show(_ shown: PlaybackNotice, for seconds: Int = 4) {
+        notice = shown
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            if notice == shown { notice = nil }
+        }
     }
 }
 

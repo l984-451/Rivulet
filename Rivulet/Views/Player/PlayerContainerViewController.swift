@@ -31,6 +31,8 @@ class PlayerContainerViewController: UIViewController {
     private var pausedDimView: UIView?
     private var chromeScrim = ChromeScrimView()
     private var captionOverlay: CaptionOverlayView?
+    /// Passing notes, top right (subtitle downloads, a server converting the file).
+    private var noticeCard: PlayerNoticeCardView?
     /// The pause screen (10 s and 2 min paused). Written only by `applyPauseScreen`.
     private var pauseScreen: PauseScreenView?
     /// Insights raised over the pause screen from its hint.
@@ -1246,6 +1248,11 @@ class PlayerContainerViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.applyChromeVisibility() }
             .store(in: &cancellables)
+        vm.$compatibilityNotice
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notice in self?.showNotice(notice) }
+            .store(in: &cancellables)
 
         // Caption inputs. The overlay measures against the picture, so a new
         // aspect ratio has to reach it; the height stepper is per-title and can
@@ -2037,6 +2044,24 @@ class PlayerContainerViewController: UIViewController {
             .compactMap { $0 }.joined(separator: ", ")
         let eyebrow = [number, meta.title ?? ""].filter { !$0.isEmpty }.joined(separator: " • ")
         rail?.setTitle(show, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
+    }
+
+    // MARK: - Notices
+
+    /// Mounted on the first notice, always above whatever is on screen then.
+    private func showNotice(_ notice: PlaybackNotice?) {
+        if noticeCard == nil, notice != nil {
+            let card = PlayerNoticeCardView()
+            view.addSubview(card)
+            card.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PlayerRailView.sideInset),
+                card.topAnchor.constraint(equalTo: view.topAnchor, constant: 60),
+            ])
+            noticeCard = card
+        }
+        if let card = noticeCard, notice != nil { view.bringSubviewToFront(card) }
+        noticeCard?.show(notice)
     }
 
     // MARK: - Post-video (Up Next)

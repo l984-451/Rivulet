@@ -25,7 +25,7 @@ struct PlaybackStartupReportingTests {
 
     @Test func endedBeforeStartupDoesNotCloseTheIncomingTimeline() async throws {
         let reports = Reports()
-        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in false }) { url, _ in
             await reports.respond(url)
         }
         var metadata = PlexMetadata()
@@ -67,7 +67,7 @@ struct PlaybackReloadPositionTests {
     }
 
     private func makePlayer(_ reports: Reports) -> (UniversalPlayerViewModel, PlexProgressReporter) {
-        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in false }) { url, _ in
             await reports.respond(url)
         }
         var metadata = PlexMetadata()
@@ -83,7 +83,7 @@ struct PlaybackReloadPositionTests {
     @Test(arguments: [false, true])
     func selectedShortSeekReportsReachPlex(_ forced: Bool) async throws {
         let reports = Reports()
-        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in false }) { url, _ in
             await reports.respond(url)
         }
         var metadata = PlexMetadata()
@@ -224,7 +224,7 @@ struct PlaybackHandoffPositionTests {
         }
         let outgoing = try episode("95230"), incoming = try episode("95682")
         let reports = Reports()
-        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }) { url, _ in
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in false }) { url, _ in
             await reports.respond(url)
         }
         let vm = UniversalPlayerViewModel(metadata: outgoing, serverURL: "https://plex.invalid", authToken: "test",
@@ -295,7 +295,7 @@ struct PlexRetryRefreshTests {
             #expect(key == "100")
             #expect(before == 3)
             return counted
-        }, openSession: { _, _, _, _ in }) { url, _ in
+        }, openSession: { _, _, _, _ in false }) { url, _ in
             try await requests.respond(url)
         }
         var metadata = PlexMetadata()
@@ -318,7 +318,7 @@ struct PlexRetryRefreshTests {
             #expect(key == "100")
             #expect(before == 3)
             return counted
-        }, stopRetryDelay: .milliseconds(20), openSession: { _, _, _, _ in }) { url, _ in
+        }, stopRetryDelay: .milliseconds(20), openSession: { _, _, _, _ in false }) { url, _ in
             try await requests.respond(url)
         }
         let server = PlexServerAddress(address: "https://plex.invalid", token: "test")
@@ -358,7 +358,7 @@ struct PlaybackHLSCancellationTests {
         {"ratingKey":"100","type":"movie","duration":100000,
          "Chapter":[{"index":1,"startTimeOffset":0,"endTimeOffset":100000,"thumb":"/chapter/1"}]}
         """.utf8))
-        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in }, request: { _, _ in Data() })
+        let reporter = PlexProgressReporter(countedPlay: { _, _, _ in false }, openSession: { _, _, _, _ in false }, request: { _, _ in Data() })
         let vm = UniversalPlayerViewModel(metadata: metadata, serverURL: "https://plex.invalid", authToken: "test", plexProgressReporter: reporter)
         vm.chapterThumbnailFetch = { _ in
             entered.continuation.yield(())

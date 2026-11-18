@@ -93,6 +93,28 @@
         }
       }
     },
+    "Server Is Converting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server wandelt um"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής κάνει μετατροπή"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversion par le serveur"
+          }
+        }
+      }
+    },
     "Slideshow" : {
       "localizations" : {
         "de" : {
@@ -253,6 +275,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Le serveur a atteint sa limite de flux. Réessayez dans un instant."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly. It's sending %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab. Er sendet %@."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο. Στέλνει %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement. Il l'envoie en %@."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly. It's sending the best quality it allows." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab. Er sendet die beste erlaubte Qualität."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο. Στέλνει την καλύτερη ποιότητα που επιτρέπει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement. Il envoie la meilleure qualité qu'il autorise."
           }
         }
       }

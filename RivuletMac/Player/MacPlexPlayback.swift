@@ -28,6 +28,8 @@ final class MacPlexPlayback: ObservableObject {
     @Published private(set) var serverRefusal: ServerRefusal?
     /// A fallback reload is under way: the failure that started it is not shown over it.
     @Published private(set) var isFallingBack = false
+    /// A passing note for the player, such as why a transcode plays instead of the file.
+    @Published private(set) var notice: PlaybackNotice?
     /// The last position the stream played at, which a failure may have zeroed on the engine.
     private var lastPlayhead: TimeInterval = 0
 
@@ -221,13 +223,18 @@ final class MacPlexPlayback: ObservableObject {
             await plex.discardPreparedPlayback(loadingRequest, replacing: playbackReports.session === session ? nil : request)
             return
         }
+        // The server won't send this file, so its transcode plays instead.
+        if refusal?.reason == .directPlayRefused, let step = fallBackToTranscode() {
+            notice = ServerRefusal.directPlayRefusedNotice(convertingTo: step)
+            return
+        }
         // The server says no, so a transcode would only fail: a quality step plays the file instead,
         // and the refusal is kept only when shown, so its card never covers the file taking over.
         if let refusal, refusal.blocksTranscode, fallBackToOriginal(at: loadingRequest.startTime) {
             serverRefusal = nil
             return
         }
-        serverRefusal = refusal
+        serverRefusal = refusal?.reason == .directPlayRefused ? nil : refusal
         if refusal?.blocksTranscode == true {
             player.stop()
             return
@@ -344,15 +351,16 @@ final class MacPlexPlayback: ObservableObject {
     }
 
     /// The file failing, at start or after it played, gets one retry as a transcode, as on tvOS.
-    private func fallBackToTranscode() {
+    /// The step follows the quality setting; Original takes the top step, since a plan always has one.
+    @discardableResult
+    private func fallBackToTranscode() -> QualityStep? {
         guard RouteFallback.transcodesAfterOriginalFailure(
-            plan: request.plan, hasSwitched: didFallBack, isLocal: request.isLocal, isStacked: request.isStacked) else { return }
+            plan: request.plan, hasSwitched: didFallBack, isLocal: request.isLocal, isStacked: request.isStacked) else { return nil }
         didFallBack = true
-        let kbps = request.quality == .auto
-            ? QualityDecision.capKbps(setting: .auto, measuredKbps: request.measuredKbps, isRelay: false) ?? 8000
-            : 8000
-        reload(quality: request.quality, plan: .transcode(QualityDecision.highestStep(atMost: kbps)),
-               at: resumeAfterFailure, isFallback: true)
+        let step = QualityDecision.fallbackStep(setting: request.quality, measuredKbps: request.measuredKbps)
+            ?? QualityStep.ladder[0]
+        reload(quality: request.quality, plan: .transcode(step), at: resumeAfterFailure, isFallback: true)
+        return step
     }
 
     /// A transcode quality chose (Auto's step, the menu) that fails, at start or mid-play, gives way to the file

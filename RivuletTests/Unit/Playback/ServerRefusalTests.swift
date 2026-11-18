@@ -59,6 +59,26 @@ final class ServerRefusalTests: XCTestCase {
         XCTAssertFalse(PlaybackDiagnostics.isServerRefusal(PlayerError.loadFailed("x")))
     }
 
+    /// Bodies measured on PMS 1.43.5 for the wildcard direct-play decision (#677).
+    func test_directPlayDecision_refusedOnlyWhenTheCodeIsNot1000() {
+        let allowed = #"{"MediaContainer":{"directPlayDecisionCode":1000,"generalDecisionCode":1000}}"#
+        let refused = #"{"MediaContainer":{"directPlayDecisionCode":3000,"generalDecisionCode":2000,"transcodeDecisionCode":4005}}"#
+        XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(Data(allowed.utf8)))
+        XCTAssertTrue(PlexNetworkManager.refusesDirectPlay(Data(refused.utf8)))
+        // No verdict is not a refusal: the file is tried as before.
+        XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(Data("<MediaContainer/>".utf8)))
+        XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(Data(#"{"MediaContainer":{}}"#.utf8)))
+    }
+
+    func test_directPlayRefusedNotice_namesTheStep_orTheServersBest() {
+        XCTAssertEqual(ServerRefusal.directPlayRefusedNotice(convertingTo: nil).title, "Server Is Converting")
+        XCTAssertTrue(ServerRefusal.directPlayRefusedNotice(convertingTo: nil).detail?.contains("best quality it allows") == true)
+        // The step's label stays on one line.
+        XCTAssertTrue(ServerRefusal.directPlayRefusedNotice(convertingTo: QualityStep.ladder[0]).detail?
+            .contains("20\u{00A0}Mbps\u{00A0}1080p") == true)
+        XCTAssertFalse(ServerRefusal(reason: .directPlayRefused).blocksTranscode)
+    }
+
     func test_shown_prefersABlockingDecision_thenTheMissingFile_onlyAfterAFailure() {
         let blocking = ServerRefusal(reason: .plexPassRequired)
         let soft = ServerRefusal(reason: .other("x"))

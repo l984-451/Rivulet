@@ -19,6 +19,8 @@ nonisolated struct ServerRefusal: Error, Equatable, Sendable {
         case cannotStream
         case notAllowed
         case streamLimit
+        /// The server won't send this account the file (a remote limit): its transcode plays instead.
+        case directPlayRefused
         /// Another decision error: the server's own sentence.
         case other(String?)
     }
@@ -34,6 +36,7 @@ nonisolated struct ServerRefusal: Error, Equatable, Sendable {
         case .cannotStream: String(localized: "This server can't stream this title to this device.")
         case .notAllowed: String(localized: "The server doesn't let this account play this video.")
         case .streamLimit: String(localized: "The server is at its stream limit. Try again in a moment.")
+        case .directPlayRefused: String(localized: "The server won't play this file directly.")
         case .other(let text?) where !text.isEmpty: String(localized: "The server can't play this video: \(text)")
         case .other: String(localized: "The server can't play this video.")
         }
@@ -84,6 +87,14 @@ nonisolated struct ServerRefusal: Error, Equatable, Sendable {
     }
 
     init(reason: Reason) { self.reason = reason }
+
+    /// The note shown while a refused file plays as the server's conversion; `step` is what was asked for.
+    static func directPlayRefusedNotice(convertingTo step: QualityStep?) -> PlaybackNotice {
+        // Non-breaking spaces keep "20 Mbps 1080p" on one line.
+        let detail = step.map { String(localized: "The server won't play this file directly. It's sending \($0.label.replacingOccurrences(of: " ", with: "\u{00A0}")).") }
+            ?? String(localized: "The server won't play this file directly. It's sending the best quality it allows.")
+        return PlaybackNotice(title: String(localized: "Server Is Converting"), detail: detail, symbol: "server.rack")
+    }
 }
 
 extension ServerRefusal: LocalizedError {

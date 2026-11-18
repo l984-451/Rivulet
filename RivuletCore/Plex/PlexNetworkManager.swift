@@ -2247,9 +2247,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// bandwidth (#423). Measured on PMS 1.43.5: a LAN direct play gets no `Session` (bandwidth 0)
     /// until a direct-play decision has run under the `X-Plex-Session-Identifier` its timeline sends.
     /// The wildcard profile makes the decision direct play whatever the file is; no transcoder starts.
+    /// Returns true when the server still refuses direct play: that is its own rule (a remote limit),
+    /// never the file's format, so the file would only fail.
+    @discardableResult
     func openDirectPlaySession(serverURL: String, authToken: String, ratingKey: String,
-                               mediaIndex: Int, sessionIdentifier: String) async {
-        guard var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/decision") else { return }
+                               mediaIndex: Int, sessionIdentifier: String) async -> Bool {
+        guard var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/decision") else { return false }
         components.queryItems = [
             URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
             URLQueryItem(name: "mediaIndex", value: String(mediaIndex)),
@@ -2262,10 +2265,20 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                          value: "add-direct-play-profile(type=videoProfile&protocol=http&container=*&videoCodec=*&audioCodec=*)"),
             URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier)
         ]
-        guard let url = components.url else { return }
+        guard let url = components.url else { return false }
         var headers = plexHeaders(authToken: authToken)
         headers["X-Plex-Session-Identifier"] = sessionIdentifier
-        _ = try? await requestData(url, method: "GET", headers: headers)
+        headers["Accept"] = "application/json"
+        guard let data = try? await requestData(url, method: "GET", headers: headers) else { return false }
+        return Self.refusesDirectPlay(data)
+    }
+
+    /// Measured on PMS 1.43.5: an allowed decision carries `directPlayDecisionCode` 1000, a refused one 3000.
+    nonisolated static func refusesDirectPlay(_ data: Data) -> Bool {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let container = body["MediaContainer"] as? [String: Any],
+              let code = container["directPlayDecisionCode"] as? Int else { return false }
+        return code != 1000
     }
 
     /// Build thumbnail URL

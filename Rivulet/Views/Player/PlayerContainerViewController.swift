@@ -1476,7 +1476,7 @@ class PlayerContainerViewController: UIViewController {
             guard let self, let vm = self.viewModel else { return }
             let list = CardTrackListView.subtitleMenu(
                     tracks: vm.subtitleMenuTracks,
-                    selectedTrackId: vm.currentSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
+                    selectedTrackId: vm.chosenSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
                     actions: vm.subtitleSearchAvailable ? [
                         CardActionConfig(title: String(localized: "Search for Subtitles")) { [weak self] row in
                             self?.searchSubtitles(from: row)
@@ -1517,7 +1517,7 @@ class PlayerContainerViewController: UIViewController {
         }
         rail.onSubtitlesHold = { [weak self] in
             guard let self, let vm = self.viewModel else { return }
-            if vm.currentSubtitleTrackId != nil {
+            if vm.chosenSubtitleTrackId != nil {
                 vm.selectSubtitleTrack(id: nil)
                 self.rail?.showNote(String(localized: "Subtitles off"))
             } else if let id = vm.subtitleOnTrackId,

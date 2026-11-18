@@ -304,6 +304,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var replayWindow: ReplayWindowLogic?
     /// When the open window began and how many skips back it has seen, for its closing log line.
     private var replayWindowOpened: (at: Date, skips: Int)?
+    /// True while a skip back shows subtitles that were off. They are temporary, so the menus keep showing Off.
+    @Published private(set) var skipBackShowsSubtitles = false
+    /// The subtitle the user chose, which the menus and system remotes show.
+    var chosenSubtitleTrackId: Int? { skipBackShowsSubtitles ? nil : currentSubtitleTrackId }
+    /// Skips back of up to this much in total show subtitles; a longer rewind is a rewind, not a missed line.
+    static let skipBackSubtitleLimit: TimeInterval = 120
     /// Subtitles turned on by tvOS's Show When Muted (aether route only).
     private var captionsOnMute = CaptionsOnMuteLogic()
     private lazy var systemCaptionsOnMute = SystemCaptionsOnMute { [weak self] in self?.updateCaptionsOnMute() }
@@ -4443,11 +4449,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let targetTime = max(0, min(base + seconds, duration))
         invalidatePlexCompletion(at: targetTime)
         reopenPlexTimeline(at: targetTime)
-        // tvOS Show on Skip Back covers skips back of up to 30s in total.
+        // Show on Skip Back covers skips back of up to `skipBackSubtitleLimit` in total; going past it ends the window.
         // A skip back at 0 moves nowhere: no tick could arm the window, so it would never close.
         if seconds < 0 { replayWindowOpened?.skips += 1 }
-        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
-           Self.systemShowsSubtitlesOnSkipBack() {
+        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime > Self.skipBackSubtitleLimit {
+            endReplayWindow(reason: "skipped back past the limit")
+        } else if seconds < 0, targetTime < base, Self.systemShowsSubtitlesOnSkipBack() {
             openCaptionWindow(until: base, landing: targetTime)
         } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {
             // Skipped forward past the point: done, even if no tick ever armed the window.
@@ -4488,6 +4495,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 + "\(describeSubtitle(currentSubtitleTrackId)), "
                 + (shows.map { "showing \(describeSubtitle($0.id))" } ?? (currentSubtitleTrackId == nil ? "no track to show" : "left as they are")))
             if let shows {
+                skipBackShowsSubtitles = true
                 selectSubtitleTrackWithoutSaving(id: shows.id, reloadsTranscode: false)
             }
         }
@@ -4527,6 +4535,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     func endReplayWindow(reason: String = "seek left it") {
         guard let window = replayWindow else { return }
         replayWindow = nil
+        skipBackShowsSubtitles = false
         noteReplayWindowEnded(window, reason: reason, reverts: window.priorSubtitleTrackId == nil)
         if window.priorSubtitleTrackId == nil {
             selectSubtitleTrackWithoutSaving(id: nil, reloadsTranscode: false)
@@ -4590,6 +4599,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func clearReplayWindow(reason: String) {
         if let window = replayWindow { noteReplayWindowEnded(window, reason: reason, reverts: false) }
         replayWindow = nil
+        skipBackShowsSubtitles = false
     }
 
     /// Publishes the skip for the bar's glyph; with the controls hidden the bar shows alone (AVKit, 3.3s).

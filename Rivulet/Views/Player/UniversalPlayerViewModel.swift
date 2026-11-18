@@ -1443,7 +1443,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         AppHangContext.setContent(
             resolution: (metadata.Media?.first?.videoResolution ?? "unknown").lowercased(),
             hdr: hdrLabel,
-            videoCodec: (metadata.primaryVideoStream?.codec ?? "unknown").lowercased()
+            videoCodec: (metadata.primaryVideoStream?.codec ?? "unknown").lowercased(),
+            bitrate: PlaybackSessionRecord.bitrateClass(kbps: metadata.primaryVideoStream?.bitrate)
         )
         // Seed the media fingerprint (codec / DV profile / audio / resume offset)
         // so EVERY playback error from here on is self-describing. Without this,

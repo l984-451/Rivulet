@@ -159,6 +159,15 @@ final class EmbyPlaybackMapperTests: XCTestCase {
         XCTAssertEqual(track.level, 153)
         XCTAssertEqual(track.profile, "Main 10")
         XCTAssertEqual(track.scanType, "progressive")
+        // The capture's AspectRatio is "320:173"; the label comes from the frame size either way.
+        XCTAssertEqual(MediaSource(id: "1", container: nil, duration: 0, bitrate: nil, fileSize: nil, fileName: nil,
+                                   videoResolution: nil, videoTracks: [track], audioTracks: [], subtitleTracks: [],
+                                   streamKind: .directPlay, streamURL: nil).aspectRatioLabel, "1.85:1")
+    }
+
+    func test_anamorphicStreamTakesTheServersAspectRatio_unverified() throws {
+        let dvd = try stream(#"{"Index":0,"Type":"Video","Codec":"mpeg2video","Width":720,"Height":480,"AspectRatio":"16:9","IsAnamorphic":true}"#)
+        XCTAssertEqual(try XCTUnwrap(EmbyMediaMapper.videoTrack(dvd)?.aspectRatio), 16.0 / 9, accuracy: 0.001)
     }
 
     // MARK: - Atmos and DTS:X by title

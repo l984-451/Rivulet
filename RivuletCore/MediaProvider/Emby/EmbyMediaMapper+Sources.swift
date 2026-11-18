@@ -55,7 +55,12 @@ extension EmbyMediaMapper {
             videoRange: range,
             isDefault: s.isDefault ?? false,
             scanType: s.isInterlaced.map { $0 ? "interlaced" : "progressive" },
-            hasHDR10Plus: false
+            hasHDR10Plus: false,
+            // AspectRatio is "2.40:1" for 1920x800 but "320:173" for 3840x2076 (measured on 4.10.2), so
+            // the frame size decides unless the pixels aren't square.
+            aspectRatio: s.isAnamorphic == true
+                ? VideoTrack.ratio(s.aspectRatio)
+                : VideoTrack.aspectRatio(width: s.width, height: s.height)
         )
     }
 
@@ -173,7 +178,6 @@ extension EmbyMediaMapper {
             fileName: src.path.flatMap { $0.split(whereSeparator: { "/\\".contains($0) }).last.map(String.init) } ?? src.name,
             versionName: src.name,
             videoResolution: nil,
-            aspectRatio: MediaSource.aspectRatio(streams.first { $0.type == "Video" }?.aspectRatio),
             videoTracks: streams.compactMap(videoTrack),
             audioTracks: streams.compactMap { audioTrack($0, defaultIndex: src.defaultAudioStreamIndex) },
             subtitleTracks: streams.compactMap {

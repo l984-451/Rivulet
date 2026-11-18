@@ -290,6 +290,7 @@ nonisolated struct EmbyMediaStream: Decodable, Sendable {
     let realFrameRate: Double?
     let averageFrameRate: Double?
     let aspectRatio: String?
+    let isAnamorphic: Bool?
     let pixelFormat: String?
     let videoRange: String?
     let colorTransfer: String?

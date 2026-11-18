@@ -253,26 +253,44 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(source(height: 480, label: "sd").detailBadges, [])
     }
 
-    /// The server's display aspect wins; the coded frame is the fallback.
-    func test_aspectRatioLabel() {
-        func source(ratio: Double?, width: Int?, height: Int?) -> MediaSource {
-            let video = VideoTrack(
-                id: "v1", codec: "hevc", profile: nil, level: nil,
-                width: width, height: height, frameRate: 24,
-                bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive"
-            )
-            return MediaSource(
-                id: "1", container: "mkv", duration: 7200,
-                bitrate: nil, fileSize: nil, fileName: nil, videoResolution: nil, aspectRatio: ratio,
-                videoTracks: [video], audioTracks: [], subtitleTracks: [],
-                streamKind: .directPlay, streamURL: nil
-            )
-        }
-        XCTAssertEqual(source(ratio: 2.35, width: 1920, height: 1080).aspectRatioLabel, "2.35:1")
-        XCTAssertEqual(source(ratio: nil, width: 3840, height: 1600).aspectRatioLabel, "2.40:1")
-        XCTAssertNil(source(ratio: nil, width: nil, height: 1080).aspectRatioLabel)
-        XCTAssertEqual(MediaSource.aspectRatio("2.40:1"), 2.4)
-        XCTAssertEqual(MediaSource.aspectRatio("16:9")!, 16.0 / 9, accuracy: 0.0001)
-        XCTAssertNil(MediaSource.aspectRatio("wide"))
+    // MARK: - Aspect ratio (#672)
+
+    private func source(width: Int?, height: Int?, pixelAspect: String? = nil) -> MediaSource {
+        let video = VideoTrack(
+            id: "v1", codec: "hevc", profile: nil, level: nil, width: width, height: height, frameRate: 24,
+            bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive",
+            aspectRatio: VideoTrack.aspectRatio(width: width, height: height, pixelAspect: pixelAspect)
+        )
+        return MediaSource(
+            id: "1", container: "mkv", duration: 7200, bitrate: nil, fileSize: nil, fileName: nil,
+            videoResolution: nil, videoTracks: [video], audioTracks: [], subtitleTracks: [],
+            streamKind: .directPlay, streamURL: nil
+        )
+    }
+
+    /// Sizes from the test server's films, each with what Plex's `aspectRatio` called it.
+    func test_aspectRatioLabel_fromFrameSize() {
+        XCTAssertEqual(source(width: 1920, height: 800).aspectRatioLabel, "2.40:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 804).aspectRatioLabel, "2.39:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 1920, height: 696).aspectRatioLabel, "2.76:1")    // Plex: 2.35
+        XCTAssertEqual(source(width: 3840, height: 2076).aspectRatioLabel, "1.85:1")
+        XCTAssertEqual(source(width: 1920, height: 1080).aspectRatioLabel, "1.78:1")
+        XCTAssertEqual(source(width: 1440, height: 1080).aspectRatioLabel, "1.33:1")
+        XCTAssertNil(source(width: nil, height: 1080).aspectRatioLabel)
+    }
+
+    /// An anamorphic DVD rip is stored narrower than it plays.
+    func test_aspectRatioLabel_correctsNonSquarePixels() {
+        XCTAssertEqual(source(width: 544, height: 288, pixelAspect: "40:33").aspectRatioLabel, "2.29:1")
+        XCTAssertEqual(source(width: 720, height: 480, pixelAspect: "32:27").aspectRatioLabel, "1.78:1")
+    }
+
+    func test_ratio_readsServerSpellings() {
+        XCTAssertEqual(VideoTrack.ratio("16:9")!, 16.0 / 9, accuracy: 0.0001)
+        XCTAssertEqual(VideoTrack.ratio("2.40:1"), 2.4)
+        XCTAssertEqual(VideoTrack.ratio("80:29")!, 2.7586, accuracy: 0.0001)
+        XCTAssertNil(VideoTrack.ratio("0:1"))
+        XCTAssertNil(VideoTrack.ratio("2.35"))
+        XCTAssertNil(VideoTrack.ratio(nil))
     }
 }

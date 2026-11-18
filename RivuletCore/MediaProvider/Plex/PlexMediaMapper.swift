@@ -151,7 +151,10 @@ enum PlexMediaMapper {
             videoRange: range,
             isDefault: stream.default ?? false,
             scanType: stream.scanType,
-            hasHDR10Plus: stream.HDR10PlusPresent == true
+            hasHDR10Plus: stream.HDR10PlusPresent == true,
+            // Not Media.aspectRatio: PMS rounds it to a few buckets, so 1920x800 and a 2.76:1 film both read 2.35.
+            aspectRatio: VideoTrack.aspectRatio(width: stream.width, height: stream.height,
+                                                pixelAspect: stream.pixelAspectRatio)
         )
     }
 
@@ -373,7 +376,6 @@ enum PlexMediaMapper {
             fileSize: part.size.map { Int64($0) },
             fileName: part.file,
             videoResolution: media.videoResolution,
-            aspectRatio: media.aspectRatio,
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,

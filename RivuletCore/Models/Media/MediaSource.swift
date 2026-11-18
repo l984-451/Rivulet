@@ -21,7 +21,6 @@ struct MediaSource: Hashable, Sendable, Identifiable {
     let fileName: String?          // Plex: file path. Jellyfin: the source's Name
     var versionName: String? = nil // the provider's name for this version (Jellyfin "Directors Cut"); nil on Plex
     let videoResolution: String?   // provider-computed label: "4k", "1080", "720", "480", "sd"
-    var aspectRatio: Double? = nil // display aspect from the server (Plex 2.35, Jellyfin "2.40:1")
 
     let videoTracks: [VideoTrack]  // usually 1, rarely more
     var audioTracks: [AudioTrack]
@@ -88,21 +87,10 @@ extension MediaSource {
         }
     }
 
-    /// "2.40:1": the server's display aspect, else the coded frame's.
+    /// The aspect ratio as cinema writes it: "2.39:1", "1.85:1", "1.78:1". Letterboxing inside the
+    /// frame can't be seen here, so a 16:9 encode of a scope film reads 1.78:1.
     var aspectRatioLabel: String? {
-        let coded = videoTracks.first.flatMap { v -> Double? in
-            guard let w = v.width, let h = v.height, h > 0 else { return nil }
-            return Double(w) / Double(h)
-        }
-        guard let ratio = aspectRatio ?? coded, ratio > 0 else { return nil }
-        return String(format: "%.2f:1", ratio)
-    }
-
-    /// A Jellyfin or Emby `AspectRatio` ("16:9", "2.40:1") as a number.
-    static func aspectRatio(_ text: String?) -> Double? {
-        let parts = text?.split(separator: ":").compactMap { Double($0) } ?? []
-        guard parts.count == 2, parts[1] > 0 else { return nil }
-        return parts[0] / parts[1]
+        videoTracks.first?.aspectRatio.map { String(format: "%.2f:1", $0) }
     }
 
     var rangeBadge: String? { rangeBadges.isEmpty ? nil : rangeBadges.joined(separator: " · ") }

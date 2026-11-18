@@ -632,26 +632,21 @@ final class RatingsGridView: UIView {
         }
     }
 
-    /// Every score on one line, each over its source's name (the info popup's row).
+    /// Every score on one line in equal columns, each over its source's name (the info popup's row).
+    /// A long name wraps ("Rotten" over "Tomatoes").
     static func row(_ ratings: [MediaRating]) -> UIView {
-        let row = UIStackView(arrangedSubviews: ratings.prefix(6).map { entry($0, score: 29, scale: 19, name: 16) })
+        let row = UIStackView(arrangedSubviews: ratings.prefix(6).map {
+            entry($0, score: 29, scale: 19, name: 16, wrapsName: true)
+        })
         row.axis = .horizontal
         row.alignment = .top
-        // Five or six spread across the popup's width (six need about 600 of its 660); fewer sit left.
-        if row.arrangedSubviews.count >= 5 {
-            row.distribution = .equalSpacing
-            row.spacing = 16
-        } else {
-            row.spacing = 40
-            let spacer = UIView()
-            spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-            row.addArrangedSubview(spacer)
-        }
+        row.distribution = .fillEqually
+        row.spacing = 16
         return row
     }
 
     static func entry(_ rating: MediaRating, score scoreSize: CGFloat = 38, scale scaleSize: CGFloat = 23,
-                      name nameSize: CGFloat = 19) -> UIView {
+                      name nameSize: CGFloat = 19, wrapsName: Bool = false) -> UIView {
         let score = UILabel()
         let text = NSMutableAttributedString(
             string: rating.badgeText,
@@ -669,9 +664,12 @@ final class RatingsGridView: UIView {
         name.font = .systemFont(ofSize: nameSize, weight: .semibold)
         name.textColor = UIColor.white.withAlphaComponent(0.6)
 
+        name.numberOfLines = wrapsName ? 0 : 1
+
         let stack = UIStackView(arrangedSubviews: [score, name])
         stack.axis = .vertical
-        stack.alignment = .leading
+        // .fill gives the name the column's width to wrap in.
+        stack.alignment = wrapsName ? .fill : .leading
         stack.spacing = 2
         return stack
     }

@@ -42,21 +42,27 @@ nonisolated extension ContinueWatchingCardCompositor {
         let key = cacheKey(layer, url, geometry, scale)
         if let cached = cache.object(forKey: key) { return cached }
         let diskKey = key as String
-        // On its own queue: this function runs on its caller's actor, which is the main actor for a cell.
-        var rendered = await offMain { storedImage(diskKey) }
-        // Another caller may have finished the same layer meanwhile.
-        if let cached = cache.object(forKey: key) { return cached }
-        if rendered == nil {
-            guard let source = await ImageCacheManager.shared.image(for: url)?.cgImage else { return nil }
-            rendered = await offPool {
-                let built: CGImage? = switch layer {
-                case .card: render(still: source, geometry: geometry, scale: scale)
-                case .title: renderTitle(logo: source, geometry: geometry, scale: scale)
-                case .titleStrong: renderTitle(logo: source, geometry: geometry, scale: scale, strongShadow: true)
-                }
-                if let built { store(built, diskKey) }
-                return built
+        // On its own serial queue: this function runs on its caller's actor, which is the main actor
+        // for a cell. The check and the insert happen on the queue, so of several callers for one
+        // layer (a cell and its neighbours' prewarms) only the first reads the file.
+        let stored: UIImage? = await offMain { () -> UIImage? in
+            let storedKey = diskKey as NSString
+            if let cached = cache.object(forKey: storedKey) { return cached }
+            guard let decoded = storedImage(diskKey) else { return nil }
+            let image = UIImage(cgImage: decoded, scale: scale, orientation: .up)
+            cache.setObject(image, forKey: storedKey, cost: decoded.bytesPerRow * decoded.height)
+            return image
+        }
+        if let stored { return stored }
+        guard let source = await ImageCacheManager.shared.image(for: url)?.cgImage else { return nil }
+        let rendered: CGImage? = await offPool {
+            let built: CGImage? = switch layer {
+            case .card: render(still: source, geometry: geometry, scale: scale)
+            case .title: renderTitle(logo: source, geometry: geometry, scale: scale)
+            case .titleStrong: renderTitle(logo: source, geometry: geometry, scale: scale, strongShadow: true)
             }
+            if let built { store(built, diskKey) }
+            return built
         }
         guard let rendered else { return nil }
         let image = UIImage(cgImage: rendered, scale: scale, orientation: .up)

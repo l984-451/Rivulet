@@ -325,6 +325,17 @@ final class PlexAuthManagerTests: XCTestCase {
         XCTAssertFalse(playable("not a url"))
     }
 
+    // With no internet, a plex.direct name can't resolve (#668)
+    func testLANFallbackURL() {
+        let lan = PlexAuthManager.lanFallbackURL
+        XCTAssertEqual(lan("https://192-168-50-5.abc123.plex.direct:32400"), "http://192.168.50.5:32400")
+        XCTAssertEqual(lan("https://10-0-0-2.ABC123.plex.direct:32401/"), "http://10.0.0.2:32401")
+        XCTAssertEqual(lan("https://fd00--1.abc123.plex.direct:32400"), "http://[fd00::1]:32400")
+        XCTAssertNil(lan("https://203-0-113-9.abc123.plex.direct:32400"))
+        XCTAssertNil(lan("http://192.168.50.5:32400"))
+        XCTAssertNil(lan("https://plex.example.com"))
+    }
+
     // The trust rule shared by the API session and the player (#337)
     func testTrustsServer_neverWithoutAServerTrust() {
         // The old rule passed these on host or port alone.

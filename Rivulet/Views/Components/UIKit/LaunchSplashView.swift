@@ -185,11 +185,15 @@ final class LaunchSplashView: UIView {
 
     /// `animation`, starting `delay` seconds after the commit that carries it: a group
     /// with no begin time is stamped with its commit's time, and its child is offset in it.
+    ///
+    /// A looping child gets a long finite group, never `.infinity`: a group of infinite
+    /// duration holds its child on its first frame, so the light never ran and the bloom
+    /// never breathed.
     private func after(_ delay: CFTimeInterval, _ animation: CAAnimation) -> CAAnimation {
         animation.beginTime = delay
         let group = CAAnimationGroup()
         group.animations = [animation]
-        group.duration = animation.repeatCount == .infinity ? .infinity : delay + animation.duration
+        group.duration = animation.repeatCount == .infinity ? 86_400 : delay + animation.duration
         group.fillMode = animation.fillMode
         group.isRemovedOnCompletion = animation.isRemovedOnCompletion
         return group

@@ -363,6 +363,7 @@ final class InfoColumnsView: UIView {
         if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
         if !detail.genres.isEmpty { info.append((String(localized: "Genres"), detail.genres.prefix(4).joined(separator: ", "))) }
         if !detail.studios.isEmpty { info.append((String(localized: "Studio"), detail.studios.prefix(2).joined(separator: ", "))) }
+        if let ratio = detail.primarySource?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
         information.configure(title: String(localized: "Information"), rows: info, style: style)
 
         // Languages — from the first media source's tracks.

@@ -375,6 +375,7 @@ enum InfoPopupContent {
         if let rt = detail.item.runtime, rt > 0 { info.append((String(localized: "Run Time"), runtimeString(rt))) }
         if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
         if let region = detail.regionOfOrigin, !region.isEmpty { info.append((String(localized: "Region of Origin"), region)) }
+        if let ratio = source?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
         addSection(title: String(localized: "Information"), rows: info, to: stack)
 
         // Languages

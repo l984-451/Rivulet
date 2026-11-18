@@ -252,4 +252,27 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         XCTAssertEqual(source(height: 576, label: "576").detailBadges, [])
         XCTAssertEqual(source(height: 480, label: "sd").detailBadges, [])
     }
+
+    /// The server's display aspect wins; the coded frame is the fallback.
+    func test_aspectRatioLabel() {
+        func source(ratio: Double?, width: Int?, height: Int?) -> MediaSource {
+            let video = VideoTrack(
+                id: "v1", codec: "hevc", profile: nil, level: nil,
+                width: width, height: height, frameRate: 24,
+                bitrate: nil, videoRange: .sdr, isDefault: true, scanType: "progressive"
+            )
+            return MediaSource(
+                id: "1", container: "mkv", duration: 7200,
+                bitrate: nil, fileSize: nil, fileName: nil, videoResolution: nil, aspectRatio: ratio,
+                videoTracks: [video], audioTracks: [], subtitleTracks: [],
+                streamKind: .directPlay, streamURL: nil
+            )
+        }
+        XCTAssertEqual(source(ratio: 2.35, width: 1920, height: 1080).aspectRatioLabel, "2.35:1")
+        XCTAssertEqual(source(ratio: nil, width: 3840, height: 1600).aspectRatioLabel, "2.40:1")
+        XCTAssertNil(source(ratio: nil, width: nil, height: 1080).aspectRatioLabel)
+        XCTAssertEqual(MediaSource.aspectRatio("2.40:1"), 2.4)
+        XCTAssertEqual(MediaSource.aspectRatio("16:9")!, 16.0 / 9, accuracy: 0.0001)
+        XCTAssertNil(MediaSource.aspectRatio("wide"))
+    }
 }

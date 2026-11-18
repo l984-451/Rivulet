@@ -255,6 +255,7 @@ nonisolated struct JFMediaStream: Decodable, Sendable {
     let sampleRate: Int?
     let realFrameRate: Double?
     let averageFrameRate: Double?
+    let aspectRatio: String?        // "16:9", "2.40:1"
     let videoRangeType: String?     // SDR, HDR10, HLG, HDR10Plus, DOVI, DOVIWithHDR10, ...
     let colorTransfer: String?      // smpte2084 (PQ), arib-std-b67 (HLG), bt709, ...
     let dvProfile: Int?

@@ -373,6 +373,7 @@ enum PlexMediaMapper {
             fileSize: part.size.map { Int64($0) },
             fileName: part.file,
             videoResolution: media.videoResolution,
+            aspectRatio: media.aspectRatio,
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             subtitleTracks: subtitleTracks,

@@ -320,6 +320,7 @@ enum JellyfinMediaMapper {
             fileName: src.name,
             versionName: src.name,
             videoResolution: nil,
+            aspectRatio: MediaSource.aspectRatio(streams.first { $0.type == "Video" }?.aspectRatio),
             videoTracks: streams.compactMap { videoTrack($0) },
             audioTracks: streams.compactMap {
                 audioTrack($0, defaultIndex: src.defaultAudioStreamIndex, externalCount: externalCount)

@@ -173,6 +173,7 @@ extension EmbyMediaMapper {
             fileName: src.path.flatMap { $0.split(whereSeparator: { "/\\".contains($0) }).last.map(String.init) } ?? src.name,
             versionName: src.name,
             videoResolution: nil,
+            aspectRatio: MediaSource.aspectRatio(streams.first { $0.type == "Video" }?.aspectRatio),
             videoTracks: streams.compactMap(videoTrack),
             audioTracks: streams.compactMap { audioTrack($0, defaultIndex: src.defaultAudioStreamIndex) },
             subtitleTracks: streams.compactMap {

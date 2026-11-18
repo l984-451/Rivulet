@@ -2439,6 +2439,28 @@
         }
       }
     },
+    "Aspect Ratio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seitenverhältnis"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναλογία διαστάσεων"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format d’image"
+          }
+        }
+      }
+    },
     "AUDIO" : {
       "localizations" : {
         "de" : {

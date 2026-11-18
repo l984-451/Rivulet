@@ -102,44 +102,6 @@ struct GuideLayoutView: View {
         }
     }
 
-    /// Programmes keyed by channel id (the EPGGuide indexes by `channel.id`).
-    /// Channels with no matched guide data get placeholder 4-hour blocks so
-    /// their rows still render focusable cells — without them the row has
-    /// nothing to land on and the channel can't be selected at all.
-    private var programsByChannel: [String: [UnifiedProgram]] {
-        var epg = dataStore.epg
-        let spanMinutes = totalMinutes
-        // One lookup per pass: String(localized:) per block hung the main thread on big lists.
-        let title = String(localized: "No guide data available.")
-        for channel in channels where (epg[channel.id]?.isEmpty ?? true) {
-            epg[channel.id] = Self.placeholderPrograms(
-                channelId: channel.id, title: title, from: timelineStart, spanMinutes: spanMinutes)
-        }
-        return epg
-    }
-
-    /// 4-hour "No guide data available." blocks spanning the visible timeline.
-    /// Block boundaries are derived from the (fixed) timeline start, so ids
-    /// stay stable across the 30s `now` ticks and don't churn the grid.
-    private static func placeholderPrograms(channelId: String, title: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
-        let blockSeconds: TimeInterval = 4 * 3600
-        let span = TimeInterval(spanMinutes * 60)
-        var programs: [UnifiedProgram] = []
-        var blockStart = start
-        while blockStart < start.addingTimeInterval(span) {
-            let blockEnd = blockStart.addingTimeInterval(blockSeconds)
-            programs.append(UnifiedProgram(
-                id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
-                channelId: channelId,
-                title: title,
-                startTime: blockStart,
-                endTime: blockEnd
-            ))
-            blockStart = blockEnd
-        }
-        return programs
-    }
-
     /// Timeline width in minutes, tracking the loaded EPG window so the grid
     /// grows as the store fills in more programming. Floors at the initial load
     /// so the first paint has room, and never runs past the placeholder ceiling.
@@ -260,7 +222,7 @@ struct GuideLayoutView: View {
 
             EPGGuide(
                 channels: channels,
-                programsByChannel: programsByChannel,
+                programsByChannel: dataStore.epg,
                 timelineStart: timelineStart,
                 totalMinutes: totalMinutes,
                 now: now,
